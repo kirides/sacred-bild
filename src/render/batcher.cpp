@@ -59,6 +59,8 @@ namespace
         case Batcher::Reason::Full: return CFlushFull;
         case Batcher::Reason::Direct: return CFlushDirect;
         case Batcher::Reason::Atlas: return CFlushAtlas;
+        case Batcher::Reason::Lighting: return CFlushLighting;
+        case Batcher::Reason::World: return CFlushWorld;
         case Batcher::Reason::Other: break;
         }
         return CFlushOther;
@@ -76,7 +78,7 @@ namespace
 }
 
 Batcher::Batcher(IDirect3DDevice7* real, IDirectDraw7* ddraw, const Options& options)
-    : m_real(real), m_submitFlags(options.noClip ? D3DDP_DONOTCLIP : 0)
+    : m_real(real), m_submitFlags(options.noClip ? D3DDP_DONOTCLIP : 0), m_batchModels(options.models)
 {
     TextureAtlas::Options atlas;
     atlas.copies = options.atlas && ddraw;
@@ -144,9 +146,32 @@ const Batcher::Layout& Batcher::layout(DWORD fvf)
     l.texCount = std::min<UINT>(Fvf::texCount(fvf), 8);
     for (UINT set = 0; set < 8; ++set)
     {
-        l.texOffset[set] = set < l.texCount && Fvf::texCoordSize(fvf, set) == 2 ? Fvf::texCoordOffset(fvf, set) : 0;
+        const bool used = set < l.texCount;
+        l.setOffset[set] = used ? Fvf::texCoordOffset(fvf, set) : 0;
+        l.setBytes[set] = used ? Fvf::texCoordSize(fvf, set) * 4 : 0;
+        l.texOffset[set] = used && Fvf::texCoordSize(fvf, set) == 2 ? l.setOffset[set] : 0;
     }
+    // Components in FVF order after the position (models only use XYZ positions, 12 bytes).
+    UINT offset = Fvf::texCoordOffset(fvf & (D3DFVF_POSITION_MASK | D3DFVF_RESERVED1), 0);
+    l.normalOffset = (fvf & D3DFVF_NORMAL) ? offset : 0;
+    offset += (fvf & D3DFVF_NORMAL) ? 12 : 0;
+    l.diffuseOffset = (fvf & D3DFVF_DIFFUSE) ? offset : 0;
+    offset += (fvf & D3DFVF_DIFFUSE) ? 4 : 0;
+    l.specularOffset = (fvf & D3DFVF_SPECULAR) ? offset : 0;
     return l;
+}
+
+DWORD Batcher::triangles(D3DPRIMITIVETYPE type, DWORD count)
+{
+    if (type == D3DPT_TRIANGLELIST)
+    {
+        return count / 3;
+    }
+    if (type == D3DPT_TRIANGLESTRIP || type == D3DPT_TRIANGLEFAN)
+    {
+        return count >= 3 ? count - 2 : 0;
+    }
+    return 0;
 }
 
 void Batcher::beforeAtlasChange(void* self)
@@ -176,6 +201,11 @@ void Batcher::invalidate()
     m_vpFlags = 0;
     m_rsDirty.clear();
     m_tssDirty.clear();
+    m_worldFlags = 0;
+    std::memset(m_tnlRsKnown, 0, sizeof(m_tnlRsKnown));
+    m_materialKnown = false;
+    std::memset(m_lightKnown, 0, sizeof(m_lightKnown));
+    std::memset(m_lightEnabledKnown, 0, sizeof(m_lightEnabledKnown));
 }
 
 DWORD Batcher::renderState(DWORD state)
@@ -256,6 +286,14 @@ HRESULT Batcher::setRenderState(DWORD state, DWORD value)
     }
     if (tnlOnly(state))
     {
+        // Applied right away: only a pending model batch depends on it.
+        if (m_tnlRsKnown[state] && m_tnlRs[state] == value)
+        {
+            return D3D_OK;
+        }
+        endModelBatch();
+        m_tnlRs[state] = value;
+        m_tnlRsKnown[state] = true;
         Scope s{TState};
         return m_real->SetRenderState(static_cast<D3DRENDERSTATETYPE>(state), value);
     }
@@ -280,12 +318,134 @@ HRESULT Batcher::getRenderState(DWORD state, DWORD* value)
     {
         return DDERR_INVALIDPARAMS;
     }
-    if (state >= kStates || tnlOnly(state))
+    if (state >= kStates)
     {
         return m_real->GetRenderState(static_cast<D3DRENDERSTATETYPE>(state), value);
     }
-    *value = renderState(state);
+    *value = tnlOnly(state) ? tnlRenderState(state) : renderState(state);
     return D3D_OK;
+}
+
+DWORD Batcher::tnlRenderState(DWORD state)
+{
+    if (!m_tnlRsKnown[state])
+    {
+        DWORD value = 0;
+        m_real->GetRenderState(static_cast<D3DRENDERSTATETYPE>(state), &value);
+        m_tnlRs[state] = value;
+        m_tnlRsKnown[state] = true;
+    }
+    return m_tnlRs[state];
+}
+
+void Batcher::endModelBatch()
+{
+    if (m_kind == Kind::Model && m_indexCount)
+    {
+        submit(Reason::Lighting);
+    }
+}
+
+void Batcher::beforeModelStateChange()
+{
+    endModelBatch();
+}
+
+const D3DMATRIX& Batcher::world()
+{
+    if (!(m_worldFlags & Known))
+    {
+        m_real->GetTransform(D3DTRANSFORMSTATE_WORLD, &m_world);
+        m_worldDevice = m_world;
+        m_worldFlags |= Known | Applied;
+    }
+    return m_world;
+}
+
+void Batcher::bindWorld(const D3DMATRIX& m)
+{
+    if ((m_worldFlags & Applied) && std::memcmp(&m_worldDevice, &m, sizeof(m)) == 0)
+    {
+        return;
+    }
+    Scope s{TState};
+    m_real->SetTransform(D3DTRANSFORMSTATE_WORLD, const_cast<D3DMATRIX*>(&m));
+    m_worldDevice = m;
+    m_worldFlags |= Applied;
+}
+
+HRESULT Batcher::setTransform(D3DTRANSFORMSTATETYPE type, const D3DMATRIX& m)
+{
+    if (type == D3DTRANSFORMSTATE_WORLD && m_batchModels)
+    {
+        // Only recorded: a pending model batch keeps the matrix it was started with.
+        m_world = m;
+        m_worldFlags |= Known;
+        return D3D_OK;
+    }
+    endModelBatch();
+    if (type == D3DTRANSFORMSTATE_WORLD)
+    {
+        m_world = m_worldDevice = m;
+        m_worldFlags |= Known | Applied;
+    }
+    Scope s{TState};
+    return m_real->SetTransform(type, const_cast<D3DMATRIX*>(&m));
+}
+
+HRESULT Batcher::getWorld(D3DMATRIX* m)
+{
+    if (!m)
+    {
+        return DDERR_INVALIDPARAMS;
+    }
+    *m = world();
+    return D3D_OK;
+}
+
+HRESULT Batcher::setMaterial(const D3DMATERIAL7& material)
+{
+    if (m_materialKnown && std::memcmp(&m_material, &material, sizeof(material)) == 0)
+    {
+        return D3D_OK;
+    }
+    endModelBatch();
+    const HRESULT hr = m_real->SetMaterial(const_cast<D3DMATERIAL7*>(&material));
+    m_material = material;
+    m_materialKnown = SUCCEEDED(hr);
+    return hr;
+}
+
+HRESULT Batcher::setLight(DWORD index, const D3DLIGHT7& light)
+{
+    if (index < kCachedLights && m_lightKnown[index] && std::memcmp(&m_lights[index], &light, sizeof(light)) == 0)
+    {
+        return D3D_OK;
+    }
+    endModelBatch();
+    const HRESULT hr = m_real->SetLight(index, const_cast<D3DLIGHT7*>(&light));
+    if (index < kCachedLights)
+    {
+        m_lights[index] = light;
+        m_lightKnown[index] = SUCCEEDED(hr);
+    }
+    return hr;
+}
+
+HRESULT Batcher::lightEnable(DWORD index, BOOL enable)
+{
+    if (index < kCachedLights && m_lightEnabledKnown[index] && !m_lightEnabled[index] == !enable)
+    {
+        return D3D_OK;
+    }
+    endModelBatch();
+    const HRESULT hr = m_real->LightEnable(index, enable);
+    if (index < kCachedLights)
+    {
+        m_lightEnabled[index] = enable;
+        m_lightEnabledKnown[index] = SUCCEEDED(hr);
+    }
+    return hr;
 }
 
 HRESULT Batcher::setStageState(DWORD stage, DWORD type, DWORD value)
@@ -495,7 +655,7 @@ void Batcher::submit(Reason reason)
         if (!m_d3d || !submitVertexBuffer())
         {
             m_real->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, m_fvf, m_verts.data(), m_vertCount, m_indices.data(),
-                m_indexCount, m_flags | m_submitFlags);
+                m_indexCount, submitFlags());
         }
     }
     count(CSubmit);
@@ -529,7 +689,7 @@ bool Batcher::submitVertexBuffer()
     std::memcpy(static_cast<uint8_t*>(data) + size_t(vb->cursor) * m_stride, m_verts.data(), size_t(m_vertCount) * m_stride);
     vb->buffer->Unlock();
     hr = m_real->DrawIndexedPrimitiveVB(D3DPT_TRIANGLELIST, vb->buffer, vb->cursor, m_vertCount, m_indices.data(),
-        m_indexCount, m_flags | m_submitFlags);
+        m_indexCount, submitFlags());
     vb->cursor += m_vertCount;
     if (FAILED(hr))
     {
@@ -550,7 +710,8 @@ Batcher::VertexBuffer* Batcher::vertexBuffer(DWORD fvf)
     }
     D3DVERTEXBUFFERDESC desc = {};
     desc.dwSize = sizeof(desc);
-    desc.dwCaps = D3DVBCAPS_WRITEONLY | ((m_submitFlags & D3DDP_DONOTCLIP) ? D3DVBCAPS_DONOTCLIP : 0);
+    desc.dwCaps = D3DVBCAPS_WRITEONLY |
+        ((m_submitFlags & D3DDP_DONOTCLIP) && Fvf::pretransformed(fvf) ? D3DVBCAPS_DONOTCLIP : 0);
     desc.dwFVF = fvf;
     desc.dwNumVertices = kVertexBufferSize;
     IDirect3DVertexBuffer7* buffer = nullptr;
@@ -592,6 +753,10 @@ void Batcher::sync(Reason reason)
         {
             bindTexture(stage, m_tex[stage]);
         }
+    }
+    if (m_worldFlags & Known)
+    {
+        bindWorld(m_world);
     }
 }
 
@@ -672,20 +837,115 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
     DWORD indexCount, DWORD flags)
 {
     drainDestroyed();
-    const DWORD n = indices ? indexCount : vertCount;
-    DWORD tris = 0;
-    if (type == D3DPT_TRIANGLELIST)
-    {
-        tris = n / 3;
-    }
-    else if (type == D3DPT_TRIANGLESTRIP || type == D3DPT_TRIANGLEFAN)
-    {
-        tris = n >= 3 ? n - 2 : 0;
-    }
+    const DWORD tris = triangles(type, indices ? indexCount : vertCount);
     if (!verts || !Fvf::pretransformed(fvf) || tris == 0 || vertCount > kMaxVerts || tris * 3 > kMaxIndices)
     {
         return drawDirect(type, fvf, verts, vertCount, indices, indexCount, flags);
     }
+    Source source;
+    source.interleaved = verts;
+    append(Kind::Pretransformed, type, fvf, source, vertCount, indices, tris, flags);
+    return D3D_OK;
+}
+
+bool Batcher::drawModel(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD vertCount, const WORD* indices,
+    DWORD indexCount, DWORD flags)
+{
+    if (!verts || (fvf & D3DFVF_POSITION_MASK) != D3DFVF_XYZ)
+    {
+        return false;
+    }
+    // Interleaved vertices as strided streams.
+    const Layout& l = layout(fvf);
+    const auto* base = static_cast<const uint8_t*>(verts);
+    D3DDRAWPRIMITIVESTRIDEDDATA data = {};
+    data.position = {const_cast<uint8_t*>(base), l.stride};
+    if (l.normalOffset) data.normal = {const_cast<uint8_t*>(base + l.normalOffset), l.stride};
+    if (l.diffuseOffset) data.diffuse = {const_cast<uint8_t*>(base + l.diffuseOffset), l.stride};
+    if (l.specularOffset) data.specular = {const_cast<uint8_t*>(base + l.specularOffset), l.stride};
+    for (UINT set = 0; set < l.texCount; ++set)
+    {
+        data.textureCoords[set] = {const_cast<uint8_t*>(base + l.setOffset[set]), l.stride};
+    }
+    return drawModel(type, fvf, data, vertCount, indices, indexCount, flags);
+}
+
+bool Batcher::drawModel(D3DPRIMITIVETYPE type, DWORD fvf, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD vertCount,
+    const WORD* indices, DWORD indexCount, DWORD flags)
+{
+    // Plain XYZ positions (no blend weights, no D3DLVERTEX reserved field) in triangles.
+    if (!m_batchModels || (fvf & D3DFVF_POSITION_MASK) != D3DFVF_XYZ || (fvf & D3DFVF_RESERVED1) ||
+        !data.position.lpvData)
+    {
+        return false;
+    }
+    drainDestroyed();
+    const DWORD tris = triangles(type, indices ? indexCount : vertCount);
+    if (tris == 0 || vertCount == 0 || vertCount > kMaxVerts || tris * 3 > kMaxIndices)
+    {
+        return false;
+    }
+    const Layout& l = layout(fvf);
+    if ((l.normalOffset && !data.normal.lpvData) || (l.diffuseOffset && !data.diffuse.lpvData) ||
+        (l.specularOffset && !data.specular.lpvData))
+    {
+        return false;
+    }
+    for (UINT set = 0; set < l.texCount; ++set)
+    {
+        if (!data.textureCoords[set].lpvData)
+        {
+            return false;
+        }
+    }
+    count(CModelDraw);
+    count(CModelVerts, vertCount);
+    Source source;
+    source.strided = &data;
+    append(Kind::Model, type, fvf, source, vertCount, indices, tris, flags);
+    return true;
+}
+
+namespace
+{
+    template <UINT Bytes>
+    void copyStream(uint8_t* dst, UINT dstStride, const uint8_t* src, DWORD srcStride, DWORD count)
+    {
+        for (DWORD i = 0; i < count; ++i, dst += dstStride, src += srcStride)
+        {
+            std::memcpy(dst, src, Bytes);
+        }
+    }
+
+    void copyStream(uint8_t* dst, UINT dstStride, const void* src, DWORD srcStride, DWORD count, UINT bytes)
+    {
+        const auto* from = static_cast<const uint8_t*>(src);
+        switch (bytes)
+        {
+        case 4: copyStream<4>(dst, dstStride, from, srcStride, count); break;
+        case 8: copyStream<8>(dst, dstStride, from, srcStride, count); break;
+        case 12: copyStream<12>(dst, dstStride, from, srcStride, count); break;
+        default: copyStream<16>(dst, dstStride, from, srcStride, count); break;
+        }
+    }
+}
+
+void Batcher::gather(uint8_t* dst, const Layout& l, const D3DDRAWPRIMITIVESTRIDEDDATA& d, DWORD count)
+{
+    copyStream(dst, l.stride, d.position.lpvData, d.position.dwStride, count, 12);
+    if (l.normalOffset) copyStream(dst + l.normalOffset, l.stride, d.normal.lpvData, d.normal.dwStride, count, 12);
+    if (l.diffuseOffset) copyStream(dst + l.diffuseOffset, l.stride, d.diffuse.lpvData, d.diffuse.dwStride, count, 4);
+    if (l.specularOffset) copyStream(dst + l.specularOffset, l.stride, d.specular.lpvData, d.specular.dwStride, count, 4);
+    for (UINT set = 0; set < l.texCount; ++set)
+    {
+        copyStream(dst + l.setOffset[set], l.stride, d.textureCoords[set].lpvData, d.textureCoords[set].dwStride, count,
+            l.setBytes[set]);
+    }
+}
+
+void Batcher::append(Kind kind, D3DPRIMITIVETYPE type, DWORD fvf, const Source& source, DWORD vertCount,
+    const WORD* indices, DWORD tris, DWORD flags)
+{
     const Layout& vertexLayout = layout(fvf);
     const UINT stride = vertexLayout.stride;
 
@@ -705,7 +965,8 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
     }
     Remap remaps[kStages];
     UINT remapCount = 0;
-    if (m_useAtlas)
+    // Models keep their textures: they rarely merge, and checking their coordinates costs more than it saves.
+    if (m_useAtlas && source.interleaved)
     {
         for (DWORD s = 0; s < stages; ++s)
         {
@@ -724,7 +985,7 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
             }
             else
             {
-                useAtlas(s, binding[s], vertexLayout, verts, vertCount, binding[s], remaps, remapCount);
+                useAtlas(s, binding[s], vertexLayout, source.interleaved, vertCount, binding[s], remaps, remapCount);
             }
         }
     }
@@ -734,9 +995,14 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
     bool start = m_indexCount == 0;
     if (!start)
     {
-        if (m_fvf != fvf || m_flags != flags)
+        if (m_kind != kind || m_fvf != fvf || m_flags != flags)
         {
             reason = Reason::Format;
+            start = true;
+        }
+        else if (kind == Kind::Model && std::memcmp(&m_batchWorld, &world(), sizeof(D3DMATRIX)) != 0)
+        {
+            reason = Reason::World;
             start = true;
         }
         else if (m_vertCount + vertCount > kMaxVerts || m_indexCount + tris * 3 > kMaxIndices)
@@ -768,6 +1034,12 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
         {
             bindTexture(s, binding[s]);
         }
+        if (kind == Kind::Model)
+        {
+            m_batchWorld = world();
+            bindWorld(m_batchWorld);
+        }
+        m_kind = kind;
         m_fvf = fvf;
         m_flags = flags;
         m_stride = stride;
@@ -786,7 +1058,14 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
     }
 
     uint8_t* dst = m_verts.data() + size_t(m_vertCount) * stride;
-    std::memcpy(dst, verts, size_t(vertCount) * stride);
+    if (source.interleaved)
+    {
+        std::memcpy(dst, source.interleaved, size_t(vertCount) * stride);
+    }
+    else
+    {
+        gather(dst, vertexLayout, *source.strided, vertCount);
+    }
     for (UINT r = 0; r < remapCount; ++r)
     {
         const Remap& m = remaps[r];
@@ -830,5 +1109,4 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
     }
     m_vertCount += vertCount;
     m_indexCount += tris * 3;
-    return D3D_OK;
 }

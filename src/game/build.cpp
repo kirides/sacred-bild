@@ -1,6 +1,7 @@
 #include "game/build.h"
 #include "game/sacred_de.h"
 #include "game/frame_hooks.h"
+#include "game/granny_async.h"
 #include "game/resolution.h"
 #include "game/ui_canvas.h"
 #include "log.h"
@@ -23,6 +24,7 @@ bool Sacred::isSupportedBuild()
 
 void Sacred::installHooks()
 {
+    GrannyAsync::install();
     Patch::begin();
     FrameHooks::install();
     Resolution::install();

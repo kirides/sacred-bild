@@ -26,6 +26,10 @@ struct Config
     bool batchNoClip = true;
     // Batched draws go through vertex buffers instead of user memory (saves copies in the runtime and driver).
     bool batchVertexBuffer = true;
+    // 3D models (characters and their shadows) go through the batcher too: vertex buffers, merged where possible.
+    bool batchModels = true;
+    // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.
+    bool asyncAnimation = true;
     // Copy small textures into shared pages so draws with different textures can be merged as well.
     bool atlas = true;
     int atlasPageSize = 8192;       // texels per side, clamped to the device limit

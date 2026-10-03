@@ -58,6 +58,7 @@ DeviceProxy* DeviceProxy::wrap(IDirect3DDevice7* real, IDirectDraw7* ddraw)
     {
         Batcher::Options options;
         options.noClip = g_config.batchNoClip;
+        options.models = g_config.batchModels;
         options.vertexBuffers = g_config.batchVertexBuffer;
         options.atlas = g_config.atlas;
         options.atlasPageSize = g_config.atlasPageSize;
@@ -510,6 +511,11 @@ HRESULT DeviceProxy::SetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m)
         else if (type == D3DTRANSFORMSTATE_PROJECTION) m_proj = *m;
     }
     HRESULT hr;
+    if (batching() && m)
+    {
+        hr = m_batcher->setTransform(type, *m);
+    }
+    else
     {
         Scope s{TState};
         hr = m_real->SetTransform(type, m);
@@ -535,7 +541,8 @@ HRESULT DeviceProxy::GetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m)
         *m = m_transforms[i];
         return D3D_OK;
     }
-    const HRESULT hr = m_real->GetTransform(type, m);
+    // While batching, the device may hold an identity world matrix for a model batch.
+    const HRESULT hr = batching() && type == D3DTRANSFORMSTATE_WORLD ? m_batcher->getWorld(m) : m_real->GetTransform(type, m);
     if (SUCCEEDED(hr) && m && i < kTransforms && !m_recording)
     {
         m_transforms[i] = *m;
@@ -583,9 +590,27 @@ HRESULT DeviceProxy::GetViewport(LPD3DVIEWPORT7 vp)
     }
     return m_real->GetViewport(vp);
 }
-HRESULT DeviceProxy::SetMaterial(LPD3DMATERIAL7 mat) { return m_real->SetMaterial(mat); }
+HRESULT DeviceProxy::SetMaterial(LPD3DMATERIAL7 mat)
+{
+    std::scoped_lock lock(m_mutex);
+    if (batching() && mat)
+    {
+        return m_batcher->setMaterial(*mat);
+    }
+    return m_real->SetMaterial(mat);
+}
+
 HRESULT DeviceProxy::GetMaterial(LPD3DMATERIAL7 mat) { return m_real->GetMaterial(mat); }
-HRESULT DeviceProxy::SetLight(DWORD index, LPD3DLIGHT7 light) { return m_real->SetLight(index, light); }
+HRESULT DeviceProxy::SetLight(DWORD index, LPD3DLIGHT7 light)
+{
+    std::scoped_lock lock(m_mutex);
+    if (batching() && light)
+    {
+        return m_batcher->setLight(index, *light);
+    }
+    return m_real->SetLight(index, light);
+}
+
 HRESULT DeviceProxy::GetLight(DWORD index, LPD3DLIGHT7 light) { return m_real->GetLight(index, light); }
 
 HRESULT DeviceProxy::SetRenderState(D3DRENDERSTATETYPE state, DWORD value)
@@ -657,6 +682,11 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
         {
             return m_batcher->draw(type, fvf, verts, count, nullptr, 0, flags);
         }
+        if (m_batcher->drawModel(type, fvf, verts, count, nullptr, 0, flags))
+        {
+            return D3D_OK;
+        }
+        D3DStats::count(CModelDirect);
         m_batcher->sync(Batcher::Reason::Direct);
     }
     if (m_ui && verts && isPretransformed(fvf))
@@ -708,6 +738,11 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
         {
             return m_batcher->draw(type, fvf, verts, vertCount, indices, indexCount, flags);
         }
+        if (m_batcher->drawModel(type, fvf, verts, vertCount, indices, indexCount, flags))
+        {
+            return D3D_OK;
+        }
+        D3DStats::count(CModelDirect);
         m_batcher->sync(Batcher::Reason::Direct);
     }
     if (m_ui && verts && isPretransformed(fvf))
@@ -768,6 +803,11 @@ HRESULT DeviceProxy::DrawPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fvf, LPD3
     std::scoped_lock lock(m_mutex);
     if (batching())
     {
+        if (data && m_batcher->drawModel(type, fvf, *data, count, nullptr, 0, flags))
+        {
+            return D3D_OK;
+        }
+        D3DStats::count(CModelDirect);
         m_batcher->sync(Batcher::Reason::Direct);
     }
     if (m_ui)
@@ -796,6 +836,11 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fv
     std::scoped_lock lock(m_mutex);
     if (batching())
     {
+        if (data && m_batcher->drawModel(type, fvf, *data, vertCount, indices, indexCount, flags))
+        {
+            return D3D_OK;
+        }
+        D3DStats::count(CModelDirect);
         m_batcher->sync(Batcher::Reason::Direct);
     }
     if (m_ui)
@@ -875,6 +920,11 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVER
 
 HRESULT DeviceProxy::ComputeSphereVisibility(LPD3DVECTOR centers, LPD3DVALUE radii, DWORD count, DWORD flags, LPDWORD result)
 {
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();      // uses the device's world matrix
+    }
     return m_real->ComputeSphereVisibility(centers, radii, count, flags, result);
 }
 
@@ -997,8 +1047,26 @@ HRESULT DeviceProxy::Load(LPDIRECTDRAWSURFACE7 dst, LPPOINT dstPoint, LPDIRECTDR
     return m_real->Load(dst, dstPoint, src, srcRect, flags);
 }
 
-HRESULT DeviceProxy::LightEnable(DWORD index, BOOL enable) { return m_real->LightEnable(index, enable); }
+HRESULT DeviceProxy::LightEnable(DWORD index, BOOL enable)
+{
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        return m_batcher->lightEnable(index, enable);
+    }
+    return m_real->LightEnable(index, enable);
+}
+
 HRESULT DeviceProxy::GetLightEnable(DWORD index, BOOL* enable) { return m_real->GetLightEnable(index, enable); }
-HRESULT DeviceProxy::SetClipPlane(DWORD index, D3DVALUE* plane) { return m_real->SetClipPlane(index, plane); }
+HRESULT DeviceProxy::SetClipPlane(DWORD index, D3DVALUE* plane)
+{
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->beforeModelStateChange();
+    }
+    return m_real->SetClipPlane(index, plane);
+}
+
 HRESULT DeviceProxy::GetClipPlane(DWORD index, D3DVALUE* plane) { return m_real->GetClipPlane(index, plane); }
 HRESULT DeviceProxy::GetInfo(DWORD id, LPVOID info, DWORD size) { return m_real->GetInfo(id, info, size); }

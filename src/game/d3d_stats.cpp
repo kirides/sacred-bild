@@ -314,16 +314,18 @@ void D3DStats::onFrame()
         ms[TState], ms[TProxy] - ms[TDraw] - ms[TState], c[CLockBack] / frames, ms[TLockBack], cpuPct);
     if (c[CMerged] || c[CFlushOther] || c[CFlushDirect])
     {
-        LOG("batch: merged={:.0f} atlasDraws={:.0f} uploads={} pageResets={} | stages kept on the original texture: "
-            "texture={:.0f} setup={:.0f} uv={:.0f} sharedCoords={:.0f} pagesFull={:.0f} | batches ended by texture={:.0f} "
-            "(page->page {:.0f}, original {:.0f}) rs={:.0f} tss={:.0f} viewport={:.0f} format={:.0f} full={:.0f} "
-            "direct={:.0f} atlas={:.0f} other={:.0f}",
-            c[CMerged] / frames, c[CAtlasDraw] / frames, c[CAtlasUpload], c[CAtlasReset], c[CAtlasSkipTexture] / frames,
+        LOG("batch: merged={:.0f} atlasDraws={:.0f} uploads={} pageResets={} | models batched={:.0f} ({:.0f} verts) "
+            "direct={:.0f} | stages kept on the original texture: texture={:.0f} setup={:.0f} uv={:.0f} "
+            "sharedCoords={:.0f} pagesFull={:.0f} | batches ended by texture={:.0f} (page->page {:.0f}, original {:.0f}) "
+            "rs={:.0f} tss={:.0f} viewport={:.0f} format={:.0f} full={:.0f} direct={:.0f} atlas={:.0f} lighting={:.0f} "
+            "world={:.0f} other={:.0f}",
+            c[CMerged] / frames, c[CAtlasDraw] / frames, c[CAtlasUpload], c[CAtlasReset], c[CModelDraw] / frames,
+            c[CModelVerts] / frames, c[CModelDirect] / frames, c[CAtlasSkipTexture] / frames,
             c[CAtlasSkipSetup] / frames, c[CAtlasRange] / frames, c[CAtlasSkipShared] / frames,
             c[CAtlasSkipFull] / frames, c[CFlushTexture] / frames, c[CFlushPages] / frames, c[CFlushOriginal] / frames,
             c[CFlushRenderState] / frames, c[CFlushStageState] / frames, c[CFlushViewport] / frames,
             c[CFlushFormat] / frames, c[CFlushFull] / frames, c[CFlushDirect] / frames, c[CFlushAtlas] / frames,
-            c[CFlushOther] / frames);
+            c[CFlushLighting] / frames, c[CFlushWorld] / frames, c[CFlushOther] / frames);
     }
 
     if (++g_reportsSinceDetail >= 30)

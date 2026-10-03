@@ -171,7 +171,22 @@ AMD user-mode driver 12 %, DDrawCompat 10 %, ntdll 9 %, msvcrt 6 % (memcpy), d3d
 - `0x6404C0` (5 % exclusive) is the `std::map` lookup of the tile layer record cache (`0x6360E0`, `0x635F50`).
 - `0x66FCE0`/`0x66FCF0` wrap `WaitForSingleObject`/`ReleaseMutex` on kernel mutexes (~2 %).
 - With two 4096 atlas pages, ~1,100 batches per frame ended on a switch between the pages (430 textures per
-  frame do not fit one page): pages are 8192 now. Limitation: a raw (non-atlas) texture the game locks and changes in the
+  frame do not fit one page): pages are 8192 now.
+
+Model batching (`BatchModels`): untransformed draws (characters FVF `0x112`/`0x152`, shadows `0x142`,
+~400 per zoomed-out frame) are gathered from their strided streams into the batch and drawn from a vertex
+buffer instead of `DrawIndexedPrimitiveStrided` (D3D time -2 ms). They merge only with the same world matrix and
+state; WORLD is only recorded while batching, and view/projection, lights, material, clip planes and T&L-only
+render states end a pending model batch. A first version moved model vertices to world space on the CPU to
+merge across world matrices: each character switches lighting and FVF between its shadow and its model, so only
+~70 of ~400 draws merged while the transform of ~180k vertices cost ~2.5 ms. Measured with it: Granny 26 % ->
+13 % of the render thread with `AsyncAnimation` (worker never waited for: `game waited` ~0.01 ms).
+
+`GrannyAdvanceTime` is called once per frame by `0x401920` (only caller, result ignored), from
+`cEngine_renderThreadRun` before the world view. `AsyncAnimation` runs it on a worker thread; all 54 Granny
+imports of the exe are patched with stubs that first wait for the worker. granny.dll has no TLS. With
+DDrawCompat's default `CpuAffinity = 1` the process affinity mask still covered all 16 CPUs here and the worker
+overlapped; the log reports the mask in case a setup really is limited to one CPU. Limitation: a raw (non-atlas) texture the game locks and changes in the
 middle of the world pass would show its new content in draws batched before the change.
 
 ## UI (`cUI_Control2` / `cUI_Window2` / `cUI_Manager`)

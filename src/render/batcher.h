@@ -16,16 +16,23 @@ class TextureAtlas;
 // on again between draws costs nothing. Small textures are used through copies in shared atlas pages (see
 // TextureAtlas), so draws with different textures can still merge.
 //
+// Untransformed (3D model) draws are submitted the same way: gathered from the game's vertex streams into the
+// batch and drawn from a vertex buffer, merged when the state and the world matrix match. The world matrix is
+// only recorded (applied when a model batch or a direct draw needs it); view, projection, lights, materials and
+// T&L-only render states still go straight to the device, after drawing a pending model batch that used the old
+// ones. (Moving model vertices to world space on the CPU to merge across world matrices cost more than it saved:
+// each character toggles lighting and vertex format between its shadow and its model anyway.)
+//
 // The caller routes the device calls here while active() and calls sync() before anything else that draws or
-// depends on the device state. Render states that only affect transformed and lit vertices, transforms,
-// lights and materials go straight to the device: the pending draws don't use them.
+// depends on the device state.
 class Batcher
 {
 public:
     struct Options
     {
-        bool noClip = true;     // submit with D3DDP_DONOTCLIP
+        bool noClip = true;     // submit pretransformed batches with D3DDP_DONOTCLIP
         bool vertexBuffers = true;  // submit through vertex buffers instead of user memory
+        bool models = true;     // batch untransformed draws as well
         bool atlas = true;
         int atlasPageSize = 4096;
         int atlasPages = 4;
@@ -56,9 +63,24 @@ public:
     HRESULT draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD vertCount, const WORD* indices,
         DWORD indexCount, DWORD flags);
 
+    // An untransformed draw (from strided or interleaved vertices). False if it can't be batched: then the
+    // caller calls sync(Reason::Direct) and draws it itself.
+    bool drawModel(D3DPRIMITIVETYPE type, DWORD fvf, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD vertCount,
+        const WORD* indices, DWORD indexCount, DWORD flags);
+    bool drawModel(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD vertCount, const WORD* indices,
+        DWORD indexCount, DWORD flags);
+
+    HRESULT setTransform(D3DTRANSFORMSTATETYPE type, const D3DMATRIX& m);
+    HRESULT getWorld(D3DMATRIX* m);
+    HRESULT setMaterial(const D3DMATERIAL7& material);
+    HRESULT setLight(DWORD index, const D3DLIGHT7& light);
+    HRESULT lightEnable(DWORD index, BOOL enable);
+    // Before any other call that changes how untransformed vertices are drawn (clip planes, ...).
+    void beforeModelStateChange();
+
     enum class Reason
     {
-        Texture, RenderState, StageState, Viewport, Format, Full, Direct, Atlas, Other
+        Texture, RenderState, StageState, Viewport, Format, Full, Direct, Atlas, Lighting, World, Other
     };
 
     // Draws the pending batch and applies everything recorded, with the game's own textures.
@@ -80,6 +102,22 @@ private:
         UINT stride = 0;
         UINT texCount = 0;
         UINT texOffset[8] = {};     // byte offset of each 2D texture coordinate set, 0 if not 2D
+        UINT setOffset[8] = {};     // byte offset and size of every texture coordinate set
+        UINT setBytes[8] = {};
+        UINT normalOffset = 0, diffuseOffset = 0, specularOffset = 0;  // 0: not present
+    };
+
+    enum class Kind : uint8_t
+    {
+        Pretransformed,     // XYZRHW vertices
+        Model,              // untransformed vertices, drawn with the world matrix in m_batchWorld
+    };
+
+    // Vertices of one draw: interleaved (pretransformed draws) or strided streams (models).
+    struct Source
+    {
+        const void* interleaved = nullptr;
+        const D3DDRAWPRIMITIVESTRIDEDDATA* strided = nullptr;
     };
 
     // Ring buffer of vertices for one vertex format, appended with DDLOCK_NOOVERWRITE.
@@ -99,12 +137,22 @@ private:
     IDirectDrawSurface7* texture(DWORD stage);
     void drainDestroyed();
     const Layout& layout(DWORD fvf);
+    static DWORD triangles(D3DPRIMITIVETYPE type, DWORD count);
+    void append(Kind kind, D3DPRIMITIVETYPE type, DWORD fvf, const Source& source, DWORD vertCount,
+        const WORD* indices, DWORD tris, DWORD flags);
+    static void gather(uint8_t* dst, const Layout& layout, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD count);
+    const D3DMATRIX& world();
+    void bindWorld(const D3DMATRIX& m);
+    DWORD tnlRenderState(DWORD state);
+    void endModelBatch();   // draws a pending model batch: something it depends on is about to change
     void useAtlas(DWORD stage, IDirectDrawSurface7* texture, const Layout& layout, const void* verts,
         DWORD vertCount, IDirectDrawSurface7*& binding, Remap* remaps, UINT& remapCount);
     bool stateChanged(Reason& reason);
     void applyStates();
     void bindTexture(DWORD stage, IDirectDrawSurface7* texture);
     void submit(Reason reason);
+    // Model batches keep the game's flags: the GPU's T&L clips them either way.
+    DWORD submitFlags() const { return m_flags | (m_kind == Kind::Pretransformed ? m_submitFlags : 0); }
     bool submitVertexBuffer();
     VertexBuffer* vertexBuffer(DWORD fvf);
     void vertexBufferFailed(const char* what, HRESULT hr);
@@ -139,7 +187,24 @@ private:
     uint8_t m_vpFlags = 0;
     std::vector<IDirectDrawSurface7*> m_destroyed;
 
+    // Untransformed draws: recorded world matrix, and caches of state that is applied right away (so repeating
+    // the same value does not end a model batch).
+    bool m_batchModels = true;
+    D3DMATRIX m_world = {}, m_worldDevice = {};
+    uint8_t m_worldFlags = 0;
+    DWORD m_tnlRs[kStates] = {};
+    bool m_tnlRsKnown[kStates] = {};
+    D3DMATERIAL7 m_material = {};
+    bool m_materialKnown = false;
+    static constexpr DWORD kCachedLights = 8;
+    D3DLIGHT7 m_lights[kCachedLights] = {};
+    bool m_lightKnown[kCachedLights] = {};
+    BOOL m_lightEnabled[kCachedLights] = {};
+    bool m_lightEnabledKnown[kCachedLights] = {};
+    D3DMATRIX m_batchWorld = {};            // world matrix a pending model batch is drawn with
+
     // Pending batch.
+    Kind m_kind = Kind::Pretransformed;
     DWORD m_fvf = 0, m_flags = 0;
     UINT m_stride = 0;
     DWORD m_vertCount = 0, m_indexCount = 0;

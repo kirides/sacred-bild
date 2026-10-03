@@ -45,7 +45,12 @@ namespace D3DStats
         CFlushFull,
         CFlushDirect,   // a draw that can't be batched (3D, vertex buffer, lines)
         CFlushAtlas,    // an atlas page is about to change
+        CFlushLighting, // a model batch ends: view/projection, lights, material or T&L render state change
+        CFlushWorld,    // a model draw with another world matrix
         CFlushOther,    // end of the world view, Clear, state blocks, ...
+        CModelDraw,     // untransformed draws batched (moved to world space)
+        CModelVerts,
+        CModelDirect,   // untransformed draws in the world view that could not be batched
         CounterCount
     };
 

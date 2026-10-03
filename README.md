@@ -61,6 +61,8 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Render | Batch | 1 | Merge the world view's draw calls. |
 | Render | BatchNoClip | 1 | Merged draws skip Direct3D 7's software clipping; the GPU clips. |
 | Render | BatchVertexBuffer | 1 | Merged draws go through vertex buffers instead of user memory. |
+| Render | BatchModels | 1 | 3D model draws go through the batcher too (vertex buffers, merged where possible). |
+| Render | AsyncAnimation | 1 | Advance Granny animations on a worker thread, overlapping the start of the frame. |
 | Render | Atlas | 1 | Copy small textures into shared pages so more draws merge. |
 | Render | AtlasPageSize | 8192 | Atlas page size in texels (clamped to the GPU limit, halved if the GPU refuses it). |
 | Render | AtlasPages | 2 | Pages per texture format; the least recently used one is reused when full. |

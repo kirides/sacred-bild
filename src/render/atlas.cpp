@@ -423,14 +423,21 @@ TextureAtlas::Page* TextureAtlas::createPage(int format)
     {
         pages += page->format == format;
     }
+    // At most 128 MB per page (8192 texels at 16 bpp, 4096 at 32 bpp): the game has a 2 GB address space.
+    int size = m_options.pageSize;
+    const int64_t bytesPerTexel = m_formats[format].dwRGBBitCount / 8;
+    while (size > 1024 && int64_t(size) * size * bytesPerTexel > (int64_t(128) << 20))
+    {
+        size /= 2;
+    }
     IDirectDrawSurface7* surface = nullptr;
     for (;;)
     {
         DDSURFACEDESC2 desc = {};
         desc.dwSize = sizeof(desc);
         desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
-        desc.dwWidth = static_cast<DWORD>(m_options.pageSize);
-        desc.dwHeight = static_cast<DWORD>(m_options.pageSize);
+        desc.dwWidth = static_cast<DWORD>(size);
+        desc.dwHeight = static_cast<DWORD>(size);
         desc.ddpfPixelFormat = m_formats[format];
         desc.ddsCaps.dwCaps = DDSCAPS_TEXTURE | DDSCAPS_VIDEOMEMORY;
         const HRESULT hr = m_ddraw->CreateSurface(&desc, &surface, nullptr);
@@ -438,20 +445,21 @@ TextureAtlas::Page* TextureAtlas::createPage(int format)
         {
             break;
         }
-        LOG("Atlas: creating a {}x{} {} page failed ({:08x})", m_options.pageSize, m_options.pageSize,
-            describeFormat(m_formats[format]), static_cast<uint32_t>(hr));
+        LOG("Atlas: creating a {}x{} {} page failed ({:08x})", size, size, describeFormat(m_formats[format]),
+            static_cast<uint32_t>(hr));
         surface = nullptr;
-        if (pages > 0 || m_options.pageSize <= 1024)
+        if (pages > 0 || size <= 1024)
         {
             m_pageLimit[format] = pages;    // out of video memory: make do with the pages there are
             return nullptr;
         }
-        m_options.pageSize /= 2;
+        size /= 2;
+        m_options.pageSize = std::min(m_options.pageSize, size);    // the device refused the larger size
     }
     auto page = std::make_unique<Page>();
     page->surface = surface;
     page->format = format;
-    page->size = m_options.pageSize;
+    page->size = size;
     LOG("Atlas: page {} ({}x{} {}), {} in total; {}", pages + 1, page->size, page->size,
         describeFormat(m_formats[format]), m_pages.size() + 1, D3DStats::memorySummary());
     m_pages.push_back(std::move(page));
