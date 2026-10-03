@@ -11,6 +11,7 @@
 
 #include <windows.h>
 #include <intrin.h>
+#include <cmath>
 #include <cstdint>
 
 namespace
@@ -187,9 +188,50 @@ namespace
         g_origWorldRender(self, edx, device);
     }
 
+    // True if one of the in-game windows covering the whole 1024x768 screen (save, options, ...) is open.
+    bool fullScreenWindowOpen(void* uiManager)
+    {
+        for (uintptr_t slot = UiManager::firstGameWindow; slot <= UiManager::lastGameWindow; slot += 4)
+        {
+            void* window = member<void*>(uiManager, slot);
+            if (!window || !(member<uint32_t>(window, UiControl::flags) & 1))
+            {
+                continue;
+            }
+            const int x = member<int>(window, UiControl::x), y = member<int>(window, UiControl::y);
+            const int w = member<int16_t>(window, UiControl::width), h = member<int16_t>(window, UiControl::height);
+            if (x <= 0 && y <= 0 && x + w >= 1023 && y + h >= 767)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void __fastcall hookUiRender(void* self, void* edx, void* device)
     {
         D3DStats::Scope s{D3DStats::TUi};
+        // The original screen showed nothing but a full-screen window; keep the world beside the canvas hidden.
+        if (UiCanvas::enabled() && device && fullScreenWindowOpen(self))
+        {
+            const LONG l = std::lround(UiCanvas::left()), t = std::lround(UiCanvas::top());
+            const LONG r = std::lround(UiCanvas::right()), b = std::lround(UiCanvas::bottom());
+            const LONG w = Resolution::width(), h = Resolution::height();
+            D3DRECT bars[4] = {{0, 0, l, h}, {r, 0, w, h}, {l, 0, r, t}, {l, b, r, h}};
+            D3DRECT used[4];
+            DWORD count = 0;
+            for (const D3DRECT& bar : bars)
+            {
+                if (bar.x2 > bar.x1 && bar.y2 > bar.y1)
+                {
+                    used[count++] = bar;
+                }
+            }
+            if (count)
+            {
+                static_cast<IDirect3DDevice7*>(device)->Clear(count, used, D3DCLEAR_TARGET, 0xFF000000, 1.0f, 0);
+            }
+        }
         UiCanvas::Scope ui;
         g_origUiRender(self, edx, device);
     }
