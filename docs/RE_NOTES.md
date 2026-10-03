@@ -171,7 +171,11 @@ AMD user-mode driver 12 %, DDrawCompat 10 %, ntdll 9 %, msvcrt 6 % (memcpy), d3d
   `GrannyLockSequenceForRendering`, `...RenderingState`).
 - `GetTransform` through d3dim700/DDrawCompat/driver cost ~5 %: SacredBild answers it from the last
   `SetTransform`.
-- `0x6404C0` (5 % exclusive) is the `std::map` lookup of the tile layer record cache (`0x6360E0`, `0x635F50`).
+- `0x6404C0` (5 % exclusive) is the `std::map` find of the map data's record caches `0x6360E0` (ground layer
+  records, render thread) and `0x635F50` (64-byte records, 85 call sites incl. game logic). Only these two
+  functions insert/evict; the constructor `0x6336F0` and `0x633F80` (unload) create/clear the maps.
+  `RecordIndex` puts a `gtl::flat_hash_map` (id -> node) in front, behind a reader/writer lock; it is dropped
+  whenever the map's head or size differs from what the index last saw (eviction, clear, new object).
 - `0x66FCE0`/`0x66FCF0` wrap `WaitForSingleObject`/`ReleaseMutex` on kernel mutexes (~2 %).
 - With two 4096 atlas pages, ~1,100 batches per frame ended on a switch between the pages (430 textures per
   frame do not fit one page): pages are 8192 now.

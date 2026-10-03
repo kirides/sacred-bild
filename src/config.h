@@ -31,6 +31,8 @@ struct Config
     bool batchModels = true;
     // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.
     bool asyncAnimation = true;
+    // Hash index in front of the map data's record caches (std::map lookups per tile and object).
+    bool recordIndex = true;
     // Copy small textures into shared pages so draws with different textures can be merged as well.
     bool atlas = true;
     int atlasPageSize = 8192;       // texels per side, clamped to the device limit

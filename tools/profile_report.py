@@ -52,7 +52,7 @@ for line in open(path, encoding='latin1'):
     m = re.match(r'\[thread (\d+) samples (\d+)\]', line)
     if m:
         cur = {'tid': int(m.group(1)), 'samples': int(m.group(2)), 'exclusive': [], 'external': [], 'inclusive': [],
-               'external_eip': []}
+               'external_eip': [], 'external_caller': []}
         threads.append(cur)
         continue
     m = re.match(r'\[(\w+)\]', line)
@@ -60,6 +60,9 @@ for line in open(path, encoding='latin1'):
         section = m.group(1)
         continue
     parts = line.split()
+    if section == 'external_caller':
+        cur[section].append((parts[0], parts[1], int(parts[2], 16), int(parts[3])))
+        continue
     if section in ('external', 'external_eip'):
         cur[section].append((parts[0], int(parts[1], 16), int(parts[2])))
     else:
@@ -96,6 +99,22 @@ for t in sorted(threads, key=lambda t: -t['samples']):
         print(f"  -- inside SacredBild by function{'' if SYMS else ' (no ddraw.map found)'}")
         for f, c in own.most_common(top):
             print(f"    {100 * c / n:5.1f}%  {f}")
+    # Who called into each DLL: the first other non-system module on the stack.
+    callers = collections.defaultdict(collections.Counter)
+    for mod, caller, rva, c in t['external_caller']:
+        if caller == 'SacredBild':
+            where = f"SacredBild!{own_name(rva)}"
+        elif caller.lower() == 'sacred.exe':
+            start, name = func_of(0x400000 + rva)
+            where = f"sacred.exe!{name}"
+        else:
+            where = caller
+        callers[mod][where] += c
+    if callers:
+        print("  -- outside sacred.exe: module <- calling module/function")
+        for mod, cnt in sorted(callers.items(), key=lambda kv: -sum(kv[1].values()))[:8]:
+            for where, c in cnt.most_common(5):
+                print(f"    {100 * c / n:5.1f}%  {mod:<18} <- {where}")
     print("  -- exclusive (own code) in sacred.exe")
     for f, c in excl.most_common(top):
         print(f"    {100 * c / n:5.1f}%  {f}")

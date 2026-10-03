@@ -36,6 +36,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.batchVertexBuffer = readInt(ini, L"Render", L"BatchVertexBuffer", g_config.batchVertexBuffer) != 0;
     g_config.batchModels = readInt(ini, L"Render", L"BatchModels", g_config.batchModels) != 0;
     g_config.asyncAnimation = readInt(ini, L"Render", L"AsyncAnimation", g_config.asyncAnimation) != 0;
+    g_config.recordIndex = readInt(ini, L"Render", L"RecordIndex", g_config.recordIndex) != 0;
     g_config.atlas = readInt(ini, L"Render", L"Atlas", g_config.atlas) != 0;
     g_config.atlasPageSize = readInt(ini, L"Render", L"AtlasPageSize", g_config.atlasPageSize);
     g_config.atlasPages = readInt(ini, L"Render", L"AtlasPages", g_config.atlasPages);
@@ -45,10 +46,10 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
 
     LOG("Config: Width={} Height={} Borderless={} FpsLimit={} UI.Scale={} UI.LinearFilter={} TextureBudgetMB={} Batch={} "
-        "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} Atlas={} ({} px, {} pages, textures <= {}) "
+        "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
         "D3DStats={} Profiler={} ({} us)",
         g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit, g_config.uiScale, g_config.uiLinearFilter,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
-        g_config.batchModels, g_config.asyncAnimation, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
+        g_config.batchModels, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
         g_config.atlasMaxTextureSize, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs);
 }

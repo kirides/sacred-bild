@@ -20,6 +20,7 @@ namespace
     {
         uintptr_t lo, hi;
         std::string name;
+        bool system = false;    // ntdll, kernel32, ...: skipped when looking for the module that called in
     };
 
     std::atomic<bool> g_running{false};
@@ -40,6 +41,9 @@ namespace
         std::unordered_map<uint64_t, uint32_t> external;
         // module << 32 | EIP offset in the module -> samples (outside sacred.exe).
         std::unordered_map<uint64_t, uint32_t> externalEip;
+        // EIP module << 48 | calling module << 32 | return address offset in it -> samples (outside sacred.exe):
+        // the first non-system module on the stack that called into the EIP's module.
+        std::unordered_map<uint64_t, uint32_t> externalCaller;
         // Return address -> samples it appeared in (approximate inclusive time).
         std::unordered_map<uintptr_t, uint32_t> inclusive;
         uint32_t samples = 0;
@@ -66,7 +70,10 @@ namespace
             GetModuleBaseNameA(GetCurrentProcess(), mods[i], name, MAX_PATH);
             const auto lo = reinterpret_cast<uintptr_t>(mi.lpBaseOfDll);
             // Our ddraw.dll and the system's share a name.
-            g_modules.push_back({lo, lo + mi.SizeOfImage, mods[i] == self ? std::string("SacredBild") : std::string(name)});
+            const bool system = _stricmp(name, "ntdll.dll") == 0 || _stricmp(name, "KERNELBASE.dll") == 0 ||
+                _stricmp(name, "KERNEL32.DLL") == 0 || _stricmp(name, "win32u.dll") == 0;
+            g_modules.push_back({lo, lo + mi.SizeOfImage, mods[i] == self ? std::string("SacredBild") : std::string(name),
+                system});
         }
     }
 
@@ -81,10 +88,10 @@ namespace
 
     bool inExe(uintptr_t a) { return a >= g_exeLo && a < g_exeHi; }
 
-    // Heuristic: the bytes before `ra` encode a call instruction.
-    bool isReturnAddress(uintptr_t ra)
+    // Heuristic: the bytes before `ra` (inside a module starting at `lo`) encode a call instruction.
+    bool isCallSite(uintptr_t ra, uintptr_t lo)
     {
-        if (!inExe(ra) || ra < g_exeLo + 7) return false;
+        if (ra < lo + 7) return false;
         const auto* p = reinterpret_cast<const uint8_t*>(ra);
         if (p[-5] == 0xE8) return true;                                    // call rel32
         if (p[-6] == 0xFF && (p[-5] & 0x38) == 0x10) return true;          // call [disp32] / [reg+disp32]
@@ -95,11 +102,19 @@ namespace
         return false;
     }
 
+    bool isReturnAddress(uintptr_t ra)
+    {
+        return inExe(ra) && isCallSite(ra, g_exeLo);
+    }
+
     struct Sample
     {
         uintptr_t eip;
         int frames;
         uintptr_t ra[kMaxFrames];
+        int eipModule = -1;
+        int callerModule = -1;      // outside sacred.exe: first other non-system module on the stack
+        uintptr_t callerRa = 0;
     };
 
     bool takeSample(HANDLE target, Sample& s, uint32_t* stack)
@@ -128,6 +143,22 @@ namespace
         {
             if (isReturnAddress(stack[i])) s.ra[s.frames++] = stack[i];
         }
+        s.eipModule = -1;
+        s.callerModule = -1;
+        if (!inExe(s.eip))
+        {
+            s.eipModule = moduleIndex(s.eip);
+            for (size_t i = 0; i < std::min<size_t>(words, 512); ++i)
+            {
+                const int mod = moduleIndex(stack[i]);
+                if (mod >= 0 && mod != s.eipModule && !g_modules[mod].system && isCallSite(stack[i], g_modules[mod].lo))
+                {
+                    s.callerModule = mod;
+                    s.callerRa = stack[i];
+                    break;
+                }
+            }
+        }
         return true;
     }
 
@@ -151,6 +182,11 @@ namespace
             if (mod >= 0)
             {
                 ++p.externalEip[(static_cast<uint64_t>(mod) << 32) | (s.eip - g_modules[mod].lo)];
+            }
+            if (mod >= 0 && mod == s.eipModule && s.callerModule >= 0)
+            {
+                ++p.externalCaller[(static_cast<uint64_t>(mod) << 48) | (static_cast<uint64_t>(s.callerModule) << 32) |
+                    (s.callerRa - g_modules[s.callerModule].lo)];
             }
         }
         // Count each return address once per sample.
@@ -230,6 +266,14 @@ namespace
                 const int mod = static_cast<int>(key >> 32);
                 const char* name = mod >= 0 && mod < static_cast<int>(g_modules.size()) ? g_modules[mod].name.c_str() : "?";
                 std::fprintf(f, "%s %08x %u\n", name, static_cast<unsigned>(key & 0xFFFFFFFF), n);
+            }
+            std::fprintf(f, "[external_caller]\n");
+            for (auto& [key, n] : sorted(p.externalCaller))
+            {
+                const int mod = static_cast<int>(key >> 48), caller = static_cast<int>((key >> 32) & 0xFFFF);
+                const int count = static_cast<int>(g_modules.size());
+                std::fprintf(f, "%s %s %08x %u\n", mod < count ? g_modules[mod].name.c_str() : "?",
+                    caller < count ? g_modules[caller].name.c_str() : "?", static_cast<unsigned>(key & 0xFFFFFFFF), n);
             }
             std::fprintf(f, "[inclusive]\n");
             for (auto& [ra, n] : sorted(p.inclusive)) std::fprintf(f, "%08x %u\n", static_cast<unsigned>(ra), n);

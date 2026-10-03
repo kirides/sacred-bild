@@ -2,6 +2,7 @@
 #include "game/sacred_de.h"
 #include "game/frame_hooks.h"
 #include "game/granny_async.h"
+#include "game/map_cache.h"
 #include "game/resolution.h"
 #include "game/ui_canvas.h"
 #include "log.h"
@@ -29,6 +30,7 @@ void Sacred::installHooks()
     FrameHooks::install();
     Resolution::install();
     UiCanvas::install();
+    MapCache::install();
     if (Patch::commit())
     {
         LOG("Game hooks installed");

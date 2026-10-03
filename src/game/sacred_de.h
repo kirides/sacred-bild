@@ -90,6 +90,17 @@ namespace Sacred::Addr
     constexpr uintptr_t cEventMouseDown_vtable = 0x008950A8;    // x at +8, y at +0xC
     constexpr uintptr_t cEventMouseUp_vtable = 0x00897248;
 
+    // Record caches of the map data object (constructor 0x6336F0, clear 0x633F80): thiscall (id) -> record, 0 if
+    // id is 0. Each looks the id up in its own std::map<uint32_t, record> (find 0x6404C0: thiscall (&key) on the
+    // map, returns the node or the head as end; node +0x10 key, +0x14 record), stamps the node with the current
+    // time (0xCD59D0) on a hit, and on a miss reads the record from a data file, inserts it and may evict the node
+    // with the oldest stamp. 0x6360E0 holds the ground layer records (16 bytes, map at +0xDE5C, stamp node +0x24),
+    // 0x635F50 the 64-byte records also used by game logic (map at +0xDE50, stamp node +0x54).
+    constexpr uintptr_t layerRecordCache = 0x006360E0;
+    constexpr uintptr_t recordCache = 0x00635F50;
+    constexpr uintptr_t recordMapFind = 0x006404C0;
+    constexpr uintptr_t g_recordStamp = 0x00CD59D0;
+
     // cWorldView0 vtable slot 5: draws the isometric world (arg: device).
     constexpr uintptr_t cWorldView0_render = 0x006322B0;
 
