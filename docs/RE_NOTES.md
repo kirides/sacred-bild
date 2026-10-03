@@ -106,6 +106,9 @@ Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAP
   `cEngine_receiveEvent` (`0x618130`) hands them to the UI manager first (UI coordinates), then to the world
   mouse handler `0x617360` (thiscall (event, flag)), which picks with them; SacredBild converts the event to
   screen pixels for that call only.
+- Hold-to-move: after 0.5 s of holding the button (`0x617360`, timer `0xAD4E9C`) the hero walks toward
+  `cursor - (512, 384)` turned into an iso direction (`0x4FB620`, `lea reg, [mouse + 2*off - 0x200]`). That
+  read is redirected to screen pixels, so the center is patched to W/2, H/2.
 - Tile layer records come from `0x6360E0`: a map cache of 0x1000 entries filled from the data file
   (fseek/fread per miss) with an O(n) LRU scan per insert when full. A zoomed-out high-resolution view needs
   more entries and thrashed every frame (~140 ms); the limit is raised to 0x8000. The texture manager budget (`0x65EA20`, set by `initApp`) is not a limit on modern

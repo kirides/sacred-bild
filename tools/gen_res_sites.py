@@ -33,6 +33,12 @@ def imm_operand(insn_addr, expected):
     assert expected in imms, (hex(insn_addr), i.mnemonic, i.op_str)
     return i, insn_addr + i.imm_offset
 
+def disp_operand(insn_addr, expected):
+    i = insn_at(insn_addr)
+    assert any(o.type == x86.X86_OP_MEM and (o.mem.disp & 0xffffffff) == expected for o in i.operands), (hex(insn_addr), i.op_str)
+    assert i.disp_size == 4, (hex(insn_addr), i.disp_size)
+    return i, insn_addr + i.disp_offset
+
 def f2u(f): return struct.unpack('<I', struct.pack('<f', f))[0]
 
 out = []
@@ -117,6 +123,9 @@ for a in center_y:
 # Static objects in cWorldView_renderTileRow: origin = camera - 512 / - 384 (add reg, -0x200 / -0x180).
 i, op = imm_operand(0x62babb, 0xfffffe00); out.append(('ImmNegHalfW', op, 0xfffffe00, f"{i.mnemonic} {i.op_str} [{func_of(0x62babb)[1]}]"))
 i, op = imm_operand(0x62bac1, 0xfffffe80); out.append(('ImmNegHalfH', op, 0xfffffe80, f"{i.mnemonic} {i.op_str} [{func_of(0x62bac1)[1]}]"))
+# Hold-to-move (FUN_004fb620): walk direction = cursor (redirected to screen pixels) - screen center.
+i, op = disp_operand(0x4fb6ef, 0xfffffe00); out.append(('ImmNegHalfW', op, 0xfffffe00, f"{i.mnemonic} {i.op_str} [{func_of(0x4fb6ef)[1]}]"))
+i, op = disp_operand(0x4fb6f9, 0xfffffe80); out.append(('ImmNegHalfH', op, 0xfffffe80, f"{i.mnemonic} {i.op_str} [{func_of(0x4fb6f9)[1]}]"))
 # Overhead-label layout rect: FUN_00662300(rect, 1024, 768)
 for a, v in ((0x60e940, 0x300), (0x60e945, 0x400), (0x6272f8, 0x300), (0x6272fd, 0x400)):
     i, op = imm_operand(a, v); out.append(('ImmIW' if v == 0x400 else 'ImmIH', op, v, f"{i.mnemonic} {i.op_str} [{func_of(a)[1]}]"))
