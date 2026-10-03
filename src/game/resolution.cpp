@@ -214,22 +214,33 @@ namespace
         return out;
     }
 
-    // The ground layer array holds 0x6D5 tiles: enough for the original view, not for a large zoomed-out one
-    // (later rows lost their blend layers). Draw the collected layers early, between rows, when it fills up.
+    // The ground layer array holds 0x6D5 tiles and the water/lava tile array 1750: enough for the original view,
+    // not for a large zoomed-out one (later rows lost their blend layers; too many water tiles overwrite the
+    // water count and crash). Draw what was collected early, between rows, before either fills up: ground,
+    // layers, then water, the order they have at the end of the frame. A row adds at most one entry per tile
+    // column (~92 at 3840 wide, zoomed out).
     using TileRowFn = void(__fastcall*)(void* self, void* edx, void* device, void* rowPos, int detail);
     using DeviceFn = void(__fastcall*)(void* self, void* edx, void* device);
     TileRowFn g_origTileRow = reinterpret_cast<TileRowFn>(Addr::cWorldView_renderTileRow);
     const auto g_flushBatcher = reinterpret_cast<DeviceFn>(Addr::cQuadBatcher_flush);
     const auto g_drawTileLayers = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawTileLayers);
+    const auto g_drawWaterTiles = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawWaterTiles);
+    constexpr uint32_t kRowMargin = 256;
 
     void __fastcall hookTileRow(void* self, void* edx, void* device, void* rowPos, int detail)
     {
-        auto& count = *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(self) + WorldView::layeredTileCount);
-        if (count + 128 > WorldView::layeredTileCapacity)
+        auto& layers = *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(self) + WorldView::layeredTileCount);
+        auto& water = *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(self) + WorldView::waterTileCount);
+        if (layers + kRowMargin > WorldView::layeredTileCapacity || water + kRowMargin > WorldView::waterTileCapacity)
         {
             g_flushBatcher(static_cast<uint8_t*>(self) + WorldView::quadBatcher, nullptr, device);
             g_drawTileLayers(self, nullptr, device);
-            count = 0;
+            layers = 0;
+            if (water)
+            {
+                g_drawWaterTiles(self, nullptr, device);
+                water = 0;
+            }
         }
         g_origTileRow(self, edx, device, rowPos, detail);
     }

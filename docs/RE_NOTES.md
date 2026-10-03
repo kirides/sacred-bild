@@ -109,6 +109,15 @@ Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAP
 - Hold-to-move: after 0.5 s of holding the button (`0x617360`, timer `0xAD4E9C`) the hero walks toward
   `cursor - (512, 384)` turned into an iso direction (`0x4FB620`, `lea reg, [mouse + 2*off - 0x200]`). That
   read is redirected to screen pixels, so the center is patched to W/2, H/2.
+- Animated water/lava tiles (record type `0x90`/`0xA0`): `renderTileRow` appends 0x98-byte entries at
+  `+0x3FF2C` (count `+0x80E3C`) with no bounds check; `cWorldView_drawWaterTiles` (`0x62DE70`) draws them after
+  all rows (glow pass, tile pass) and sets the water ambience from their count and average position. Entry 1750
+  lands on the count: a large water area fully zoomed out at 2560x1440 overwrote it and crashed in
+  `renderTileRow` (`0x62B6EC`). SacredBild flushes ground, layers and water tiles between rows before either
+  array fills up.
+- Device calls from other threads: in game the main thread calls the device itself, ~3-4 times per second:
+  `0x6285C0` (zoom: `GetTransform` + `SetTransform`) and the render flag setter `0x6435A0` (filtering, stage
+  states). The proxy therefore keeps a lock (a spinlock: the render thread never pays a kernel wake-up).
 - Tile layer records come from `0x6360E0`: a map cache of 0x1000 entries filled from the data file
   (fseek/fread per miss) with an O(n) LRU scan per insert when full. A zoomed-out high-resolution view needs
   more entries and thrashed every frame (~140 ms); the limit is raised to 0x8000. The texture manager budget (`0x65EA20`, set by `initApp`) is not a limit on modern

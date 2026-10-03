@@ -83,6 +83,9 @@ namespace Sacred::Addr
     constexpr uintptr_t cWorldView_renderTileRow = 0x0062B000;  // thiscall (device, rowPos, detail)
     constexpr uintptr_t cWorldView_drawTileLayers = 0x0062D530; // thiscall (device)
     constexpr uintptr_t cQuadBatcher_flush = 0x00629420;        // thiscall (device)
+    // Draws the collected water/lava tiles (glow pass, then the tiles) and sets the water ambience from their
+    // count and average position.
+    constexpr uintptr_t cWorldView_drawWaterTiles = 0x0062DE70; // thiscall (device)
 
     // Engine input: cEngine_receiveEvent (0x618130) passes mouse events to the UI manager first (UI coordinates)
     // and then to the world mouse handler, which picks with the event position.
@@ -149,6 +152,10 @@ namespace Sacred::WorldView
     constexpr uintptr_t quadBatcher = 0x86890;
     constexpr uintptr_t layeredTileCount = 0x3FF1C;
     constexpr uint32_t layeredTileCapacity = 0x6D5;
+    // Animated (water/lava, record type 0x90/0xA0) tiles: renderTileRow appends 0x98-byte entries at +0x3FF2C without
+    // a bounds check; cWorldView_drawWaterTiles draws them after all rows. Entry 1750 would overwrite the count.
+    constexpr uintptr_t waterTileCount = 0x80E3C;
+    constexpr uint32_t waterTileCapacity = (0x80E3C - 0x3FF2C) / 0x98;
 }
 
 // cTextureManager member offsets.

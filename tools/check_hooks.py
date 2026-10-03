@@ -27,6 +27,7 @@ HOOKS = {
     0x0062B000: ('cWorldView::renderTileRow', 3),
     0x0062D530: ('cWorldView::drawTileLayers (called)', 1),
     0x00629420: ('cQuadBatcher::flush (called)', 1),
+    0x0062DE70: ('cWorldView::drawWaterTiles (called)', 1),
     0x00617360: ('cEngine::worldMouse', 2),
     0x00623A20: ('pixelsToWorld (cdecl)', 0),
     0x00623C40: ('worldToPixels (cdecl)', 0),
