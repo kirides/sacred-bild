@@ -90,6 +90,13 @@ Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAP
   out, patching only the int half shifts everything by `W/2 - 512`. SacredBild patches all of them
   (`resolution_sites.inc`: `ImmHalfW/H`, `MemHalfW/H`, `MemCullH/H2`), including "center - camera" loads
   (`mov reg, 0x200`) in the object passes and the effect code at `0x41B150`, `0x41B1E0`, `0x41EAF0`.
+- Draw lists: `cWorldView_renderTileRow` stores object positions relative to the camera with the center
+  added (`iso - cam + 0x200`, and for static objects `iso - (cam - 0x200)` via `add reg, -0x200` at
+  `0x62BABB`); the object passes convert them back with `(p - 512.0) / zoom + 512.0`. Every one of these
+  centers is patched together (missing the `-0x200` form shifted all buildings by `(512 - W/2) / zoom`).
+  2D sprites draw with Z off, so their layering against the 3D characters is purely draw order.
+- `cWorldView_screenToWorld` (`0x62A0A0`, vtable slot 6): `(mouse - backbuffer/2) * zoom + camera`, uses
+  the real back-buffer size.
 - In game the frame only clears Z (`cEngine_renderThreadRun`); the ground has to cover the screen.
   SacredBild clears the target before `cWorldView0_render`.
 - Fade: `cEngine_renderFadeOverlay` (`0x60E100`) draws a full-screen TL quad while engine flags

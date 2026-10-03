@@ -104,9 +104,68 @@ DeviceProxy* DeviceProxy::instance()
     return g_instance;
 }
 
+std::string DeviceProxy::renderStates()
+{
+    DWORD z = 0, zw = 0, zf = 0, ab = 0, at = 0;
+    m_real->GetRenderState(D3DRENDERSTATE_ZENABLE, &z);
+    m_real->GetRenderState(D3DRENDERSTATE_ZWRITEENABLE, &zw);
+    m_real->GetRenderState(D3DRENDERSTATE_ZFUNC, &zf);
+    m_real->GetRenderState(D3DRENDERSTATE_ALPHABLENDENABLE, &ab);
+    m_real->GetRenderState(D3DRENDERSTATE_ALPHATESTENABLE, &at);
+    return std::format("z {} zw {} zf {} ab {} at {}", z, zw, zf, ab, at);
+}
+
+void DeviceProxy::probeTL(DWORD fvf, const void* verts, DWORD count, const void* site)
+{
+    if (!m_probe || m_ui || !verts || (fvf & D3DFVF_POSITION_MASK) != D3DFVF_XYZRHW)
+    {
+        return;
+    }
+    const UINT stride = fvfStride(fvf);
+    float z0 = 1e30f, z1 = -1e30f, y0 = 1e30f, y1 = -1e30f;
+    for (DWORD i = 0; i < count; ++i)
+    {
+        const float* p = reinterpret_cast<const float*>(static_cast<const uint8_t*>(verts) + size_t(i) * stride);
+        z0 = std::min(z0, p[2]); z1 = std::max(z1, p[2]);
+        y0 = std::min(y0, p[1]); y1 = std::max(y1, p[1]);
+    }
+    for (TLSite& s : m_probeTL)
+    {
+        if (s.site == site)
+        {
+            ++s.draws;
+            s.zMin = std::min(s.zMin, z0); s.zMax = std::max(s.zMax, z1);
+            s.yMin = std::min(s.yMin, y0); s.yMax = std::max(s.yMax, y1);
+            return;
+        }
+    }
+    if (m_probeTL.size() < 64)
+    {
+        DWORD z = 0, zw = 0, zf = 0;
+        m_real->GetRenderState(D3DRENDERSTATE_ZENABLE, &z);
+        m_real->GetRenderState(D3DRENDERSTATE_ZWRITEENABLE, &zw);
+        m_real->GetRenderState(D3DRENDERSTATE_ZFUNC, &zf);
+        m_probeTL.push_back({site, 1, z0, z1, y0, y1, z, zw, zf});
+    }
+}
+
+void DeviceProxy::dumpProbeTL()
+{
+    for (const TLSite& s : m_probeTL)
+    {
+        LOG("ProbeTL: {} draws {} z {:.4f}..{:.4f} y {:.0f}..{:.0f} (z {} zw {} zf {})", s.site, s.draws, s.zMin, s.zMax,
+            s.yMin, s.yMax, s.zEnable, s.zWrite, s.zFunc);
+    }
+    m_probeTL.clear();
+}
+
 void DeviceProxy::setProbe(bool enabled)
 {
     std::scoped_lock lock(m_mutex);
+    if (m_probe && !enabled)
+    {
+        dumpProbeTL();
+    }
     m_probe = enabled;
     m_probeLogged = 0;
     if (enabled)
@@ -158,10 +217,10 @@ void DeviceProxy::probe3D(const char* what, DWORD fvf, const void* positions, DW
         y0 = std::min(y0, sy); y1 = std::max(y1, sy);
         z0 = std::min(z0, sz); z1 = std::max(z1, sz);
     }
-    LOG("Probe3D: {} at {} fvf {:x} n {} -> x {:.0f}..{:.0f} y {:.0f}..{:.0f} z {:.3f}..{:.3f} ({}/{} in front) vp {},{} {}x{} "
-        "proj[0][0]={:.5f} proj[1][1]={:.5f} world.t=({:.0f},{:.0f},{:.0f})",
-        what, site, fvf, count, x0, x1, y0, y1, z0, z1, front, sampled, vp.dwX, vp.dwY, vp.dwWidth, vp.dwHeight,
-        m_proj._11, m_proj._22, m_world._41, m_world._42, m_world._43);
+    LOG("Probe3D: {} at {} fvf {:x} n {} -> x {:.0f}..{:.0f} y {:.0f}..{:.0f} z {:.4f}..{:.4f} ({}/{} in front) {} "
+        "world.t=({:.0f},{:.0f},{:.0f})",
+        what, site, fvf, count, x0, x1, y0, y1, z0, z1, front, sampled, renderStates(),
+        m_world._41, m_world._42, m_world._43);
 }
 
 D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt) const
@@ -452,6 +511,7 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
     if (quad) D3DStats::count(CDrawQuad);
     D3DStats::onDraw(type, fvf, count, false);
     std::scoped_lock lock(m_mutex);
+    probeTL(fvf, verts, count, _ReturnAddress());
     if (m_ui && verts && isPretransformed(fvf))
     {
         m_site = _ReturnAddress();
@@ -484,6 +544,7 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
     if (fvf & D3DFVF_XYZRHW) D3DStats::count(CDrawTL);
     D3DStats::onDraw(type, fvf, indexCount, true);
     std::scoped_lock lock(m_mutex);
+    probeTL(fvf, verts, vertCount, _ReturnAddress());
     if (m_ui && verts && isPretransformed(fvf))
     {
         m_site = _ReturnAddress();

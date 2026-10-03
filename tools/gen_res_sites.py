@@ -109,6 +109,9 @@ for a in center_x:
     i, op = imm_operand(a, 0x200); out.append(('ImmHalfW', op, 0x200, f"{i.mnemonic} {i.op_str} [{func_of(a)[1]}]"))
 for a in center_y:
     i, op = imm_operand(a, 0x180); out.append(('ImmHalfH', op, 0x180, f"{i.mnemonic} {i.op_str} [{func_of(a)[1]}]"))
+# Static objects in cWorldView_renderTileRow: origin = camera - 512 / - 384 (add reg, -0x200 / -0x180).
+i, op = imm_operand(0x62babb, 0xfffffe00); out.append(('ImmNegHalfW', op, 0xfffffe00, f"{i.mnemonic} {i.op_str} [{func_of(0x62babb)[1]}]"))
+i, op = imm_operand(0x62bac1, 0xfffffe80); out.append(('ImmNegHalfH', op, 0xfffffe80, f"{i.mnemonic} {i.op_str} [{func_of(0x62bac1)[1]}]"))
 # Overhead-label layout rect: FUN_00662300(rect, 1024, 768)
 for a, v in ((0x60e940, 0x300), (0x60e945, 0x400), (0x6272f8, 0x300), (0x6272fd, 0x400)):
     i, op = imm_operand(a, v); out.append(('ImmIW' if v == 0x400 else 'ImmIH', op, v, f"{i.mnemonic} {i.op_str} [{func_of(a)[1]}]"))

@@ -22,6 +22,7 @@ namespace
         ImmFW, ImmFH,                               // float immediate: screen width/height
         ImmIW, ImmIH,                               // int immediate: screen width/height
         ImmHalfW, ImmHalfH,                         // int immediate: screen center (was 512/384)
+        ImmNegHalfW, ImmNegHalfH,                   // int immediate: minus screen center (was -512/-384)
         MemHalfW, MemHalfH,                         // operand -> &screen center (float, was 512.0/384.0)
         MemCullH, MemCullH2,                        // operand -> &ground-tile cull bottom (float, was 818.0 / 888.0)
         ImmCullW, ImmCullH,                         // int immediate: object cull bounds (was 1024 + 200 / 768 + 200)
@@ -84,6 +85,8 @@ namespace
         case Kind::ImmIH: return static_cast<uint32_t>(g_height);
         case Kind::ImmHalfW: return static_cast<uint32_t>(g_width / 2);
         case Kind::ImmHalfH: return static_cast<uint32_t>(g_height / 2);
+        case Kind::ImmNegHalfW: return static_cast<uint32_t>(-(g_width / 2));
+        case Kind::ImmNegHalfH: return static_cast<uint32_t>(-(g_height / 2));
         case Kind::MemHalfW: return reinterpret_cast<uint32_t>(&g_halfWF);
         case Kind::MemHalfH: return reinterpret_cast<uint32_t>(&g_halfHF);
         case Kind::MemCullH: return reinterpret_cast<uint32_t>(&g_cullHF);

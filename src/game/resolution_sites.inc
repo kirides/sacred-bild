@@ -120,6 +120,8 @@ static const Site kResolutionSites[] = {
     {Kind::ImmHalfH, 0x0062FE7E, 0x00000180}, // mov ecx, 0x180 [FUN_0062e580]
     {Kind::ImmHalfH, 0x00631AE8, 0x00000180}, // mov ecx, 0x180 [FUN_006300d0]
     {Kind::ImmHalfH, 0x00631C71, 0x00000180}, // mov ecx, 0x180 [FUN_006300d0]
+    {Kind::ImmNegHalfW, 0x0062BABD, 0xFFFFFE00}, // add edx, 0xfffffe00 [FUN_0062b000]
+    {Kind::ImmNegHalfH, 0x0062BAC2, 0xFFFFFE80}, // add eax, 0xfffffe80 [FUN_0062b000]
     {Kind::ImmIH, 0x0060E941, 0x00000300}, // push 0x300 [cEngine_renderThreadRun]
     {Kind::ImmIW, 0x0060E946, 0x00000400}, // push 0x400 [cEngine_renderThreadRun]
     {Kind::ImmIH, 0x006272F9, 0x00000300}, // push 0x300 [FUN_00627260]

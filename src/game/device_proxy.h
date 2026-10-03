@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <mutex>
+#include <string>
 #include <vector>
 
 // IDirect3DDevice7 wrapper handed to the game instead of the real device. All calls are forwarded;
@@ -93,6 +94,9 @@ private:
     bool clipQuad(DWORD fvf, uint8_t* verts);
     D3DVIEWPORT7 canvasViewport(const D3DVIEWPORT7& virt) const;    // clamped to the canvas, or the screen if unconfined
     void probe3D(const char* what, DWORD fvf, const void* positions, DWORD stride, DWORD count, const void* site);
+    void probeTL(DWORD fvf, const void* verts, DWORD count, const void* site);
+    void dumpProbeTL();
+    std::string renderStates();
     DWORD uiFilter(DWORD value) const;
 
     IDirect3DDevice7* m_real;
@@ -110,5 +114,7 @@ private:
 
     bool m_probe = false;
     int m_probeLogged = 0;
+    struct TLSite { const void* site; int draws; float zMin, zMax, yMin, yMax; DWORD zEnable, zWrite, zFunc; };
+    std::vector<TLSite> m_probeTL;
     D3DMATRIX m_world = {}, m_view = {}, m_proj = {};
 };
