@@ -5,6 +5,7 @@
 #include <d3d.h>
 
 #include "render/batcher.h"
+#include "spin_lock.h"
 
 #include <cstdint>
 #include <memory>
@@ -33,6 +34,10 @@ public:
     void endBatch();
     // Draws what is batched and applies recorded state, for code that touches the frame outside the device.
     void syncBatch();
+
+    // Once per presented frame, from the presenting thread: device calls from any other thread are counted
+    // (they decide whether the proxy could do without its lock) and logged every few seconds.
+    void onPresent(DWORD thread);
 
     // Diagnostics: while enabled (one frame every few seconds), log where 3D draws land on screen.
     void setProbe(bool enabled);
@@ -97,6 +102,20 @@ public:
 private:
     explicit DeviceProxy(IDirect3DDevice7* real) : m_real(real) {}
 
+    // Held for every call that touches the proxy's or the batcher's state.
+    class CallLock
+    {
+    public:
+        CallLock(DeviceProxy& proxy, void* site);
+        ~CallLock() { m_proxy.m_mutex.unlock(); }
+        CallLock(const CallLock&) = delete;
+        CallLock& operator=(const CallLock&) = delete;
+
+    private:
+        DeviceProxy& m_proxy;
+    };
+    void noteForeignCall(DWORD thread, void* site);
+
     // Calls go through the batcher: inside a batching scope, outside UI mode and state block recording.
     bool batching() const { return m_batcher && m_batcher->active() && !m_ui && !m_recording; }
 
@@ -119,7 +138,17 @@ private:
     std::unique_ptr<Batcher> m_batcher;
     bool m_recording = false;               // between BeginStateBlock and EndStateBlock
 
-    std::recursive_mutex m_mutex;
+    RecursiveSpinLock m_mutex;
+    DWORD m_presentThread = 0;
+    struct ForeignSite
+    {
+        void* site;
+        DWORD thread;
+        uint32_t calls;
+    };
+    std::vector<ForeignSite> m_foreignSites;
+    uint32_t m_foreignCalls = 0;
+    DWORD m_foreignReportTick = 0;
     bool m_ui = false;
     bool m_confine = true;
     D3DVIEWPORT7 m_savedViewport = {};      // physical viewport before entering UI mode

@@ -3,6 +3,7 @@
 #include "config.h"
 #include "log.h"
 #include "patch.h"
+#include "spin_lock.h"
 
 #include <gtl/phmap.hpp>
 
@@ -35,7 +36,7 @@ namespace
         CacheFn original;
         uintptr_t mapOffset;    // the std::map in the owner: +0 head node, +4 size
         uintptr_t stampOffset;  // last use, in the node
-        std::shared_mutex mutex;    // the game calls some of these from its logic thread as well
+        SharedSpinLock mutex;       // the game calls some of these from its logic thread as well
         Index indexes[4];
         uint32_t next = 0;
     };

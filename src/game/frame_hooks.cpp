@@ -152,6 +152,7 @@ namespace
         // Every 5 s, log where the next frame's 3D draws land (characters are 3D models).
         if (DeviceProxy* proxy = DeviceProxy::instance())
         {
+            proxy->onPresent(thread);
             static DWORD nextProbe = GetTickCount() + 5000;
             static bool probing = false;
             if (probing)
