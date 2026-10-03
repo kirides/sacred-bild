@@ -126,6 +126,20 @@ i, op = imm_operand(0x62bac1, 0xfffffe80); out.append(('ImmNegHalfH', op, 0xffff
 # Hold-to-move (FUN_004fb620): walk direction = cursor (redirected to screen pixels) - screen center.
 i, op = disp_operand(0x4fb6ef, 0xfffffe00); out.append(('ImmNegHalfW', op, 0xfffffe00, f"{i.mnemonic} {i.op_str} [{func_of(0x4fb6ef)[1]}]"))
 i, op = disp_operand(0x4fb6f9, 0xfffffe80); out.append(('ImmNegHalfH', op, 0xfffffe80, f"{i.mnemonic} {i.op_str} [{func_of(0x4fb6f9)[1]}]"))
+# World depth range. The camera looks at its target from 1341.6 units (eye (0, 1200, 600)), so a ground point
+# v world units above the screen center lies at depth 1341.6 + 2v. The ortho near/far -600 / 2500 cover 768 px up
+# to zoom 2; a taller view puts its top rows past the far plane (3D models cut off or missing there). Device
+# projections only: the second push pair in each function builds g_unzoomedProjection.
+for a in (0x624fe1, 0x62835b, 0x628535, 0x628cdd):
+    i, op = imm_operand(a, f2u(2500.0)); out.append(('ImmFar', op, f2u(2500.0), f"{i.mnemonic} {i.op_str} [{func_of(a)[1]}]"))
+for a in (0x624fe6, 0x628360, 0x62853a, 0x628ce2):
+    i, op = imm_operand(a, f2u(-600.0)); out.append(('ImmNear', op, f2u(-600.0), f"{i.mnemonic} {i.op_str} [{func_of(a)[1]}]"))
+# Depth of Z-tested sprites (flag 0x200 objects, FUN_00628980), the same range by hand:
+# z = (2 * (200 - y * 400/768) * zoom - h / sin(26.57) + [+0x970ac]) / 3100 + 0.002, with 200 = the 384 px center
+# in world units and +0x970ac = camera distance + 600 (cWorldView_updateViewMetrics).
+for a, tgt, kind in ((0x62898c, 0x88ed48, 'MemDepthHalfH'), (0x624ef6, 0x88f028, 'MemDepthNear'),
+                     (0x6289ba, 0x8900dc, 'MemDepthScale'), (0x6289c0, 0x890088, 'MemDepthBias')):
+    i = mem_operand(a, tgt); out.append((kind, a, tgt, f"{i.mnemonic} {i.op_str} [{func_of(a)[1]}]"))
 # Overhead-label layout rect: FUN_00662300(rect, 1024, 768)
 for a, v in ((0x60e940, 0x300), (0x60e945, 0x400), (0x6272f8, 0x300), (0x6272fd, 0x400)):
     i, op = imm_operand(a, v); out.append(('ImmIW' if v == 0x400 else 'ImmIH', op, v, f"{i.mnemonic} {i.op_str} [{func_of(a)[1]}]"))

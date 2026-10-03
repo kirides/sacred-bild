@@ -12,8 +12,9 @@ detected at startup; SacredBild then only passes ddraw calls through and logs th
 
 - **Any resolution** (default: desktop resolution) instead of the hard-coded 1024x768:
   - back buffer and window at the target size, borderless window so the client area matches;
-  - world view: orthographic projection, visible area, culling and overhead-label layout scaled so the
-    world keeps its original pixel density and simply shows more (including the 0.5x-2.0x zoom);
+  - world view: orthographic projection (including its depth range), visible area, culling and
+    overhead-label layout scaled so the world keeps its original pixel density and simply shows more
+    (including the 0.5x-2.0x zoom);
   - world view centered on the screen (the game assumed a 512/384 screen center in 17 places);
   - UI: the game's 1024x768 UI (menus, HUD, cursor, intro videos) is drawn into a centered canvas,
     scaled to fit the screen height (`[UI] Scale`, `LinearFilter`); the mouse is mapped into that canvas

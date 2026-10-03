@@ -94,7 +94,24 @@ Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAP
   added (`iso - cam + 0x200`, and for static objects `iso - (cam - 0x200)` via `add reg, -0x200` at
   `0x62BABB`); the object passes convert them back with `(p - 512.0) / zoom + 512.0`. Every one of these
   centers is patched together (missing the `-0x200` form shifted all buildings by `(512 - W/2) / zoom`).
-  2D sprites draw with Z off, so their layering against the 3D characters is purely draw order.
+  Most 2D sprites draw with Z off, so their layering against the 3D characters is draw order. Objects with
+  flag `0x200` (buildings, portals: the occluders characters walk behind) draw with Z test and Z write on, with a
+  depth computed by hand (see "Depth range" below).
+- Camera and depth range: view = look-at from eye `0x182CDA0` (0, 1200, 600) to target `0x182CD80` (0, 0, 0),
+  up +Z (set up by static initializers at `0x810DB0`/`0x810DD0`; `0x6285C0` shifts both by the camera). The
+  camera looks down at 26.57° from 1341.6 units, so ground `v` world units above the screen center lies at depth
+  `1341.6 + 2v`, a point `h` above the ground `2.236h` closer. The world projection's near/far are -600 / 2500
+  (`push 0xC4160000` / `0x451C4000` in `0x624F10`, `0x628210`, `0x6283F0`, `0x6289D0`; `cEngine_ctor` and
+  `0x60D800` set an initial -1000 / 1500 one that the world view replaces every frame). That covers a 768 px
+  view up to zoom 2 (depths 542..2142). At 2560x1440, zoom 2, ground in the top ~164 px lies past the far plane:
+  3D models there lost their lower parts (the far side) or vanished. `0x628980` (thiscall (screen y, height))
+  gives the Z-tested sprites their depth with the same constants by hand:
+  `(2 * (200 - y * 400/768) * zoom - h / sin(26.57°) + view[+0x970AC]) / 3100 + 0.002`, where 200 is the 384 px
+  center in world units and `+0x970AC` = camera distance + 600 (`cWorldView_updateViewMetrics`). With the screen
+  center at H/2 that put the sprites ~350·zoom units in front of 3D models at the same spot. SacredBild scales the
+  range around the camera distance with `H/768` (1440: -2299..3514) and patches the sprite constants to match
+  (center `200·H/768`, `-near`, `1/(far - near)`, bias `0.002·768/H`). The model visibility test `0x405810`
+  only checks x/y.
 - `cWorldView_screenToWorld` (`0x62A0A0`, vtable slot 6): `(mouse - backbuffer/2) * zoom + camera`, uses
   the real back-buffer size.
 - Ground layers: `renderTileRow` draws each tile's base through the quad batcher (`+0x86890`, flush
@@ -266,12 +283,6 @@ Per-window re-anchoring does not work: children are absolute, many renderers dra
 - Diagnostics: draws in a UI scope that extend beyond 1024x768, or that the proxy cannot map (3D, VB,
   strided), are logged once per call site; changes of the engine fade flags and the UI manager mode
   (`+8`: `0x10` cinematic) are logged as `State:` lines.
-
-## Known issues
-
-- Creatures disappear ~100-200 px below the top edge at 2560x1440 (seen before the batching work). The world
-  view's own culling is patched (all 384/512 centers, the +200 margins, tile row range); the remaining suspect
-  is game logic deciding visibility with the unpatched 1024x768 `g_unzoomedProjection`. Low priority.
 
 ## Things that read the back buffer
 

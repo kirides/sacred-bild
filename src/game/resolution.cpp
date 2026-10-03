@@ -8,6 +8,7 @@
 #include <ddraw.h>
 #include <intrin.h>
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace
@@ -29,6 +30,9 @@ namespace
         ImmPickLimit,                               // int immediate: max objects in the pick list (was 1000)
         ImmLayerCache,                              // int immediate: tile layer record cache size (was 0x1000)
         MemUnzX, MemUnzY,                           // operand -> &g_unzoomedProjection._11 * 1024/W (._22 * 768/H)
+        ImmNear, ImmFar,                            // float immediate: world projection near/far plane (was -600 / 2500)
+        MemDepthHalfH, MemDepthNear,                // operand -> &sprite depth constants (was 200.0 = 384 px, 600.0 = -near)
+        MemDepthScale, MemDepthBias,                // (was 1/3100 = 1/(far - near), 0.002)
     };
 
     struct Site
@@ -58,6 +62,12 @@ namespace
     double g_projPosW = 267.0;
     double g_projNegH = -200.0;
     double g_projPosH = 200.0;
+    double g_near = -600.0;
+    double g_far = 2500.0;
+    float g_depthHalfHF = 200.0f;
+    float g_depthNegNearF = 600.0f;
+    float g_depthScaleF = 1.0f / 3100.0f;
+    float g_depthBiasF = 0.002f;
 
     uint32_t floatBits(double v)
     {
@@ -99,6 +109,12 @@ namespace
         case Kind::ImmLayerCache: return 0x8000;
         case Kind::MemUnzX: return reinterpret_cast<uint32_t>(&g_unzXF);
         case Kind::MemUnzY: return reinterpret_cast<uint32_t>(&g_unzYF);
+        case Kind::ImmNear: return floatBits(g_near);
+        case Kind::ImmFar: return floatBits(g_far);
+        case Kind::MemDepthHalfH: return reinterpret_cast<uint32_t>(&g_depthHalfHF);
+        case Kind::MemDepthNear: return reinterpret_cast<uint32_t>(&g_depthNegNearF);
+        case Kind::MemDepthScale: return reinterpret_cast<uint32_t>(&g_depthScaleF);
+        case Kind::MemDepthBias: return reinterpret_cast<uint32_t>(&g_depthBiasF);
         }
         return 0;
     }
@@ -298,6 +314,18 @@ namespace
         g_projNegW = -g_projPosW;
         g_projPosH = 200.0 * g_height / 768.0;
         g_projNegH = -g_projPosH;
+        // Depth: the camera sits 1341.6 units from its target (eye (0, 1200, 600)), so ground v world units above
+        // the screen center is at depth 1341.6 + 2v. Scale the original range around that center with the height,
+        // or the top rows of a taller view lie past the far plane: 3D models there lose their lower parts or vanish.
+        const double scale = g_height / 768.0;
+        const double eye = std::sqrt(1200.0 * 1200.0 + 600.0 * 600.0);
+        g_near = eye - (eye + 600.0) * scale;
+        g_far = eye + (2500.0 - eye) * scale;
+        // Z-tested sprites compute their depth by hand: same range, center at H/2, bias kept in world units.
+        g_depthHalfHF = static_cast<float>(g_projPosH);
+        g_depthNegNearF = static_cast<float>(-g_near);
+        g_depthScaleF = static_cast<float>(1.0 / (g_far - g_near));
+        g_depthBiasF = static_cast<float>(0.002 / scale);
     }
 }
 
@@ -321,7 +349,7 @@ int Resolution::centerY() { return (g_height - 768) / 2; }
 void Resolution::install()
 {
     chooseSize();
-    LOG("Resolution: {}x{}", g_width, g_height);
+    LOG("Resolution: {}x{}, world depth range {:.0f}..{:.0f}", g_width, g_height, g_near, g_far);
     if (!active())
     {
         return;
