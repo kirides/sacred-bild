@@ -139,6 +139,11 @@ namespace
             }
             else if (static_cast<int>(GetTickCount() - nextProbe) >= 0)
             {
+                if (void* textures = *reinterpret_cast<void**>(Addr::g_pTextureManager))
+                {
+                    LOG("Textures: {} / {} MB loaded", member<uint32_t>(textures, TextureManager::usedBytes) >> 20,
+                        member<uint32_t>(textures, TextureManager::budgetBytes) >> 20);
+                }
                 LOG("Probe3D: last 5 s: creature renders {}, object renders {} (model attached {}), model draws {}",
                     _InterlockedExchange(&g_creatureRenders, 0), _InterlockedExchange(&g_objectRenders, 0),
                     _InterlockedExchange(&g_objectAttached, 0), _InterlockedExchange(&g_modelDraws, 0));

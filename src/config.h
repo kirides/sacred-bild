@@ -16,6 +16,10 @@ struct Config
     float uiScale = 0.0f;
     bool uiLinearFilter = true;   // bilinear filtering for the scaled UI instead of the game's point sampling
 
+    // Texture memory the game may keep loaded, in MB; 0 = max(game's own value, 256). A zoomed-out view at a
+    // high resolution shows far more different ground textures than the original 1024x768.
+    int textureBudgetMB = 0;
+
     // Diagnostics
     bool d3dStats = true;         // per-second D3D7 call counts in the log
     bool profiler = false;        // sample the render thread, dump hot spots on exit

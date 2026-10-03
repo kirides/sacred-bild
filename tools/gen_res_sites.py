@@ -89,6 +89,11 @@ center_y = [0x41b27e, 0x41b3e4, 0x41b4c4, 0x41e596, 0x62b4e9, 0x62dce1, 0x62e3a9
 UNZ11, UNZ22 = 0x182ccf0, 0x182cd04
 for a, tgt, kind in ((0x6288de, UNZ11, 'MemUnzX'), (0x6288fe, UNZ22, 'MemUnzY')):
     i = mem_operand(a, tgt); out.append((kind, a, tgt, f"{i.mnemonic} {i.op_str} [{func_of(a)[1]}]"))
+# Tile layer record cache (FUN_006360e0): 0x1000 entries, then an O(n) LRU scan plus a file read per miss.
+# A zoomed-out high-resolution view needs more and thrashes every frame.
+i, op = imm_operand(0x636201, 0x1000); out.append(('ImmLayerCache', op, 0x1000, f"{i.mnemonic} {i.op_str} [{func_of(0x636201)[1]}]"))
+# Object picking (FUN_00626d30) gives up when more than 1000 objects are on screen.
+i, op = imm_operand(0x626d82, 0x3e8); out.append(('ImmPickLimit', op, 0x3e8, f"{i.mnemonic} {i.op_str} [{func_of(0x626d82)[1]}]"))
 # Object/creature passes cull their screen position against 1024 + 200 / 768 + 200.
 for a in (0x62f988, 0x6315cb):
     i, op = imm_operand(a, 0x4c8); out.append(('ImmCullW', op, 0x4c8, f"{i.mnemonic} {i.op_str} [{func_of(a)[1]}]"))

@@ -52,6 +52,8 @@ static const Site kResolutionSites[] = {
     {Kind::ImmFH, 0x0060E2D5, 0x44400000}, // mov dword ptr [esp + 0x18], 0x44400000 [overlay]
     {Kind::MemUnzX, 0x006288DE, 0x0182CCF0}, // fmul dword ptr [0x182ccf0] [FUN_006285c0]
     {Kind::MemUnzY, 0x006288FE, 0x0182CD04}, // fmul dword ptr [0x182cd04] [FUN_006285c0]
+    {Kind::ImmLayerCache, 0x00636203, 0x00001000}, // cmp ecx, 0x1000 [FUN_006360e0]
+    {Kind::ImmPickLimit, 0x00626D84, 0x000003E8}, // cmp edx, 0x3e8 [FUN_00626d30]
     {Kind::ImmCullW, 0x0062F98A, 0x000004C8}, // cmp edi, 0x4c8 [FUN_0062e580]
     {Kind::ImmCullW, 0x006315CD, 0x000004C8}, // cmp edi, 0x4c8 [FUN_006300d0]
     {Kind::ImmCullH, 0x0062F9A8, 0x000003C8}, // cmp eax, 0x3c8 [FUN_0062e580]

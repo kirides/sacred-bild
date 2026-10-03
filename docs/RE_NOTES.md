@@ -97,6 +97,19 @@ Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAP
   2D sprites draw with Z off, so their layering against the 3D characters is purely draw order.
 - `cWorldView_screenToWorld` (`0x62A0A0`, vtable slot 6): `(mouse - backbuffer/2) * zoom + camera`, uses
   the real back-buffer size.
+- Ground layers: `renderTileRow` draws each tile's base through the quad batcher (`+0x86890`, flush
+  `0x629420`) and copies tiles with blend layers into an array at `+0xB64` (0x90 bytes each, list heads at
+  `+0x3E3C4`, count `+0x3FF1C`, capped at `0x6D5`); `cWorldView_drawTileLayers` (`0x62D530`) draws them after
+  all rows. A zoomed-out high-resolution view overflows the cap (later rows lose their blends: staircase
+  edges), so SacredBild flushes batcher + layers between rows when the array is nearly full.
+- Input: mouse events (`0x8950A8` down, `0x897248` up; x/y at +8/+0xC) carry the UI-space cursor.
+  `cEngine_receiveEvent` (`0x618130`) hands them to the UI manager first (UI coordinates), then to the world
+  mouse handler `0x617360` (thiscall (event, flag)), which picks with them; SacredBild converts the event to
+  screen pixels for that call only.
+- Tile layer records come from `0x6360E0`: a map cache of 0x1000 entries filled from the data file
+  (fseek/fread per miss) with an O(n) LRU scan per insert when full. A zoomed-out high-resolution view needs
+  more entries and thrashed every frame (~140 ms); the limit is raised to 0x8000. The texture manager budget (`0x65EA20`, set by `initApp`) is not a limit on modern
+  machines (computes to ~4 GB).
 - In game the frame only clears Z (`cEngine_renderThreadRun`); the ground has to cover the screen.
   SacredBild clears the target before `cWorldView0_render`.
 - Fade: `cEngine_renderFadeOverlay` (`0x60E100`) draws a full-screen TL quad while engine flags

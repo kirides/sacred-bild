@@ -48,6 +48,11 @@ namespace Sacred::Addr
     constexpr uintptr_t cUI_Manager_createGameWindows = 0x007593D0;
     constexpr uintptr_t cUI_Window2_typeDescriptor = 0x009DE188;
 
+    // Texture manager (one instance): loads textures on use, evicts least recently used ones above a budget.
+    // initApp computes the budget from GlobalMemoryStatus and the reported video memory (min 32 MB).
+    constexpr uintptr_t g_pTextureManager = 0x013E57B8;
+    constexpr uintptr_t cTextureManager_init = 0x0065EA20;      // thiscall (budgetBytes)
+
     // cEngine
     constexpr uintptr_t initApp = 0x00815620;
     constexpr uintptr_t cEngine_renderThreadRun = 0x0060E3F0;   // fastcall (engine), loops until shutdown
@@ -67,6 +72,19 @@ namespace Sacred::Addr
     constexpr uintptr_t pixelsToWorld = 0x00623A20;
     constexpr uintptr_t worldToPixels = 0x00623C40;
     constexpr uintptr_t g_unzoomedProjection = 0x0182CCF0;
+
+    // Ground: renderTileRow draws each tile's base through the quad batcher (cWorldView + 0x86890) and collects
+    // tiles with blend layers into a fixed array (at most 0x6D5 per frame); after all rows cWorldView0_render
+    // flushes the batcher and cWorldView_drawTileLayers draws the collected layers.
+    constexpr uintptr_t cWorldView_renderTileRow = 0x0062B000;  // thiscall (device, rowPos, detail)
+    constexpr uintptr_t cWorldView_drawTileLayers = 0x0062D530; // thiscall (device)
+    constexpr uintptr_t cQuadBatcher_flush = 0x00629420;        // thiscall (device)
+
+    // Engine input: cEngine_receiveEvent (0x618130) passes mouse events to the UI manager first (UI coordinates)
+    // and then to the world mouse handler, which picks with the event position.
+    constexpr uintptr_t cEngine_worldMouse = 0x00617360;        // thiscall (event, flag) -> bool
+    constexpr uintptr_t cEventMouseDown_vtable = 0x008950A8;    // x at +8, y at +0xC
+    constexpr uintptr_t cEventMouseUp_vtable = 0x00897248;
 
     // cWorldView0 vtable slot 5: draws the isometric world (arg: device).
     constexpr uintptr_t cWorldView0_render = 0x006322B0;
@@ -108,6 +126,21 @@ namespace Sacred::UiControl
 namespace Sacred::Engine
 {
     constexpr uintptr_t flags = 0x54;        // 0x10000 loading screen, 0x20000 fade out, 0x40000 fade in, 0x80000 black
+}
+
+// cWorldView member offsets (ground layers).
+namespace Sacred::WorldView
+{
+    constexpr uintptr_t quadBatcher = 0x86890;
+    constexpr uintptr_t layeredTileCount = 0x3FF1C;
+    constexpr uint32_t layeredTileCapacity = 0x6D5;
+}
+
+// cTextureManager member offsets.
+namespace Sacred::TextureManager
+{
+    constexpr uintptr_t usedBytes = 0xC001C;
+    constexpr uintptr_t budgetBytes = 0xC0020;
 }
 
 // cMouse member offsets.

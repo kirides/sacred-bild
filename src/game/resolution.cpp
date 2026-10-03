@@ -26,6 +26,8 @@ namespace
         MemHalfW, MemHalfH,                         // operand -> &screen center (float, was 512.0/384.0)
         MemCullH, MemCullH2,                        // operand -> &ground-tile cull bottom (float, was 818.0 / 888.0)
         ImmCullW, ImmCullH,                         // int immediate: object cull bounds (was 1024 + 200 / 768 + 200)
+        ImmPickLimit,                               // int immediate: max objects in the pick list (was 1000)
+        ImmLayerCache,                              // int immediate: tile layer record cache size (was 0x1000)
         MemUnzX, MemUnzY,                           // operand -> &g_unzoomedProjection._11 * 1024/W (._22 * 768/H)
     };
 
@@ -93,6 +95,8 @@ namespace
         case Kind::MemCullH2: return reinterpret_cast<uint32_t>(&g_cullH2F);
         case Kind::ImmCullW: return static_cast<uint32_t>(g_width + 200);
         case Kind::ImmCullH: return static_cast<uint32_t>(g_height + 200);
+        case Kind::ImmPickLimit: return 8000;
+        case Kind::ImmLayerCache: return 0x8000;
         case Kind::MemUnzX: return reinterpret_cast<uint32_t>(&g_unzXF);
         case Kind::MemUnzY: return reinterpret_cast<uint32_t>(&g_unzYF);
         }
@@ -210,6 +214,37 @@ namespace
         return out;
     }
 
+    // The ground layer array holds 0x6D5 tiles: enough for the original view, not for a large zoomed-out one
+    // (later rows lost their blend layers). Draw the collected layers early, between rows, when it fills up.
+    using TileRowFn = void(__fastcall*)(void* self, void* edx, void* device, void* rowPos, int detail);
+    using DeviceFn = void(__fastcall*)(void* self, void* edx, void* device);
+    TileRowFn g_origTileRow = reinterpret_cast<TileRowFn>(Addr::cWorldView_renderTileRow);
+    const auto g_flushBatcher = reinterpret_cast<DeviceFn>(Addr::cQuadBatcher_flush);
+    const auto g_drawTileLayers = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawTileLayers);
+
+    void __fastcall hookTileRow(void* self, void* edx, void* device, void* rowPos, int detail)
+    {
+        auto& count = *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(self) + WorldView::layeredTileCount);
+        if (count + 128 > WorldView::layeredTileCapacity)
+        {
+            g_flushBatcher(static_cast<uint8_t*>(self) + WorldView::quadBatcher, nullptr, device);
+            g_drawTileLayers(self, nullptr, device);
+            count = 0;
+        }
+        g_origTileRow(self, edx, device, rowPos, detail);
+    }
+
+    using TextureInitFn = uint32_t(__fastcall*)(void* self, void* edx, uint32_t budget);
+    TextureInitFn g_origTextureInit = reinterpret_cast<TextureInitFn>(Addr::cTextureManager_init);
+
+    uint32_t __fastcall hookTextureInit(void* self, void* edx, uint32_t budget)
+    {
+        const uint32_t wanted = g_config.textureBudgetMB > 0 ? static_cast<uint32_t>(g_config.textureBudgetMB) << 20
+                                                             : std::max<uint32_t>(budget, 256u << 20);
+        LOG("Texture budget: game {} MB, using {} MB", budget >> 20, wanted >> 20);
+        return g_origTextureInit(self, edx, wanted);
+    }
+
     using LoadingScreenFn = void(__fastcall*)(void* self, void* edx, uint32_t progress, const char* text);
     LoadingScreenFn g_origLoadingScreen = reinterpret_cast<LoadingScreenFn>(Addr::dxDriver7_drawLoadingScreen);
 
@@ -295,6 +330,8 @@ void Resolution::install()
 
     Patch::hook(g_origFindMode, &hookFindMode, "cDxDevices::findMode");
     Patch::hook(g_origLoadingScreen, &hookLoadingScreen, "dxDriver7::drawLoadingScreen");
+    Patch::hook(g_origTextureInit, &hookTextureInit, "cTextureManager::init");
+    Patch::hook(g_origTileRow, &hookTileRow, "cWorldView::renderTileRow");
     Patch::hook(g_origPixelsToWorld, &hookPixelsToWorld, "pixelsToWorld");
     Patch::hook(g_origWorldToPixels, &hookWorldToPixels, "worldToPixels");
 }

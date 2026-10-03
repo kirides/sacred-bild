@@ -30,6 +30,8 @@ namespace
     using RenderCursorFn = void(__fastcall*)(void* self, void* edx, void* device, int flag);
     using MouseInstanceFn = void*(__cdecl*)();
     using IsCursorOverUiFn = bool(__fastcall*)(void* uiManager, void* edx, int x, int y);
+    using WorldMouseFn = uint32_t(__fastcall*)(void* engine, void* edx, void* event, int flag);
+    WorldMouseFn g_origWorldMouse = reinterpret_cast<WorldMouseFn>(Addr::cEngine_worldMouse);
     using SavePortraitFn = uint32_t(__fastcall*)(void* self, void* edx, const char* path, int w, int h, float scale);
     using PlayVideoFn = int(__fastcall*)(void* self, void* edx, void* a, void* b, void* c, int w, int h);
 
@@ -71,6 +73,25 @@ namespace
     {
         UiCanvas::Scope ui;
         return g_origPlayVideo(self, edx, a, b, c, w, h);
+    }
+
+    // Mouse events carry the cursor as the window procedure read it (UI coordinates). The UI gets them first;
+    // the world mouse handler then picks with them, so it gets screen pixels for the duration of the call.
+    uint32_t __fastcall hookWorldMouse(void* engine, void* edx, void* event, int flag)
+    {
+        const uintptr_t vtable = event ? *static_cast<uintptr_t*>(event) : 0;
+        if (vtable != Addr::cEventMouseDown_vtable && vtable != Addr::cEventMouseUp_vtable)
+        {
+            return g_origWorldMouse(engine, edx, event, flag);
+        }
+        auto* coords = reinterpret_cast<int*>(static_cast<uint8_t*>(event) + 8);
+        const int x = coords[0], y = coords[1];
+        coords[0] = UiCanvas::toPhysicalX(x);
+        coords[1] = UiCanvas::toPhysicalY(y);
+        const uint32_t result = g_origWorldMouse(engine, edx, event, flag);
+        coords[0] = x;
+        coords[1] = y;
+        return result;
     }
 
     // The world cursor handler reads the mouse once (redirected to physical) and also asks the UI with it.
@@ -188,5 +209,6 @@ void UiCanvas::install()
     Patch::hook(g_origGetClientCursorPos, &hookGetClientCursorPos, "getClientCursorPos");
     Patch::hook(g_origRenderCursor, &hookRenderCursor, "cMouse::renderCursor");
     Patch::hook(g_origSavePortrait, &hookSavePortrait, "renderSavePortrait");
+    Patch::hook(g_origWorldMouse, &hookWorldMouse, "cEngine::worldMouse");
     Patch::hook(g_origPlayVideo, &hookPlayVideo, "playVideo");
 }
