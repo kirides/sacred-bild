@@ -119,6 +119,41 @@ Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAP
   (`+0x54`) have `0x20000` (fade out, then latches `0x80000` = black), `0x40000` (fade in) or `0x80000`.
   `cEngine_setFadeMode` and many script functions toggle them.
 
+## Draw calls and batching
+
+Measured at 1920x1200, zoomed out (2.0): ~9,600 draws per frame, 8,400 stage-0 texture switches, ~350
+distinct textures, 21.6 ms of 30 ms world time inside `DrawPrimitive*`. Nearly every draw uses another
+texture than the one before, so the game's own batching rarely gets past one quad.
+
+- Ground quad batcher at `cWorldView + 0x86890`: `0x629260` (thiscall (device, 4 vertices)) culls against
+  0..1024 / 0..768, appends a quad (FVF `0x244`: XYZRHW, diffuse, two texture coordinate sets) and flushes at
+  0x252 indices; `0x629420` flushes with one `DrawIndexedPrimitive` and is called whenever the texture changes
+  (`0x6293A0` one texture, `0x6293E0` two). The detail histogram shows mostly 6-index draws: one quad each.
+- `cTileRenderer` (`0x61E810`/`0x61FAC0`, vertex buffer) is not used in game (no `DrawPrimitiveVB` calls).
+- Sprites: `dxDriver7_drawTexturedQuad` and the object passes draw FVF `0x1C4` strips and small indexed lists.
+- Render state cache: `0x643560` (thiscall (flag, on)) skips redundant changes of a flag word at device
+  wrapper `+4`; `0x6435A0` applies them. Flags: `1` ZENABLE, `2` CULLMODE CCW/none, `4` ALPHABLENDENABLE,
+  `8` SRCBLEND one/srcalpha, `0x10` DESTBLEND one/invsrcalpha, `0x20` LIGHTING, `0x40` ZFUNC greater/lessequal,
+  `0x80` SPECULARENABLE, `0x100` ZWRITEENABLE, `0x200` COLORVERTEX, `0x400` FILLMODE solid/wireframe, `0x800`
+  linear/point filtering (stages 0+1), `0x1000` stage 0 addressing wrap/mirror, `0x2000`/`0x20000`/`0x40000`
+  texture stage setups for ground layers, `0x4000` ALPHATESTENABLE, `0x8000` texture transform (count 2),
+  `0x10000` stencil. Sprites toggle alpha test and Z writes around each draw; the values at draw time repeat.
+- No `ApplyStateBlock` calls exist; `GetRenderState` is used by `cTileRenderer_flush` and a few others.
+- Textures come from `dxDriver7_createSurface` type 1: `DDSCAPS_TEXTURE` + `DDSCAPS2_TEXTUREMANAGE`, mostly
+  256x256 ARGB4444, some ARGB8888, no mipmaps or color keys. The texture manager (`0x65F010`) loads and
+  evicts them on the render thread while drawing.
+
+SacredBild batches the world view (`src/render/batcher.*`, active inside `cWorldView0_render`): state calls
+are recorded; at each pretransformed triangle draw the recorded state is compared with the device, and
+draws that match are appended to one pending triangle-list `DrawIndexedPrimitive`. Small textures are used
+through copies in 4096x4096 atlas pages with a one-texel gutter (`src/render/atlas.*`), with texture
+coordinates remapped, when the draw's coordinates stay within half a texel of the texture. The gutter holds
+the opposite edge for wrap addressing and repeats the edge for clamp/mirror (identical that close to the edge).
+Copies are refreshed when a texture's uniqueness value changes; destroyed textures are noticed through
+private data (`DDSPD_IUNKNOWNPOINTER`). 3D models (strided draws), Clear, EndScene and back buffer locks
+draw the pending batch first. Limitation: a raw (non-atlas) texture the game locks and changes in the
+middle of the world pass would show its new content in draws batched before the change.
+
 ## UI (`cUI_Control2` / `cUI_Window2` / `cUI_Manager`)
 
 `cUI_Control2` (vtable `0x895488`): `+0x10` flags (bit 0 visible), `+0x24` x, `+0x28` y, `+0x2C`/`+0x2E`

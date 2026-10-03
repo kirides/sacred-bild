@@ -99,9 +99,9 @@ namespace
         LOG("dxDriver7::init -> {} ({}x{} {}bpp, {}, device {})", ok & 0xFF, member<uint16_t>(self, DxDriver::width),
             member<uint16_t>(self, DxDriver::height), member<int>(self, DxDriver::bpp),
             member<int>(self, DxDriver::windowed) == 1 ? "fullscreen" : "windowed", static_cast<void*>(device));
-        if ((ok & 0xFF) && device && (g_config.d3dStats || UiCanvas::enabled()))
+        if ((ok & 0xFF) && device && (g_config.d3dStats || g_config.batch || UiCanvas::enabled()))
         {
-            device = DeviceProxy::wrap(device);
+            device = DeviceProxy::wrap(device, member<IDirectDraw7*>(self, DxDriver::ddraw));
         }
         return ok;
     }
@@ -160,6 +160,10 @@ namespace
     {
         D3DStats::count(D3DStats::CLockBack);
         D3DStats::Scope s{D3DStats::TLockBack};
+        if (DeviceProxy* proxy = DeviceProxy::instance())
+        {
+            proxy->syncBatch();     // the CPU must see everything drawn so far
+        }
         void* bits = g_origLockBack(self, edx, desc);
         // The savegame thumbnail copies desc.dwHeight rows into a 1024x768 buffer: hand it the centered 1024x768.
         if (bits && Resolution::active() && reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::captureLockBackReturn)
@@ -185,7 +189,16 @@ namespace
             Resolution::refresh();
             static_cast<IDirect3DDevice7*>(device)->Clear(0, nullptr, D3DCLEAR_TARGET, 0xFF000000, 1.0f, 0);
         }
+        DeviceProxy* proxy = DeviceProxy::instance();
+        if (proxy && device == proxy)
+        {
+            proxy->beginBatch();
+        }
         g_origWorldRender(self, edx, device);
+        if (proxy && device == proxy)
+        {
+            proxy->endBatch();
+        }
     }
 
     // True if one of the in-game windows covering the whole 1024x768 screen (save, options, ...) is open.

@@ -20,6 +20,22 @@ namespace D3DStats
         CTransform,
         CClear,
         CLockBack,      // dxDriver7::lockBack: CPU drawing into the frame
+        // Batcher
+        CSubmit,        // draw calls that reached the real device
+        CMerged,        // game draws appended to a pending batch
+        CAtlasDraw,     // batched draws that sample an atlas page
+        CAtlasRange,    // draws kept on the original texture: coordinates beyond the edges
+        CAtlasUpload,   // texture copies into atlas pages
+        CAtlasReset,    // atlas pages emptied for reuse
+        CFlushTexture,  // pending batch drawn because the next draw needs ...: other textures
+        CFlushRenderState,
+        CFlushStageState,
+        CFlushViewport,
+        CFlushFormat,   // another vertex format or draw flags
+        CFlushFull,
+        CFlushDirect,   // a draw that can't be batched (3D, vertex buffer, lines)
+        CFlushAtlas,    // an atlas page is about to change
+        CFlushOther,    // end of the world view, Clear, state blocks, ...
         CounterCount
     };
 
@@ -32,11 +48,14 @@ namespace D3DStats
         TDraw,          // inside DrawPrimitive*
         TState,         // inside SetTexture/SetRenderState/SetTextureStageState/SetTransform
         TLockBack,
+        TProxy,         // inside the device proxy's draw and state methods, D3D included
+        TWorldProxy,    // the part of TProxy spent inside cWorldView0::render
         TimerCount
     };
 
     void count(Counter c, uint32_t n = 1);
     void addTime(Timer t, int64_t ticks);
+    int64_t total(Timer t);     // accumulated since the last report
     int64_t now();
 
     void setRenderThread(unsigned long threadId);
@@ -45,10 +64,12 @@ namespace D3DStats
     // Called by the device proxy on SetTexture(0, ...); tracks per-frame uniqueness and texture sizes.
     void onTexture(void* surface);
 
-    // Detail histograms for the batching design, logged every ~30 s.
+    // Detail histograms, collected in one frame per second and logged every ~30 s.
     void onDraw(uint32_t primitiveType, uint32_t fvf, uint32_t vertexCount, bool indexed);
     void onRenderState(uint32_t state, uint32_t value);
     void onStageState(uint32_t stage, uint32_t type, uint32_t value);
+    // State that ended a batch: render state number, or 0x10000 | stage << 8 | stage state type.
+    void onFlushCause(uint32_t key);
 
     struct Scope
     {

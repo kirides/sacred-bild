@@ -1,6 +1,7 @@
 #include "game/device_proxy.h"
 #include "game/d3d_stats.h"
 #include "game/ui_canvas.h"
+#include "render/fvf.h"
 #include "config.h"
 #include "log.h"
 
@@ -18,53 +19,10 @@ namespace
 
     bool isPretransformed(DWORD fvf)
     {
-        return (fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW;
-    }
-
-    // Byte size of one pretransformed vertex and offset of its first texture coordinate set.
-    UINT vertexStride(DWORD fvf, UINT* texOffset = nullptr)
-    {
-        UINT size = 16;
-        if (fvf & D3DFVF_DIFFUSE) size += 4;
-        if (fvf & D3DFVF_SPECULAR) size += 4;
-        if (texOffset) *texOffset = size;
-        const UINT texCount = (fvf & D3DFVF_TEXCOUNT_MASK) >> D3DFVF_TEXCOUNT_SHIFT;
-        for (UINT i = 0; i < texCount; ++i)
-        {
-            static constexpr UINT kSizes[4] = {8, 12, 16, 4};   // D3DFVF_TEXTUREFORMAT2, 3, 4, 1
-            size += kSizes[(fvf >> (16 + i * 2)) & 3];
-        }
-        return size;
+        return Fvf::pretransformed(fvf);
     }
 
     bool isNear(float a, float b) { return std::fabs(a - b) < 0.05f; }
-
-    // Byte size of a vertex of any FVF (position first).
-    UINT fvfStride(DWORD fvf)
-    {
-        UINT size = 0;
-        switch (fvf & D3DFVF_POSITION_MASK)
-        {
-        case D3DFVF_XYZ: size = 12; break;
-        case D3DFVF_XYZRHW: size = 16; break;
-        case D3DFVF_XYZB1: size = 16; break;
-        case D3DFVF_XYZB2: size = 20; break;
-        case D3DFVF_XYZB3: size = 24; break;
-        case D3DFVF_XYZB4: size = 28; break;
-        case D3DFVF_XYZB5: size = 32; break;
-        }
-        if (fvf & D3DFVF_NORMAL) size += 12;
-        if (fvf & D3DFVF_RESERVED1) size += 4;
-        if (fvf & D3DFVF_DIFFUSE) size += 4;
-        if (fvf & D3DFVF_SPECULAR) size += 4;
-        const UINT texCount = (fvf & D3DFVF_TEXCOUNT_MASK) >> D3DFVF_TEXCOUNT_SHIFT;
-        for (UINT i = 0; i < texCount; ++i)
-        {
-            static constexpr UINT kSizes[4] = {8, 12, 16, 4};
-            size += kSizes[(fvf >> (16 + i * 2)) & 3];
-        }
-        return size;
-    }
 
     D3DMATRIX multiply(const D3DMATRIX& a, const D3DMATRIX& b)
     {
@@ -89,14 +47,53 @@ namespace
     }
 }
 
-DeviceProxy* DeviceProxy::wrap(IDirect3DDevice7* real)
+DeviceProxy* DeviceProxy::wrap(IDirect3DDevice7* real, IDirectDraw7* ddraw)
 {
     if (!real)
     {
         return nullptr;
     }
     g_instance = new DeviceProxy(real);
+    if (g_config.batch)
+    {
+        Batcher::Options options;
+        options.atlas = g_config.atlas;
+        options.atlasPageSize = g_config.atlasPageSize;
+        options.atlasPages = g_config.atlasPages;
+        options.atlasMaxTextureSize = g_config.atlasMaxTextureSize;
+        g_instance->m_batcher = std::make_unique<Batcher>(real, ddraw, options);
+    }
     return g_instance;
+}
+
+void DeviceProxy::beginBatch()
+{
+    Scope p{TProxy};
+    std::scoped_lock lock(m_mutex);
+    if (m_batcher && !m_batcher->active())
+    {
+        m_batcher->begin();
+    }
+}
+
+void DeviceProxy::endBatch()
+{
+    Scope p{TProxy};
+    std::scoped_lock lock(m_mutex);
+    if (m_batcher && m_batcher->active())
+    {
+        m_batcher->end();
+    }
+}
+
+void DeviceProxy::syncBatch()
+{
+    Scope p{TProxy};
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();
+    }
 }
 
 DeviceProxy* DeviceProxy::instance()
@@ -121,7 +118,7 @@ void DeviceProxy::probeTL(DWORD fvf, const void* verts, DWORD count, const void*
     {
         return;
     }
-    const UINT stride = fvfStride(fvf);
+    const UINT stride = Fvf::stride(fvf);
     float z0 = 1e30f, z1 = -1e30f, y0 = 1e30f, y1 = -1e30f;
     for (DWORD i = 0; i < count; ++i)
     {
@@ -267,6 +264,11 @@ void DeviceProxy::beginUi(bool confine)
     {
         return;
     }
+    // UI mode talks to the device directly.
+    if (batching())
+    {
+        m_batcher->sync();
+    }
     m_ui = true;
     m_confine = confine;
     m_real->GetViewport(&m_savedViewport);
@@ -297,11 +299,15 @@ void DeviceProxy::endUi()
         m_real->SetTextureStageState(stage, D3DTSS_MAGFILTER, m_filters[stage][0]);
         m_real->SetTextureStageState(stage, D3DTSS_MINFILTER, m_filters[stage][1]);
     }
+    if (batching())
+    {
+        m_batcher->invalidate();
+    }
 }
 
 bool DeviceProxy::mapToCanvas(DWORD fvf, const void* verts, DWORD count, const void*& mapped)
 {
-    const UINT stride = vertexStride(fvf);
+    const UINT stride = Fvf::stride(fvf);
     const size_t bytes = size_t(stride) * count;
     if (m_scratch.size() < bytes)
     {
@@ -338,9 +344,9 @@ bool DeviceProxy::mapToCanvas(DWORD fvf, const void* verts, DWORD count, const v
 
 bool DeviceProxy::clipQuad(DWORD fvf, uint8_t* verts)
 {
-    UINT texOffset = 0;
-    const UINT stride = vertexStride(fvf, &texOffset);
-    const UINT texCount = (fvf & D3DFVF_TEXCOUNT_MASK) >> D3DFVF_TEXCOUNT_SHIFT;
+    const UINT texOffset = Fvf::texCoordOffset(fvf, 0);
+    const UINT stride = Fvf::stride(fvf);
+    const UINT texCount = Fvf::texCount(fvf);
     float* v[4];
     float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
     for (int i = 0; i < 4; ++i)
@@ -437,15 +443,44 @@ ULONG DeviceProxy::Release()
 HRESULT DeviceProxy::GetCaps(LPD3DDEVICEDESC7 desc) { return m_real->GetCaps(desc); }
 HRESULT DeviceProxy::EnumTextureFormats(LPD3DENUMPIXELFORMATSCALLBACK cb, LPVOID ctx) { return m_real->EnumTextureFormats(cb, ctx); }
 HRESULT DeviceProxy::BeginScene() { return m_real->BeginScene(); }
-HRESULT DeviceProxy::EndScene() { return m_real->EndScene(); }
+
+HRESULT DeviceProxy::EndScene()
+{
+    Scope p{TProxy};
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();
+    }
+    return m_real->EndScene();
+}
+
 HRESULT DeviceProxy::GetDirect3D(LPDIRECT3D7* d3d) { return m_real->GetDirect3D(d3d); }
-HRESULT DeviceProxy::SetRenderTarget(LPDIRECTDRAWSURFACE7 surface, DWORD flags) { return m_real->SetRenderTarget(surface, flags); }
+
+HRESULT DeviceProxy::SetRenderTarget(LPDIRECTDRAWSURFACE7 surface, DWORD flags)
+{
+    std::scoped_lock lock(m_mutex);
+    if (!batching())
+    {
+        return m_real->SetRenderTarget(surface, flags);
+    }
+    m_batcher->sync();
+    const HRESULT hr = m_real->SetRenderTarget(surface, flags);
+    m_batcher->invalidate();    // the viewport may follow the new target
+    return hr;
+}
+
 HRESULT DeviceProxy::GetRenderTarget(LPDIRECTDRAWSURFACE7* surface) { return m_real->GetRenderTarget(surface); }
 
 HRESULT DeviceProxy::Clear(DWORD count, LPD3DRECT rects, DWORD flags, D3DCOLOR color, D3DVALUE z, DWORD stencil)
 {
+    Scope p{TProxy};
     D3DStats::count(CClear);
     std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();      // clears the viewport, after everything drawn so far
+    }
     if (m_ui && count && rects)
     {
         std::vector<D3DRECT> mapped(rects, rects + count);
@@ -463,6 +498,7 @@ HRESULT DeviceProxy::Clear(DWORD count, LPD3DRECT rects, DWORD flags, D3DCOLOR c
 
 HRESULT DeviceProxy::SetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m)
 {
+    Scope p{TProxy};
     D3DStats::count(CTransform);
     if (m)
     {
@@ -478,6 +514,7 @@ HRESULT DeviceProxy::SetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m)
 HRESULT DeviceProxy::GetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m) { return m_real->GetTransform(type, m); }
 HRESULT DeviceProxy::SetViewport(LPD3DVIEWPORT7 vp)
 {
+    Scope p{TProxy};
     std::scoped_lock lock(m_mutex);
     if (m_ui && vp)
     {
@@ -485,16 +522,25 @@ HRESULT DeviceProxy::SetViewport(LPD3DVIEWPORT7 vp)
         D3DVIEWPORT7 mapped = canvasViewport(*vp);
         return m_real->SetViewport(&mapped);
     }
+    if (batching() && vp)
+    {
+        return m_batcher->setViewport(*vp);
+    }
     return m_real->SetViewport(vp);
 }
 HRESULT DeviceProxy::MultiplyTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m) { return m_real->MultiplyTransform(type, m); }
 HRESULT DeviceProxy::GetViewport(LPD3DVIEWPORT7 vp)
 {
+    Scope p{TProxy};
     std::scoped_lock lock(m_mutex);
     if (m_ui && vp)
     {
         *vp = m_uiViewport;
         return D3D_OK;
+    }
+    if (batching())
+    {
+        return m_batcher->getViewport(vp);
     }
     return m_real->GetViewport(vp);
 }
@@ -505,19 +551,58 @@ HRESULT DeviceProxy::GetLight(DWORD index, LPD3DLIGHT7 light) { return m_real->G
 
 HRESULT DeviceProxy::SetRenderState(D3DRENDERSTATETYPE state, DWORD value)
 {
+    Scope p{TProxy};
     D3DStats::count(CRenderState);
     D3DStats::onRenderState(state, value);
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        return m_batcher->setRenderState(state, value);
+    }
     Scope s{TState};
     return m_real->SetRenderState(state, value);
 }
 
-HRESULT DeviceProxy::GetRenderState(D3DRENDERSTATETYPE state, LPDWORD value) { return m_real->GetRenderState(state, value); }
-HRESULT DeviceProxy::BeginStateBlock() { return m_real->BeginStateBlock(); }
-HRESULT DeviceProxy::EndStateBlock(LPDWORD handle) { return m_real->EndStateBlock(handle); }
+HRESULT DeviceProxy::GetRenderState(D3DRENDERSTATETYPE state, LPDWORD value)
+{
+    Scope p{TProxy};
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        return m_batcher->getRenderState(state, value);
+    }
+    return m_real->GetRenderState(state, value);
+}
+
+HRESULT DeviceProxy::BeginStateBlock()
+{
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();
+    }
+    const HRESULT hr = m_real->BeginStateBlock();
+    m_recording = SUCCEEDED(hr);    // recorded calls must reach the device
+    return hr;
+}
+
+HRESULT DeviceProxy::EndStateBlock(LPDWORD handle)
+{
+    std::scoped_lock lock(m_mutex);
+    const HRESULT hr = m_real->EndStateBlock(handle);
+    m_recording = false;
+    if (batching())
+    {
+        m_batcher->invalidate();
+    }
+    return hr;
+}
+
 HRESULT DeviceProxy::PreLoad(LPDIRECTDRAWSURFACE7 texture) { return m_real->PreLoad(texture); }
 
 HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID verts, DWORD count, DWORD flags)
 {
+    Scope p{TProxy};
     D3DStats::count(CDraw);
     D3DStats::count(CVerts, count);
     if (fvf & D3DFVF_XYZRHW) D3DStats::count(CDrawTL);
@@ -526,6 +611,14 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
     D3DStats::onDraw(type, fvf, count, false);
     std::scoped_lock lock(m_mutex);
     probeTL(fvf, verts, count, _ReturnAddress());
+    if (batching())
+    {
+        if (isPretransformed(fvf))
+        {
+            return m_batcher->draw(type, fvf, verts, count, nullptr, 0, flags);
+        }
+        m_batcher->sync(Batcher::Reason::Direct);
+    }
     if (m_ui && verts && isPretransformed(fvf))
     {
         m_site = _ReturnAddress();
@@ -538,6 +631,7 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
         {
             clipQuad(fvf, m_scratch.data());
         }
+        D3DStats::count(CSubmit);
         Scope s{TDraw};
         return m_real->DrawPrimitive(type, fvf, const_cast<void*>(mapped), count, flags);
     }
@@ -545,7 +639,8 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
     {
         noteUiDraw(_ReturnAddress(), "3D DrawPrimitive (viewport-mapped)");
     }
-    probe3D("DP", fvf, verts, fvfStride(fvf), count, _ReturnAddress());
+    probe3D("DP", fvf, verts, Fvf::stride(fvf), count, _ReturnAddress());
+    D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
     const bool overlay = beginOverlay3D(restore);
@@ -560,12 +655,21 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
 HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID verts, DWORD vertCount,
     LPWORD indices, DWORD indexCount, DWORD flags)
 {
+    Scope p{TProxy};
     D3DStats::count(CDrawIndexed);
     D3DStats::count(CVerts, vertCount);
     if (fvf & D3DFVF_XYZRHW) D3DStats::count(CDrawTL);
     D3DStats::onDraw(type, fvf, indexCount, true);
     std::scoped_lock lock(m_mutex);
     probeTL(fvf, verts, vertCount, _ReturnAddress());
+    if (batching())
+    {
+        if (isPretransformed(fvf))
+        {
+            return m_batcher->draw(type, fvf, verts, vertCount, indices, indexCount, flags);
+        }
+        m_batcher->sync(Batcher::Reason::Direct);
+    }
     if (m_ui && verts && isPretransformed(fvf))
     {
         m_site = _ReturnAddress();
@@ -574,6 +678,7 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
         {
             return D3D_OK;
         }
+        D3DStats::count(CSubmit);
         Scope s{TDraw};
         return m_real->DrawIndexedPrimitive(type, fvf, const_cast<void*>(mapped), vertCount, indices, indexCount, flags);
     }
@@ -581,7 +686,8 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
     {
         noteUiDraw(_ReturnAddress(), "3D DrawIndexedPrimitive (viewport-mapped)");
     }
-    probe3D("DIP", fvf, verts, fvfStride(fvf), vertCount, _ReturnAddress());
+    probe3D("DIP", fvf, verts, Fvf::stride(fvf), vertCount, _ReturnAddress());
+    D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
     const bool overlay = beginOverlay3D(restore);
@@ -593,20 +699,43 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
     return hr;
 }
 
-HRESULT DeviceProxy::SetClipStatus(LPD3DCLIPSTATUS status) { return m_real->SetClipStatus(status); }
-HRESULT DeviceProxy::GetClipStatus(LPD3DCLIPSTATUS status) { return m_real->GetClipStatus(status); }
+HRESULT DeviceProxy::SetClipStatus(LPD3DCLIPSTATUS status)
+{
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();
+    }
+    return m_real->SetClipStatus(status);
+}
+
+HRESULT DeviceProxy::GetClipStatus(LPD3DCLIPSTATUS status)
+{
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();
+    }
+    return m_real->GetClipStatus(status);
+}
 
 HRESULT DeviceProxy::DrawPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fvf, LPD3DDRAWPRIMITIVESTRIDEDDATA data,
     DWORD count, DWORD flags)
 {
+    Scope p{TProxy};
     D3DStats::count(CDraw);
     D3DStats::count(CVerts, count);
     std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync(Batcher::Reason::Direct);
+    }
     if (m_ui)
     {
         noteUiDraw(_ReturnAddress(), "DrawPrimitiveStrided (not mapped)");
     }
     probe3D("DPS", fvf, data ? data->position.lpvData : nullptr, data ? data->position.dwStride : 0, count, _ReturnAddress());
+    D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
     const bool overlay = beginOverlay3D(restore);
@@ -621,15 +750,21 @@ HRESULT DeviceProxy::DrawPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fvf, LPD3
 HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fvf, LPD3DDRAWPRIMITIVESTRIDEDDATA data,
     DWORD vertCount, LPWORD indices, DWORD indexCount, DWORD flags)
 {
+    Scope p{TProxy};
     D3DStats::count(CDrawIndexed);
     D3DStats::count(CVerts, vertCount);
     std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync(Batcher::Reason::Direct);
+    }
     if (m_ui)
     {
         noteUiDraw(_ReturnAddress(), "DrawIndexedPrimitiveStrided (not mapped)");
     }
     probe3D("DIPS", fvf, data ? data->position.lpvData : nullptr, data ? data->position.dwStride : 0, vertCount,
         _ReturnAddress());
+    D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
     const bool overlay = beginOverlay3D(restore);
@@ -643,15 +778,21 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fv
 
 HRESULT DeviceProxy::DrawPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVERTEXBUFFER7 vb, DWORD start, DWORD count, DWORD flags)
 {
+    Scope p{TProxy};
     D3DStats::count(CDrawVB);
     D3DStats::count(CVerts, count);
     D3DStats::onDraw(type, 0xFFFFFF, count, false);
     std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync(Batcher::Reason::Direct);
+    }
     if (m_ui)
     {
         noteUiDraw(_ReturnAddress(), "DrawPrimitiveVB (not mapped)");
     }
     probe3D("DPVB", 0, nullptr, 0, count, _ReturnAddress());
+    D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
     const bool overlay = beginOverlay3D(restore);
@@ -666,15 +807,21 @@ HRESULT DeviceProxy::DrawPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVERTEXBUFF
 HRESULT DeviceProxy::DrawIndexedPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVERTEXBUFFER7 vb, DWORD start,
     DWORD vertCount, LPWORD indices, DWORD indexCount, DWORD flags)
 {
+    Scope p{TProxy};
     D3DStats::count(CDrawVB);
     D3DStats::count(CVerts, vertCount);
     D3DStats::onDraw(type, 0xFFFFFF, indexCount, true);
     std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync(Batcher::Reason::Direct);
+    }
     if (m_ui)
     {
         noteUiDraw(_ReturnAddress(), "DrawIndexedPrimitiveVB (not mapped)");
     }
     probe3D("DIPVB", 0, nullptr, 0, vertCount, _ReturnAddress());
+    D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
     const bool overlay = beginOverlay3D(restore);
@@ -691,16 +838,31 @@ HRESULT DeviceProxy::ComputeSphereVisibility(LPD3DVECTOR centers, LPD3DVALUE rad
     return m_real->ComputeSphereVisibility(centers, radii, count, flags, result);
 }
 
-HRESULT DeviceProxy::GetTexture(DWORD stage, LPDIRECTDRAWSURFACE7* texture) { return m_real->GetTexture(stage, texture); }
+HRESULT DeviceProxy::GetTexture(DWORD stage, LPDIRECTDRAWSURFACE7* texture)
+{
+    Scope p{TProxy};
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        return m_batcher->getTexture(stage, texture);
+    }
+    return m_real->GetTexture(stage, texture);
+}
 
 HRESULT DeviceProxy::SetTexture(DWORD stage, LPDIRECTDRAWSURFACE7 texture)
 {
+    Scope p{TProxy};
     D3DStats::count(CSetTexture);
+    std::scoped_lock lock(m_mutex);
     if (stage == 0 && texture != m_texture0)
     {
         m_texture0 = texture;
         D3DStats::count(CTexSwitch);
         D3DStats::onTexture(texture);
+    }
+    if (batching())
+    {
+        return m_batcher->setTexture(stage, texture);
     }
     Scope s{TState};
     return m_real->SetTexture(stage, texture);
@@ -708,11 +870,18 @@ HRESULT DeviceProxy::SetTexture(DWORD stage, LPDIRECTDRAWSURFACE7 texture)
 
 HRESULT DeviceProxy::GetTextureStageState(DWORD stage, D3DTEXTURESTAGESTATETYPE type, LPDWORD value)
 {
+    Scope p{TProxy};
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        return m_batcher->getStageState(stage, type, value);
+    }
     return m_real->GetTextureStageState(stage, type, value);
 }
 
 HRESULT DeviceProxy::SetTextureStageState(DWORD stage, D3DTEXTURESTAGESTATETYPE type, DWORD value)
 {
+    Scope p{TProxy};
     D3DStats::count(CStageState);
     D3DStats::onStageState(stage, type, value);
     std::scoped_lock lock(m_mutex);
@@ -724,18 +893,66 @@ HRESULT DeviceProxy::SetTextureStageState(DWORD stage, D3DTEXTURESTAGESTATETYPE 
             value = uiFilter(value);
         }
     }
+    if (batching())
+    {
+        return m_batcher->setStageState(stage, type, value);
+    }
     Scope s{TState};
     return m_real->SetTextureStageState(stage, type, value);
 }
 
-HRESULT DeviceProxy::ValidateDevice(LPDWORD passes) { return m_real->ValidateDevice(passes); }
-HRESULT DeviceProxy::ApplyStateBlock(DWORD handle) { return m_real->ApplyStateBlock(handle); }
-HRESULT DeviceProxy::CaptureStateBlock(DWORD handle) { return m_real->CaptureStateBlock(handle); }
+HRESULT DeviceProxy::ValidateDevice(LPDWORD passes)
+{
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();
+    }
+    return m_real->ValidateDevice(passes);
+}
+
+HRESULT DeviceProxy::ApplyStateBlock(DWORD handle)
+{
+    std::scoped_lock lock(m_mutex);
+    if (!batching())
+    {
+        return m_real->ApplyStateBlock(handle);
+    }
+    m_batcher->sync();
+    const HRESULT hr = m_real->ApplyStateBlock(handle);
+    m_batcher->invalidate();
+    return hr;
+}
+
+HRESULT DeviceProxy::CaptureStateBlock(DWORD handle)
+{
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();
+    }
+    return m_real->CaptureStateBlock(handle);
+}
+
 HRESULT DeviceProxy::DeleteStateBlock(DWORD handle) { return m_real->DeleteStateBlock(handle); }
-HRESULT DeviceProxy::CreateStateBlock(D3DSTATEBLOCKTYPE type, LPDWORD handle) { return m_real->CreateStateBlock(type, handle); }
+
+HRESULT DeviceProxy::CreateStateBlock(D3DSTATEBLOCKTYPE type, LPDWORD handle)
+{
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();
+    }
+    return m_real->CreateStateBlock(type, handle);
+}
 
 HRESULT DeviceProxy::Load(LPDIRECTDRAWSURFACE7 dst, LPPOINT dstPoint, LPDIRECTDRAWSURFACE7 src, LPRECT srcRect, DWORD flags)
 {
+    std::scoped_lock lock(m_mutex);
+    if (batching())
+    {
+        m_batcher->sync();      // pending draws may sample the destination
+    }
     return m_real->Load(dst, dstPoint, src, srcRect, flags);
 }
 

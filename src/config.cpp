@@ -30,12 +30,18 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.uiScale = static_cast<float>(_wtof(readString(ini, L"UI", L"Scale", L"0").c_str()));
     g_config.uiLinearFilter = readInt(ini, L"UI", L"LinearFilter", g_config.uiLinearFilter) != 0;
     g_config.textureBudgetMB = readInt(ini, L"Render", L"TextureBudgetMB", g_config.textureBudgetMB);
+    g_config.batch = readInt(ini, L"Render", L"Batch", g_config.batch) != 0;
+    g_config.atlas = readInt(ini, L"Render", L"Atlas", g_config.atlas) != 0;
+    g_config.atlasPageSize = readInt(ini, L"Render", L"AtlasPageSize", g_config.atlasPageSize);
+    g_config.atlasPages = readInt(ini, L"Render", L"AtlasPages", g_config.atlasPages);
+    g_config.atlasMaxTextureSize = readInt(ini, L"Render", L"AtlasMaxTextureSize", g_config.atlasMaxTextureSize);
     g_config.d3dStats = readInt(ini, L"Debug", L"D3DStats", g_config.d3dStats) != 0;
     g_config.profiler = readInt(ini, L"Debug", L"Profiler", g_config.profiler) != 0;
     g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
 
-    LOG("Config: Width={} Height={} Borderless={} UI.Scale={} UI.LinearFilter={} TextureBudgetMB={} D3DStats={} "
-        "Profiler={} ({} us)", g_config.width, g_config.height, g_config.borderless, g_config.uiScale,
-        g_config.uiLinearFilter, g_config.textureBudgetMB, g_config.d3dStats, g_config.profiler,
-        g_config.profilerIntervalUs);
+    LOG("Config: Width={} Height={} Borderless={} UI.Scale={} UI.LinearFilter={} TextureBudgetMB={} Batch={} Atlas={} "
+        "({} px, {} pages, textures <= {}) D3DStats={} Profiler={} ({} us)", g_config.width, g_config.height,
+        g_config.borderless, g_config.uiScale, g_config.uiLinearFilter, g_config.textureBudgetMB, g_config.batch,
+        g_config.atlas, g_config.atlasPageSize, g_config.atlasPages, g_config.atlasMaxTextureSize, g_config.d3dStats,
+        g_config.profiler, g_config.profilerIntervalUs);
 }

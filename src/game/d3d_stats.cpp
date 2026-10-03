@@ -31,7 +31,10 @@ namespace
     std::unordered_map<uint64_t, uint32_t> g_drawKinds;     // type | fvf | vertex count | indexed
     std::unordered_map<uint64_t, uint32_t> g_stateValues;   // state << 32 | value
     std::unordered_map<uint64_t, uint32_t> g_stageValues;   // stage << 48 | type << 32 | value
+    std::unordered_map<uint32_t, uint32_t> g_flushCauses;   // see onFlushCause
     int g_reportsSinceDetail = 0;
+    // Detail is collected in the first frame after each report only: the maps are too slow for every call.
+    std::atomic<bool> g_detailFrame{false};
 
     std::string describeFormat(const DDPIXELFORMAT& pf)
     {
@@ -95,6 +98,17 @@ namespace
         {
             LOG("Detail:   tss {} {:>2} = {:08x} x{}", key >> 48, (key >> 32) & 0xFFFF, uint32_t(key), n);
         }
+        for (const auto& [key, n] : topN(g_flushCauses, 12))
+        {
+            if (key & 0x10000)
+            {
+                LOG("Detail:   batch ended by tss {} {:>2} x{}", (key >> 8) & 0xFF, key & 0xFF, n);
+            }
+            else
+            {
+                LOG("Detail:   batch ended by rs {:>3} x{}", key, n);
+            }
+        }
     }
 
     std::atomic<uint32_t> g_counters[D3DStats::CounterCount];
@@ -147,9 +161,14 @@ void D3DStats::addTime(Timer t, int64_t ticks)
     g_times[t].fetch_add(ticks, std::memory_order_relaxed);
 }
 
+int64_t D3DStats::total(Timer t)
+{
+    return g_times[t].load(std::memory_order_relaxed);
+}
+
 void D3DStats::onTexture(void* surface)
 {
-    if (!surface)
+    if (!surface || !g_detailFrame.load(std::memory_order_relaxed))
     {
         return;
     }
@@ -176,6 +195,10 @@ void D3DStats::onTexture(void* surface)
 
 void D3DStats::onDraw(uint32_t primitiveType, uint32_t fvf, uint32_t vertexCount, bool indexed)
 {
+    if (!g_detailFrame.load(std::memory_order_relaxed))
+    {
+        return;
+    }
     const uint64_t key = (uint64_t(primitiveType) << 56) | (uint64_t(fvf & 0xFFFFFF) << 32) |
         (uint64_t(vertexCount & 0x7FFFFFFF) << 1) | (indexed ? 1 : 0);
     std::scoped_lock lock(g_detailMutex);
@@ -184,14 +207,32 @@ void D3DStats::onDraw(uint32_t primitiveType, uint32_t fvf, uint32_t vertexCount
 
 void D3DStats::onRenderState(uint32_t state, uint32_t value)
 {
+    if (!g_detailFrame.load(std::memory_order_relaxed))
+    {
+        return;
+    }
     std::scoped_lock lock(g_detailMutex);
     ++g_stateValues[(uint64_t(state) << 32) | value];
 }
 
 void D3DStats::onStageState(uint32_t stage, uint32_t type, uint32_t value)
 {
+    if (!g_detailFrame.load(std::memory_order_relaxed))
+    {
+        return;
+    }
     std::scoped_lock lock(g_detailMutex);
     ++g_stageValues[(uint64_t(stage) << 48) | (uint64_t(type) << 32) | value];
+}
+
+void D3DStats::onFlushCause(uint32_t key)
+{
+    if (!g_detailFrame.load(std::memory_order_relaxed))
+    {
+        return;
+    }
+    std::scoped_lock lock(g_detailMutex);
+    ++g_flushCauses[key];
 }
 
 void D3DStats::setRenderThread(unsigned long threadId)
@@ -225,6 +266,7 @@ void D3DStats::onFrame()
     addTime(TFrame, t - g_lastFrameTsc);
     g_lastFrameTsc = t;
     ++g_frames;
+    if (g_detailFrame.exchange(false, std::memory_order_relaxed))
     {
         std::scoped_lock lock(g_detailMutex);
         g_frameTextures.clear();
@@ -252,13 +294,27 @@ void D3DStats::onFrame()
     g_lastThreadCpu = cpu;
 
     const double draws = c[CDraw] + c[CDrawIndexed] + c[CDrawVB];
-    LOG("fps={:.1f} frame={:.2f}ms world={:.2f} ui={:.2f} flip={:.2f} | per frame: draws={:.0f} (TL {:.0f}, quads {:.0f}, "
-        "VB {:.0f}) verts={:.0f} setTex={:.0f} texSwitch={:.0f} uniqueTex={:.0f} rs={:.0f} tss={:.0f} xform={:.0f} "
-        "clear={:.1f} | in d3d: draw={:.2f}ms state={:.2f}ms | lockBack={:.1f} ({:.2f}ms) | renderCPU={:.0f}%",
-        frames * 1000.0 / wallMs, ms[TFrame], ms[TWorld], ms[TUi], ms[TFlip], draws / frames, c[CDrawTL] / frames,
-        c[CDrawQuad] / frames, c[CDrawVB] / frames, c[CVerts] / frames, c[CSetTexture] / frames,
-        c[CTexSwitch] / frames, c[CUniqueTex] / frames, c[CRenderState] / frames, c[CStageState] / frames,
-        c[CTransform] / frames, c[CClear] / frames, ms[TDraw], ms[TState], c[CLockBack] / frames, ms[TLockBack], cpuPct);
+    // uniqueTex comes from the one detail frame.
+    // world = game code + device calls; device calls = D3D (draw + state) + SacredBild's own work (proxy, batcher, stats).
+    LOG("fps={:.1f} frame={:.2f}ms world={:.2f} (game {:.2f}, device calls {:.2f}) ui={:.2f} flip={:.2f} | per frame: "
+        "draws={:.0f} (TL {:.0f}, quads {:.0f}, VB {:.0f}) submitted={:.0f} verts={:.0f} setTex={:.0f} texSwitch={:.0f} "
+        "uniqueTex={} rs={:.0f} tss={:.0f} xform={:.0f} clear={:.1f} | in d3d: draw={:.2f}ms state={:.2f}ms, "
+        "SacredBild={:.2f}ms | lockBack={:.1f} ({:.2f}ms) | renderCPU={:.0f}%",
+        frames * 1000.0 / wallMs, ms[TFrame], ms[TWorld], ms[TWorld] - ms[TWorldProxy], ms[TWorldProxy], ms[TUi],
+        ms[TFlip], draws / frames, c[CDrawTL] / frames, c[CDrawQuad] / frames, c[CDrawVB] / frames,
+        c[CSubmit] / frames, c[CVerts] / frames, c[CSetTexture] / frames, c[CTexSwitch] / frames, c[CUniqueTex],
+        c[CRenderState] / frames, c[CStageState] / frames, c[CTransform] / frames, c[CClear] / frames, ms[TDraw],
+        ms[TState], ms[TProxy] - ms[TDraw] - ms[TState], c[CLockBack] / frames, ms[TLockBack], cpuPct);
+    if (c[CMerged] || c[CFlushOther] || c[CFlushDirect])
+    {
+        LOG("batch: merged={:.0f} atlasDraws={:.0f} keptOriginal(uv)={:.0f} uploads={} pageResets={} | batches ended by "
+            "texture={:.0f} rs={:.0f} tss={:.0f} viewport={:.0f} format={:.0f} full={:.0f} direct={:.0f} atlas={:.0f} "
+            "other={:.0f}",
+            c[CMerged] / frames, c[CAtlasDraw] / frames, c[CAtlasRange] / frames, c[CAtlasUpload], c[CAtlasReset],
+            c[CFlushTexture] / frames, c[CFlushRenderState] / frames, c[CFlushStageState] / frames,
+            c[CFlushViewport] / frames, c[CFlushFormat] / frames, c[CFlushFull] / frames, c[CFlushDirect] / frames,
+            c[CFlushAtlas] / frames, c[CFlushOther] / frames);
+    }
 
     if (++g_reportsSinceDetail >= 30)
     {
@@ -269,4 +325,5 @@ void D3DStats::onFrame()
 
     g_frames = 0;
     g_reportQpc = q;
+    g_detailFrame.store(true, std::memory_order_relaxed);
 }

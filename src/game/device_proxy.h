@@ -4,19 +4,22 @@
 #include <ddraw.h>
 #include <d3d.h>
 
+#include "render/batcher.h"
+
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 // IDirect3DDevice7 wrapper handed to the game instead of the real device. All calls are forwarded;
-// draw/state calls are instrumented, and UI draws are mapped into the UI canvas. DDrawCompat's shared
-// vtables are never modified.
+// draw/state calls are instrumented, UI draws are mapped into the UI canvas and world draws are batched.
+// DDrawCompat's shared vtables are never modified.
 class DeviceProxy final : public IDirect3DDevice7
 {
 public:
-    // Takes over the caller's reference to `real`.
-    static DeviceProxy* wrap(IDirect3DDevice7* real);
+    // Takes over the caller's reference to `real`. `ddraw` creates the batcher's atlas pages.
+    static DeviceProxy* wrap(IDirect3DDevice7* real, IDirectDraw7* ddraw);
     static DeviceProxy* instance();     // the proxy currently handed to the game, if any
     IDirect3DDevice7* real() const { return m_real; }
 
@@ -24,6 +27,12 @@ public:
     // the canvas, draws outside 1024x768 culled or clipped. Unconfined (cursor): mapped only.
     void beginUi(bool confine);
     void endUi();
+
+    // Batching scope (see Batcher), around the world view.
+    void beginBatch();
+    void endBatch();
+    // Draws what is batched and applies recorded state, for code that touches the frame outside the device.
+    void syncBatch();
 
     // Diagnostics: while enabled (one frame every few seconds), log where 3D draws land on screen.
     void setProbe(bool enabled);
@@ -88,6 +97,9 @@ public:
 private:
     explicit DeviceProxy(IDirect3DDevice7* real) : m_real(real) {}
 
+    // Calls go through the batcher: inside a batching scope, outside UI mode and state block recording.
+    bool batching() const { return m_batcher && m_batcher->active() && !m_ui && !m_recording; }
+
     // Copies pretransformed vertices into the canvas; false if all of them land outside it.
     bool mapToCanvas(DWORD fvf, const void* verts, DWORD count, const void*& mapped);
     // Clips an axis-aligned 4-vertex quad (strip/fan) to the canvas in place; false if it can't.
@@ -104,6 +116,8 @@ private:
 
     IDirect3DDevice7* m_real;
     LPDIRECTDRAWSURFACE7 m_texture0 = nullptr;
+    std::unique_ptr<Batcher> m_batcher;
+    bool m_recording = false;               // between BeginStateBlock and EndStateBlock
 
     std::recursive_mutex m_mutex;
     bool m_ui = false;

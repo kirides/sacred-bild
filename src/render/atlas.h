@@ -4,83 +4,112 @@
 #include <ddraw.h>
 
 #include <cstdint>
-#include <functional>
 #include <memory>
-#include <mutex>
 #include <unordered_map>
 #include <vector>
 
-// Packs small game textures into large video-memory pages so draws using different textures can share
-// one texture binding. Copies are refreshed when a texture's DirectDraw uniqueness value changes and
-// dropped when the texture is destroyed (tracked through surface private data).
+// Registry of the game's textures, plus copies of small ones packed into large video-memory pages so draws
+// that used different textures can share one texture binding. Destroyed textures are noticed through surface
+// private data; a copy is refreshed when its texture's DirectDraw uniqueness value changes.
+//
+// Each copy has a one-texel gutter, filled from the opposite edge for wrap addressing or by repeating the
+// edge for clamp and mirror addressing, so point and bilinear sampling of texture coordinates in
+// [-0.5, size + 0.5] texels reads exactly what the original texture would.
 class TextureAtlas
 {
 public:
-    struct Page;
-
-    struct Slot
-    {
-        Page* page = nullptr;
-        uint16_t x = 0, y = 0, w = 0, h = 0;   // texel rect inside the page, excluding padding
-        DWORD uniqueness = 0;
-        float scaleU = 1, scaleV = 1, offsetU = 0, offsetV = 0;
-        uint32_t uploads = 0;
-    };
-
     struct Page
     {
+        struct Shelf
+        {
+            int y = 0, height = 0, x = 0;
+        };
+
         IDirectDrawSurface7* surface = nullptr;
-        DDPIXELFORMAT format = {};
-        int size = 0;
-        int shelfY = 0, shelfHeight = 0, cursorX = 0;
+        int format = 0;
+        std::vector<Shelf> shelves;
+        int nextY = 0;
         uint32_t lastUse = 0;
-        std::vector<IDirectDrawSurface7*> textures;   // slots living on this page
+        std::vector<IDirectDrawSurface7*> textures;     // textures with a copy on this page
     };
 
-    struct Stats
+    struct Entry
     {
-        uint32_t uploads = 0;       // slot (re)uploads since last report
-        uint32_t pageResets = 0;
-        uint32_t rejected = 0;      // lookups of textures that can't be atlased
+        uint32_t trackerId = 0;     // 0: destruction is not tracked
+        bool eligible = false;      // may be copied into a page
+        int format = -1;
+        uint16_t width = 0, height = 0;
+        Page* page = nullptr;       // current copy, if any
+        uint16_t x = 0, y = 0;      // copy origin inside the page (gutter excluded)
+        float scaleU = 1, scaleV = 1, offsetU = 0, offsetV = 0;     // texture -> page coordinates
+        DWORD uniqueness = 0;       // of the texture when copied
+        uint32_t checkedFrame = 0;
+        uint8_t changes = 0;        // content changes seen; frequently changing textures are not copied
+        bool clampEdges = false;    // gutter repeats the edges (clamp/mirror) instead of wrapping
+        uint8_t edgeSwitches = 0;   // gutter refills for another addressing mode
     };
 
-    TextureAtlas(IDirectDraw7* ddraw, int pageSize);
+    // Runs before a page region that pending draws may still use is overwritten.
+    using BeforeModifyFn = void (*)(void* context);
+
+    struct Options
+    {
+        bool copies = true;         // false: registry only
+        int pageSize = 4096;
+        int maxPagesPerFormat = 4;
+        int maxTextureSize = 512;
+    };
+
+    TextureAtlas(IDirectDraw7* ddraw, const Options& options, BeforeModifyFn beforeModify, void* context);
     ~TextureAtlas();
+    TextureAtlas(const TextureAtlas&) = delete;
+    TextureAtlas& operator=(const TextureAtlas&) = delete;
 
-    // Slot for `texture`, uploading it if needed; nullptr if it can't be atlased.
-    // `beforeModify(page)` runs before an existing page region is overwritten.
-    const Slot* lookup(IDirectDrawSurface7* texture, uint32_t frame, const std::function<void(Page*)>& beforeModify);
+    // True if a texture seen before may have been destroyed since the last drain().
+    static bool destroyedPending();
+    // Forgets destroyed textures and appends them to `destroyed`.
+    void drain(std::vector<IDirectDrawSurface7*>& destroyed);
 
-    void forget(IDirectDrawSurface7* texture);   // texture destroyed
-    void checkLostPages(const std::function<void(Page*)>& beforeModify);
+    // Registers the texture on first use. The entry stays valid until the texture is destroyed and drained.
+    Entry& entry(IDirectDrawSurface7* texture);
 
-    size_t pageCount() const { return m_pages.size(); }
-    size_t slotCount() const { return m_slots.size(); }
-    Stats takeStats();
+    // Makes sure the texture has an up-to-date copy in a page whose gutter suits the addressing mode (wrap, or
+    // clamp/mirror with `clampEdges`); false if it can't have one now.
+    bool place(IDirectDrawSurface7* texture, Entry& entry, uint32_t frame, bool clampEdges);
 
-    std::recursive_mutex& mutex() { return m_mutex; }
+    // Once per frame before use: restores lost pages.
+    void beginFrame();
+
+    int pageCount() const { return static_cast<int>(m_pages.size()); }
 
 private:
-    struct Info
-    {
-        bool atlasable = false;
-        DDPIXELFORMAT format = {};
-        int width = 0, height = 0;
-    };
+    void describe(IDirectDrawSurface7* texture, Entry& entry);
+    int formatIndex(const DDPIXELFORMAT& pf);
+    Page* allocate(int format, int w, int h, uint32_t frame, int& x, int& y);
+    bool fit(Page& page, int w, int h, int& x, int& y);
+    Page* createPage(int format);
+    void resetPage(Page& page);
+    void drop(IDirectDrawSurface7* texture, Entry& entry);
+    bool upload(IDirectDrawSurface7* texture, Entry& entry, bool gutterOnly);
 
-    Info describe(IDirectDrawSurface7* texture);
-    void track(IDirectDrawSurface7* texture);
-    Page* allocate(const DDPIXELFORMAT& format, int w, int h, uint32_t frame, uint16_t& x, uint16_t& y,
-        const std::function<void(Page*)>& beforeModify);
-    Page* createPage(const DDPIXELFORMAT& format);
-    void resetPage(Page* page);
-    bool upload(IDirectDrawSurface7* texture, Slot& slot);
-
-    std::recursive_mutex m_mutex;
     IDirectDraw7* m_ddraw;
-    int m_pageSize;
+    Options m_options;
+    BeforeModifyFn m_beforeModify;
+    void* m_context;
+    bool m_failed = false;          // copying into pages does not work: no more copies
+    uint32_t m_uploads = 0, m_uploadFailures = 0;
+    std::vector<DDPIXELFORMAT> m_formats;
+    std::vector<int> m_pageLimit;   // per format; lowered when page creation fails
     std::vector<std::unique_ptr<Page>> m_pages;
-    std::unordered_map<IDirectDrawSurface7*, Info> m_info;
-    std::unordered_map<IDirectDrawSurface7*, Slot> m_slots;
-    Stats m_stats;
+    std::unordered_map<IDirectDrawSurface7*, Entry> m_entries;
+
+    // Direct-mapped lookup cache in front of m_entries (entry addresses are stable until erased).
+    struct CacheLine
+    {
+        IDirectDrawSurface7* texture = nullptr;
+        Entry* entry = nullptr;
+    };
+    static constexpr size_t kCacheLines = 512;
+    CacheLine m_cache[kCacheLines];
+    std::vector<std::pair<IDirectDrawSurface7*, uint32_t>> m_drained;
 };

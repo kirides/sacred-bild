@@ -27,6 +27,8 @@ add_library(ddraw SHARED
   src/game/device_proxy.cpp
   src/game/resolution.cpp
   src/game/ui_canvas.cpp
+  src/render/atlas.cpp
+  src/render/batcher.cpp
   src/exports.def
   src/version.rc
 )
