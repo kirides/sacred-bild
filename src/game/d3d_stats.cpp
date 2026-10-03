@@ -5,6 +5,7 @@
 #include <objbase.h>
 #include <ddraw.h>
 #include <intrin.h>
+#include <psapi.h>
 #include <algorithm>
 #include <atomic>
 #include <format>
@@ -166,6 +167,32 @@ int64_t D3DStats::total(Timer t)
     return g_times[t].load(std::memory_order_relaxed);
 }
 
+std::string D3DStats::memorySummary()
+{
+    PROCESS_MEMORY_COUNTERS_EX pmc = {};
+    pmc.cb = sizeof(pmc);
+    GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc));
+    size_t used = 0, largestFree = 0;
+    MEMORY_BASIC_INFORMATION mbi = {};
+    for (auto* p = static_cast<uint8_t*>(nullptr) + 0x10000; VirtualQuery(p, &mbi, sizeof(mbi)); p += mbi.RegionSize)
+    {
+        if (mbi.State == MEM_FREE)
+        {
+            largestFree = std::max<size_t>(largestFree, mbi.RegionSize);
+        }
+        else
+        {
+            used += mbi.RegionSize;
+        }
+        if (mbi.RegionSize == 0)
+        {
+            break;
+        }
+    }
+    return std::format("private {} MB, address space {} MB used, largest free {} MB", pmc.PrivateUsage >> 20,
+        used >> 20, largestFree >> 20);
+}
+
 void D3DStats::onTexture(void* surface)
 {
     if (!surface || !g_detailFrame.load(std::memory_order_relaxed))
@@ -307,13 +334,16 @@ void D3DStats::onFrame()
         ms[TState], ms[TProxy] - ms[TDraw] - ms[TState], c[CLockBack] / frames, ms[TLockBack], cpuPct);
     if (c[CMerged] || c[CFlushOther] || c[CFlushDirect])
     {
-        LOG("batch: merged={:.0f} atlasDraws={:.0f} keptOriginal(uv)={:.0f} uploads={} pageResets={} | batches ended by "
-            "texture={:.0f} rs={:.0f} tss={:.0f} viewport={:.0f} format={:.0f} full={:.0f} direct={:.0f} atlas={:.0f} "
-            "other={:.0f}",
-            c[CMerged] / frames, c[CAtlasDraw] / frames, c[CAtlasRange] / frames, c[CAtlasUpload], c[CAtlasReset],
-            c[CFlushTexture] / frames, c[CFlushRenderState] / frames, c[CFlushStageState] / frames,
-            c[CFlushViewport] / frames, c[CFlushFormat] / frames, c[CFlushFull] / frames, c[CFlushDirect] / frames,
-            c[CFlushAtlas] / frames, c[CFlushOther] / frames);
+        LOG("batch: merged={:.0f} atlasDraws={:.0f} uploads={} pageResets={} | stages kept on the original texture: "
+            "texture={:.0f} setup={:.0f} uv={:.0f} sharedCoords={:.0f} pagesFull={:.0f} | batches ended by texture={:.0f} "
+            "(page->page {:.0f}, original {:.0f}) rs={:.0f} tss={:.0f} viewport={:.0f} format={:.0f} full={:.0f} "
+            "direct={:.0f} atlas={:.0f} other={:.0f}",
+            c[CMerged] / frames, c[CAtlasDraw] / frames, c[CAtlasUpload], c[CAtlasReset], c[CAtlasSkipTexture] / frames,
+            c[CAtlasSkipSetup] / frames, c[CAtlasRange] / frames, c[CAtlasSkipShared] / frames,
+            c[CAtlasSkipFull] / frames, c[CFlushTexture] / frames, c[CFlushPages] / frames, c[CFlushOriginal] / frames,
+            c[CFlushRenderState] / frames, c[CFlushStageState] / frames, c[CFlushViewport] / frames,
+            c[CFlushFormat] / frames, c[CFlushFull] / frames, c[CFlushDirect] / frames, c[CFlushAtlas] / frames,
+            c[CFlushOther] / frames);
     }
 
     if (++g_reportsSinceDetail >= 30)

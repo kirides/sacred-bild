@@ -38,6 +38,8 @@ namespace
         // EIP -> samples (sacred.exe), and module!caller -> samples (outside sacred.exe).
         std::unordered_map<uintptr_t, uint32_t> exclusive;
         std::unordered_map<uint64_t, uint32_t> external;
+        // module << 32 | EIP offset in the module -> samples (outside sacred.exe).
+        std::unordered_map<uint64_t, uint32_t> externalEip;
         // Return address -> samples it appeared in (approximate inclusive time).
         std::unordered_map<uintptr_t, uint32_t> inclusive;
         uint32_t samples = 0;
@@ -53,6 +55,9 @@ namespace
         {
             return;
         }
+        HMODULE self = nullptr;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&loadModules), &self);
         for (DWORD i = 0; i < needed / sizeof(HMODULE) && i < 512; ++i)
         {
             MODULEINFO mi = {};
@@ -60,7 +65,8 @@ namespace
             GetModuleInformation(GetCurrentProcess(), mods[i], &mi, sizeof(mi));
             GetModuleBaseNameA(GetCurrentProcess(), mods[i], name, MAX_PATH);
             const auto lo = reinterpret_cast<uintptr_t>(mi.lpBaseOfDll);
-            g_modules.push_back({lo, lo + mi.SizeOfImage, name});
+            // Our ddraw.dll and the system's share a name.
+            g_modules.push_back({lo, lo + mi.SizeOfImage, mods[i] == self ? std::string("SacredBild") : std::string(name)});
         }
     }
 
@@ -142,6 +148,10 @@ namespace
             }
             const uintptr_t caller = s.frames ? s.ra[0] : 0;
             ++p.external[(static_cast<uint64_t>(static_cast<uint32_t>(mod)) << 32) | caller];
+            if (mod >= 0)
+            {
+                ++p.externalEip[(static_cast<uint64_t>(mod) << 32) | (s.eip - g_modules[mod].lo)];
+            }
         }
         // Count each return address once per sample.
         for (int i = 0; i < s.frames; ++i)
@@ -209,6 +219,13 @@ namespace
             for (auto& [eip, n] : sorted(p.exclusive)) std::fprintf(f, "%08x %u\n", static_cast<unsigned>(eip), n);
             std::fprintf(f, "[external]\n");
             for (auto& [key, n] : sorted(p.external))
+            {
+                const int mod = static_cast<int>(key >> 32);
+                const char* name = mod >= 0 && mod < static_cast<int>(g_modules.size()) ? g_modules[mod].name.c_str() : "?";
+                std::fprintf(f, "%s %08x %u\n", name, static_cast<unsigned>(key & 0xFFFFFFFF), n);
+            }
+            std::fprintf(f, "[external_eip]\n");
+            for (auto& [key, n] : sorted(p.externalEip))
             {
                 const int mod = static_cast<int>(key >> 32);
                 const char* name = mod >= 0 && mod < static_cast<int>(g_modules.size()) ? g_modules[mod].name.c_str() : "?";

@@ -151,7 +151,11 @@ coordinates remapped, when the draw's coordinates stay within half a texel of th
 the opposite edge for wrap addressing and repeats the edge for clamp/mirror (identical that close to the edge).
 Copies are refreshed when a texture's uniqueness value changes; destroyed textures are noticed through
 private data (`DDSPD_IUNKNOWNPOINTER`). 3D models (strided draws), Clear, EndScene and back buffer locks
-draw the pending batch first. Limitation: a raw (non-atlas) texture the game locks and changes in the
+draw the pending batch first. Merged draws go out with `D3DDP_DONOTCLIP` (`BatchNoClip`): after merging,
+Direct3D still spent about 20 ns per vertex (200k vertices per zoomed-out frame), and the GPU clips anyway.
+First measurement (1920x1200, zoom 2.0): 9,500 game draws -> ~780 device draws (~390 batches, the rest
+3D model parts), world view 30.5 ms -> 14.5 ms. The frame rate stays at 60 because of DDrawCompat's
+`FpsLimiter = flipstart(60)` in the user's DDrawCompat overlay config. Limitation: a raw (non-atlas) texture the game locks and changes in the
 middle of the world pass would show its new content in draws batched before the change.
 
 ## UI (`cUI_Control2` / `cUI_Window2` / `cUI_Manager`)

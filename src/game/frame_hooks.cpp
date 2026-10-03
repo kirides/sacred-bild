@@ -142,8 +142,8 @@ namespace
             {
                 if (void* textures = *reinterpret_cast<void**>(Addr::g_pTextureManager))
                 {
-                    LOG("Textures: {} / {} MB loaded", member<uint32_t>(textures, TextureManager::usedBytes) >> 20,
-                        member<uint32_t>(textures, TextureManager::budgetBytes) >> 20);
+                    LOG("Textures: {} / {} MB loaded | {}", member<uint32_t>(textures, TextureManager::usedBytes) >> 20,
+                        member<uint32_t>(textures, TextureManager::budgetBytes) >> 20, D3DStats::memorySummary());
                 }
                 LOG("Probe3D: last 5 s: creature renders {}, object renders {} (model attached {}), model draws {}",
                     _InterlockedExchange(&g_creatureRenders, 0), _InterlockedExchange(&g_objectRenders, 0),
@@ -190,6 +190,7 @@ namespace
             static_cast<IDirect3DDevice7*>(device)->Clear(0, nullptr, D3DCLEAR_TARGET, 0xFF000000, 1.0f, 0);
         }
         DeviceProxy* proxy = DeviceProxy::instance();
+        const int64_t proxyTime = D3DStats::total(D3DStats::TProxy);
         if (proxy && device == proxy)
         {
             proxy->beginBatch();
@@ -199,6 +200,7 @@ namespace
         {
             proxy->endBatch();
         }
+        D3DStats::addTime(D3DStats::TWorldProxy, D3DStats::total(D3DStats::TProxy) - proxyTime);
     }
 
     // True if one of the in-game windows covering the whole 1024x768 screen (save, options, ...) is open.

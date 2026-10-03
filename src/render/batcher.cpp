@@ -73,7 +73,8 @@ namespace
     }
 }
 
-Batcher::Batcher(IDirect3DDevice7* real, IDirectDraw7* ddraw, const Options& options) : m_real(real)
+Batcher::Batcher(IDirect3DDevice7* real, IDirectDraw7* ddraw, const Options& options)
+    : m_real(real), m_submitFlags(options.noClip ? D3DDP_DONOTCLIP : 0)
 {
     TextureAtlas::Options atlas;
     atlas.copies = options.atlas && ddraw;
@@ -98,12 +99,13 @@ Batcher::Batcher(IDirect3DDevice7* real, IDirectDraw7* ddraw, const Options& opt
     m_tssDirty.reserve(kStages * kStageTypes);
     if (m_useAtlas)
     {
-        LOG("Batcher: on, atlas pages {}x{}, up to {} per texture format, textures up to {}x{}", atlas.pageSize,
-            atlas.pageSize, atlas.maxPagesPerFormat, atlas.maxTextureSize, atlas.maxTextureSize);
+        LOG("Batcher: on{}, atlas pages {}x{}, up to {} per texture format, textures up to {}x{}",
+            options.noClip ? " (no software clipping)" : "", atlas.pageSize, atlas.pageSize, atlas.maxPagesPerFormat,
+            atlas.maxTextureSize, atlas.maxTextureSize);
     }
     else
     {
-        LOG("Batcher: on, no texture atlas");
+        LOG("Batcher: on{}, no texture atlas", options.noClip ? " (no software clipping)" : "");
     }
 }
 
@@ -453,7 +455,7 @@ void Batcher::submit(Reason reason)
     {
         Scope s{TDraw};
         m_real->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, m_fvf, m_verts.data(), m_vertCount, m_indices.data(),
-            m_indexCount, m_flags);
+            m_indexCount, m_flags | m_submitFlags);
     }
     count(CSubmit);
     count(flushCounter(reason));
@@ -495,6 +497,7 @@ void Batcher::useAtlas(DWORD stage, IDirectDrawSurface7* texture, DWORD fvf, UIN
     TextureAtlas::Entry& e = m_atlas->entry(texture);
     if (!e.eligible)
     {
+        count(CAtlasSkipTexture);
         return;
     }
     // The copy only behaves like the original for plain 2D coordinates, and its gutter for wrap addressing or
@@ -504,6 +507,7 @@ void Batcher::useAtlas(DWORD stage, IDirectDrawSurface7* texture, DWORD fvf, UIN
         stageState(stage, D3DTSS_TEXTURETRANSFORMFLAGS) != D3DTTFF_DISABLE ||
         renderState(D3DRENDERSTATE_WRAP0 + set) != 0)
     {
+        count(CAtlasSkipSetup);
         return;
     }
     const DWORD addressU = stageState(stage, D3DTSS_ADDRESSU), addressV = stageState(stage, D3DTSS_ADDRESSV);
@@ -515,6 +519,7 @@ void Batcher::useAtlas(DWORD stage, IDirectDrawSurface7* texture, DWORD fvf, UIN
     }
     else if (addressU != D3DTADDRESS_WRAP || addressV != D3DTADDRESS_WRAP)
     {
+        count(CAtlasSkipSetup);
         return;
     }
     const UINT offset = Fvf::texCoordOffset(fvf, set);
@@ -537,6 +542,7 @@ void Batcher::useAtlas(DWORD stage, IDirectDrawSurface7* texture, DWORD fvf, UIN
     }
     if (!m_atlas->place(texture, e, m_frame, clampEdges))
     {
+        count(CAtlasSkipFull);
         return;
     }
     binding = e.page->surface;
@@ -592,7 +598,11 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
             {
                 shared |= o != s && m_tex[o] && sets[o] == sets[s];
             }
-            if (!shared)
+            if (shared)
+            {
+                count(CAtlasSkipShared);
+            }
+            else
             {
                 useAtlas(s, binding[s], fvf, stride, verts, vertCount, binding[s], remaps, remapCount);
             }
@@ -622,6 +632,9 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
                 {
                     reason = Reason::Texture;
                     start = true;
+                    const bool pages = (m_texFlags[s] & Applied) && m_atlas->isPage(m_texDevice[s]) &&
+                        m_atlas->isPage(binding[s]);
+                    count(pages ? CFlushPages : CFlushOriginal);
                 }
             }
             start = start || stateChanged(reason);

@@ -293,7 +293,7 @@ bool TextureAtlas::place(IDirectDrawSurface7* texture, Entry& e, uint32_t frame,
         e.y = static_cast<uint16_t>(y + 1);
         e.clampEdges = clampEdges;
         page->textures.push_back(texture);
-        const float inv = 1.0f / static_cast<float>(m_options.pageSize);
+        const float inv = 1.0f / static_cast<float>(page->size);
         e.scaleU = e.width * inv;
         e.scaleV = e.height * inv;
         e.offsetU = e.x * inv;
@@ -360,9 +360,21 @@ TextureAtlas::Page* TextureAtlas::allocate(int format, int w, int h, uint32_t fr
     return fit(*lru, w, h, x, y) ? lru : nullptr;
 }
 
+bool TextureAtlas::isPage(IDirectDrawSurface7* surface) const
+{
+    for (const auto& page : m_pages)
+    {
+        if (page->surface == surface)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool TextureAtlas::fit(Page& page, int w, int h, int& x, int& y)
 {
-    const int size = m_options.pageSize;
+    const int size = page.size;
     int best = -1;
     for (size_t i = 0; i < page.shelves.size(); ++i)
     {
@@ -393,32 +405,42 @@ bool TextureAtlas::fit(Page& page, int w, int h, int& x, int& y)
 
 TextureAtlas::Page* TextureAtlas::createPage(int format)
 {
-    DDSURFACEDESC2 desc = {};
-    desc.dwSize = sizeof(desc);
-    desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
-    desc.dwWidth = static_cast<DWORD>(m_options.pageSize);
-    desc.dwHeight = static_cast<DWORD>(m_options.pageSize);
-    desc.ddpfPixelFormat = m_formats[format];
-    desc.ddsCaps.dwCaps = DDSCAPS_TEXTURE | DDSCAPS_VIDEOMEMORY;
-    IDirectDrawSurface7* surface = nullptr;
-    const HRESULT hr = m_ddraw->CreateSurface(&desc, &surface, nullptr);
     int pages = 0;
     for (auto& page : m_pages)
     {
         pages += page->format == format;
     }
-    if (FAILED(hr) || !surface)
+    IDirectDrawSurface7* surface = nullptr;
+    for (;;)
     {
-        LOG("Atlas: creating a {}x{} {} page failed ({:08x}); {} page(s) for this format", m_options.pageSize,
-            m_options.pageSize, describeFormat(m_formats[format]), static_cast<uint32_t>(hr), pages);
-        m_pageLimit[format] = pages;
-        return nullptr;
+        DDSURFACEDESC2 desc = {};
+        desc.dwSize = sizeof(desc);
+        desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
+        desc.dwWidth = static_cast<DWORD>(m_options.pageSize);
+        desc.dwHeight = static_cast<DWORD>(m_options.pageSize);
+        desc.ddpfPixelFormat = m_formats[format];
+        desc.ddsCaps.dwCaps = DDSCAPS_TEXTURE | DDSCAPS_VIDEOMEMORY;
+        const HRESULT hr = m_ddraw->CreateSurface(&desc, &surface, nullptr);
+        if (SUCCEEDED(hr) && surface)
+        {
+            break;
+        }
+        LOG("Atlas: creating a {}x{} {} page failed ({:08x})", m_options.pageSize, m_options.pageSize,
+            describeFormat(m_formats[format]), static_cast<uint32_t>(hr));
+        surface = nullptr;
+        if (pages > 0 || m_options.pageSize <= 1024)
+        {
+            m_pageLimit[format] = pages;    // out of video memory: make do with the pages there are
+            return nullptr;
+        }
+        m_options.pageSize /= 2;
     }
     auto page = std::make_unique<Page>();
     page->surface = surface;
     page->format = format;
-    LOG("Atlas: page {} ({}x{} {}), {} in total", pages + 1, m_options.pageSize, m_options.pageSize,
-        describeFormat(m_formats[format]), m_pages.size() + 1);
+    page->size = m_options.pageSize;
+    LOG("Atlas: page {} ({}x{} {}), {} in total; {}", pages + 1, page->size, page->size,
+        describeFormat(m_formats[format]), m_pages.size() + 1, D3DStats::memorySummary());
     m_pages.push_back(std::move(page));
     return m_pages.back().get();
 }

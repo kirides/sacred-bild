@@ -57,6 +57,7 @@ DeviceProxy* DeviceProxy::wrap(IDirect3DDevice7* real, IDirectDraw7* ddraw)
     if (g_config.batch)
     {
         Batcher::Options options;
+        options.noClip = g_config.batchNoClip;
         options.atlas = g_config.atlas;
         options.atlasPageSize = g_config.atlasPageSize;
         options.atlasPages = g_config.atlasPages;

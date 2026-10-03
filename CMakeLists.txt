@@ -8,6 +8,8 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# RelWithDebInfo is the build that ships: inline like Release (CMake's default for it is /Ob1).
+string(REPLACE "/Ob1" "/Ob2" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
 
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h" REQUIRED)
 find_library(DETOURS_LIBRARY_RELEASE detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH REQUIRED)
@@ -37,7 +39,8 @@ target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} psapi dxguid)
 target_compile_definitions(ddraw PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 target_compile_options(ddraw PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.
-target_link_options(ddraw PRIVATE /SAFESEH:NO)
+# The map file lets tools/profile_report.py name functions in SacredBild's own samples.
+target_link_options(ddraw PRIVATE /SAFESEH:NO /MAP)
 set_target_properties(ddraw PROPERTIES OUTPUT_NAME "ddraw")
 
 # Optional: copy the DLL into the game folder after build (-DSACRED_GAME_DIR=...).

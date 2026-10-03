@@ -24,6 +24,7 @@ class Batcher
 public:
     struct Options
     {
+        bool noClip = true;     // submit with D3DDP_DONOTCLIP
         bool atlas = true;
         int atlasPageSize = 4096;
         int atlasPages = 4;
@@ -92,6 +93,7 @@ private:
 
     IDirect3DDevice7* m_real;
     std::unique_ptr<TextureAtlas> m_atlas;
+    DWORD m_submitFlags = 0;
     bool m_useAtlas = false;
     bool m_active = false;
     uint32_t m_frame = 0;

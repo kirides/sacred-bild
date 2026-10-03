@@ -1,11 +1,46 @@
-# Summarizes SacredBild-profile.txt: maps sampled addresses to DE function names (from .funcs_de.json).
-# usage: python tools/profile_report.py [path-to-SacredBild-profile.txt] [top-N]
-import sys, os, re, collections
+# Summarizes SacredBild-profile.txt: maps sampled addresses to DE function names (from .funcs_de.json) and
+# SacredBild's own samples to its functions (from the linker map of the build that ran).
+# usage: python tools/profile_report.py [path-to-SacredBild-profile.txt] [top-N] [path-to-ddraw.map]
+import sys, os, re, bisect, collections
 sys.path.insert(0, os.path.dirname(__file__))
 from funcs import func_of
 
 path = sys.argv[1] if len(sys.argv) > 1 else r"B:\Spiele\GOG Games\Sacred Gold\SacredBild-profile.txt"
 top = int(sys.argv[2]) if len(sys.argv) > 2 else 30
+map_path = sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.path.dirname(__file__), '..', 'out', 'build',
+                                                               'msvc-x86', 'RelWithDebInfo', 'ddraw.map')
+
+def demangle(sym):
+    """Rough MSVC demangling: ?name@Scope@Outer@@... -> Outer::Scope::name."""
+    if not sym.startswith('?') or sym.startswith('??'):
+        return sym[:100]
+    parts = sym[1:].split('@@')[0].split('@')
+    parts = [p for p in parts if p and not p.startswith('?A0x')]   # anonymous namespaces
+    return '::'.join(reversed(parts))
+
+def load_map(path):
+    """RVA -> function name from an MSVC /MAP file."""
+    if not os.path.exists(path):
+        return None
+    base, syms = 0x10000000, []
+    for line in open(path, encoding='latin1'):
+        m = re.match(r'\s*Preferred load address is ([0-9a-fA-F]+)', line)
+        if m:
+            base = int(m.group(1), 16)
+            continue
+        m = re.match(r'\s*0001:[0-9a-fA-F]+\s+(\S+)\s+([0-9a-fA-F]{8})\s+f\b', line)
+        if m:
+            syms.append((int(m.group(2), 16) - base, demangle(m.group(1))))
+    syms.sort()
+    return [a for a, _ in syms], [n for _, n in syms]
+
+SYMS = load_map(map_path)
+
+def own_name(rva):
+    if not SYMS:
+        return f"+{rva:08x}"
+    i = bisect.bisect_right(SYMS[0], rva) - 1
+    return SYMS[1][i] if i >= 0 else f"+{rva:08x}"
 
 threads = []      # (tid, samples, sections)
 cur = None
@@ -16,7 +51,8 @@ for line in open(path, encoding='latin1'):
         continue
     m = re.match(r'\[thread (\d+) samples (\d+)\]', line)
     if m:
-        cur = {'tid': int(m.group(1)), 'samples': int(m.group(2)), 'exclusive': [], 'external': [], 'inclusive': []}
+        cur = {'tid': int(m.group(1)), 'samples': int(m.group(2)), 'exclusive': [], 'external': [], 'inclusive': [],
+               'external_eip': []}
         threads.append(cur)
         continue
     m = re.match(r'\[(\w+)\]', line)
@@ -24,8 +60,8 @@ for line in open(path, encoding='latin1'):
         section = m.group(1)
         continue
     parts = line.split()
-    if section == 'external':
-        cur['external'].append((parts[0], int(parts[1], 16), int(parts[2])))
+    if section in ('external', 'external_eip'):
+        cur[section].append((parts[0], int(parts[1], 16), int(parts[2])))
     else:
         cur[section].append((int(parts[0], 16), int(parts[1])))
 
@@ -52,6 +88,14 @@ for t in sorted(threads, key=lambda t: -t['samples']):
     print("  -- outside sacred.exe by calling game function")
     for (mod, caller), c in ext_caller.most_common(top):
         print(f"    {100 * c / n:5.1f}%  {mod:<20} <- {caller}")
+    own = collections.Counter()
+    for mod, rva, c in t['external_eip']:
+        if mod == 'SacredBild':
+            own[own_name(rva)] += c
+    if own:
+        print(f"  -- inside SacredBild by function{'' if SYMS else ' (no ddraw.map found)'}")
+        for f, c in own.most_common(top):
+            print(f"    {100 * c / n:5.1f}%  {f}")
     print("  -- exclusive (own code) in sacred.exe")
     for f, c in excl.most_common(top):
         print(f"    {100 * c / n:5.1f}%  {f}")

@@ -27,6 +27,7 @@ public:
 
         IDirectDrawSurface7* surface = nullptr;
         int format = 0;
+        int size = 0;                                   // texels per side
         std::vector<Shelf> shelves;
         int nextY = 0;
         uint32_t lastUse = 0;
@@ -55,7 +56,7 @@ public:
     struct Options
     {
         bool copies = true;         // false: registry only
-        int pageSize = 4096;
+        int pageSize = 4096;        // halved (down to 1024) when the device refuses a page
         int maxPagesPerFormat = 4;
         int maxTextureSize = 512;
     };
@@ -81,6 +82,7 @@ public:
     void beginFrame();
 
     int pageCount() const { return static_cast<int>(m_pages.size()); }
+    bool isPage(IDirectDrawSurface7* surface) const;
 
 private:
     void describe(IDirectDrawSurface7* texture, Entry& entry);

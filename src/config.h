@@ -22,6 +22,8 @@ struct Config
 
     // World view draws: merge consecutive draws that end up with the same device state into one call.
     bool batch = true;
+    // Batched draws skip Direct3D 7's software clipping of pretransformed vertices; the GPU clips them.
+    bool batchNoClip = true;
     // Copy small textures into shared pages so draws with different textures can be merged as well.
     bool atlas = true;
     int atlasPageSize = 4096;       // texels per side, clamped to the device limit

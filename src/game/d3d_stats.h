@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 
 // Per-frame counters and phase timers; logs a summary about once per second.
 namespace D3DStats
@@ -24,7 +25,14 @@ namespace D3DStats
         CSubmit,        // draw calls that reached the real device
         CMerged,        // game draws appended to a pending batch
         CAtlasDraw,     // batched draws that sample an atlas page
-        CAtlasRange,    // draws kept on the original texture: coordinates beyond the edges
+        // Textured stages kept on the original texture because ...
+        CAtlasRange,    // coordinates beyond the edges
+        CAtlasSkipTexture,  // the texture can't be copied (size, format, mipmaps, changes too often)
+        CAtlasSkipSetup,    // coordinate set, texture transform, wrap render state or mixed addressing
+        CAtlasSkipShared,   // two stages share a coordinate set
+        CAtlasSkipFull,     // no room in the pages this frame (or the copy failed)
+        CFlushPages,        // batches ended by texture: from one atlas page to another
+        CFlushOriginal,     // batches ended by texture: an original texture on either side
         CAtlasUpload,   // texture copies into atlas pages
         CAtlasReset,    // atlas pages emptied for reuse
         CFlushTexture,  // pending batch drawn because the next draw needs ...: other textures
@@ -60,6 +68,9 @@ namespace D3DStats
 
     void setRenderThread(unsigned long threadId);
     void onFrame();
+
+    // "private N MB, address space N MB used, largest free N MB" (the game is not large address aware).
+    std::string memorySummary();
 
     // Called by the device proxy on SetTexture(0, ...); tracks per-frame uniqueness and texture sizes.
     void onTexture(void* surface);

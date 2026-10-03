@@ -59,6 +59,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Display | Borderless | 1 | Main window without frame. |
 | Render | TextureBudgetMB | 0 | Texture memory the game may keep loaded; 0 = the game's value, at least 256. |
 | Render | Batch | 1 | Merge the world view's draw calls. |
+| Render | BatchNoClip | 1 | Merged draws skip Direct3D 7's software clipping; the GPU clips. |
 | Render | Atlas | 1 | Copy small textures into shared pages so more draws merge. |
 | Render | AtlasPageSize | 4096 | Atlas page size in texels (clamped to the GPU limit). |
 | Render | AtlasPages | 4 | Pages per texture format; the least recently used one is reused when full. |
