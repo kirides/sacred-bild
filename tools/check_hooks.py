@@ -25,6 +25,7 @@ HOOKS = {
     0x006404C0: ('recordMapFind (called)', 1),
     0x0065EA20: ('cTextureManager::init', 1),
     0x0062B000: ('cWorldView::renderTileRow', 3),
+    0x00632A30: ('cWorldView::initRowWalk', 2),
     0x0062D530: ('cWorldView::drawTileLayers (called)', 1),
     0x00629420: ('cQuadBatcher::flush (called)', 1),
     0x0062DE70: ('cWorldView::drawWaterTiles (called)', 1),

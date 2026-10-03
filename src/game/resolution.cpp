@@ -243,7 +243,171 @@ namespace
     const auto g_drawWaterTiles = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawWaterTiles);
     constexpr uint32_t kRowMargin = 256;
 
-    void __fastcall hookTileRow(void* self, void* edx, void* device, void* rowPos, int detail)
+    // Row walk. Only the 3x3 sectors around the camera (64x64 tiles each) are loaded. cWorldView0_render walks the
+    // rows by tile and sector index from the top-left corner of the view (initRowWalk) and steps over sector edges
+    // with fixed index changes. The original view plus its margins (6 tiles left, 5 rows up, 19 rows down) always
+    // lies inside the loaded sectors; a large zoomed-out one does not near a sector edge. The corner then lies in no
+    // sector (-1, its tile index computed from out-of-range tables), the steps turn that into a valid sector with a
+    // negative tile index, and renderTileRow reads before the tile table (crash at 0x62B203). Rows that run out of
+    // the loaded sectors on the other side step into wrong sectors. Instead, every row gets its position in the
+    // 192x192 loaded tiles from one anchor per frame and is clipped to them.
+    struct RowPos
+    {
+        float x, y;
+        int16_t tile;       // row * 64 + column within the sector
+        int16_t sector;     // 3x3 grid: row * 3 + column
+        int16_t steps;      // rows until the walk leaves the sector (cWorldView0_render only)
+        int16_t pad;
+    };
+
+    enum class Walk { Off, Clip, Skip };
+
+    struct RowWalkState
+    {
+        void* view = nullptr;
+        Walk mode = Walk::Off;
+        bool cornerInside = false;
+        int row = 0, col = 0;   // loaded-tile position of the even start: +1/+1 per row down, -1/+1 per tile right
+        int rows[2] = {};       // even/odd rows drawn so far (cWorldView0_render rebases x/y after initRowWalk)
+    };
+    RowWalkState g_walk;
+    Walk g_walkOutside = Walk::Off;     // mode of the last frame whose corner was outside (Off: inside)
+    uint32_t g_walkStateLogs = 0;       // logged changes into an outside corner
+    uint32_t g_walkMismatchLogs = 0;    // logged disagreements with the game's walk (would be bugs here)
+
+    using InitRowWalkFn = void(__fastcall*)(void* self, void* edx, const int32_t* pos, void* map);
+    InitRowWalkFn g_origInitRowWalk = reinterpret_cast<InitRowWalkFn>(Addr::cWorldView_initRowWalk);
+
+    RowPos* rowPos(void* view, uintptr_t offset)
+    {
+        return reinterpret_cast<RowPos*>(static_cast<uint8_t*>(view) + offset);
+    }
+
+    bool loadedTile(const RowPos& p, int& row, int& col)
+    {
+        if (p.sector < 0 || p.sector > 8 || p.tile < 0 || p.tile > 0xFFF)
+        {
+            return false;
+        }
+        row = p.sector / 3 * 64 + p.tile / 64;
+        col = p.sector % 3 * 64 + p.tile % 64;
+        return true;
+    }
+
+    int floorDiv(int a, int b)
+    {
+        return a / b - ((a % b != 0) && ((a < 0) != (b < 0)) ? 1 : 0);
+    }
+
+    void __fastcall hookInitRowWalk(void* self, void* edx, const int32_t* pos, void* map)
+    {
+        g_origInitRowWalk(self, edx, pos, map);
+        RowPos* even = rowPos(self, WorldView::rowEven);
+        RowPos* odd = rowPos(self, WorldView::rowOdd);
+        g_walk.view = self;
+        g_walk.rows[0] = 0;
+        g_walk.rows[1] = 0;
+        g_walk.cornerInside = loadedTile(*even, g_walk.row, g_walk.col);
+
+        // Look up a point next to the camera (always in the middle sector) and step back to the corner in whole
+        // tiles: (96, 0) on screen is one tile right (row - 1, column + 1), (0, 48) one row down (+1, +1); both keep
+        // the tile snapping of initRowWalk. Done every frame so a disagreement with the game's own corner shows up.
+        const int a = floorDiv(*reinterpret_cast<const int32_t*>(Addr::g_viewCameraX) - pos[1], 96);
+        const int b = floorDiv(*reinterpret_cast<const int32_t*>(Addr::g_viewCameraY) - pos[2], 48);
+        const RowPos saved[2] = {*even, *odd};
+        const int32_t probe[3] = {pos[0], pos[1] + a * 96, pos[2] + b * 48};
+        g_origInitRowWalk(self, edx, probe, map);
+        int row = 0;
+        int col = 0;
+        const bool probed = loadedTile(*even, row, col);
+        *even = saved[0];
+        *odd = saved[1];
+        row -= b - a;
+        col -= a + b;
+
+        const Walk previous = g_walkOutside;
+        if (g_walk.cornerInside)
+        {
+            g_walk.mode = Walk::Clip;
+            g_walkOutside = Walk::Off;
+            if (probed && (row != g_walk.row || col != g_walk.col) && g_walkMismatchLogs < 10)
+            {
+                ++g_walkMismatchLogs;
+                LOG("Row walk: probe gives tile ({}, {}), the game's corner ({}, {})", row, col, g_walk.row, g_walk.col);
+            }
+            return;
+        }
+        g_walk.mode = probed ? Walk::Clip : Walk::Skip;
+        g_walk.row = row;
+        g_walk.col = col;
+        g_walkOutside = g_walk.mode;
+        if (g_walk.mode != previous && g_walkStateLogs < 50)
+        {
+            ++g_walkStateLogs;
+            LOG("Row walk: view corner outside the loaded sectors (sector {}, tile {}), {}", saved[0].sector,
+                saved[0].tile, probed ? std::format("clipping rows from tile ({}, {})", row, col)
+                                      : std::string("no tile next to the camera either, skipping the ground"));
+        }
+    }
+
+    // Draws the part of walk row k that lies in the loaded sectors.
+    void renderRowClipped(void* self, void* edx, void* device, RowPos* pos, int detail, int odd, int k)
+    {
+        auto* base = static_cast<uint8_t*>(self);
+        const int row = g_walk.row + k;
+        const int col = g_walk.col + k + odd;
+        auto& length = *reinterpret_cast<int32_t*>(base + WorldView::rowLength);
+        const int32_t n0 = length;
+        // Tile j of the row is (row - j, col + j).
+        const int first = std::max({0, row - 191, -col});
+        const int last = std::min({n0 - 1, row, 191 - col});
+        if (first > last)
+        {
+            return;
+        }
+        RowPos clipped = *pos;
+        clipped.x += static_cast<float>(first) * 96.0f;
+        const int r = row - first;
+        const int c = col + first;
+        clipped.sector = static_cast<int16_t>(r / 64 * 3 + c / 64);
+        clipped.tile = static_cast<int16_t>(r % 64 * 64 + c % 64);
+        if (first == 0 && last == n0 - 1)
+        {
+            if (clipped.sector == pos->sector && clipped.tile == pos->tile)
+            {
+                g_origTileRow(self, edx, device, pos, detail);
+                return;
+            }
+            if (g_walk.cornerInside)
+            {
+                // The game's walk is right whenever its corner is: this would be a bug here, keep the game's row.
+                if (g_walkMismatchLogs < 10)
+                {
+                    ++g_walkMismatchLogs;
+                    LOG("Row walk: row at y {} is sector {} tile {}, computed {} / {}", pos->y, pos->sector, pos->tile,
+                        clipped.sector, clipped.tile);
+                }
+                g_origTileRow(self, edx, device, pos, detail);
+                return;
+            }
+        }
+        // Ground is drawn for columns edgeLeft - 1 .. length - edgeRight + 1 (the rest are off-screen margins);
+        // keep those columns where they were in the full row.
+        auto& edgeLeft = *reinterpret_cast<int32_t*>(base + WorldView::rowEdgeLeft);
+        auto& edgeRight = *reinterpret_cast<int32_t*>(base + WorldView::rowEdgeRight);
+        const int32_t left0 = edgeLeft;
+        const int32_t right0 = edgeRight;
+        const int32_t n = last - first + 1;
+        length = n;
+        edgeLeft = left0 - first;
+        edgeRight = right0 + n + first - n0;
+        g_origTileRow(self, edx, device, &clipped, detail);
+        length = n0;
+        edgeLeft = left0;
+        edgeRight = right0;
+    }
+
+    void __fastcall hookTileRow(void* self, void* edx, void* device, void* rowPosArg, int detail)
     {
         auto& layers = *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(self) + WorldView::layeredTileCount);
         auto& water = *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(self) + WorldView::waterTileCount);
@@ -258,7 +422,19 @@ namespace
                 water = 0;
             }
         }
-        g_origTileRow(self, edx, device, rowPos, detail);
+        auto* pos = static_cast<RowPos*>(rowPosArg);
+        if (self == g_walk.view && g_walk.mode != Walk::Off &&
+            (pos == rowPos(self, WorldView::rowEven) || pos == rowPos(self, WorldView::rowOdd)))
+        {
+            const int odd = pos == rowPos(self, WorldView::rowOdd) ? 1 : 0;
+            const int k = g_walk.rows[odd]++;
+            if (g_walk.mode == Walk::Clip)
+            {
+                renderRowClipped(self, edx, device, pos, detail, odd, k);
+            }
+            return;
+        }
+        g_origTileRow(self, edx, device, rowPosArg, detail);
     }
 
     using TextureInitFn = uint32_t(__fastcall*)(void* self, void* edx, uint32_t budget);
@@ -371,6 +547,7 @@ void Resolution::install()
     Patch::hook(g_origLoadingScreen, &hookLoadingScreen, "dxDriver7::drawLoadingScreen");
     Patch::hook(g_origTextureInit, &hookTextureInit, "cTextureManager::init");
     Patch::hook(g_origTileRow, &hookTileRow, "cWorldView::renderTileRow");
+    Patch::hook(g_origInitRowWalk, &hookInitRowWalk, "cWorldView::initRowWalk");
     Patch::hook(g_origPixelsToWorld, &hookPixelsToWorld, "pixelsToWorld");
     Patch::hook(g_origWorldToPixels, &hookWorldToPixels, "worldToPixels");
 }

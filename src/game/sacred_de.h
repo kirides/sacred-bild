@@ -86,6 +86,12 @@ namespace Sacred::Addr
     // Draws the collected water/lava tiles (glow pass, then the tiles) and sets the water ambience from their
     // count and average position.
     constexpr uintptr_t cWorldView_drawWaterTiles = 0x0062DE70; // thiscall (device)
+    // Row walk: initRowWalk sets the even and odd row positions (WorldView::rowEven/rowOdd) from the view's top-left
+    // corner; cWorldView0_render then calls renderTileRow for each and steps it one tile row down (tile + 0x41,
+    // y + 48), changing sector at sector edges. The camera position (view coordinates) is set by the same frame.
+    constexpr uintptr_t cWorldView_initRowWalk = 0x00632A30;    // thiscall (pos: +4 x, +8 y; map data)
+    constexpr uintptr_t g_viewCameraX = 0x00AD5918;             // int32
+    constexpr uintptr_t g_viewCameraY = 0x00AD591C;             // int32
 
     // Engine input: cEngine_receiveEvent (0x618130) passes mouse events to the UI manager first (UI coordinates)
     // and then to the world mouse handler, which picks with the event position.
@@ -156,6 +162,13 @@ namespace Sacred::WorldView
     // a bounds check; cWorldView_drawWaterTiles draws them after all rows. Entry 1750 would overwrite the count.
     constexpr uintptr_t waterTileCount = 0x80E3C;
     constexpr uint32_t waterTileCapacity = (0x80E3C - 0x3FF2C) / 0x98;
+    // Row walk positions: x, y (float), tile (int16, row * 64 + column in its sector), sector (int16, 3x3 grid of
+    // loaded sectors around the camera, row * 3 + column), steps (int16).
+    constexpr uintptr_t rowEven = 0x970D4;
+    constexpr uintptr_t rowOdd = 0x970E4;   // even + (48, 24): one tile column further
+    constexpr uintptr_t rowEdgeLeft = 0x96AB8;  // 6: renderTileRow draws ground from column edgeLeft - 1 ...
+    constexpr uintptr_t rowEdgeRight = 0x96ABC; // 6: ... to column rowLength - edgeRight + 1 (rest: margins)
+    constexpr uintptr_t rowLength = 0x96AC8;    // tiles per row: view width / 96 + 12
 }
 
 // cTextureManager member offsets.

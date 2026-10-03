@@ -119,6 +119,25 @@ Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAP
   `+0x3E3C4`, count `+0x3FF1C`, capped at `0x6D5`); `cWorldView_drawTileLayers` (`0x62D530`) draws them after
   all rows. A zoomed-out high-resolution view overflows the cap (later rows lose their blends: staircase
   edges), so SacredBild flushes batcher + layers between rows when the array is nearly full.
+- Row walk: only the 3x3 sectors around the camera are loaded (64x64 tiles each; `view+0x970B0` 9 sector
+  pointers, tile table at `+0x6C`, 32-byte tiles, tile index = row·64 + column, sector = row·3 + column).
+  `cWorldView_initRowWalk` (`0x632A30`, thiscall (pos {+4 x, +8 y}, map data)) snaps the view's top-left corner
+  (camera `0xAD5918`/`0xAD591C` minus view/2 and margins) to the tile lattice and finds its sector and tile; the
+  even row position lives at `+0x970D4` (x, y float, tile, sector, steps int16), the odd one (+48, +24: one tile
+  column further) at `+0x970E4`. `cWorldView0_render` calls `renderTileRow` for both, then steps each one tile row
+  down (tile + 0x41, y + 48; at the sector's last row sector + 3, last column + 1, corner + 4). Inside the row
+  (`0x62D3B2`) a tile step right is tile - 0x3F, x + 96, crossing to sector - 3 / - 2 / + 1. Row length is
+  `+0x96AC8` (view width / 96 + 12); ground is drawn only for columns `+0x96AB8` - 1 .. length - `+0x96ABC` + 1
+  (both 6), the rest are margins for objects. The walked area is the view plus 6 tiles left, 5 rows up and 19 rows
+  down; the original view always lies inside the loaded sectors. A large zoomed-out view does not near a sector
+  edge (at 2560x1440 zoom 2 the visible part still fits, the margins do not): the corner then is in no sector,
+  `initRowWalk` stores sector -1 with a tile index computed from the offset tables at index -1, the steps turn
+  that into a valid sector with a negative tile index, and `renderTileRow` (which checks the index only against
+  `> 0xFFF`) read before the tile table: crash at `0x62B203` (e.g. leaving a town to the north). Rows leaving the
+  loaded sectors to the right or bottom stepped into wrong sectors. SacredBild anchors each frame's walk in the
+  192x192 loaded tiles (the game's corner, or a lookup next to the camera stepped back in whole tiles) and runs
+  each row only over its loaded part, shifting x, tile, sector, length and the ground columns. `0x62D870` is an
+  unreferenced copy of the row walk.
 - Input: mouse events (`0x8950A8` down, `0x897248` up; x/y at +8/+0xC) carry the UI-space cursor.
   `cEngine_receiveEvent` (`0x618130`) hands them to the UI manager first (UI coordinates), then to the world
   mouse handler `0x617360` (thiscall (event, flag)), which picks with them; SacredBild converts the event to
