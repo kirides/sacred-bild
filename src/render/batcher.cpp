@@ -22,6 +22,8 @@ namespace
     // One pending batch: 16-bit indices, and well within what the runtime accepts per call.
     constexpr DWORD kMaxVerts = 0x4000;
     constexpr DWORD kMaxIndices = 0x6000;
+    // Vertices per submit vertex buffer (one per vertex format): several batches before it wraps.
+    constexpr DWORD kVertexBufferSize = 0xC000;
 
     // Render states that only affect vertices Direct3D transforms and lights; pretransformed draws ignore them.
     bool tnlOnly(DWORD state)
@@ -93,23 +95,59 @@ Batcher::Batcher(IDirect3DDevice7* real, IDirectDraw7* ddraw, const Options& opt
     }
     m_useAtlas = atlas.copies;
     m_atlas = std::make_unique<TextureAtlas>(ddraw, atlas, &Batcher::beforeAtlasChange, this);
+    if (options.vertexBuffers && FAILED(m_real->GetDirect3D(&m_d3d)))
+    {
+        m_d3d = nullptr;
+    }
     m_verts.resize(size_t(kMaxVerts) * 64);
     m_indices.resize(kMaxIndices);
     m_rsDirty.reserve(kStates);
     m_tssDirty.reserve(kStages * kStageTypes);
+    const char* submits = m_d3d ? "vertex buffers" : "user memory";
     if (m_useAtlas)
     {
-        LOG("Batcher: on{}, atlas pages {}x{}, up to {} per texture format, textures up to {}x{}",
-            options.noClip ? " (no software clipping)" : "", atlas.pageSize, atlas.pageSize, atlas.maxPagesPerFormat,
-            atlas.maxTextureSize, atlas.maxTextureSize);
+        LOG("Batcher: on, submits from {}{}, atlas pages up to {}x{}, up to {} per texture format, textures up to {}x{}",
+            submits, options.noClip ? " without software clipping" : "", atlas.pageSize, atlas.pageSize,
+            atlas.maxPagesPerFormat, atlas.maxTextureSize, atlas.maxTextureSize);
     }
     else
     {
-        LOG("Batcher: on{}, no texture atlas", options.noClip ? " (no software clipping)" : "");
+        LOG("Batcher: on, submits from {}{}, no texture atlas", submits,
+            options.noClip ? " without software clipping" : "");
     }
 }
 
-Batcher::~Batcher() = default;
+Batcher::~Batcher()
+{
+    for (VertexBuffer& vb : m_vertexBuffers)
+    {
+        vb.buffer->Release();
+    }
+    if (m_d3d)
+    {
+        m_d3d->Release();
+    }
+}
+
+const Batcher::Layout& Batcher::layout(DWORD fvf)
+{
+    for (const Layout& l : m_layouts)
+    {
+        if (l.fvf == fvf)
+        {
+            return l;
+        }
+    }
+    Layout& l = m_layouts[m_nextLayout++ % std::size(m_layouts)];
+    l.fvf = fvf;
+    l.stride = Fvf::stride(fvf);
+    l.texCount = std::min<UINT>(Fvf::texCount(fvf), 8);
+    for (UINT set = 0; set < 8; ++set)
+    {
+        l.texOffset[set] = set < l.texCount && Fvf::texCoordSize(fvf, set) == 2 ? Fvf::texCoordOffset(fvf, set) : 0;
+    }
+    return l;
+}
 
 void Batcher::beforeAtlasChange(void* self)
 {
@@ -454,13 +492,93 @@ void Batcher::submit(Reason reason)
     }
     {
         Scope s{TDraw};
-        m_real->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, m_fvf, m_verts.data(), m_vertCount, m_indices.data(),
-            m_indexCount, m_flags | m_submitFlags);
+        if (!m_d3d || !submitVertexBuffer())
+        {
+            m_real->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, m_fvf, m_verts.data(), m_vertCount, m_indices.data(),
+                m_indexCount, m_flags | m_submitFlags);
+        }
     }
     count(CSubmit);
     count(flushCounter(reason));
     m_vertCount = 0;
     m_indexCount = 0;
+}
+
+// A vertex buffer spares the runtime and the driver copying the vertices out of user memory again.
+bool Batcher::submitVertexBuffer()
+{
+    VertexBuffer* vb = vertexBuffer(m_fvf);
+    if (!vb)
+    {
+        return false;
+    }
+    DWORD lockFlags = DDLOCK_WAIT | DDLOCK_WRITEONLY | DDLOCK_NOOVERWRITE;
+    if (vb->cursor + m_vertCount > kVertexBufferSize)
+    {
+        vb->cursor = 0;
+        lockFlags = DDLOCK_WAIT | DDLOCK_WRITEONLY | DDLOCK_DISCARDCONTENTS;
+    }
+    void* data = nullptr;
+    DWORD size = 0;
+    HRESULT hr = vb->buffer->Lock(lockFlags, &data, &size);
+    if (FAILED(hr) || !data)
+    {
+        vertexBufferFailed("Lock", hr);
+        return false;
+    }
+    std::memcpy(static_cast<uint8_t*>(data) + size_t(vb->cursor) * m_stride, m_verts.data(), size_t(m_vertCount) * m_stride);
+    vb->buffer->Unlock();
+    hr = m_real->DrawIndexedPrimitiveVB(D3DPT_TRIANGLELIST, vb->buffer, vb->cursor, m_vertCount, m_indices.data(),
+        m_indexCount, m_flags | m_submitFlags);
+    vb->cursor += m_vertCount;
+    if (FAILED(hr))
+    {
+        vertexBufferFailed("DrawIndexedPrimitiveVB", hr);
+        return false;
+    }
+    return true;
+}
+
+Batcher::VertexBuffer* Batcher::vertexBuffer(DWORD fvf)
+{
+    for (VertexBuffer& vb : m_vertexBuffers)
+    {
+        if (vb.fvf == fvf)
+        {
+            return &vb;
+        }
+    }
+    D3DVERTEXBUFFERDESC desc = {};
+    desc.dwSize = sizeof(desc);
+    desc.dwCaps = D3DVBCAPS_WRITEONLY | ((m_submitFlags & D3DDP_DONOTCLIP) ? D3DVBCAPS_DONOTCLIP : 0);
+    desc.dwFVF = fvf;
+    desc.dwNumVertices = kVertexBufferSize;
+    IDirect3DVertexBuffer7* buffer = nullptr;
+    const HRESULT hr = m_d3d->CreateVertexBuffer(&desc, &buffer, 0);
+    if (FAILED(hr) || !buffer)
+    {
+        vertexBufferFailed("CreateVertexBuffer", hr);
+        return nullptr;
+    }
+    LOG("Batcher: vertex buffer for FVF {:x}, {} vertices", fvf, kVertexBufferSize);
+    m_vertexBuffers.push_back({buffer, fvf, 0});
+    return &m_vertexBuffers.back();
+}
+
+void Batcher::vertexBufferFailed(const char* what, HRESULT hr)
+{
+    LOG("Batcher: {} failed: {:08x}", what, static_cast<uint32_t>(hr));
+    if (++m_vertexBufferFailures >= 3 && m_d3d)
+    {
+        LOG("Batcher: submitting from user memory from now on");
+        for (VertexBuffer& vb : m_vertexBuffers)
+        {
+            vb.buffer->Release();
+        }
+        m_vertexBuffers.clear();
+        m_d3d->Release();
+        m_d3d = nullptr;
+    }
 }
 
 void Batcher::sync(Reason reason)
@@ -491,7 +609,7 @@ HRESULT Batcher::drawDirect(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts,
     return m_real->DrawPrimitive(type, fvf, const_cast<void*>(verts), vertCount, flags);
 }
 
-void Batcher::useAtlas(DWORD stage, IDirectDrawSurface7* texture, DWORD fvf, UINT stride, const void* verts,
+void Batcher::useAtlas(DWORD stage, IDirectDrawSurface7* texture, const Layout& layout, const void* verts,
     DWORD vertCount, IDirectDrawSurface7*& binding, Remap* remaps, UINT& remapCount)
 {
     TextureAtlas::Entry& e = m_atlas->entry(texture);
@@ -503,7 +621,7 @@ void Batcher::useAtlas(DWORD stage, IDirectDrawSurface7* texture, DWORD fvf, UIN
     // The copy only behaves like the original for plain 2D coordinates, and its gutter for wrap addressing or
     // for clamp/mirror (identical within half a texel of the edges) on both axes.
     const DWORD set = stageState(stage, D3DTSS_TEXCOORDINDEX);   // also rejects generated coordinates (high bits)
-    if (set >= Fvf::texCount(fvf) || Fvf::texCoordSize(fvf, set) != 2 ||
+    if (set >= layout.texCount || !layout.texOffset[set] ||
         stageState(stage, D3DTSS_TEXTURETRANSFORMFLAGS) != D3DTTFF_DISABLE ||
         renderState(D3DRENDERSTATE_WRAP0 + set) != 0)
     {
@@ -522,7 +640,8 @@ void Batcher::useAtlas(DWORD stage, IDirectDrawSurface7* texture, DWORD fvf, UIN
         count(CAtlasSkipSetup);
         return;
     }
-    const UINT offset = Fvf::texCoordOffset(fvf, set);
+    const UINT offset = layout.texOffset[set];
+    const UINT stride = layout.stride;
     // Coordinates may reach half a texel beyond the edges: the gutter covers that.
     float u0 = FLT_MAX, u1 = -FLT_MAX, v0 = FLT_MAX, v1 = -FLT_MAX;
     const uint8_t* p = static_cast<const uint8_t*>(verts) + offset;
@@ -567,7 +686,8 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
     {
         return drawDirect(type, fvf, verts, vertCount, indices, indexCount, flags);
     }
-    const UINT stride = Fvf::stride(fvf);
+    const Layout& vertexLayout = layout(fvf);
+    const UINT stride = vertexLayout.stride;
 
     // Textures the draw samples, replaced by atlas pages where possible. A coordinate set shared by two
     // stages keeps the original textures: remapping it for one would break the other.
@@ -604,7 +724,7 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
             }
             else
             {
-                useAtlas(s, binding[s], fvf, stride, verts, vertCount, binding[s], remaps, remapCount);
+                useAtlas(s, binding[s], vertexLayout, verts, vertCount, binding[s], remaps, remapCount);
             }
         }
     }

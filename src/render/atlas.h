@@ -32,6 +32,9 @@ public:
         int nextY = 0;
         uint32_t lastUse = 0;
         std::vector<IDirectDrawSurface7*> textures;     // textures with a copy on this page
+        int64_t usedArea = 0;       // texels handed out since the last reset
+        int64_t liveArea = 0;       // of those, texels still holding a copy (destroyed textures leave holes)
+        bool full = false;          // an allocation did not fit
     };
 
     struct Entry
@@ -56,8 +59,8 @@ public:
     struct Options
     {
         bool copies = true;         // false: registry only
-        int pageSize = 4096;        // halved (down to 1024) when the device refuses a page
-        int maxPagesPerFormat = 4;
+        int pageSize = 8192;        // halved (down to 1024) when the device refuses a page
+        int maxPagesPerFormat = 2;
         int maxTextureSize = 512;
     };
 
@@ -78,7 +81,8 @@ public:
     // clamp/mirror with `clampEdges`); false if it can't have one now.
     bool place(IDirectDrawSurface7* texture, Entry& entry, uint32_t frame, bool clampEdges);
 
-    // Once per frame before use: restores lost pages.
+    // Once per frame before use: restores lost pages and empties full pages that are mostly holes, so the
+    // textures still in use get copied again compactly.
     void beginFrame();
 
     int pageCount() const { return static_cast<int>(m_pages.size()); }

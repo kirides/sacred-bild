@@ -32,6 +32,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.textureBudgetMB = readInt(ini, L"Render", L"TextureBudgetMB", g_config.textureBudgetMB);
     g_config.batch = readInt(ini, L"Render", L"Batch", g_config.batch) != 0;
     g_config.batchNoClip = readInt(ini, L"Render", L"BatchNoClip", g_config.batchNoClip) != 0;
+    g_config.batchVertexBuffer = readInt(ini, L"Render", L"BatchVertexBuffer", g_config.batchVertexBuffer) != 0;
     g_config.atlas = readInt(ini, L"Render", L"Atlas", g_config.atlas) != 0;
     g_config.atlasPageSize = readInt(ini, L"Render", L"AtlasPageSize", g_config.atlasPageSize);
     g_config.atlasPages = readInt(ini, L"Render", L"AtlasPages", g_config.atlasPages);
@@ -41,8 +42,9 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
 
     LOG("Config: Width={} Height={} Borderless={} UI.Scale={} UI.LinearFilter={} TextureBudgetMB={} Batch={} "
-        "BatchNoClip={} Atlas={} ({} px, {} pages, textures <= {}) D3DStats={} Profiler={} ({} us)", g_config.width,
-        g_config.height, g_config.borderless, g_config.uiScale, g_config.uiLinearFilter, g_config.textureBudgetMB,
-        g_config.batch, g_config.batchNoClip, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
-        g_config.atlasMaxTextureSize, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs);
+        "BatchNoClip={} BatchVertexBuffer={} Atlas={} ({} px, {} pages, textures <= {}) D3DStats={} Profiler={} ({} us)",
+        g_config.width, g_config.height, g_config.borderless, g_config.uiScale, g_config.uiLinearFilter,
+        g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer, g_config.atlas,
+        g_config.atlasPageSize, g_config.atlasPages, g_config.atlasMaxTextureSize, g_config.d3dStats,
+        g_config.profiler, g_config.profilerIntervalUs);
 }

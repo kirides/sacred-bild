@@ -1,4 +1,6 @@
 #pragma once
+#include <intrin.h>
+#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -61,10 +63,36 @@ namespace D3DStats
         TimerCount
     };
 
-    void count(Counter c, uint32_t n = 1);
-    void addTime(Timer t, int64_t ticks);
-    int64_t total(Timer t);     // accumulated since the last report
-    int64_t now();
+    namespace Detail
+    {
+        inline std::atomic<uint32_t> counters[CounterCount];
+        inline std::atomic<int64_t> times[TimerCount];
+    }
+
+    // Called tens of thousands of times per frame. Plain load + store instead of a locked add: nearly every call
+    // comes from the render thread, and a count lost to a race with another thread doesn't matter.
+    inline void count(Counter c, uint32_t n = 1)
+    {
+        auto& v = Detail::counters[c];
+        v.store(v.load(std::memory_order_relaxed) + n, std::memory_order_relaxed);
+    }
+
+    inline void addTime(Timer t, int64_t ticks)
+    {
+        auto& v = Detail::times[t];
+        v.store(v.load(std::memory_order_relaxed) + ticks, std::memory_order_relaxed);
+    }
+
+    // Accumulated since the last report.
+    inline int64_t total(Timer t)
+    {
+        return Detail::times[t].load(std::memory_order_relaxed);
+    }
+
+    inline int64_t now()
+    {
+        return static_cast<int64_t>(__rdtsc());
+    }
 
     void setRenderThread(unsigned long threadId);
     void onFrame();

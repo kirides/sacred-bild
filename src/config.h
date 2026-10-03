@@ -24,10 +24,12 @@ struct Config
     bool batch = true;
     // Batched draws skip Direct3D 7's software clipping of pretransformed vertices; the GPU clips them.
     bool batchNoClip = true;
+    // Batched draws go through vertex buffers instead of user memory (saves copies in the runtime and driver).
+    bool batchVertexBuffer = true;
     // Copy small textures into shared pages so draws with different textures can be merged as well.
     bool atlas = true;
-    int atlasPageSize = 4096;       // texels per side, clamped to the device limit
-    int atlasPages = 4;             // at most this many pages per texture format
+    int atlasPageSize = 8192;       // texels per side, clamped to the device limit
+    int atlasPages = 2;             // at most this many pages per texture format
     int atlasMaxTextureSize = 512;  // larger textures are used directly
 
     // Diagnostics

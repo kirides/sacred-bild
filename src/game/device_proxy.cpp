@@ -58,6 +58,7 @@ DeviceProxy* DeviceProxy::wrap(IDirect3DDevice7* real, IDirectDraw7* ddraw)
     {
         Batcher::Options options;
         options.noClip = g_config.batchNoClip;
+        options.vertexBuffers = g_config.batchVertexBuffer;
         options.atlas = g_config.atlas;
         options.atlasPageSize = g_config.atlasPageSize;
         options.atlasPages = g_config.atlasPages;
@@ -501,18 +502,47 @@ HRESULT DeviceProxy::SetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m)
 {
     Scope p{TProxy};
     D3DStats::count(CTransform);
+    std::scoped_lock lock(m_mutex);
     if (m)
     {
-        std::scoped_lock lock(m_mutex);
         if (type == D3DTRANSFORMSTATE_WORLD) m_world = *m;
         else if (type == D3DTRANSFORMSTATE_VIEW) m_view = *m;
         else if (type == D3DTRANSFORMSTATE_PROJECTION) m_proj = *m;
     }
-    Scope s{TState};
-    return m_real->SetTransform(type, m);
+    HRESULT hr;
+    {
+        Scope s{TState};
+        hr = m_real->SetTransform(type, m);
+    }
+    if (static_cast<DWORD>(type) < kTransforms)
+    {
+        // While a state block records, the call may not reach the device state.
+        m_transformKnown[type] = SUCCEEDED(hr) && m && !m_recording;
+        if (m_transformKnown[type])
+        {
+            m_transforms[type] = *m;
+        }
+    }
+    return hr;
 }
 
-HRESULT DeviceProxy::GetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m) { return m_real->GetTransform(type, m); }
+HRESULT DeviceProxy::GetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m)
+{
+    std::scoped_lock lock(m_mutex);
+    const DWORD i = static_cast<DWORD>(type);
+    if (m && i < kTransforms && m_transformKnown[i])
+    {
+        *m = m_transforms[i];
+        return D3D_OK;
+    }
+    const HRESULT hr = m_real->GetTransform(type, m);
+    if (SUCCEEDED(hr) && m && i < kTransforms && !m_recording)
+    {
+        m_transforms[i] = *m;
+        m_transformKnown[i] = true;
+    }
+    return hr;
+}
 HRESULT DeviceProxy::SetViewport(LPD3DVIEWPORT7 vp)
 {
     Scope p{TProxy};
@@ -529,7 +559,15 @@ HRESULT DeviceProxy::SetViewport(LPD3DVIEWPORT7 vp)
     }
     return m_real->SetViewport(vp);
 }
-HRESULT DeviceProxy::MultiplyTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m) { return m_real->MultiplyTransform(type, m); }
+HRESULT DeviceProxy::MultiplyTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m)
+{
+    std::scoped_lock lock(m_mutex);
+    if (static_cast<DWORD>(type) < kTransforms)
+    {
+        m_transformKnown[type] = false;
+    }
+    return m_real->MultiplyTransform(type, m);
+}
 HRESULT DeviceProxy::GetViewport(LPD3DVIEWPORT7 vp)
 {
     Scope p{TProxy};
@@ -592,6 +630,7 @@ HRESULT DeviceProxy::EndStateBlock(LPDWORD handle)
     std::scoped_lock lock(m_mutex);
     const HRESULT hr = m_real->EndStateBlock(handle);
     m_recording = false;
+    forgetTransforms();
     if (batching())
     {
         m_batcher->invalidate();
@@ -915,6 +954,7 @@ HRESULT DeviceProxy::ValidateDevice(LPDWORD passes)
 HRESULT DeviceProxy::ApplyStateBlock(DWORD handle)
 {
     std::scoped_lock lock(m_mutex);
+    forgetTransforms();
     if (!batching())
     {
         return m_real->ApplyStateBlock(handle);

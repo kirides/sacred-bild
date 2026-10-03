@@ -112,8 +112,8 @@ namespace
         }
     }
 
-    std::atomic<uint32_t> g_counters[D3DStats::CounterCount];
-    std::atomic<int64_t> g_times[D3DStats::TimerCount];
+    auto& g_counters = D3DStats::Detail::counters;
+    auto& g_times = D3DStats::Detail::times;
 
     HANDLE g_renderThread = nullptr;
     unsigned long g_renderThreadId = 0;
@@ -145,26 +145,6 @@ namespace
         return (static_cast<uint64_t>(k.dwHighDateTime) << 32 | k.dwLowDateTime) +
             (static_cast<uint64_t>(u.dwHighDateTime) << 32 | u.dwLowDateTime);
     }
-}
-
-int64_t D3DStats::now()
-{
-    return static_cast<int64_t>(__rdtsc());
-}
-
-void D3DStats::count(Counter c, uint32_t n)
-{
-    g_counters[c].fetch_add(n, std::memory_order_relaxed);
-}
-
-void D3DStats::addTime(Timer t, int64_t ticks)
-{
-    g_times[t].fetch_add(ticks, std::memory_order_relaxed);
-}
-
-int64_t D3DStats::total(Timer t)
-{
-    return g_times[t].load(std::memory_order_relaxed);
 }
 
 std::string D3DStats::memorySummary()

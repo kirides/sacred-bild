@@ -155,7 +155,23 @@ draw the pending batch first. Merged draws go out with `D3DDP_DONOTCLIP` (`Batch
 Direct3D still spent about 20 ns per vertex (200k vertices per zoomed-out frame), and the GPU clips anyway.
 First measurement (1920x1200, zoom 2.0): 9,500 game draws -> ~780 device draws (~390 batches, the rest
 3D model parts), world view 30.5 ms -> 14.5 ms. The frame rate stays at 60 because of DDrawCompat's
-`FpsLimiter = flipstart(60)` in the user's DDrawCompat overlay config. Limitation: a raw (non-atlas) texture the game locks and changes in the
+`FpsLimiter = flipstart(60)` in the user's DDrawCompat overlay config.
+
+Profile after batching (2560x1440, zoom 2.0, ~46 fps, render thread): granny.dll 23 %, SacredBild 15 %,
+AMD user-mode driver 12 %, DDrawCompat 10 %, ntdll 9 %, msvcrt 6 % (memcpy), d3dim700 5 %, sacred.exe 16 %.
+- 3D characters are about half the frame. Per creature `cObject3D_drawModel` (`0x44ABA0`) runs a visibility
+  test `0x405810` (reads world/view/projection back with `GetTransform`), `cGranny_render` (`0x405CD0`: per
+  mesh piece `GrannyLockNextRenderingState`, SetTexture, SetTransform(WORLD), `DrawIndexedPrimitiveStrided`
+  FVF `0x112`/`0x152`, lighting on) and `cGranny_renderShadow` (`0x407030`: the same meshes flattened through
+  a shadow matrix, FVF `0x142`, stencil flag `0x10000`). `0x401920` calls `GrannyAdvanceTime` per model
+  instance (~10 % of the thread); the skinning inside the lock calls is about as much. Granny is 1.x (2002 API:
+  `GrannyLockSequenceForRendering`, `...RenderingState`).
+- `GetTransform` through d3dim700/DDrawCompat/driver cost ~5 %: SacredBild answers it from the last
+  `SetTransform`.
+- `0x6404C0` (5 % exclusive) is the `std::map` lookup of the tile layer record cache (`0x6360E0`, `0x635F50`).
+- `0x66FCE0`/`0x66FCF0` wrap `WaitForSingleObject`/`ReleaseMutex` on kernel mutexes (~2 %).
+- With two 4096 atlas pages, ~1,100 batches per frame ended on a switch between the pages (430 textures per
+  frame do not fit one page): pages are 8192 now. Limitation: a raw (non-atlas) texture the game locks and changes in the
 middle of the world pass would show its new content in draws batched before the change.
 
 ## UI (`cUI_Control2` / `cUI_Window2` / `cUI_Manager`)

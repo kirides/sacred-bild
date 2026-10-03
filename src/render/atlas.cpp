@@ -29,10 +29,12 @@ namespace
         std::atomic<bool> pending{false};
     };
 
+    // Never freed: trackers can outlive the atlas. Created when the DLL loads, before any tracker exists.
+    DestroyedQueue* const g_destroyedQueue = new DestroyedQueue;
+
     DestroyedQueue& destroyedQueue()
     {
-        static auto* queue = new DestroyedQueue;    // never freed: trackers can outlive the atlas
-        return *queue;
+        return *g_destroyedQueue;
     }
 
     std::atomic<uint32_t> g_nextTrackerId{1};
@@ -293,6 +295,7 @@ bool TextureAtlas::place(IDirectDrawSurface7* texture, Entry& e, uint32_t frame,
         e.y = static_cast<uint16_t>(y + 1);
         e.clampEdges = clampEdges;
         page->textures.push_back(texture);
+        page->liveArea += int64_t(e.width + 2) * (e.height + 2);
         const float inv = 1.0f / static_cast<float>(page->size);
         e.scaleU = e.width * inv;
         e.scaleV = e.height * inv;
@@ -320,6 +323,14 @@ void TextureAtlas::beginFrame()
             LOG("Atlas: page {} lost, restore {:08x}", static_cast<void*>(page->surface), static_cast<uint32_t>(hr));
             resetPage(*page);
         }
+        else if (page->full && page->liveArea * 10 < page->usedArea * 6)
+        {
+            // Textures the game unloaded left more than 40 % holes: start over, the ones in use come back as drawn.
+            LOG("Atlas: emptying a {}x{} page ({}% in use, {} copies)", page->size, page->size,
+                page->liveArea * 100 / std::max<int64_t>(page->usedArea, 1), page->textures.size());
+            resetPage(*page);
+            D3DStats::count(D3DStats::CAtlasReset);
+        }
     }
 }
 
@@ -338,6 +349,7 @@ TextureAtlas::Page* TextureAtlas::allocate(int format, int w, int h, uint32_t fr
         {
             return page.get();
         }
+        page->full = true;
         if (page->lastUse != frame && (!lru || page->lastUse < lru->lastUse))
         {
             lru = page.get();
@@ -400,6 +412,7 @@ bool TextureAtlas::fit(Page& page, int w, int h, int& x, int& y)
     x = shelf.x;
     y = shelf.y;
     shelf.x += w;
+    page.usedArea += int64_t(w) * h;
     return true;
 }
 
@@ -458,6 +471,9 @@ void TextureAtlas::resetPage(Page& page)
     page.textures.clear();
     page.shelves.clear();
     page.nextY = 0;
+    page.usedArea = 0;
+    page.liveArea = 0;
+    page.full = false;
 }
 
 void TextureAtlas::drop(IDirectDrawSurface7* texture, Entry& e)
@@ -473,6 +489,7 @@ void TextureAtlas::drop(IDirectDrawSurface7* texture, Entry& e)
         *it = list.back();
         list.pop_back();
     }
+    e.page->liveArea -= int64_t(e.width + 2) * (e.height + 2);
     e.page = nullptr;   // the space stays unused until the page is reset
 }
 

@@ -129,6 +129,13 @@ private:
     const void* m_site = nullptr;           // game call site of the current UI draw (diagnostics)
     float m_virtMinX = 0, m_virtMinY = 0, m_virtMaxX = 0, m_virtMaxY = 0;   // its bounds in 1024x768 space
 
+    // GetTransform answered from the last SetTransform: the game reads the matrices back for every 3D model, and
+    // each read costs a trip through the runtime, DDrawCompat and the driver. Indexed by D3DTRANSFORMSTATETYPE.
+    static constexpr DWORD kTransforms = 24;
+    D3DMATRIX m_transforms[kTransforms] = {};
+    bool m_transformKnown[kTransforms] = {};
+    void forgetTransforms() { std::fill(std::begin(m_transformKnown), std::end(m_transformKnown), false); }
+
     bool m_probe = false;
     int m_probeLogged = 0;
     struct TLSite { const void* site; int draws; float zMin, zMax, yMin, yMax; DWORD zEnable, zWrite, zFunc; };

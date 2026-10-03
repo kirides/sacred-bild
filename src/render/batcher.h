@@ -25,6 +25,7 @@ public:
     struct Options
     {
         bool noClip = true;     // submit with D3DDP_DONOTCLIP
+        bool vertexBuffers = true;  // submit through vertex buffers instead of user memory
         bool atlas = true;
         int atlasPageSize = 4096;
         int atlasPages = 4;
@@ -73,6 +74,22 @@ private:
         float scaleU, scaleV, offsetU, offsetV;
     };
 
+    struct Layout
+    {
+        DWORD fvf = ~0u;
+        UINT stride = 0;
+        UINT texCount = 0;
+        UINT texOffset[8] = {};     // byte offset of each 2D texture coordinate set, 0 if not 2D
+    };
+
+    // Ring buffer of vertices for one vertex format, appended with DDLOCK_NOOVERWRITE.
+    struct VertexBuffer
+    {
+        IDirect3DVertexBuffer7* buffer = nullptr;
+        DWORD fvf = 0;
+        DWORD cursor = 0;
+    };
+
     static constexpr DWORD kStates = 256;
     static constexpr DWORD kStages = 8;
     static constexpr DWORD kStageTypes = 32;
@@ -81,12 +98,16 @@ private:
     DWORD stageState(DWORD stage, DWORD type);
     IDirectDrawSurface7* texture(DWORD stage);
     void drainDestroyed();
-    void useAtlas(DWORD stage, IDirectDrawSurface7* texture, DWORD fvf, UINT stride, const void* verts,
+    const Layout& layout(DWORD fvf);
+    void useAtlas(DWORD stage, IDirectDrawSurface7* texture, const Layout& layout, const void* verts,
         DWORD vertCount, IDirectDrawSurface7*& binding, Remap* remaps, UINT& remapCount);
     bool stateChanged(Reason& reason);
     void applyStates();
     void bindTexture(DWORD stage, IDirectDrawSurface7* texture);
     void submit(Reason reason);
+    bool submitVertexBuffer();
+    VertexBuffer* vertexBuffer(DWORD fvf);
+    void vertexBufferFailed(const char* what, HRESULT hr);
     HRESULT drawDirect(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD vertCount, const WORD* indices,
         DWORD indexCount, DWORD flags);
     static void beforeAtlasChange(void* self);
@@ -95,6 +116,11 @@ private:
     std::unique_ptr<TextureAtlas> m_atlas;
     DWORD m_submitFlags = 0;
     bool m_useAtlas = false;
+    IDirect3D7* m_d3d = nullptr;            // creates the vertex buffers; null: submit from user memory
+    std::vector<VertexBuffer> m_vertexBuffers;
+    uint32_t m_vertexBufferFailures = 0;
+    Layout m_layouts[4];
+    uint32_t m_nextLayout = 0;
     bool m_active = false;
     uint32_t m_frame = 0;
 
