@@ -1,4 +1,5 @@
 #include "game/map_cache.h"
+#include "game/d3d_stats.h"
 #include "game/sacred_de.h"
 #include "config.h"
 #include "log.h"
@@ -107,6 +108,7 @@ namespace
         }
         else
         {
+            D3DStats::count(D3DStats::CRecordRead);
             uint8_t* record = c.original(owner, edx, id);
             if (mapSize(map) != ix->size + 1)
             {

@@ -267,6 +267,12 @@ Per-window re-anchoring does not work: children are absolute, many renderers dra
   strided), are logged once per call site; changes of the engine fade flags and the UI manager mode
   (`+8`: `0x10` cinematic) are logged as `State:` lines.
 
+## Known issues
+
+- Creatures disappear ~100-200 px below the top edge at 2560x1440 (seen before the batching work). The world
+  view's own culling is patched (all 384/512 centers, the +200 margins, tile row range); the remaining suspect
+  is game logic deciding visibility with the unpatched 1024x768 `g_unzoomedProjection`. Low priority.
+
 ## Things that read the back buffer
 
 | Function | Behavior at > 1024x768 | SacredBild |

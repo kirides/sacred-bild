@@ -146,6 +146,17 @@ namespace
             D3DStats::Scope s{D3DStats::TFlip};
             hr = g_origFlip(self, edx);
         }
+        // Texture memory the texture manager loaded during this frame.
+        if (void* textures = *reinterpret_cast<void**>(Addr::g_pTextureManager))
+        {
+            static uint32_t lastUsed = 0;
+            const uint32_t used = member<uint32_t>(textures, TextureManager::usedBytes);
+            if (used > lastUsed)
+            {
+                D3DStats::count(D3DStats::CTextureKB, (used - lastUsed) >> 10);
+            }
+            lastUsed = used;
+        }
         D3DStats::onFrame();
         GrannyAsync::onFrame();
         logGameState();

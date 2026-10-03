@@ -125,6 +125,14 @@ namespace
 
     int64_t g_reportQpc = 0;
     uint32_t g_frames = 0;
+
+    // Frame times: a frame much slower than the running average is a hitch, logged with what it did.
+    double g_avgFrameMs = 0.0;
+    double g_maxFrameMs = 0.0;
+    uint32_t g_hitches = 0;
+    uint32_t g_hitchLogs = 0;
+    uint32_t g_frameCounters[D3DStats::CounterCount] = {};     // counters at the end of the previous frame
+    int64_t g_frameTimes[D3DStats::TimerCount] = {};
     int64_t g_lastFrameTsc = 0;
     uint64_t g_lastThreadCpu = 0;
 
@@ -270,9 +278,43 @@ void D3DStats::onFrame()
         g_tscStart = g_lastFrameTsc = t;
         return;
     }
-    addTime(TFrame, t - g_lastFrameTsc);
+    const int64_t frameTicks = t - g_lastFrameTsc;
+    addTime(TFrame, frameTicks);
     g_lastFrameTsc = t;
     ++g_frames;
+    {
+        const double tscPerMs = static_cast<double>(t - g_tscStart) * g_qpcFreq / (1000.0 * static_cast<double>(q - g_qpcStart));
+        const double frameMs = static_cast<double>(frameTicks) / tscPerMs;
+        uint32_t dc[CounterCount];
+        double dms[TimerCount];
+        for (int i = 0; i < CounterCount; ++i)
+        {
+            const uint32_t v = g_counters[i].load(std::memory_order_relaxed);
+            dc[i] = v - g_frameCounters[i];
+            g_frameCounters[i] = v;
+        }
+        for (int i = 0; i < TimerCount; ++i)
+        {
+            const int64_t v = g_times[i].load(std::memory_order_relaxed);
+            dms[i] = static_cast<double>(v - g_frameTimes[i]) / tscPerMs;
+            g_frameTimes[i] = v;
+        }
+        g_maxFrameMs = std::max(g_maxFrameMs, frameMs);
+        if (g_avgFrameMs > 0.0 && frameMs > std::max(2.0 * g_avgFrameMs, g_avgFrameMs + 8.0))
+        {
+            ++g_hitches;
+            if (g_hitchLogs++ < 5)
+            {
+                LOG("Hitch: {:.1f} ms (average {:.1f}) world {:.1f} ui {:.1f} flip {:.1f} lockBack {:.1f} | atlas uploads {} "
+                    "page resets {} | record file reads {} | textures loaded {} KB | draws {} submitted {}",
+                    frameMs, g_avgFrameMs, dms[TWorld], dms[TUi], dms[TFlip], dms[TLockBack], dc[CAtlasUpload],
+                    dc[CAtlasReset], dc[CRecordRead], dc[CTextureKB], dc[CDraw] + dc[CDrawIndexed] + dc[CDrawVB],
+                    dc[CSubmit]);
+            }
+        }
+        // Slow average: a single hitch barely moves it, a new steady frame rate takes over within a second.
+        g_avgFrameMs = g_avgFrameMs > 0.0 ? g_avgFrameMs * 0.95 + std::min(frameMs, 4.0 * g_avgFrameMs) * 0.05 : frameMs;
+    }
     if (g_detailFrame.exchange(false, std::memory_order_relaxed))
     {
         std::scoped_lock lock(g_detailMutex);
@@ -295,6 +337,13 @@ void D3DStats::onFrame()
     {
         ms[i] = static_cast<double>(g_times[i].exchange(0, std::memory_order_relaxed)) / tscPerMs / frames;
     }
+    std::fill(std::begin(g_frameCounters), std::end(g_frameCounters), 0u);
+    std::fill(std::begin(g_frameTimes), std::end(g_frameTimes), int64_t(0));
+    const double maxFrameMs = g_maxFrameMs;
+    const uint32_t hitches = g_hitches;
+    g_maxFrameMs = 0.0;
+    g_hitches = 0;
+    g_hitchLogs = 0;
 
     const uint64_t cpu = threadCpu100ns();
     const double cpuPct = 100.0 * static_cast<double>(cpu - g_lastThreadCpu) / 10000.0 / wallMs;
@@ -303,11 +352,11 @@ void D3DStats::onFrame()
     const double draws = c[CDraw] + c[CDrawIndexed] + c[CDrawVB];
     // uniqueTex comes from the one detail frame.
     // world = game code + device calls; device calls = D3D (draw + state) + SacredBild's own work (proxy, batcher, stats).
-    LOG("fps={:.1f} frame={:.2f}ms world={:.2f} (game {:.2f}, device calls {:.2f}) ui={:.2f} flip={:.2f} | per frame: "
+    LOG("fps={:.1f} frame={:.2f}ms (max {:.1f}, {} hitches) world={:.2f} (game {:.2f}, device calls {:.2f}) ui={:.2f} flip={:.2f} | per frame: "
         "draws={:.0f} (TL {:.0f}, quads {:.0f}, VB {:.0f}) submitted={:.0f} verts={:.0f} setTex={:.0f} texSwitch={:.0f} "
         "uniqueTex={} rs={:.0f} tss={:.0f} xform={:.0f} clear={:.1f} | in d3d: draw={:.2f}ms state={:.2f}ms, "
         "SacredBild={:.2f}ms | lockBack={:.1f} ({:.2f}ms) | renderCPU={:.0f}%",
-        frames * 1000.0 / wallMs, ms[TFrame], ms[TWorld], ms[TWorld] - ms[TWorldProxy], ms[TWorldProxy], ms[TUi],
+        frames * 1000.0 / wallMs, ms[TFrame], maxFrameMs, hitches, ms[TWorld], ms[TWorld] - ms[TWorldProxy], ms[TWorldProxy], ms[TUi],
         ms[TFlip], draws / frames, c[CDrawTL] / frames, c[CDrawQuad] / frames, c[CDrawVB] / frames,
         c[CSubmit] / frames, c[CVerts] / frames, c[CSetTexture] / frames, c[CTexSwitch] / frames, c[CUniqueTex],
         c[CRenderState] / frames, c[CStageState] / frames, c[CTransform] / frames, c[CClear] / frames, ms[TDraw],

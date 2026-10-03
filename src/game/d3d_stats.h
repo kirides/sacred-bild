@@ -51,6 +51,8 @@ namespace D3DStats
         CModelDraw,     // untransformed draws batched (moved to world space)
         CModelVerts,
         CModelDirect,   // untransformed draws in the world view that could not be batched
+        CRecordRead,    // record cache misses: a seek and read in the game's data file
+        CTextureKB,     // texture memory the game's texture manager loaded
         CounterCount
     };
 
