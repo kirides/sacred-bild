@@ -241,6 +241,20 @@ D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt) const
     return vp;
 }
 
+bool DeviceProxy::beginOverlay3D(D3DVIEWPORT7& restore)
+{
+    if (!m_ui || m_confine)
+    {
+        return false;
+    }
+    m_real->GetViewport(&restore);
+    m_confine = true;
+    D3DVIEWPORT7 vp = canvasViewport(m_uiViewport);
+    m_confine = false;
+    m_real->SetViewport(&vp);
+    return true;
+}
+
 DWORD DeviceProxy::uiFilter(DWORD value) const
 {
     return g_config.uiLinearFilter && value == D3DTFG_POINT ? D3DTFG_LINEAR : value;
@@ -533,7 +547,14 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
     }
     probe3D("DP", fvf, verts, fvfStride(fvf), count, _ReturnAddress());
     Scope s{TDraw};
-    return m_real->DrawPrimitive(type, fvf, verts, count, flags);
+    D3DVIEWPORT7 restore;
+    const bool overlay = beginOverlay3D(restore);
+    const HRESULT hr = m_real->DrawPrimitive(type, fvf, verts, count, flags);
+    if (overlay)
+    {
+        m_real->SetViewport(&restore);
+    }
+    return hr;
 }
 
 HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID verts, DWORD vertCount,
@@ -562,7 +583,14 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
     }
     probe3D("DIP", fvf, verts, fvfStride(fvf), vertCount, _ReturnAddress());
     Scope s{TDraw};
-    return m_real->DrawIndexedPrimitive(type, fvf, verts, vertCount, indices, indexCount, flags);
+    D3DVIEWPORT7 restore;
+    const bool overlay = beginOverlay3D(restore);
+    const HRESULT hr = m_real->DrawIndexedPrimitive(type, fvf, verts, vertCount, indices, indexCount, flags);
+    if (overlay)
+    {
+        m_real->SetViewport(&restore);
+    }
+    return hr;
 }
 
 HRESULT DeviceProxy::SetClipStatus(LPD3DCLIPSTATUS status) { return m_real->SetClipStatus(status); }
@@ -580,7 +608,14 @@ HRESULT DeviceProxy::DrawPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fvf, LPD3
     }
     probe3D("DPS", fvf, data ? data->position.lpvData : nullptr, data ? data->position.dwStride : 0, count, _ReturnAddress());
     Scope s{TDraw};
-    return m_real->DrawPrimitiveStrided(type, fvf, data, count, flags);
+    D3DVIEWPORT7 restore;
+    const bool overlay = beginOverlay3D(restore);
+    const HRESULT hr = m_real->DrawPrimitiveStrided(type, fvf, data, count, flags);
+    if (overlay)
+    {
+        m_real->SetViewport(&restore);
+    }
+    return hr;
 }
 
 HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fvf, LPD3DDRAWPRIMITIVESTRIDEDDATA data,
@@ -596,7 +631,14 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fv
     probe3D("DIPS", fvf, data ? data->position.lpvData : nullptr, data ? data->position.dwStride : 0, vertCount,
         _ReturnAddress());
     Scope s{TDraw};
-    return m_real->DrawIndexedPrimitiveStrided(type, fvf, data, vertCount, indices, indexCount, flags);
+    D3DVIEWPORT7 restore;
+    const bool overlay = beginOverlay3D(restore);
+    const HRESULT hr = m_real->DrawIndexedPrimitiveStrided(type, fvf, data, vertCount, indices, indexCount, flags);
+    if (overlay)
+    {
+        m_real->SetViewport(&restore);
+    }
+    return hr;
 }
 
 HRESULT DeviceProxy::DrawPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVERTEXBUFFER7 vb, DWORD start, DWORD count, DWORD flags)
@@ -611,7 +653,14 @@ HRESULT DeviceProxy::DrawPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVERTEXBUFF
     }
     probe3D("DPVB", 0, nullptr, 0, count, _ReturnAddress());
     Scope s{TDraw};
-    return m_real->DrawPrimitiveVB(type, vb, start, count, flags);
+    D3DVIEWPORT7 restore;
+    const bool overlay = beginOverlay3D(restore);
+    const HRESULT hr = m_real->DrawPrimitiveVB(type, vb, start, count, flags);
+    if (overlay)
+    {
+        m_real->SetViewport(&restore);
+    }
+    return hr;
 }
 
 HRESULT DeviceProxy::DrawIndexedPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVERTEXBUFFER7 vb, DWORD start,
@@ -627,7 +676,14 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVER
     }
     probe3D("DIPVB", 0, nullptr, 0, vertCount, _ReturnAddress());
     Scope s{TDraw};
-    return m_real->DrawIndexedPrimitiveVB(type, vb, start, vertCount, indices, indexCount, flags);
+    D3DVIEWPORT7 restore;
+    const bool overlay = beginOverlay3D(restore);
+    const HRESULT hr = m_real->DrawIndexedPrimitiveVB(type, vb, start, vertCount, indices, indexCount, flags);
+    if (overlay)
+    {
+        m_real->SetViewport(&restore);
+    }
+    return hr;
 }
 
 HRESULT DeviceProxy::ComputeSphereVisibility(LPD3DVECTOR centers, LPD3DVALUE radii, DWORD count, DWORD flags, LPDWORD result)

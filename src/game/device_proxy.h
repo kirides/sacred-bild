@@ -94,6 +94,9 @@ private:
     bool clipQuad(DWORD fvf, uint8_t* verts);
     D3DVIEWPORT7 canvasViewport(const D3DVIEWPORT7& virt) const;    // clamped to the canvas, or the screen if unconfined
     void probe3D(const char* what, DWORD fvf, const void* positions, DWORD stride, DWORD count, const void* site);
+    // Unconfined (cursor) mode: 3D draws such as a dragged item model project into 1024x768 and need the
+    // canvas-mapped viewport; returns false if nothing changed.
+    bool beginOverlay3D(D3DVIEWPORT7& restore);
     void probeTL(DWORD fvf, const void* verts, DWORD count, const void* site);
     void dumpProbeTL();
     std::string renderStates();
