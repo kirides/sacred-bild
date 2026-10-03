@@ -1,0 +1,24 @@
+LIBRARY ddraw
+EXPORTS
+    AcquireDDThreadLock         = Stub_AcquireDDThreadLock
+    CompleteCreateSysmemSurface = Stub_CompleteCreateSysmemSurface
+    D3DParseUnknownCommand      = Stub_D3DParseUnknownCommand
+    DDGetAttachedSurfaceLcl     = Stub_DDGetAttachedSurfaceLcl
+    DDInternalLock              = Stub_DDInternalLock
+    DDInternalUnlock            = Stub_DDInternalUnlock
+    DSoundHelp                  = Stub_DSoundHelp
+    DirectDrawCreate            = Stub_DirectDrawCreate
+    DirectDrawCreateClipper     = Stub_DirectDrawCreateClipper
+    DirectDrawCreateEx          = Stub_DirectDrawCreateEx
+    DirectDrawEnumerateA        = Stub_DirectDrawEnumerateA
+    DirectDrawEnumerateExA      = Stub_DirectDrawEnumerateExA
+    DirectDrawEnumerateExW      = Stub_DirectDrawEnumerateExW
+    DirectDrawEnumerateW        = Stub_DirectDrawEnumerateW
+    DllCanUnloadNow             = Stub_DllCanUnloadNow          PRIVATE
+    DllGetClassObject           = Stub_DllGetClassObject        PRIVATE
+    GetDDSurfaceLocal           = Stub_GetDDSurfaceLocal
+    GetOLEThunkData             = Stub_GetOLEThunkData
+    GetSurfaceFromDC            = Stub_GetSurfaceFromDC
+    RegisterSpecialCase         = Stub_RegisterSpecialCase
+    ReleaseDDThreadLock         = Stub_ReleaseDDThreadLock
+    SetAppCompatData            = Stub_SetAppCompatData

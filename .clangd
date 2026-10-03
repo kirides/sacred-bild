@@ -1,0 +1,11 @@
+# IDE-only: the MSVC build (CMake preset msvc-x86) is authoritative.
+CompileFlags:
+  Compiler: clang-cl
+  Add:
+    - --target=i686-pc-windows-msvc
+    - /std:c++latest
+    - /EHsc
+    - /DWIN32_LEAN_AND_MEAN
+    - /DNOMINMAX
+    - /IE:/git/github/sacred-bild/src
+    - /IE:/git/github/sacred-bild/vcpkg_installed/x86-windows-static/include

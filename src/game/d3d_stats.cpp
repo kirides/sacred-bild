@@ -1,0 +1,272 @@
+#include "game/d3d_stats.h"
+#include "log.h"
+
+#include <windows.h>
+#include <objbase.h>
+#include <ddraw.h>
+#include <intrin.h>
+#include <algorithm>
+#include <atomic>
+#include <format>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+namespace
+{
+    struct TextureInfo
+    {
+        uint32_t width = 0;
+        uint32_t height = 0;
+        std::string format;
+        bool colorKey = false;
+        uint32_t uses = 0;          // SetTexture switches to it
+    };
+
+    std::mutex g_detailMutex;
+    std::unordered_set<void*> g_frameTextures;
+    std::unordered_map<void*, TextureInfo> g_textures;
+    std::unordered_map<uint64_t, uint32_t> g_drawKinds;     // type | fvf | vertex count | indexed
+    std::unordered_map<uint64_t, uint32_t> g_stateValues;   // state << 32 | value
+    std::unordered_map<uint64_t, uint32_t> g_stageValues;   // stage << 48 | type << 32 | value
+    int g_reportsSinceDetail = 0;
+
+    std::string describeFormat(const DDPIXELFORMAT& pf)
+    {
+        if (pf.dwFlags & DDPF_FOURCC)
+        {
+            const char cc[5] = {char(pf.dwFourCC), char(pf.dwFourCC >> 8), char(pf.dwFourCC >> 16), char(pf.dwFourCC >> 24), 0};
+            return cc;
+        }
+        return std::format("{}bpp A{:x}R{:x}G{:x}B{:x}", pf.dwRGBBitCount, (pf.dwFlags & DDPF_ALPHAPIXELS) ? pf.dwRGBAlphaBitMask : 0,
+            pf.dwRBitMask, pf.dwGBitMask, pf.dwBBitMask);
+    }
+
+    template <class Map>
+    std::vector<std::pair<typename Map::key_type, uint32_t>> topN(const Map& m, size_t n)
+    {
+        std::vector<std::pair<typename Map::key_type, uint32_t>> v(m.begin(), m.end());
+        std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
+        if (v.size() > n) v.resize(n);
+        return v;
+    }
+
+    void logDetail()
+    {
+        static constexpr uint32_t kBuckets[] = {16, 32, 64, 128, 256, 512, 1024, 0xFFFFFFFF};
+        uint32_t sizes[std::size(kBuckets)] = {};
+        std::unordered_map<std::string, uint32_t> formats;
+        uint32_t colorKeyed = 0;
+        uint64_t pixels = 0;
+        for (const auto& [surface, t] : g_textures)
+        {
+            const uint32_t side = std::max(t.width, t.height);
+            for (size_t i = 0; i < std::size(kBuckets); ++i)
+            {
+                if (side <= kBuckets[i])
+                {
+                    ++sizes[i];
+                    break;
+                }
+            }
+            ++formats[t.format];
+            colorKeyed += t.colorKey;
+            pixels += uint64_t(t.width) * t.height;
+        }
+        LOG("Detail: textures seen {} ({:.1f} Mpixel, {} color-keyed) | max side <=16:{} <=32:{} <=64:{} <=128:{} <=256:{} "
+            "<=512:{} <=1024:{} larger:{}", g_textures.size(), pixels / 1e6, colorKeyed, sizes[0], sizes[1], sizes[2],
+            sizes[3], sizes[4], sizes[5], sizes[6], sizes[7]);
+        for (const auto& [fmt, n] : topN(formats, 8))
+        {
+            LOG("Detail:   format {:<28} {}", fmt, n);
+        }
+        for (const auto& [key, n] : topN(g_drawKinds, 12))
+        {
+            LOG("Detail:   draw type {} fvf {:03x} verts {:<5} {} x{}", key >> 56, (key >> 32) & 0xFFFFFF,
+                (key >> 1) & 0x7FFFFFFF, (key & 1) ? "indexed" : "", n);
+        }
+        for (const auto& [key, n] : topN(g_stateValues, 24))
+        {
+            LOG("Detail:   rs {:>3} = {:08x} x{}", key >> 32, uint32_t(key), n);
+        }
+        for (const auto& [key, n] : topN(g_stageValues, 16))
+        {
+            LOG("Detail:   tss {} {:>2} = {:08x} x{}", key >> 48, (key >> 32) & 0xFFFF, uint32_t(key), n);
+        }
+    }
+
+    std::atomic<uint32_t> g_counters[D3DStats::CounterCount];
+    std::atomic<int64_t> g_times[D3DStats::TimerCount];
+
+    HANDLE g_renderThread = nullptr;
+    unsigned long g_renderThreadId = 0;
+
+    // TSC <-> QPC calibration, refined at every report.
+    int64_t g_tscStart = 0;
+    int64_t g_qpcStart = 0;
+    int64_t g_qpcFreq = 1;
+
+    int64_t g_reportQpc = 0;
+    uint32_t g_frames = 0;
+    int64_t g_lastFrameTsc = 0;
+    uint64_t g_lastThreadCpu = 0;
+
+    int64_t qpc()
+    {
+        LARGE_INTEGER v;
+        QueryPerformanceCounter(&v);
+        return v.QuadPart;
+    }
+
+    uint64_t threadCpu100ns()
+    {
+        FILETIME c, e, k, u;
+        if (!g_renderThread || !GetThreadTimes(g_renderThread, &c, &e, &k, &u))
+        {
+            return 0;
+        }
+        return (static_cast<uint64_t>(k.dwHighDateTime) << 32 | k.dwLowDateTime) +
+            (static_cast<uint64_t>(u.dwHighDateTime) << 32 | u.dwLowDateTime);
+    }
+}
+
+int64_t D3DStats::now()
+{
+    return static_cast<int64_t>(__rdtsc());
+}
+
+void D3DStats::count(Counter c, uint32_t n)
+{
+    g_counters[c].fetch_add(n, std::memory_order_relaxed);
+}
+
+void D3DStats::addTime(Timer t, int64_t ticks)
+{
+    g_times[t].fetch_add(ticks, std::memory_order_relaxed);
+}
+
+void D3DStats::onTexture(void* surface)
+{
+    if (!surface)
+    {
+        return;
+    }
+    std::scoped_lock lock(g_detailMutex);
+    if (g_frameTextures.insert(surface).second)
+    {
+        count(CUniqueTex);
+    }
+    auto [it, inserted] = g_textures.try_emplace(surface);
+    ++it->second.uses;
+    if (inserted)
+    {
+        DDSURFACEDESC2 desc = {};
+        desc.dwSize = sizeof(desc);
+        if (SUCCEEDED(static_cast<IDirectDrawSurface7*>(surface)->GetSurfaceDesc(&desc)))
+        {
+            it->second.width = desc.dwWidth;
+            it->second.height = desc.dwHeight;
+            it->second.format = describeFormat(desc.ddpfPixelFormat);
+            it->second.colorKey = (desc.dwFlags & DDSD_CKSRCBLT) != 0;
+        }
+    }
+}
+
+void D3DStats::onDraw(uint32_t primitiveType, uint32_t fvf, uint32_t vertexCount, bool indexed)
+{
+    const uint64_t key = (uint64_t(primitiveType) << 56) | (uint64_t(fvf & 0xFFFFFF) << 32) |
+        (uint64_t(vertexCount & 0x7FFFFFFF) << 1) | (indexed ? 1 : 0);
+    std::scoped_lock lock(g_detailMutex);
+    ++g_drawKinds[key];
+}
+
+void D3DStats::onRenderState(uint32_t state, uint32_t value)
+{
+    std::scoped_lock lock(g_detailMutex);
+    ++g_stateValues[(uint64_t(state) << 32) | value];
+}
+
+void D3DStats::onStageState(uint32_t stage, uint32_t type, uint32_t value)
+{
+    std::scoped_lock lock(g_detailMutex);
+    ++g_stageValues[(uint64_t(stage) << 48) | (uint64_t(type) << 32) | value];
+}
+
+void D3DStats::setRenderThread(unsigned long threadId)
+{
+    if (threadId == g_renderThreadId)
+    {
+        return;
+    }
+    if (g_renderThread)
+    {
+        CloseHandle(g_renderThread);
+    }
+    g_renderThreadId = threadId;
+    g_renderThread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, threadId);
+    g_lastThreadCpu = threadCpu100ns();
+}
+
+void D3DStats::onFrame()
+{
+    const int64_t t = now();
+    const int64_t q = qpc();
+    if (!g_qpcStart)
+    {
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        g_qpcFreq = f.QuadPart;
+        g_qpcStart = g_reportQpc = q;
+        g_tscStart = g_lastFrameTsc = t;
+        return;
+    }
+    addTime(TFrame, t - g_lastFrameTsc);
+    g_lastFrameTsc = t;
+    ++g_frames;
+    {
+        std::scoped_lock lock(g_detailMutex);
+        g_frameTextures.clear();
+    }
+
+    if (q - g_reportQpc < g_qpcFreq)
+    {
+        return;
+    }
+
+    const double tscPerMs = static_cast<double>(t - g_tscStart) * g_qpcFreq / (1000.0 * static_cast<double>(q - g_qpcStart));
+    const double wallMs = 1000.0 * static_cast<double>(q - g_reportQpc) / g_qpcFreq;
+    const double frames = g_frames;
+
+    uint32_t c[CounterCount];
+    for (int i = 0; i < CounterCount; ++i) c[i] = g_counters[i].exchange(0, std::memory_order_relaxed);
+    double ms[TimerCount];
+    for (int i = 0; i < TimerCount; ++i)
+    {
+        ms[i] = static_cast<double>(g_times[i].exchange(0, std::memory_order_relaxed)) / tscPerMs / frames;
+    }
+
+    const uint64_t cpu = threadCpu100ns();
+    const double cpuPct = 100.0 * static_cast<double>(cpu - g_lastThreadCpu) / 10000.0 / wallMs;
+    g_lastThreadCpu = cpu;
+
+    const double draws = c[CDraw] + c[CDrawIndexed] + c[CDrawVB];
+    LOG("fps={:.1f} frame={:.2f}ms world={:.2f} ui={:.2f} flip={:.2f} | per frame: draws={:.0f} (TL {:.0f}, quads {:.0f}, "
+        "VB {:.0f}) verts={:.0f} setTex={:.0f} texSwitch={:.0f} uniqueTex={:.0f} rs={:.0f} tss={:.0f} xform={:.0f} "
+        "clear={:.1f} | in d3d: draw={:.2f}ms state={:.2f}ms | lockBack={:.1f} ({:.2f}ms) | renderCPU={:.0f}%",
+        frames * 1000.0 / wallMs, ms[TFrame], ms[TWorld], ms[TUi], ms[TFlip], draws / frames, c[CDrawTL] / frames,
+        c[CDrawQuad] / frames, c[CDrawVB] / frames, c[CVerts] / frames, c[CSetTexture] / frames,
+        c[CTexSwitch] / frames, c[CUniqueTex] / frames, c[CRenderState] / frames, c[CStageState] / frames,
+        c[CTransform] / frames, c[CClear] / frames, ms[TDraw], ms[TState], c[CLockBack] / frames, ms[TLockBack], cpuPct);
+
+    if (++g_reportsSinceDetail >= 30)
+    {
+        g_reportsSinceDetail = 0;
+        std::scoped_lock lock(g_detailMutex);
+        logDetail();
+    }
+
+    g_frames = 0;
+    g_reportQpc = q;
+}

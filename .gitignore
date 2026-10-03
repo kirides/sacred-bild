@@ -1,0 +1,9 @@
+out/
+vcpkg_installed/
+.funcs_de.json
+.funcs.json
+.res_hits.json
+.rtti_all.txt
+.named_funcs.txt
+__pycache__/
+*.pyc

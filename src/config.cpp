@@ -1,0 +1,39 @@
+#include "config.h"
+#include "log.h"
+
+#include <windows.h>
+
+Config g_config;
+
+namespace
+{
+    int readInt(const std::wstring& ini, const wchar_t* section, const wchar_t* key, int def)
+    {
+        return static_cast<int>(GetPrivateProfileIntW(section, key, def, ini.c_str()));
+    }
+
+    std::wstring readString(const std::wstring& ini, const wchar_t* section, const wchar_t* key, const std::wstring& def)
+    {
+        wchar_t buf[MAX_PATH] = {};
+        GetPrivateProfileStringW(section, key, def.c_str(), buf, MAX_PATH, ini.c_str());
+        return buf;
+    }
+}
+
+void ConfigFile::load(const std::wstring& gameDir)
+{
+    const std::wstring ini = gameDir + L"\\SacredBild.ini";
+    g_config.ddrawChain = readString(ini, L"DDraw", L"Chain", g_config.ddrawChain);
+    g_config.width = readInt(ini, L"Display", L"Width", g_config.width);
+    g_config.height = readInt(ini, L"Display", L"Height", g_config.height);
+    g_config.borderless = readInt(ini, L"Display", L"Borderless", g_config.borderless) != 0;
+    g_config.uiScale = static_cast<float>(_wtof(readString(ini, L"UI", L"Scale", L"0").c_str()));
+    g_config.uiLinearFilter = readInt(ini, L"UI", L"LinearFilter", g_config.uiLinearFilter) != 0;
+    g_config.d3dStats = readInt(ini, L"Debug", L"D3DStats", g_config.d3dStats) != 0;
+    g_config.profiler = readInt(ini, L"Debug", L"Profiler", g_config.profiler) != 0;
+    g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
+
+    LOG("Config: Width={} Height={} Borderless={} UI.Scale={} UI.LinearFilter={} D3DStats={} Profiler={} ({} us)",
+        g_config.width, g_config.height, g_config.borderless, g_config.uiScale, g_config.uiLinearFilter,
+        g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs);
+}
