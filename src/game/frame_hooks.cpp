@@ -12,8 +12,10 @@
 
 #include <windows.h>
 #include <intrin.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string>
 
 namespace
 {
@@ -91,6 +93,23 @@ namespace
     {
         g_engine = engine;
         g_origRenderThreadRun(engine);
+    }
+
+    // The in-game frame limit (the game passes 60); menus keep theirs.
+    using LimiterFn = void(__cdecl*)(double unused, uint32_t fps);
+    LimiterFn g_origLimiter = reinterpret_cast<LimiterFn>(Addr::frameLimiter);
+
+    void __cdecl hookLimiter(double unused, uint32_t fps)
+    {
+        if (reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::renderLimiterReturn)
+        {
+            if (g_config.fpsLimit <= 0)
+            {
+                return;
+            }
+            fps = (fps & 0xFFFF0000u) | static_cast<uint16_t>(std::min(g_config.fpsLimit, 1000));
+        }
+        g_origLimiter(unused, fps);
     }
 
     uint32_t __fastcall hookInit(void* self, void* edx, void* devices, void* deviceDesc, void* mode)
@@ -262,6 +281,11 @@ void FrameHooks::install()
     Patch::hook(g_origWorldRender, &hookWorldRender, "cWorldView0::render");
     Patch::hook(g_origUiRender, &hookUiRender, "cUI_Manager::render");
     Patch::hook(g_origRenderThreadRun, &hookRenderThreadRun, "cEngine::renderThreadRun");
+    if (g_config.fpsLimit != 60)
+    {
+        Patch::hook(g_origLimiter, &hookLimiter, "frameLimiter");
+        LOG("Frame limit in game: {}", g_config.fpsLimit > 0 ? std::to_string(g_config.fpsLimit) : std::string("off"));
+    }
     if (g_config.d3dStats)
     {
         Patch::hook(g_origCreatureRender, &hookCreatureRender, "cCreature::render");

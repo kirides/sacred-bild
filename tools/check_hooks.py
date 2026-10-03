@@ -19,6 +19,7 @@ HOOKS = {
     0x004B1740: ('renderSavePortrait', 4),
     0x006A0C60: ('playVideo', 5),
     0x0060E3F0: ('cEngine::renderThreadRun (fastcall)', 0),
+    0x0060AA90: ('frameLimiter (cdecl)', 0),
     0x0065EA20: ('cTextureManager::init', 1),
     0x0062B000: ('cWorldView::renderTileRow', 3),
     0x0062D530: ('cWorldView::drawTileLayers (called)', 1),

@@ -57,6 +57,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 |---|---|---|---|
 | Display | Width, Height | 0 | Render resolution; 0 = desktop. 1024x768 = unpatched game. |
 | Display | Borderless | 1 | Main window without frame. |
+| Display | FpsLimit | 60 | The game's own in-game frame limit; 0 = off. |
 | Render | TextureBudgetMB | 0 | Texture memory the game may keep loaded; 0 = the game's value, at least 256. |
 | Render | Batch | 1 | Merge the world view's draw calls. |
 | Render | BatchNoClip | 1 | Merged draws skip Direct3D 7's software clipping; the GPU clips. |

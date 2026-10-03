@@ -56,6 +56,10 @@ namespace Sacred::Addr
     // cEngine
     constexpr uintptr_t initApp = 0x00815620;
     constexpr uintptr_t cEngine_renderThreadRun = 0x0060E3F0;   // fastcall (engine), loops until shutdown
+    // Frame limiter: cdecl (double, uint16 fps); spins with Sleep(0) until 1/fps passed since its last return.
+    // The render loop calls it with 60 before each flip (skipped if 0x182CDBC has 0x4000), the menu loop too.
+    constexpr uintptr_t frameLimiter = 0x0060AA90;
+    constexpr uintptr_t renderLimiterReturn = 0x0060EB0E;
     // cEngine_updateWorldCursor (0x611F10) asks the UI whether the cursor is over a window before picking.
     constexpr uintptr_t worldCursorUiTestCall = 0x00611F83;
     constexpr uintptr_t cEngine_captureInternal = 0x00613710;

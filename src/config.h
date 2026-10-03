@@ -11,6 +11,7 @@ struct Config
     int width = 0;
     int height = 0;
     bool borderless = true;       // main window without frame, client area = back buffer
+    int fpsLimit = 60;            // the game's own in-game frame limit (it uses 60); 0 = off
 
     // UI canvas: the 1024x768 UI drawn centered. 0 = scale to fit the screen height.
     float uiScale = 0.0f;

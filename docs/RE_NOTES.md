@@ -115,6 +115,9 @@ Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAP
   machines (computes to ~4 GB).
 - In game the frame only clears Z (`cEngine_renderThreadRun`); the ground has to cover the screen.
   SacredBild clears the target before `cWorldView0_render`.
+- Frame limit: before each flip `cEngine_renderThreadRun` calls `0x60AA90` (cdecl (double, fps)) with
+  `push 0x3c` = 60 unless global options `0x182CDBC` have `0x4000`; it spins with `Sleep(0)` until 1/fps passed.
+  `cUI_Manager_runThread` calls it as well (menus). SacredBild's `FpsLimit` replaces the in-game value only.
 - Fade: `cEngine_renderFadeOverlay` (`0x60E100`) draws a full-screen TL quad while engine flags
   (`+0x54`) have `0x20000` (fade out, then latches `0x80000` = black), `0x40000` (fade in) or `0x80000`.
   `cEngine_setFadeMode` and many script functions toggle them.
