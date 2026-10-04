@@ -29,6 +29,7 @@ add_library(ddraw SHARED
   src/game/frame_hooks.cpp
   src/game/gameserver.cpp
   src/game/granny_async.cpp
+  src/game/language.cpp
   src/game/map_cache.cpp
   src/game/movie.cpp
   src/game/d3d_stats.cpp

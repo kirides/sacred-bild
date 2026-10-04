@@ -161,6 +161,28 @@ namespace Sacred::Addr
 
     // cUI_Manager::render(device): letterbox bars + all UI windows.
     inline uintptr_t cUI_Manager_render{};              // DE 007587B0
+
+    // Language. WinMain (0x816BD0) sets g_language from settings.cfg's LANGUAGE (exact match with a code, else it
+    // stays DE) or a code in lower case on the command line, formats ".\SCRIPTS\<code>\global.res" and passes it to
+    // cTextTable_load, which ignores it in these builds: it loads the text from the exe's BINARY resource 107 (each
+    // uint16 XORed with the one before it, the first with 0x45AD) into a buffer from the game's operator new.
+    inline uintptr_t g_language{};                      // DE 017E5CB4; int32, index into g_languageCodes
+    inline uintptr_t g_languageCodes{};                 // DE 00897394; char[16] each: US DE FR SP IT PL HU JP VC RU CZ
+    constexpr int languageCount = 11;
+    inline uintptr_t cTextTable_load{};                 // DE 0080DBF0; thiscall (path) -> bool, this = g_textTable
+    inline uintptr_t textTableAllocCall{};              // DE 0080DC60; its `call operator new` (cdecl (size))
+    // initApp passes ".\PAK\SOUND.PAK" (speech and sound effects) before it creates the sound system: the path is
+    // copied into a 256-byte buffer (0x9D5624) that cMSS's constructor opens once.
+    inline uintptr_t cMSS_setPakPath{};                 // DE 00677440; cdecl (path)
+}
+
+// Text table (g_textTable, DE 0182CCD0; a static object, destroyed at exit). global.res, in memory as on disk:
+// uint32 count, count entries {uint32 id, uint32 offset, uint32 flags, uint32 bytes} by ascending id, then the
+// UTF-16 strings; an entry's string starts at 4 + offset.
+namespace Sacred::TextTable
+{
+    constexpr uintptr_t data = 0x00;         // uint8_t*
+    constexpr uintptr_t size = 0x04;         // uint32 bytes
 }
 
 // dxDriver7 member offsets (identical in the ENG and DE builds).

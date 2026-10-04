@@ -567,6 +567,26 @@
   "initNetworkNagleTest": {
    "451BBE74": "007D294E",
    "452F85C7": "007D310E"
+  },
+  "cTextTable_load": {
+   "451BBE74": "0080DBF0",
+   "452F85C7": "0080E680"
+  },
+  "textTableAllocCall": {
+   "451BBE74": "0080DC60",
+   "452F85C7": "0080E6F0"
+  },
+  "cMSS_setPakPath": {
+   "451BBE74": "00677440",
+   "452F85C7": "00677160"
+  },
+  "g_language": {
+   "451BBE74": "017E5CB4",
+   "452F85C7": "017E7D34"
+  },
+  "g_languageCodes": {
+   "451BBE74": "00897394",
+   "452F85C7": "00899394"
   }
  },
  "gameserver.exe": {

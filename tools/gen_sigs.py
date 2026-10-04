@@ -95,6 +95,12 @@ SACRED = [
     # network
     ('g_pGameClient', 0x0182CB70, 'data'),
     ('initNetworkNagleTest', 0x007D294E, 'code'),
+    # language files (language.cpp)
+    ('cTextTable_load', 0x0080DBF0, 'func'),
+    ('textTableAllocCall', 0x0080DC60, 'code'),
+    ('cMSS_setPakPath', 0x00677440, 'func'),
+    ('g_language', 0x017E5CB4, 'data'),
+    ('g_languageCodes', 0x00897394, 'data'),
 ]
 
 # gameserver.exe has no function table here: each entry gives the instruction its window starts at.

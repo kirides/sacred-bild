@@ -513,3 +513,25 @@ Server time-outs (`cNetServer_watchdogThread` `0x4DBCB0`, 5 ms loop, times from 
 second; SacredBild makes that `[Net] JoinTimeout`, 30 s by default); loading may take 4 min (`+0x74` set, `+0x64` last receive); in game, three 30 s ticks without any data
 (`+0x6C..+0x6E`, cleared by `cNetServer_onReceive`) kick the player; idle warning at 14 min, kick at 15 min
 (`+0x68` last activity, not the host).
+
+## Language files
+
+- **Language**: `g_language` (`0x17E5CB4`) indexes `g_languageCodes` (`0x897394`, `char[16]` each: `US DE FR SP IT
+  PL HU JP VC RU CZ`). `WinMain` (`0x816BD0`) sets it to 1 (DE), `loadSettings` (`0x813360`) to the code that equals
+  `LANGUAGE` byte for byte (else it stays), then a code in lower case on the command line wins. Besides the files it
+  switches PL keyboard handling (`sacredWndProc`), JP/VC IME and line breaking (fonts, `0x64EDB4` ...), hides the
+  loading screen's status text for SP, and goes into the hero (`AMH`, `0x6046F0`) and savegame (`AMS`, `0x619C90`)
+  headers; the savegame loader (`0x61B790`) only logs it. Speech playback (`0x693DA0`) is passed it and ignores it.
+- **Text**: `WinMain` formats `.\SCRIPTS\<code>\global.res` and calls `cTextTable_load` (`0x80DBF0`, thiscall on
+  `g_textTable` `0x182CCD0`), which in the GOG builds ignores the path: it loads `BINARY` resource 107 from the exe,
+  each uint16 XORed with the one before it (the first with `0x45AD`), into a buffer from `operator new` (`+0` data,
+  `+4` size). `scripts\us\global.res` in both GOG installs is that resource decoded, byte for byte. Format: uint32
+  count, count entries {id, offset, flags (0/1/3/5), bytes} with strictly ascending ids, UTF-16 strings at
+  `4 + offset`. DE and ENG have the same 23,123 ids, so the files are interchangeable.
+- **Speech**: `initApp` calls `cMSS_setPakPath` (`0x677440`, cdecl) with `.\PAK\SOUND.PAK`, copied into the 256-byte
+  `g_soundPakPath` (`0x9D5624`); cMSS's constructor (`0x6764E0`) opens it once and keeps the `FILE*` (`+0xB7F0`).
+  Header: `SND`, version 1, uint32 sound count (50,000 in both), sounds addressed by slot.
+- gameserver.exe loads neither. Besides the exes, the two GOG installs differ in these two files, `credits*.txt`
+  (lists of text ids, different localization staff) and some data without text (`PAK\motions.pak` 85 bytes and 396
+  longer in ENG, `bin\sets.bin` 259 bytes, 4 header bytes of each `startcode.bin`); movies, music, fonts and loading
+  screens are the same.

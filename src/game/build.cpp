@@ -3,6 +3,7 @@
 #include "game/frame_hooks.h"
 #include "game/movie.h"
 #include "game/granny_async.h"
+#include "game/language.h"
 #include "game/map_cache.h"
 #include "game/resolution.h"
 #include "game/ui_anchor.h"
@@ -72,6 +73,7 @@ void Sacred::installHooks()
     UiAnchor::install();
     Movie::install();
     MapCache::install();
+    Language::install();
     if (Patch::commit())
     {
         LOG("Game hooks installed");

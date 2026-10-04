@@ -143,4 +143,9 @@ static const Sig::Entry kAddressSigs[] = {
     {"g_recordStamp", "8B 15 ?? ?? ?? ?? 5F 89 45 30 88 5D 02 88 5D 01", 2, Sig::Take::Abs32, &Sacred::Addr::g_recordStamp}, // 00CD59D0, 00CD7A50
     {"g_pGameClient", "8A 8E 18 38 00 00 8B 56 40 51 8B 0D ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::g_pGameClient}, // 0182CB70, 0182EBF0
     {"initNetworkNagleTest", "8B 9E 14 04 04 00 8B 17 33 C0 83 FB 02", 10, Sig::Take::Match, &Sacred::Addr::initNetworkNagleTest}, // 007D294E, 007D310E
+    {"cTextTable_load", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 53 56 57 8B 3D ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cTextTable_load}, // 0080DBF0, 0080E680
+    {"textTableAllocCall", "E8 ?? ?? ?? ?? 89 73 04 83 C4 04 D1 EE 85 FF 89 03", 0, Sig::Take::Match, &Sacred::Addr::textTableAllocCall}, // 0080DC60, 0080E6F0
+    {"cMSS_setPakPath", "56 57 8B 7C 24 0C 83 C9 FF 33 C0 F2 AE", 0, Sig::Take::Match, &Sacred::Addr::cMSS_setPakPath}, // 00677440, 00677160
+    {"g_language", "EB 21 8B 94 24 04 02 00 00 A1 ?? ?? ?? ?? 6A 01", 10, Sig::Take::Abs32, &Sacred::Addr::g_language}, // 017E5CB4, 017E7D34
+    {"g_languageCodes", "68 ?? ?? ?? ?? C7 84 24 E8 00 00 00 08 01 00 00", 1, Sig::Take::Abs32, &Sacred::Addr::g_languageCodes}, // 00897394, 00899394
 };
