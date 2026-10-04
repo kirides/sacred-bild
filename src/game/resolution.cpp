@@ -1,5 +1,6 @@
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
+#include "game/ui_canvas.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
@@ -201,10 +202,11 @@ namespace
     DrawTextAFn g_origDrawTextA;
     CreateWindowExAFn g_origCreateWindowExA;
     bool g_centerGdi = false;
+    thread_local bool t_nativeGdi = false;      // drawing into the 1024x768 loading canvas: nothing to move
 
     BOOL WINAPI hookBitBlt(HDC dst, int x, int y, int w, int h, HDC src, int sx, int sy, DWORD rop)
     {
-        if (g_centerGdi || (x == 0 && y == 0 && w == 1024 && h == 768))
+        if (!t_nativeGdi && (g_centerGdi || (x == 0 && y == 0 && w == 1024 && h == 768)))
         {
             x += Resolution::centerX();
             y += Resolution::centerY();
@@ -496,9 +498,58 @@ namespace
     using LoadingScreenFn = void(__fastcall*)(void* self, void* edx, uint32_t progress, const char* text);
     LoadingScreenFn g_origLoadingScreen = nullptr;
 
+    // The loading screen draws with GDI into the back buffer and flips (only when its progress bar moved). With the
+    // UI canvas the game draws it into a 1024x768 surface in place of the back buffer; Resolution::beforeFlip scales
+    // that into the menus' canvas on the back buffer.
+    IDirectDrawSurface7* g_loadingCanvas = nullptr;
+    bool g_loadingCanvasFailed = false;
+    thread_local IDirectDrawSurface7* t_loadingBack = nullptr;     // the back buffer while the canvas stands in
+
+    IDirectDrawSurface7*& backBuffer(void* dxDriver)
+    {
+        return *reinterpret_cast<IDirectDrawSurface7**>(static_cast<uint8_t*>(dxDriver) + DxDriver::back);
+    }
+
+    IDirectDrawSurface7* loadingCanvas(void* dxDriver)
+    {
+        if (g_loadingCanvas || g_loadingCanvasFailed)
+        {
+            return g_loadingCanvas;
+        }
+        auto* ddraw = *reinterpret_cast<IDirectDraw7**>(static_cast<uint8_t*>(dxDriver) + DxDriver::ddraw);
+        DDSURFACEDESC2 desc = {};
+        desc.dwSize = sizeof(desc);
+        desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
+        desc.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
+        desc.dwWidth = 1024;
+        desc.dwHeight = 768;
+        const HRESULT hr = ddraw ? ddraw->CreateSurface(&desc, &g_loadingCanvas, nullptr) : E_POINTER;
+        if (FAILED(hr))
+        {
+            LOG("Loading screen: no 1024x768 surface ({:08x}), drawn centered", static_cast<uint32_t>(hr));
+            g_loadingCanvas = nullptr;
+            g_loadingCanvasFailed = true;
+        }
+        return g_loadingCanvas;
+    }
+
     void __fastcall hookLoadingScreen(void* self, void* edx, uint32_t progress, const char* text)
     {
-        auto* back = *reinterpret_cast<IDirectDrawSurface7**>(reinterpret_cast<uint8_t*>(self) + DxDriver::back);
+        IDirectDrawSurface7*& back = backBuffer(self);
+        if (IDirectDrawSurface7* canvas = back && UiCanvas::enabled() ? loadingCanvas(self) : nullptr)
+        {
+            t_loadingBack = back;
+            back = canvas;
+            t_nativeGdi = true;
+            g_origLoadingScreen(self, edx, progress, text);
+            t_nativeGdi = false;
+            if (t_loadingBack)
+            {
+                back = t_loadingBack;   // nothing new to show: no flip
+                t_loadingBack = nullptr;
+            }
+            return;
+        }
         if (back)
         {
             DDBLTFX fx = {};
@@ -564,6 +615,25 @@ void Resolution::refresh()
         g_unzYF = m22 * 768.0f / g_heightF;
     }
 }
+void Resolution::beforeFlip(void* dxDriver)
+{
+    IDirectDrawSurface7* back = t_loadingBack;
+    if (!back)
+    {
+        return;
+    }
+    t_loadingBack = nullptr;
+    IDirectDrawSurface7*& current = backBuffer(dxDriver);
+    IDirectDrawSurface7* canvas = current;
+    current = back;
+    DDBLTFX fx = {};
+    fx.dwSize = sizeof(fx);
+    back->Blt(nullptr, nullptr, nullptr, DDBLT_COLORFILL | DDBLT_WAIT, &fx);
+    const UiCanvas::Bounds r = UiCanvas::menuCanvas();
+    RECT dst = {std::lround(r.left), std::lround(r.top), std::lround(r.right), std::lround(r.bottom)};
+    back->Blt(&dst, canvas, nullptr, DDBLT_WAIT, nullptr);
+}
+
 int Resolution::centerX() { return (g_width - 1024) / 2; }
 int Resolution::centerY() { return (g_height - 768) / 2; }
 

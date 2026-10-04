@@ -313,7 +313,9 @@ purchase, master, savegame, options, chest, horse, net info, net portraits, char
 offsets in `Sacred::UiManager`). The shop windows (blacksmith, merchant, master, chest, cube, trade) are 640 wide
 at 0,0, next to the inventory at 0,388. `cUI_Manager_render` (`0x7587B0`, arg: device) draws the
 cinematic letterbox bars (float immediates 1024/768) and all windows. Full-screen menus are separate
-`cUI_Window2`s with rect (0,0,1024,768) or (0,0,1023,767).
+`cUI_Window2`s with rect (0,0,1024,768) or (0,0,1023,767). In game (mode bits `0x04` and `0x40`) a visible savegame (`+0xAC`),
+options (`+0xBC`) or character (`+0xD0`) window is drawn alone; the megamap (`+0x94`) alone with the tutorial
+hints and popups; otherwise all HUD windows. The escape menu (`+0xB0`) and popups follow in every case.
 
 Input: `getClientCursorPos` (`0x66E500`, cdecl `(HWND, POINT*)`) is the cursor read for the game; the
 window procedure is `sacredWndProc` (`0x8122A0`, class "Sacred" registered by `0x813240`). It calls
@@ -363,7 +365,11 @@ Per-window re-anchoring does not work: children are absolute, many renderers dra
   axis-aligned quads to the canvas. Clear rects are mapped; GetViewport returns the virtual viewport.
 - Two placements: in game (`[UI] Scale`) and menus (`ScaleMode=InGame`: as large as fits; `Full`: the in-game
   one), picked by the UI manager's mode (`+8` bit `0x04` in game; `0x03` in the menus, `0x4C` in game, `0x43`
-  leaving it). The outermost UI scope keeps the placement it started with.
+  leaving it); an open full-screen window in game takes the menus' placement. The outermost UI scope keeps the
+  placement it started with.
+- Loading screen (`dxDriver7_drawLoadingScreen`, GDI on the back buffer's DC, then `dxDriver7_flip`, only when the
+  progress bar moved): SacredBild puts a 1024x768 system memory surface in the driver's back buffer slot (`+0xBC`)
+  for the call; the flip hook puts the back buffer back and Blts the surface scaled into the menus' canvas.
 - UI images are rects in 256x256 sheets: records of 0x54 bytes from `0x9EAEB8` (`+0` id, `+4` type, `+8` TGA
   name, `+0x28` texture, `+0x2C..+0x38` x0, y0, x1, y1 in pixels at load, `+0x4C`/`+0x50` width/height).
   `0x760E60` makes x1/y1 exclusive and turns them into `u0 = x0/256`, `u1 = (x1 + 0.5)/256` (same for v): drawn

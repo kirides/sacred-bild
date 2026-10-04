@@ -143,6 +143,7 @@ namespace
                 Profiler::retarget(thread);
             }
         }
+        Resolution::beforeFlip(self);
         int hr;
         {
             D3DStats::Scope s{D3DStats::TFlip};
@@ -238,31 +239,11 @@ namespace
         D3DStats::addTime(D3DStats::TWorldProxy, D3DStats::total(D3DStats::TProxy) - proxyTime);
     }
 
-    // True if one of the in-game windows covering the whole 1024x768 screen (save, options, ...) is open.
-    bool fullScreenWindowOpen(void* uiManager)
-    {
-        for (uintptr_t slot = UiManager::firstGameWindow; slot <= UiManager::lastGameWindow; slot += 4)
-        {
-            void* window = member<void*>(uiManager, slot);
-            if (!window || !(member<uint32_t>(window, UiControl::flags) & 1))
-            {
-                continue;
-            }
-            const int x = member<int>(window, UiControl::x), y = member<int>(window, UiControl::y);
-            const int w = member<int16_t>(window, UiControl::width), h = member<int16_t>(window, UiControl::height);
-            if (x <= 0 && y <= 0 && x + w >= 1023 && y + h >= 767)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     void __fastcall hookUiRender(void* self, void* edx, void* device)
     {
         D3DStats::Scope s{D3DStats::TUi};
         // The original screen showed nothing but a full-screen window; keep the world beside the canvas hidden.
-        if (UiCanvas::enabled() && device && fullScreenWindowOpen(self))
+        if (UiCanvas::enabled() && device && UiCanvas::fullScreenWindowOpen())
         {
             const LONG l = std::lround(UiCanvas::left()), t = std::lround(UiCanvas::top());
             const LONG r = std::lround(UiCanvas::right()), b = std::lround(UiCanvas::bottom());

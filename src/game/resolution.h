@@ -13,6 +13,10 @@ namespace Resolution
     // Re-reads g_unzoomedProjection for the camera conversion fix (call once per frame on the render thread).
     void refresh();
 
+    // Call in dxDriver7::flip before the original: shows the loading screen, drawn into a 1024x768 surface on this
+    // thread, scaled to the menus' canvas.
+    void beforeFlip(void* dxDriver);
+
     // Offset that centers a 1024x768 layout on the screen.
     int centerX();
     int centerY();

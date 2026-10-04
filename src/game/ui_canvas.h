@@ -3,8 +3,9 @@
 
 // The game's UI keeps running in its native 1024x768 space: it is drawn into a centered (optionally scaled)
 // canvas and the cursor is mapped into that space. World code keeps physical screen coordinates.
-// The canvas has an in-game placement ([UI] Scale) and one for the menus ([UI] ScaleMode=InGame: as large as fits;
-// Full: the in-game one). The UI manager's state picks it; a UI scope keeps the one it started with.
+// The canvas has an in-game placement ([UI] Scale) and one for the menus, full-screen windows in game and the
+// loading screen ([UI] ScaleMode=InGame: as large as fits; Full: the in-game one). The UI manager's state picks it;
+// a UI scope keeps the one it started with.
 //
 // Frames place a 1024x768 layout elsewhere on the screen: windows anchored to a screen edge (UiAnchor) draw, read
 // the cursor and receive mouse events in a frame shifted against the canvas, so the game's own layout of each
@@ -14,6 +15,9 @@ namespace UiCanvas
     // Hooks the cursor and the world's mouse reads; call inside a Patch transaction after Resolution::install.
     void install();
     bool enabled();
+
+    // An in-game window covering the whole 1024x768 screen (options, savegame, character, megamap) is open.
+    bool fullScreenWindowOpen();
 
     // Canvas placement in physical pixels (in game or menus, see above).
     float scale();
@@ -59,6 +63,8 @@ namespace UiCanvas
         float left, top, right, bottom;
     };
     Bounds screenBounds();
+    // The menus' canvas in physical pixels.
+    Bounds menuCanvas();
 
     // [Debug] UiTrace: Scroll Lock logs the next UI frame's draws (UiTrace lines with the frame and the calling
     // sacred.exe code), and popup texts set during the next seconds.

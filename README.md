@@ -28,7 +28,8 @@ ddraw calls through and logs which one.
     tooltips), so the game's code for it is unchanged; menus and full-screen windows (map, options, save) stay
     centered. Tooltips and the item on the cursor use the whole screen, and the escape menu and message boxes
     dim the whole screen;
-  - loading screen and splash (GDI) centered; savegame thumbnails taken from the screen center;
+  - loading screen (GDI) drawn into a 1024x768 surface and scaled like the menus, splash centered; savegame
+    thumbnails taken from the screen center;
   - always a 32-bit display mode (`GFX32 : 0` in `Settings.cfg` is ignored).
 - **Direct3D 9Ex backend** (`src/ddraw9/`): DirectDraw 7 and Direct3D 7 implemented on Direct3D 9Ex, for the
   subset Sacred uses (windowed swap chain, one render target with z-buffer, managed textures, system memory surfaces
@@ -89,7 +90,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh; 0 = right away. |
 | Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |
 | UI | Scale | 0 | UI scale; 0 = as large as fits the screen height, otherwise a factor (1 = native pixels), capped at that. |
-| UI | ScaleMode | InGame | Where `Scale` applies: `InGame` = the in-game UI only, the menus always fill the screen height; `Full` = the menus too. |
+| UI | ScaleMode | InGame | Where `Scale` applies: `InGame` = the in-game UI only; the menus, the full-screen windows in game (options, save/load, character export, map) and the loading screen always fill the screen height. `Full` = those too. |
 | UI | LinearFilter | 1 | Bilinear filtering for the scaled UI instead of the game's point sampling. |
 | UI | Anchor | 1 | In game, HUD windows placed by `[UI.Layout]`; 0 = all of the UI in the centered canvas. |
 | UI.Layout | Taskbar, Chat | 2048,4096 | Where a window's 1024x768 layout goes: X,Y in 0..4096 of the room the screen leaves around it (0 = left/top edge, 2048 = centered, 4096 = right/bottom edge). |

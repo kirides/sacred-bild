@@ -53,12 +53,39 @@ namespace
     SavePortraitFn g_origSavePortrait = nullptr;
     CursorPosFn g_cursorPos = nullptr;
 
-    // The UI manager's state picks the layout; a UI scope keeps the one it started with.
+    template <class T>
+    T& member(void* obj, uintptr_t offset)
+    {
+        return *reinterpret_cast<T*>(static_cast<uint8_t*>(obj) + offset);
+    }
+
+    bool fullScreenWindowOpen(void* manager)
+    {
+        for (uintptr_t slot = UiManager::firstGameWindow; slot <= UiManager::lastGameWindow; slot += 4)
+        {
+            void* window = member<void*>(manager, slot);
+            if (!window || !(member<uint32_t>(window, UiControl::flags) & 1))
+            {
+                continue;
+            }
+            const int x = member<int>(window, UiControl::x), y = member<int>(window, UiControl::y);
+            const int w = member<int16_t>(window, UiControl::width), h = member<int16_t>(window, UiControl::height);
+            if (x <= 0 && y <= 0 && x + w >= 1023 && y + h >= 767)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // The UI manager's state picks the layout: in game, unless a full-screen window (options, savegame, character,
+    // megamap) replaces the game's screen, which the manager then draws alone. A UI scope keeps the layout it
+    // started with.
     const Layout& liveLayout()
     {
         void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager);
-        const bool inGame = manager &&
-            (*reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(manager) + UiManager::flags) & UiManager::inGame);
+        const bool inGame = manager && (member<uint32_t>(manager, UiManager::flags) & UiManager::inGame) &&
+            !fullScreenWindowOpen(manager);
         return inGame ? g_game : g_menu;
     }
 
@@ -226,6 +253,17 @@ namespace
 }
 
 bool UiCanvas::enabled() { return g_enabled; }
+
+bool UiCanvas::fullScreenWindowOpen()
+{
+    void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager);
+    return manager && ::fullScreenWindowOpen(manager);
+}
+
+UiCanvas::Bounds UiCanvas::menuCanvas()
+{
+    return {g_menu.left, g_menu.top, g_menu.left + 1024.0f * g_menu.scale, g_menu.top + 768.0f * g_menu.scale};
+}
 float UiCanvas::scale() { return layout().scale; }
 float UiCanvas::left() { return layout().left; }
 float UiCanvas::top() { return layout().top; }
