@@ -12,9 +12,10 @@ namespace Focus
     // Patches the game's imports.
     void install();
 
-    // The main game window was created (main thread).
+    // The main game window was created (main thread): subclassed, its close button disabled (Alt+F4 still quits).
     void windowCreated(HWND window);
 
-    // Once per presented frame: confines the cursor to the window's client area while it is in the foreground.
+    // Once per presented frame: confines the cursor to the window's client area while it is in the foreground, and
+    // subclasses the window again if the game replaced its window procedure.
     void onFrame();
 }

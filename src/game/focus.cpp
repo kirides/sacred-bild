@@ -3,6 +3,7 @@
 #include "log.h"
 #include "patch.h"
 
+#include <atomic>
 #include <mutex>
 
 namespace
@@ -17,7 +18,7 @@ namespace
     HOOKPROC g_gameKeyboardHook = nullptr;
 
     HWND g_window = nullptr;
-    WNDPROC g_origWindowProc = nullptr;
+    std::atomic<WNDPROC> g_origWindowProc{nullptr};
     std::mutex g_clipMutex;
     bool g_clipped = false;
     RECT g_target = {};     // the client area clipped to
@@ -85,7 +86,8 @@ namespace
     }
 
     // Releases the cursor right away when the window loses the foreground, is moved, or a menu opens; onFrame
-    // confines it again.
+    // confines it again. The close button and the system menu's Close don't quit (too easy to hit by accident);
+    // Alt+F4 still does.
     LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
         if ((message == WM_ACTIVATE && LOWORD(wParam) == WA_INACTIVE) || (message == WM_ACTIVATEAPP && !wParam) ||
@@ -93,7 +95,27 @@ namespace
         {
             release();
         }
-        return CallWindowProcA(g_origWindowProc, window, message, wParam, lParam);
+        if (message == WM_SYSKEYDOWN && wParam == VK_F4)
+        {
+            PostMessageA(window, WM_CLOSE, 0, 0);   // what DefWindowProc would do, but Close is disabled
+            return 0;
+        }
+        if (message == WM_SYSCOMMAND && (wParam & 0xFFF0) == SC_CLOSE && HIWORD(lParam) != 0xFFFF)
+        {
+            return 0;   // by mouse (HIWORD -1 = by accelerator)
+        }
+        return CallWindowProcA(g_origWindowProc.load(), window, message, wParam, lParam);
+    }
+
+    // Subclasses the main window, again after the game replaced its window procedure (it does when a game starts).
+    void subclass(HWND window)
+    {
+        const auto current = reinterpret_cast<WNDPROC>(GetWindowLongPtrA(window, GWLP_WNDPROC));
+        if (current && current != &windowProc)
+        {
+            g_origWindowProc = current;
+            SetWindowLongPtrA(window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&windowProc));
+        }
     }
 
     // The window's client area on the screen, if the cursor should be confined to it now.
@@ -136,16 +158,19 @@ void Focus::install()
 void Focus::windowCreated(HWND window)
 {
     g_window = window;
-    if (g_config.clipCursor)
-    {
-        g_origWindowProc = reinterpret_cast<WNDPROC>(
-            SetWindowLongPtrA(window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&windowProc)));
-    }
+    subclass(window);
+    EnableMenuItem(GetSystemMenu(window, FALSE), SC_CLOSE, MF_BYCOMMAND | MF_GRAYED);   // greys the close button
 }
 
 void Focus::onFrame()
 {
-    if (!g_config.clipCursor || !g_origWindowProc)
+    HWND window = g_window;
+    if (!window)
+    {
+        return;
+    }
+    subclass(window);
+    if (!g_config.clipCursor)
     {
         return;
     }

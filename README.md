@@ -15,6 +15,7 @@ ddraw calls through and logs which one.
 - **Any resolution** (default: desktop resolution) instead of the hard-coded 1024x768:
   - back buffer and window at the target size: borderless when it fills the screen, otherwise with a frame
     (caption and system menu: it can be moved and minimized) around a client area of that size (`[Display] Borderless`);
+    its close button is disabled so a stray click doesn't end the game (Alt+F4 still quits);
   - world view: orthographic projection (including its depth range), visible area, culling and
     overhead-label layout scaled so the world keeps its original pixel density and simply shows more
     (including the 0.5x-2.0x zoom);

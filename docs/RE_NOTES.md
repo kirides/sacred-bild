@@ -49,7 +49,9 @@ Two threads present frames:
 Main window: `0x813240` registers class "Sacred" (`sacredWndProc` `0x8122A0`) and creates it with `CreateWindowExA`
 as `WS_POPUP|WS_VISIBLE` (return address `0x813337`); `dxDriver7_init` sizes it with `SetWindowPos`: the screen in
 fullscreen mode, the mode's size centered on the primary screen when windowed. (`0x664910` creates the debug
-"LogWindow", `WS_OVERLAPPEDWINDOW`.)
+"LogWindow", `WS_OVERLAPPEDWINDOW`.) `WM_CLOSE` quits (`0x816620`); windowed, `WM_SYSCOMMAND` goes to
+`DefWindowProcA`. Starting a game (`cCommand_armaPlay::execute` `0x755AC0` posts `0x8002`) replaces the window
+procedure with `0x8110D0` through the delay-loaded `SetWindowLongA` (`[0xA21F34]`): subclasses don't survive it.
 
 ## What the game needs from DirectDraw (SacredBild's Direct3D 9 backend, `src/ddraw9/`)
 
