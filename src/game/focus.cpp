@@ -8,12 +8,10 @@
 namespace
 {
     using GetAsyncKeyStateFn = SHORT(WINAPI*)(int);
-    using GetCursorPosFn = BOOL(WINAPI*)(LPPOINT);
     using SetCursorPosFn = BOOL(WINAPI*)(int, int);
     using SetWindowsHookExAFn = HHOOK(WINAPI*)(int, HOOKPROC, HINSTANCE, DWORD);
 
     GetAsyncKeyStateFn g_origGetAsyncKeyState = nullptr;
-    GetCursorPosFn g_origGetCursorPos = nullptr;
     SetCursorPosFn g_origSetCursorPos = nullptr;
     SetWindowsHookExAFn g_origSetWindowsHookExA = nullptr;
     HOOKPROC g_gameKeyboardHook = nullptr;
@@ -24,10 +22,6 @@ namespace
     bool g_clipped = false;
     RECT g_target = {};     // the client area clipped to
     RECT g_clip = {};       // what Windows made of it
-
-    // The last cursor position the game saw while in the foreground; it keeps seeing that one while in the background.
-    POINT g_lastCursor = {};
-    bool g_haveCursor = false;
 
     // One of the game's windows (the main window, a dialog, a message box) is in the foreground.
     bool active()
@@ -41,22 +35,6 @@ namespace
     {
         const SHORT state = g_origGetAsyncKeyState(key);   // also consumes the "pressed since last call" bit
         return active() ? state : 0;
-    }
-
-    BOOL WINAPI hookGetCursorPos(LPPOINT point)
-    {
-        if (!point || active() || !g_haveCursor)
-        {
-            const BOOL ok = g_origGetCursorPos(point);
-            if (ok && point)
-            {
-                g_lastCursor = *point;
-                g_haveCursor = true;
-            }
-            return ok;
-        }
-        *point = g_lastCursor;
-        return TRUE;
     }
 
     BOOL WINAPI hookSetCursorPos(int x, int y)
@@ -148,8 +126,6 @@ void Focus::install()
 {
     g_origGetAsyncKeyState = static_cast<GetAsyncKeyStateFn>(
         Patch::iat("USER32.dll", "GetAsyncKeyState", reinterpret_cast<void*>(&hookGetAsyncKeyState)));
-    g_origGetCursorPos = static_cast<GetCursorPosFn>(
-        Patch::iat("USER32.dll", "GetCursorPos", reinterpret_cast<void*>(&hookGetCursorPos)));
     g_origSetCursorPos = static_cast<SetCursorPosFn>(
         Patch::iat("USER32.dll", "SetCursorPos", reinterpret_cast<void*>(&hookSetCursorPos)));
     g_origSetWindowsHookExA = static_cast<SetWindowsHookExAFn>(

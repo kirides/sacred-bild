@@ -59,10 +59,10 @@ ddraw calls through and logs which one.
 - **Languages**: the GOG builds ignore the game's `LANGUAGE` for text and speech (the text is built into the exe,
   the speech is always `PAK\sound.pak`). SacredBild loads the language's own files when they are there, so one
   install runs every language you have the files for (see below).
-- **Input only in the foreground**: the game polls keys, mouse buttons and the cursor whether or not it has the
-  focus, moves the cursor, and its low-level keyboard hook swallowed the Windows keys, Alt+Tab and Alt+Esc
-  system-wide. All of that now only happens while the game is in the foreground (in the background it keeps the
-  last cursor position), so typing in another window doesn't move your character, and Alt+Tab / Alt+Esc work in
+- **Input only in the foreground**: the game polls keys and mouse buttons whether or not it has the focus, moves
+  the cursor, and its low-level keyboard hook swallowed the Windows keys, Alt+Tab and Alt+Esc system-wide. All of
+  that now only happens while the game is in the foreground (its cursor still follows the mouse over the window, so
+  you see where a click will land), so typing in another window doesn't move your character, and Alt+Tab / Alt+Esc work in
   game too (the Windows keys and Ctrl+Esc stay blocked while it has the focus). The mouse is confined to the
   game window while it is in the foreground (`[Display] ClipCursor`), e.g. a window on one side of a 32:9 screen
   or a borderless game next to a second monitor; it is let go while the window is moved (Alt+Space, Move) or a
