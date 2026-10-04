@@ -1,0 +1,188 @@
+name: Build and conditional release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - '**'
+    paths-ignore:
+      - '**/*.md'
+
+  pull_request:
+    branches:
+      - '**'
+    paths-ignore:
+      - '**/*.md'
+
+  workflow_dispatch:
+
+env:
+  # Same vcpkg commit as local builds and GD3D11.
+  VCPKG_COMMIT: 39344dff01c5a5a0134caf2624cdd492f05d30ea
+
+jobs:
+  build:
+    runs-on: windows-2025-vs2026
+
+    outputs:
+      artifact-id-release: ${{ steps.artifact-upload-release.outputs.artifact-id }}
+      artifact-id-debug: ${{ steps.artifact-upload-debug.outputs.artifact-id }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # The preset's "Visual Studio 18 2026" generator needs CMake 4.2+.
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+          # Only clone/bootstrap vcpkg and export VCPKG_ROOT here; the manifest install
+          # (x86-windows-static) runs in the CMake configure step through the preset's toolchain.
+          runVcpkgInstall: false
+
+      # run-vcpkg exports the removed 'x-gha' backend; override it with a file cache.
+      - name: Use file-based vcpkg binary cache
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\vcpkg_binary_cache" | Out-Null
+          "VCPKG_BINARY_SOURCES=clear;files,$env:GITHUB_WORKSPACE\vcpkg_binary_cache,readwrite" >> $env:GITHUB_ENV
+
+      - name: Restore vcpkg binaries and downloads
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ github.workspace }}/vcpkg_binary_cache
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-x86-windows-static-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-x86-windows-static-${{ env.VCPKG_COMMIT }}-
+
+      - name: Configure
+        shell: pwsh
+        run: cmake --preset msvc-x86
+
+      - name: Save vcpkg binaries and downloads
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ github.workspace }}/vcpkg_binary_cache
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-x86-windows-static-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build --preset release
+
+      - name: Prepare release structure
+        id: package
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $tagOrGitShortHash = $env:GITHUB_REF_NAME
+          } else {
+            $shortHash = $env:GITHUB_SHA.Substring(0, 9)
+            $tagOrGitShortHash = "git-$shortHash"
+          }
+          $relDir = "SacredBild-$tagOrGitShortHash"
+          $buildDir = "out/build/msvc-x86/RelWithDebInfo"
+
+          # Laid out like the game folder, so the zip extracts directly on top of it.
+          New-Item -Path "$relDir/SacredBild" -ItemType Directory -Force | Out-Null
+          Copy-Item -Path "$buildDir/ddraw.dll", "$buildDir/ddraw.pdb", "$buildDir/ddraw.map", "dist/SacredBild.ini" -Destination $relDir
+          Copy-Item -Path "LICENSE" -Destination "$relDir/SacredBild"
+
+          "release-dir=$relDir" >> $env:GITHUB_OUTPUT
+
+      - name: Upload debug artifact (with PDB and map)
+        id: artifact-upload-debug
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.release-dir }}-debug
+          path: ${{ steps.package.outputs.release-dir }}
+          if-no-files-found: error
+
+      - name: Remove PDB and map for release
+        shell: pwsh
+        run: |
+          $relDir = "${{ steps.package.outputs.release-dir }}"
+          Remove-Item -Path "$relDir/ddraw.pdb", "$relDir/ddraw.map" -Force
+
+      - name: Upload release artifact (no PDB)
+        id: artifact-upload-release
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.release-dir }}
+          path: ${{ steps.package.outputs.release-dir }}
+          if-no-files-found: error
+
+  create-release:
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_type == 'tag')
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifacts
+        id: download-artifact
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id-release }},${{ needs.build.outputs.artifact-id-debug }}
+          path: downloaded-artifacts
+
+      - name: Create ZIPs for release
+        shell: pwsh
+        run: |
+          $downloadPath = "${{ steps.download-artifact.outputs.download-path }}"
+          Get-ChildItem -Path $downloadPath -Directory | ForEach-Object {
+            $dir = $_.FullName
+            Write-Host "Listing $dir"
+            Get-ChildItem -Path $dir -Recurse
+
+            $zipName = "$dir.zip"
+            7z a -tzip -mx=7 -mmt=on "$zipName" "$dir/*"
+            Write-Host "Created $zipName"
+          }
+
+      - name: Calculate nightly release info
+        if: github.ref_type != 'tag'
+        id: nightly-info
+        shell: pwsh
+        run: |
+          $shortHash = $env:GITHUB_SHA.Substring(0, 7)
+          $date = Get-Date -Format 'dd.MM.yyyy HH:mm'
+          "tag=nightly-$env:GITHUB_RUN_ID" >> $env:GITHUB_OUTPUT
+          "name=Nightly - $shortHash ($date)" >> $env:GITHUB_OUTPUT
+
+      - name: Create nightly release
+        if: github.ref_type != 'tag'
+        uses: ncipollo/release-action@v1.21.0
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: "${{ steps.download-artifact.outputs.download-path }}/*.zip"
+          commit: ${{ github.sha }}
+          generateReleaseNotes: true
+          name: ${{ steps.nightly-info.outputs.name }}
+          prerelease: true
+          removeArtifacts: true
+          tag: ${{ steps.nightly-info.outputs.tag }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create regular release
+        if: github.ref_type == 'tag'
+        uses: ncipollo/release-action@v1.21.0
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: "${{ steps.download-artifact.outputs.download-path }}/*.zip"
+          generateReleaseNotes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
