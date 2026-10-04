@@ -6,6 +6,7 @@
 #include "game/language.h"
 #include "game/map_cache.h"
 #include "game/resolution.h"
+#include "game/screenshot.h"
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
 #include "net/connection.h"
@@ -72,6 +73,7 @@ void Sacred::installHooks()
     UiCanvas::install();
     UiAnchor::install();
     Movie::install();
+    Screenshot::install();
     MapCache::install();
     Language::install();
     if (Patch::commit())

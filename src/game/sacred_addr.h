@@ -95,6 +95,13 @@ namespace Sacred::Addr
     inline uintptr_t worldCursorUiTestCall{};           // DE 00611F83
     // cEngine_captureInternal: DE 00613710
     inline uintptr_t captureLockBackReturn{};           // DE 0061374B; after captureInternal's call to lockBack
+    // Screenshots: dxDriver7_startCapture (DE 00648790, thiscall (frames)) sets dxDriver7 +0xA8 (frames left) and
+    // +0xAC (frames taken); every caller (Print Screen, the game's screenshot key, a debug key) asks for one frame.
+    // While +0xA8 is set, dxDriver7_flip locks the back buffer and calls captureScreenshot: mode -1 = one screenshot,
+    // written by writeTga1024x768 (DE 006483F0) as .\Capture\shotNNNN.tga, which a thread (DE 00648560) converts to a
+    // quality 50 JPEG through IJL. Both assume 1024x768 (the 32-bit path ignores the pitch). Modes >= 0 copy 3 MB
+    // frames into a mapped file ("vidobj"), < -1 write them out as cap%04d.tga: only reached with more than one frame.
+    inline uintptr_t captureScreenshot{};               // DE 00648900; cdecl (bits, pitch, mode)
 
     // 3D model path: cCreature vtable[5] render -> cObject3D_render (needs the Granny model attached, flags bit 26)
     // -> cObject3D_drawModel -> cGranny_render* -> DrawIndexedPrimitiveStrided.

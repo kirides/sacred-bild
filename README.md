@@ -30,7 +30,9 @@ ddraw calls through and logs which one.
     to the windows they explain, and the escape menu and message boxes dim the whole screen;
   - loading screen (GDI) drawn into a 1024x768 surface and scaled like the menus, splash centered; savegame
     thumbnails taken from the screen center;
-  - always a 32-bit display mode (`GFX32 : 0` in `Settings.cfg` is ignored).
+  - always a 32-bit display mode (`GFX32 : 0` in `Settings.cfg` is ignored);
+  - screenshots (Print Screen) of the whole screen as `Capture\shotNNNN.png` (or `.jpg`, `[Screenshot] Format`),
+    saved on a worker thread; the game's own wrote the top-left 1024x768 as TGA + JPEG, sheared at other widths.
 - **Direct3D 9Ex backend** (`src/ddraw9/`): DirectDraw 7 and Direct3D 7 implemented on Direct3D 9Ex, for the
   subset Sacred uses (windowed swap chain, one render target with z-buffer, managed textures, system memory surfaces
   for GDI text, the fixed-function device). Both APIs are fixed-function with the same vertex formats and render
@@ -111,6 +113,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Render | AtlasPageSize | 8192 | Atlas page size in texels (clamped to the GPU limit, halved if the GPU refuses it). |
 | Render | AtlasPages | 2 | Pages per texture format; the least recently used one is reused when full. |
 | Render | AtlasMaxTextureSize | 512 | Larger textures are used directly. |
+| Screenshot | Format | png | Print Screen saves `Capture\shotNNNN.png`; `jpg` = JPEG (quality 95) instead. |
 | Net | Relay | 1 | Hosted games: the gameserver announces on every adapter and answers `Hosts` subscriptions. |
 | Net | Port | 2105 | UDP port of that relay (host side). |
 | Net | Hosts | | Hosts whose games are listed even without broadcasts: IPv4 addresses or names, comma-separated, optional `:port`. |

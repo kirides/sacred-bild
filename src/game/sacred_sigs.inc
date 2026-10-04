@@ -123,6 +123,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"frameLimiter", "83 EC 20 8D 44 24 18 56 57 50 FF 15 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::frameLimiter}, // 0060AA90, 0060A9F0
     {"renderLimiterReturn", "83 C4 0C 8B 46 54 F6 C4 80 74 0B 8B 4E 54", 0, Sig::Take::Match, &Sacred::Addr::renderLimiterReturn}, // 0060EB0E, 0060EA6E
     {"captureLockBackReturn", "85 C0 0F 84 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 8B 85 A0 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::captureLockBackReturn}, // 0061374B, 006136AB
+    {"captureScreenshot", "6A 00 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 08 85 C0 74 0D 68 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::captureScreenshot}, // 00648900, 006487D0
     {"cCreature_render", "83 EC 64 53 55 56 57 8B E9 E8 ?? ?? ?? ?? 84 C0", 0, Sig::Take::Match, &Sacred::Addr::cCreature_render}, // 00599880, 00599910
     {"cObject3D_render", "A1 ?? ?? ?? ?? 83 EC 30 53 55 56 8B F1 57 89 46 54", 0, Sig::Take::Match, &Sacred::Addr::cObject3D_render}, // 0044B400, 0044B230
     {"cObject3D_drawModel", "56 8B F1 57 8B 7C 24 0C F6 46 14 02", 0, Sig::Take::Match, &Sacred::Addr::cObject3D_drawModel}, // 0044ABA0, 0044A9D0

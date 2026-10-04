@@ -69,6 +69,9 @@ struct Config
     int atlasPages = 2;             // at most this many pages per texture format
     int atlasMaxTextureSize = 512;  // larger textures are used directly
 
+    // Screenshots (Print Screen) of the whole screen as Capture\shotNNNN.png, or .jpg with Format=jpg.
+    bool screenshotJpeg = false;
+
     // LAN games over VPNs. Hosting: the gameserver Sacred starts gets SacredBild as well; it announces the game on
     // every network adapter with that adapter's address and to SacredBild players that subscribe at UDP `netPort`.
     bool netRelay = true;

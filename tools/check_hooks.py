@@ -23,6 +23,7 @@ HOOKS = {
     0x004B1740: ('renderSavePortrait', 4),
     0x006A0C60: ('playVideo', 5),
     0x006A0B40: ('openMovieStream (cdecl)', 0),
+    0x00648900: ('captureScreenshot (cdecl)', 0),
     0x0060E3F0: ('cEngine::renderThreadRun (fastcall)', 0),
     0x0060AA90: ('frameLimiter (cdecl)', 0),
     0x006360E0: ('layerRecordCache', 1),

@@ -279,6 +279,11 @@ bool FrameHooks::flip()
     return true;
 }
 
+void* FrameHooks::dxDriver()
+{
+    return g_dxDriver;
+}
+
 void FrameHooks::install()
 {
     Patch::hook(g_origInit, Addr::dxDriver7_init, &hookInit, "dxDriver7::init");

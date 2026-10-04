@@ -99,6 +99,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.atlasPageSize = readInt(ini, L"Render", L"AtlasPageSize", g_config.atlasPageSize);
     g_config.atlasPages = readInt(ini, L"Render", L"AtlasPages", g_config.atlasPages);
     g_config.atlasMaxTextureSize = readInt(ini, L"Render", L"AtlasMaxTextureSize", g_config.atlasMaxTextureSize);
+    g_config.screenshotJpeg = _wcsicmp(readString(ini, L"Screenshot", L"Format", L"png").c_str(), L"jpg") == 0;
     g_config.netRelay = readInt(ini, L"Net", L"Relay", g_config.netRelay) != 0;
     g_config.netPort = readInt(ini, L"Net", L"Port", g_config.netPort);
     g_config.netHosts = ascii(readString(ini, L"Net", L"Hosts", L""));
@@ -111,13 +112,13 @@ void ConfigFile::load(const std::wstring& gameDir)
 
     LOG("Config: Backend={} MediaFoundation={} Width={} Height={} Borderless={} FpsLimit={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
-        "Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} D3DStats={} Profiler={} ({} us) UiTrace={}",
+        "Screenshot.Format={} Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} D3DStats={} Profiler={} ({} us) UiTrace={}",
         g_config.ddrawD3D9 ? "d3d9" : "chain", g_config.mediaFoundation, g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit,
         g_config.vsync, g_config.maxFrameLatency, g_config.uiScale,
         g_config.uiScaleMenus ? "Full" : "InGame", g_config.uiLinearFilter, g_config.uiAnchor,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
         g_config.batchModels, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
-        g_config.atlasMaxTextureSize, g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs, g_config.uiTrace);
+        g_config.atlasMaxTextureSize, g_config.screenshotJpeg ? "jpg" : "png", g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs, g_config.uiTrace);
     const auto pos = [](const Config::UiPosition& p) { return std::format("{},{}", p.x, p.y); };
     LOG("Config: UI.Layout Taskbar={} Chat={} Inventory={} Equipment={} Stats={} Minimap={} Portraits={} Shops={}",
         pos(g_config.uiTaskbar), pos(g_config.uiChat), pos(g_config.uiInventory), pos(g_config.uiEquipment),

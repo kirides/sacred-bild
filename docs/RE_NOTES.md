@@ -428,7 +428,8 @@ Known gaps: the party arrows and the cinematic bars stay in the canvas.
 |---|---|---|
 | `cEngine_captureInternal` (`0x613710`), savegame thumbnail | copies `desc.dwHeight` rows into a 1024x768 buffer: **heap overflow** | `lockBack` hook hands it the centered 1024x768 (return address `0x61374B`) |
 | `renderSavePortrait` | size-aware (centered region) | projection constants patched; runs outside the UI canvas |
-| `captureScreenshot` (`0x648900`) / `writeTga1024x768` (`0x6483F0`) | screenshots cropped to top-left 1024x768, video capture garbled | not yet handled |
+| `captureScreenshot` (`0x648900`) / `writeTga1024x768` (`0x6483F0`) | screenshots of the top-left 1024x768, sheared at 32 bits (`writeTga` `0x660730` ignores the pitch), JPEG copy assumes 1024x768 too | mode -1 replaced: whole back buffer as PNG/JPEG through WIC (`src/game/screenshot.*`) |
+| `captureScreenshot` modes >= 0 / < -1 (frame sequence into the mapped file `vidobj`, then `cap%04d.tga`) | 3 MB frames copied without pitch: garbled | unreachable: every `dxDriver7_startCapture` (`0x648790`) caller asks for 1 frame; left as is |
 | `debugCaptureCharacter` (`0x6F5190`) | developer tool, reads fixed offsets inside the surface | ignored |
 
 ## Hard-coded 1024x768 elsewhere
