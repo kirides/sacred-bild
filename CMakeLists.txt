@@ -25,6 +25,7 @@ add_library(ddraw SHARED
   src/profiler.cpp
   src/game/build.cpp
   src/game/frame_hooks.cpp
+  src/game/gameserver.cpp
   src/game/granny_async.cpp
   src/game/map_cache.cpp
   src/game/d3d_stats.cpp
@@ -34,6 +35,7 @@ add_library(ddraw SHARED
   src/render/atlas.cpp
   src/render/batcher.cpp
   src/net/adapters.cpp
+  src/net/connection.cpp
   src/net/lan_client.cpp
   src/net/lan_protocol.cpp
   src/net/lan_server.cpp

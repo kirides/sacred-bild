@@ -5,6 +5,7 @@
 #include "game/map_cache.h"
 #include "game/resolution.h"
 #include "game/ui_canvas.h"
+#include "net/connection.h"
 #include "net/lan_client.h"
 #include "log.h"
 #include "patch.h"
@@ -41,5 +42,6 @@ void Sacred::installHooks()
     {
         LOG("Game hooks installed");
     }
+    Connection::install();
     LanClient::install();
 }

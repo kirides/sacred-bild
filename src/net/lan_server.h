@@ -7,9 +7,6 @@
 // subscribed at the relay port ([Net] Port).
 namespace LanServer
 {
-    // True when the host process is gameserver.exe.
-    bool isHostProcess();
-
-    // Checks the build and patches the gameserver's send() import (used for the announcements only).
+    // Patches the gameserver's send() import (used for the announcements only); call after the build check.
     void install();
 }

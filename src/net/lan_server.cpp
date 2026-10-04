@@ -1,7 +1,6 @@
 #include "net/lan_server.h"
 #include "net/adapters.h"
 #include "net/lan_protocol.h"
-#include "game/build.h"
 #include "game/gameserver_de.h"
 #include "config.h"
 #include "log.h"
@@ -229,21 +228,8 @@ namespace
     }
 }
 
-bool LanServer::isHostProcess()
-{
-    wchar_t path[MAX_PATH] = {};
-    GetModuleFileNameW(nullptr, path, MAX_PATH);
-    const wchar_t* name = wcsrchr(path, L'\\');
-    return _wcsicmp(name ? name + 1 : path, L"gameserver.exe") == 0;
-}
-
 void LanServer::install()
 {
-    if (!Sacred::hostExeIs(Addr::kTimestamp, Addr::kSizeOfImage, Addr::kEntryPoint))
-    {
-        LOG("Unsupported gameserver.exe build: LAN relay disabled");
-        return;
-    }
     if (!g_config.netRelay)
     {
         LOG("LAN relay off ([Net] Relay=0)");

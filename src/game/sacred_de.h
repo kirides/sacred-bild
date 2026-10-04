@@ -116,6 +116,9 @@ namespace Sacred::Addr
     // 5 s. cGCclass_joinLanGame (0x7D3530) connects to the address inside the announcement.
     constexpr uintptr_t g_pGameClient = 0x0182CB70;
     constexpr uintptr_t gameClient_lanSocket = 0x14;
+    // cGCclass_initNetwork sets TinCat's drv_disable_nagle (TCP_NODELAY on the game connection) to
+    // "data flow == LAN" (cGCclass + 0x40414 == 2): `cmp ebx, 2; sete al` after `xor eax, eax`.
+    constexpr uintptr_t initNetworkNagleTest = 0x007D294E;
 
     // cWorldView0 vtable slot 5: draws the isometric world (arg: device).
     constexpr uintptr_t cWorldView0_render = 0x006322B0;

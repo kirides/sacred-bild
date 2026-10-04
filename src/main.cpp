@@ -3,7 +3,7 @@
 #include "profiler.h"
 #include "proxy.h"
 #include "game/build.h"
-#include "net/lan_server.h"
+#include "game/gameserver.h"
 
 #include <windows.h>
 #include <detours/detours.h>
@@ -37,14 +37,14 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID)
     {
         DisableThreadLibraryCalls(instance);
         const std::wstring gameDir = exeDirectory();
-        if (LanServer::isHostProcess())
+        if (GameServer::isHostProcess())
         {
-            // Injected by sacred.exe when it starts the gameserver (LanClient): only the LAN relay runs here.
+            // Injected by sacred.exe when it starts the gameserver (LanClient): only the network patches run here.
             DetourRestoreAfterWith();
             Log::init((gameDir + L"\\SacredBild-server.log").c_str());
             LOG("SacredBild " __DATE__ " " __TIME__ " in gameserver.exe");
             ConfigFile::load(gameDir);
-            LanServer::install();
+            GameServer::installHooks();
             return TRUE;
         }
         Log::init((gameDir + L"\\SacredBild.log").c_str());

@@ -18,4 +18,8 @@ namespace GameServer::Addr
     // it and sends it with the only send() call in the exe; the version field is cleared again right after.
     constexpr uintptr_t net_pingSocket = 0x1A8;
     constexpr uintptr_t net_announcement = 0x596C;
+
+    // cNetServer_watchdogThread (0x4DBCB0) drops a connected player that has not sent its first message within
+    // 5000 ms of connecting: `add edx, 5000` (imm32 here) on the connect time, compared with the current time.
+    constexpr uintptr_t firstContactTimeoutImm = 0x004DC523;
 }

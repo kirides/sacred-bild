@@ -46,6 +46,11 @@ struct Config
     // Joining: hosts whose games are listed even though their broadcasts don't arrive here
     // (comma-separated IPv4 addresses or host names, optionally with :port).
     std::string netHosts;
+    // TCP_NODELAY on the game connection in both data flow modes; the game uses it for LAN only, MODEM/ISDN runs
+    // with Nagle's algorithm (small messages wait for the previous one's ACK).
+    bool netNoDelay = true;
+    // Seconds a player connecting to a gameserver Sacred started has to send its first message (the game: 5).
+    int netJoinTimeout = 30;
 
     // Diagnostics
     bool d3dStats = true;         // per-second D3D7 call counts in the log

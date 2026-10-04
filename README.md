@@ -78,6 +78,8 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Net | Relay | 1 | Hosted games: the gameserver announces on every adapter and answers `Hosts` subscriptions. |
 | Net | Port | 2105 | UDP port of that relay (host side). |
 | Net | Hosts | | Hosts whose games are listed even without broadcasts: IPv4 addresses or names, comma-separated, optional `:port`. |
+| Net | NoDelay | 1 | Game connection without Nagle's algorithm in both data flow modes (the game: LAN only). |
+| Net | JoinTimeout | 30 | Seconds a joining player has to send its first message to a gameserver Sacred started (the game: 5). |
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | ddraw loaded behind SacredBild; empty = system ddraw. |
 | Debug | D3DStats | 1 | Frame statistics in `SacredBild.log` (wraps the D3D device in a proxy). |
 | Debug | Profiler | 0 | Sampling profiler; writes `SacredBild-profile.txt` every 15 s. |

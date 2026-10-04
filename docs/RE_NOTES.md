@@ -352,3 +352,45 @@ itself into the gameserver (Detours `DetourCreateProcessWithDllExA` from a `Crea
 replaces the `send` import: the game's broadcast carries the address of the adapter it leaves on, every other
 adapter gets a subnet broadcast with its own address (XOR format), and players that subscribed at UDP 2105 get
 the plain announcement and fill in the address they received it from (`src/net/`).
+
+## Networking: game connection and the "data flow" (ISDN / LAN) setting
+
+Game traffic is TinCat over **TCP** (`tincat2.dll`, Ghidra `/tincat2.dll`; the auto-analysis there fails, so
+functions exist only where they were created by hand). TinCat has its own UDP broadcast lobby, which Sacred does
+not use. `cGCclass_initNetwork` creates the TinCat API once when the multiplayer menu is set up
+(`0x7D7D00`) and configures a `TinCatValues` object (vtable `0x1003CE60`). Its fields match the keys of TinCat's
+`[tincat]` config reader (`0x1000A300`):
+
+| Sacred call | TinCat field | Key | Value |
+|---|---|---|---|
+| `+0x08` | profile copy | (`TinCatValues_init`: client profile table `0x100491E0`, server `0x10048FE0`) | profile 0 |
+| `+0x2C` | `+0x44/+0x48` | `drv_writer_sleep` (+activate) | 5 ms |
+| `+0x34` | `+0x3C/+0x40` | `drv_reader_sleep` (+activate) | 5 ms |
+| `+0x3C` | `+0x4C/+0x50` | `drv_serverloop_sleep` (+activate) | 100 ms |
+| `+0x44` | `+0x14` | `srv_sendlogonrequest` | 15000 ms |
+| `+0x4C` | `+0x34` | `usr_logoncheck` | 10000 ms |
+| `+0x54` | `+0x20` | `srv_checkdeadcon` | 70000 ms |
+| `+0x5C` | `+0x28` | `srv_sendalive` | 30000 ms |
+| `+0x68` | `+0x54` | `drv_disable_nagle` | client: data flow == LAN; server: always |
+
+**Data flow** (`NETWORK_SPEEDSETTINGS`, `cGCclass +0x40414`; the options' radio buttons store 1 = MODEM/ISDN,
+2 = LAN, 0 = not set; `setNetSpeedMode` `0x7ED1B0` stores it and sends message 0x21). It does three things:
+- client: TCP_NODELAY on the TinCat connection for LAN only, decided once at `cGCclass_initNetwork`
+  (`cmp ebx, 2; sete al` at `0x7D294E`; SacredBild's `[Net] NoDelay` makes it 1 in both modes);
+- it travels in the first-contact message (`cGCclass +0x40064`, copied before `cGCclass_joinLanGame`); the
+  server keeps it in the player record (`net + 0x1D4 + slot * 0x518`) and updates it on message 0x21;
+- server: object simulation is distributed to clients. `setObjectOwner` (`0x4D6950`) sets a creature's owner
+  slot (`+0x39`, recursively for its children) and sends message 0x171. When a creature needs a new owner, the
+  main loop (`0x4C5082`) walks the players that see it and skips ISDN players
+  (`cNetServer_isPlayerIsdn` `0x4DCDC0`) for creatures with flag `0x20` at `+0x200` (ambient NPCs). The player
+  list draws ISDN players in another color.
+
+Community reports: joining in LAN mode fails over the internet ("IP: Cannot Connect!", connect time-outs),
+joining in MODEM/ISDN works and switching to LAN afterwards is fine; ISDN hides most ambient NPCs. Switching after
+the join keeps TCP_NODELAY off (TinCat is not re-initialised) but makes the player an owner candidate.
+
+Server time-outs (`cNetServer_watchdogThread` `0x4DBCB0`, 5 ms loop, times from `0x6340C8`; player record =
+`net + 0x1B0 + slot * 0x518`): first contact must arrive within **5 s** of the connection (`+0x60`, checked every
+second; SacredBild makes that `[Net] JoinTimeout`, 30 s by default); loading may take 4 min (`+0x74` set, `+0x64` last receive); in game, three 30 s ticks without any data
+(`+0x6C..+0x6E`, cleared by `cNetServer_onReceive`) kick the player; idle warning at 14 min, kick at 15 min
+(`+0x68` last activity, not the host).

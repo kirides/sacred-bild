@@ -54,15 +54,17 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.netRelay = readInt(ini, L"Net", L"Relay", g_config.netRelay) != 0;
     g_config.netPort = readInt(ini, L"Net", L"Port", g_config.netPort);
     g_config.netHosts = ascii(readString(ini, L"Net", L"Hosts", L""));
+    g_config.netNoDelay = readInt(ini, L"Net", L"NoDelay", g_config.netNoDelay) != 0;
+    g_config.netJoinTimeout = readInt(ini, L"Net", L"JoinTimeout", g_config.netJoinTimeout);
     g_config.d3dStats = readInt(ini, L"Debug", L"D3DStats", g_config.d3dStats) != 0;
     g_config.profiler = readInt(ini, L"Debug", L"Profiler", g_config.profiler) != 0;
     g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
 
     LOG("Config: Width={} Height={} Borderless={} FpsLimit={} UI.Scale={} UI.LinearFilter={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
-        "Net.Relay={} Net.Port={} Net.Hosts='{}' D3DStats={} Profiler={} ({} us)",
+        "Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} D3DStats={} Profiler={} ({} us)",
         g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit, g_config.uiScale, g_config.uiLinearFilter,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
         g_config.batchModels, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
-        g_config.atlasMaxTextureSize, g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs);
+        g_config.atlasMaxTextureSize, g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs);
 }
