@@ -67,7 +67,8 @@ ddraw calls through and logs which one.
   game too (the Windows keys and Ctrl+Esc stay blocked while it has the focus). The mouse is confined to the
   game window while it is in the foreground (`[Display] ClipCursor`), e.g. a window on one side of a 32:9 screen
   or a borderless game next to a second monitor; it is let go while the window is moved (Alt+Space, Move) or a
-  menu of it is open, and only taken once the cursor is over the window, so a click on the title bar still drags.
+  menu of it is open, and while Alt is held; it is only taken once the cursor is over the window, so a click on the
+  title bar still drags.
 - **Diagnostics**: per-second frame stats (draw calls, texture switches, unique textures, time spent in
   the world renderer, UI, flip and inside Direct3D, what ended each batch) and an optional sampling profiler.
   When the game or its gameserver crashes, a minidump goes next to the exe (`SacredBild-crash-*.dmp`,
@@ -110,7 +111,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 |---|---|---|---|
 | Display | Width, Height | 0 | Render resolution; 0 = desktop. 1024x768 = unpatched game. |
 | Display | Borderless | auto | Main window frame: `auto` = a frame when the window is smaller than the screen, `1` = never (the game's frameless window), `0` = always. The client area is `Width` x `Height` either way. |
-| Display | ClipCursor | 1 | Confine the mouse to the game window while it is in the foreground. |
+| Display | ClipCursor | 1 | Confine the mouse to the game window while it is in the foreground; hold Alt to move it out. |
 | Display | FpsLimit | 60 | The game's own in-game frame limit; 0 = off. |
 | Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh; 0 = right away. |
 | Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |

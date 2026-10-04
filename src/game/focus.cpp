@@ -104,6 +104,10 @@ namespace
         {
             return 0;   // by mouse (HIWORD -1 = by accelerator)
         }
+        if (message == WM_SYSCOMMAND && (wParam & 0xFFF0) == SC_KEYMENU && lParam == 0)
+        {
+            return 0;   // Alt alone (the game shows item names with it) doesn't enter the menu; Alt+Space still opens it
+        }
         return CallWindowProcA(g_origWindowProc.load(), window, message, wParam, lParam);
     }
 
@@ -123,6 +127,12 @@ namespace
     {
         HWND window = g_window;
         if (!window || GetForegroundWindow() != window || IsIconic(window))
+        {
+            return false;
+        }
+        // Holding Alt lets the cursor go (as in many newer games); once released, the cursor is taken again when it
+        // is back over the window.
+        if (GetAsyncKeyState(VK_MENU) < 0)
         {
             return false;
         }
