@@ -24,9 +24,24 @@ struct Config
 
     // UI canvas: the 1024x768 UI drawn centered. 0 = scale to fit the screen height.
     float uiScale = 0.0f;
-    // In game, the HUD windows (taskbar, minimap, inventory, ...) move to the screen edges and corners they had
-    // in the 1024x768 layout instead of staying in the centered canvas.
+    // In game, the HUD windows (taskbar, minimap, inventory, ...) are placed on the screen by [UI.Layout] instead
+    // of staying in the centered canvas.
     bool uiAnchor = true;
+    // [UI.Layout]: where each in-game window's 1024x768 layout goes, as X,Y in 0..4096 of the room the screen leaves
+    // around it: 0 = against the left/top edge, 2048 = centered, 4096 = against the right/bottom edge. Windows at
+    // the same position keep their 1024x768 arrangement.
+    struct UiPosition
+    {
+        int x, y;
+    };
+    UiPosition uiTaskbar{2048, 4096};
+    UiPosition uiChat{2048, 4096};
+    UiPosition uiInventory{0, 4096};
+    UiPosition uiEquipment{4096, 0};
+    UiPosition uiStats{4096, 0};
+    UiPosition uiMinimap{4096, 0};
+    UiPosition uiPortraits{0, 0};
+    UiPosition uiShops{0, 0};       // blacksmith, merchant, combat art master, chest, cube, trade
     bool uiLinearFilter = true;   // bilinear filtering for the scaled UI instead of the game's point sampling
 
     // Texture memory the game may keep loaded, in MB; 0 = max(game's own value, 256). A zoomed-out view at a
@@ -67,6 +82,7 @@ struct Config
     // Diagnostics
     bool d3dStats = true;         // per-second D3D7 call counts in the log
     bool profiler = false;        // sample the render thread, dump hot spots on exit
+    bool uiTrace = false;         // Scroll Lock logs one UI frame's draws with their frames and callers
     int profilerIntervalUs = 500;
 };
 

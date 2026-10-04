@@ -7,8 +7,11 @@
 #include "patch.h"
 
 #include <windows.h>
+#include <intrin.h>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <format>
 
 namespace
 {
@@ -21,6 +24,9 @@ namespace
     thread_local int t_depth = 0;
     thread_local UiCanvas::Frame t_frame;
     thread_local UiCanvas::Frame t_outerFrame;     // the frame before the outermost UI scope
+    thread_local bool t_trace = false;
+    std::atomic<ULONGLONG> g_tracePopupsUntil{0};
+    bool g_traceKeyDown = false;
 
     using GetClientCursorPosFn = void(__cdecl*)(HWND, POINT*);
     using RenderCursorFn = void(__fastcall*)(void* self, void* edx, void* device, int flag);
@@ -30,6 +36,8 @@ namespace
     WorldMouseFn g_origWorldMouse = nullptr;
     using SavePortraitFn = uint32_t(__fastcall*)(void* self, void* edx, const char* path, int w, int h, float scale);
     using CursorPosFn = void(__fastcall*)(void* mouse, void* edx, int* x, int* y);
+    using HeldItemFn = void(__fastcall*)(void* self, void* edx, void* device, int flag);
+    HeldItemFn g_origHeldItem = nullptr;
 
     GetClientCursorPosFn g_origGetClientCursorPos = nullptr;
     RenderCursorFn g_origRenderCursor = nullptr;
@@ -41,6 +49,37 @@ namespace
     int mouseField(void* mouse, uintptr_t offset)
     {
         return *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(mouse) + offset);
+    }
+
+    // The bytes before `ra` encode a call instruction.
+    bool isCallSite(uintptr_t ra)
+    {
+        const auto* p = reinterpret_cast<const uint8_t*>(ra);
+        return p[-5] == 0xE8 ||                                             // call rel32
+            (p[-6] == 0xFF && (p[-5] & 0x38) == 0x10) ||                    // call [disp32] / [reg+disp32]
+            (p[-3] == 0xFF && (p[-2] & 0xF8) == 0x50) ||                    // call [reg+disp8]
+            (p[-2] == 0xFF && ((p[-1] & 0xF8) == 0xD0 || (p[-1] & 0xF8) == 0x10)) ||   // call reg / [reg]
+            (p[-4] == 0xFF && p[-3] == 0x54);                               // call [sib+disp8]
+    }
+
+    // Return addresses into sacred.exe on the calling thread's stack, innermost first (stale ones included).
+    std::string exeCallers()
+    {
+        const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+        const uintptr_t lo = base + 0x1000, hi = base + nt->OptionalHeader.SizeOfImage;
+        const auto* top = static_cast<const uintptr_t*>(reinterpret_cast<NT_TIB*>(NtCurrentTeb())->StackBase);
+        std::string out;
+        int found = 0;
+        for (auto* p = static_cast<const uintptr_t*>(_AddressOfReturnAddress()); p < top && found < 16; ++p)
+        {
+            if (*p >= lo + 8 && *p < hi && isCallSite(*p))
+            {
+                out += std::format(" {:08x}", *p);
+                ++found;
+            }
+        }
+        return out;
     }
 
     void notifyProxy()
@@ -69,6 +108,14 @@ namespace
         UiCanvas::Scope ui{UiCanvas::Mode::Overlay};
         UiCanvas::FrameScope canvas{{0.0f, 0.0f, false}};
         g_origRenderCursor(self, edx, device, flag);
+    }
+
+    // The item held by the cursor follows it over the whole screen, out of the frame of the window that draws it.
+    void __fastcall hookHeldItem(void* self, void* edx, void* device, int flag)
+    {
+        const UiCanvas::Frame current = UiCanvas::frame();
+        UiCanvas::FrameScope unconfined{{current.x, current.y, false}};
+        g_origHeldItem(self, edx, device, flag);
     }
 
     uint32_t __fastcall hookSavePortrait(void* self, void* edx, const char* path, int w, int h, float scale)
@@ -172,13 +219,12 @@ int UiCanvas::toVirtualY(int physical) { return static_cast<int>(std::lround((ph
 int UiCanvas::toPhysicalX(int virt) { return static_cast<int>(std::lround(virt * g_scale + g_left)); }
 int UiCanvas::toPhysicalY(int virt) { return static_cast<int>(std::lround(virt * g_scale + g_top)); }
 
-UiCanvas::Frame UiCanvas::anchored(int horizontal, int vertical)
+UiCanvas::Frame UiCanvas::placed(float x, float y)
 {
-    // Whole pixels for the frame's origin, so the UI's texels stay where they are in the canvas.
-    const float originX[3] = {0.0f, g_left, std::floor(Resolution::width() - 1024.0f * g_scale)};
-    const float originY[3] = {0.0f, g_top, std::floor(Resolution::height() - 768.0f * g_scale)};
-    return {(originX[std::clamp(horizontal, 0, 2)] - g_left) / g_scale,
-            (originY[std::clamp(vertical, 0, 2)] - g_top) / g_scale, true};
+    // Whole pixels for the frame's origin, so the UI's texels keep their alignment (0.5 gives the canvas itself).
+    const float originX = std::floor((Resolution::width() - 1024.0f * g_scale) * std::clamp(x, 0.0f, 1.0f));
+    const float originY = std::floor((Resolution::height() - 768.0f * g_scale) * std::clamp(y, 0.0f, 1.0f));
+    return {(originX - g_left) / g_scale, (originY - g_top) / g_scale, true};
 }
 
 UiCanvas::Frame UiCanvas::frame() { return t_frame; }
@@ -207,6 +253,21 @@ UiCanvas::Placement UiCanvas::placement()
     return p;
 }
 
+UiCanvas::Bounds UiCanvas::screenBounds()
+{
+    return {-g_left / g_scale - t_frame.x, -g_top / g_scale - t_frame.y,
+            (Resolution::width() - g_left) / g_scale - t_frame.x, (Resolution::height() - g_top) / g_scale - t_frame.y};
+}
+
+bool UiCanvas::tracing() { return t_trace; }
+bool UiCanvas::tracingPopups() { return g_config.uiTrace && GetTickCount64() < g_tracePopupsUntil.load(); }
+
+void UiCanvas::trace(const std::string& line)
+{
+    LOG("UiTrace: {} | frame {:.1f},{:.1f}{} | callers{}", line, t_frame.x, t_frame.y, t_frame.confine ? "" : " unconfined",
+        exeCallers());
+}
+
 UiCanvas::FrameScope::FrameScope(const Frame& frame) : m_previous(t_frame)
 {
     if (frame == t_frame)
@@ -233,6 +294,17 @@ void UiCanvas::enter(Mode mode)
     {
         t_outerFrame = t_frame;
         t_frame = {0.0f, 0.0f, mode == Mode::Canvas};
+        if (g_config.uiTrace && mode == Mode::Canvas)
+        {
+            const bool down = GetAsyncKeyState(VK_SCROLL) < 0;
+            if (down && !g_traceKeyDown)
+            {
+                t_trace = true;
+                g_tracePopupsUntil = GetTickCount64() + 5000;
+                LOG("UiTrace: frame begins (canvas {},{} scale {:.3f}; popups traced for 5 s)", g_left, g_top, g_scale);
+            }
+            g_traceKeyDown = down;
+        }
         if (DeviceProxy* proxy = DeviceProxy::instance())
         {
             proxy->beginUi();
@@ -244,6 +316,11 @@ void UiCanvas::leave()
 {
     if (g_enabled && --t_depth == 0)
     {
+        if (t_trace)
+        {
+            LOG("UiTrace: frame ends");
+            t_trace = false;
+        }
         t_frame = t_outerFrame;
         if (DeviceProxy* proxy = DeviceProxy::instance())
         {
@@ -321,5 +398,6 @@ void UiCanvas::install()
     Patch::hook(g_origGetClientCursorPos, Addr::getClientCursorPos, &hookGetClientCursorPos, "getClientCursorPos");
     Patch::hook(g_origRenderCursor, Addr::cMouse_renderCursor, &hookRenderCursor, "cMouse::renderCursor");
     Patch::hook(g_origSavePortrait, Addr::renderSavePortrait, &hookSavePortrait, "renderSavePortrait");
+    Patch::hook(g_origHeldItem, Addr::cInventoryEntry_render, &hookHeldItem, "cInventoryEntry::render");
     Patch::hook(g_origWorldMouse, Addr::cEngine_worldMouse, &hookWorldMouse, "cEngine::worldMouse");
 }

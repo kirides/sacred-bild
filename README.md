@@ -21,11 +21,13 @@ ddraw calls through and logs which one.
   - UI: the game's 1024x768 UI (menus, HUD, cursor, intro videos) is drawn into a centered canvas,
     scaled to fit the screen height (`[UI] Scale`, `LinearFilter`); the mouse is mapped into that canvas
     for the UI while world picking keeps physical screen coordinates;
-  - in game, the HUD windows go to the screen edges they had in the 1024x768 layout (`[UI] Anchor`): taskbar
-    and chat at the bottom, inventory bottom-left, equipment bottom-right, minimap and character stats
-    top-right, party portraits and the shop / chest / cube / trade windows top-left. Each keeps its own layout
-    and runs in a shifted copy of the 1024x768 space (drawing, cursor, clicks, tooltips), so the game's code
-    for it is unchanged; menus and full-screen windows (map, options, save) stay centered;
+  - in game, the HUD windows are placed on the screen (`[UI] Anchor`, positions in `[UI.Layout]`); by default
+    at the edges they had in the 1024x768 layout: taskbar and chat at the bottom, inventory bottom-left, minimap,
+    character stats and equipment top-right, party portraits and the shop / chest / cube / trade windows
+    top-left. Each keeps its own layout and runs in a shifted copy of the 1024x768 space (drawing, cursor, clicks,
+    tooltips), so the game's code for it is unchanged; menus and full-screen windows (map, options, save) stay
+    centered. Tooltips and the item on the cursor use the whole screen, and the escape menu and message boxes
+    dim the whole screen;
   - loading screen and splash (GDI) centered; savegame thumbnails taken from the screen center;
   - always a 32-bit display mode (`GFX32 : 0` in `Settings.cfg` is ignored).
 - **Direct3D 9Ex backend** (`src/ddraw9/`): DirectDraw 7 and Direct3D 7 implemented on Direct3D 9Ex, for the
@@ -88,7 +90,11 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |
 | UI | Scale | 0 | UI scale; 0 = as large as fits the screen height, otherwise a factor (1 = native pixels), capped at that. |
 | UI | LinearFilter | 1 | Bilinear filtering for the scaled UI instead of the game's point sampling. |
-| UI | Anchor | 1 | In game, HUD windows at the screen edges and corners; 0 = all of the UI in the centered canvas. |
+| UI | Anchor | 1 | In game, HUD windows placed by `[UI.Layout]`; 0 = all of the UI in the centered canvas. |
+| UI.Layout | Taskbar, Chat | 2048,4096 | Where a window's 1024x768 layout goes: X,Y in 0..4096 of the room the screen leaves around it (0 = left/top edge, 2048 = centered, 4096 = right/bottom edge). |
+| UI.Layout | Inventory | 0,4096 | |
+| UI.Layout | Stats, Equipment, Minimap | 4096,0 | |
+| UI.Layout | Portraits, Shops | 0,0 | Party portraits; blacksmith, merchant, combat art master, chest, cube and trade. |
 | Render | TextureBudgetMB | 0 | Texture memory the game may keep loaded; 0 = the game's value, at least 256. |
 | Render | Batch | 1 | Merge the world view's draw calls. |
 | Render | BatchNoClip | 1 | Merged draws skip Direct3D 7's software clipping; the GPU clips. |
@@ -111,6 +117,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Debug | D3DStats | 1 | Frame statistics in `SacredBild.log` (wraps the D3D device in a proxy). |
 | Debug | Profiler | 0 | Sampling profiler; writes `SacredBild-profile.txt` every 15 s. |
 | Debug | ProfilerIntervalUs | 500 | Sampling interval. |
+| Debug | UiTrace | 0 | Scroll Lock logs one UI frame's draws (`UiTrace:` lines: position, UI frame, calling game code) and popups set during the next 5 s. |
 
 ### LAN games over a VPN
 

@@ -376,6 +376,24 @@ anchored windows' classes point at thunks that enter the window's frame and shif
 isInside arguments into it (all classes are single inheritance; the slot after a vtable's last entry is the
 next one's RTTI pointer, which bounds the patch). Popups take the frame in which their text was set and are
 drawn unconfined. The cursor itself, the manager's own drawing and every other window stay in the canvas.
+Window positions come from `[UI.Layout]` (X,Y in 0..4096 of the room around the 1024x768 layout). Stats (656,0
+256x420) and equipment (656,388 256x256) form one column; by default they share the top-right frame with the
+minimap. The taskbar's level-up button ("+", embedded control at taskbar `+0x18C`, absolute 898,10 without a
+parent, set by the taskbar setup `0x6E4BA0`) lies on the stats window's close button and is covered by it while
+the window is open; it is moved within the taskbar's (unconfined) frame by the offset between the two frames.
+The taskbar draws it (`+0x14`), highlights it while flag 0x400000 is set (`0x731B40`, non-virtual, reads its rect)
+and hit-tests it through `+0x1C` / `+0x10`. The item held by the cursor is drawn by every window that takes items
+(`cInventoryEntry_render` `0x5DC3F0` with (device, 1), at `getCursorPos`); it runs unconfined. The effects list
+behind the portrait's "+" is a popup at (16, 16) with the clamp flag (`0x6D7900`): the game's way of saying top-left
+corner. Popups are drawn unconfined, and their layout (`0x6E7730`, hooked) runs without the game's clamp and
+centering (the flags' bits are cleared for the original, the children are laid out afterwards): a popup the game
+would push against an edge of its 1024x768 screen goes against that edge of the real screen (in the popup's
+frame), centered ones go to the screen center. Untextured translucent black quads over the whole 1024x768 screen
+are drawn over the whole screen: the escape menu's background (`0x6BB030`, 0x6F000000) and the dimmed background
+of message boxes (windows with flag 0x800, `cUI_Control2_render`, 0x9F000000). The stats window's close button is an embedded control at `+0x210` named `UI_STAT_BTN_BASE`
+(stats-relative 242,10, parent set); the game flags controls of that name with 0x20000 on level-up (`0x57EEF3`), and
+the stats window's show (`0x6A5C60`) messages them as well. `[Debug] UiTrace` logs a frame's UI draws with their frame
+and the calling code (a stack scan for return addresses into sacred.exe) for finding the rest.
 Known gaps: the tutorial hints point at the 1024x768 positions; the party arrows and the cinematic bars stay in
 the canvas.
 

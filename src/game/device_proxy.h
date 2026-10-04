@@ -124,6 +124,11 @@ private:
 
     // Copies pretransformed vertices into the UI frame; false if all of them land outside a confined frame.
     bool mapToCanvas(DWORD fvf, const void* verts, DWORD count, const void*& mapped);
+    // The mapped quad is an untextured translucent black one over the whole 1024x768 screen, the dimmed background
+    // of the escape menu and of message boxes (windows with flag 0x800): draws it over the whole screen instead;
+    // false if it is something else.
+    bool drawScreenDim(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, DWORD flags, HRESULT& hr);
+    void traceUiDraw(const char* what, DWORD count);
     // Clips an axis-aligned 4-vertex quad (strip/fan) to the UI frame in place; false if it can't.
     bool clipQuad(DWORD fvf, uint8_t* verts);
     // Mapped into the UI frame; clamped to the frame, or the screen if unconfined (or `confined` is false).

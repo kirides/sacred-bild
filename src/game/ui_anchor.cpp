@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <format>
 #include <iterator>
 #include <mutex>
 
@@ -23,31 +24,31 @@ namespace
         return *reinterpret_cast<T*>(reinterpret_cast<uint8_t*>(obj) + offset);
     }
 
-    enum Edge { Low = 0, Center = 1, High = 2 };     // left/top, center, right/bottom
-
     struct Anchor
     {
         uintptr_t window;       // UiManager member
-        Edge horizontal, vertical;
+        Config::UiPosition Config::*position;   // [UI.Layout]
         bool render2;           // draws through UiWindowSlot::render2 (device, ?, ?)
+        bool confine = true;    // clip to the frame's 1024x768 rect
     };
 
-    // Where each window sits in the 1024x768 layout. The shop windows (top-left) and the inventory (bottom-left)
-    // are used together; each keeps its own corner.
-    constexpr Anchor kAnchors[] = {
-        {UiManager::taskbar, Center, High, false},
-        {UiManager::console, Center, High, false},
-        {UiManager::inventory, Low, High, false},
-        {UiManager::equipment, High, High, false},
-        {UiManager::minimap, High, Low, false},
-        {UiManager::stats, High, Low, false},
-        {UiManager::netPortraits, Low, Low, true},
-        {UiManager::blacksmith, Low, Low, true},
-        {UiManager::merchant, Low, Low, true},
-        {UiManager::master, Low, Low, false},
-        {UiManager::chest, Low, Low, false},
-        {UiManager::cube, Low, Low, false},
-        {UiManager::trade, Low, Low, false},
+    // The in-game windows placed by [UI.Layout]. Defaults: the corners and edges they have in the 1024x768 layout;
+    // stats and equipment form one column (656,0 .. 912,644) next to the minimap and share its corner.
+    // The taskbar is not confined: its level-up button moves to the stats window's place (moveLevelUpButton).
+    const Anchor kAnchors[] = {
+        {UiManager::taskbar, &Config::uiTaskbar, false, false},
+        {UiManager::console, &Config::uiChat, false},
+        {UiManager::inventory, &Config::uiInventory, false},
+        {UiManager::minimap, &Config::uiMinimap, false},
+        {UiManager::stats, &Config::uiStats, false},
+        {UiManager::equipment, &Config::uiEquipment, false},
+        {UiManager::netPortraits, &Config::uiPortraits, true},
+        {UiManager::blacksmith, &Config::uiShops, true},
+        {UiManager::merchant, &Config::uiShops, true},
+        {UiManager::master, &Config::uiShops, false},
+        {UiManager::chest, &Config::uiShops, false},
+        {UiManager::cube, &Config::uiShops, false},
+        {UiManager::trade, &Config::uiShops, false},
     };
     Frame g_frames[std::size(kAnchors)];
 
@@ -64,7 +65,9 @@ namespace
     std::mutex g_patchMutex;
     uintptr_t g_codeBegin = 0, g_codeEnd = 0;
 
-    // Popups take the frame of the code that set their text; those set in the canvas are not listed.
+    // Popups take the frame of the code that set their text (those set in the canvas are not listed) and are drawn
+    // unconfined: their layout keeps them on the whole screen instead of the 1024x768 rect.
+    void* g_popupVtable = nullptr;
     struct PopupFrame
     {
         void* popup;
@@ -76,9 +79,12 @@ namespace
 
     using CreateGameWindowsFn = void(__fastcall*)(void* manager);
     using SetTextFn = uint32_t(__fastcall*)(void* self, void* edx, uint32_t a, uint32_t b, uint32_t c);
+    using LayoutFn = void(__fastcall*)(void* window);
     CreateGameWindowsFn g_origCreateGameWindows = nullptr;
     SetTextFn g_origSetText = nullptr;
     SetTextFn g_origSetTextId = nullptr;
+    LayoutFn g_origPopupLayout = nullptr;
+    LayoutFn g_layoutChildren = nullptr;
 
     void* original(void* self, uintptr_t slot)
     {
@@ -94,7 +100,8 @@ namespace
         return nullptr;     // unreachable: only patched vtables lead here
     }
 
-    bool frameOf(void* self, Frame& out)
+    // The frame `self` runs in; `what` names it for UiTrace (the UiManager member, or 1 for a popup).
+    bool frameOf(void* self, Frame& out, uintptr_t* what = nullptr)
     {
         if (void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager))
         {
@@ -103,22 +110,36 @@ namespace
                 if (member<void*>(manager, kAnchors[i].window) == self)
                 {
                     out = g_frames[i];
+                    if (what) *what = kAnchors[i].window;
                     return true;
                 }
             }
         }
+        if (*static_cast<void**>(self) != g_popupVtable)
+        {
+            return false;
+        }
+        out = {0.0f, 0.0f, false};
         AcquireSRWLockShared(&g_popupLock);
-        bool found = false;
-        for (size_t i = 0; i < g_popupCount && !found; ++i)
+        for (size_t i = 0; i < g_popupCount; ++i)
         {
             if (g_popups[i].popup == self)
             {
                 out = g_popups[i].frame;
-                found = true;
+                break;
             }
         }
         ReleaseSRWLockShared(&g_popupLock);
-        return found;
+        if (what) *what = 1;
+        return true;
+    }
+
+    void traceRender(uintptr_t what, const char* slot)
+    {
+        if (UiCanvas::tracing())
+        {
+            UiCanvas::trace(what == 1 ? std::format("popup {}", slot) : std::format("window +{:x} {}", what, slot));
+        }
     }
 
     // Coordinates of the calling thread's frame, seen from `to`.
@@ -177,11 +198,13 @@ namespace
     {
         const auto orig = reinterpret_cast<RenderFn>(original(self, UiWindowSlot::render));
         Frame frame;
-        if (!frameOf(self, frame))
+        uintptr_t what = 0;
+        if (!frameOf(self, frame, &what))
         {
             return orig(self, edx, device);
         }
         UiCanvas::FrameScope scope{frame};
+        traceRender(what, "render");
         return orig(self, edx, device);
     }
 
@@ -214,11 +237,13 @@ namespace
     {
         const auto orig = reinterpret_cast<Render2Fn>(original(self, UiWindowSlot::render2));
         Frame frame;
-        if (!frameOf(self, frame))
+        uintptr_t what = 0;
+        if (!frameOf(self, frame, &what))
         {
             return orig(self, edx, device, a, b);
         }
         UiCanvas::FrameScope scope{frame};
+        traceRender(what, "render2");
         return orig(self, edx, device, a, b);
     }
 
@@ -276,6 +301,43 @@ namespace
         LOG("UI anchor: vtable {} ({} slots) wrapped in {} places", static_cast<void*>(table), slots, count);
     }
 
+    const Frame* anchorFrame(uintptr_t window)
+    {
+        for (size_t i = 0; i < std::size(kAnchors); ++i)
+        {
+            if (kAnchors[i].window == window)
+            {
+                return &g_frames[i];
+            }
+        }
+        return nullptr;
+    }
+
+    // The taskbar's level-up button lies on the stats window's close button (both absolute 898, 10) and is meant to
+    // be covered by it. Moved within the taskbar's frame to where the stats frame puts that spot, the taskbar draws,
+    // highlights and hit-tests it there. Only a button still at its original position is moved (createGameWindows
+    // runs again for every game).
+    void moveLevelUpButton(void* manager)
+    {
+        void* taskbar = member<void*>(manager, UiManager::taskbar);
+        const Frame* from = anchorFrame(UiManager::taskbar);
+        const Frame* to = anchorFrame(UiManager::stats);
+        if (!taskbar || !from || !to)
+        {
+            return;
+        }
+        void* button = static_cast<uint8_t*>(taskbar) + Taskbar::levelUpButton;
+        auto& x = member<int>(button, UiControl::x);
+        auto& y = member<int>(button, UiControl::y);
+        if (x != Taskbar::levelUpX || y != Taskbar::levelUpY)
+        {
+            return;
+        }
+        x += static_cast<int>(std::lround(to->x - from->x));
+        y += static_cast<int>(std::lround(to->y - from->y));
+        LOG("UI anchor: taskbar level-up button moved to {},{} in the taskbar's frame", x, y);
+    }
+
     void __fastcall hookCreateGameWindows(void* manager)
     {
         g_origCreateGameWindows(manager);
@@ -286,15 +348,26 @@ namespace
                 wrap(window, a.render2);
             }
         }
+        moveLevelUpButton(manager);
+        // The popups exist since the manager's constructor.
+        for (auto** p = member<void**>(manager, UiManager::popupsBegin); p != member<void**>(manager, UiManager::popupsEnd); ++p)
+        {
+            if (*p)
+            {
+                g_popupVtable = *static_cast<void**>(*p);
+                wrap(*p, false);
+                break;
+            }
+        }
     }
 
     void notePopup(void* popup)
     {
         const Frame current = UiCanvas::frame();
         const bool canvas = current.x == 0.0f && current.y == 0.0f;
-        if (!canvas)
+        if (UiCanvas::tracingPopups())
         {
-            wrap(popup, false);
+            UiCanvas::trace(std::format("popup {} text set", popup));
         }
         AcquireSRWLockExclusive(&g_popupLock);
         size_t i = 0;
@@ -330,6 +403,54 @@ namespace
         return g_origSetTextId(self, edx, a, b, c);
     }
 
+    // The game keeps popups inside the 1024x768 screen (or centers them on it); keep them inside the whole screen.
+    // The layout runs in the popup's render, in the popup's (unconfined) frame; popups drawn before the game windows
+    // exist (menus) are still confined to the canvas and keep the game's layout.
+    void __fastcall hookPopupLayout(void* popup)
+    {
+        if (UiCanvas::frame().confine)
+        {
+            g_origPopupLayout(popup);
+            return;
+        }
+        auto& flags = member<uint32_t>(popup, Popup::flags);
+        const uint32_t own = Popup::clampToScreen | Popup::centerOnScreen | Popup::keepChildren;
+        const uint32_t saved = flags;
+        flags = (saved & ~(Popup::clampToScreen | Popup::centerOnScreen)) | Popup::keepChildren;
+        g_origPopupLayout(popup);
+        auto& x = member<int>(popup, UiControl::x);
+        auto& y = member<int>(popup, UiControl::y);
+        const int w = member<int16_t>(popup, UiControl::width), h = member<int16_t>(popup, UiControl::height);
+        const UiCanvas::Bounds screen = UiCanvas::screenBounds();
+        const int left = static_cast<int>(std::ceil(screen.left)), top = static_cast<int>(std::ceil(screen.top));
+        const int right = static_cast<int>(std::floor(screen.right)), bottom = static_cast<int>(std::floor(screen.bottom));
+        if (saved & Popup::clampToScreen)
+        {
+            // Where the game would push the popup against an edge of its 1024x768 screen (the effects list is
+            // placed at 16,16 to sit in the top-left corner), it goes against that edge of the real screen.
+            if (x < 16) x = left + 16;
+            else if (x + w + 16 > 1024) x = right - 32 - w;
+            if (y < 16) y = top + 16;
+            else if (y + h + 16 > 768) y = bottom - 32 - h;
+            x = std::max(std::min(x, right - 32 - w), left + 16);
+            y = std::max(std::min(y, bottom - 32 - h), top + 16);
+        }
+        if (saved & Popup::centerOnScreen)
+        {
+            x = (left + right) / 2 - w / 2;
+            y = (top + bottom) / 2 - h / 2;
+        }
+        flags = (flags & ~own) | (saved & own);
+        if (UiCanvas::tracingPopups())
+        {
+            UiCanvas::trace(std::format("popup {} laid out at {},{} size {}x{} flags {:x}", popup, x, y, w, h, saved));
+        }
+        if (!(saved & Popup::keepChildren))
+        {
+            g_layoutChildren(popup);
+        }
+    }
+
     void findCode()
     {
         const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
@@ -353,7 +474,7 @@ void UiAnchor::install()
     {
         return;
     }
-    const Frame left = UiCanvas::anchored(Low, Low), right = UiCanvas::anchored(High, High);
+    const Frame left = UiCanvas::placed(0.0f, 0.0f), right = UiCanvas::placed(1.0f, 1.0f);
     if (std::fabs(left.x) < 0.5f && std::fabs(left.y) < 0.5f && std::fabs(right.x) < 0.5f && std::fabs(right.y) < 0.5f)
     {
         LOG("UI anchor: the canvas covers the screen, nothing to move");
@@ -361,7 +482,9 @@ void UiAnchor::install()
     }
     for (size_t i = 0; i < std::size(kAnchors); ++i)
     {
-        g_frames[i] = UiCanvas::anchored(kAnchors[i].horizontal, kAnchors[i].vertical);
+        const Config::UiPosition& pos = g_config.*kAnchors[i].position;
+        g_frames[i] = UiCanvas::placed(pos.x / 4096.0f, pos.y / 4096.0f);
+        g_frames[i].confine = kAnchors[i].confine;
     }
     LOG("UI anchor: frames reach {:.1f},{:.1f} .. {:.1f},{:.1f} beyond the canvas", left.x, left.y, right.x, right.y);
     findCode();
@@ -369,4 +492,6 @@ void UiAnchor::install()
         "cUI_Manager::createGameWindows");
     Patch::hook(g_origSetText, Addr::cUI_Popup_setText, &hookSetText, "cUI_Popup::setText");
     Patch::hook(g_origSetTextId, Addr::cUI_Popup_setTextId, &hookSetTextId, "cUI_Popup::setTextId");
+    g_layoutChildren = reinterpret_cast<LayoutFn>(Addr::cUI_Window2_layoutChildren);
+    Patch::hook(g_origPopupLayout, Addr::cUI_Popup_layout, &hookPopupLayout, "cUI_Popup::layout");
 }

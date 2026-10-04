@@ -415,6 +415,52 @@ bool DeviceProxy::mapToCanvas(DWORD fvf, const void* verts, DWORD count, const v
     return !confine || maxX > place.clipLeft && minX < place.clipRight && maxY > place.clipTop && minY < place.clipBottom;
 }
 
+bool DeviceProxy::drawScreenDim(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, DWORD flags, HRESULT& hr)
+{
+    if (m_texture0 || count != 4 || !(fvf & D3DFVF_DIFFUSE) ||
+        m_virtMinX > 0.5f || m_virtMinY > 0.5f || m_virtMaxX < 1022.5f || m_virtMaxY < 766.5f)
+    {
+        return false;
+    }
+    const UINT stride = Fvf::stride(fvf);
+    const UINT diffuse = 16 + ((fvf & D3DFVF_RESERVED1) ? 4 : 0);
+    for (DWORD i = 0; i < count; ++i)
+    {
+        DWORD color;
+        std::memcpy(&color, m_scratch.data() + size_t(i) * stride + diffuse, sizeof(color));
+        if ((color & 0xFFFFFF) != 0 || (color >> 24) == 0xFF)
+        {
+            return false;
+        }
+    }
+    const UiCanvas::Placement place = UiCanvas::placement();
+    const float midX = place.originX + 512.0f * place.scale, midY = place.originY + 384.0f * place.scale;
+    const float l = static_cast<float>(m_savedViewport.dwX), t = static_cast<float>(m_savedViewport.dwY);
+    const float r = l + m_savedViewport.dwWidth, b = t + m_savedViewport.dwHeight;
+    for (DWORD i = 0; i < count; ++i)
+    {
+        auto* p = reinterpret_cast<float*>(m_scratch.data() + size_t(i) * stride);
+        p[0] = p[0] < midX ? l : r;
+        p[1] = p[1] < midY ? t : b;
+    }
+    D3DVIEWPORT7 restore;
+    m_real->GetViewport(&restore);
+    m_real->SetViewport(&m_savedViewport);
+    D3DStats::count(CSubmit);
+    {
+        Scope s{TDraw};
+        hr = m_real->DrawPrimitive(type, fvf, m_scratch.data(), count, flags);
+    }
+    m_real->SetViewport(&restore);
+    return true;
+}
+
+void DeviceProxy::traceUiDraw(const char* what, DWORD count)
+{
+    UiCanvas::trace(std::format("{} {} vertices {:.0f},{:.0f} .. {:.0f},{:.0f} texture {}", what, count, m_virtMinX,
+        m_virtMinY, m_virtMaxX, m_virtMaxY, static_cast<void*>(m_texture0)));
+}
+
 bool DeviceProxy::clipQuad(DWORD fvf, uint8_t* verts)
 {
     const UINT texOffset = Fvf::texCoordOffset(fvf, 0);
@@ -767,9 +813,19 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
     {
         m_site = _ReturnAddress();
         const void* mapped = nullptr;
-        if (!mapToCanvas(fvf, verts, count, mapped))
+        const bool visible = mapToCanvas(fvf, verts, count, mapped);
+        if (UiCanvas::tracing())
+        {
+            traceUiDraw(visible ? "DrawPrimitive" : "DrawPrimitive (culled)", count);
+        }
+        if (!visible)
         {
             return D3D_OK;
+        }
+        HRESULT dimmed;
+        if (quad && drawScreenDim(type, fvf, count, flags, dimmed))
+        {
+            return dimmed;
         }
         if (quad && UiCanvas::frame().confine)
         {
@@ -823,7 +879,12 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
     {
         m_site = _ReturnAddress();
         const void* mapped = nullptr;
-        if (!mapToCanvas(fvf, verts, vertCount, mapped))
+        const bool visible = mapToCanvas(fvf, verts, vertCount, mapped);
+        if (UiCanvas::tracing())
+        {
+            traceUiDraw(visible ? "DrawIndexedPrimitive" : "DrawIndexedPrimitive (culled)", vertCount);
+        }
+        if (!visible)
         {
             return D3D_OK;
         }

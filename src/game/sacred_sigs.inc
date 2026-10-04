@@ -113,6 +113,9 @@ static const Sig::Entry kAddressSigs[] = {
     {"cUI_Manager_createGameWindows", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 83 EC 08 55 56 8B F1", 0, Sig::Take::Match, &Sacred::Addr::cUI_Manager_createGameWindows}, // 007593D0, 00759AF0
     {"cUI_Popup_setText", "8B 44 24 04 53 55 8B E9 56 57 89 85 74 21 00 00 8D 85 8E 21 00 00 BA 04 00 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Popup_setText}, // 006E6AE0, 006E6EA0
     {"cUI_Popup_setTextId", "53 55 56 57 8B 7C 24 18 8B F1 89 BE 78 21 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Popup_setTextId}, // 006E6BF0, 006E6FB0
+    {"cUI_Popup_layout", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 74 53 55 56 8B F1", 0, Sig::Take::Match, &Sacred::Addr::cUI_Popup_layout}, // 006E7730, 006E7AF0
+    {"cInventoryEntry_render", "81 EC 54 02 00 00 53 55 56 8B E9 57", 0, Sig::Take::Match, &Sacred::Addr::cInventoryEntry_render}, // 005DC3F0, 005DC430
+    {"cUI_Window2_layoutChildren", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 4C 53 55 8B D9", 0, Sig::Take::Match, &Sacred::Addr::cUI_Window2_layoutChildren}, // 007273C0, 00727B30
     {"g_pTextureManager", "74 1C 85 C0 75 02 8B C5 8B 0D ?? ?? ?? ?? 6A 00", 10, Sig::Take::Abs32, &Sacred::Addr::g_pTextureManager}, // 013E57B8, 013E7838
     {"cTextureManager_init", "83 EC 08 53 55 8B E9 56 8B 4D 04 57", 0, Sig::Take::Match, &Sacred::Addr::cTextureManager_init}, // 0065EA20, 0065E7A0
     {"cEngine_renderThreadRun", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 60 03 00 00", 0, Sig::Take::Match, &Sacred::Addr::cEngine_renderThreadRun}, // 0060E3F0, 0060E350

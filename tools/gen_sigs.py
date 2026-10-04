@@ -60,6 +60,9 @@ SACRED = [
     ('cUI_Manager_createGameWindows', 0x007593D0, 'func'),
     ('cUI_Popup_setText', 0x006E6AE0, 'func'),
     ('cUI_Popup_setTextId', 0x006E6BF0, 'func'),
+    ('cUI_Popup_layout', 0x006E7730, 'func'),
+    ('cInventoryEntry_render', 0x005DC3F0, 'func'),
+    ('cUI_Window2_layoutChildren', 0x007273C0, 'func'),
     # textures
     ('g_pTextureManager', 0x013E57B8, 'data'),
     ('cTextureManager_init', 0x0065EA20, 'func'),

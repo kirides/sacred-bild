@@ -55,6 +55,14 @@ namespace Sacred::Addr
     // centers it on x/y and clamps it into 16..1008 x 16..752 before drawing.
     inline uintptr_t cUI_Popup_setText{};               // DE 006E6AE0; thiscall (?, const wstring*, bool)
     inline uintptr_t cUI_Popup_setTextId{};             // DE 006E6BF0; thiscall (?, text id, bool)
+    // The layout: sizes the popup to its text; unless flags (+0x154) have 2 it centers the popup on x/y; with 8 it
+    // clamps it into 16..1008 x 16..752 (a popup that would leave the 1024x768 screen sticks to its edge); with 0x20
+    // it centers it on the screen (512, 384); then clears 0x40 and, unless 0x200, lays out the children.
+    inline uintptr_t cUI_Popup_layout{};                // DE 006E7730; fastcall (popup)
+    inline uintptr_t cUI_Window2_layoutChildren{};      // DE 007273C0; fastcall (window)
+    // Draws the item held by the cursor at the cursor; every window that takes items (inventory, chest, cube,
+    // trade, merchant, blacksmith) calls it from its render with (device, 1).
+    inline uintptr_t cInventoryEntry_render{};          // DE 005DC3F0; thiscall (device, short)
 
     // UI-side reads of the cursor: cMouse_instance() followed by reads of +4/+8 only, and the calls of cMouse::getX
     // (DE 006559E0), getY (006559F0) and getCursorPos. SacredBild gives them the cursor in the current UI frame.
@@ -262,6 +270,25 @@ namespace Sacred::UiWindowSlot
     constexpr uintptr_t isInside = 0x1C;     // (x, y) -> bool
     constexpr uintptr_t show = 0x24;         // (bool)
     constexpr uintptr_t render2 = 0x44;      // (device, ?, ?): blacksmith, merchant, net portraits draw here
+}
+
+// cUI_Taskbar2 members.
+namespace Sacred::Taskbar
+{
+    // Embedded button ("+", opens the character stats; blinks with flag 0x400000 while points are unspent). Placed at
+    // the absolute position (898, 10) of the stats window's close button, which covers it while the window is open.
+    constexpr uintptr_t levelUpButton = 0x18C;
+    constexpr int levelUpX = 898;
+    constexpr int levelUpY = 10;
+}
+
+// Popup (tooltip) window: a cUI_Window2 with its own flags.
+namespace Sacred::Popup
+{
+    constexpr uintptr_t flags = 0x154;
+    constexpr uint32_t clampToScreen = 0x08;    // layout keeps it 16 px inside the 1024x768 screen
+    constexpr uint32_t centerOnScreen = 0x20;   // layout centers it on (512, 384)
+    constexpr uint32_t keepChildren = 0x200;    // layout leaves the children where they are
 }
 
 // cEvent member offsets (mouse button events: cEventMouseDown_vtable / cEventMouseUp_vtable).

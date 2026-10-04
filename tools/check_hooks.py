@@ -51,6 +51,9 @@ HOOKS = {
     0x007593D0: ('cUI_Manager::createGameWindows', 0),
     0x006E6AE0: ('cUI_Popup::setText', 3),
     0x006E6BF0: ('cUI_Popup::setTextId', 3),
+    0x006E7730: ('cUI_Popup::layout (fastcall)', 0),
+    0x005DC3F0: ('cInventoryEntry::render', 2),
+    0x007273C0: ('cUI_Window2::layoutChildren (called, fastcall)', 0),
     # ui_anchor.cpp: vtable slots of the anchored windows and popups (receiveEvent 1, render 1, isInside 2,
     # show 1, render2 3 arguments)
     **{a: (f'{n} +0x10 receiveEvent', 1) for n, a in (

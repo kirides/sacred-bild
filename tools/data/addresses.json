@@ -448,6 +448,18 @@
    "451BBE74": "006E6BF0",
    "452F85C7": "006E6FB0"
   },
+  "cUI_Popup_layout": {
+   "451BBE74": "006E7730",
+   "452F85C7": "006E7AF0"
+  },
+  "cInventoryEntry_render": {
+   "451BBE74": "005DC3F0",
+   "452F85C7": "005DC430"
+  },
+  "cUI_Window2_layoutChildren": {
+   "451BBE74": "007273C0",
+   "452F85C7": "00727B30"
+  },
   "g_pTextureManager": {
    "451BBE74": "013E57B8",
    "452F85C7": "013E7838"

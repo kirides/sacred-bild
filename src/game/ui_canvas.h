@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 
 // The game's UI keeps running in its native 1024x768 space: it is drawn into a centered (optionally scaled)
 // canvas and the cursor is mapped into that space. World code keeps physical screen coordinates.
@@ -36,8 +37,9 @@ namespace UiCanvas
         bool operator==(const Frame&) const = default;
     };
 
-    // Frame offset that puts the 1024x768 layout against the screen's left/top (0), center (1) or right/bottom (2).
-    Frame anchored(int horizontal, int vertical);
+    // Frame that puts the 1024x768 layout at x, y (0..1) of the room the screen leaves around it: 0 against the
+    // left/top edge, 0.5 centered, 1 against the right/bottom edge.
+    Frame placed(float x, float y);
 
     // The calling thread's frame and where it lies on the screen (physical pixels). `clip` is the frame's rect if it
     // is confined, else the screen.
@@ -48,6 +50,19 @@ namespace UiCanvas
         float clipLeft, clipTop, clipRight, clipBottom;
     };
     Placement placement();
+
+    // The screen in the current frame's coordinates.
+    struct Bounds
+    {
+        float left, top, right, bottom;
+    };
+    Bounds screenBounds();
+
+    // [Debug] UiTrace: Scroll Lock logs the next UI frame's draws (UiTrace lines with the frame and the calling
+    // sacred.exe code), and popup texts set during the next seconds.
+    bool tracing();             // the calling thread draws a traced UI frame
+    bool tracingPopups();
+    void trace(const std::string& line);
 
     // Draws and cursor reads of the calling thread go through `frame` while it lives (nests).
     class FrameScope
