@@ -12,6 +12,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"cMouse_renderCursor", "56 8B F1 57 8D 7E 24 8B CF E8 ?? ?? ?? ?? 8B 4E 64", 0, Sig::Take::Match, &Sacred::Addr::cMouse_renderCursor}, // 006555E0, 00655450
     {"renderSavePortrait", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 B8 50 52 00 00", 0, Sig::Take::Match, &Sacred::Addr::renderSavePortrait}, // 004B1740, 004B1450
     {"playVideo", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC C4 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::playVideo}, // 006A0C60, 006A0EA0
+    {"openMovieStream", "8B 44 24 0C 81 EC 0C 02 00 00 53 8B 1D ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::openMovieStream}, // 006A0B40, 006A0D80
     {"g_pUiManager", "6A 01 C7 05 ?? ?? ?? ?? 00 00 00 00 FF 50 04 C3", 4, Sig::Take::Abs32, &Sacred::Addr::g_pUiManager}, // 017ECB3C, 017EEBBC
     {"cUI_Manager_isCursorOverUi", "53 55 56 8B F1 57 F6 46 08 08 0F 84 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cUI_Manager_isCursorOverUi}, // 0075A370, 0075AA90
     {"cUI_Manager_render", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC 54 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Manager_render}, // 007587B0, 00758ED0

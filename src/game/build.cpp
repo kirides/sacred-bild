@@ -1,6 +1,7 @@
 #include "game/build.h"
 #include "game/sacred_addr.h"
 #include "game/frame_hooks.h"
+#include "game/movie.h"
 #include "game/granny_async.h"
 #include "game/map_cache.h"
 #include "game/resolution.h"
@@ -67,6 +68,7 @@ void Sacred::installHooks()
     FrameHooks::install();
     Resolution::install();
     UiCanvas::install();
+    Movie::install();
     MapCache::install();
     if (Patch::commit())
     {

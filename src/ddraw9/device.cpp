@@ -763,11 +763,11 @@ namespace DDraw9
         {
             return D3DERR_SCENE_IN_SCENE;
         }
+        // Never fails for Direct3D 9's reasons: the game's dxDriver7_beginScene retries until it succeeds.
         const HRESULT hr = m_dev->BeginScene();
         if (FAILED(hr))
         {
             logFailure("BeginScene", hr);
-            return D3DERR_SCENE_BEGIN_FAILED;
         }
         m_inScene = true;
         return D3D_OK;

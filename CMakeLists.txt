@@ -29,6 +29,7 @@ add_library(ddraw SHARED
   src/game/gameserver.cpp
   src/game/granny_async.cpp
   src/game/map_cache.cpp
+  src/game/movie.cpp
   src/game/d3d_stats.cpp
   src/game/device_proxy.cpp
   src/game/resolution.cpp
@@ -50,14 +51,14 @@ add_library(ddraw SHARED
   src/version.rc
 )
 target_include_directories(ddraw PRIVATE src ${DETOURS_INCLUDE_DIRS})
-target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} psapi dxguid gdi32 ws2_32 iphlpapi delayimp)
+target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi delayimp)
 target_compile_definitions(ddraw PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 target_compile_options(ddraw PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.
 # The map file lets tools/profile_report.py name functions in SacredBild's own samples.
 target_link_options(ddraw PRIVATE /SAFESEH:NO /MAP)
-# Winsock and the IP helper load on first use (LAN relay) instead of with the DLL.
-target_link_options(ddraw PRIVATE /DELAYLOAD:ws2_32.dll /DELAYLOAD:iphlpapi.dll)
+# Winsock and the IP helper load on first use (LAN relay), Media Foundation with the first movie.
+target_link_options(ddraw PRIVATE /DELAYLOAD:ws2_32.dll /DELAYLOAD:iphlpapi.dll /DELAYLOAD:mfplat.dll)
 set_target_properties(ddraw PROPERTIES OUTPUT_NAME "ddraw")
 
 # Optional: copy the DLL into the game folder after build (-DSACRED_GAME_DIR=...).

@@ -70,11 +70,19 @@ Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAP
   primary + back buffer; 2 = fullscreen flip chain. GDI also draws the loading screen into the back buffer's DC.
 - Granny textures: `0x401BE0` enumerates texture formats (callback `0x403F60` takes 4444, 565, 555, 1555, 888,
   8888, no FourCC) for `GrannyAllowTextureFormat`.
-- Video (`playVideo`, `0x6A0C60`, 640x480 movies): IAMMultiMediaStream gets the DirectDraw object as IDirectDraw.
-  With `COMPAT_VIDEO` the game creates a 1024x512 texture (caps TEXTURE only), hands it to
-  `IDirectDrawMediaStream::CreateSample` as IDirectDrawSurface and draws it as a TL quad after each
-  `IDirectDrawStreamSample::Update`; without, amstream creates its own surface and the game Blts it to the primary
-  (not supported by the backend).
+- Movies (`movie\*.wmv`, `0x6A14A0` picks them by id: ASCARON/PUBLISHER/OEM at startup from `initApp`, INTRO,
+  EXTRO, act1-8, ...): `openMovieStream` (`0x6A0B40`, cdecl (path, IDirectDraw*, IAMMultiMediaStream** out)) creates
+  amstream, adds the DirectDraw object as the primary video stream and the default audio renderer, opens the file.
+  `playVideo` (`0x6A0C60`, thiscall on the movie player: `+4` skip count, `+8` HWND; args IDirectDraw*, primary
+  IDirectDrawSurface*, stream, 640, 480; returns -1 when skipped). With `COMPAT_VIDEO` it creates a 1024x512 texture
+  (caps TEXTURE only), hands it to `IDirectDrawMediaStream::CreateSample` as IDirectDrawSurface and draws it as a TL
+  quad after each `IDirectDrawStreamSample::Update`; without, amstream creates its own surface and the game Blts it
+  to the primary. Its loop only peeks keyboard messages (removing them) and skips on ESC, space or a mouse button
+  (`GetAsyncKeyState`). amstream doesn't work on SacredBild's emulated DirectDraw (no picture, then the window hung
+  after skipping), so with the Direct3D 9 backend `openMovieStream` only records the file and `playVideo` plays it
+  through Media Foundation (`src/game/movie.cpp`).
+- `dxDriver7_beginScene` (`0x646F50`, ref-counted at `+0x1D8`) retries `IDirect3DDevice7::BeginScene` until it
+  succeeds: a device whose BeginScene fails hangs the calling thread.
 
 ## World view (`cWorldView`, vtables `0x89009C`, `cWorldView0` `0x8900F8`)
 

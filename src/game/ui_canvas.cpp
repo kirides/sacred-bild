@@ -27,14 +27,12 @@ namespace
     using WorldMouseFn = uint32_t(__fastcall*)(void* engine, void* edx, void* event, int flag);
     WorldMouseFn g_origWorldMouse = nullptr;
     using SavePortraitFn = uint32_t(__fastcall*)(void* self, void* edx, const char* path, int w, int h, float scale);
-    using PlayVideoFn = int(__fastcall*)(void* self, void* edx, void* a, void* b, void* c, int w, int h);
 
     GetClientCursorPosFn g_origGetClientCursorPos = nullptr;
     RenderCursorFn g_origRenderCursor = nullptr;
     MouseInstanceFn g_mouseInstance = nullptr;
     IsCursorOverUiFn g_isCursorOverUi = nullptr;
     SavePortraitFn g_origSavePortrait = nullptr;
-    PlayVideoFn g_origPlayVideo = nullptr;
 
     int mouseField(void* mouse, uintptr_t offset)
     {
@@ -61,12 +59,6 @@ namespace
     {
         UiCanvas::Suspend physical;
         return g_origSavePortrait(self, edx, path, w, h, scale);
-    }
-
-    int __fastcall hookPlayVideo(void* self, void* edx, void* a, void* b, void* c, int w, int h)
-    {
-        UiCanvas::Scope ui;
-        return g_origPlayVideo(self, edx, a, b, c, w, h);
     }
 
     // Mouse events carry the cursor as the window procedure read it (UI coordinates). The UI gets them first;
@@ -208,5 +200,4 @@ void UiCanvas::install()
     Patch::hook(g_origRenderCursor, Addr::cMouse_renderCursor, &hookRenderCursor, "cMouse::renderCursor");
     Patch::hook(g_origSavePortrait, Addr::renderSavePortrait, &hookSavePortrait, "renderSavePortrait");
     Patch::hook(g_origWorldMouse, Addr::cEngine_worldMouse, &hookWorldMouse, "cEngine::worldMouse");
-    Patch::hook(g_origPlayVideo, Addr::playVideo, &hookPlayVideo, "playVideo");
 }

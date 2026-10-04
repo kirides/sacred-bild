@@ -34,8 +34,13 @@ namespace Sacred::Addr
 
     // Renders the hero into the back buffer and reads the centered region back for the savegame JPEG.
     inline uintptr_t renderSavePortrait{};              // DE 004B1740; thiscall (path, w, h, scale), this = 0xAAAF00
-    // Plays an intro/cutscene video through DirectShow onto a fullscreen 1024x768 TL quad.
-    inline uintptr_t playVideo{};                       // DE 006A0C60; thiscall, 5 stack args
+    // Plays an intro/cutscene video through DirectShow onto a fullscreen 1024x768 TL quad. thiscall on the movie
+    // player (+4 skip count, +8 HWND): (IDirectDraw*, primary IDirectDrawSurface*, IAMMultiMediaStream*, 640, 480);
+    // returns -1 when skipped.
+    inline uintptr_t playVideo{};                       // DE 006A0C60
+    // cdecl (const char* path, IDirectDraw*, IAMMultiMediaStream** out) -> HRESULT: amstream with the DirectDraw
+    // video stream, the default audio renderer and the file opened. The caller plays it if *out is set.
+    inline uintptr_t openMovieStream{};                 // DE 006A0B40
 
     // UI framework (cUI_Control2 / cUI_Window2 / cUI_Manager)
     inline uintptr_t g_pUiManager{};                    // DE 017ECB3C; cUI_Manager*

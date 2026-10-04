@@ -31,6 +31,7 @@ SACRED = [
     ('cMouse_renderCursor', 0x006555E0, 'func'),
     ('renderSavePortrait', 0x004B1740, 'func'),
     ('playVideo', 0x006A0C60, 'func'),
+    ('openMovieStream', 0x006A0B40, 'func'),
     ('g_pUiManager', 0x017ECB3C, 'data'),
     ('cUI_Manager_isCursorOverUi', 0x0075A370, 'func'),
     ('cUI_Manager_render', 0x007587B0, 'func'),

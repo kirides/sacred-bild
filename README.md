@@ -28,6 +28,10 @@ ddraw calls through and logs which one.
   states, so device calls translate almost one to one. Frames are presented with the flip model (`VSync`,
   `MaxFrameLatency`), and the per-call layers of Windows' Direct3D 7 runtime and DDrawCompat are gone. Anything the
   backend doesn't implement is logged once (`Direct3D 9 backend: not supported: ...`).
+- **Movies through Media Foundation** (with the Direct3D 9 backend): the game decodes its WMV movies with DirectShow
+  into DirectDraw surfaces, which needs a real DirectDraw. SacredBild plays them with the Media Engine instead (audio
+  included), draws them over the whole screen with their aspect ratio kept, and keeps the window responsive; ESC,
+  space and mouse buttons skip as before.
 - **Batched world rendering**: the world view issues thousands of small sprite and ground draws per frame
   (almost 10,000 zoomed out at 1920x1200). SacredBild records state changes instead of applying them and
   merges consecutive draws that end up with the same state into one call; small textures are copied into
@@ -125,6 +129,7 @@ Read a profile with `python tools/profile_report.py <SacredBild-profile.txt>`.
   `tools/gen_res_sites.py`, which verifies every instruction and gives each site a signature and the value it
   must hold; both are checked again at startup).
 - `src/game/ui_canvas.*`: UI canvas placement, UI scopes and mouse mapping.
+- `src/game/movie.*`: intro and cutscene movies (Media Foundation player for the Direct3D 9 backend).
 - `src/game/device_proxy.*`: IDirect3DDevice7 wrapper; maps UI draws into the canvas, routes world draws
   through the batcher and instruments calls.
 - `src/render/batcher.*`, `atlas.*`: deferred device state, draw merging and the texture atlas.

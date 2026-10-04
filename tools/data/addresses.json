@@ -44,6 +44,10 @@
    "451BBE74": "006A0C60",
    "452F85C7": "006A0EA0"
   },
+  "openMovieStream": {
+   "451BBE74": "006A0B40",
+   "452F85C7": "006A0D80"
+  },
   "g_pUiManager": {
    "451BBE74": "017ECB3C",
    "452F85C7": "017EEBBC"
