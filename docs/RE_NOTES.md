@@ -342,8 +342,15 @@ Popups (tooltips, hints; class vtable `0x894B3C`, constructor `0x6E6400`) live i
 `+0x124/+0x128` and are drawn by `0x7586A0` after the windows. Callers set the popup's x/y and then its text with
 `0x6E6AE0` (string) or `0x6E6BF0` (text id), which flags a new layout (`+0x154` bit 0x40); the popup's render
 (`0x6E7300`) then lays it out (`0x6E7730`: centered on x/y, clamped into 16..1008 x 16..752, or centered on the
-screen). Show helpers: `0x75AC70` / `0x75AD10` (x, y, text, ...); `0x75ADD0` positions the tutorial hints at
-fixed 1024x768 positions; the equipment window sets x/y itself (`0x6B73A0`).
+screen). Show helpers: `0x75AC70` / `0x75AD10` (x, y, text, ...); the equipment window sets x/y itself
+(`0x6B73A0`). `cUI_Manager_showHelp` (`0x75ADD0`, thiscall (device, short screen), from `cUI_Manager_render` every
+frame) is the help screen: with manager flag `0x200` (H key) it puts the help popups (indices: uint16 array at
+manager `+0x56`) at fixed 1024x768 positions (tables at `0x17EC958..0x17ECB38`, x, y, w|h<<16; text ids from
+`0x9EA544`) and sets their texts, flags `0x201`; without it the hints "[H] shows or hides the help screen" and
+"[TAB] for the overview map" at (425, 100) and (425, 170) (manager flags `0x400`, `0x800`). The screen
+follows the open windows: 1 none (general hints), 2 inventory (entries next to the stats window, over inventory,
+equipment and taskbar), 3 blacksmith, 4 combo master (`0x6D11C0`), 5 merchant, 6 world map, 7 rune exchange at the
+master (`0x6D11A0`). Every screen's first entry is "[H] shows the help screen".
 
 The cMouse (`cMouse_instance` `0x6550F0`, a 0x70-byte singleton behind `0xCDBADC`): `+4/+8` position, `+0xC/+0x10`
 the drawn position (copied and clamped to `+0x14..+0x20` by `0x655670`), `+0x64` cursor image, `+0x68` the item
@@ -404,14 +411,16 @@ behind the portrait's "+" is a popup at (16, 16) with the clamp flag (`0x6D7900`
 corner. Popups are drawn unconfined, and their layout (`0x6E7730`, hooked) runs without the game's clamp and
 centering (the flags' bits are cleared for the original, the children are laid out afterwards): a popup the game
 would push against an edge of its 1024x768 screen goes against that edge of the real screen (in the popup's
-frame), centered ones go to the screen center. Untextured translucent black quads over the whole 1024x768 screen
+frame), centered ones go to the screen center. The help screen sets all its texts in the canvas; after
+`cUI_Manager_showHelp` each entry that explains a window gets that window's frame (a table per screen and entry), the
+inventory screen's "[H]" hint (20, 80) the screen's top-left corner, general hints and the world map's stay in the
+canvas. Untextured translucent black quads over the whole 1024x768 screen
 are drawn over the whole screen: the escape menu's background (`0x6BB030`, 0x6F000000) and the dimmed background
 of message boxes (windows with flag 0x800, `cUI_Control2_render`, 0x9F000000). The stats window's close button is an embedded control at `+0x210` named `UI_STAT_BTN_BASE`
 (stats-relative 242,10, parent set); the game flags controls of that name with 0x20000 on level-up (`0x57EEF3`), and
 the stats window's show (`0x6A5C60`) messages them as well. `[Debug] UiTrace` logs a frame's UI draws with their frame
 and the calling code (a stack scan for return addresses into sacred.exe) for finding the rest.
-Known gaps: the tutorial hints point at the 1024x768 positions; the party arrows and the cinematic bars stay in
-the canvas.
+Known gaps: the party arrows and the cinematic bars stay in the canvas.
 
 ## Things that read the back buffer
 

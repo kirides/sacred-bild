@@ -49,6 +49,11 @@ namespace Sacred::Addr
     // cUI_Window2_addChild: DE 00727120; pushes into the children vector
     // Creates the in-game windows (UiManager::taskbar ...) once; later calls return right away.
     inline uintptr_t cUI_Manager_createGameWindows{};   // DE 007593D0; fastcall (manager)
+    // The help screen (H key, UiManager::helpScreen): cUI_Manager_render calls it every frame with the screen for
+    // the open windows (1 none, 2 inventory, 3 blacksmith, 4 combo master, 5 merchant, 6 world map, 7 rune exchange).
+    // It puts the manager's help popups (UiManager::helpPopups) at fixed 1024x768 positions, each next to or over
+    // the window it explains, and sets their texts. Without the help screen it shows the [H] and [TAB] hints instead.
+    inline uintptr_t cUI_Manager_showHelp{};            // DE 0075ADD0; thiscall (device, short screen)
     // cUI_Window2_typeDescriptor: DE 009DE188
     // Popup (tooltip / hint) windows, owned by the manager (UiManager::popupsBegin). Callers set the popup's x/y
     // first, then its text with one of these, which also requests a new layout: the popup's render (vtable +0x14)
@@ -232,6 +237,9 @@ namespace Sacred::UiManager
 {
     constexpr uintptr_t flags = 0x08;        // 0x01 menus, 0x04 in game, 0x10 cinematic
     constexpr uint32_t inGame = 0x04;
+    constexpr uint32_t helpScreen = 0x200;   // the help screen (H key) is shown
+    // uint16[16]: indices into the popups (popupsBegin) used by the help screen, in the order of its entries.
+    constexpr uintptr_t helpPopups = 0x56;
     constexpr uintptr_t firstGameWindow = 0x80;
     constexpr uintptr_t lastGameWindow = 0xD8;
     // In-game windows (cUI_Window2 subclasses) and their rects in the 1024x768 layout.

@@ -77,10 +77,35 @@ namespace
     size_t g_popupCount = 0;
     SRWLOCK g_popupLock = SRWLOCK_INIT;
 
+    // The help screen's entries (cUI_Manager_showHelp, per screen in the order of UiManager::helpPopups) take the
+    // frame of the window they explain; 0 leaves an entry in the canvas (hints about the game in general).
+    constexpr uintptr_t kScreenCorner = 1;      // the screen's top-left corner
+    const uintptr_t kHelpWindows[7][9] = {
+        // 1: no window open
+        {},
+        // 2: inventory: the [H] hint at the top-left corner, stats (skills, active window, values), inventory
+        // (tabs), stats, inventory (sort button), equipment, taskbar (weapon slot, combat art slot)
+        {kScreenCorner, UiManager::stats, UiManager::stats, UiManager::inventory, UiManager::stats,
+            UiManager::inventory, UiManager::equipment, UiManager::taskbar, UiManager::taskbar},
+        // 3: blacksmith
+        {0, UiManager::blacksmith, UiManager::blacksmith, UiManager::blacksmith},
+        // 4: combo master: master, then the inventory's combo and combat art tabs
+        {0, UiManager::master, UiManager::master, UiManager::master, UiManager::inventory, UiManager::inventory},
+        // 5: merchant: merchant, inventory, the gold in the stats window
+        {0, UiManager::merchant, UiManager::merchant, UiManager::inventory, UiManager::stats},
+        // 6: world map (full screen, in the canvas)
+        {},
+        // 7: rune exchange at the combat art master
+        {0, UiManager::master, UiManager::master, UiManager::master},
+    };
+    Frame g_cornerFrame;
+
     using CreateGameWindowsFn = void(__fastcall*)(void* manager);
+    using ShowHelpFn = void(__fastcall*)(void* manager, void* edx, void* device, uint32_t screen);
     using SetTextFn = uint32_t(__fastcall*)(void* self, void* edx, uint32_t a, uint32_t b, uint32_t c);
     using LayoutFn = void(__fastcall*)(void* window);
     CreateGameWindowsFn g_origCreateGameWindows = nullptr;
+    ShowHelpFn g_origShowHelp = nullptr;
     SetTextFn g_origSetText = nullptr;
     SetTextFn g_origSetTextId = nullptr;
     LayoutFn g_origPopupLayout = nullptr;
@@ -361,14 +386,10 @@ namespace
         }
     }
 
-    void notePopup(void* popup)
+    // Popups may reach past their window's 1024x768 rect: the frame is kept unconfined.
+    void setPopupFrame(void* popup, const Frame& frame)
     {
-        const Frame current = UiCanvas::frame();
-        const bool canvas = current.x == 0.0f && current.y == 0.0f;
-        if (UiCanvas::tracingPopups())
-        {
-            UiCanvas::trace(std::format("popup {} text set", popup));
-        }
+        const bool canvas = frame.x == 0.0f && frame.y == 0.0f;
         AcquireSRWLockExclusive(&g_popupLock);
         size_t i = 0;
         while (i < g_popupCount && g_popups[i].popup != popup)
@@ -384,11 +405,44 @@ namespace
         }
         else if (i < std::size(g_popups))
         {
-            // Popups may reach past their window's 1024x768 rect.
-            g_popups[i] = {popup, {current.x, current.y, false}};
+            g_popups[i] = {popup, {frame.x, frame.y, false}};
             g_popupCount = std::max(g_popupCount, i + 1);
         }
         ReleaseSRWLockExclusive(&g_popupLock);
+    }
+
+    void notePopup(void* popup)
+    {
+        if (UiCanvas::tracingPopups())
+        {
+            UiCanvas::trace(std::format("popup {} text set", popup));
+        }
+        setPopupFrame(popup, UiCanvas::frame());
+    }
+
+    // Runs in the canvas (the manager's own drawing), so the texts it sets leave its popups there; the entries that
+    // explain a window move to that window's frame.
+    void __fastcall hookShowHelp(void* manager, void* edx, void* device, uint32_t screen)
+    {
+        const bool help = member<uint32_t>(manager, UiManager::flags) & UiManager::helpScreen;
+        g_origShowHelp(manager, edx, device, screen);
+        const size_t index = static_cast<size_t>(static_cast<int16_t>(screen) - 1);
+        if (!help || index >= std::size(kHelpWindows))
+        {
+            return;
+        }
+        void** popups = member<void**>(manager, UiManager::popupsBegin);
+        const size_t count = member<void**>(manager, UiManager::popupsEnd) - popups;
+        for (size_t i = 0; i < std::size(kHelpWindows[index]); ++i)
+        {
+            const uintptr_t window = kHelpWindows[index][i];
+            const uint16_t slot = member<uint16_t>(manager, UiManager::helpPopups + 2 * i);
+            const Frame* frame = window == kScreenCorner ? &g_cornerFrame : anchorFrame(window);
+            if (window && frame && slot < count && popups[slot])
+            {
+                setPopupFrame(popups[slot], *frame);
+            }
+        }
     }
 
     uint32_t __fastcall hookSetText(void* self, void* edx, uint32_t a, uint32_t b, uint32_t c)
@@ -486,10 +540,12 @@ void UiAnchor::install()
         g_frames[i] = UiCanvas::placed(pos.x / 4096.0f, pos.y / 4096.0f);
         g_frames[i].confine = kAnchors[i].confine;
     }
+    g_cornerFrame = left;
     LOG("UI anchor: frames reach {:.1f},{:.1f} .. {:.1f},{:.1f} beyond the canvas", left.x, left.y, right.x, right.y);
     findCode();
     Patch::hook(g_origCreateGameWindows, Addr::cUI_Manager_createGameWindows, &hookCreateGameWindows,
         "cUI_Manager::createGameWindows");
+    Patch::hook(g_origShowHelp, Addr::cUI_Manager_showHelp, &hookShowHelp, "cUI_Manager::showHelp");
     Patch::hook(g_origSetText, Addr::cUI_Popup_setText, &hookSetText, "cUI_Popup::setText");
     Patch::hook(g_origSetTextId, Addr::cUI_Popup_setTextId, &hookSetTextId, "cUI_Popup::setTextId");
     g_layoutChildren = reinterpret_cast<LayoutFn>(Addr::cUI_Window2_layoutChildren);

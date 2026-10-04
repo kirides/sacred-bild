@@ -49,6 +49,7 @@ HOOKS = {
     0x006559A0: ('cMouse::getCursorPos', 2),
     # ui_anchor.cpp: hooks
     0x007593D0: ('cUI_Manager::createGameWindows', 0),
+    0x0075ADD0: ('cUI_Manager::showHelp', 2),
     0x006E6AE0: ('cUI_Popup::setText', 3),
     0x006E6BF0: ('cUI_Popup::setTextId', 3),
     0x006E7730: ('cUI_Popup::layout (fastcall)', 0),

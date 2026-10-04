@@ -58,6 +58,7 @@ SACRED = [
     *[(f'uiCursorPosCalls[{n}]', a, 'code') for n, a in enumerate((0x005DC455, 0x006ACEB4, 0x006BFF32, 0x006EA170, 0x006EA1F9))],
     ('cMouse_getCursorPos', 0x006559A0, 'func'),
     ('cUI_Manager_createGameWindows', 0x007593D0, 'func'),
+    ('cUI_Manager_showHelp', 0x0075ADD0, 'func'),
     ('cUI_Popup_setText', 0x006E6AE0, 'func'),
     ('cUI_Popup_setTextId', 0x006E6BF0, 'func'),
     ('cUI_Popup_layout', 0x006E7730, 'func'),

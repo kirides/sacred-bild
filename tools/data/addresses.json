@@ -440,6 +440,10 @@
    "451BBE74": "007593D0",
    "452F85C7": "00759AF0"
   },
+  "cUI_Manager_showHelp": {
+   "451BBE74": "0075ADD0",
+   "452F85C7": "0075B4F0"
+  },
   "cUI_Popup_setText": {
    "451BBE74": "006E6AE0",
    "452F85C7": "006E6EA0"

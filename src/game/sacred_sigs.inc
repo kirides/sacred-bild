@@ -111,6 +111,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"uiCursorPosCalls[4]", "E8 ?? ?? ?? ?? 66 8B 45 00 66 8B 0B 8D 54 24 38", 0, Sig::Take::Match, &Sacred::Addr::uiCursorPosCalls[4]}, // 006EA1F9, 006EA589
     {"cMouse_getCursorPos", "8B 41 64 85 C0 74 23 0F BF 50 02 0F BF 40 04", 0, Sig::Take::Match, &Sacred::Addr::cMouse_getCursorPos}, // 006559A0, 00655810
     {"cUI_Manager_createGameWindows", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 83 EC 08 55 56 8B F1", 0, Sig::Take::Match, &Sacred::Addr::cUI_Manager_createGameWindows}, // 007593D0, 00759AF0
+    {"cUI_Manager_showHelp", "83 EC 10 53 55 8B E9 56 57 8B 45 08", 0, Sig::Take::Match, &Sacred::Addr::cUI_Manager_showHelp}, // 0075ADD0, 0075B4F0
     {"cUI_Popup_setText", "8B 44 24 04 53 55 8B E9 56 57 89 85 74 21 00 00 8D 85 8E 21 00 00 BA 04 00 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Popup_setText}, // 006E6AE0, 006E6EA0
     {"cUI_Popup_setTextId", "53 55 56 57 8B 7C 24 18 8B F1 89 BE 78 21 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Popup_setTextId}, // 006E6BF0, 006E6FB0
     {"cUI_Popup_layout", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 74 53 55 56 8B F1", 0, Sig::Take::Match, &Sacred::Addr::cUI_Popup_layout}, // 006E7730, 006E7AF0

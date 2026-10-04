@@ -26,8 +26,8 @@ ddraw calls through and logs which one.
     character stats and equipment top-right, party portraits and the shop / chest / cube / trade windows
     top-left. Each keeps its own layout and runs in a shifted copy of the 1024x768 space (drawing, cursor, clicks,
     tooltips), so the game's code for it is unchanged; menus and full-screen windows (map, options, save) stay
-    centered. Tooltips and the item on the cursor use the whole screen, and the escape menu and message boxes
-    dim the whole screen;
+    centered. Tooltips and the item on the cursor use the whole screen, the help screen's texts (H key) stay next
+    to the windows they explain, and the escape menu and message boxes dim the whole screen;
   - loading screen (GDI) drawn into a 1024x768 surface and scaled like the menus, splash centered; savegame
     thumbnails taken from the screen center;
   - always a 32-bit display mode (`GFX32 : 0` in `Settings.cfg` is ignored).
