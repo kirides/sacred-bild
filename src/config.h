@@ -92,6 +92,8 @@ struct Config
     bool d3dStats = true;         // per-second D3D7 call counts in the log
     bool profiler = false;        // sample the render thread, dump hot spots on exit
     bool uiTrace = false;         // Scroll Lock logs one UI frame's draws with their frames and callers
+    // Movies always through the fallback (DirectShow into a system memory surface) instead of Media Foundation.
+    bool movieFallback = false;
     int profilerIntervalUs = 500;
 };
 

@@ -80,7 +80,8 @@ Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAP
   to the primary. Its loop only peeks keyboard messages (removing them) and skips on ESC, space or a mouse button
   (`GetAsyncKeyState`). amstream doesn't work on SacredBild's emulated DirectDraw (no picture, then the window hung
   after skipping), so with the Direct3D 9 backend `openMovieStream` only records the file and `playVideo` plays it
-  through Media Foundation (`src/game/movie.cpp`).
+  through Media Foundation, or through amstream on Windows' own DirectDraw (a system memory sample surface, copied
+  into a texture) where Media Foundation can't (`src/game/movie.cpp`).
 - `dxDriver7_beginScene` (`0x646F50`, ref-counted at `+0x1D8`) retries `IDirect3DDevice7::BeginScene` until it
   succeeds: a device whose BeginScene fails hangs the calling thread.
 

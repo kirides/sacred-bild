@@ -8,6 +8,7 @@
 #include "patch.h"
 
 #include <windows.h>
+#include <amstream.h>
 #include <dxgiformat.h>
 #include <mfapi.h>
 #include <mfmediaengine.h>
@@ -36,6 +37,10 @@ namespace
     // Not exported by every SDK library this links against.
     constexpr GUID kClsidWicImagingFactory = {0xcacaf262, 0x9370, 0x4615, {0xa1, 0x3b, 0x9f, 0x55, 0x39, 0xda, 0x4c, 0x0a}};
     constexpr GUID kWicPixelFormat32bppBGRA = {0x6fddc324, 0x4e03, 0x4bfe, {0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x0f}};
+    // amstream's (DEFINE_GUIDs in amstream.h / mmstream.h, in no library this links against).
+    constexpr GUID kClsidAMMultiMediaStream = {0x49c47ce5, 0x9ba4, 0x11d0, {0x82, 0x12, 0x00, 0xc0, 0x4f, 0xc3, 0x2c, 0x45}};
+    constexpr GUID kMspidPrimaryVideo = {0xa35ff56a, 0x9fda, 0x11d0, {0x8f, 0xdf, 0x00, 0xc0, 0x4f, 0xd9, 0x18, 0x9d}};
+    constexpr GUID kMspidPrimaryAudio = {0xa35ff56b, 0x9fda, 0x11d0, {0x8f, 0xdf, 0x00, 0xc0, 0x4f, 0xd9, 0x18, 0x9d}};
     // {9B1D2C64-3C1A-4E2B-8F11-7A0E5D6C4B21}: asks a stream object whether it is a MovieFile.
     constexpr GUID kMovieFileIid = {0x9b1d2c64, 0x3c1a, 0x4e2b, {0x8f, 0x11, 0x7a, 0x0e, 0x5d, 0x6c, 0x4b, 0x21}};
 
@@ -267,20 +272,38 @@ namespace
     };
     constexpr DWORD kTlFvf = D3DFVF_XYZRHW | D3DFVF_TEX1;
 
-    class Player
+    void logOnce(const char* what, HRESULT hr)
+    {
+        static bool logged = false;
+        if (!logged)
+        {
+            logged = true;
+            LOG("Movie: {} failed ({:08x})", what, static_cast<uint32_t>(hr));
+        }
+    }
+
+    // Decodes a movie for the Player: 32-bit BGRX frames, and the sound on its own.
+    class Source
     {
     public:
-        Player(IDirect3DDevice7* device, IDirectDraw7* ddraw, IDirectDrawSurface7* primary, IDirectDrawSurface7* target)
-            : m_device(device), m_ddraw(ddraw), m_primary(primary), m_target(target)
-        {
-            DDSURFACEDESC2 desc = {};
-            desc.dwSize = sizeof(desc);
-            target->GetSurfaceDesc(&desc);
-            m_screenW = desc.dwWidth;
-            m_screenH = desc.dwHeight;
-        }
+        virtual ~Source() = default;
+        virtual bool finished() = 0;
+        // False while the frame size isn't known yet.
+        virtual bool videoSize(DWORD& w, DWORD& h) = 0;
+        // Width / height of a pixel on screen.
+        virtual float pixelAspect() { return 1.0f; }
+        // Decodes the frame due now; false if there is no new one.
+        virtual bool next() = 0;
+        // Copies the frame next() decoded into `dst` (videoSize, 4 bytes per pixel).
+        virtual bool copy(uint8_t* dst, LONG pitch) = 0;
+    };
 
-        ~Player()
+    // Media Foundation's Media Engine in frame server mode (no window of its own): frames are fetched with
+    // TransferVideoFrame.
+    class MediaEngineSource final : public Source
+    {
+    public:
+        ~MediaEngineSource() override
         {
             if (m_engine)
             {
@@ -302,7 +325,6 @@ namespace
             {
                 m_events.Attach(new EngineEvents());
                 attributes->SetUnknown(MF_MEDIA_ENGINE_CALLBACK, m_events.Get());
-                // Frame server mode (no window of its own): frames are fetched with TransferVideoFrame.
                 attributes->SetUINT32(MF_MEDIA_ENGINE_VIDEO_OUTPUT_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM);
                 hr = factory->CreateInstance(0, attributes.Get(), &m_engine);
             }
@@ -328,8 +350,12 @@ namespace
             return true;
         }
 
-        bool finished() const
+        bool finished() override
         {
+            if (m_failed)
+            {
+                return true;
+            }
             if (m_events->error.load() != S_OK)
             {
                 static bool logged = false;
@@ -343,29 +369,58 @@ namespace
             return m_events->ended.load();
         }
 
-        // Fetches the frame due now, if there is a new one.
-        bool update()
+        bool videoSize(DWORD& w, DWORD& h) override
         {
-            if (!m_frame && !createFrame())
+            return SUCCEEDED(m_engine->GetNativeVideoSize(&w, &h)) && w && h;     // known once the metadata is loaded
+        }
+
+        float pixelAspect() override
+        {
+            DWORD ax = 0, ay = 0;
+            if (SUCCEEDED(m_engine->GetVideoAspectRatio(&ax, &ay)) && ax && ay)
             {
-                return false;
+                return static_cast<float>(ax) / static_cast<float>(ay);
+            }
+            return 1.0f;
+        }
+
+        bool next() override
+        {
+            if (!m_bitmap)
+            {
+                HRESULT hr = videoSize(m_w, m_h) ? S_OK : E_PENDING;
+                if (SUCCEEDED(hr))
+                {
+                    hr = m_wic->CreateBitmap(m_w, m_h, kWicPixelFormat32bppBGRA, WICBitmapCacheOnLoad, &m_bitmap);
+                }
+                if (FAILED(hr))
+                {
+                    return false;
+                }
             }
             LONGLONG pts = 0;
             if (m_engine->OnVideoStreamTick(&pts) != S_OK)
             {
                 return false;
             }
-            const RECT dst = {0, 0, static_cast<LONG>(m_videoW), static_cast<LONG>(m_videoH)};
+            const RECT dst = {0, 0, static_cast<LONG>(m_w), static_cast<LONG>(m_h)};
             const MFARGB border = {0, 0, 0, 255};
-            HRESULT hr = m_engine->TransferVideoFrame(m_bitmap.Get(), nullptr, &dst, &border);
+            const HRESULT hr = m_engine->TransferVideoFrame(m_bitmap.Get(), nullptr, &dst, &border);
             if (FAILED(hr))
             {
                 logOnce("TransferVideoFrame", hr);
+                m_failed = !m_transferred;     // never worked (e.g. Wine): let the fallback play it
                 return false;
             }
+            m_transferred = true;
+            return true;
+        }
+
+        bool copy(uint8_t* dst, LONG pitch) override
+        {
             ComPtr<IWICBitmapLock> lock;
-            const WICRect all = {0, 0, static_cast<INT>(m_videoW), static_cast<INT>(m_videoH)};
-            hr = m_bitmap->Lock(&all, WICBitmapLockRead, &lock);
+            const WICRect all = {0, 0, static_cast<INT>(m_w), static_cast<INT>(m_h)};
+            HRESULT hr = m_bitmap->Lock(&all, WICBitmapLockRead, &lock);
             UINT stride = 0, size = 0;
             BYTE* pixels = nullptr;
             if (SUCCEEDED(hr))
@@ -373,24 +428,287 @@ namespace
                 lock->GetStride(&stride);
                 hr = lock->GetDataPointer(&size, &pixels);
             }
-            DDSURFACEDESC2 desc = {};
-            desc.dwSize = sizeof(desc);
+            if (FAILED(hr))
+            {
+                logOnce("reading the frame", hr);
+                return false;
+            }
+            for (UINT y = 0; y < m_h; ++y)
+            {
+                std::memcpy(dst + size_t(y) * pitch, pixels + size_t(y) * stride, size_t(m_w) * 4);
+            }
+            return true;
+        }
+
+    private:
+        ComPtr<EngineEvents> m_events;
+        ComPtr<IMFMediaEngine> m_engine;
+        ComPtr<IWICImagingFactory> m_wic;
+        ComPtr<IWICBitmap> m_bitmap;
+        DWORD m_w = 0, m_h = 0;
+        bool m_transferred = false;
+        bool m_failed = false;
+    };
+
+    // DirectShow's multimedia streams (amstream, as the game uses them), decoding into a system memory surface of
+    // Windows' own DirectDraw: amstream doesn't work on the Direct3D 9 backend's. It plays the sound itself. For
+    // systems without the Media Engine (Windows 7, N editions) or where it can't play the file.
+    class StreamSource final : public Source
+    {
+    public:
+        ~StreamSource() override
+        {
+            if (m_stream)
+            {
+                m_stream->SetState(STREAMSTATE_STOP);
+            }
+            m_sample.Reset();
+            m_video.Reset();
+            m_stream.Reset();
+            m_surface.Reset();
+            m_ddraw.Reset();
+        }
+
+        // False if DirectShow can't play the file.
+        bool open(const std::wstring& path)
+        {
+            HRESULT hr = createDirectDraw();
             if (SUCCEEDED(hr))
             {
-                hr = m_frame->Lock(nullptr, &desc, DDLOCK_WAIT | DDLOCK_WRITEONLY, nullptr);
+                hr = CoCreateInstance(kClsidAMMultiMediaStream, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&m_stream));
             }
+            if (SUCCEEDED(hr))
+            {
+                hr = m_stream->Initialize(STREAMTYPE_READ, 0, nullptr);
+            }
+            if (SUCCEEDED(hr))
+            {
+                hr = m_stream->AddMediaStream(m_ddraw.Get(), &kMspidPrimaryVideo, 0, nullptr);
+            }
+            if (SUCCEEDED(hr) && FAILED(m_stream->AddMediaStream(nullptr, &kMspidPrimaryAudio, AMMSF_ADDDEFAULTRENDERER, nullptr)))
+            {
+                LOG("Movie: no audio renderer, playing without sound");
+            }
+            if (SUCCEEDED(hr))
+            {
+                hr = m_stream->OpenFile(path.c_str(), 0);
+            }
+            ComPtr<IMediaStream> media;
+            if (SUCCEEDED(hr))
+            {
+                hr = m_stream->GetMediaStream(kMspidPrimaryVideo, &media);
+            }
+            if (SUCCEEDED(hr))
+            {
+                hr = media.As(&m_video);
+            }
+            if (SUCCEEDED(hr))
+            {
+                hr = createSample();
+            }
+            if (SUCCEEDED(hr))
+            {
+                hr = m_stream->SetState(STREAMSTATE_RUN);
+            }
+            if (FAILED(hr))
+            {
+                LOG("Movie: DirectShow can't play it ({:08x})", static_cast<uint32_t>(hr));
+                return false;
+            }
+            return true;
+        }
+
+        bool finished() override
+        {
+            return m_ended;
+        }
+
+        bool videoSize(DWORD& w, DWORD& h) override
+        {
+            w = m_w;
+            h = m_h;
+            return true;
+        }
+
+        // Waits for the next frame, as the game's own loop does.
+        bool next() override
+        {
+            if (m_ended)
+            {
+                return false;
+            }
+            const HRESULT hr = m_sample->Update(0, nullptr, nullptr, 0);
+            if (hr != S_OK)
+            {
+                if (FAILED(hr))
+                {
+                    LOG("Movie: DirectShow playback error {:08x}", static_cast<uint32_t>(hr));
+                }
+                m_ended = true;     // MS_S_ENDOFSTREAM, or an error
+                return false;
+            }
+            return true;
+        }
+
+        bool copy(uint8_t* dst, LONG pitch) override
+        {
+            DDSURFACEDESC desc = {};
+            desc.dwSize = sizeof(desc);
+            const HRESULT hr = m_surface->Lock(nullptr, &desc, DDLOCK_WAIT | DDLOCK_READONLY, nullptr);
+            if (FAILED(hr))
+            {
+                logOnce("reading the frame", hr);
+                return false;
+            }
+            for (UINT y = 0; y < m_h; ++y)
+            {
+                std::memcpy(dst + size_t(y) * pitch, static_cast<const uint8_t*>(desc.lpSurface) + size_t(y) * desc.lPitch,
+                    size_t(m_w) * 4);
+            }
+            m_surface->Unlock(nullptr);
+            return true;
+        }
+
+    private:
+        using DirectDrawCreateFn = HRESULT(WINAPI*)(GUID*, IDirectDraw**, IUnknown*);
+
+        HRESULT createDirectDraw()
+        {
+            wchar_t dir[MAX_PATH] = {};
+            GetSystemDirectoryW(dir, MAX_PATH);
+            HMODULE module = LoadLibraryW((std::wstring(dir) + L"\\ddraw.dll").c_str());
+            auto create = module ? reinterpret_cast<DirectDrawCreateFn>(GetProcAddress(module, "DirectDrawCreate")) : nullptr;
+            if (!create)
+            {
+                return E_NOINTERFACE;
+            }
+            HRESULT hr = create(nullptr, &m_ddraw, nullptr);
+            if (SUCCEEDED(hr))
+            {
+                hr = m_ddraw->SetCooperativeLevel(nullptr, DDSCL_NORMAL);   // no primary surface, no window
+            }
+            return hr;
+        }
+
+        // A 32-bit RGB system memory surface of the video's size, as the stream's sample.
+        HRESULT createSample()
+        {
+            DDSURFACEDESC native = {};
+            native.dwSize = sizeof(native);
+            HRESULT hr = m_video->GetFormat(&native, nullptr, nullptr, nullptr);
+            if (FAILED(hr))
+            {
+                return hr;
+            }
+            m_w = native.dwWidth;
+            m_h = native.dwHeight;
+            DDSURFACEDESC desc = {};
+            desc.dwSize = sizeof(desc);
+            desc.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
+            desc.dwWidth = m_w;
+            desc.dwHeight = m_h;
+            desc.ddpfPixelFormat.dwSize = sizeof(DDPIXELFORMAT);
+            desc.ddpfPixelFormat.dwFlags = DDPF_RGB;
+            desc.ddpfPixelFormat.dwRGBBitCount = 32;
+            desc.ddpfPixelFormat.dwRBitMask = 0xFF0000;
+            desc.ddpfPixelFormat.dwGBitMask = 0xFF00;
+            desc.ddpfPixelFormat.dwBBitMask = 0xFF;
+            hr = m_video->SetFormat(&desc, nullptr);
+            if (SUCCEEDED(hr))
+            {
+                desc.dwFlags |= DDSD_CAPS;
+                desc.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
+                hr = m_ddraw->CreateSurface(&desc, &m_surface, nullptr);
+            }
+            if (SUCCEEDED(hr))
+            {
+                hr = m_video->CreateSample(m_surface.Get(), nullptr, 0, &m_sample);
+            }
+            return hr;
+        }
+
+        ComPtr<IDirectDraw> m_ddraw;
+        ComPtr<IAMMultiMediaStream> m_stream;
+        ComPtr<IDirectDrawMediaStream> m_video;
+        ComPtr<IDirectDrawSurface> m_surface;
+        ComPtr<IDirectDrawStreamSample> m_sample;
+        DWORD m_w = 0, m_h = 0;
+        bool m_ended = false;
+    };
+
+    struct Outcome
+    {
+        bool skipped = false;
+        bool quit = false;      // WM_QUIT arrived
+        int frames = 0;
+    };
+
+    // Shows a Source's frames on the game's device until it ends or the player skips.
+    class Player
+    {
+    public:
+        Player(IDirect3DDevice7* device, IDirectDraw7* ddraw, IDirectDrawSurface7* primary, IDirectDrawSurface7* target,
+            Source& source)
+            : m_device(device), m_ddraw(ddraw), m_primary(primary), m_target(target), m_source(source)
+        {
+            DDSURFACEDESC2 desc = {};
+            desc.dwSize = sizeof(desc);
+            target->GetSurfaceDesc(&desc);
+            m_screenW = desc.dwWidth;
+            m_screenH = desc.dwHeight;
+        }
+
+        Outcome run(HWND window)
+        {
+            Outcome outcome;
+            SavedState saved(m_device);
+            setupStates();
+            while (!m_source.finished())
+            {
+                if (skipPressed(window))
+                {
+                    outcome.skipped = true;
+                    break;
+                }
+                if (!pumpMessages())
+                {
+                    outcome.quit = true;
+                    break;
+                }
+                const bool fresh = update();
+                outcome.frames += fresh ? 1 : 0;
+                draw();
+                if (!fresh && !(g_config.ddrawD3D9 && g_config.vsync))
+                {
+                    Sleep(1);   // presenting doesn't wait for the display here
+                }
+            }
+            return outcome;
+        }
+
+    private:
+        // Puts the frame due now into the texture, if there is a new one.
+        bool update()
+        {
+            if (!m_frame && !createFrame())
+            {
+                return false;
+            }
+            if (!m_source.next())
+            {
+                return false;
+            }
+            DDSURFACEDESC2 desc = {};
+            desc.dwSize = sizeof(desc);
+            const HRESULT hr = m_frame->Lock(nullptr, &desc, DDLOCK_WAIT | DDLOCK_WRITEONLY, nullptr);
             if (FAILED(hr))
             {
                 logOnce("copying the frame", hr);
                 return false;
             }
-            for (UINT y = 0; y < m_videoH; ++y)
-            {
-                std::memcpy(static_cast<uint8_t*>(desc.lpSurface) + size_t(y) * desc.lPitch, pixels + size_t(y) * stride,
-                    size_t(m_videoW) * 4);
-            }
+            const bool copied = m_source.copy(static_cast<uint8_t*>(desc.lpSurface), desc.lPitch);
             m_frame->Unlock(nullptr);
-            return true;
+            return copied;
         }
 
         void draw()
@@ -402,12 +720,7 @@ namespace
             if (m_frame)
             {
                 // Fit the picture (its display aspect ratio) into the screen, centered.
-                DWORD ax = 0, ay = 0;
-                float aspect = static_cast<float>(m_videoW) / static_cast<float>(m_videoH);
-                if (SUCCEEDED(m_engine->GetVideoAspectRatio(&ax, &ay)) && ax && ay)
-                {
-                    aspect *= static_cast<float>(ax) / static_cast<float>(ay);
-                }
+                const float aspect = static_cast<float>(m_videoW) / static_cast<float>(m_videoH) * m_source.pixelAspect();
                 float w = static_cast<float>(m_screenW), h = w / aspect;
                 if (h > static_cast<float>(m_screenH))
                 {
@@ -460,22 +773,17 @@ namespace
             m_device->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
         }
 
-    private:
         bool createFrame()
         {
             DWORD w = 0, h = 0;
-            if (FAILED(m_engine->GetNativeVideoSize(&w, &h)) || !w || !h)
+            if (!m_source.videoSize(w, h))
             {
-                return false;   // not known before the metadata is loaded
+                return false;
             }
-            HRESULT hr = m_wic->CreateBitmap(w, h, kWicPixelFormat32bppBGRA, WICBitmapCacheOnLoad, &m_bitmap);
-            // A managed texture stays lockable on any DirectDraw; frames are BGRA, alpha unused.
+            // A managed texture stays lockable on any DirectDraw; frames are BGRX, alpha unused.
+            HRESULT hr = DDERR_INVALIDPIXELFORMAT;
             for (const DWORD alpha : {0u, 0xFF000000u})
             {
-                if (FAILED(hr))
-                {
-                    break;
-                }
                 DDSURFACEDESC2 desc = {};
                 desc.dwSize = sizeof(desc);
                 desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
@@ -490,20 +798,16 @@ namespace
                 desc.ddpfPixelFormat.dwGBitMask = 0xFF00;
                 desc.ddpfPixelFormat.dwBBitMask = 0xFF;
                 desc.ddpfPixelFormat.dwRGBAlphaBitMask = alpha;
-                if (SUCCEEDED(m_ddraw->CreateSurface(&desc, &m_frame, nullptr)))
+                hr = m_ddraw->CreateSurface(&desc, &m_frame, nullptr);
+                if (SUCCEEDED(hr))
                 {
                     break;
                 }
                 m_frame.Reset();
             }
-            if (SUCCEEDED(hr) && !m_frame)
-            {
-                hr = DDERR_INVALIDPIXELFORMAT;
-            }
             if (FAILED(hr))
             {
                 logOnce("creating the frame texture", hr);
-                m_frame.Reset();
                 return false;
             }
             m_videoW = w;
@@ -512,30 +816,32 @@ namespace
             return true;
         }
 
-        static void logOnce(const char* what, HRESULT hr)
-        {
-            static bool logged = false;
-            if (!logged)
-            {
-                logged = true;
-                LOG("Movie: {} failed ({:08x})", what, static_cast<uint32_t>(hr));
-            }
-        }
-
         IDirect3DDevice7* m_device;
         IDirectDraw7* m_ddraw;
         IDirectDrawSurface7* m_primary;
         IDirectDrawSurface7* m_target;
+        Source& m_source;
         DWORD m_screenW = 0, m_screenH = 0;
-        ComPtr<EngineEvents> m_events;
-        ComPtr<IMFMediaEngine> m_engine;
-        ComPtr<IWICImagingFactory> m_wic;
-        ComPtr<IWICBitmap> m_bitmap;
         ComPtr<IDirectDrawSurface7> m_frame;
         DWORD m_videoW = 0, m_videoH = 0;
     };
 
-    // Plays `file` through Media Foundation; -1 if skipped, like the game's loop.
+    // The Media Engine exists from Windows 8 on (not on N editions without the Media Feature Pack).
+    bool mediaEngineAvailable()
+    {
+        static const bool available = [] {
+            const bool found = LoadLibraryExW(L"mfmediaengine.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32) != nullptr;
+            if (!found)
+            {
+                LOG("Movie: Media Foundation's Media Engine is not available");
+            }
+            return found;
+        }();
+        return available;
+    }
+
+    // Plays `file` through Media Foundation, or through DirectShow if the Media Engine isn't there, can't open the
+    // file or never delivers a frame ([Debug] MovieFallback: always); -1 if skipped, like the game's loop.
     int play(void* self, IDirectDraw* ddraw1, IDirectDrawSurface* primary1, const MovieFile& file)
     {
         IDirect3DDevice7* device = DeviceProxy::instance();
@@ -554,44 +860,38 @@ namespace
         HWND window = self ? *reinterpret_cast<HWND*>(static_cast<uint8_t*>(self) + 8) : nullptr;
 
         const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        const bool mf = SUCCEEDED(MFStartup(MF_VERSION, MFSTARTUP_LITE));
-        bool skipped = false;
+        Outcome outcome;
+        bool done = false;
+        if (!g_config.movieFallback && mediaEngineAvailable() && SUCCEEDED(MFStartup(MF_VERSION, MFSTARTUP_LITE)))
         {
-            Player player(device, ddraw.Get(), primary.Get(), target.Get());
-            if (mf && player.open(file.path()))
             {
-                SavedState saved(device);
-                player.setupStates();
-                while (!player.finished())
+                MediaEngineSource source;
+                if (source.open(file.path()))
                 {
-                    if (skipPressed(window))
-                    {
-                        skipped = true;
-                        break;
-                    }
-                    if (!pumpMessages())
-                    {
-                        break;
-                    }
-                    const bool fresh = player.update();
-                    player.draw();
-                    if (!fresh && !(g_config.ddrawD3D9 && g_config.vsync))
-                    {
-                        Sleep(1);   // presenting doesn't wait for the display here
-                    }
+                    LOG("Movie: {} through Media Foundation", file.name());
+                    Player player(device, ddraw.Get(), primary.Get(), target.Get(), source);
+                    outcome = player.run(window);
+                    done = outcome.frames > 0 || outcome.skipped || outcome.quit;
                 }
             }
-        }
-        if (mf)
-        {
             MFShutdown();
+        }
+        if (!done)
+        {
+            StreamSource source;
+            if (source.open(file.path()))
+            {
+                LOG("Movie: {} through DirectShow (system memory surface)", file.name());
+                Player player(device, ddraw.Get(), primary.Get(), target.Get(), source);
+                outcome = player.run(window);
+            }
         }
         if (SUCCEEDED(com))
         {
             CoUninitialize();
         }
 
-        if (skipped)
+        if (outcome.skipped)
         {
             // As the game does: count the skip and wait for the key to be released, so it doesn't skip the next one.
             if (self)
@@ -605,22 +905,8 @@ namespace
             }
         }
         pumpMessages();
-        LOG("Movie: {} {}", file.name(), skipped ? "skipped" : "finished");
-        return skipped ? -1 : 0;
-    }
-
-    // The Media Engine exists from Windows 8 on (not on N editions without the Media Feature Pack).
-    bool mediaEngineAvailable()
-    {
-        static const bool available = [] {
-            const bool found = LoadLibraryExW(L"mfmediaengine.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32) != nullptr;
-            if (!found)
-            {
-                LOG("Movie: Media Foundation's Media Engine is not available");
-            }
-            return found;
-        }();
-        return available;
+        LOG("Movie: {} {}", file.name(), outcome.skipped ? "skipped" : "finished");
+        return outcome.skipped ? -1 : 0;
     }
 
     HRESULT __cdecl hookOpenStream(const char* path, IUnknown* ddraw, IUnknown** stream)
@@ -629,16 +915,11 @@ namespace
         {
             return g_origOpenStream(path, ddraw, stream);
         }
-        if (!mediaEngineAvailable())
+        if (!g_config.ddrawD3D9 && !g_config.movieFallback && !mediaEngineAvailable())
         {
-            if (!g_config.ddrawD3D9)
-            {
-                return g_origOpenStream(path, ddraw, stream);
-            }
-            *stream = nullptr;  // amstream can't decode into the Direct3D 9 backend's surfaces: no movie
-            return E_FAIL;
+            return g_origOpenStream(path, ddraw, stream);   // the game's own amstream player works on the chained ddraw
         }
-        // playVideo plays the file with Media Foundation instead of amstream.
+        // playVideo plays the file itself (Media Foundation, or the DirectShow fallback).
         char full[MAX_PATH] = {};
         if (!GetFullPathNameA(path, MAX_PATH, full, nullptr))
         {

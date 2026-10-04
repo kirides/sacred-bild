@@ -43,7 +43,9 @@ ddraw calls through and logs which one.
   decodes its WMV movies with DirectShow into DirectDraw surfaces, which needs a real DirectDraw, and its loop stops
   processing window messages. SacredBild plays them with the Media Engine instead (audio included), draws them over
   the whole screen with their aspect ratio kept, and keeps the window responsive; ESC, space and mouse buttons skip
-  as before.
+  as before. Where the Media Engine is missing (Windows 7, N editions) or can't play a movie (Wine), they are
+  decoded with the game's DirectShow streams into a system memory surface of Windows' own DirectDraw instead, and
+  drawn the same way (`[Debug] MovieFallback`).
 - **Batched world rendering**: the world view issues thousands of small sprite and ground draws per frame
   (almost 10,000 zoomed out at 1920x1200). SacredBild records state changes instead of applying them and
   merges consecutive draws that end up with the same state into one call; small textures are copied into
@@ -132,6 +134,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Debug | Profiler | 0 | Sampling profiler; writes `SacredBild-profile.txt` every 15 s. |
 | Debug | ProfilerIntervalUs | 500 | Sampling interval. |
 | Debug | UiTrace | 0 | Scroll Lock logs one UI frame's draws (`UiTrace:` lines: position, UI frame, calling game code) and popups set during the next 5 s. |
+| Debug | MovieFallback | 0 | Movies always through the fallback (DirectShow into a system memory surface), as without the Media Engine. |
 
 ### LAN games over a VPN
 
