@@ -1,0 +1,423 @@
+#include "game/gpu_skin.h"
+#include "game/d3d_stats.h"
+#include "game/granny_mesh.h"
+#include "ddraw9/skin.h"
+#include "config.h"
+#include "log.h"
+#include "patch.h"
+
+#include <intrin.h>
+#include <atomic>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
+
+namespace
+{
+    using namespace GrannyMesh;
+    namespace Skin = DDraw9::Skin;
+
+    constexpr uint32_t kInfluences = 4;
+    constexpr DWORD kFvfModel = D3DFVF_XYZ | D3DFVF_NORMAL | D3DFVF_TEX1;          // 0x112
+    constexpr DWORD kFvfModelDiffuse = kFvfModel | D3DFVF_DIFFUSE;                 // 0x152
+
+    GrannyMesh::DeformFn g_origDeform = nullptr;
+    uintptr_t g_renderReturn = 0;   // the rendering path's deform call returns here
+    bool g_active = false;
+    std::atomic<bool> g_gpuUsable{true};    // false once the backend can't skin: deforms are no longer left to it
+
+    // A Granny mesh as analysed for the shader: per vertex up to four bones (binding indices) and weights.
+    struct MeshInfo
+    {
+        // What the mesh looked like when analysed: a freed mesh's address may come back with another mesh.
+        uint32_t vertexCount = 0, bindingCount = 0;
+        const void* positions = nullptr;
+        const void* normals = nullptr;
+        const void* bindings = nullptr;
+        const void* weighted = nullptr;
+        const void* normalWeights = nullptr;
+
+        bool gpu = false;
+        std::vector<uint8_t> bones;     // kInfluences per vertex
+        std::vector<float> weights;
+
+        // Static vertex buffers, per device and texture coordinate stream (the draw supplies those).
+        struct Buffer
+        {
+            IDirect3DDevice7* device;
+            const void* uv;
+            uint32_t uvStride;
+            Skin::Mesh* mesh;
+        };
+        std::vector<Buffer> buffers;
+
+        ~MeshInfo()
+        {
+            for (Buffer& b : buffers)
+            {
+                Skin::releaseMesh(b.mesh);
+            }
+        }
+
+        bool matches(const uint8_t* mesh) const
+        {
+            return field<uint32_t>(mesh, Mesh::vertexCount) == vertexCount &&
+                field<uint32_t>(mesh, Mesh::bindingCount) == bindingCount &&
+                field<const void*>(mesh, Mesh::positions) == positions && field<const void*>(mesh, Mesh::normals) == normals &&
+                field<const void*>(mesh, Mesh::bindings) == bindings && field<const void*>(mesh, Mesh::weighted) == weighted &&
+                field<const void*>(mesh, Mesh::normalWeights) == normalWeights;
+        }
+    };
+
+    // A deform left to the GPU, until its vertices are drawn (or skinned on the CPU after all).
+    struct Pending
+    {
+        std::shared_ptr<MeshInfo> info;
+        float* positions = nullptr;     // Granny's output buffers, as the draw's streams point at them
+        float* normals = nullptr;
+        bool normalize = false;
+        std::vector<float> palette;     // kPaletteFloats per binding, for this pose
+        uint32_t paletteId = 0;
+        uint64_t serial = 0;
+        bool filled = false;            // skinned on the CPU after all
+    };
+
+    std::mutex g_mutex;
+    std::unordered_map<const uint8_t*, std::shared_ptr<MeshInfo>> g_meshes;
+    std::unordered_map<const void*, std::shared_ptr<Pending>> g_pending;    // by positions buffer
+    uint32_t g_nextPaletteId = 1;
+    uint64_t g_serial = 0;
+    uint32_t g_meshLogs = 0;
+
+    std::shared_ptr<MeshInfo> analyse(const uint8_t* mesh)
+    {
+        auto info = std::make_shared<MeshInfo>();
+        info->vertexCount = field<uint32_t>(mesh, Mesh::vertexCount);
+        info->bindingCount = field<uint32_t>(mesh, Mesh::bindingCount);
+        info->positions = field<const void*>(mesh, Mesh::positions);
+        info->normals = field<const void*>(mesh, Mesh::normals);
+        info->bindings = field<const void*>(mesh, Mesh::bindings);
+        info->weighted = field<const void*>(mesh, Mesh::weighted);
+        info->normalWeights = field<const void*>(mesh, Mesh::normalWeights);
+        const char* reason = nullptr;
+        if (!plausible(mesh) || !info->normals)
+        {
+            reason = "implausible";
+        }
+        else if (info->vertexCount > 0xFFFF)
+        {
+            reason = "too many vertices";
+        }
+        else if (info->bindingCount > Skin::kMaxBones)
+        {
+            reason = "too many bones";
+        }
+        else if (field<uint32_t>(mesh, Mesh::normalCount) != info->vertexCount)
+        {
+            reason = "normal count";
+        }
+        if (!reason)
+        {
+            Influences positions, normals;
+            uint8_t paths = 0;
+            Problems problems;
+            positionInfluences(mesh, positions, paths, problems);
+            normalInfluences(mesh, normals, paths, problems);
+            info->bones.assign(size_t(info->vertexCount) * kInfluences, 0);
+            info->weights.assign(size_t(info->vertexCount) * kInfluences, 0.0f);
+            if (problems.outOfRange || problems.tooMany)
+            {
+                reason = "influence lists";
+            }
+            for (uint32_t v = 0; !reason && v < info->vertexCount; ++v)
+            {
+                const auto& list = positions[v];
+                if (list.empty() || list.size() > kInfluences)
+                {
+                    reason = "influences per vertex";
+                }
+                else if (!sameInfluences(list, normals[v]))
+                {
+                    reason = "normals weighted unlike positions";
+                }
+                for (size_t i = 0; !reason && i < list.size(); ++i)
+                {
+                    info->bones[v * kInfluences + i] = static_cast<uint8_t>(list[i].binding);
+                    info->weights[v * kInfluences + i] = list[i].weight;
+                }
+            }
+        }
+        info->gpu = !reason;
+        if (reason && g_meshLogs < 32)
+        {
+            ++g_meshLogs;
+            LOG("GPU skinning: mesh {} ({} vertices, {} bones) stays on the CPU: {}", static_cast<const void*>(mesh),
+                info->vertexCount, info->bindingCount, reason);
+        }
+        return info;
+    }
+
+    std::shared_ptr<MeshInfo> meshInfo(const uint8_t* mesh)
+    {
+        auto it = g_meshes.find(mesh);
+        if (it != g_meshes.end() && it->second->matches(mesh))
+        {
+            return it->second;
+        }
+        if (g_meshes.size() > 4096)
+        {
+            g_meshes.clear();   // pending draws keep their own references
+        }
+        auto info = analyse(mesh);
+        g_meshes[mesh] = info;
+        return info;
+    }
+
+    // Vertex v of a mesh in the pose of `palette`, with its normal if `normal` is set.
+    void skinOne(const MeshInfo& info, const float* palette, uint32_t v, float* position, float* normal)
+    {
+        const float* p = static_cast<const float*>(info.positions) + size_t(v) * 3;
+        const float* n = static_cast<const float*>(info.normals) + size_t(v) * 3;
+        float pos[3] = {}, nrm[3] = {};
+        for (uint32_t i = 0; i < kInfluences; ++i)
+        {
+            const float w = info.weights[size_t(v) * kInfluences + i];
+            if (w == 0.0f)
+            {
+                continue;
+            }
+            const float* m = palette + size_t(info.bones[size_t(v) * kInfluences + i]) * kPaletteFloats;
+            for (int r = 0; r < 3; ++r)
+            {
+                pos[r] += w * (m[r * 3] * p[0] + m[r * 3 + 1] * p[1] + m[r * 3 + 2] * p[2] + m[9 + r]);
+                nrm[r] += w * (m[r * 3] * n[0] + m[r * 3 + 1] * n[1] + m[r * 3 + 2] * n[2]);
+            }
+        }
+        std::memcpy(position, pos, sizeof(pos));
+        if (normal)
+        {
+            std::memcpy(normal, nrm, sizeof(nrm));
+        }
+    }
+
+    // The vertices cGranny_render reads for a piece's bounding box: every step-th of the mesh's vertices.
+    void boundsSamples(const Pending& p)
+    {
+        const uint32_t count = p.info->vertexCount;
+        const uint32_t step = count < 12 ? 1 : count < 23 ? 2 : count < 34 ? 3 : count / 11;
+        for (uint32_t v = 0; v < count; v += step)
+        {
+            skinOne(*p.info, p.palette.data(), v, p.positions + size_t(v) * 3, nullptr);
+        }
+    }
+
+    // All of the vertices on the CPU, as Granny would have skinned them.
+    void fill(Pending& p)
+    {
+        if (p.filled)
+        {
+            return;
+        }
+        p.filled = true;
+        for (uint32_t v = 0; v < p.info->vertexCount; ++v)
+        {
+            float* n = p.normals + size_t(v) * 3;
+            skinOne(*p.info, p.palette.data(), v, p.positions + size_t(v) * 3, n);
+            if (p.normalize)
+            {
+                const float inv = 1.0f / std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+                n[0] *= inv;
+                n[1] *= inv;
+                n[2] *= inv;
+            }
+        }
+    }
+
+    void __fastcall hookDeform(uint8_t* mesh, void* edx, void* bones, uint32_t* positionsOut, uint32_t doPositions,
+        uint32_t* normalsOut, uint32_t doNormals, uint32_t normalizeNormals)
+    {
+        const bool render = reinterpret_cast<uintptr_t>(_ReturnAddress()) == g_renderReturn;
+        const bool positions = (doPositions & 0xFF) && positionsOut && positionsOut[1];
+        const bool normals = (doNormals & 0xFF) && normalsOut && normalsOut[1];
+        std::shared_ptr<MeshInfo> info;
+        if (render && positions && normals && g_gpuUsable.load(std::memory_order_relaxed))
+        {
+            std::scoped_lock lock(g_mutex);
+            info = meshInfo(mesh);
+            // Granny allocates its output buffers in a full deform; until then it has to do one.
+            if (!info->gpu || positionsOut[0] < info->vertexCount || normalsOut[0] < info->vertexCount)
+            {
+                info.reset();
+            }
+        }
+        if (!info)
+        {
+            g_origDeform(mesh, edx, bones, positionsOut, doPositions, normalsOut, doNormals, normalizeNormals);
+            if (positions)
+            {
+                std::scoped_lock lock(g_mutex);
+                g_pending.erase(reinterpret_cast<const void*>(positionsOut[1]));
+            }
+            return;
+        }
+        // Only the bones' matrices for this pose: no positions, no normals.
+        g_origDeform(mesh, edx, bones, positionsOut, 0, normalsOut, 0, normalizeNormals);
+
+        auto p = std::make_shared<Pending>();
+        p->info = info;
+        p->positions = reinterpret_cast<float*>(positionsOut[1]);
+        p->normals = reinterpret_cast<float*>(normalsOut[1]);
+        p->normalize = (normalizeNormals & 0xFF) != 0;
+        p->palette.resize(size_t(info->bindingCount) * kPaletteFloats);
+        const uint8_t* binding = field<const uint8_t*>(mesh, Mesh::bindings);
+        for (uint32_t b = 0; b < info->bindingCount; ++b, binding += Binding::size)
+        {
+            std::memcpy(&p->palette[size_t(b) * kPaletteFloats], binding + Binding::matrix, kPaletteFloats * sizeof(float));
+        }
+        boundsSamples(*p);
+        D3DStats::count(D3DStats::CSkinDeferred);
+
+        std::scoped_lock lock(g_mutex);
+        p->paletteId = g_nextPaletteId++;
+        if (g_nextPaletteId == 0)
+        {
+            g_nextPaletteId = 1;
+        }
+        p->serial = ++g_serial;
+        const void* key = p->positions;
+        g_pending[key] = std::move(p);
+        // Entries of characters that are gone: their draw always follows their deform at once.
+        if (g_pending.size() > 2048)
+        {
+            std::erase_if(g_pending, [](const auto& e) { return e.second->serial + 1024 < g_serial; });
+        }
+    }
+
+    Skin::Mesh* staticBuffer(MeshInfo& info, IDirect3DDevice7* device, const D3DDP_PTRSTRIDE& uv)
+    {
+        for (const MeshInfo::Buffer& b : info.buffers)
+        {
+            if (b.device == device && b.uv == uv.lpvData && b.uvStride == uv.dwStride)
+            {
+                return b.mesh;
+            }
+        }
+        std::vector<Skin::Vertex> vertices(info.vertexCount);
+        const auto* positions = static_cast<const float*>(info.positions);
+        const auto* normals = static_cast<const float*>(info.normals);
+        const auto* uvs = static_cast<const uint8_t*>(uv.lpvData);
+        for (uint32_t v = 0; v < info.vertexCount; ++v)
+        {
+            Skin::Vertex& out = vertices[v];
+            std::memcpy(out.position, positions + size_t(v) * 3, sizeof(out.position));
+            std::memcpy(out.normal, normals + size_t(v) * 3, sizeof(out.normal));
+            std::memcpy(out.uv, uvs + size_t(v) * uv.dwStride, sizeof(out.uv));
+            std::memcpy(out.bones, &info.bones[size_t(v) * kInfluences], sizeof(out.bones));
+            std::memcpy(out.weights, &info.weights[size_t(v) * kInfluences], sizeof(out.weights));
+        }
+        Skin::Mesh* mesh = Skin::createMesh(device, vertices.data(), info.vertexCount);
+        if (mesh)
+        {
+            info.buffers.push_back({device, uv.lpvData, uv.dwStride, mesh});
+        }
+        return mesh;
+    }
+
+    bool drawGpu(IDirect3DDevice7* real, Pending& p, void (*prepare)(void*), void* context, D3DPRIMITIVETYPE type,
+        DWORD fvf, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD vertCount, const WORD* indices, DWORD indexCount)
+    {
+        // The draw cGranny_render makes from the rendering state; anything else is drawn as it comes.
+        const bool diffuse = fvf == kFvfModelDiffuse;
+        if (type != D3DPT_TRIANGLELIST || (fvf != kFvfModel && !diffuse) || vertCount != p.info->vertexCount ||
+            data.normal.lpvData != p.normals || !data.textureCoords[0].lpvData || !indices || indexCount < 3 ||
+            (diffuse && !data.diffuse.lpvData))
+        {
+            return false;
+        }
+        if (!Skin::available(real))
+        {
+            if (g_gpuUsable.exchange(false))
+            {
+                LOG("GPU skinning: the device can't skin (not the Direct3D 9 backend, or no vs_2_0): Granny skins on the CPU");
+            }
+            return false;
+        }
+        Skin::Mesh* mesh = staticBuffer(*p.info, real, data.textureCoords[0]);
+        if (!mesh)
+        {
+            return false;
+        }
+        prepare(context);
+        Skin::Draw draw = {};
+        draw.mesh = mesh;
+        draw.palette = p.palette.data();
+        draw.bones = p.info->bindingCount;
+        draw.paletteId = p.paletteId;
+        draw.normalizeSkinned = p.normalize;
+        draw.diffuse = diffuse ? static_cast<const DWORD*>(data.diffuse.lpvData) : nullptr;
+        draw.diffuseStride = data.diffuse.dwStride;
+        draw.indices = indices;
+        draw.indexCount = indexCount;
+        return Skin::draw(real, draw);
+    }
+}
+
+bool GpuSkin::active()
+{
+    return g_active;
+}
+
+bool GpuSkin::draw(IDirect3DDevice7* real, bool gpu, void (*prepare)(void*), void* context, D3DPRIMITIVETYPE type,
+    DWORD fvf, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD vertCount, const WORD* indices, DWORD indexCount)
+{
+    std::shared_ptr<Pending> p;
+    {
+        std::scoped_lock lock(g_mutex);
+        auto it = g_pending.find(data.position.lpvData);
+        if (it == g_pending.end())
+        {
+            return false;
+        }
+        p = it->second;
+    }
+    if (gpu && !p->filled && drawGpu(real, *p, prepare, context, type, fvf, data, vertCount, indices, indexCount))
+    {
+        D3DStats::count(D3DStats::CSkinGpu);
+        return true;
+    }
+    if (!p->filled)
+    {
+        D3DStats::count(D3DStats::CSkinCpu);
+    }
+    fill(*p);
+    return false;
+}
+
+void GpuSkin::install()
+{
+    if (!g_config.gpuSkinning)
+    {
+        return;
+    }
+    if (!g_config.ddrawD3D9)
+    {
+        LOG("GPU skinning: off, it needs [DDraw] Backend=d3d9");
+        return;
+    }
+    const uintptr_t deform = findDeform("GPU skinning");
+    g_renderReturn = findRenderDeformReturn("GPU skinning");
+    if (!deform || !g_renderReturn)
+    {
+        return;
+    }
+    if (Patch::hook(g_origDeform, deform, &hookDeform, "granny deform"))
+    {
+        g_active = true;
+        LOG("GPU skinning: on, characters are skinned in a vertex shader (Granny's deform at granny.dll + {:x})",
+            deform - reinterpret_cast<uintptr_t>(GetModuleHandleW(L"granny.dll")));
+    }
+}

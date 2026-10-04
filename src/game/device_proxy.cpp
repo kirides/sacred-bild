@@ -1,5 +1,6 @@
 #include "game/device_proxy.h"
 #include "game/d3d_stats.h"
+#include "game/gpu_skin.h"
 #include "game/ui_canvas.h"
 #include "render/fvf.h"
 #include "config.h"
@@ -961,6 +962,23 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fv
     D3DStats::count(CDrawIndexed);
     D3DStats::count(CVerts, vertCount);
     CallLock lock(*this, _ReturnAddress());
+    if (data && GpuSkin::active())
+    {
+        // Vertices whose skinning was left to the GPU: drawn by the backend's shader once the batcher's recorded state
+        // is applied, or skinned on the CPU after all and drawn below.
+        auto prepare = [](void* self) {
+            auto* proxy = static_cast<DeviceProxy*>(self);
+            if (proxy->batching())
+            {
+                proxy->m_batcher->sync(Batcher::Reason::Direct);
+            }
+        };
+        if (GpuSkin::draw(m_real, !m_ui, prepare, this, type, fvf, *data, vertCount, indices, indexCount))
+        {
+            D3DStats::count(CSubmit);
+            return D3D_OK;
+        }
+    }
     if (batching())
     {
         if (data && m_batcher->drawModel(type, fvf, *data, vertCount, indices, indexCount, flags))

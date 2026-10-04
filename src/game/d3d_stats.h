@@ -52,6 +52,9 @@ namespace D3DStats
         CModelVerts,
         CModelDirect,   // untransformed draws in the world view that could not be batched
         CRecordRead,    // record cache misses: a seek and read in the game's data file
+        CSkinDeferred,  // GpuSkinning: Granny deforms left to the GPU (bone matrices only)
+        CSkinGpu,       // ... drawn by the skinning shader
+        CSkinCpu,       // ... skinned on the CPU after all (state the shader doesn't do, UI)
         CTextureKB,     // texture memory the game's texture manager loaded
         CounterCount
     };

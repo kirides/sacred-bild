@@ -3,6 +3,7 @@
 #include "game/focus.h"
 #include "game/frame_hooks.h"
 #include "game/movie.h"
+#include "game/gpu_skin.h"
 #include "game/granny_async.h"
 #include "game/ground_quads.h"
 #include "game/language.h"
@@ -82,6 +83,7 @@ void Sacred::installHooks()
     Screenshot::install();
     MapCache::install();
     GroundQuads::install();
+    GpuSkin::install();
     SkinCheck::install();
     Language::install();
     if (Patch::commit())

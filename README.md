@@ -128,6 +128,7 @@ The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll`
 | Render | BatchNoClip | 1 | Merged draws skip Direct3D 7's software clipping; the GPU clips. |
 | Render | BatchVertexBuffer | 1 | Merged draws go through vertex buffers instead of user memory. |
 | Render | BatchModels | 1 | 3D model draws go through the batcher too (vertex buffers, merged where possible). |
+| Render | GpuSkinning | 0 | Characters skinned (animated) in a vertex shader instead of by Granny on the CPU; `Backend=d3d9` only. Experimental. |
 | Render | BatchGround | 1 | The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls per quad. |
 | Render | RecordIndex | 1 | Hash index (gtl::flat_hash_map) in front of the game's tile/object record caches. |
 | Render | AsyncAnimation | 1 | Advance Granny animations on a worker thread, overlapping the start of the frame. |
@@ -230,6 +231,8 @@ What the game's code at those addresses does is in `docs/RE_NOTES.md` and in the
 | `src/game/screenshot.*` | Print Screen as PNG / JPEG |
 | `src/game/language.*` | Text and speech files of the game's language |
 | `src/game/granny_async.*` | Animation update on a worker thread (`[Render] AsyncAnimation`) |
+| `src/game/granny_mesh.*` | Granny's meshes, bone bindings and influence lists as its deform routine sees them |
+| `src/game/gpu_skin.*` | `[Render] GpuSkinning`: Granny's deform reduced to the bone matrices, characters drawn by the backend's skinning shader |
 | `src/game/skin_check.*` | `[Debug] SkinCheck`: Granny's skinning data read back and checked |
 | `src/game/ground_quads.*` | The ground's quad batcher straight to the batcher (`[Render] BatchGround`) |
 | `src/game/map_cache.*` | Hash index in front of the map record caches (`[Render] RecordIndex`) |
@@ -254,6 +257,7 @@ Generated files in the repository, and the checks:
 | `tools/gen_sigs.py` | Writes `src/game/sacred_sigs.inc`, `gameserver_sigs.inc` and `tools/data/addresses.json`: a signature for every address, taken from the English build and accepted only if it matches exactly once in it and in the German one |
 | `tools/gen_res_sites.py` | Writes `src/game/resolution_sites.inc`: the 1024x768 constants to patch, each verified and with a signature |
 | `tools/check_hooks.py` | Checks that every hook declares as many stack arguments as the hooked function pops |
+| `tools/gen_shaders.py` | Writes `src/ddraw9/skin_shaders.inc`: `src/ddraw9/skin.hlsl` compiled to vs_2_0 with `fxc` from the Windows SDK |
 | `tools/sigs.py`, `funcs.py`, `eng.py` | Shared code: signature search, function boundaries and names (`tools/data/functions_eng.tsv`, exported from Ghidra), the English exe |
 
 Reverse engineering helpers (how addresses and offsets were found):

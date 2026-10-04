@@ -20,6 +20,8 @@ namespace DDraw9
 
     namespace
     {
+        const void* g_deviceVtable = nullptr;
+
         // Direct3D 7 render states that Direct3D 9 has under the same number with the same meaning.
         bool sharedRenderState(DWORD state)
         {
@@ -216,6 +218,19 @@ namespace DDraw9
     {
         m_ddraw->AddRef();
         m_dev->AddRef();
+        if (!g_deviceVtable)
+        {
+            g_deviceVtable = *reinterpret_cast<void* const*>(static_cast<IDirect3DDevice7*>(this));
+        }
+    }
+
+    Device* Device::from(const void* iface)
+    {
+        if (iface && g_deviceVtable && *static_cast<const void* const*>(iface) == g_deviceVtable)
+        {
+            return static_cast<Device*>(static_cast<IDirect3DDevice7*>(const_cast<void*>(iface)));
+        }
+        return nullptr;
     }
 
     Device::~Device()
@@ -235,6 +250,7 @@ namespace DDraw9
         {
             m_indexBuffer->Release();
         }
+        releaseSkin();
         m_dev->Release();
         m_ddraw->Release();
     }

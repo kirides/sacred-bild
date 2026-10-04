@@ -427,6 +427,12 @@ void D3DStats::onFrame()
             c[CFlushLighting] / frames, c[CFlushWorld] / frames, c[CFlushOther] / frames);
     }
 
+    if (c[CSkinDeferred] || c[CSkinCpu])
+    {
+        LOG("skinning: {:.0f} deforms left to the GPU, {:.0f} drawn by the shader, {:.0f} skinned on the CPU after all",
+            c[CSkinDeferred] / frames, c[CSkinGpu] / frames, c[CSkinCpu] / frames);
+    }
+
     // Per pass: exclusive time, of that inside the device proxy (D3D included), game draws -> submitted draws. A
     // merged batch is submitted (and its D3D time spent) in the pass that ends it, not the ones whose draws it holds.
     if (g_passTotals[PWorld].ticks)

@@ -35,6 +35,8 @@ add_library(ddraw SHARED
   src/game/map_cache.cpp
   src/game/ground_quads.cpp
   src/game/skin_check.cpp
+  src/game/granny_mesh.cpp
+  src/game/gpu_skin.cpp
   src/game/world_passes.cpp
   src/game/movie.cpp
   src/game/d3d_stats.cpp
@@ -44,6 +46,7 @@ add_library(ddraw SHARED
   src/game/ui_anchor.cpp
   src/game/ui_canvas.cpp
   src/ddraw9/device.cpp
+  src/ddraw9/device_skin.cpp
   src/ddraw9/directdraw.cpp
   src/ddraw9/format.cpp
   src/ddraw9/gpu.cpp

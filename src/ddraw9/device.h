@@ -1,5 +1,6 @@
 #pragma once
 #include "ddraw9/d3d9_api.h"
+#include "ddraw9/skin.h"
 #include "spin_lock.h"
 
 #include <array>
@@ -24,6 +25,13 @@ namespace DDraw9
     {
     public:
         static HRESULT create(DirectDraw* ddraw, REFCLSID type, Surface* target, Device** out);
+        // The device behind an IDirect3DDevice7 pointer if it is one of these, else null.
+        static Device* from(const void* iface);
+
+        // GPU skinning (device_skin.cpp, see skin.h).
+        bool skinAvailable();
+        Skin::Mesh* createSkinMesh(const Skin::Vertex* vertices, uint32_t count);
+        bool drawSkinned(const Skin::Draw& draw);
 
         // IUnknown
         STDMETHOD(QueryInterface)(REFIID riid, LPVOID* out) override;
@@ -133,6 +141,11 @@ namespace DDraw9
         // Interleaves strided vertex data into m_scratch in the layout of `fvf`.
         bool gather(DWORD fvf, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD count);
         void capture(StateBlock& block, D3DSTATEBLOCKTYPE type) const;
+        // Creates the skinning shaders and declarations once; false if the device can't run them.
+        bool initSkin();
+        // Fills the shader constants from the Direct3D 7 state; false if the state needs something the shader doesn't do.
+        bool skinConstants(const Skin::Draw& draw, bool diffuse);
+        void releaseSkin();
         void recapture(StateBlock& block) const;
         void apply(const StateBlock& block);
         StateBlock* stateBlock(DWORD handle);
@@ -174,6 +187,14 @@ namespace DDraw9
         // Index buffer ring for DrawIndexedPrimitiveVB (Direct3D 9 draws from vertex buffers need indices in one).
         d9::IDirect3DIndexBuffer9* m_indexBuffer = nullptr;
         UINT m_indexCapacity = 0, m_indexCursor = 0;
+
+        // GPU skinning.
+        int m_skinState = 0;                    // 0 not tried, 1 ready, -1 unavailable
+        d9::IDirect3DVertexShader9* m_skinShaders[2] = {};      // without / with a diffuse stream
+        d9::IDirect3DVertexDeclaration9* m_skinDecls[2] = {};
+        d9::IDirect3DVertexBuffer9* m_skinDiffuse = nullptr;    // ring of per-vertex diffuse colors
+        UINT m_skinDiffuseCursor = 0;
+        uint32_t m_skinPaletteId = 0;           // palette in the bone constants (0: none)
 
         std::vector<uint8_t> m_scratch;
         std::vector<std::unique_ptr<StateBlock>> m_stateBlocks;

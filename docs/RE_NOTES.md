@@ -319,8 +319,26 @@ streams for positions, normals and texture coordinates, the piece's index range,
   lists (`0x1001E490`), each overwriting; optionally normalize the normals.
 - `cGranny_render` reads about 11 deformed positions per piece for a bounding box.
 
+- Callers of the deform: the rendering path (`0x10034200`, call returning to `0x100343C0`; a second call there is
+  the rigid mesh cookie path with no outputs) and `GrannyLockSequenceForRayIntersection` (`0x100359B0`): picking
+  reads those positions on the CPU.
+- The draw (`cGranny_render`): `DrawIndexedPrimitiveStrided`, triangle list, FVF `0x112` (or `0x152` with a
+  per-vertex diffuse stream from the table at `0xA23FC0`), positions and normals pointing at the deform's output
+  buffers (the whole mesh, vertex count = the mesh's), texture coordinates at the mesh's static array, the piece's
+  indices; `SetTransform(WORLD)` from the state before.
+
 `[Debug] SkinCheck` (`src/game/skin_check.*`) rebuilds per-vertex weights from these lists and compares its own
-skinning with Granny's output, with all influences and with at most four per vertex.
+skinning with Granny's output, with all influences and with at most four per vertex. Measured (66 meshes, 16.5M
+vertices): at most 4 influences, at most 56 bones per mesh, normals weighted exactly like their positions, paths
+rigid / vertex-major / normal lists; differences of one float step (Granny accumulates in x87 extended precision).
+
+`[Render] GpuSkinning` (`src/game/gpu_skin.*`, `src/ddraw9/device_skin.cpp`, `skin.hlsl`): for the rendering
+path's deforms that want normals (the model pass; the shadow pass wants positions only) the deform runs with both
+outputs off, which still computes every binding's matrix; the module keeps those and CPU-skins only the vertices
+`cGranny_render` samples for its bounding box (every `count < 12 ? 1 : count < 23 ? 2 : count < 34 ? 3 : count / 11`-th).
+The draw that follows is recognized by its position pointer and drawn by the backend from a static vertex buffer
+(bind pose, texture coordinates, 4 bones and weights) with a vs_2_0 shader that skins and lights like Direct3D 7's
+fixed-function pipeline; otherwise the module skins the whole mesh on the CPU first.
 
 ## UI (`cUI_Control2` / `cUI_Window2` / `cUI_Manager`)
 
