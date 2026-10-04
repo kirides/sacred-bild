@@ -3,6 +3,8 @@
 
 // The game's UI keeps running in its native 1024x768 space: it is drawn into a centered (optionally scaled)
 // canvas and the cursor is mapped into that space. World code keeps physical screen coordinates.
+// The canvas has an in-game placement ([UI] Scale) and one for the menus ([UI] ScaleMode=InGame: as large as fits;
+// Full: the in-game one). The UI manager's state picks it; a UI scope keeps the one it started with.
 //
 // Frames place a 1024x768 layout elsewhere on the screen: windows anchored to a screen edge (UiAnchor) draw, read
 // the cursor and receive mouse events in a frame shifted against the canvas, so the game's own layout of each
@@ -13,7 +15,7 @@ namespace UiCanvas
     void install();
     bool enabled();
 
-    // Canvas placement in physical pixels.
+    // Canvas placement in physical pixels (in game or menus, see above).
     float scale();
     float left();
     float top();

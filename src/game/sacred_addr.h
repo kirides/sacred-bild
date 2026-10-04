@@ -231,6 +231,7 @@ namespace Sacred::Mouse
 namespace Sacred::UiManager
 {
     constexpr uintptr_t flags = 0x08;        // 0x01 menus, 0x04 in game, 0x10 cinematic
+    constexpr uint32_t inGame = 0x04;
     constexpr uintptr_t firstGameWindow = 0x80;
     constexpr uintptr_t lastGameWindow = 0xD8;
     // In-game windows (cUI_Window2 subclasses) and their rects in the 1024x768 layout.

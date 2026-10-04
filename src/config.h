@@ -24,6 +24,9 @@ struct Config
 
     // UI canvas: the 1024x768 UI drawn centered. 0 = scale to fit the screen height.
     float uiScale = 0.0f;
+    // ScaleMode=Full: uiScale applies to the menus (start menu, options, ...) too. InGame: in game only, the menus
+    // always fit the screen height.
+    bool uiScaleMenus = false;
     // In game, the HUD windows (taskbar, minimap, inventory, ...) are placed on the screen by [UI.Layout] instead
     // of staying in the centered canvas.
     bool uiAnchor = true;

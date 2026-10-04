@@ -361,6 +361,16 @@ Per-window re-anchoring does not work: children are absolute, many renderers dra
 - In a scope the device proxy sets the viewport to the canvas (3D UI elements follow), maps
   pretransformed vertices `x*s + left`, culls draws entirely outside 1024x768 (parked windows) and clips
   axis-aligned quads to the canvas. Clear rects are mapped; GetViewport returns the virtual viewport.
+- Two placements: in game (`[UI] Scale`) and menus (`ScaleMode=InGame`: as large as fits; `Full`: the in-game
+  one), picked by the UI manager's mode (`+8` bit `0x04` in game; `0x03` in the menus, `0x4C` in game, `0x43`
+  leaving it). The outermost UI scope keeps the placement it started with.
+- UI images are rects in 256x256 sheets: records of 0x54 bytes from `0x9EAEB8` (`+0` id, `+4` type, `+8` TGA
+  name, `+0x28` texture, `+0x2C..+0x38` x0, y0, x1, y1 in pixels at load, `+0x4C`/`+0x50` width/height).
+  `0x760E60` makes x1/y1 exclusive and turns them into `u0 = x0/256`, `u1 = (x1 + 0.5)/256` (same for v): drawn
+  1:1 with point sampling, pixel centers (whole coordinates) hit texel edges on the left and texel centers on the
+  right. Scaled or bilinear, the edge pixels blended up to half of the neighbouring sheet image in (dark seams
+  between tiles); the proxy rewrites the texture coordinates of axis-aligned textured UI quads so pixels sample
+  at their middle and the outermost ones stay inside the image's texels (`DeviceProxy::fitTexels`).
 - `getClientCursorPos` returns canvas (virtual) coordinates, so cMouse and all UI hit tests are virtual;
   the world's mouse reads listed above are redirected to versions returning physical coordinates.
 - Diagnostics: draws in a UI scope that extend beyond 1024x768, or that the proxy cannot map (3D, VB,

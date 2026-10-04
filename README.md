@@ -19,7 +19,7 @@ ddraw calls through and logs which one.
     (including the 0.5x-2.0x zoom);
   - world view centered on the screen (the game assumed a 512/384 screen center in 17 places);
   - UI: the game's 1024x768 UI (menus, HUD, cursor, intro videos) is drawn into a centered canvas,
-    scaled to fit the screen height (`[UI] Scale`, `LinearFilter`); the mouse is mapped into that canvas
+    scaled to fit the screen height (`[UI] Scale`, `ScaleMode`, `LinearFilter`); the mouse is mapped into that canvas
     for the UI while world picking keeps physical screen coordinates;
   - in game, the HUD windows are placed on the screen (`[UI] Anchor`, positions in `[UI.Layout]`); by default
     at the edges they had in the 1024x768 layout: taskbar and chat at the bottom, inventory bottom-left, minimap,
@@ -89,6 +89,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh; 0 = right away. |
 | Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |
 | UI | Scale | 0 | UI scale; 0 = as large as fits the screen height, otherwise a factor (1 = native pixels), capped at that. |
+| UI | ScaleMode | InGame | Where `Scale` applies: `InGame` = the in-game UI only, the menus always fill the screen height; `Full` = the menus too. |
 | UI | LinearFilter | 1 | Bilinear filtering for the scaled UI instead of the game's point sampling. |
 | UI | Anchor | 1 | In game, HUD windows placed by `[UI.Layout]`; 0 = all of the UI in the centered canvas. |
 | UI.Layout | Taskbar, Chat | 2048,4096 | Where a window's 1024x768 layout goes: X,Y in 0..4096 of the room the screen leaves around it (0 = left/top edge, 2048 = centered, 4096 = right/bottom edge). |

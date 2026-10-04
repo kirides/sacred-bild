@@ -18,10 +18,17 @@ namespace
     using namespace Sacred;
 
     bool g_enabled = false;
-    float g_scale = 1.0f;
-    float g_left = 0.0f;
-    float g_top = 0.0f;
+
+    // Canvas placement in physical pixels: in game, and in the menus (ScaleMode=InGame: always as large as fits).
+    struct Layout
+    {
+        float scale = 1.0f;
+        float left = 0.0f;
+        float top = 0.0f;
+    };
+    Layout g_game, g_menu;
     thread_local int t_depth = 0;
+    thread_local const Layout* t_layout = nullptr;  // taken by the outermost UI scope for all of its draws
     thread_local UiCanvas::Frame t_frame;
     thread_local UiCanvas::Frame t_outerFrame;     // the frame before the outermost UI scope
     thread_local bool t_trace = false;
@@ -45,6 +52,17 @@ namespace
     IsCursorOverUiFn g_isCursorOverUi = nullptr;
     SavePortraitFn g_origSavePortrait = nullptr;
     CursorPosFn g_cursorPos = nullptr;
+
+    // The UI manager's state picks the layout; a UI scope keeps the one it started with.
+    const Layout& liveLayout()
+    {
+        void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager);
+        const bool inGame = manager &&
+            (*reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(manager) + UiManager::flags) & UiManager::inGame);
+        return inGame ? g_game : g_menu;
+    }
+
+    const Layout& layout() { return t_layout ? *t_layout : liveLayout(); }
 
     int mouseField(void* mouse, uintptr_t offset)
     {
@@ -208,23 +226,25 @@ namespace
 }
 
 bool UiCanvas::enabled() { return g_enabled; }
-float UiCanvas::scale() { return g_scale; }
-float UiCanvas::left() { return g_left; }
-float UiCanvas::top() { return g_top; }
-float UiCanvas::right() { return g_left + 1024.0f * g_scale; }
-float UiCanvas::bottom() { return g_top + 768.0f * g_scale; }
+float UiCanvas::scale() { return layout().scale; }
+float UiCanvas::left() { return layout().left; }
+float UiCanvas::top() { return layout().top; }
+float UiCanvas::right() { const Layout& l = layout(); return l.left + 1024.0f * l.scale; }
+float UiCanvas::bottom() { const Layout& l = layout(); return l.top + 768.0f * l.scale; }
 
-int UiCanvas::toVirtualX(int physical) { return static_cast<int>(std::lround((physical - g_left) / g_scale)); }
-int UiCanvas::toVirtualY(int physical) { return static_cast<int>(std::lround((physical - g_top) / g_scale)); }
-int UiCanvas::toPhysicalX(int virt) { return static_cast<int>(std::lround(virt * g_scale + g_left)); }
-int UiCanvas::toPhysicalY(int virt) { return static_cast<int>(std::lround(virt * g_scale + g_top)); }
+int UiCanvas::toVirtualX(int physical) { const Layout& l = layout(); return static_cast<int>(std::lround((physical - l.left) / l.scale)); }
+int UiCanvas::toVirtualY(int physical) { const Layout& l = layout(); return static_cast<int>(std::lround((physical - l.top) / l.scale)); }
+int UiCanvas::toPhysicalX(int virt) { const Layout& l = layout(); return static_cast<int>(std::lround(virt * l.scale + l.left)); }
+int UiCanvas::toPhysicalY(int virt) { const Layout& l = layout(); return static_cast<int>(std::lround(virt * l.scale + l.top)); }
 
 UiCanvas::Frame UiCanvas::placed(float x, float y)
 {
-    // Whole pixels for the frame's origin, so the UI's texels keep their alignment (0.5 gives the canvas itself).
-    const float originX = std::floor((Resolution::width() - 1024.0f * g_scale) * std::clamp(x, 0.0f, 1.0f));
-    const float originY = std::floor((Resolution::height() - 768.0f * g_scale) * std::clamp(y, 0.0f, 1.0f));
-    return {(originX - g_left) / g_scale, (originY - g_top) / g_scale, true};
+    // Frames exist in game only. Whole pixels for the frame's origin, so the UI's texels keep their alignment (0.5
+    // gives the canvas itself).
+    const Layout& l = g_game;
+    const float originX = std::floor((Resolution::width() - 1024.0f * l.scale) * std::clamp(x, 0.0f, 1.0f));
+    const float originY = std::floor((Resolution::height() - 768.0f * l.scale) * std::clamp(y, 0.0f, 1.0f));
+    return {(originX - l.left) / l.scale, (originY - l.top) / l.scale, true};
 }
 
 UiCanvas::Frame UiCanvas::frame() { return t_frame; }
@@ -232,16 +252,17 @@ UiCanvas::Frame UiCanvas::frame() { return t_frame; }
 UiCanvas::Placement UiCanvas::placement()
 {
     const float w = static_cast<float>(Resolution::width()), h = static_cast<float>(Resolution::height());
+    const Layout& l = layout();
     Placement p;
-    p.scale = g_scale;
-    p.originX = g_left + t_frame.x * g_scale;
-    p.originY = g_top + t_frame.y * g_scale;
+    p.scale = l.scale;
+    p.originX = l.left + t_frame.x * l.scale;
+    p.originY = l.top + t_frame.y * l.scale;
     if (t_frame.confine)
     {
         p.clipLeft = std::max(p.originX, 0.0f);
         p.clipTop = std::max(p.originY, 0.0f);
-        p.clipRight = std::min(p.originX + 1024.0f * g_scale, w);
-        p.clipBottom = std::min(p.originY + 768.0f * g_scale, h);
+        p.clipRight = std::min(p.originX + 1024.0f * l.scale, w);
+        p.clipBottom = std::min(p.originY + 768.0f * l.scale, h);
     }
     else
     {
@@ -255,8 +276,9 @@ UiCanvas::Placement UiCanvas::placement()
 
 UiCanvas::Bounds UiCanvas::screenBounds()
 {
-    return {-g_left / g_scale - t_frame.x, -g_top / g_scale - t_frame.y,
-            (Resolution::width() - g_left) / g_scale - t_frame.x, (Resolution::height() - g_top) / g_scale - t_frame.y};
+    const Layout& l = layout();
+    return {-l.left / l.scale - t_frame.x, -l.top / l.scale - t_frame.y,
+            (Resolution::width() - l.left) / l.scale - t_frame.x, (Resolution::height() - l.top) / l.scale - t_frame.y};
 }
 
 bool UiCanvas::tracing() { return t_trace; }
@@ -294,6 +316,7 @@ void UiCanvas::enter(Mode mode)
     {
         t_outerFrame = t_frame;
         t_frame = {0.0f, 0.0f, mode == Mode::Canvas};
+        t_layout = &liveLayout();
         if (g_config.uiTrace && mode == Mode::Canvas)
         {
             const bool down = GetAsyncKeyState(VK_SCROLL) < 0;
@@ -301,7 +324,8 @@ void UiCanvas::enter(Mode mode)
             {
                 t_trace = true;
                 g_tracePopupsUntil = GetTickCount64() + 5000;
-                LOG("UiTrace: frame begins (canvas {},{} scale {:.3f}; popups traced for 5 s)", g_left, g_top, g_scale);
+                LOG("UiTrace: frame begins (canvas {},{} scale {:.3f}; popups traced for 5 s)", t_layout->left,
+                    t_layout->top, t_layout->scale);
             }
             g_traceKeyDown = down;
         }
@@ -326,6 +350,7 @@ void UiCanvas::leave()
         {
             proxy->endUi();
         }
+        t_layout = nullptr;
     }
 }
 
@@ -367,11 +392,15 @@ void UiCanvas::install()
         return;
     }
     const float fit = std::min(Resolution::width() / 1024.0f, Resolution::height() / 768.0f);
-    g_scale = g_config.uiScale > 0.0f ? std::min(g_config.uiScale, fit) : fit;
-    g_left = std::floor((Resolution::width() - 1024.0f * g_scale) / 2.0f);
-    g_top = std::floor((Resolution::height() - 768.0f * g_scale) / 2.0f);
+    auto centered = [](float scale) {
+        return Layout{scale, std::floor((Resolution::width() - 1024.0f * scale) / 2.0f),
+                      std::floor((Resolution::height() - 768.0f * scale) / 2.0f)};
+    };
+    g_game = centered(g_config.uiScale > 0.0f ? std::min(g_config.uiScale, fit) : fit);
+    g_menu = g_config.uiScaleMenus ? g_game : centered(fit);
     g_enabled = true;
-    LOG("UI canvas: scale {:.3f} at {},{} ({}x{})", g_scale, g_left, g_top, 1024.0f * g_scale, 768.0f * g_scale);
+    LOG("UI canvas: in game scale {:.3f} at {},{}, menus scale {:.3f} at {},{}", g_game.scale, g_game.left, g_game.top,
+        g_menu.scale, g_menu.left, g_menu.top);
 
     g_mouseInstance = reinterpret_cast<MouseInstanceFn>(Addr::cMouse_instance);
     g_isCursorOverUi = reinterpret_cast<IsCursorOverUiFn>(Addr::cUI_Manager_isCursorOverUi);

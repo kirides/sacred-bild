@@ -77,6 +77,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.vsync = readInt(ini, L"Display", L"VSync", g_config.vsync) != 0;
     g_config.maxFrameLatency = readInt(ini, L"Display", L"MaxFrameLatency", g_config.maxFrameLatency);
     g_config.uiScale = static_cast<float>(_wtof(readString(ini, L"UI", L"Scale", L"0").c_str()));
+    g_config.uiScaleMenus = _wcsicmp(readString(ini, L"UI", L"ScaleMode", L"InGame").c_str(), L"Full") == 0;
     g_config.uiLinearFilter = readInt(ini, L"UI", L"LinearFilter", g_config.uiLinearFilter) != 0;
     g_config.uiAnchor = readInt(ini, L"UI", L"Anchor", g_config.uiAnchor) != 0;
     readPosition(ini, L"Taskbar", g_config.uiTaskbar);
@@ -108,11 +109,12 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
     g_config.uiTrace = readInt(ini, L"Debug", L"UiTrace", g_config.uiTrace) != 0;
 
-    LOG("Config: Backend={} MediaFoundation={} Width={} Height={} Borderless={} FpsLimit={} VSync={} MaxFrameLatency={} UI.Scale={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
+    LOG("Config: Backend={} MediaFoundation={} Width={} Height={} Borderless={} FpsLimit={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
         "Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} D3DStats={} Profiler={} ({} us) UiTrace={}",
         g_config.ddrawD3D9 ? "d3d9" : "chain", g_config.mediaFoundation, g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit,
-        g_config.vsync, g_config.maxFrameLatency, g_config.uiScale, g_config.uiLinearFilter, g_config.uiAnchor,
+        g_config.vsync, g_config.maxFrameLatency, g_config.uiScale,
+        g_config.uiScaleMenus ? "Full" : "InGame", g_config.uiLinearFilter, g_config.uiAnchor,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
         g_config.batchModels, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
         g_config.atlasMaxTextureSize, g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs, g_config.uiTrace);
