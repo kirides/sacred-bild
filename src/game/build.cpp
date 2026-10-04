@@ -5,6 +5,7 @@
 #include "game/granny_async.h"
 #include "game/map_cache.h"
 #include "game/resolution.h"
+#include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
 #include "net/connection.h"
 #include "net/lan_client.h"
@@ -68,6 +69,7 @@ void Sacred::installHooks()
     FrameHooks::install();
     Resolution::install();
     UiCanvas::install();
+    UiAnchor::install();
     Movie::install();
     MapCache::install();
     if (Patch::commit())

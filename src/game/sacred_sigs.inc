@@ -37,6 +37,82 @@ static const Sig::Entry kAddressSigs[] = {
     {"worldMouseReads[2]", "C2 04 00 E8 ?? ?? ?? ?? 8B 78 04 8B 58 08 85 FF", 3, Sig::Take::Match, &Sacred::Addr::worldMouseReads[2]}, // 00610567, 006104C7
     {"worldMouseReads[3]", "89 5C 24 48 88 5C 24 4C E8 ?? ?? ?? ?? 8B 70 04", 8, Sig::Take::Match, &Sacred::Addr::worldMouseReads[3]}, // 00611F63, 00611EC3
     {"worldMouseReads[4]", "E8 ?? ?? ?? ?? 8B 48 04 8B B4 24 9C 00 00 00 8B 50 08", 0, Sig::Take::Match, &Sacred::Addr::worldMouseReads[4]}, // 0062772E, 0062764E
+    {"uiMouseReads[0]", "E8 ?? ?? ?? ?? 8B 58 04 8B 40 08 33 FF 66 8B BE 64 11 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[0]}, // 005DC2D6, 005DC316
+    {"uiMouseReads[1]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 33 DB 89 4C 24 20", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[1]}, // 006A31C4, 006A3404
+    {"uiMouseReads[2]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 89 4C 24 24 89 54 24 20", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[2]}, // 006A451D, 006A475D
+    {"uiMouseReads[3]", "89 44 24 14 89 7C 24 1C E8 ?? ?? ?? ?? 8A 4F 23", 8, Sig::Take::Match, &Sacred::Addr::uiMouseReads[3]}, // 006A8ADC, 006A8E1C
+    {"uiMouseReads[4]", "89 7C 24 78 89 6C 24 1C E8 ?? ?? ?? ?? 8B 48 04", 8, Sig::Take::Match, &Sacred::Addr::uiMouseReads[4]}, // 006A949E, 006A97DE
+    {"uiMouseReads[5]", "89 74 24 24 89 74 24 44 E8 ?? ?? ?? ?? 8B 48 04", 8, Sig::Take::Match, &Sacred::Addr::uiMouseReads[5]}, // 006A9C4A, 006A9F8A
+    {"uiMouseReads[6]", "E8 ?? ?? ?? ?? 8B 70 04 8B 68 08 8B 44 24 38 8B 8F 58 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[6]}, // 006AC8D7, 006ACC27
+    {"uiMouseReads[7]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 89 4C 24 14 6A 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[7]}, // 006AEBBD, 006AEEDD
+    {"uiMouseReads[8]", "C6 84 24 80 01 00 00 03 E8 ?? ?? ?? ?? 8B 78 04", 8, Sig::Take::Match, &Sacred::Addr::uiMouseReads[8]}, // 006B2705, 006B2A25
+    {"uiMouseReads[9]", "89 74 24 64 E8 ?? ?? ?? ?? 8B 68 04 8B 40 08 6A 00", 4, Sig::Take::Match, &Sacred::Addr::uiMouseReads[9]}, // 006B2815, 006B2B35
+    {"uiMouseReads[10]", "E8 ?? ?? ?? ?? 8B 50 04 8B 40 08 8D 8B 26 03 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[10]}, // 006B7497, 006B77F7
+    {"uiMouseReads[11]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 8B 44 24 18 89 4C 24 28", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[11]}, // 006B78BA, 006B7C1A
+    {"uiMouseReads[12]", "F7 80 F4 01 00 00 00 00 00 80 0F 84 ?? ?? ?? ?? E8 ?? ?? ?? ??", 16, Sig::Take::Match, &Sacred::Addr::uiMouseReads[12]}, // 006B7A50, 006B7DB0
+    {"uiMouseReads[13]", "E8 ?? ?? ?? ?? 8B 50 08 8B 68 04 8B 86 5C 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[13]}, // 006BB1C4, 006BB524
+    {"uiMouseReads[14]", "E8 ?? ?? ?? ?? 8B 50 04 8B 40 08 8B 4D 00 89 44 24 14", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[14]}, // 006BF82A, 006BFA9A
+    {"uiMouseReads[15]", "66 C7 86 66 11 00 00 88 01 0F 84 ?? ?? ?? ?? 55 E8 ?? ?? ?? ??", 16, Sig::Take::Match, &Sacred::Addr::uiMouseReads[15]}, // 006C1271, 006C14E1
+    {"uiMouseReads[16]", "E8 ?? ?? ?? ?? 8B 50 08 8B 8E D0 02 00 00 8B 40 04", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[16]}, // 006C1F2F, 006C219F
+    {"uiMouseReads[17]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 89 4C 24 30 8B 0D ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[17]}, // 006C235C, 006C25CC
+    {"uiMouseReads[18]", "E8 ?? ?? ?? ?? 8B 78 04 8B 70 08 81 FF A2 00 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[18]}, // 006C6EE7, 006C7167
+    {"uiMouseReads[19]", "BE 04 00 00 00 E8 ?? ?? ?? ?? 8A 54 24 0C 8B 48 04", 5, Sig::Take::Match, &Sacred::Addr::uiMouseReads[19]}, // 006C76BA, 006C793A
+    {"uiMouseReads[20]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 6A 02 89 4C 24 54", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[20]}, // 006C9585, 006C9805
+    {"uiMouseReads[21]", "E8 ?? ?? ?? ?? 8B 8D 54 01 0C 00 8B 78 04 8B 40 08", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[21]}, // 006C9D12, 006C9F92
+    {"uiMouseReads[22]", "E8 ?? ?? ?? ?? 8B 68 04 8B 40 08 6A 04 89 6C 24 2C", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[22]}, // 006D2BB2, 006D2E32
+    {"uiMouseReads[23]", "C6 44 24 70 01 E8 ?? ?? ?? ?? 8B 70 04 8B 40 08", 5, Sig::Take::Match, &Sacred::Addr::uiMouseReads[23]}, // 006D4A91, 006D4D11
+    {"uiMouseReads[24]", "E8 ?? ?? ?? ?? 8B 68 04 8B 40 08 89 44 24 10 33 F6", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[24]}, // 006D6357, 006D65D7
+    {"uiMouseReads[25]", "E8 ?? ?? ?? ?? 8B 48 04 8B 40 08 8B 96 58 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[25]}, // 006D71D1, 006D7451
+    {"uiMouseReads[26]", "E8 ?? ?? ?? ?? 8B 68 04 8B 40 08 8B 93 6C 02 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[26]}, // 006D796C, 006D7BEC
+    {"uiMouseReads[27]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 33 ED 89 4C 24 14", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[27]}, // 006D8DD5, 006D9055
+    {"uiMouseReads[28]", "E8 ?? ?? ?? ?? 8B 68 04 8B 40 08 89 44 24 10 33 FF", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[28]}, // 006D8E67, 006D90E7
+    {"uiMouseReads[29]", "8B BE 54 01 00 00 E8 ?? ?? ?? ?? 8B 48 04 8B 40 08", 6, Sig::Take::Match, &Sacred::Addr::uiMouseReads[29]}, // 006DA834, 006DAAB4
+    {"uiMouseReads[30]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 6A 01 89 4C 24 1C", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[30]}, // 006DCCA8, 006DCEF8
+    {"uiMouseReads[31]", "E8 ?? ?? ?? ?? 8B 48 04 8B 54 24 70 8B 40 08 3B CA", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[31]}, // 006DDFA4, 006DE1F4
+    {"uiMouseReads[32]", "E8 ?? ?? ?? ?? 8B 48 04 8B 40 08 50 89 4C 24 1C", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[32]}, // 006E435C, 006E45AC
+    {"uiMouseReads[33]", "E8 ?? ?? ?? ?? 8B 50 04 8B 40 08 89 54 24 34 89 44 24 10", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[33]}, // 006E7459, 006E7819
+    {"uiMouseReads[34]", "8B B9 C0 0B 00 00 E8 ?? ?? ?? ?? 8B 48 04 8B 40 08", 6, Sig::Take::Match, &Sacred::Addr::uiMouseReads[34]}, // 006EA5C6, 006EA956
+    {"uiMouseReads[35]", "E8 ?? ?? ?? ?? 8A 54 24 68 8B 48 04 8B 40 08 84 D2", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[35]}, // 006F1326, 006F1666
+    {"uiMouseReads[36]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 89 4C 24 64 89 54 24 68", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[36]}, // 006F744B, 006F778B
+    {"uiMouseReads[37]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 89 4C 24 14 89 54 24 18", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[37]}, // 006F8A06, 006F8D46
+    {"uiMouseReads[38]", "D9 9E C8 03 00 00 E8 ?? ?? ?? ?? 8B 48 04 8B 50 08", 6, Sig::Take::Match, &Sacred::Addr::uiMouseReads[38]}, // 0070F211, 0070F811
+    {"uiMouseReads[39]", "E8 ?? ?? ?? ?? 8B 78 04 8B 68 08 33 DB 89 7C 24 20", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[39]}, // 00716693, 00716E53
+    {"uiMouseReads[40]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 8B 86 58 01 00 00 8B BE 5C 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[40]}, // 007211BF, 0072192F
+    {"uiMouseReads[41]", "E8 ?? ?? ?? ?? 8B 58 04 8B 48 08 8B 86 5C 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[41]}, // 00721891, 00722001
+    {"uiMouseReads[42]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 8B 86 58 01 00 00 89 4C 24 24", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[42]}, // 00721B33, 007222A3
+    {"uiMouseReads[43]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 6A 02 89 4C 24 34", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[43]}, // 007280EE, 0072885E
+    {"uiMouseReads[44]", "E8 ?? ?? ?? ?? 8B 50 04 8B 40 08 8D 4C 24 1C 89 54 24 10", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[44]}, // 0072BA32, 0072C1A2
+    {"uiMouseReads[45]", "E8 ?? ?? ?? ?? 8B 48 04 8B 50 08 8B 83 4C 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[45]}, // 0072F919, 0072FFF9
+    {"uiMouseReads[46]", "A9 00 00 00 10 75 3B E8 ?? ?? ?? ?? 8B 48 04 8B 40 08", 7, Sig::Take::Match, &Sacred::Addr::uiMouseReads[46]}, // 00731834, 00731F14
+    {"uiMouseReads[47]", "39 5E 20 74 6F E8 ?? ?? ?? ?? 8B 48 04 8B 40 08", 5, Sig::Take::Match, &Sacred::Addr::uiMouseReads[47]}, // 00731ABC, 0073219C
+    {"uiMouseReads[48]", "8B F1 E8 ?? ?? ?? ?? 8B 48 04 8B 40 08 8B 16 50", 2, Sig::Take::Match, &Sacred::Addr::uiMouseReads[48]}, // 00732173, 00732853
+    {"uiMouseReads[49]", "E8 ?? ?? ?? ?? 8B 68 08 8B 48 04 8B 16 55 89 4C 24 18", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[49]}, // 0074B49D, 0074BBED
+    {"uiMouseReads[50]", "8B 96 98 00 00 00 89 54 24 1C E8 ?? ?? ?? ?? 8B 68 04", 10, Sig::Take::Match, &Sacred::Addr::uiMouseReads[50]}, // 0074F7EB, 0074FEDB
+    {"uiMouseReads[51]", "E8 ?? ?? ?? ?? 8B 48 04 8B 40 08 8B 17 50 89 4C 24 14", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[51]}, // 0075282B, 00752F4B
+    {"uiMouseReads[52]", "E8 ?? ?? ?? ?? 8B 48 04 8B 54 24 30 8B 40 08 3B CA", 0, Sig::Take::Match, &Sacred::Addr::uiMouseReads[52]}, // 00753A9D, 007541BD
+    {"uiMouseReads[53]", "C7 87 80 00 00 00 00 00 00 00 E8 ?? ?? ?? ?? 8B 48 04", 10, Sig::Take::Match, &Sacred::Addr::uiMouseReads[53]}, // 007544B0, 00754BD0
+    {"uiMouseReads[54]", "88 44 24 13 E8 ?? ?? ?? ?? 8A 54 24 13 8B 48 04", 4, Sig::Take::Match, &Sacred::Addr::uiMouseReads[54]}, // 0075837D, 00758A9D
+    {"uiGetXCalls[0]", "89 7C 24 38 E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? 89 44 24 60", 11, Sig::Take::Match, &Sacred::Addr::uiGetXCalls[0]}, // 005DC42B, 005DC46B
+    {"uiGetXCalls[1]", "E8 ?? ?? ?? ?? 89 46 08 E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 89 46 0C", 0, Sig::Take::Match, &Sacred::Addr::uiGetXCalls[1]}, // 006B64B9, 006B6819
+    {"uiGetXCalls[2]", "E8 ?? ?? ?? ?? 89 46 08 E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? 66 8B 56 08", 0, Sig::Take::Match, &Sacred::Addr::uiGetXCalls[2]}, // 006B6C67, 006B6FC7
+    {"uiGetXCalls[3]", "E8 ?? ?? ?? ?? 89 47 08 E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? 8D 4C 24 20", 0, Sig::Take::Match, &Sacred::Addr::uiGetXCalls[3]}, // 006DAB75, 006DADF5
+    {"uiGetXCalls[4]", "83 F8 02 75 44 E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? 89 46 08", 12, Sig::Take::Match, &Sacred::Addr::uiGetXCalls[4]}, // 006DBD01, 006DBF81
+    {"uiGetXCalls[5]", "83 F8 02 0F 85 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? 89 47 08", 16, Sig::Take::Match, &Sacred::Addr::uiGetXCalls[5]}, // 006DD793, 006DD9E3
+    {"uiGetYCalls[0]", "E8 ?? ?? ?? ?? 89 44 24 4C 8D 44 24 4C 8D 4C 24 60", 0, Sig::Take::Match, &Sacred::Addr::uiGetYCalls[0]}, // 005DC43B, 005DC47B
+    {"uiGetYCalls[1]", "E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 89 46 0C E8 ?? ?? ?? ?? 8B 54 24 24 66 8B 4E 08", 0, Sig::Take::Match, &Sacred::Addr::uiGetYCalls[1]}, // 006B64C8, 006B6828
+    {"uiGetYCalls[2]", "E8 ?? ?? ?? ?? 66 8B 56 08 66 8B C8 33 FF 89 46 0C", 0, Sig::Take::Match, &Sacred::Addr::uiGetYCalls[2]}, // 006B6C76, 006B6FD6
+    {"uiGetYCalls[3]", "E8 ?? ?? ?? ?? 8D 4C 24 20 89 47 0C 66 8B D0 66 8B 47 08", 0, Sig::Take::Match, &Sacred::Addr::uiGetYCalls[3]}, // 006DAB84, 006DAE04
+    {"uiGetYCalls[4]", "8B C8 E8 ?? ?? ?? ?? 8B 17 89 46 0C 50 8B 46 08", 2, Sig::Take::Match, &Sacred::Addr::uiGetYCalls[4]}, // 006DBD10, 006DBF90
+    {"uiGetYCalls[5]", "8B C8 E8 ?? ?? ?? ?? 8B 16 89 47 0C 50 8B 47 08", 2, Sig::Take::Match, &Sacred::Addr::uiGetYCalls[5]}, // 006DD7A2, 006DD9F2
+    {"uiCursorPosCalls[0]", "E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? 8B F0 85 F6 89 74 24 2C", 0, Sig::Take::Match, &Sacred::Addr::uiCursorPosCalls[0]}, // 005DC455, 005DC495
+    {"uiCursorPosCalls[1]", "E8 ?? ?? ?? ?? 66 8B 0B 66 8B 57 08 8D 44 24 14", 0, Sig::Take::Match, &Sacred::Addr::uiCursorPosCalls[1]}, // 006ACEB4, 006AD204
+    {"uiCursorPosCalls[2]", "E8 ?? ?? ?? ?? 8B 4C 24 14 66 8B 81 58 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::uiCursorPosCalls[2]}, // 006BFF32, 006C01A2
+    {"uiCursorPosCalls[3]", "E8 ?? ?? ?? ?? 8B 4C 24 1C 8B 54 24 20 8D 44 24 24 50", 0, Sig::Take::Match, &Sacred::Addr::uiCursorPosCalls[3]}, // 006EA170, 006EA500
+    {"uiCursorPosCalls[4]", "E8 ?? ?? ?? ?? 66 8B 45 00 66 8B 0B 8D 54 24 38", 0, Sig::Take::Match, &Sacred::Addr::uiCursorPosCalls[4]}, // 006EA1F9, 006EA589
+    {"cMouse_getCursorPos", "8B 41 64 85 C0 74 23 0F BF 50 02 0F BF 40 04", 0, Sig::Take::Match, &Sacred::Addr::cMouse_getCursorPos}, // 006559A0, 00655810
+    {"cUI_Manager_createGameWindows", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 83 EC 08 55 56 8B F1", 0, Sig::Take::Match, &Sacred::Addr::cUI_Manager_createGameWindows}, // 007593D0, 00759AF0
+    {"cUI_Popup_setText", "8B 44 24 04 53 55 8B E9 56 57 89 85 74 21 00 00 8D 85 8E 21 00 00 BA 04 00 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Popup_setText}, // 006E6AE0, 006E6EA0
+    {"cUI_Popup_setTextId", "53 55 56 57 8B 7C 24 18 8B F1 89 BE 78 21 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Popup_setTextId}, // 006E6BF0, 006E6FB0
     {"g_pTextureManager", "74 1C 85 C0 75 02 8B C5 8B 0D ?? ?? ?? ?? 6A 00", 10, Sig::Take::Abs32, &Sacred::Addr::g_pTextureManager}, // 013E57B8, 013E7838
     {"cTextureManager_init", "83 EC 08 53 55 8B E9 56 8B 4D 04 57", 0, Sig::Take::Match, &Sacred::Addr::cTextureManager_init}, // 0065EA20, 0065E7A0
     {"cEngine_renderThreadRun", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 60 03 00 00", 0, Sig::Take::Match, &Sacred::Addr::cEngine_renderThreadRun}, // 0060E3F0, 0060E350

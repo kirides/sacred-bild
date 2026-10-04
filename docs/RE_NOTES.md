@@ -284,9 +284,22 @@ width/height (int16), `+0x30` name (char[0x20], uninitialized for default-constr
 `+0x50` parent. Render = vtable `+0x14`.
 
 `cUI_Window2` (vtable `0x8951D8`, type descriptor `0x9DE188`) adds a child vector at
-`+0x78/+0x7C/+0x80`. `cUI_Window2_addChild` (`0x727120`) only pushes into that vector, it does **not**
-set the parent pointer: **children keep absolute screen coordinates**, laid out for 1024x768.
-`cUI_Control2_getAbsoluteRect` (`0x731C70`) only adds parent offsets when `+0x50` is set.
+`+0x78/+0x7C/+0x80`. `cUI_Window2_addChild` (`0x727120`) only pushes into that vector, it does not
+set the parent pointer; most constructors pass the parent to the control's constructor instead (the
+inventory's border pieces are created at negative y relative to the window), so children are usually
+relative. `cUI_Control2_getAbsoluteRect` (`0x731C70`, 154 calls) adds parent offsets when `+0x50` is set, and
+most hit tests and tooltips go through it. Window code still draws and tests at fixed 1024x768 positions in
+places: the taskbar's center ornament at (512, 710) (`0x6E3D20`, `0x6E3BB0`), its hit test (`0x6DFB10`: x 384..640,
+y 676..768), the minimap's radar ping at (975, 70) (`0x6D6E70`), the party arrows along the screen edges
+(`0x6CFF70`: 8..1008 x 8..752), the megamap's scrolling at x 1023 / y 767 (`0x6C76A0`).
+
+Virtual functions (thiscall, vtable byte offsets): `+0x10` receiveEvent(cEvent*) -> bool, `+0x14` render(device),
+`+0x1C` isInside(x, y) -> bool, `+0x24` show(bool), `+0x30` update, `+0x34` / `+0x38` ESC / Enter (from
+receiveEvent), `+0x44` render2(device, ?, ?) on blacksmith, merchant, net portraits (and menu windows). Mouse
+button events: cEventMouseDown (vtable `0x8950A8`, type 2) and cEventMouseUp (`0x897248`, type 3), x/y at
+`+8`/`+0xC`; there is no mouse move event, hover reads the cMouse. The manager calls `+0x10` of each window in
+turn (`cUI_Manager_receiveEvent` `0x757120`), `+0x14`/`+0x44` to draw and `+0x1C` from
+`cUI_Manager_isCursorOverUi`.
 
 Construction: `cRect_ctor(x, y, w, h)` (`0x6A55F0`) builds the rect passed by value to
 `cUI_Window2_ctor` (`0x724070`), which calls `cUI_Control2_ctor(name, x, y, w|h<<16, parent, flags)`
@@ -295,8 +308,10 @@ equipment -> (656,388), mercenaries -> (932,0), ...).
 
 `cUI_Manager` (vtable `0x8957D0`): `cUI_Manager_createGameWindows` (`0x7593D0`) creates the in-game
 windows into `+0x80..+0xD8` (taskbar, inventory, equipment, blacksmith, merchant, megamap, overview map,
-mercenaries, stats, console, questbook, escape menu, purchase, master, savegame, options, chest, horse,
-net info, net portraits, cube, trade). `cUI_Manager_render` (`0x7587B0`, arg: device) draws the
+minimap ("UI_WND_MERC": minimap and party portraits, 932,0 92x676), stats, console, questbook, escape menu,
+purchase, master, savegame, options, chest, horse, net info, net portraits, character, cube, trade; rects and
+offsets in `Sacred::UiManager`). The shop windows (blacksmith, merchant, master, chest, cube, trade) are 640 wide
+at 0,0, next to the inventory at 0,388. `cUI_Manager_render` (`0x7587B0`, arg: device) draws the
 cinematic letterbox bars (float immediates 1024/768) and all windows. Full-screen menus are separate
 `cUI_Window2`s with rect (0,0,1024,768) or (0,0,1023,767).
 
@@ -321,6 +336,19 @@ calls `dxDriver7_drawLoadingScreen` via `0x759000` instead. `cEngine_renderThrea
 in-game): world, overlays, `cUI_Manager_render`, cursor. `playVideo` (`0x6A0C60`, thiscall, 5 args):
 DirectShow video into a 1024x512 texture drawn as a (0,0)-(1024,768) TL quad with its own frame loop.
 
+Popups (tooltips, hints; class vtable `0x894B3C`, constructor `0x6E6400`) live in the manager's vector at
+`+0x124/+0x128` and are drawn by `0x7586A0` after the windows. Callers set the popup's x/y and then its text with
+`0x6E6AE0` (string) or `0x6E6BF0` (text id), which flags a new layout (`+0x154` bit 0x40); the popup's render
+(`0x6E7300`) then lays it out (`0x6E7730`: centered on x/y, clamped into 16..1008 x 16..752, or centered on the
+screen). Show helpers: `0x75AC70` / `0x75AD10` (x, y, text, ...); `0x75ADD0` positions the tutorial hints at
+fixed 1024x768 positions; the equipment window sets x/y itself (`0x6B73A0`).
+
+The cMouse (`cMouse_instance` `0x6550F0`, a 0x70-byte singleton behind `0xCDBADC`): `+4/+8` position, `+0xC/+0x10`
+the drawn position (copied and clamped to `+0x14..+0x20` by `0x655670`), `+0x64` cursor image, `+0x68` the item
+held by the cursor (`0x6556E0` get, `0x655710` set, `0x655880` clear). Reads of the position: 89 sites, 17 in
+world code, the other 72 in the UI (55 `cMouse_instance()` followed by reads of +4/+8 only, 6 `getX`, 6 `getY`,
+5 `getCursorPos` `0x6559A0`), two of them outside the UI code range (`cInventoryEntry` `0x5DC2D0`, `0x5DC3F0`).
+
 ### SacredBild UI canvas
 
 Per-window re-anchoring does not work: children are absolute, many renderers draw at absolute
@@ -338,6 +366,18 @@ Per-window re-anchoring does not work: children are absolute, many renderers dra
 - Diagnostics: draws in a UI scope that extend beyond 1024x768, or that the proxy cannot map (3D, VB,
   strided), are logged once per call site; changes of the engine fade flags and the UI manager mode
   (`+8`: `0x10` cinematic) are logged as `State:` lines.
+
+Anchored HUD (`src/game/ui_anchor.*`): moving the windows themselves would miss the fixed positions listed
+above, so each anchored window keeps its 1024x768 coordinates and runs in a frame, a copy of the 1024x768
+space placed against a screen edge. The frame is per thread (`UiCanvas::FrameScope`); the proxy maps draws into
+the current frame and confines them to its rect; the 72 UI reads of the cursor return it relative to the
+current frame. The vtable slots `+0x10`, `+0x14`, `+0x1C`, `+0x24` (and `+0x44` where it is render2) of the
+anchored windows' classes point at thunks that enter the window's frame and shift mouse button events and
+isInside arguments into it (all classes are single inheritance; the slot after a vtable's last entry is the
+next one's RTTI pointer, which bounds the patch). Popups take the frame in which their text was set and are
+drawn unconfined. The cursor itself, the manager's own drawing and every other window stay in the canvas.
+Known gaps: the tutorial hints point at the 1024x768 positions; the party arrows and the cinematic bars stay in
+the canvas.
 
 ## Things that read the back buffer
 

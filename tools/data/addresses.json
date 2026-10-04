@@ -144,6 +144,310 @@
    "451BBE74": "0062772E",
    "452F85C7": "0062764E"
   },
+  "uiMouseReads[0]": {
+   "451BBE74": "005DC2D6",
+   "452F85C7": "005DC316"
+  },
+  "uiMouseReads[1]": {
+   "451BBE74": "006A31C4",
+   "452F85C7": "006A3404"
+  },
+  "uiMouseReads[2]": {
+   "451BBE74": "006A451D",
+   "452F85C7": "006A475D"
+  },
+  "uiMouseReads[3]": {
+   "451BBE74": "006A8ADC",
+   "452F85C7": "006A8E1C"
+  },
+  "uiMouseReads[4]": {
+   "451BBE74": "006A949E",
+   "452F85C7": "006A97DE"
+  },
+  "uiMouseReads[5]": {
+   "451BBE74": "006A9C4A",
+   "452F85C7": "006A9F8A"
+  },
+  "uiMouseReads[6]": {
+   "451BBE74": "006AC8D7",
+   "452F85C7": "006ACC27"
+  },
+  "uiMouseReads[7]": {
+   "451BBE74": "006AEBBD",
+   "452F85C7": "006AEEDD"
+  },
+  "uiMouseReads[8]": {
+   "451BBE74": "006B2705",
+   "452F85C7": "006B2A25"
+  },
+  "uiMouseReads[9]": {
+   "451BBE74": "006B2815",
+   "452F85C7": "006B2B35"
+  },
+  "uiMouseReads[10]": {
+   "451BBE74": "006B7497",
+   "452F85C7": "006B77F7"
+  },
+  "uiMouseReads[11]": {
+   "451BBE74": "006B78BA",
+   "452F85C7": "006B7C1A"
+  },
+  "uiMouseReads[12]": {
+   "451BBE74": "006B7A50",
+   "452F85C7": "006B7DB0"
+  },
+  "uiMouseReads[13]": {
+   "451BBE74": "006BB1C4",
+   "452F85C7": "006BB524"
+  },
+  "uiMouseReads[14]": {
+   "451BBE74": "006BF82A",
+   "452F85C7": "006BFA9A"
+  },
+  "uiMouseReads[15]": {
+   "451BBE74": "006C1271",
+   "452F85C7": "006C14E1"
+  },
+  "uiMouseReads[16]": {
+   "451BBE74": "006C1F2F",
+   "452F85C7": "006C219F"
+  },
+  "uiMouseReads[17]": {
+   "451BBE74": "006C235C",
+   "452F85C7": "006C25CC"
+  },
+  "uiMouseReads[18]": {
+   "451BBE74": "006C6EE7",
+   "452F85C7": "006C7167"
+  },
+  "uiMouseReads[19]": {
+   "451BBE74": "006C76BA",
+   "452F85C7": "006C793A"
+  },
+  "uiMouseReads[20]": {
+   "451BBE74": "006C9585",
+   "452F85C7": "006C9805"
+  },
+  "uiMouseReads[21]": {
+   "451BBE74": "006C9D12",
+   "452F85C7": "006C9F92"
+  },
+  "uiMouseReads[22]": {
+   "451BBE74": "006D2BB2",
+   "452F85C7": "006D2E32"
+  },
+  "uiMouseReads[23]": {
+   "451BBE74": "006D4A91",
+   "452F85C7": "006D4D11"
+  },
+  "uiMouseReads[24]": {
+   "451BBE74": "006D6357",
+   "452F85C7": "006D65D7"
+  },
+  "uiMouseReads[25]": {
+   "451BBE74": "006D71D1",
+   "452F85C7": "006D7451"
+  },
+  "uiMouseReads[26]": {
+   "451BBE74": "006D796C",
+   "452F85C7": "006D7BEC"
+  },
+  "uiMouseReads[27]": {
+   "451BBE74": "006D8DD5",
+   "452F85C7": "006D9055"
+  },
+  "uiMouseReads[28]": {
+   "451BBE74": "006D8E67",
+   "452F85C7": "006D90E7"
+  },
+  "uiMouseReads[29]": {
+   "451BBE74": "006DA834",
+   "452F85C7": "006DAAB4"
+  },
+  "uiMouseReads[30]": {
+   "451BBE74": "006DCCA8",
+   "452F85C7": "006DCEF8"
+  },
+  "uiMouseReads[31]": {
+   "451BBE74": "006DDFA4",
+   "452F85C7": "006DE1F4"
+  },
+  "uiMouseReads[32]": {
+   "451BBE74": "006E435C",
+   "452F85C7": "006E45AC"
+  },
+  "uiMouseReads[33]": {
+   "451BBE74": "006E7459",
+   "452F85C7": "006E7819"
+  },
+  "uiMouseReads[34]": {
+   "451BBE74": "006EA5C6",
+   "452F85C7": "006EA956"
+  },
+  "uiMouseReads[35]": {
+   "451BBE74": "006F1326",
+   "452F85C7": "006F1666"
+  },
+  "uiMouseReads[36]": {
+   "451BBE74": "006F744B",
+   "452F85C7": "006F778B"
+  },
+  "uiMouseReads[37]": {
+   "451BBE74": "006F8A06",
+   "452F85C7": "006F8D46"
+  },
+  "uiMouseReads[38]": {
+   "451BBE74": "0070F211",
+   "452F85C7": "0070F811"
+  },
+  "uiMouseReads[39]": {
+   "451BBE74": "00716693",
+   "452F85C7": "00716E53"
+  },
+  "uiMouseReads[40]": {
+   "451BBE74": "007211BF",
+   "452F85C7": "0072192F"
+  },
+  "uiMouseReads[41]": {
+   "451BBE74": "00721891",
+   "452F85C7": "00722001"
+  },
+  "uiMouseReads[42]": {
+   "451BBE74": "00721B33",
+   "452F85C7": "007222A3"
+  },
+  "uiMouseReads[43]": {
+   "451BBE74": "007280EE",
+   "452F85C7": "0072885E"
+  },
+  "uiMouseReads[44]": {
+   "451BBE74": "0072BA32",
+   "452F85C7": "0072C1A2"
+  },
+  "uiMouseReads[45]": {
+   "451BBE74": "0072F919",
+   "452F85C7": "0072FFF9"
+  },
+  "uiMouseReads[46]": {
+   "451BBE74": "00731834",
+   "452F85C7": "00731F14"
+  },
+  "uiMouseReads[47]": {
+   "451BBE74": "00731ABC",
+   "452F85C7": "0073219C"
+  },
+  "uiMouseReads[48]": {
+   "451BBE74": "00732173",
+   "452F85C7": "00732853"
+  },
+  "uiMouseReads[49]": {
+   "451BBE74": "0074B49D",
+   "452F85C7": "0074BBED"
+  },
+  "uiMouseReads[50]": {
+   "451BBE74": "0074F7EB",
+   "452F85C7": "0074FEDB"
+  },
+  "uiMouseReads[51]": {
+   "451BBE74": "0075282B",
+   "452F85C7": "00752F4B"
+  },
+  "uiMouseReads[52]": {
+   "451BBE74": "00753A9D",
+   "452F85C7": "007541BD"
+  },
+  "uiMouseReads[53]": {
+   "451BBE74": "007544B0",
+   "452F85C7": "00754BD0"
+  },
+  "uiMouseReads[54]": {
+   "451BBE74": "0075837D",
+   "452F85C7": "00758A9D"
+  },
+  "uiGetXCalls[0]": {
+   "451BBE74": "005DC42B",
+   "452F85C7": "005DC46B"
+  },
+  "uiGetXCalls[1]": {
+   "451BBE74": "006B64B9",
+   "452F85C7": "006B6819"
+  },
+  "uiGetXCalls[2]": {
+   "451BBE74": "006B6C67",
+   "452F85C7": "006B6FC7"
+  },
+  "uiGetXCalls[3]": {
+   "451BBE74": "006DAB75",
+   "452F85C7": "006DADF5"
+  },
+  "uiGetXCalls[4]": {
+   "451BBE74": "006DBD01",
+   "452F85C7": "006DBF81"
+  },
+  "uiGetXCalls[5]": {
+   "451BBE74": "006DD793",
+   "452F85C7": "006DD9E3"
+  },
+  "uiGetYCalls[0]": {
+   "451BBE74": "005DC43B",
+   "452F85C7": "005DC47B"
+  },
+  "uiGetYCalls[1]": {
+   "451BBE74": "006B64C8",
+   "452F85C7": "006B6828"
+  },
+  "uiGetYCalls[2]": {
+   "451BBE74": "006B6C76",
+   "452F85C7": "006B6FD6"
+  },
+  "uiGetYCalls[3]": {
+   "451BBE74": "006DAB84",
+   "452F85C7": "006DAE04"
+  },
+  "uiGetYCalls[4]": {
+   "451BBE74": "006DBD10",
+   "452F85C7": "006DBF90"
+  },
+  "uiGetYCalls[5]": {
+   "451BBE74": "006DD7A2",
+   "452F85C7": "006DD9F2"
+  },
+  "uiCursorPosCalls[0]": {
+   "451BBE74": "005DC455",
+   "452F85C7": "005DC495"
+  },
+  "uiCursorPosCalls[1]": {
+   "451BBE74": "006ACEB4",
+   "452F85C7": "006AD204"
+  },
+  "uiCursorPosCalls[2]": {
+   "451BBE74": "006BFF32",
+   "452F85C7": "006C01A2"
+  },
+  "uiCursorPosCalls[3]": {
+   "451BBE74": "006EA170",
+   "452F85C7": "006EA500"
+  },
+  "uiCursorPosCalls[4]": {
+   "451BBE74": "006EA1F9",
+   "452F85C7": "006EA589"
+  },
+  "cMouse_getCursorPos": {
+   "451BBE74": "006559A0",
+   "452F85C7": "00655810"
+  },
+  "cUI_Manager_createGameWindows": {
+   "451BBE74": "007593D0",
+   "452F85C7": "00759AF0"
+  },
+  "cUI_Popup_setText": {
+   "451BBE74": "006E6AE0",
+   "452F85C7": "006E6EA0"
+  },
+  "cUI_Popup_setTextId": {
+   "451BBE74": "006E6BF0",
+   "452F85C7": "006E6FB0"
+  },
   "g_pTextureManager": {
    "451BBE74": "013E57B8",
    "452F85C7": "013E7838"

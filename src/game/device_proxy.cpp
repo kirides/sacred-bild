@@ -276,16 +276,22 @@ void DeviceProxy::probe3D(const char* what, DWORD fvf, const void* positions, DW
         m_world._41, m_world._42, m_world._43);
 }
 
-D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt) const
+D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt, bool frameOnly) const
 {
-    const float s = UiCanvas::scale();
-    const float l = m_confine ? UiCanvas::left() : 0.0f, t = m_confine ? UiCanvas::top() : 0.0f;
-    const float r = m_confine ? UiCanvas::right() : static_cast<float>(m_savedViewport.dwX + m_savedViewport.dwWidth);
-    const float b = m_confine ? UiCanvas::bottom() : static_cast<float>(m_savedViewport.dwY + m_savedViewport.dwHeight);
-    const float x0 = std::max(UiCanvas::left() + virt.dwX * s, l);
-    const float y0 = std::max(UiCanvas::top() + virt.dwY * s, t);
-    const float x1 = std::min(UiCanvas::left() + (virt.dwX + virt.dwWidth) * s, r);
-    const float y1 = std::min(UiCanvas::top() + (virt.dwY + virt.dwHeight) * s, b);
+    const UiCanvas::Placement p = UiCanvas::placement();
+    const float s = p.scale;
+    float l = p.clipLeft, t = p.clipTop, r = p.clipRight, b = p.clipBottom;
+    if (frameOnly)
+    {
+        l = std::max(l, p.originX);
+        t = std::max(t, p.originY);
+        r = std::min(r, p.originX + 1024.0f * s);
+        b = std::min(b, p.originY + 768.0f * s);
+    }
+    const float x0 = std::max(p.originX + virt.dwX * s, l);
+    const float y0 = std::max(p.originY + virt.dwY * s, t);
+    const float x1 = std::min(p.originX + (virt.dwX + virt.dwWidth) * s, r);
+    const float y1 = std::min(p.originY + (virt.dwY + virt.dwHeight) * s, b);
     D3DVIEWPORT7 vp = virt;
     vp.dwX = static_cast<DWORD>(std::lround(x0));
     vp.dwY = static_cast<DWORD>(std::lround(y0));
@@ -296,14 +302,12 @@ D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt) const
 
 bool DeviceProxy::beginOverlay3D(D3DVIEWPORT7& restore)
 {
-    if (!m_ui || m_confine)
+    if (!m_ui || UiCanvas::frame().confine)
     {
         return false;
     }
     m_real->GetViewport(&restore);
-    m_confine = true;
-    D3DVIEWPORT7 vp = canvasViewport(m_uiViewport);
-    m_confine = false;
+    D3DVIEWPORT7 vp = canvasViewport(m_uiViewport, true);
     m_real->SetViewport(&vp);
     return true;
 }
@@ -313,7 +317,7 @@ DWORD DeviceProxy::uiFilter(DWORD value) const
     return g_config.uiLinearFilter && value == D3DTFG_POINT ? D3DTFG_LINEAR : value;
 }
 
-void DeviceProxy::beginUi(bool confine)
+void DeviceProxy::beginUi()
 {
     CallLock lock(*this, _ReturnAddress());
     if (m_ui)
@@ -326,10 +330,9 @@ void DeviceProxy::beginUi(bool confine)
         m_batcher->sync();
     }
     m_ui = true;
-    m_confine = confine;
     m_real->GetViewport(&m_savedViewport);
     m_uiViewport = {0, 0, 1024, 768, m_savedViewport.dvMinZ, m_savedViewport.dvMaxZ};
-    if (m_confine)
+    if (UiCanvas::frame().confine)
     {
         D3DVIEWPORT7 vp = canvasViewport(m_uiViewport);
         m_real->SetViewport(&vp);
@@ -339,6 +342,18 @@ void DeviceProxy::beginUi(bool confine)
         m_real->SetTextureStageState(stage, D3DTSS_MAGFILTER, uiFilter(m_filters[stage][0]));
         m_real->SetTextureStageState(stage, D3DTSS_MINFILTER, uiFilter(m_filters[stage][1]));
     }
+}
+
+void DeviceProxy::uiFrameChanged()
+{
+    CallLock lock(*this, _ReturnAddress());
+    if (!m_ui)
+    {
+        return;
+    }
+    // Confined frames clip through the viewport; unconfined ones draw on the whole screen.
+    D3DVIEWPORT7 vp = UiCanvas::frame().confine ? canvasViewport(m_uiViewport) : m_savedViewport;
+    m_real->SetViewport(&vp);
 }
 
 void DeviceProxy::endUi()
@@ -372,7 +387,9 @@ bool DeviceProxy::mapToCanvas(DWORD fvf, const void* verts, DWORD count, const v
     std::memcpy(m_scratch.data(), verts, bytes);
     m_virtMinX = m_virtMinY = 1e30f;
     m_virtMaxX = m_virtMaxY = -1e30f;
-    const float s = UiCanvas::scale(), ox = UiCanvas::left(), oy = UiCanvas::top();
+    const UiCanvas::Placement place = UiCanvas::placement();
+    const bool confine = UiCanvas::frame().confine;
+    const float s = place.scale, ox = place.originX, oy = place.originY;
     float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
     for (DWORD i = 0; i < count; ++i)
     {
@@ -390,12 +407,12 @@ bool DeviceProxy::mapToCanvas(DWORD fvf, const void* verts, DWORD count, const v
     }
     mapped = m_scratch.data();
     const bool onScreen = m_virtMaxX > 0 && m_virtMinX < 1024 && m_virtMaxY > 0 && m_virtMinY < 768;
-    if (m_confine && onScreen && (m_virtMaxX > 1100 || m_virtMaxY > 830 || m_virtMinX < -76 || m_virtMinY < -62))
+    if (confine && onScreen && (m_virtMaxX > 1100 || m_virtMaxY > 830 || m_virtMinX < -76 || m_virtMinY < -62))
     {
         noteUiDraw(m_site, "draw beyond 1024x768");
     }
     // Windows parked outside the 1024x768 screen must stay invisible.
-    return !m_confine || maxX > UiCanvas::left() && minX < UiCanvas::right() && maxY > UiCanvas::top() && minY < UiCanvas::bottom();
+    return !confine || maxX > place.clipLeft && minX < place.clipRight && maxY > place.clipTop && minY < place.clipBottom;
 }
 
 bool DeviceProxy::clipQuad(DWORD fvf, uint8_t* verts)
@@ -413,7 +430,8 @@ bool DeviceProxy::clipQuad(DWORD fvf, uint8_t* verts)
         minY = std::min(minY, v[i][1]);
         maxY = std::max(maxY, v[i][1]);
     }
-    const float l = UiCanvas::left(), t = UiCanvas::top(), r = UiCanvas::right(), b = UiCanvas::bottom();
+    const UiCanvas::Placement place = UiCanvas::placement();
+    const float l = place.clipLeft, t = place.clipTop, r = place.clipRight, b = place.clipBottom;
     if (minX >= l && maxX <= r && minY >= t && maxY <= b)
     {
         return true;
@@ -539,13 +557,16 @@ HRESULT DeviceProxy::Clear(DWORD count, LPD3DRECT rects, DWORD flags, D3DCOLOR c
     }
     if (m_ui && count && rects)
     {
+        const UiCanvas::Placement place = UiCanvas::placement();
+        auto mapX = [&](LONG x) { return static_cast<LONG>(std::lround(x * place.scale + place.originX)); };
+        auto mapY = [&](LONG y) { return static_cast<LONG>(std::lround(y * place.scale + place.originY)); };
         std::vector<D3DRECT> mapped(rects, rects + count);
         for (D3DRECT& r : mapped)
         {
-            r.x1 = UiCanvas::toPhysicalX(r.x1);
-            r.y1 = UiCanvas::toPhysicalY(r.y1);
-            r.x2 = UiCanvas::toPhysicalX(r.x2);
-            r.y2 = UiCanvas::toPhysicalY(r.y2);
+            r.x1 = mapX(r.x1);
+            r.y1 = mapY(r.y1);
+            r.x2 = mapX(r.x2);
+            r.y2 = mapY(r.y2);
         }
         return m_real->Clear(count, mapped.data(), flags, color, z, stencil);
     }
@@ -750,7 +771,7 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
         {
             return D3D_OK;
         }
-        if (quad && m_confine)
+        if (quad && UiCanvas::frame().confine)
         {
             clipQuad(fvf, m_scratch.data());
         }

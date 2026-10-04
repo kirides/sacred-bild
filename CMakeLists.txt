@@ -34,6 +34,7 @@ add_library(ddraw SHARED
   src/game/d3d_stats.cpp
   src/game/device_proxy.cpp
   src/game/resolution.cpp
+  src/game/ui_anchor.cpp
   src/game/ui_canvas.cpp
   src/ddraw9/device.cpp
   src/ddraw9/directdraw.cpp

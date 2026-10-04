@@ -2,6 +2,10 @@
 
 // The game's UI keeps running in its native 1024x768 space: it is drawn into a centered (optionally scaled)
 // canvas and the cursor is mapped into that space. World code keeps physical screen coordinates.
+//
+// Frames place a 1024x768 layout elsewhere on the screen: windows anchored to a screen edge (UiAnchor) draw, read
+// the cursor and receive mouse events in a frame shifted against the canvas, so the game's own layout of each
+// window, hard-coded coordinates included, stays intact. The canvas is the frame at offset 0.
 namespace UiCanvas
 {
     // Hooks the cursor and the world's mouse reads; call inside a Patch transaction after Resolution::install.
@@ -15,14 +19,52 @@ namespace UiCanvas
     float right();
     float bottom();
 
+    // Cursor in canvas coordinates (what cMouse holds) and back.
     int toVirtualX(int physical);
     int toVirtualY(int physical);
     int toPhysicalX(int virt);
     int toPhysicalY(int virt);
 
-    // UI drawing scope (nests, per thread). While active, the device proxy maps draws into the canvas.
-    // Canvas: confined to the canvas (windows parked off-screen stay hidden). Overlay: mapped the same way but
-    // may cover the whole screen (the cursor, which also points at the world beside the canvas).
+    // A frame: offset against the canvas in virtual units; confined frames clip their draws to their 1024x768
+    // rect (windows the game hid by moving them off its screen stay hidden).
+    struct Frame
+    {
+        float x = 0.0f;
+        float y = 0.0f;
+        bool confine = true;
+
+        bool operator==(const Frame&) const = default;
+    };
+
+    // Frame offset that puts the 1024x768 layout against the screen's left/top (0), center (1) or right/bottom (2).
+    Frame anchored(int horizontal, int vertical);
+
+    // The calling thread's frame and where it lies on the screen (physical pixels). `clip` is the frame's rect if it
+    // is confined, else the screen.
+    Frame frame();
+    struct Placement
+    {
+        float scale, originX, originY;
+        float clipLeft, clipTop, clipRight, clipBottom;
+    };
+    Placement placement();
+
+    // Draws and cursor reads of the calling thread go through `frame` while it lives (nests).
+    class FrameScope
+    {
+    public:
+        explicit FrameScope(const Frame& frame);
+        ~FrameScope();
+        FrameScope(const FrameScope&) = delete;
+        FrameScope& operator=(const FrameScope&) = delete;
+
+    private:
+        Frame m_previous;
+    };
+
+    // UI drawing scope (nests, per thread). While active, the device proxy maps draws into the current frame.
+    // Canvas: starts in the canvas frame, confined (windows parked off-screen stay hidden). Overlay: mapped the same
+    // way but may cover the whole screen (the cursor, which also points at the world beside the canvas).
     enum class Mode { Canvas, Overlay };
     void enter(Mode mode = Mode::Canvas);
     void leave();

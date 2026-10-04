@@ -47,8 +47,24 @@ namespace Sacred::Addr
     inline uintptr_t cUI_Manager_isCursorOverUi{};      // DE 0075A370; thiscall (x, y) -> bool, UI coordinates
     // cUI_Control2_ctor: DE 00731420; (name, x, y, w|h<<16, parent, flags)
     // cUI_Window2_addChild: DE 00727120; pushes into the children vector
-    // cUI_Manager_createGameWindows: DE 007593D0
+    // Creates the in-game windows (UiManager::taskbar ...) once; later calls return right away.
+    inline uintptr_t cUI_Manager_createGameWindows{};   // DE 007593D0; fastcall (manager)
     // cUI_Window2_typeDescriptor: DE 009DE188
+    // Popup (tooltip / hint) windows, owned by the manager (UiManager::popupsBegin). Callers set the popup's x/y
+    // first, then its text with one of these, which also requests a new layout: the popup's render (vtable +0x14)
+    // centers it on x/y and clamps it into 16..1008 x 16..752 before drawing.
+    inline uintptr_t cUI_Popup_setText{};               // DE 006E6AE0; thiscall (?, const wstring*, bool)
+    inline uintptr_t cUI_Popup_setTextId{};             // DE 006E6BF0; thiscall (?, text id, bool)
+
+    // UI-side reads of the cursor: cMouse_instance() followed by reads of +4/+8 only, and the calls of cMouse::getX
+    // (DE 006559E0), getY (006559F0) and getCursorPos. SacredBild gives them the cursor in the current UI frame.
+    inline uintptr_t uiMouseReads[55]{};                // DE 005DC2D6 006A31C4 ... 0075837D (tools/gen_sigs.py)
+    inline uintptr_t uiGetXCalls[6]{};                  // DE 005DC42B 006B64B9 006B6C67 006DAB75 006DBD01 006DD793
+    inline uintptr_t uiGetYCalls[6]{};                  // DE 005DC43B 006B64C8 006B6C76 006DAB84 006DBD10 006DD7A2
+    inline uintptr_t uiCursorPosCalls[5]{};             // DE 005DC455 006ACEB4 006BFF32 006EA170 006EA1F9
+    // thiscall (int* x, int* y): the drawn cursor's top-left corner (+0xC/+0x10 minus the cursor's hot spot); writes
+    // nothing while no cursor image is set (+0x64).
+    inline uintptr_t cMouse_getCursorPos{};             // DE 006559A0
 
     // Texture manager (one instance): loads textures on use, evicts least recently used ones above a budget.
     // initApp computes the budget from GlobalMemoryStatus and the reported video memory (min 32 MB).
@@ -200,6 +216,7 @@ namespace Sacred::Mouse
 {
     constexpr uintptr_t x = 0x04;
     constexpr uintptr_t y = 0x08;
+    constexpr uintptr_t cursorImage = 0x64;  // getCursorPos writes its outputs only while this is set
 }
 
 // cUI_Manager: top-level game windows created by createGameWindows live in this pointer range.
@@ -208,4 +225,48 @@ namespace Sacred::UiManager
     constexpr uintptr_t flags = 0x08;        // 0x01 menus, 0x04 in game, 0x10 cinematic
     constexpr uintptr_t firstGameWindow = 0x80;
     constexpr uintptr_t lastGameWindow = 0xD8;
+    // In-game windows (cUI_Window2 subclasses) and their rects in the 1024x768 layout.
+    constexpr uintptr_t taskbar = 0x80;      // 0,676 1024x92
+    constexpr uintptr_t inventory = 0x84;    // 0,388 640x256
+    constexpr uintptr_t equipment = 0x88;    // 656,388 256x256
+    constexpr uintptr_t blacksmith = 0x8C;   // 0,0 640x352
+    constexpr uintptr_t merchant = 0x90;     // 0,0 640x336
+    constexpr uintptr_t megamap = 0x94;      // full screen
+    constexpr uintptr_t overviewMap = 0x98;  // 162,120 700x525
+    constexpr uintptr_t minimap = 0x9C;      // UI_WND_MERC: minimap and party portraits, 932,0 92x676
+    constexpr uintptr_t stats = 0xA0;        // 656,0 256x420
+    constexpr uintptr_t console = 0xA4;      // chat input, 256,640 512x128
+    constexpr uintptr_t questbook = 0xA8;    // 64,64 832x576
+    constexpr uintptr_t savegame = 0xAC;     // full screen
+    constexpr uintptr_t escMenu = 0xB0;      // 380,284
+    constexpr uintptr_t purchase = 0xB4;     // 160,96
+    constexpr uintptr_t master = 0xB8;       // combat art master, 0,0 640x336
+    constexpr uintptr_t options = 0xBC;      // full screen
+    constexpr uintptr_t chest = 0xC0;        // 0,0 640x320
+    constexpr uintptr_t horse = 0xC4;        // 256,204 512x360
+    constexpr uintptr_t netInfo = 0xC8;      // 352,406 320x240
+    constexpr uintptr_t netPortraits = 0xCC; // 0,0 896x64
+    constexpr uintptr_t character = 0xD0;    // full screen
+    constexpr uintptr_t cube = 0xD4;         // 0,0 640x320
+    constexpr uintptr_t trade = 0xD8;        // 0,0 640x320
+    // std::vector of popup windows (vtable: render +0x14, events +0x10, hit test +0x1c, like a window).
+    constexpr uintptr_t popupsBegin = 0x124;
+    constexpr uintptr_t popupsEnd = 0x128;
+}
+
+// cUI_Window2 virtual functions (thiscall; byte offsets into the vtable) that SacredBild wraps for UI frames.
+namespace Sacred::UiWindowSlot
+{
+    constexpr uintptr_t receiveEvent = 0x10; // (cEvent*) -> bool; mouse buttons carry x/y at +8/+0xC
+    constexpr uintptr_t render = 0x14;       // (device)
+    constexpr uintptr_t isInside = 0x1C;     // (x, y) -> bool
+    constexpr uintptr_t show = 0x24;         // (bool)
+    constexpr uintptr_t render2 = 0x44;      // (device, ?, ?): blacksmith, merchant, net portraits draw here
+}
+
+// cEvent member offsets (mouse button events: cEventMouseDown_vtable / cEventMouseUp_vtable).
+namespace Sacred::MouseEvent
+{
+    constexpr uintptr_t x = 0x08;
+    constexpr uintptr_t y = 0x0C;
 }

@@ -24,10 +24,13 @@ public:
     static DeviceProxy* instance();     // the proxy currently handed to the game, if any
     IDirect3DDevice7* real() const { return m_real; }
 
-    // UI canvas mode (see UiCanvas): pretransformed vertices scaled into the canvas. Confined: viewport set to
-    // the canvas, draws outside 1024x768 culled or clipped. Unconfined (cursor): mapped only.
-    void beginUi(bool confine);
+    // UI canvas mode (see UiCanvas): pretransformed vertices scaled into the calling thread's UI frame. Confined
+    // frames: viewport set to the frame's rect, draws outside 1024x768 culled or clipped. Unconfined (cursor,
+    // popups): mapped only.
+    void beginUi();
     void endUi();
+    // The UI frame changed (UiCanvas::FrameScope) while in UI mode.
+    void uiFrameChanged();
 
     // Batching scope (see Batcher), around the world view.
     void beginBatch();
@@ -119,14 +122,15 @@ private:
     // Calls go through the batcher: inside a batching scope, outside UI mode and state block recording.
     bool batching() const { return m_batcher && m_batcher->active() && !m_ui && !m_recording; }
 
-    // Copies pretransformed vertices into the canvas; false if all of them land outside it.
+    // Copies pretransformed vertices into the UI frame; false if all of them land outside a confined frame.
     bool mapToCanvas(DWORD fvf, const void* verts, DWORD count, const void*& mapped);
-    // Clips an axis-aligned 4-vertex quad (strip/fan) to the canvas in place; false if it can't.
+    // Clips an axis-aligned 4-vertex quad (strip/fan) to the UI frame in place; false if it can't.
     bool clipQuad(DWORD fvf, uint8_t* verts);
-    D3DVIEWPORT7 canvasViewport(const D3DVIEWPORT7& virt) const;    // clamped to the canvas, or the screen if unconfined
+    // Mapped into the UI frame; clamped to the frame, or the screen if unconfined (or `confined` is false).
+    D3DVIEWPORT7 canvasViewport(const D3DVIEWPORT7& virt, bool confined = true) const;
     void probe3D(const char* what, DWORD fvf, const void* positions, DWORD stride, DWORD count, const void* site);
     // Unconfined (cursor) mode: 3D draws such as a dragged item model project into 1024x768 and need the
-    // canvas-mapped viewport; returns false if nothing changed.
+    // frame-mapped viewport; returns false if nothing changed.
     bool beginOverlay3D(D3DVIEWPORT7& restore);
     void probeTL(DWORD fvf, const void* verts, DWORD count, const void* site);
     void dumpProbeTL();
@@ -150,7 +154,6 @@ private:
     uint32_t m_foreignCalls = 0;
     DWORD m_foreignReportTick = 0;
     bool m_ui = false;
-    bool m_confine = true;
     D3DVIEWPORT7 m_savedViewport = {};      // physical viewport before entering UI mode
     D3DVIEWPORT7 m_uiViewport = {};         // viewport as the UI sees it (virtual 1024x768 space)
     DWORD m_filters[2][2] = {{1, 1}, {1, 1}};   // game's MAG/MIN filter for stages 0/1

@@ -43,6 +43,23 @@ SACRED = [
     *[(f'worldGetXCalls[{n}]', a, 'code') for n, a in enumerate((0x00611FF4, 0x0061203D, 0x006127DC, 0x00612868, 0x00617E9C, 0x00617F09))],
     *[(f'worldGetYCalls[{n}]', a, 'code') for n, a in enumerate((0x00611FE7, 0x00612030, 0x006127ED, 0x00612879, 0x00617EAD, 0x00617EFC))],
     *[(f'worldMouseReads[{n}]', a, 'code') for n, a in enumerate((0x004FB6C1, 0x0060F308, 0x00610567, 0x00611F63, 0x0062772E))],
+    # UI-side reads of the cursor (ui_canvas, frames): cMouse_instance() followed by reads of +4/+8 only, and the
+    # calls of cMouse::getX / getY / getCursorPos; every other read of the position in the exe is a world one above.
+    *[(f'uiMouseReads[{n}]', a, 'code') for n, a in enumerate((
+        0x005DC2D6, 0x006A31C4, 0x006A451D, 0x006A8ADC, 0x006A949E, 0x006A9C4A, 0x006AC8D7, 0x006AEBBD, 0x006B2705,
+        0x006B2815, 0x006B7497, 0x006B78BA, 0x006B7A50, 0x006BB1C4, 0x006BF82A, 0x006C1271, 0x006C1F2F, 0x006C235C,
+        0x006C6EE7, 0x006C76BA, 0x006C9585, 0x006C9D12, 0x006D2BB2, 0x006D4A91, 0x006D6357, 0x006D71D1, 0x006D796C,
+        0x006D8DD5, 0x006D8E67, 0x006DA834, 0x006DCCA8, 0x006DDFA4, 0x006E435C, 0x006E7459, 0x006EA5C6, 0x006F1326,
+        0x006F744B, 0x006F8A06, 0x0070F211, 0x00716693, 0x007211BF, 0x00721891, 0x00721B33, 0x007280EE, 0x0072BA32,
+        0x0072F919, 0x00731834, 0x00731ABC, 0x00732173, 0x0074B49D, 0x0074F7EB, 0x0075282B, 0x00753A9D, 0x007544B0,
+        0x0075837D))],
+    *[(f'uiGetXCalls[{n}]', a, 'code') for n, a in enumerate((0x005DC42B, 0x006B64B9, 0x006B6C67, 0x006DAB75, 0x006DBD01, 0x006DD793))],
+    *[(f'uiGetYCalls[{n}]', a, 'code') for n, a in enumerate((0x005DC43B, 0x006B64C8, 0x006B6C76, 0x006DAB84, 0x006DBD10, 0x006DD7A2))],
+    *[(f'uiCursorPosCalls[{n}]', a, 'code') for n, a in enumerate((0x005DC455, 0x006ACEB4, 0x006BFF32, 0x006EA170, 0x006EA1F9))],
+    ('cMouse_getCursorPos', 0x006559A0, 'func'),
+    ('cUI_Manager_createGameWindows', 0x007593D0, 'func'),
+    ('cUI_Popup_setText', 0x006E6AE0, 'func'),
+    ('cUI_Popup_setTextId', 0x006E6BF0, 'func'),
     # textures
     ('g_pTextureManager', 0x013E57B8, 'data'),
     ('cTextureManager_init', 0x0065EA20, 'func'),

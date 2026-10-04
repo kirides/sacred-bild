@@ -19,6 +19,8 @@ namespace
     float g_left = 0.0f;
     float g_top = 0.0f;
     thread_local int t_depth = 0;
+    thread_local UiCanvas::Frame t_frame;
+    thread_local UiCanvas::Frame t_outerFrame;     // the frame before the outermost UI scope
 
     using GetClientCursorPosFn = void(__cdecl*)(HWND, POINT*);
     using RenderCursorFn = void(__fastcall*)(void* self, void* edx, void* device, int flag);
@@ -27,16 +29,29 @@ namespace
     using WorldMouseFn = uint32_t(__fastcall*)(void* engine, void* edx, void* event, int flag);
     WorldMouseFn g_origWorldMouse = nullptr;
     using SavePortraitFn = uint32_t(__fastcall*)(void* self, void* edx, const char* path, int w, int h, float scale);
+    using CursorPosFn = void(__fastcall*)(void* mouse, void* edx, int* x, int* y);
 
     GetClientCursorPosFn g_origGetClientCursorPos = nullptr;
     RenderCursorFn g_origRenderCursor = nullptr;
     MouseInstanceFn g_mouseInstance = nullptr;
     IsCursorOverUiFn g_isCursorOverUi = nullptr;
     SavePortraitFn g_origSavePortrait = nullptr;
+    CursorPosFn g_cursorPos = nullptr;
 
     int mouseField(void* mouse, uintptr_t offset)
     {
         return *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(mouse) + offset);
+    }
+
+    void notifyProxy()
+    {
+        if (g_enabled && t_depth > 0)
+        {
+            if (DeviceProxy* proxy = DeviceProxy::instance())
+            {
+                proxy->uiFrameChanged();
+            }
+        }
     }
 
     void __cdecl hookGetClientCursorPos(HWND hwnd, POINT* pt)
@@ -52,6 +67,7 @@ namespace
     void __fastcall hookRenderCursor(void* self, void* edx, void* device, int flag)
     {
         UiCanvas::Scope ui{UiCanvas::Mode::Overlay};
+        UiCanvas::FrameScope canvas{{0.0f, 0.0f, false}};
         g_origRenderCursor(self, edx, device, flag);
     }
 
@@ -70,7 +86,7 @@ namespace
         {
             return g_origWorldMouse(engine, edx, event, flag);
         }
-        auto* coords = reinterpret_cast<int*>(static_cast<uint8_t*>(event) + 8);
+        auto* coords = reinterpret_cast<int*>(static_cast<uint8_t*>(event) + MouseEvent::x);
         const int x = coords[0], y = coords[1];
         coords[0] = UiCanvas::toPhysicalX(x);
         coords[1] = UiCanvas::toPhysicalY(y);
@@ -105,6 +121,43 @@ namespace
         shadow[2] = UiCanvas::toPhysicalY(mouseField(mouse, Mouse::y));
         return shadow;
     }
+
+    // UI reads of the cursor: canvas coordinates moved into the calling thread's frame.
+    int frameX(int canvas) { return static_cast<int>(std::lround(canvas - t_frame.x)); }
+    int frameY(int canvas) { return static_cast<int>(std::lround(canvas - t_frame.y)); }
+
+    int __fastcall frameGetX(void* mouse)
+    {
+        return frameX(mouseField(mouse, Mouse::x));
+    }
+
+    int __fastcall frameGetY(void* mouse)
+    {
+        return frameY(mouseField(mouse, Mouse::y));
+    }
+
+    void* __cdecl frameMouseInstance()
+    {
+        void* mouse = g_mouseInstance();
+        if (t_frame.x == 0.0f && t_frame.y == 0.0f)
+        {
+            return mouse;
+        }
+        thread_local int shadow[4];
+        shadow[1] = frameX(mouseField(mouse, Mouse::x));
+        shadow[2] = frameY(mouseField(mouse, Mouse::y));
+        return shadow;
+    }
+
+    void __fastcall frameCursorPos(void* mouse, void* edx, int* x, int* y)
+    {
+        g_cursorPos(mouse, edx, x, y);
+        if (*reinterpret_cast<void**>(static_cast<uint8_t*>(mouse) + Mouse::cursorImage))
+        {
+            *x = frameX(*x);
+            *y = frameY(*y);
+        }
+    }
 }
 
 bool UiCanvas::enabled() { return g_enabled; }
@@ -119,13 +172,70 @@ int UiCanvas::toVirtualY(int physical) { return static_cast<int>(std::lround((ph
 int UiCanvas::toPhysicalX(int virt) { return static_cast<int>(std::lround(virt * g_scale + g_left)); }
 int UiCanvas::toPhysicalY(int virt) { return static_cast<int>(std::lround(virt * g_scale + g_top)); }
 
+UiCanvas::Frame UiCanvas::anchored(int horizontal, int vertical)
+{
+    // Whole pixels for the frame's origin, so the UI's texels stay where they are in the canvas.
+    const float originX[3] = {0.0f, g_left, std::floor(Resolution::width() - 1024.0f * g_scale)};
+    const float originY[3] = {0.0f, g_top, std::floor(Resolution::height() - 768.0f * g_scale)};
+    return {(originX[std::clamp(horizontal, 0, 2)] - g_left) / g_scale,
+            (originY[std::clamp(vertical, 0, 2)] - g_top) / g_scale, true};
+}
+
+UiCanvas::Frame UiCanvas::frame() { return t_frame; }
+
+UiCanvas::Placement UiCanvas::placement()
+{
+    const float w = static_cast<float>(Resolution::width()), h = static_cast<float>(Resolution::height());
+    Placement p;
+    p.scale = g_scale;
+    p.originX = g_left + t_frame.x * g_scale;
+    p.originY = g_top + t_frame.y * g_scale;
+    if (t_frame.confine)
+    {
+        p.clipLeft = std::max(p.originX, 0.0f);
+        p.clipTop = std::max(p.originY, 0.0f);
+        p.clipRight = std::min(p.originX + 1024.0f * g_scale, w);
+        p.clipBottom = std::min(p.originY + 768.0f * g_scale, h);
+    }
+    else
+    {
+        p.clipLeft = 0.0f;
+        p.clipTop = 0.0f;
+        p.clipRight = w;
+        p.clipBottom = h;
+    }
+    return p;
+}
+
+UiCanvas::FrameScope::FrameScope(const Frame& frame) : m_previous(t_frame)
+{
+    if (frame == t_frame)
+    {
+        return;
+    }
+    t_frame = frame;
+    notifyProxy();
+}
+
+UiCanvas::FrameScope::~FrameScope()
+{
+    if (m_previous == t_frame)
+    {
+        return;
+    }
+    t_frame = m_previous;
+    notifyProxy();
+}
+
 void UiCanvas::enter(Mode mode)
 {
     if (g_enabled && t_depth++ == 0)
     {
+        t_outerFrame = t_frame;
+        t_frame = {0.0f, 0.0f, mode == Mode::Canvas};
         if (DeviceProxy* proxy = DeviceProxy::instance())
         {
-            proxy->beginUi(mode == Mode::Canvas);
+            proxy->beginUi();
         }
     }
 }
@@ -134,6 +244,7 @@ void UiCanvas::leave()
 {
     if (g_enabled && --t_depth == 0)
     {
+        t_frame = t_outerFrame;
         if (DeviceProxy* proxy = DeviceProxy::instance())
         {
             proxy->endUi();
@@ -162,7 +273,7 @@ void UiCanvas::resume(int depth)
     {
         if (DeviceProxy* proxy = DeviceProxy::instance())
         {
-            proxy->beginUi(true);
+            proxy->beginUi();
         }
     }
 }
@@ -195,6 +306,17 @@ void UiCanvas::install()
     for (uintptr_t site : Addr::worldMouseReads) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&physicalMouseInstance));
     redirected += Patch::redirectCall(Addr::worldCursorUiTestCall, reinterpret_cast<void*>(&isCursorOverUiPhysical));
     LOG("UI canvas: {} world mouse reads redirected", redirected);
+    if (g_config.uiAnchor)
+    {
+        // The UI's own reads of the cursor follow the frame they run in.
+        g_cursorPos = reinterpret_cast<CursorPosFn>(Addr::cMouse_getCursorPos);
+        redirected = 0;
+        for (uintptr_t site : Addr::uiMouseReads) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&frameMouseInstance));
+        for (uintptr_t site : Addr::uiGetXCalls) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&frameGetX));
+        for (uintptr_t site : Addr::uiGetYCalls) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&frameGetY));
+        for (uintptr_t site : Addr::uiCursorPosCalls) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&frameCursorPos));
+        LOG("UI canvas: {} UI mouse reads follow the frame", redirected);
+    }
 
     Patch::hook(g_origGetClientCursorPos, Addr::getClientCursorPos, &hookGetClientCursorPos, "getClientCursorPos");
     Patch::hook(g_origRenderCursor, Addr::cMouse_renderCursor, &hookRenderCursor, "cMouse::renderCursor");

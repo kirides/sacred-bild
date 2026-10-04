@@ -24,6 +24,9 @@ struct Config
 
     // UI canvas: the 1024x768 UI drawn centered. 0 = scale to fit the screen height.
     float uiScale = 0.0f;
+    // In game, the HUD windows (taskbar, minimap, inventory, ...) move to the screen edges and corners they had
+    // in the 1024x768 layout instead of staying in the centered canvas.
+    bool uiAnchor = true;
     bool uiLinearFilter = true;   // bilinear filtering for the scaled UI instead of the game's point sampling
 
     // Texture memory the game may keep loaded, in MB; 0 = max(game's own value, 256). A zoomed-out view at a
