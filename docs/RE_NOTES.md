@@ -317,3 +317,38 @@ Per-window re-anchoring does not work: children are absolute, many renderers dra
 UI functions comparing against 1023/767 or using 768 offsets (`0x6C7580`, `0x6C76A0` megamap
 scrolling, `0x6C99E0`, `0x6CC950`, `0x6E7730` taskbar, `0x70FC70`, `0x759D60`, `0x75A870`) and windows
 positioned at runtime (`0x75AC70`, `0x75AD10`) are correct inside the UI canvas and need no patches.
+
+## Networking: LAN games
+
+Game traffic goes through Ascaron's `tincat2.dll` (TCP and UDP sockets, imported via WSOCK32). Finding LAN
+games is the game's own code on top of Winsock:
+
+- **Hosting**: creating a game (`cUI_NetLan`, action 5) writes `GameServer.cfg` (`writeGameServerCfg`
+  `0x7EE360`: `NETWORK_IP_ADDRESS`, `NETWORK_PORT_LISTEN`, session name, ...) and starts `GameServer.exe` with
+  `CreateProcessA` (`0x7D8427`, no window).
+- **gameserver.exe** (Ghidra `/gameserver.exe`, timestamp `0x451BBDBF`): app object `*0x634238`, network object
+  at app `+0x40`. `cNetServer_initNetwork` (`0x4E8AB0`) opens the ping socket (`+0x1A8`): UDP, `SO_BROADCAST`,
+  `connect()`ed to `255.255.255.255:<NETWORK_PORT_LISTEN>`. `cNetServer_sendAnnouncement` (`0x4E99A0`, called
+  periodically and when players join or leave) fills the plain announcement at `+0x596C`, runs it through
+  `CompressMemory` (`0x4918B0`) and `send()`s it — the exe's only `send` call.
+- **Announcement** (0xAE bytes): `+0` u16 version check (from `TinCat_GetBuildNumber`), `+2` u16 gameserver
+  TCP port, `+4` u32 IPv4 address in host byte order, `+8` u32 flags, `+0xC` u8 players, `+0xD` u8 max players,
+  `+0xE` wchar_t name[80]. The address is `0x6341B8`: the first address `detectLocalIps` (`0x495350`) found, or
+  `NETWORK_IP_ADDRESS` if it is one of them. `detectLocalIps` reads the IP address table through SNMP
+  (`inetmib1.dll`) and keeps at most **three** addresses (skipping 0, 127.x and x.x.x.254/255); without SNMP it
+  falls back to `gethostbyname`, one address. sacred.exe has the same code (`0x803F40`, table at `0x182CC70`).
+- **Wire format** (`CompressMemory` / `UncompressMemory` `0x800A60`): u32 header = payload size, bit 27 set if
+  not compressed. Payloads under 0x50 bytes are XOR-chained (`plain = (prevCipher + 0xB5D6C7A3) ^ cipher`,
+  seeded with the size, the last size % 4 bytes raw), larger ones zlib. The receiver accepts both for any size.
+- **LAN list** (`cGCclass`, `*0x182CB70`): `cGCclass_initNetwork` (`0x7D2410`) binds a UDP socket (`+0x14`,
+  `SO_REUSEADDR`) to `INADDR_ANY:NETWORK_PORT_LISTEN` (2005). `cGCclass_pollLanGames` (`0x7D2E20`) drains it
+  with `select` / `__WSAFDIsSet` / `recvfrom` (their only callers), accepts packets that decode to 0xAE bytes,
+  keys games by (address, name) and drops a game after 5 s without an announcement. The sender address is
+  ignored: `cGCclass_joinLanGame` (`0x7D3530`) connects to the address in the announcement.
+
+Over a VPN this fails twice: Windows sends a limited broadcast through the adapter with the best route only (and
+L3 VPNs carry no broadcasts at all), and the announced address is often not the VPN one. SacredBild injects
+itself into the gameserver (Detours `DetourCreateProcessWithDllExA` from a `CreateProcessA` IAT hook) and
+replaces the `send` import: the game's broadcast carries the address of the adapter it leaves on, every other
+adapter gets a subnet broadcast with its own address (XOR format), and players that subscribed at UDP 2105 get
+the plain announcement and fill in the address they received it from (`src/net/`).

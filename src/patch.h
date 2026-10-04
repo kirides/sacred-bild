@@ -17,7 +17,8 @@ namespace Patch
     // Retargets an existing `call rel32` (E8) instruction.
     bool redirectCall(uintptr_t callSite, const void* target);
 
-    // Replaces an import of the main exe; returns the previous target or nullptr.
+    // Replaces an import of the main exe (by name, or by ordinal if the slot is bound to `function`); returns the
+    // previous target or nullptr.
     void* iat(const char* dll, const char* function, void* replacement);
 
     // Detours a function; `original` receives the trampoline.

@@ -58,6 +58,9 @@ void* Patch::iat(const char* dll, const char* function, void* replacement)
     auto* base = reinterpret_cast<uint8_t*>(GetModuleHandleW(nullptr));
     auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + reinterpret_cast<IMAGE_DOS_HEADER*>(base)->e_lfanew);
     const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    // Imports by ordinal (Winsock in Sacred) carry no name: those slots are matched by the address they are bound to.
+    const HMODULE module = GetModuleHandleA(dll);
+    const auto bound = module ? reinterpret_cast<ULONG_PTR>(GetProcAddress(module, function)) : 0;
     for (auto* imp = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + dir.VirtualAddress); imp->Name; ++imp)
     {
         if (_stricmp(reinterpret_cast<const char*>(base + imp->Name), dll) != 0)
@@ -68,12 +71,11 @@ void* Patch::iat(const char* dll, const char* function, void* replacement)
         auto* slots = reinterpret_cast<IMAGE_THUNK_DATA*>(base + imp->FirstThunk);
         for (; names->u1.AddressOfData; ++names, ++slots)
         {
-            if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal))
-            {
-                continue;
-            }
-            auto* byName = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(base + names->u1.AddressOfData);
-            if (std::strcmp(reinterpret_cast<const char*>(byName->Name), function) == 0)
+            const bool match = IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal)
+                ? bound && slots->u1.Function == bound
+                : std::strcmp(reinterpret_cast<const char*>(
+                      reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(base + names->u1.AddressOfData)->Name), function) == 0;
+            if (match)
             {
                 void* old = reinterpret_cast<void*>(slots->u1.Function);
                 write(reinterpret_cast<uintptr_t>(&slots->u1.Function), &replacement, sizeof(replacement));

@@ -110,6 +110,13 @@ namespace Sacred::Addr
     constexpr uintptr_t recordMapFind = 0x006404C0;
     constexpr uintptr_t g_recordStamp = 0x00CD59D0;
 
+    // Game client (cGCclass, one instance). cGCclass_initNetwork (0x7D2410) binds a UDP socket (SO_REUSEADDR) to
+    // NETWORK_PORT_LISTEN for the LAN list; cGCclass_pollLanGames (0x7D2E20) reads the gameservers' announcements
+    // from it with select/__WSAFDIsSet/recvfrom (their only use in the exe) and drops games that were silent for
+    // 5 s. cGCclass_joinLanGame (0x7D3530) connects to the address inside the announcement.
+    constexpr uintptr_t g_pGameClient = 0x0182CB70;
+    constexpr uintptr_t gameClient_lanSocket = 0x14;
+
     // cWorldView0 vtable slot 5: draws the isometric world (arg: device).
     constexpr uintptr_t cWorldView0_render = 0x006322B0;
 

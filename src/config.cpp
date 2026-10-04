@@ -14,9 +14,19 @@ namespace
 
     std::wstring readString(const std::wstring& ini, const wchar_t* section, const wchar_t* key, const std::wstring& def)
     {
-        wchar_t buf[MAX_PATH] = {};
-        GetPrivateProfileStringW(section, key, def.c_str(), buf, MAX_PATH, ini.c_str());
+        wchar_t buf[1024] = {};
+        GetPrivateProfileStringW(section, key, def.c_str(), buf, static_cast<DWORD>(std::size(buf)), ini.c_str());
         return buf;
+    }
+
+    std::string ascii(const std::wstring& s)
+    {
+        std::string out;
+        for (wchar_t c : s)
+        {
+            out += c < 0x80 ? static_cast<char>(c) : '?';
+        }
+        return out;
     }
 }
 
@@ -41,15 +51,18 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.atlasPageSize = readInt(ini, L"Render", L"AtlasPageSize", g_config.atlasPageSize);
     g_config.atlasPages = readInt(ini, L"Render", L"AtlasPages", g_config.atlasPages);
     g_config.atlasMaxTextureSize = readInt(ini, L"Render", L"AtlasMaxTextureSize", g_config.atlasMaxTextureSize);
+    g_config.netRelay = readInt(ini, L"Net", L"Relay", g_config.netRelay) != 0;
+    g_config.netPort = readInt(ini, L"Net", L"Port", g_config.netPort);
+    g_config.netHosts = ascii(readString(ini, L"Net", L"Hosts", L""));
     g_config.d3dStats = readInt(ini, L"Debug", L"D3DStats", g_config.d3dStats) != 0;
     g_config.profiler = readInt(ini, L"Debug", L"Profiler", g_config.profiler) != 0;
     g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
 
     LOG("Config: Width={} Height={} Borderless={} FpsLimit={} UI.Scale={} UI.LinearFilter={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
-        "D3DStats={} Profiler={} ({} us)",
+        "Net.Relay={} Net.Port={} Net.Hosts='{}' D3DStats={} Profiler={} ({} us)",
         g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit, g_config.uiScale, g_config.uiLinearFilter,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
         g_config.batchModels, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
-        g_config.atlasMaxTextureSize, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs);
+        g_config.atlasMaxTextureSize, g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs);
 }

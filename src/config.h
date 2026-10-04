@@ -39,6 +39,14 @@ struct Config
     int atlasPages = 2;             // at most this many pages per texture format
     int atlasMaxTextureSize = 512;  // larger textures are used directly
 
+    // LAN games over VPNs. Hosting: the gameserver Sacred starts gets SacredBild as well; it announces the game on
+    // every network adapter with that adapter's address and to SacredBild players that subscribe at UDP `netPort`.
+    bool netRelay = true;
+    int netPort = 2105;
+    // Joining: hosts whose games are listed even though their broadcasts don't arrive here
+    // (comma-separated IPv4 addresses or host names, optionally with :port).
+    std::string netHosts;
+
     // Diagnostics
     bool d3dStats = true;         // per-second D3D7 call counts in the log
     bool profiler = false;        // sample the render thread, dump hot spots on exit

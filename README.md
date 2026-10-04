@@ -24,6 +24,11 @@ detected at startup; SacredBild then only passes ddraw calls through and logs th
   (almost 10,000 zoomed out at 1920x1200). SacredBild records state changes instead of applying them and
   merges consecutive draws that end up with the same state into one call; small textures are copied into
   shared atlas pages so draws with different textures merge as well.
+- **LAN games over VPNs**: Sacred finds LAN games through broadcasts that Windows sends on one network adapter
+  only and that many VPNs don't carry, and the announced address is one Sacred picked from the first three
+  adapters it found. When Sacred starts the gameserver for a hosted game, SacredBild goes along: every
+  announcement goes out on every adapter with that adapter's own address, and to players who list the host in
+  `[Net] Hosts` (see below).
 - **Diagnostics**: per-second frame stats (draw calls, texture switches, unique textures, time spent in
   the world renderer, UI, flip and inside Direct3D, what ended each batch) and an optional sampling profiler.
 
@@ -70,10 +75,25 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Render | AtlasPageSize | 8192 | Atlas page size in texels (clamped to the GPU limit, halved if the GPU refuses it). |
 | Render | AtlasPages | 2 | Pages per texture format; the least recently used one is reused when full. |
 | Render | AtlasMaxTextureSize | 512 | Larger textures are used directly. |
+| Net | Relay | 1 | Hosted games: the gameserver announces on every adapter and answers `Hosts` subscriptions. |
+| Net | Port | 2105 | UDP port of that relay (host side). |
+| Net | Hosts | | Hosts whose games are listed even without broadcasts: IPv4 addresses or names, comma-separated, optional `:port`. |
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | ddraw loaded behind SacredBild; empty = system ddraw. |
 | Debug | D3DStats | 1 | Frame statistics in `SacredBild.log` (wraps the D3D device in a proxy). |
 | Debug | Profiler | 0 | Sampling profiler; writes `SacredBild-profile.txt` every 15 s. |
 | Debug | ProfilerIntervalUs | 500 | Sampling interval. |
+
+### LAN games over a VPN
+
+Everyone installs SacredBild. The host creates the LAN game as usual; Windows Firewall has to let
+`gameserver.exe` receive on the VPN adapter (the prompt on first start, or a rule for its TCP port and UDP 2105;
+VPN adapters are often in the "Public" profile).
+
+- VPNs that carry broadcasts (ZeroTier, Hamachi, Radmin VPN, OpenVPN TAP): the game shows up in the LAN list.
+- VPNs without broadcasts (WireGuard, Tailscale, OpenVPN TUN): joining players add the host's VPN address,
+  e.g. `Hosts=10.8.0.2` or a Tailscale name. A shared list of all players works, a PC skips its own addresses.
+
+The host's relay logs to `SacredBild-server.log`, the LAN list to `SacredBild.log` (lines starting with `LAN`).
 
 Read a profile with `python tools/profile_report.py <SacredBild-profile.txt>`.
 
@@ -87,6 +107,8 @@ Read a profile with `python tools/profile_report.py <SacredBild-profile.txt>`.
 - `src/game/device_proxy.*`: IDirect3DDevice7 wrapper; maps UI draws into the canvas, routes world draws
   through the batcher and instruments calls.
 - `src/render/batcher.*`, `atlas.*`: deferred device state, draw merging and the texture atlas.
+- `src/net/`: LAN games over VPNs: `lan_server.*` runs in gameserver.exe, `lan_client.*` in sacred.exe;
+  `src/game/gameserver_de.h` holds the gameserver's addresses.
 - `d3d_stats.*`, `frame_hooks.*`, `src/profiler.*`: instrumentation.
 - `docs/RE_NOTES.md`: how the game's renderer works and where things are.
 - `tools/`: Python helpers over the exe (`de.py`, `funcs.py`, `check_hooks.py`, `gen_res_sites.py`, ...).
