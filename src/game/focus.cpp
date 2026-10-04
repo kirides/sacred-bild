@@ -112,11 +112,23 @@ namespace
         return CallWindowProcA(g_origWindowProc.load(), window, message, wParam, lParam);
     }
 
-    // Subclasses the main window, again after the game replaced its window procedure (it does when a game starts).
-    void subclass(HWND window)
+    // A window procedure of the game itself (read through GetWindowLongPtrA, which gives the game's ANSI procedures
+    // as addresses; one set through SetWindowLongPtrW reads as a handle outside any module).
+    bool gameProc(WNDPROC proc)
+    {
+        const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+        const auto addr = reinterpret_cast<uintptr_t>(proc);
+        return addr >= base && addr < base + nt->OptionalHeader.SizeOfImage;
+    }
+
+    // Subclasses the main window. `onlyOverGame`: only if the game replaced its window procedure (it does when a game
+    // starts), not over a subclass another module put over this one (opengl32's with DXVK under RenderDoc, overlays):
+    // that one calls windowProc in turn, and windowProc calling it back recursed until the stack overflowed.
+    void subclass(HWND window, bool onlyOverGame)
     {
         const auto current = reinterpret_cast<WNDPROC>(GetWindowLongPtrA(window, GWLP_WNDPROC));
-        if (current && current != &windowProc)
+        if (current && current != &windowProc && (!onlyOverGame || gameProc(current)))
         {
             g_origWindowProc = current;
             SetWindowLongPtrA(window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&windowProc));
@@ -182,7 +194,7 @@ void Focus::install()
 void Focus::windowCreated(HWND window)
 {
     g_window = window;
-    subclass(window);
+    subclass(window, false);
     EnableMenuItem(GetSystemMenu(window, FALSE), SC_CLOSE, MF_BYCOMMAND | MF_GRAYED);   // greys the close button
 }
 
@@ -198,7 +210,7 @@ void Focus::onFrame()
     {
         return;
     }
-    subclass(window);
+    subclass(window, true);
     if (!g_config.clipCursor)
     {
         return;
