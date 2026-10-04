@@ -21,7 +21,8 @@ ddraw calls through and logs which one.
   - UI: the game's 1024x768 UI (menus, HUD, cursor, intro videos) is drawn into a centered canvas,
     scaled to fit the screen height (`[UI] Scale`, `LinearFilter`); the mouse is mapped into that canvas
     for the UI while world picking keeps physical screen coordinates;
-  - loading screen and splash (GDI) centered; savegame thumbnails taken from the screen center.
+  - loading screen and splash (GDI) centered; savegame thumbnails taken from the screen center;
+  - always a 32-bit display mode (`GFX32 : 0` in `Settings.cfg` is ignored).
 - **Direct3D 9Ex backend** (`src/ddraw9/`): DirectDraw 7 and Direct3D 7 implemented on Direct3D 9Ex, for the
   subset Sacred uses (windowed swap chain, one render target with z-buffer, managed textures, system memory surfaces
   for GDI text, the fixed-function device). Both APIs are fixed-function with the same vertex formats and render
@@ -66,7 +67,8 @@ The DLL is statically linked against the CRT and imports only Windows system DLL
 
 This backs up the current `ddraw.dll`, moves an existing DDrawCompat to `SacredBild\DDrawCompat.dll`,
 copies SacredBild's `ddraw.dll` and creates `SacredBild.ini`. `uninstall.ps1` restores the backup.
-DDrawCompat is only used with `[DDraw] Backend=chain`; without it, that falls back to Windows' own `ddraw.dll`.
+DDrawCompat is only used with `[DDraw] Backend=chain`; without it, that falls back to Windows' own `ddraw.dll`
+(whose Direct3D 7 runtime refuses render targets over 2048 pixels; SacredBild works around that).
 
 For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build output instead.
 
@@ -119,7 +121,7 @@ Read a profile with `python tools/profile_report.py <SacredBild-profile.txt>`.
 ## Layout
 
 - `src/main.cpp`, `src/proxy.cpp`, `src/exports.def`: DLL entry, ddraw exports (to the Direct3D 9 backend or the
-  chain-loaded ddraw).
+  chain-loaded ddraw). `src/system_ddraw.*`: render targets over 2048 pixels on Windows' own ddraw.
 - `src/ddraw9/`: the Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7 + IDirect3D7, exports), `surface.*`
   (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `gpu.*` (device, presentation),
   `format.*`. `d3d9_api.h` puts Direct3D 9 into namespace `d9`: its headers clash with Direct3D 7's.

@@ -1,6 +1,7 @@
 #include "proxy.h"
 #include "config.h"
 #include "log.h"
+#include "system_ddraw.h"
 #include "ddraw9/backend.h"
 
 #include <windows.h>
@@ -103,6 +104,10 @@ bool Proxy::init(const std::wstring& gameDir)
     DDRAW_PROCS(RESOLVE)
 #undef RESOLVE
 
+    if (!g_config.ddrawD3D9 && chain == system)
+    {
+        g_procs.DirectDrawCreateEx = SystemDdraw::wrap(g_procs.DirectDrawCreateEx);
+    }
     if (g_config.ddrawD3D9)
     {
         // DirectDraw objects come from SacredBild's backend; the system ddraw.dll keeps the remaining exports and

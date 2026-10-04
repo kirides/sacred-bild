@@ -168,6 +168,9 @@ namespace
 
     void* __fastcall hookFindMode(void* self, void* edx, int w, int h, int bpp, int flags)
     {
+        // Always 32 bits per pixel: GFX32 : 0 asks for a 16-bit mode, which only a fullscreen game uses (windowed
+        // takes the desktop's format, textures their own formats either way).
+        bpp = 32;
         if (static_cast<uint16_t>(w) != 1024 || static_cast<uint16_t>(h) != 768)
         {
             return g_origFindMode(self, edx, w, h, bpp, flags);
@@ -568,6 +571,7 @@ void Resolution::install()
 {
     chooseSize();
     LOG("Resolution: {}x{}, world depth range {:.0f}..{:.0f}", g_width, g_height, g_near, g_far);
+    Patch::hook(g_origFindMode, Addr::cDxDevices_findMode, &hookFindMode, "cDxDevices::findMode");
     if (!active())
     {
         return;
@@ -606,7 +610,6 @@ void Resolution::install()
     g_flushBatcher = reinterpret_cast<DeviceFn>(Addr::cQuadBatcher_flush);
     g_drawTileLayers = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawTileLayers);
     g_drawWaterTiles = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawWaterTiles);
-    Patch::hook(g_origFindMode, Addr::cDxDevices_findMode, &hookFindMode, "cDxDevices::findMode");
     Patch::hook(g_origLoadingScreen, Addr::dxDriver7_drawLoadingScreen, &hookLoadingScreen, "dxDriver7::drawLoadingScreen");
     Patch::hook(g_origTextureInit, Addr::cTextureManager_init, &hookTextureInit, "cTextureManager::init");
     Patch::hook(g_origTileRow, Addr::cWorldView_renderTileRow, &hookTileRow, "cWorldView::renderTileRow");
