@@ -2,6 +2,7 @@
 #include "config.h"
 #include "log.h"
 #include "patch.h"
+#include "profiler.h"
 
 #include <windows.h>
 #include <float.h>
@@ -192,6 +193,10 @@ void GrannyAsync::install()
     // Animation finishing late holds up the frame: keep up with the render thread.
     SetThreadPriority(thread, THREAD_PRIORITY_ABOVE_NORMAL);
     CloseHandle(thread);
+    if (g_config.profiler)
+    {
+        Profiler::addThread(g_workerId);
+    }
 
     for (const auto& [slot, target] : patches)
     {

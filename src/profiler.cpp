@@ -30,6 +30,8 @@ namespace
     // Target thread; swapped by retarget() while the sampler runs.
     std::atomic<HANDLE> g_target{nullptr};
     std::atomic<DWORD> g_targetId{0};
+    std::atomic<HANDLE> g_extra{nullptr};
+    std::atomic<DWORD> g_extraId{0};
 
     uintptr_t g_exeLo = 0, g_exeHi = 0;     // sacred.exe .text
     std::vector<Module> g_modules;
@@ -228,6 +230,11 @@ namespace
             Sample s;
             HANDLE target = g_target.load();
             if (target && takeSample(target, s, stack)) record(g_profiles[g_targetId.load()], s);
+            HANDLE extra = g_extra.load();
+            if (extra && g_extraId.load() != g_targetId.load() && takeSample(extra, s, stack))
+            {
+                record(g_profiles[g_extraId.load()], s);
+            }
         }
         if (timer) CloseHandle(timer);
         writeReport();
@@ -314,6 +321,19 @@ void Profiler::retarget(unsigned long threadId)
     g_thread = CreateThread(nullptr, 0, &samplerThread, nullptr, 0, nullptr);
     SetThreadPriority(g_thread, THREAD_PRIORITY_TIME_CRITICAL);
     LOG("Profiler: sampling thread {} every {} us", threadId, g_config.profilerIntervalUs);
+}
+
+void Profiler::addThread(unsigned long threadId)
+{
+    HANDLE handle = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, threadId);
+    if (!handle)
+    {
+        LOG("Profiler: OpenThread({}) failed", threadId);
+        return;
+    }
+    g_extraId = threadId;
+    g_extra = handle;
+    LOG("Profiler: also sampling thread {}", threadId);
 }
 
 void Profiler::stop()
