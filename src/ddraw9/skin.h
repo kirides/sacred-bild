@@ -22,7 +22,7 @@ namespace DDraw9::Skin
     };
 
     struct Mesh;    // a static vertex buffer on the device that created it
-    struct Indices; // a static index buffer (a piece's triangle list) on the device that created it
+    struct Indices; // a piece's triangle list in a shared index buffer on the device that created it
 
     struct Draw
     {

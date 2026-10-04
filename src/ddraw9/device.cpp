@@ -7,6 +7,7 @@
 #include "render/fvf.h"
 #include "log.h"
 
+#include <intrin.h>
 #include <algorithm>
 #include <cstring>
 #include <format>
@@ -568,9 +569,51 @@ namespace DDraw9
         }
     }
 
+    void Device::applyFixedFunction()
+    {
+        for (uint32_t dirty = m_transformsDirty; dirty; dirty &= dirty - 1)
+        {
+            unsigned long type = 0;
+            _BitScanForward(&type, dirty);
+            applyTransform(type, m_transforms[type]);
+        }
+        m_transformsDirty = 0;
+        if (m_materialDirty)
+        {
+            m_materialDirty = false;
+            m_dev->SetMaterial(reinterpret_cast<const d9::D3DMATERIAL9*>(&m_material));
+        }
+        if (m_lightsDirty)
+        {
+            m_lightsDirty = false;
+            for (DWORD index = 0; index < m_lights.size(); ++index)
+            {
+                Light& slot = m_lights[index];
+                if (slot.lightDirty)
+                {
+                    slot.lightDirty = false;
+                    const D3DLIGHT7& light = slot.light;
+                    const HRESULT hr = m_dev->SetLight(index, reinterpret_cast<const d9::D3DLIGHT9*>(&light));
+                    if (FAILED(hr))
+                    {
+                        logFailure(std::format("SetLight (type {}, range {}, attenuation {} {} {})",
+                            static_cast<int>(light.dltType), light.dvRange, light.dvAttenuation0, light.dvAttenuation1,
+                            light.dvAttenuation2).c_str(), hr);
+                    }
+                }
+                if (slot.enableDirty)
+                {
+                    slot.enableDirty = false;
+                    m_dev->LightEnable(index, slot.enabled);
+                }
+            }
+        }
+    }
+
     void Device::prepare(DWORD fvf)
     {
         prepareTarget();
+        applyFixedFunction();
         if (m_skinBound)
         {
             // Back from the skinning shader to the fixed-function pipeline.
@@ -893,7 +936,8 @@ namespace DDraw9
             return D3D_OK;
         }
         m_transforms[i] = *m;
-        return applyTransform(i, *m);
+        m_transformsDirty |= 1u << i;
+        return D3D_OK;
     }
 
     HRESULT Device::GetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m)
@@ -979,7 +1023,7 @@ namespace DDraw9
             return D3D_OK;
         }
         m_material = *material;
-        m_dev->SetMaterial(reinterpret_cast<const d9::D3DMATERIAL9*>(material));
+        m_materialDirty = true;
         return D3D_OK;
     }
 
@@ -1012,12 +1056,8 @@ namespace DDraw9
         }
         m_lights[index].light = *light;
         m_lights[index].set = true;
-        const HRESULT hr = m_dev->SetLight(index, reinterpret_cast<const d9::D3DLIGHT9*>(light));
-        if (FAILED(hr))
-        {
-            logFailure(std::format("SetLight (type {}, range {}, attenuation {} {} {})", static_cast<int>(light->dltType),
-                light->dvRange, light->dvAttenuation0, light->dvAttenuation1, light->dvAttenuation2).c_str(), hr);
-        }
+        m_lights[index].lightDirty = true;
+        m_lightsDirty = true;
         return D3D_OK;
     }
 
@@ -1063,7 +1103,8 @@ namespace DDraw9
             slot.set = true;
         }
         slot.enabled = enable;
-        m_dev->LightEnable(index, enable);
+        slot.enableDirty = true;
+        m_lightsDirty = true;
         return D3D_OK;
     }
 

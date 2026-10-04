@@ -104,6 +104,8 @@ namespace DDraw9
             D3DLIGHT7 light = {};
             bool set = false;
             BOOL enabled = FALSE;
+            bool lightDirty = false;    // not yet given to Direct3D 9 (applyFixedFunction)
+            bool enableDirty = false;
         };
 
         // Recorded (BeginStateBlock/EndStateBlock) or captured (CreateStateBlock) state, applied through the
@@ -133,6 +135,9 @@ namespace DDraw9
         HRESULT applyRenderState(DWORD state, DWORD value);
         HRESULT applyStageState(DWORD stage, DWORD type, DWORD value);
         HRESULT applyTransform(DWORD type, const D3DMATRIX& m);
+        // Transforms, material and lights reach Direct3D 9 only before a fixed-function draw: skinned draws read them
+        // from the recorded state, and a character sets them for every piece.
+        void applyFixedFunction();
         void syncDepth();
         // Before every fixed-function draw: z-buffer, vertex format, and textures with CPU changes uploaded.
         void prepare(DWORD fvf);
@@ -169,6 +174,9 @@ namespace DDraw9
         D3DVIEWPORT7 m_viewport = {};
         D3DMATERIAL7 m_material = {};
         std::vector<Light> m_lights;
+        uint32_t m_transformsDirty = 0;         // bit per transform type set since the last fixed-function draw
+        bool m_materialDirty = false;
+        bool m_lightsDirty = false;
         float m_clipPlanes[kClipPlanes][4] = {};
         D3DCLIPSTATUS m_clipStatus = {};
 
@@ -198,6 +206,9 @@ namespace DDraw9
         d9::IDirect3DVertexBuffer9* m_skinDiffuse = nullptr;    // ring of per-vertex diffuse colors
         UINT m_skinDiffuseCursor = 0;
         uint32_t m_skinPaletteId = 0;           // palette in the bone constants (0: none)
+        std::vector<float> m_skinPalette;       // its values
+        d9::IDirect3DIndexBuffer9* m_skinArena = nullptr;   // index arena new pieces go into
+        UINT m_skinArenaUsed = 0, m_skinArenaCapacity = 0;
         // The skinning shader stays bound until the next fixed-function draw (prepare): a character's pieces and
         // its shadow are consecutive skinned draws.
         bool m_skinBound = false;

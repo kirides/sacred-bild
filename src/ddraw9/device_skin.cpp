@@ -4,6 +4,7 @@
 #include "ddraw9/gpu.h"
 #include "log.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <mutex>
@@ -18,9 +19,11 @@ namespace DDraw9
             uint32_t count;
         };
 
+        // A piece's triangle list, in an index arena shared by all pieces (one SetIndices for all skinned draws).
         struct Indices
         {
-            d9::IDirect3DIndexBuffer9* buffer;
+            d9::IDirect3DIndexBuffer9* buffer;  // holds a reference
+            uint32_t start;
             uint32_t count;
         };
     }
@@ -37,6 +40,8 @@ namespace DDraw9
         constexpr UINT kMaxLights = 8;
         constexpr UINT kBoneRegister = 73;
         constexpr UINT kDiffuseRing = 1u << 16;     // diffuse colors per pass through the ring
+        constexpr UINT kIndexArena = 1u << 20;      // indices per arena (2 MB); all pieces of all meshes so far fit
+        constexpr UINT kCameraRegisters = 10;       // world x view, projection, normal matrix: change per character
 
         using Float4 = float[4];
 
@@ -184,6 +189,12 @@ namespace DDraw9
             m_skinDiffuse->Release();
             m_skinDiffuse = nullptr;
         }
+        if (m_skinArena)
+        {
+            m_skinArena->Release();
+            m_skinArena = nullptr;
+        }
+        m_skinPalette.clear();
         m_skinPaletteId = 0;
         m_skinBound = false;
         m_skinConstantCount = 0;
@@ -231,25 +242,41 @@ namespace DDraw9
         {
             return nullptr;
         }
-        d9::IDirect3DIndexBuffer9* buffer = nullptr;
-        HRESULT hr = m_dev->CreateIndexBuffer(count * sizeof(WORD), D3DUSAGE_WRITEONLY, d9::D3DFMT_INDEX16,
-            d9::D3DPOOL_DEFAULT, &buffer, nullptr);
-        if (FAILED(hr))
+        // Appended to a dynamic arena without overwriting what earlier draws use; a full arena is left to the pieces
+        // that reference it and a new one started.
+        if (!m_skinArena || m_skinArenaUsed + count > m_skinArenaCapacity)
         {
-            logSkinFailure("CreateIndexBuffer", hr);
-            return nullptr;
+            if (m_skinArena)
+            {
+                m_skinArena->Release();
+                m_skinArena = nullptr;
+            }
+            const UINT capacity = std::max(kIndexArena, count);
+            const HRESULT hr = m_dev->CreateIndexBuffer(capacity * sizeof(WORD), D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY,
+                d9::D3DFMT_INDEX16, d9::D3DPOOL_DEFAULT, &m_skinArena, nullptr);
+            if (FAILED(hr))
+            {
+                logSkinFailure("CreateIndexBuffer", hr);
+                m_skinArena = nullptr;
+                return nullptr;
+            }
+            m_skinArenaUsed = 0;
+            m_skinArenaCapacity = capacity;
         }
         void* data = nullptr;
-        hr = buffer->Lock(0, 0, &data, 0);
+        const HRESULT hr = m_skinArena->Lock(m_skinArenaUsed * sizeof(WORD), count * sizeof(WORD), &data,
+            m_skinArenaUsed ? D3DLOCK_NOOVERWRITE : D3DLOCK_DISCARD);
         if (FAILED(hr) || !data)
         {
             logSkinFailure("Lock (indices)", hr);
-            buffer->Release();
             return nullptr;
         }
         std::memcpy(data, indices, count * sizeof(WORD));
-        buffer->Unlock();
-        return new Skin::Indices{buffer, count};
+        m_skinArena->Unlock();
+        m_skinArena->AddRef();
+        auto* piece = new Skin::Indices{m_skinArena, m_skinArenaUsed, count};
+        m_skinArenaUsed += count;
+        return piece;
     }
 
     bool Device::skinConstants(const Skin::Draw& draw, bool diffuse)
@@ -352,14 +379,19 @@ namespace DDraw9
             set(r[6], std::cos(l.dvTheta * 0.5f), std::cos(l.dvPhi * 0.5f), l.dltType == D3DLIGHT_SPOT ? 1.0f : 0.0f, 0.0f);
         }
 
-        // Uploaded only where they changed: a character's pieces and its shadow mostly repeat them.
+        // Uploaded only where they changed, the camera (per character) apart from material and lights (rarely).
         const UINT count = kLightRegister + lightCount * kLightRegisters;
-        if (count != m_skinConstantCount || std::memcmp(c, m_skinConstants, count * sizeof(Float4)) != 0)
+        if (!m_skinConstantCount || std::memcmp(c, m_skinConstants, kCameraRegisters * sizeof(Float4)) != 0)
         {
-            m_dev->SetVertexShaderConstantF(0, &c[0][0], count);
-            std::memcpy(m_skinConstants, c, count * sizeof(Float4));
-            m_skinConstantCount = count;
+            m_dev->SetVertexShaderConstantF(0, &c[0][0], kCameraRegisters);
         }
+        if (count != m_skinConstantCount || std::memcmp(c[kCameraRegisters], m_skinConstants[kCameraRegisters],
+                (count - kCameraRegisters) * sizeof(Float4)) != 0)
+        {
+            m_dev->SetVertexShaderConstantF(kCameraRegisters, &c[kCameraRegisters][0], count - kCameraRegisters);
+        }
+        std::memcpy(m_skinConstants, c, count * sizeof(Float4));
+        m_skinConstantCount = count;
         const BOOL flags[5] = {draw.normalizeSkinned, m_rs[D3DRENDERSTATE_NORMALIZENORMALS] != 0,
             m_rs[D3DRENDERSTATE_LOCALVIEWER] != 0, m_rs[D3DRENDERSTATE_SPECULARENABLE] != 0, lighting};
         if (std::memcmp(flags, m_skinFlags, sizeof(flags)) != 0)
@@ -374,9 +406,17 @@ namespace DDraw9
             m_skinLightCount = static_cast<int>(lightCount);
         }
 
-        // Bones: Granny's matrix rows with the translation in w.
+        // Bones: Granny's matrix rows with the translation in w. A character's shadow pass computes the same pose
+        // again (another palette id, the same values): compared before uploading.
+        const size_t paletteFloats = size_t(draw.bones) * 12;
+        if (draw.paletteId != m_skinPaletteId && m_skinPalette.size() == paletteFloats &&
+            std::memcmp(m_skinPalette.data(), draw.palette, paletteFloats * sizeof(float)) == 0)
+        {
+            m_skinPaletteId = draw.paletteId;
+        }
         if (draw.paletteId != m_skinPaletteId)
         {
+            m_skinPalette.assign(draw.palette, draw.palette + paletteFloats);
             Float4 bones[Skin::kMaxBones * 3];
             for (uint32_t b = 0; b < draw.bones; ++b)
             {
@@ -468,7 +508,8 @@ namespace DDraw9
             m_ib9Bound = draw.indices->buffer;
             m_dev->SetIndices(draw.indices->buffer);
         }
-        const HRESULT hr = m_dev->DrawIndexedPrimitive(d9::D3DPT_TRIANGLELIST, 0, 0, vertices, 0, draw.indices->count / 3);
+        const HRESULT hr = m_dev->DrawIndexedPrimitive(d9::D3DPT_TRIANGLELIST, 0, 0, vertices, draw.indices->start,
+            draw.indices->count / 3);
         if (FAILED(hr))
         {
             logSkinFailure("DrawIndexedPrimitive", hr);
