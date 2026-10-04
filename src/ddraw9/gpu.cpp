@@ -25,6 +25,7 @@ namespace DDraw9::Gpu
         d9::D3DPRESENT_PARAMETERS g_params = {};
         bool g_backBufferFrozen = false;
         bool g_presentFailed = false;
+        bool g_forceImmediateFailed = false;
 
         UINT adapterOf(HWND window)
         {
@@ -302,7 +303,21 @@ namespace DDraw9::Gpu
         }
         if (SUCCEEDED(hr))
         {
-            hr = dev->PresentEx(nullptr, nullptr, nullptr, nullptr, 0);
+            // Without vsync: in a window, flip model presentation still queues each frame for the next refresh and blocks
+            // once the queue is full, whatever the interval (the frame rate stopped at the refresh rate). Forced
+            // immediate presents replace the queued frame instead of waiting.
+            DWORD flags = 0;
+            if (!g_config.vsync && g_params.SwapEffect == d9::D3DSWAPEFFECT_FLIPEX && !g_forceImmediateFailed)
+            {
+                flags = D3DPRESENT_FORCEIMMEDIATE;
+            }
+            hr = dev->PresentEx(nullptr, nullptr, nullptr, nullptr, flags);
+            if (hr == D3DERR_INVALIDCALL && flags)
+            {
+                g_forceImmediateFailed = true;
+                LOG("Direct3D 9: immediate presents not accepted, frames wait for the display's refresh");
+                hr = dev->PresentEx(nullptr, nullptr, nullptr, nullptr, 0);
+            }
         }
         if (FAILED(hr) && !g_presentFailed)
         {

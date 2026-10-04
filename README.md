@@ -113,7 +113,7 @@ The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll`
 | Display | ClipCursor | 1 | Confine the mouse to the game window while it is in the foreground; hold Alt to move it out. |
 | Display | FpsLimit | 60 | The game's own in-game frame limit; 0 = off. |
 | Display | FpsLimitInactive | 20 | Frame limit while the game is in the background, in game and in the menus; 0 = off. |
-| Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh; 0 = right away. |
+| Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh; 0 = right away (a new frame replaces one still waiting for the refresh, so the frame rate is not limited by it). |
 | Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |
 | UI | Scale | 0 | UI scale; 0 = as large as fits the screen height, otherwise a factor (1 = native pixels), capped at that. |
 | UI | ScaleMode | InGame | Where `Scale` applies: `InGame` = the in-game UI only; the menus, the full-screen windows in game (options, save/load, character export, map) and the loading screen always fill the screen height. `Full` = those too. |
