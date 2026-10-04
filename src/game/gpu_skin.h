@@ -16,6 +16,8 @@ namespace GpuSkin
     // Queues the hook in the caller's Patch transaction.
     void install();
     bool active();
+    // Once per presented frame: with D3DStats, skeletons posed against skeletons drawn.
+    void onFrame();
 
     // From DeviceProxy::DrawIndexedPrimitiveStrided. If the positions are vertices whose skinning this module left to
     // the GPU: with `gpu`, calls `prepare(context)` (apply what the batcher only recorded) and draws them through the

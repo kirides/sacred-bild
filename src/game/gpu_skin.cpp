@@ -14,6 +14,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace
@@ -101,6 +102,43 @@ namespace
         uint64_t serial = 0;
         bool filled = false;            // skinned on the CPU after all
     };
+
+    // [Debug] D3DStats: skeletons GrannyAdvanceTime poses per frame against those drawn (posing runs on the
+    // animation worker before the world view draws them).
+    using PoseFn = void(__fastcall*)(uint8_t* skeleton, void* edx, uint32_t a, uint32_t b);
+    PoseFn g_origPose = nullptr;
+    const uint32_t* g_poseFrame = nullptr;
+    struct PoseStats
+    {
+        std::mutex mutex;
+        std::unordered_set<const void*> posed, drawn;
+        uint64_t posedBones = 0;
+        uint64_t frames = 0, posedTotal = 0, posedBonesTotal = 0, drawnTotal = 0, undrawnTotal = 0, undrawnBonesTotal = 0;
+        DWORD nextLog = 0;
+    };
+    PoseStats g_poses;
+
+    void __fastcall hookPose(uint8_t* skeleton, void* edx, uint32_t a, uint32_t b)
+    {
+        if (field<uint8_t>(skeleton, Skeleton::active) && field<uint32_t>(skeleton, Skeleton::posedFrame) != *g_poseFrame)
+        {
+            std::scoped_lock lock(g_poses.mutex);
+            if (g_poses.posed.insert(skeleton).second)
+            {
+                g_poses.posedBones += field<uint32_t>(skeleton, Skeleton::boneCount);
+            }
+        }
+        g_origPose(skeleton, edx, a, b);
+    }
+
+    void noteDrawn(void* bones)
+    {
+        if (g_origPose && bones)
+        {
+            std::scoped_lock lock(g_poses.mutex);
+            g_poses.drawn.insert(*static_cast<void* const*>(bones));
+        }
+    }
 
     std::mutex g_mutex;
     std::unordered_map<const uint8_t*, std::shared_ptr<MeshInfo>> g_meshes;
@@ -258,6 +296,10 @@ namespace
     {
         // The model pass wants positions and normals, the shadow pass positions only.
         const bool render = reinterpret_cast<uintptr_t>(_ReturnAddress()) == g_renderReturn;
+        if (render)
+        {
+            noteDrawn(bones);
+        }
         const bool positions = (doPositions & 0xFF) && positionsOut && positionsOut[1];
         const bool wantNormals = (doNormals & 0xFF) != 0;
         const bool normals = wantNormals && normalsOut && normalsOut[1];
@@ -438,6 +480,49 @@ bool GpuSkin::active()
     return g_active;
 }
 
+void GpuSkin::onFrame()
+{
+    if (!g_origPose)
+    {
+        return;
+    }
+    PoseStats& s = g_poses;
+    std::scoped_lock lock(s.mutex);
+    if (s.posed.empty() && s.drawn.empty())
+    {
+        return;
+    }
+    ++s.frames;
+    s.posedTotal += s.posed.size();
+    s.posedBonesTotal += s.posedBones;
+    s.drawnTotal += s.drawn.size();
+    for (const void* skeleton : s.posed)
+    {
+        if (!s.drawn.contains(skeleton))
+        {
+            ++s.undrawnTotal;
+            s.undrawnBonesTotal += field<uint32_t>(static_cast<const uint8_t*>(skeleton), Skeleton::boneCount);
+        }
+    }
+    s.posed.clear();
+    s.drawn.clear();
+    s.posedBones = 0;
+    const DWORD now = GetTickCount();
+    if (!s.nextLog)
+    {
+        s.nextLog = now + 5000;
+    }
+    else if (static_cast<int>(now - s.nextLog) >= 0)
+    {
+        s.nextLog = now + 5000;
+        const double f = static_cast<double>(s.frames);
+        LOG("Animation poses per frame: {:.0f} skeletons ({:.0f} bones) posed, {:.0f} drawn, {:.0f} posed but not drawn "
+            "({:.0f} bones)", s.posedTotal / f, s.posedBonesTotal / f, s.drawnTotal / f, s.undrawnTotal / f,
+            s.undrawnBonesTotal / f);
+        s.frames = s.posedTotal = s.posedBonesTotal = s.drawnTotal = s.undrawnTotal = s.undrawnBonesTotal = 0;
+    }
+}
+
 bool GpuSkin::draw(IDirect3DDevice7* real, bool gpu, void (*prepare)(void*), void* context, D3DPRIMITIVETYPE type,
     DWORD fvf, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD vertCount, const WORD* indices, DWORD indexCount)
 {
@@ -480,6 +565,14 @@ void GpuSkin::install()
     if (!deform || !g_renderReturn)
     {
         return;
+    }
+    if (g_config.d3dStats)
+    {
+        const uintptr_t pose = findPose("GPU skinning", g_poseFrame);
+        if (pose && g_poseFrame && !Patch::hook(g_origPose, pose, &hookPose, "granny pose"))
+        {
+            g_origPose = nullptr;
+        }
     }
     if (Patch::hook(g_origDeform, deform, &hookDeform, "granny deform"))
     {

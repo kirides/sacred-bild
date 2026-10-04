@@ -149,6 +149,15 @@ namespace GrannyMesh
             "83 EC 2C 8B 44 24 30 53 8B D9 56 8B 08 57 8B 7B 18 89 4C 24 20 83 FF 01", 0);
     }
 
+    uintptr_t findPose(const char* who, const uint32_t*& frameCounter)
+    {
+        // push esi; mov esi, ecx; push edi; mov al, [esi + 0x6C]; test al, al; je; mov eax, [counter]; mov ecx, [esi + 0x78]
+        const uintptr_t pose = findInGranny(who, "Granny's skeleton pose update",
+            "56 8B F1 57 8A 46 6C 84 C0 74 ?? A1 ?? ?? ?? ?? 8B 4E 78 3B C8", 0);
+        frameCounter = pose ? *reinterpret_cast<const uint32_t* const*>(pose + 12) : nullptr;
+        return pose;
+    }
+
     uintptr_t findRenderDeformReturn(const char* who)
     {
         // lea eax, [edi + 0x1A8] (normals out) ... lea edx, [edi + 0x1A0] (positions out) ... call deform

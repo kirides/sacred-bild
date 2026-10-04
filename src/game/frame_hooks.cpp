@@ -2,6 +2,7 @@
 #include "game/d3d_stats.h"
 #include "game/device_proxy.h"
 #include "game/focus.h"
+#include "game/gpu_skin.h"
 #include "game/granny_async.h"
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
@@ -180,6 +181,7 @@ namespace
             D3DStats::onFrame();
         }
         GrannyAsync::onFrame();
+        GpuSkin::onFrame();
         Focus::onFrame();
         logGameState();
         if (DeviceProxy* proxy = DeviceProxy::instance())

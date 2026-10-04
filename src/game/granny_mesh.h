@@ -63,6 +63,18 @@ namespace GrannyMesh
     // picking reads those positions on the CPU.
     uintptr_t findRenderDeformReturn(const char* who);
 
+    // The skeleton pose update GrannyAdvanceTime runs for every active skeleton (thiscall on the skeleton (2 args),
+    // ret 8): once per frame (frame counter at +0x78 against a global counter), parent first, then every bone
+    // (count at +0x10, 300-byte bone states at +0x18; the deform's first argument points at the same skeleton).
+    // `frameCounter` receives the global counter's address.
+    uintptr_t findPose(const char* who, const uint32_t*& frameCounter);
+    namespace Skeleton
+    {
+        constexpr uintptr_t boneCount = 0x10;
+        constexpr uintptr_t active = 0x6C;          // byte
+        constexpr uintptr_t posedFrame = 0x78;
+    }
+
     template <class T>
     T field(const uint8_t* p, uintptr_t offset)
     {
