@@ -136,6 +136,24 @@ namespace
     int64_t g_lastFrameTsc = 0;
     uint64_t g_lastThreadCpu = 0;
 
+    // World view passes (render thread only): what the current pass has used since it was entered.
+    struct PassTotals
+    {
+        int64_t ticks = 0, proxyTicks = 0;
+        uint32_t draws = 0, submits = 0;
+    };
+    D3DStats::Pass g_pass = D3DStats::PNone;
+    int64_t g_passStart = 0, g_passProxy = 0;
+    uint32_t g_passDraws = 0, g_passSubmits = 0;
+    PassTotals g_passTotals[D3DStats::PassCount];
+
+    uint32_t gameDraws()
+    {
+        return g_counters[D3DStats::CDraw].load(std::memory_order_relaxed) +
+            g_counters[D3DStats::CDrawIndexed].load(std::memory_order_relaxed) +
+            g_counters[D3DStats::CDrawVB].load(std::memory_order_relaxed);
+    }
+
     int64_t qpc()
     {
         LARGE_INTEGER v;
@@ -248,6 +266,38 @@ void D3DStats::onFlushCause(uint32_t key)
     }
     std::scoped_lock lock(g_detailMutex);
     ++g_flushCauses[key];
+}
+
+D3DStats::Pass D3DStats::currentPass()
+{
+    return g_pass;
+}
+
+D3DStats::Pass D3DStats::enterPass(Pass pass)
+{
+    const Pass previous = g_pass;
+    if (pass == previous || (previous == PNone && pass != PWorld))
+    {
+        return previous;
+    }
+    const int64_t t = now();
+    const int64_t proxy = total(TProxy);
+    const uint32_t draws = gameDraws();
+    const uint32_t submits = g_counters[CSubmit].load(std::memory_order_relaxed);
+    if (previous != PNone)
+    {
+        PassTotals& p = g_passTotals[previous];
+        p.ticks += t - g_passStart;
+        p.proxyTicks += proxy - g_passProxy;
+        p.draws += draws - g_passDraws;
+        p.submits += submits - g_passSubmits;
+    }
+    g_pass = pass;
+    g_passStart = t;
+    g_passProxy = proxy;
+    g_passDraws = draws;
+    g_passSubmits = submits;
+    return previous;
 }
 
 void D3DStats::setRenderThread(unsigned long threadId)
@@ -376,6 +426,24 @@ void D3DStats::onFrame()
             c[CFlushFormat] / frames, c[CFlushFull] / frames, c[CFlushDirect] / frames, c[CFlushAtlas] / frames,
             c[CFlushLighting] / frames, c[CFlushWorld] / frames, c[CFlushOther] / frames);
     }
+
+    // Per pass: exclusive time, of that inside the device proxy (D3D included), game draws -> submitted draws. A
+    // merged batch is submitted (and its D3D time spent) in the pass that ends it, not the ones whose draws it holds.
+    if (g_passTotals[PWorld].ticks)
+    {
+        static constexpr const char* kPassNames[PassCount] = {
+            "", "other", "rows", "ground", "layers", "water", "objects", "objects2", "models"};
+        std::string line;
+        for (int p = PWorld; p < PassCount; ++p)
+        {
+            const PassTotals& pt = g_passTotals[p];
+            line += std::format("{}{} {:.2f} (device {:.2f}, {:.0f}->{:.0f})", p == PWorld ? "" : " | ", kPassNames[p],
+                static_cast<double>(pt.ticks) / tscPerMs / frames, static_cast<double>(pt.proxyTicks) / tscPerMs / frames,
+                pt.draws / frames, pt.submits / frames);
+        }
+        LOG("passes: {}", line);
+    }
+    std::fill(std::begin(g_passTotals), std::end(g_passTotals), PassTotals{});
 
     if (++g_reportsSinceDetail >= 30)
     {

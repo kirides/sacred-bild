@@ -10,8 +10,10 @@
 #include "game/screenshot.h"
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
+#include "game/world_passes.h"
 #include "net/connection.h"
 #include "net/lan_client.h"
+#include "config.h"
 #include "log.h"
 #include "patch.h"
 #include "sig.h"
@@ -81,6 +83,10 @@ void Sacred::installHooks()
     if (Patch::commit())
     {
         LOG("Game hooks installed");
+    }
+    if (g_config.d3dStats)
+    {
+        WorldPasses::install();
     }
     Connection::install();
     LanClient::install();

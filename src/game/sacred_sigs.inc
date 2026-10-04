@@ -134,6 +134,9 @@ static const Sig::Entry kAddressSigs[] = {
     {"cWorldView_drawTileLayers", "83 EC 28 53 56 57 8B F9 E8 ?? ?? ?? ?? 8B F0 8B 87 1C FF 03 00", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_drawTileLayers}, // 0062D3C0, 0062D530
     {"cQuadBatcher_flush", "56 8B F1 8B 86 10 59 00 00 85 C0 0F 84 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cQuadBatcher_flush}, // 00629340, 00629420
     {"cWorldView_drawWaterTiles", "83 EC 54 55 56 57 8B F9 E8 ?? ?? ?? ?? 8B E8 89 6C 24 2C", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_drawWaterTiles}, // 0062DD00, 0062DE70
+    {"cWorldView_drawObjects", "81 EC D4 01 00 00 53 55 56 8B F1 8A 0D ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_drawObjects}, // 0062E410, 0062E580
+    {"cWorldView_drawObjects2", "55 8B EC 83 E4 F8 81 EC 04 02 00 00", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_drawObjects2}, // 0062FF60, 006300D0
+    {"cObject3D_drawModel", "56 8B F1 57 8B 7C 24 0C F6 46 14 02", 0, Sig::Take::Match, &Sacred::Addr::cObject3D_drawModel}, // 0044A9D0, 0044ABA0
     {"cWorldView_initRowWalk", "A0 ?? ?? ?? ?? 83 EC 24 A8 01 53 56 8B F1 75 59", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_initRowWalk}, // 006328C0, 00632A30
     {"g_viewCameraX", "8B 80 C4 9D 00 00 8B 4E 18 03 C8 A1 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::g_viewCameraX}, // 00AD7998, 00AD5918
     {"g_viewCameraY", "A1 ?? ?? ?? ?? 81 C2 00 FE FF FF 05 80 FE FF FF", 1, Sig::Take::Abs32, &Sacred::Addr::g_viewCameraY}, // 00AD799C, 00AD591C

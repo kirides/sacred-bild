@@ -123,4 +123,34 @@ namespace D3DStats
         int64_t start = now();
         ~Scope() { addTime(timer, now() - start); }
     };
+
+    // Passes of cWorldView0::render. Time, device-call time, game draws and submits go to the innermost pass
+    // (exclusive), so nested passes (models inside the object passes, a layer flush inside the row walk) are not
+    // counted twice.
+    enum Pass
+    {
+        PNone,          // outside the world view
+        PWorld,         // the world view outside the passes below (setup, light lists, ...)
+        PRows,          // renderTileRow: tile walk, per-tile lighting, collecting objects and layers
+        PGround,        // quad batcher flushes outside the layer and water passes: the base tiles' draws
+        PLayers,        // drawTileLayers
+        PWater,         // drawWaterTiles
+        PObjects,       // first object pass (0x62E410)
+        PObjects2,      // second object pass (0x62FF60)
+        PModels,        // cObject3D::drawModel: 3D characters and their shadows
+        PassCount
+    };
+
+    Pass currentPass();
+    // Makes `pass` the current one and returns the previous; only PWorld starts accounting outside the world view.
+    Pass enterPass(Pass pass);
+
+    struct PassScope
+    {
+        Pass previous;
+        explicit PassScope(Pass pass) : previous(enterPass(pass)) {}
+        ~PassScope() { enterPass(previous); }
+        PassScope(const PassScope&) = delete;
+        PassScope& operator=(const PassScope&) = delete;
+    };
 }

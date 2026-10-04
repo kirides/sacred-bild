@@ -532,6 +532,18 @@
    "452F85C7": "0062DD00",
    "451BBE74": "0062DE70"
   },
+  "cWorldView_drawObjects": {
+   "452F85C7": "0062E410",
+   "451BBE74": "0062E580"
+  },
+  "cWorldView_drawObjects2": {
+   "452F85C7": "0062FF60",
+   "451BBE74": "006300D0"
+  },
+  "cObject3D_drawModel": {
+   "452F85C7": "0044A9D0",
+   "451BBE74": "0044ABA0"
+  },
   "cWorldView_initRowWalk": {
    "452F85C7": "006328C0",
    "451BBE74": "00632A30"

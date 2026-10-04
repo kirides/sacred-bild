@@ -37,6 +37,10 @@ HOOKS = {
     0x0062D3C0: ('cWorldView::drawTileLayers (called)', 1),
     0x00629340: ('cQuadBatcher::flush (called)', 1),
     0x0062DD00: ('cWorldView::drawWaterTiles (called)', 1),
+    # world_passes.cpp ([Debug] D3DStats)
+    0x0062E410: ('cWorldView::drawObjects', 1),
+    0x0062FF60: ('cWorldView::drawObjects2', 1),
+    0x0044A9D0: ('cObject3D::drawModel', 5),
     0x006172C0: ('cEngine::worldMouse', 2),
     0x00623940: ('pixelsToWorld (cdecl)', 0),
     0x00623B60: ('worldToPixels (cdecl)', 0),

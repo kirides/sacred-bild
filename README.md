@@ -144,7 +144,7 @@ The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll`
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | `Backend=chain`: ddraw loaded behind SacredBild; empty = system ddraw. |
 | DDraw | D3D9 | | `Backend=d3d9`: `d3d9.dll` to use (e.g. DXVK), relative to the game folder or absolute. Empty or not loadable: a `d3d9.dll` next to the exe, then Windows' own. |
 | DDraw | MediaFoundation | 1 | Movies through Media Foundation; always on with `Backend=d3d9`, 0 = the game's own player with `Backend=chain`. |
-| Debug | D3DStats | 0 | Frame statistics, hitches and texture memory in `SacredBild.log`. |
+| Debug | D3DStats | 0 | Frame statistics, hitches and texture memory in `SacredBild.log`, and the world view's time by pass (`passes:` lines). |
 | Debug | Profiler | 0 | Sampling profiler; writes `SacredBild-profile.txt` every 15 s. |
 | Debug | ProfilerIntervalUs | 500 | Sampling interval. |
 | Debug | UiTrace | 0 | Scroll Lock logs one UI frame's draws (`UiTrace:` lines: position, UI frame, calling game code) and popups set during the next 5 s. |
@@ -230,6 +230,7 @@ What the game's code at those addresses does is in `docs/RE_NOTES.md` and in the
 | `src/game/granny_async.*` | Animation update on a worker thread (`[Render] AsyncAnimation`) |
 | `src/game/map_cache.*` | Hash index in front of the map record caches (`[Render] RecordIndex`) |
 | `src/game/d3d_stats.*` | `[Debug] D3DStats` frame statistics |
+| `src/game/world_passes.*` | `[Debug] D3DStats`: the world view's passes timed separately |
 | `src/render/batcher.*`, `atlas.*`, `fvf.h` | Draw merging, the texture atlas, vertex format layout |
 | `src/net/` | LAN games over VPNs: `lan_client.*` (sacred.exe), `lan_server.*` (gameserver.exe), `lan_protocol.*` (announcements), `adapters.*` (network adapters), `connection.*` (`NoDelay`) |
 

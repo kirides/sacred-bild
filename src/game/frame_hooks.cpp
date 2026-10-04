@@ -226,6 +226,7 @@ namespace
     void __fastcall hookWorldRender(void* self, void* edx, void* device)
     {
         D3DStats::Scope s{D3DStats::TWorld};
+        D3DStats::PassScope pass{D3DStats::PWorld};
         // In game only Z is cleared: the ground covers 1024x768, but anything it leaves uncovered at larger
         // sizes (map edges, extreme zoom) would show old frames.
         if (Resolution::active() && device)

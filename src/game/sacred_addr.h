@@ -110,6 +110,12 @@ namespace Sacred::Addr
     // Draws the collected water/lava tiles (glow pass, then the tiles) and sets the water ambience from their
     // count and average position.
     inline uintptr_t cWorldView_drawWaterTiles{};       // ENG 0062DD00; thiscall (device)
+    // The object passes after the ground (sprites, buildings, creatures; 3D models through cObject3D::drawModel), in
+    // this order with drawWaterTiles between them.
+    inline uintptr_t cWorldView_drawObjects{};          // ENG 0062E410; thiscall (device)
+    inline uintptr_t cWorldView_drawObjects2{};         // ENG 0062FF60; thiscall (device)
+    // Per 3D model: visibility test, cGranny_render (model) and cGranny_renderShadow.
+    inline uintptr_t cObject3D_drawModel{};             // ENG 0044A9D0; thiscall (device, model, instance, flags64)
     // Row walk: initRowWalk sets the even and odd row positions (WorldView::rowEven/rowOdd) from the view's top-left
     // corner; cWorldView0_render then calls renderTileRow for each and steps it one tile row down (tile + 0x41,
     // y + 48), changing sector at sector edges. The camera position (view coordinates) is set by the same frame.
