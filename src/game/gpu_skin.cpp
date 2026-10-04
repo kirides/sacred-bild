@@ -7,6 +7,7 @@
 #include "patch.h"
 
 #include <intrin.h>
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -103,40 +104,133 @@ namespace
         bool filled = false;            // skinned on the CPU after all
     };
 
-    // [Debug] D3DStats: skeletons GrannyAdvanceTime poses per frame against those drawn (posing runs on the
-    // animation worker before the world view draws them).
+    // Skeleton poses (bone world transforms from the local ones the animations set): GrannyAdvanceTime recomputes them
+    // for every active skeleton, drawn or not (zoomed out at 2560x1440 ~70 % of the posed bones are never drawn).
+    // [Render] OffscreenPoses = N: skeletons not drawn in the last frames are posed only every Nth frame, staggered;
+    // one that is drawn after all is posed right before its deform. Whatever else reads an undrawn skeleton's bones
+    // (the game's bone queries, its visibility test) sees a pose at most N frames old. With D3DStats: skeletons posed
+    // against skeletons drawn, and the time posing takes.
     using PoseFn = void(__fastcall*)(uint8_t* skeleton, void* edx, uint32_t a, uint32_t b);
     PoseFn g_origPose = nullptr;
+    // Granny's pose counter: the advance poses skeletons whose stamp differs from it, stamps them with it and then
+    // increments it, so a skeleton posed by the last advance has counter - 1.
     const uint32_t* g_poseFrame = nullptr;
-    struct PoseStats
+    uint32_t g_poseInterval = 1;
+    uint32_t g_poseArgs[2] = {};                // the advance's arguments; the pose only passes them to the parent
+    thread_local int t_poseDepth = 0;           // > 0: inside a pose (a child's parent is always posed)
+
+    struct PoseState
     {
         std::mutex mutex;
+        uint32_t frame = 0;                     // presented frames
+        std::unordered_map<const void*, uint32_t> lastDrawn;
+        // D3DStats, this frame and summed up between reports.
         std::unordered_set<const void*> posed, drawn;
-        uint64_t posedBones = 0;
-        uint64_t frames = 0, posedTotal = 0, posedBonesTotal = 0, drawnTotal = 0, undrawnTotal = 0, undrawnBonesTotal = 0;
+        uint64_t posedBones = 0, skippedBones = 0;
+        uint32_t skipped = 0, onDemand = 0;
+        int64_t poseTicks = 0;
+        uint64_t frames = 0, posedTotal = 0, posedBonesTotal = 0, drawnTotal = 0, undrawnTotal = 0, undrawnBonesTotal = 0,
+            skippedTotal = 0, skippedBonesTotal = 0, onDemandTotal = 0;
+        int64_t poseTicksTotal = 0;
         DWORD nextLog = 0;
     };
-    PoseStats g_poses;
+    PoseState g_pose;
+
+    int64_t qpcNow()
+    {
+        LARGE_INTEGER v;
+        QueryPerformanceCounter(&v);
+        return v.QuadPart;
+    }
 
     void __fastcall hookPose(uint8_t* skeleton, void* edx, uint32_t a, uint32_t b)
     {
-        if (field<uint8_t>(skeleton, Skeleton::active) && field<uint32_t>(skeleton, Skeleton::posedFrame) != *g_poseFrame)
+        if (!field<uint8_t>(skeleton, Skeleton::active) || field<uint32_t>(skeleton, Skeleton::posedFrame) == *g_poseFrame)
         {
-            std::scoped_lock lock(g_poses.mutex);
-            if (g_poses.posed.insert(skeleton).second)
+            g_origPose(skeleton, edx, a, b);    // returns right away
+            return;
+        }
+        PoseState& s = g_pose;
+        bool skip = false;
+        {
+            std::scoped_lock lock(s.mutex);
+            if (t_poseDepth == 0 && g_poseInterval > 1)
             {
-                g_poses.posedBones += field<uint32_t>(skeleton, Skeleton::boneCount);
+                g_poseArgs[0] = a;
+                g_poseArgs[1] = b;
+                const auto it = s.lastDrawn.find(skeleton);
+                const bool recent = it != s.lastDrawn.end() && it->second + 2 >= s.frame;
+                skip = !recent && (s.frame + static_cast<uint32_t>(reinterpret_cast<uintptr_t>(skeleton) >> 6)) %
+                    g_poseInterval != 0;
+            }
+            if (g_config.d3dStats)
+            {
+                if (skip)
+                {
+                    ++s.skipped;
+                    s.skippedBones += field<uint32_t>(skeleton, Skeleton::boneCount);
+                }
+                else if (s.posed.insert(skeleton).second)
+                {
+                    s.posedBones += field<uint32_t>(skeleton, Skeleton::boneCount);
+                }
             }
         }
+        if (skip)
+        {
+            return;     // the stamp stays: the next advance comes back to it
+        }
+        const int64_t start = g_config.d3dStats && t_poseDepth == 0 ? qpcNow() : 0;
+        ++t_poseDepth;
         g_origPose(skeleton, edx, a, b);
+        --t_poseDepth;
+        if (start)
+        {
+            std::scoped_lock lock(s.mutex);
+            s.poseTicks += qpcNow() - start;
+        }
     }
 
+    // Rendering path, before a deform (render thread, inside Granny's lock, the animation worker idle).
     void noteDrawn(void* bones)
     {
-        if (g_origPose && bones)
+        if (!g_origPose || !bones)
         {
-            std::scoped_lock lock(g_poses.mutex);
-            g_poses.drawn.insert(*static_cast<void* const*>(bones));
+            return;
+        }
+        auto* skeleton = *static_cast<uint8_t**>(bones);
+        PoseState& s = g_pose;
+        {
+            std::scoped_lock lock(s.mutex);
+            s.lastDrawn[skeleton] = s.frame;
+            if (g_config.d3dStats)
+            {
+                s.drawn.insert(skeleton);
+            }
+        }
+        // A skeleton the last advance skipped: pose it now.
+        const uint32_t posedNow = *g_poseFrame - 1;
+        if (g_poseInterval <= 1 || !skeleton || !field<uint8_t>(skeleton, Skeleton::active) ||
+            field<uint32_t>(skeleton, Skeleton::posedFrame) == posedNow)
+        {
+            return;
+        }
+        ++t_poseDepth;
+        g_origPose(skeleton, nullptr, g_poseArgs[0], g_poseArgs[1]);
+        --t_poseDepth;
+        // It (and any parent posed with it) now carries the current counter, which would make the next advance skip
+        // them: stamp them as posed by the last advance instead.
+        for (uint8_t* k = skeleton; k; k = field<uint8_t*>(k, Skeleton::parent))
+        {
+            if (field<uint32_t>(k, Skeleton::posedFrame) == *g_poseFrame)
+            {
+                *reinterpret_cast<uint32_t*>(k + Skeleton::posedFrame) = posedNow;
+            }
+        }
+        if (g_config.d3dStats)
+        {
+            std::scoped_lock lock(s.mutex);
+            ++s.onDemand;
         }
     }
 
@@ -486,9 +580,14 @@ void GpuSkin::onFrame()
     {
         return;
     }
-    PoseStats& s = g_poses;
+    PoseState& s = g_pose;
     std::scoped_lock lock(s.mutex);
-    if (s.posed.empty() && s.drawn.empty())
+    ++s.frame;
+    if (s.lastDrawn.size() > 4096)
+    {
+        std::erase_if(s.lastDrawn, [&](const auto& e) { return e.second + 600 < s.frame; });
+    }
+    if (!g_config.d3dStats || (s.posed.empty() && s.drawn.empty() && !s.skipped))
     {
         return;
     }
@@ -496,6 +595,10 @@ void GpuSkin::onFrame()
     s.posedTotal += s.posed.size();
     s.posedBonesTotal += s.posedBones;
     s.drawnTotal += s.drawn.size();
+    s.skippedTotal += s.skipped;
+    s.skippedBonesTotal += s.skippedBones;
+    s.onDemandTotal += s.onDemand;
+    s.poseTicksTotal += s.poseTicks;
     for (const void* skeleton : s.posed)
     {
         if (!s.drawn.contains(skeleton))
@@ -506,7 +609,9 @@ void GpuSkin::onFrame()
     }
     s.posed.clear();
     s.drawn.clear();
-    s.posedBones = 0;
+    s.posedBones = s.skippedBones = 0;
+    s.skipped = s.onDemand = 0;
+    s.poseTicks = 0;
     const DWORD now = GetTickCount();
     if (!s.nextLog)
     {
@@ -515,11 +620,17 @@ void GpuSkin::onFrame()
     else if (static_cast<int>(now - s.nextLog) >= 0)
     {
         s.nextLog = now + 5000;
+        LARGE_INTEGER freq;
+        QueryPerformanceFrequency(&freq);
         const double f = static_cast<double>(s.frames);
-        LOG("Animation poses per frame: {:.0f} skeletons ({:.0f} bones) posed, {:.0f} drawn, {:.0f} posed but not drawn "
-            "({:.0f} bones)", s.posedTotal / f, s.posedBonesTotal / f, s.drawnTotal / f, s.undrawnTotal / f,
+        LOG("Animation poses per frame: {:.0f} skeletons ({:.0f} bones) posed in {:.2f} ms, {:.0f} skipped ({:.0f} bones), "
+            "{:.1f} posed on demand, {:.0f} drawn, {:.0f} posed but not drawn ({:.0f} bones)", s.posedTotal / f,
+            s.posedBonesTotal / f, 1000.0 * static_cast<double>(s.poseTicksTotal) / static_cast<double>(freq.QuadPart) / f,
+            s.skippedTotal / f, s.skippedBonesTotal / f, s.onDemandTotal / f, s.drawnTotal / f, s.undrawnTotal / f,
             s.undrawnBonesTotal / f);
         s.frames = s.posedTotal = s.posedBonesTotal = s.drawnTotal = s.undrawnTotal = s.undrawnBonesTotal = 0;
+        s.skippedTotal = s.skippedBonesTotal = s.onDemandTotal = 0;
+        s.poseTicksTotal = 0;
     }
 }
 
@@ -566,18 +677,29 @@ void GpuSkin::install()
     {
         return;
     }
-    if (g_config.d3dStats)
+    if (!Patch::hook(g_origDeform, deform, &hookDeform, "granny deform"))
+    {
+        return;
+    }
+    g_active = true;
+    LOG("GPU skinning: on, characters are skinned in a vertex shader (Granny's deform at granny.dll + {:x})",
+        deform - reinterpret_cast<uintptr_t>(GetModuleHandleW(L"granny.dll")));
+
+    // Skipped poses rely on the deform hook to pose a skeleton that is drawn after all.
+    g_poseInterval = static_cast<uint32_t>(std::max(g_config.offscreenPoses, 1));
+    if (g_config.d3dStats || g_poseInterval > 1)
     {
         const uintptr_t pose = findPose("GPU skinning", g_poseFrame);
-        if (pose && g_poseFrame && !Patch::hook(g_origPose, pose, &hookPose, "granny pose"))
+        if (pose && g_poseFrame && Patch::hook(g_origPose, pose, &hookPose, "granny pose"))
+        {
+            if (g_poseInterval > 1)
+            {
+                LOG("Animation: skeletons not drawn in the last frames are posed every {}th frame", g_poseInterval);
+            }
+        }
+        else
         {
             g_origPose = nullptr;
         }
-    }
-    if (Patch::hook(g_origDeform, deform, &hookDeform, "granny deform"))
-    {
-        g_active = true;
-        LOG("GPU skinning: on, characters are skinned in a vertex shader (Granny's deform at granny.dll + {:x})",
-            deform - reinterpret_cast<uintptr_t>(GetModuleHandleW(L"granny.dll")));
     }
 }

@@ -343,6 +343,24 @@ fixed-function pipeline; otherwise the module skins the whole mesh on the CPU fi
 positions, one constant diffuse color (stride 0), texture coordinates, lighting off, stencil on, its world matrix
 flattening the mesh onto the ground (singular: the shader's normal matrix is only computed for lit draws).
 
+### Animation advance (GrannyAdvanceTime)
+
+`GrannyAdvanceTime` (`0x10029710`) -> engine `0x100337A0` -> scene `0x10007080`: adds the elapsed time to the scene
+clock, advances every animation control (`0x10007420` -> `0x100016E0` per control, which samples the animation
+into the bones' local transforms; accumulated root motion included) and then poses every skeleton in a list
+(`0x10007500` -> `0x10008460`). The pose update (thiscall on the skeleton, `ret 8`) runs once per frame per skeleton:
+it skips inactive ones (`+0x6C`) and those whose stamp (`+0x78`) equals the global pose counter (`0x1006DC54`),
+stamps them, poses the parent skeleton (`+0x74`) first and then each bone (count `+0x10`, 300-byte bone states at
+`+0x18`; `0x10021690`: local to world, `0x10021250` then `0x10020990` with the parent bone). The counter is incremented
+after the list, so a skeleton posed by the last advance carries counter - 1 (the constructor `0x100084F0` starts it
+there). The deform's first argument points at the same skeleton object.
+
+Measured at 2560x1440 zoomed out: ~2.9-3.4 ms per frame on the animation worker, 220-310 skeletons (10,000-12,000
+bones) posed per frame of which only 70-120 were drawn. Busy time by function: `0x10021250` 20 %, `0x10020E10`
+15 % (accumulating a control into a local transform), `0x10020990` 11 %, small 3x3 helpers the rest.
+`[Render] OffscreenPoses` poses skeletons not drawn in the last two frames only every Nth frame; the deform hook
+poses a skipped one before it is drawn and stamps it (and parents) back to counter - 1.
+
 ## UI (`cUI_Control2` / `cUI_Window2` / `cUI_Manager`)
 
 `cUI_Control2` (vtable `0x897488`): `+0x10` flags (bit 0 visible), `+0x24` x, `+0x28` y, `+0x2C`/`+0x2E`

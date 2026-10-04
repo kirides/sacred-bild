@@ -72,6 +72,7 @@ namespace GrannyMesh
     {
         constexpr uintptr_t boneCount = 0x10;
         constexpr uintptr_t active = 0x6C;          // byte
+        constexpr uintptr_t parent = 0x74;          // skeleton this one is attached to, posed first
         constexpr uintptr_t posedFrame = 0x78;
     }
 

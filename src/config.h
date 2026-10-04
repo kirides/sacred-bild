@@ -77,6 +77,8 @@ struct Config
     bool batchGround = true;
     // Characters skinned in a vertex shader instead of by Granny on the CPU (Direct3D 9 backend only).
     bool gpuSkinning = true;
+    // Skeletons not drawn in the last frames are posed every Nth frame instead of every frame (1 = every frame).
+    int offscreenPoses = 4;
     // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.
     bool asyncAnimation = true;
     // Hash index in front of the map data's record caches (std::map lookups per tile and object).
