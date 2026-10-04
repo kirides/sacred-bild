@@ -1,5 +1,6 @@
 #include "game/build.h"
 #include "game/sacred_addr.h"
+#include "game/focus.h"
 #include "game/frame_hooks.h"
 #include "game/movie.h"
 #include "game/granny_async.h"
@@ -70,6 +71,7 @@ void Sacred::installHooks()
     Patch::begin();
     FrameHooks::install();
     Resolution::install();
+    Focus::install();
     UiCanvas::install();
     UiAnchor::install();
     Movie::install();

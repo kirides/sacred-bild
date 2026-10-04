@@ -74,6 +74,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.width = readInt(ini, L"Display", L"Width", g_config.width);
     g_config.height = readInt(ini, L"Display", L"Height", g_config.height);
     g_config.borderless = readInt(ini, L"Display", L"Borderless", g_config.borderless) != 0;
+    g_config.clipCursor = readInt(ini, L"Display", L"ClipCursor", g_config.clipCursor) != 0;
     g_config.fpsLimit = readInt(ini, L"Display", L"FpsLimit", g_config.fpsLimit);
     g_config.vsync = readInt(ini, L"Display", L"VSync", g_config.vsync) != 0;
     g_config.maxFrameLatency = readInt(ini, L"Display", L"MaxFrameLatency", g_config.maxFrameLatency);
@@ -113,10 +114,10 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.crashDump = readInt(ini, L"Debug", L"CrashDump", g_config.crashDump);
     g_config.movieFallback = readInt(ini, L"Debug", L"MovieFallback", g_config.movieFallback) != 0;
 
-    LOG("Config: Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} FpsLimit={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
+    LOG("Config: Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} ClipCursor={} FpsLimit={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
         "Screenshot.Format={} Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} D3DStats={} Profiler={} ({} us) UiTrace={} CrashDump={} MovieFallback={}",
-        g_config.ddrawD3D9 ? "d3d9" : "chain", ascii(g_config.d3d9Path), g_config.mediaFoundation, g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit,
+        g_config.ddrawD3D9 ? "d3d9" : "chain", ascii(g_config.d3d9Path), g_config.mediaFoundation, g_config.width, g_config.height, g_config.borderless, g_config.clipCursor, g_config.fpsLimit,
         g_config.vsync, g_config.maxFrameLatency, g_config.uiScale,
         g_config.uiScaleMenus ? "Full" : "InGame", g_config.uiLinearFilter, g_config.uiAnchor,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,

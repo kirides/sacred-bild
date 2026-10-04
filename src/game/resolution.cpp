@@ -1,4 +1,5 @@
 #include "game/resolution.h"
+#include "game/focus.h"
 #include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
 #include "config.h"
@@ -229,13 +230,19 @@ namespace
         HWND parent, HMENU menu, HINSTANCE inst, LPVOID param)
     {
         // Main game window: borderless so the client area matches the back buffer.
-        if (reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::mainWindowCreateReturn && g_config.borderless)
+        const bool mainWindow = reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::mainWindowCreateReturn;
+        if (mainWindow && g_config.borderless)
         {
             LOG("Main window style {:08x} -> borderless", style);
             style = (style & WS_VISIBLE) | WS_POPUP;
             exStyle &= ~(WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_DLGMODALFRAME);
         }
-        return g_origCreateWindowExA(exStyle, cls, name, style, x, y, w, h, parent, menu, inst, param);
+        HWND window = g_origCreateWindowExA(exStyle, cls, name, style, x, y, w, h, parent, menu, inst, param);
+        if (mainWindow && window)
+        {
+            Focus::windowCreated(window);
+        }
+        return window;
     }
 
     // The conversion helpers turn projection units into pixels with 1024/768. Callers pass either

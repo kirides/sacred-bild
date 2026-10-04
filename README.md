@@ -58,6 +58,14 @@ ddraw calls through and logs which one.
 - **Languages**: the GOG builds ignore the game's `LANGUAGE` for text and speech (the text is built into the exe,
   the speech is always `PAK\sound.pak`). SacredBild loads the language's own files when they are there, so one
   install runs every language you have the files for (see below).
+- **Input only in the foreground**: the game polls keys, mouse buttons and the cursor whether or not it has the
+  focus, moves the cursor, and its low-level keyboard hook swallowed the Windows keys, Alt+Tab and Alt+Esc
+  system-wide. All of that now only happens while the game is in the foreground (in the background it keeps the
+  last cursor position), so typing in another window doesn't move your character, and Alt+Tab / Alt+Esc work in
+  game too (the Windows keys and Ctrl+Esc stay blocked while it has the focus). The mouse is confined to the
+  game window while it is in the foreground (`[Display] ClipCursor`), e.g. a window on one side of a 32:9 screen
+  or a borderless game next to a second monitor; it is let go while the window is moved (Alt+Space, Move) or a
+  menu of it is open, and only taken once the cursor is over the window, so a click on the title bar still drags.
 - **Diagnostics**: per-second frame stats (draw calls, texture switches, unique textures, time spent in
   the world renderer, UI, flip and inside Direct3D, what ended each batch) and an optional sampling profiler.
   When the game or its gameserver crashes, a minidump goes next to the exe (`SacredBild-crash-*.dmp`,
@@ -100,6 +108,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 |---|---|---|---|
 | Display | Width, Height | 0 | Render resolution; 0 = desktop. 1024x768 = unpatched game. |
 | Display | Borderless | 1 | Main window without frame. |
+| Display | ClipCursor | 1 | Confine the mouse to the game window while it is in the foreground. |
 | Display | FpsLimit | 60 | The game's own in-game frame limit; 0 = off. |
 | Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh; 0 = right away. |
 | Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |

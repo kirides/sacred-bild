@@ -27,6 +27,7 @@ add_library(ddraw SHARED
   src/sig.cpp
   src/system_ddraw.cpp
   src/game/build.cpp
+  src/game/focus.cpp
   src/game/frame_hooks.cpp
   src/game/gameserver.cpp
   src/game/granny_async.cpp

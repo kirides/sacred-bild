@@ -1,6 +1,7 @@
 #include "game/frame_hooks.h"
 #include "game/d3d_stats.h"
 #include "game/device_proxy.h"
+#include "game/focus.h"
 #include "game/granny_async.h"
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
@@ -162,6 +163,7 @@ namespace
         }
         D3DStats::onFrame();
         GrannyAsync::onFrame();
+        Focus::onFrame();
         logGameState();
         // Every 5 s, log where the next frame's 3D draws land (characters are 3D models).
         if (DeviceProxy* proxy = DeviceProxy::instance())
