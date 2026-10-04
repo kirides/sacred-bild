@@ -126,9 +126,6 @@ static const Sig::Entry kAddressSigs[] = {
     {"renderLimiterReturn", "83 C4 0C 8B 46 54 F6 C4 80 74 0B 8B 4E 54", 0, Sig::Take::Match, &Sacred::Addr::renderLimiterReturn}, // 0060EB0E, 0060EA6E
     {"captureLockBackReturn", "85 C0 0F 84 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 8B 85 A0 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::captureLockBackReturn}, // 0061374B, 006136AB
     {"captureScreenshot", "6A 00 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 08 85 C0 74 0D 68 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::captureScreenshot}, // 00648900, 006487D0
-    {"cCreature_render", "83 EC 64 53 55 56 57 8B E9 E8 ?? ?? ?? ?? 84 C0", 0, Sig::Take::Match, &Sacred::Addr::cCreature_render}, // 00599880, 00599910
-    {"cObject3D_render", "A1 ?? ?? ?? ?? 83 EC 30 53 55 56 8B F1 57 89 46 54", 0, Sig::Take::Match, &Sacred::Addr::cObject3D_render}, // 0044B400, 0044B230
-    {"cObject3D_drawModel", "56 8B F1 57 8B 7C 24 0C F6 46 14 02", 0, Sig::Take::Match, &Sacred::Addr::cObject3D_drawModel}, // 0044ABA0, 0044A9D0
     {"pixelsToWorld", "8B 4C 24 0C 8B 44 24 10 8B 54 24 08", 0, Sig::Take::Match, &Sacred::Addr::pixelsToWorld}, // 00623A20, 00623940
     {"worldToPixels", "83 EC 0C 8B 44 24 18 8B 4C 24 14 8B 54 24 1C", 0, Sig::Take::Match, &Sacred::Addr::worldToPixels}, // 00623C40, 00623B60
     {"g_unzoomedProjection", "C7 44 24 08 00 00 00 00 68 ?? ?? ?? ?? 8D 4C 24 04", 9, Sig::Take::Abs32, &Sacred::Addr::g_unzoomedProjection}, // 0182CCF0, 0182ED70

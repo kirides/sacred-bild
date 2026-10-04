@@ -17,11 +17,6 @@ namespace
 {
     DeviceProxy* g_instance = nullptr;
 
-    bool isPretransformed(DWORD fvf)
-    {
-        return Fvf::pretransformed(fvf);
-    }
-
     bool isNear(float a, float b) { return std::fabs(a - b) < 0.05f; }
 
     // One axis of a textured UI rectangle: screen positions p0 < p1 carry texture coordinates e0, e1 (texels).
@@ -56,18 +51,6 @@ namespace
         const float k = c1 > c0 ? (s1 - s0) / (c1 - c0) : 0.0f;
         e0 = s0 + (p0 - c0) * k;
         e1 = s0 + (p1 - c0) * k;
-    }
-
-    D3DMATRIX multiply(const D3DMATRIX& a, const D3DMATRIX& b)
-    {
-        D3DMATRIX r;
-        const float(*A)[4] = reinterpret_cast<const float(*)[4]>(&a);
-        const float(*B)[4] = reinterpret_cast<const float(*)[4]>(&b);
-        float(*R)[4] = reinterpret_cast<float(*)[4]>(&r);
-        for (int i = 0; i < 4; ++i)
-            for (int j = 0; j < 4; ++j)
-                R[i][j] = A[i][0] * B[0][j] + A[i][1] * B[1][j] + A[i][2] * B[2][j] + A[i][3] * B[3][j];
-        return r;
     }
 
     // Logs each game call site once that draws in UI mode with geometry the canvas can't place exactly.
@@ -191,137 +174,14 @@ DeviceProxy* DeviceProxy::instance()
     return g_instance;
 }
 
-std::string DeviceProxy::renderStates()
-{
-    DWORD z = 0, zw = 0, zf = 0, ab = 0, at = 0;
-    m_real->GetRenderState(D3DRENDERSTATE_ZENABLE, &z);
-    m_real->GetRenderState(D3DRENDERSTATE_ZWRITEENABLE, &zw);
-    m_real->GetRenderState(D3DRENDERSTATE_ZFUNC, &zf);
-    m_real->GetRenderState(D3DRENDERSTATE_ALPHABLENDENABLE, &ab);
-    m_real->GetRenderState(D3DRENDERSTATE_ALPHATESTENABLE, &at);
-    return std::format("z {} zw {} zf {} ab {} at {}", z, zw, zf, ab, at);
-}
-
-void DeviceProxy::probeTL(DWORD fvf, const void* verts, DWORD count, const void* site)
-{
-    if (!m_probe || m_ui || !verts || (fvf & D3DFVF_POSITION_MASK) != D3DFVF_XYZRHW)
-    {
-        return;
-    }
-    const UINT stride = Fvf::stride(fvf);
-    float z0 = 1e30f, z1 = -1e30f, y0 = 1e30f, y1 = -1e30f;
-    for (DWORD i = 0; i < count; ++i)
-    {
-        const float* p = reinterpret_cast<const float*>(static_cast<const uint8_t*>(verts) + size_t(i) * stride);
-        z0 = std::min(z0, p[2]); z1 = std::max(z1, p[2]);
-        y0 = std::min(y0, p[1]); y1 = std::max(y1, p[1]);
-    }
-    for (TLSite& s : m_probeTL)
-    {
-        if (s.site == site)
-        {
-            ++s.draws;
-            s.zMin = std::min(s.zMin, z0); s.zMax = std::max(s.zMax, z1);
-            s.yMin = std::min(s.yMin, y0); s.yMax = std::max(s.yMax, y1);
-            return;
-        }
-    }
-    if (m_probeTL.size() < 64)
-    {
-        DWORD z = 0, zw = 0, zf = 0;
-        m_real->GetRenderState(D3DRENDERSTATE_ZENABLE, &z);
-        m_real->GetRenderState(D3DRENDERSTATE_ZWRITEENABLE, &zw);
-        m_real->GetRenderState(D3DRENDERSTATE_ZFUNC, &zf);
-        m_probeTL.push_back({site, 1, z0, z1, y0, y1, z, zw, zf});
-    }
-}
-
-void DeviceProxy::dumpProbeTL()
-{
-    for (const TLSite& s : m_probeTL)
-    {
-        LOG("ProbeTL: {} draws {} z {:.4f}..{:.4f} y {:.0f}..{:.0f} (z {} zw {} zf {})", s.site, s.draws, s.zMin, s.zMax,
-            s.yMin, s.yMax, s.zEnable, s.zWrite, s.zFunc);
-    }
-    m_probeTL.clear();
-}
-
-void DeviceProxy::setProbe(bool enabled)
-{
-    CallLock lock(*this, _ReturnAddress());
-    if (m_probe && !enabled)
-    {
-        dumpProbeTL();
-    }
-    m_probe = enabled;
-    m_probeLogged = 0;
-    if (enabled)
-    {
-        D3DVIEWPORT7 vp = {};
-        m_real->GetViewport(&vp);
-        LOG("Probe3D: frame start, vp {},{} {}x{} z {:.2f}..{:.2f} | proj diag {:.5f} {:.5f} {:.5f} t ({:.3f},{:.3f},{:.3f}) | "
-            "view row0 ({:.3f},{:.3f},{:.3f}) row1 ({:.3f},{:.3f},{:.3f}) row2 ({:.3f},{:.3f},{:.3f}) t ({:.1f},{:.1f},{:.1f})",
-            vp.dwX, vp.dwY, vp.dwWidth, vp.dwHeight, vp.dvMinZ, vp.dvMaxZ, m_proj._11, m_proj._22, m_proj._33,
-            m_proj._41, m_proj._42, m_proj._43, m_view._11, m_view._12, m_view._13, m_view._21, m_view._22, m_view._23,
-            m_view._31, m_view._32, m_view._33, m_view._41, m_view._42, m_view._43);
-    }
-}
-
-void DeviceProxy::probe3D(const char* what, DWORD fvf, const void* positions, DWORD stride, DWORD count, const void* site)
-{
-    if (!m_probe || m_ui || m_probeLogged >= 48 || (fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW)
-    {
-        return;
-    }
-    ++m_probeLogged;
-    if (!positions)
-    {
-        LOG("Probe3D: {} at {} fvf {:x} n {} (no positions)", what, site, fvf, count);
-        return;
-    }
-    D3DVIEWPORT7 vp = {};
-    m_real->GetViewport(&vp);
-    const D3DMATRIX wvp = multiply(multiply(m_world, m_view), m_proj);
-    const float(*M)[4] = reinterpret_cast<const float(*)[4]>(&wvp);
-    float x0 = 1e30f, x1 = -1e30f, y0 = 1e30f, y1 = -1e30f, z0 = 1e30f, z1 = -1e30f;
-    int front = 0, sampled = 0;
-    const DWORD step = std::max<DWORD>(1, count / 128);
-    for (DWORD i = 0; i < count; i += step, ++sampled)
-    {
-        const float* p = reinterpret_cast<const float*>(static_cast<const uint8_t*>(positions) + size_t(i) * stride);
-        float o[4];
-        for (int j = 0; j < 4; ++j)
-            o[j] = p[0] * M[0][j] + p[1] * M[1][j] + p[2] * M[2][j] + M[3][j];
-        if (o[3] <= 1e-6f)
-        {
-            continue;
-        }
-        ++front;
-        const float sx = vp.dwX + (1.0f + o[0] / o[3]) * vp.dwWidth * 0.5f;
-        const float sy = vp.dwY + (1.0f - o[1] / o[3]) * vp.dwHeight * 0.5f;
-        const float sz = o[2] / o[3];
-        x0 = std::min(x0, sx); x1 = std::max(x1, sx);
-        y0 = std::min(y0, sy); y1 = std::max(y1, sy);
-        z0 = std::min(z0, sz); z1 = std::max(z1, sz);
-    }
-    LOG("Probe3D: {} at {} fvf {:x} n {} -> x {:.0f}..{:.0f} y {:.0f}..{:.0f} z {:.4f}..{:.4f} ({}/{} in front) {} "
-        "world.t=({:.0f},{:.0f},{:.0f})",
-        what, site, fvf, count, x0, x1, y0, y1, z0, z1, front, sampled, renderStates(),
-        m_world._41, m_world._42, m_world._43);
-}
-
-D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt, bool frameOnly) const
+D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt) const
 {
     const UiCanvas::Placement p = UiCanvas::placement();
     const float s = p.scale;
-    float l = p.clipLeft, t = p.clipTop, r = p.clipRight, b = p.clipBottom;
-    if (frameOnly)
-    {
-        l = std::max(l, p.originX);
-        t = std::max(t, p.originY);
-        r = std::min(r, p.originX + 1024.0f * s);
-        b = std::min(b, p.originY + 768.0f * s);
-    }
+    const float l = std::max(p.clipLeft, p.originX);
+    const float t = std::max(p.clipTop, p.originY);
+    const float r = std::min(p.clipRight, p.originX + 1024.0f * s);
+    const float b = std::min(p.clipBottom, p.originY + 768.0f * s);
     const float x0 = std::max(p.originX + virt.dwX * s, l);
     const float y0 = std::max(p.originY + virt.dwY * s, t);
     const float x1 = std::min(p.originX + (virt.dwX + virt.dwWidth) * s, r);
@@ -341,7 +201,7 @@ bool DeviceProxy::beginOverlay3D(D3DVIEWPORT7& restore)
         return false;
     }
     m_real->GetViewport(&restore);
-    D3DVIEWPORT7 vp = canvasViewport(m_uiViewport, true);
+    D3DVIEWPORT7 vp = canvasViewport(m_uiViewport);
     m_real->SetViewport(&vp);
     return true;
 }
@@ -724,12 +584,6 @@ HRESULT DeviceProxy::SetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m)
     Scope p{TProxy};
     D3DStats::count(CTransform);
     CallLock lock(*this, _ReturnAddress());
-    if (m)
-    {
-        if (type == D3DTRANSFORMSTATE_WORLD) m_world = *m;
-        else if (type == D3DTRANSFORMSTATE_VIEW) m_view = *m;
-        else if (type == D3DTRANSFORMSTATE_PROJECTION) m_proj = *m;
-    }
     HRESULT hr;
     if (batching() && m)
     {
@@ -895,10 +749,9 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
     if (quad) D3DStats::count(CDrawQuad);
     D3DStats::onDraw(type, fvf, count, false);
     CallLock lock(*this, _ReturnAddress());
-    probeTL(fvf, verts, count, _ReturnAddress());
     if (batching())
     {
-        if (isPretransformed(fvf))
+        if (Fvf::pretransformed(fvf))
         {
             return m_batcher->draw(type, fvf, verts, count, nullptr, 0, flags);
         }
@@ -909,7 +762,7 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
         D3DStats::count(CModelDirect);
         m_batcher->sync(Batcher::Reason::Direct);
     }
-    if (m_ui && verts && isPretransformed(fvf))
+    if (m_ui && verts && Fvf::pretransformed(fvf))
     {
         m_site = _ReturnAddress();
         const void* mapped = nullptr;
@@ -943,7 +796,6 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
     {
         noteUiDraw(_ReturnAddress(), "3D DrawPrimitive (viewport-mapped)");
     }
-    probe3D("DP", fvf, verts, Fvf::stride(fvf), count, _ReturnAddress());
     D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
@@ -965,10 +817,9 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
     if (fvf & D3DFVF_XYZRHW) D3DStats::count(CDrawTL);
     D3DStats::onDraw(type, fvf, indexCount, true);
     CallLock lock(*this, _ReturnAddress());
-    probeTL(fvf, verts, vertCount, _ReturnAddress());
     if (batching())
     {
-        if (isPretransformed(fvf))
+        if (Fvf::pretransformed(fvf))
         {
             return m_batcher->draw(type, fvf, verts, vertCount, indices, indexCount, flags);
         }
@@ -979,7 +830,7 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
         D3DStats::count(CModelDirect);
         m_batcher->sync(Batcher::Reason::Direct);
     }
-    if (m_ui && verts && isPretransformed(fvf))
+    if (m_ui && verts && Fvf::pretransformed(fvf))
     {
         m_site = _ReturnAddress();
         const void* mapped = nullptr;
@@ -1000,7 +851,6 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
     {
         noteUiDraw(_ReturnAddress(), "3D DrawIndexedPrimitive (viewport-mapped)");
     }
-    probe3D("DIP", fvf, verts, Fvf::stride(fvf), vertCount, _ReturnAddress());
     D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
@@ -1053,7 +903,6 @@ HRESULT DeviceProxy::DrawPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fvf, LPD3
     {
         noteUiDraw(_ReturnAddress(), "DrawPrimitiveStrided (not mapped)");
     }
-    probe3D("DPS", fvf, data ? data->position.lpvData : nullptr, data ? data->position.dwStride : 0, count, _ReturnAddress());
     D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
@@ -1086,8 +935,6 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fv
     {
         noteUiDraw(_ReturnAddress(), "DrawIndexedPrimitiveStrided (not mapped)");
     }
-    probe3D("DIPS", fvf, data ? data->position.lpvData : nullptr, data ? data->position.dwStride : 0, vertCount,
-        _ReturnAddress());
     D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
@@ -1115,7 +962,6 @@ HRESULT DeviceProxy::DrawPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVERTEXBUFF
     {
         noteUiDraw(_ReturnAddress(), "DrawPrimitiveVB (not mapped)");
     }
-    probe3D("DPVB", 0, nullptr, 0, count, _ReturnAddress());
     D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;
@@ -1144,7 +990,6 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVER
     {
         noteUiDraw(_ReturnAddress(), "DrawIndexedPrimitiveVB (not mapped)");
     }
-    probe3D("DIPVB", 0, nullptr, 0, vertCount, _ReturnAddress());
     D3DStats::count(CSubmit);
     Scope s{TDraw};
     D3DVIEWPORT7 restore;

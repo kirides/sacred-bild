@@ -15,7 +15,6 @@ namespace DDraw9::Gpu
     // The window frames are presented to (DirectDraw's cooperative level window), and whether Direct3D must
     // leave the FPU control word alone (DDSCL_FPUSETUP / DDSCL_FPUPRESERVE).
     void setWindow(HWND window, bool fpuPreserve);
-    HWND window();
 
     // The device, created on first use with a back buffer of width x height (0: the window's client size).
     d9::IDirect3DDevice9Ex* device(UINT width = 0, UINT height = 0);
@@ -32,11 +31,7 @@ namespace DDraw9::Gpu
     d9::D3DDISPLAYMODE displayMode();
 
     bool textureFormat(d9::D3DFORMAT format);
-    bool renderTargetFormat(d9::D3DFORMAT format);
     bool depthFormat(d9::D3DFORMAT format);
-
-    // Serializes the backend's own shared objects (staging surfaces, ...). Direct3D 9 itself is multithreaded.
-    RecursiveSpinLock& lock();
 }
 
 namespace DDraw9

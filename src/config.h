@@ -100,7 +100,7 @@ struct Config
     int netJoinTimeout = 30;
 
     // Diagnostics
-    bool d3dStats = true;         // per-second D3D7 call counts in the log
+    bool d3dStats = false;         // per-second D3D7 call counts in the log
     bool profiler = false;        // sample the render thread, dump hot spots on exit
     bool uiTrace = false;         // Scroll Lock logs one UI frame's draws with their frames and callers
     // Minidump next to the exe when the game crashes: 0 = off, 1 = stacks and the memory they point to, 2 = all memory.

@@ -250,12 +250,6 @@ namespace DDraw9::Format
             format == d9::D3DFMT_DXT4 || format == d9::D3DFMT_DXT5;
     }
 
-    bool depth(d9::D3DFORMAT format)
-    {
-        return format == d9::D3DFMT_D16 || format == d9::D3DFMT_D15S1 || format == d9::D3DFMT_D24X8 ||
-            format == d9::D3DFMT_D24S8 || format == d9::D3DFMT_D24X4S4 || format == d9::D3DFMT_D32;
-    }
-
     bool stencil(d9::D3DFORMAT format)
     {
         return format == d9::D3DFMT_D15S1 || format == d9::D3DFMT_D24S8 || format == d9::D3DFMT_D24X4S4;

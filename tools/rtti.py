@@ -1,6 +1,8 @@
-# Dump MSVC RTTI class -> vtable mapping from Sacred.exe
+# Lists the vtables of the DE sacred.exe by class name, from its MSVC RTTI (how the *_vtable addresses and the
+# class names in sacred_addr.h were found).
+# Usage: python tools/rtti.py [class name regex]
 import pefile, struct, re, sys
-EXE = r"B:\Spiele\GOG Games\Sacred Gold\sacred.exe"
+from gen_sigs import SACRED_DE as EXE
 pe = pefile.PE(EXE, fast_load=True)
 base = pe.OPTIONAL_HEADER.ImageBase
 img = pe.get_memory_mapped_image()

@@ -1,5 +1,10 @@
 # SacredBild
 
+> **AI disclosure:** SacredBild is developed with an AI coding assistant (Anthropic's Claude). Most of the code,
+> the reverse engineering notes and this documentation were written with it, at the maintainer's direction; the
+> maintainer decides what goes in and tests the changes in the game. The source is kept to what the features need
+> and documented so that people can review it: see [Reading the code](#reading-the-code).
+
 A `ddraw.dll` hook for **Sacred Gold** that runs the game at modern resolutions and instruments its
 renderer, as groundwork for replacing the slow parts. It runs the game's DirectDraw / Direct3D 7 on Direct3D 9Ex
 itself (or loads [DDrawCompat](https://github.com/narzoul/DDrawCompat) behind itself, `Backend=chain`), and patches
@@ -71,32 +76,26 @@ ddraw calls through and logs which one.
   title bar still drags.
 - **Rendering in the background**: the game stopped drawing when it lost the focus, which often left the main menu
   black. It now keeps drawing at `[Display] FpsLimitInactive` frames per second.
-- **Diagnostics**: per-second frame stats (draw calls, texture switches, unique textures, time spent in
-  the world renderer, UI, flip and inside Direct3D, what ended each batch) and an optional sampling profiler.
+- **Diagnostics**: optional per-second frame stats (`[Debug] D3DStats`: draw calls, texture switches, unique
+  textures, time spent in the world renderer, UI, flip and inside Direct3D, what ended each batch, texture memory)
+  and an optional sampling profiler (`[Debug] Profiler`).
   When the game or its gameserver crashes, a minidump goes next to the exe (`SacredBild-crash-*.dmp`,
   `SacredBild-server-crash-*.dmp`; `[Debug] CrashDump`) and the log names the exception and where it happened.
 
-## Build
-
-Requires Visual Studio 2026 (MSVC, Win32 toolset), CMake 3.25+ and vcpkg with `VCPKG_ROOT` set
-(Detours is pulled from vcpkg).
-
-```sh
-cmake --preset msvc-x86
-cmake --build --preset release      # -> out/build/msvc-x86/RelWithDebInfo/ddraw.dll
-python tools/check_hooks.py         # verifies hook signatures against the exe (German and English)
-```
-
-The DLL is statically linked against the CRT and imports only Windows system DLLs (`d3d9.dll` is loaded at run time).
-
 ## Install
+
+From a [release](../../releases) (tagged versions, and a nightly prerelease of every push to `main`): extract the
+zip into the game folder. It replaces the `ddraw.dll` there (if that is DDrawCompat, move it to
+`SacredBild\DDrawCompat.dll` first) and an existing `SacredBild.ini`.
+
+From a build (see [Build](#build)):
 
 ```powershell
 .\install.ps1 -GameDir "B:\Spiele\GOG Games\Sacred Gold"
 ```
 
 This backs up the current `ddraw.dll`, moves an existing DDrawCompat to `SacredBild\DDrawCompat.dll`,
-copies SacredBild's `ddraw.dll` and creates `SacredBild.ini`. `uninstall.ps1` restores the backup.
+copies SacredBild's `ddraw.dll` and creates `SacredBild.ini` if there is none. `uninstall.ps1` restores the backup.
 DDrawCompat is only used with `[DDraw] Backend=chain`; without it, that falls back to Windows' own `ddraw.dll`
 (whose Direct3D 7 runtime refuses render targets over 2048 pixels; SacredBild works around that).
 
@@ -104,8 +103,6 @@ The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll`
 [DXVK](https://github.com/doitsujin/dxvk)'s 32-bit one), else Windows' own. `SacredBild.log` names the one in use
 (`Direct3D 9: using ...`). Under Wine / Proton, SacredBild's `ddraw.dll` only loads with a native override:
 `WINEDLLOVERRIDES="ddraw=n,b"`.
-
-For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build output instead.
 
 ## Configuration (`SacredBild.ini`)
 
@@ -147,14 +144,14 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | `Backend=chain`: ddraw loaded behind SacredBild; empty = system ddraw. |
 | DDraw | D3D9 | | `Backend=d3d9`: `d3d9.dll` to use (e.g. DXVK), relative to the game folder or absolute. Empty or not loadable: a `d3d9.dll` next to the exe, then Windows' own. |
 | DDraw | MediaFoundation | 1 | Movies through Media Foundation; always on with `Backend=d3d9`, 0 = the game's own player with `Backend=chain`. |
-| Debug | D3DStats | 1 | Frame statistics in `SacredBild.log` (wraps the D3D device in a proxy). |
+| Debug | D3DStats | 0 | Frame statistics, hitches and texture memory in `SacredBild.log`. |
 | Debug | Profiler | 0 | Sampling profiler; writes `SacredBild-profile.txt` every 15 s. |
 | Debug | ProfilerIntervalUs | 500 | Sampling interval. |
 | Debug | UiTrace | 0 | Scroll Lock logs one UI frame's draws (`UiTrace:` lines: position, UI frame, calling game code) and popups set during the next 5 s. |
 | Debug | CrashDump | 1 | Minidump next to the exe on a crash: 0 = off, 1 = stacks and the memory they point to (small), 2 = all memory (for the game's globals; hundreds of MB). |
 | Debug | MovieFallback | 0 | Movies always through the fallback (DirectShow into a system memory surface), as without the Media Engine. |
 
-### LAN games over a VPN
+## LAN games over a VPN
 
 Everyone installs SacredBild. The host creates the LAN game as usual; Windows Firewall has to let
 `gameserver.exe` receive on the VPN adapter (the prompt on first start, or a rule for its TCP port and UDP 2105;
@@ -166,9 +163,7 @@ VPN adapters are often in the "Public" profile).
 
 The host's relay logs to `SacredBild-server.log`, the LAN list to `SacredBild.log` (lines starting with `LAN`).
 
-Read a profile with `python tools/profile_report.py <SacredBild-profile.txt>`.
-
-### Languages
+## Languages
 
 Sacred takes its language from `LANGUAGE` in `settings.cfg`, one of `US DE FR SP IT PL HU JP VC RU CZ` in upper
 case (anything else quietly means `DE`), or from the code in lower case on the command line (`sacred.exe de`).
@@ -195,31 +190,88 @@ The code also changes a few things in the game: keyboard input for `PL`, IME and
 no status text on the loading screen for `SP`. Savegames store it; loading one saved under another code only logs
 the difference.
 
-## Layout
+## Reading the code
 
-- `src/main.cpp`, `src/proxy.cpp`, `src/exports.def`: DLL entry, ddraw exports (to the Direct3D 9 backend or the
-  chain-loaded ddraw). `src/system_ddraw.*`: render targets over 2048 pixels on Windows' own ddraw.
-- `src/ddraw9/`: the Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7 + IDirect3D7, exports), `surface.*`
-  (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `gpu.*` (device, presentation),
-  `format.*`. `d3d9_api.h` puts Direct3D 9 into namespace `d9`: its headers clash with Direct3D 7's.
-- `src/game/sacred_addr.h`, `gameserver_addr.h`: the addresses SacredBild patches and the struct offsets it uses.
-  The addresses are resolved at startup (`src/sig.*`) from `sacred_sigs.inc` / `gameserver_sigs.inc`, generated by
-  `tools/gen_sigs.py`: signatures taken from the German build and accepted only if they match exactly once in
-  the English one too (`SACRED_DE` / `SACRED_ENG` / `GAMESERVER_DE` / `GAMESERVER_ENG` point the tool at the exes).
-- `src/game/resolution.*`, `resolution_sites.inc`: resolution patches (the `.inc` is generated by
-  `tools/gen_res_sites.py`, which verifies every instruction and gives each site a signature and the value it
-  must hold; both are checked again at startup).
-- `src/game/ui_canvas.*`: UI canvas placement, UI scopes and frames, mouse mapping.
-- `src/game/ui_anchor.*`: HUD windows anchored to the screen edges (frames per window, wrapped vtables, popups).
-- `src/game/movie.*`: intro and cutscene movies (Media Foundation player for the Direct3D 9 backend).
-- `src/game/language.*`: text and speech files of the game's language; `import-language.ps1` makes them from
-  another install.
-- `src/game/device_proxy.*`: IDirect3DDevice7 wrapper; maps UI draws into the canvas, routes world draws
-  through the batcher and instruments calls.
-- `src/render/batcher.*`, `atlas.*`: deferred device state, draw merging and the texture atlas.
-- `src/net/`: LAN games over VPNs: `lan_server.*` runs in gameserver.exe, `lan_client.*` in sacred.exe;
-  `src/game/gameserver_de.h` holds the gameserver's addresses.
-- `d3d_stats.*`, `frame_hooks.*`, `src/profiler.*`: instrumentation.
-- `docs/RE_NOTES.md`: how the game's renderer works and where things are.
-- `tools/`: Python helpers over the exe (`de.py`, `funcs.py`, `sigs.py`, `gen_sigs.py`, `gen_res_sites.py`,
-  `check_hooks.py`, ...).
+SacredBild is one DLL, `ddraw.dll`, which the game loads from its folder in place of Windows' own. Start in
+`src/main.cpp`: `DllMain` reads `SacredBild.ini` (`src/config.*`), loads the DirectDraw implementation the game
+will get (`src/proxy.*`), finds the game's code by byte signature (`Sacred::resolveAddresses`) and installs the
+patches (`Sacred::installHooks` in `src/game/build.cpp`, which lists every module in order). Each module patches
+the game in its `install()` with [Detours](https://github.com/microsoft/Detours) hooks or checked byte patches
+(`src/patch.*`: a write happens only if the bytes there are the expected ones).
+
+What the game's code at those addresses does is in `docs/RE_NOTES.md` and in the comments of
+`src/game/sacred_addr.h`; the addresses and names refer to the German build in Ghidra.
+
+### Source files
+
+| Path | What it is |
+|---|---|
+| `src/main.cpp` | DLL entry: game (`sacred.exe`) or LAN gameserver (`gameserver.exe`) setup |
+| `src/proxy.*`, `src/exports.def` | The `ddraw.dll` exports, to the Direct3D 9 backend or the chain-loaded ddraw |
+| `src/system_ddraw.*` | `Backend=chain` on Windows' own ddraw: render targets over 2048 pixels |
+| `src/config.*` | `SacredBild.ini` |
+| `src/log.*`, `src/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
+| `src/patch.*`, `src/sig.*` | Code patches and hooks; byte signature search |
+| `src/spin_lock.h` | Locks for the render thread's hot paths |
+| `src/profiler.*` | `[Debug] Profiler` |
+| `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
+| `src/game/build.*` | Which exe this is, address lookup, the list of game modules |
+| `src/game/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses and struct offsets SacredBild uses; their signatures (generated) |
+| `src/game/gameserver*` | The same for gameserver.exe, and its patches |
+| `src/game/resolution.*`, `resolution_sites.inc` | Any resolution: window, back buffer, world view; the 1024x768 constants patched (generated) |
+| `src/game/ui_canvas.*` | The 1024x768 UI in a scaled, centered canvas; cursor mapping |
+| `src/game/ui_anchor.*` | HUD windows placed at the screen edges (`[UI] Anchor`, `[UI.Layout]`) |
+| `src/game/device_proxy.*` | The IDirect3DDevice7 the game gets: UI draws into the canvas, world draws to the batcher |
+| `src/game/frame_hooks.*` | Device creation, flip, world and UI render; frame limits |
+| `src/game/focus.*` | Input only in the foreground, `ClipCursor`, close button |
+| `src/game/movie.*` | Intro and cutscene movies through Media Foundation |
+| `src/game/screenshot.*` | Print Screen as PNG / JPEG |
+| `src/game/language.*` | Text and speech files of the game's language |
+| `src/game/granny_async.*` | Animation update on a worker thread (`[Render] AsyncAnimation`) |
+| `src/game/map_cache.*` | Hash index in front of the map record caches (`[Render] RecordIndex`) |
+| `src/game/d3d_stats.*` | `[Debug] D3DStats` frame statistics |
+| `src/render/batcher.*`, `atlas.*`, `fvf.h` | Draw merging, the texture atlas, vertex format layout |
+| `src/net/` | LAN games over VPNs: `lan_client.*` (sacred.exe), `lan_server.*` (gameserver.exe), `lan_protocol.*` (announcements), `adapters.*` (network adapters), `connection.*` (`NoDelay`) |
+
+Every header starts with what its module does and why.
+
+### Tools
+
+Python 3 with `pefile` and `capstone`. They read the game's exes from the paths in `tools/gen_sigs.py`, or from
+the environment variables `SACRED_DE`, `SACRED_ENG`, `GAMESERVER_DE` and `GAMESERVER_ENG`.
+
+Generated files in the repository, and the checks:
+
+| Tool | Does |
+|---|---|
+| `tools/gen_sigs.py` | Writes `src/game/sacred_sigs.inc`, `gameserver_sigs.inc` and `tools/data/addresses.json`: a signature for every address, taken from the German build and accepted only if it matches exactly once in the English one too |
+| `tools/gen_res_sites.py` | Writes `src/game/resolution_sites.inc`: the 1024x768 constants to patch, each verified and with a signature |
+| `tools/check_hooks.py` | Checks that every hook declares as many stack arguments as the hooked function pops, in both builds |
+| `tools/sigs.py`, `funcs.py`, `de.py` | Shared code: signature search, function boundaries (`tools/data/functions_de.tsv`, exported from Ghidra), the German exe |
+
+Reverse engineering helpers (how addresses and offsets were found):
+
+| Tool | Does |
+|---|---|
+| `tools/de.py <address> [count]` | Disassembles the German exe |
+| `tools/rtti.py [regex]` | Class names -> vtables, from the RTTI |
+| `tools/vt.py <vtable>...` | Vtable slots |
+| `tools/scan_res.py` | Every instruction that uses a 1024x768-related constant |
+| `tools/check_rets.py <address>...` | `ret` sizes, i.e. stack argument counts |
+| `tools/profile_report.py <SacredBild-profile.txt>` | Names the hot spots of a `[Debug] Profiler` profile |
+
+### Build
+
+Requires Visual Studio 2026 (MSVC, Win32 toolset), CMake 3.25+ and vcpkg with `VCPKG_ROOT` set
+(vcpkg provides [Detours](https://github.com/microsoft/Detours) and [gtl](https://github.com/greg7mdp/gtl)).
+
+```sh
+cmake --preset msvc-x86
+cmake --build --preset release      # -> out/build/msvc-x86/RelWithDebInfo/ddraw.dll
+python tools/check_hooks.py         # verifies hook signatures against the exe (German and English)
+```
+
+The DLL is statically linked against the CRT and imports only Windows system DLLs (`d3d9.dll` is loaded at run time).
+For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build output instead of installing.
+`.github/workflows/` builds every push and pull request; pushes to `main` publish a nightly prerelease, `v*` tags a
+release.

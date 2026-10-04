@@ -42,9 +42,6 @@ public:
     // (they decide whether the proxy could do without its lock) and logged every few seconds.
     void onPresent(DWORD thread);
 
-    // Diagnostics: while enabled (one frame every few seconds), log where 3D draws land on screen.
-    void setProbe(bool enabled);
-
     // IUnknown
     STDMETHOD(QueryInterface)(REFIID riid, LPVOID* ppvObj) override;
     STDMETHOD_(ULONG, AddRef)() override;
@@ -135,15 +132,11 @@ private:
     // at its middle and the edges stay inside the quad's texels (no seams between UI images under scaling and
     // bilinear filtering). Leaves other quads alone.
     void fitTexels(DWORD fvf, uint8_t* verts);
-    // Mapped into the UI frame; clamped to the frame, or the screen if unconfined (or `confined` is false).
-    D3DVIEWPORT7 canvasViewport(const D3DVIEWPORT7& virt, bool confined = true) const;
-    void probe3D(const char* what, DWORD fvf, const void* positions, DWORD stride, DWORD count, const void* site);
+    // `virt` (1024x768 space) mapped into the UI frame and clamped to it.
+    D3DVIEWPORT7 canvasViewport(const D3DVIEWPORT7& virt) const;
     // Unconfined (cursor) mode: 3D draws such as a dragged item model project into 1024x768 and need the
     // frame-mapped viewport; returns false if nothing changed.
     bool beginOverlay3D(D3DVIEWPORT7& restore);
-    void probeTL(DWORD fvf, const void* verts, DWORD count, const void* site);
-    void dumpProbeTL();
-    std::string renderStates();
     DWORD uiFilter(DWORD value) const;
 
     IDirect3DDevice7* m_real;
@@ -177,10 +170,4 @@ private:
     D3DMATRIX m_transforms[kTransforms] = {};
     bool m_transformKnown[kTransforms] = {};
     void forgetTransforms() { std::fill(std::begin(m_transformKnown), std::end(m_transformKnown), false); }
-
-    bool m_probe = false;
-    int m_probeLogged = 0;
-    struct TLSite { const void* site; int draws; float zMin, zMax, yMin, yMax; DWORD zEnable, zWrite, zFunc; };
-    std::vector<TLSite> m_probeTL;
-    D3DMATRIX m_world = {}, m_view = {}, m_proj = {};
 };

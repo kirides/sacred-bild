@@ -1,5 +1,7 @@
+# Prints the slots of vtables in the DE sacred.exe (how the virtual function offsets in sacred_addr.h were found).
+# Usage: python tools/vt.py <vtable address>...
 import pefile, struct, sys
-EXE = r"B:\Spiele\GOG Games\Sacred Gold\sacred.exe"
+from gen_sigs import SACRED_DE as EXE
 pe = pefile.PE(EXE, fast_load=True); base = pe.OPTIONAL_HEADER.ImageBase; img = pe.get_memory_mapped_image()
 def u32(va): return struct.unpack_from("<I", img, va - base)[0]
 for a in sys.argv[1:]:

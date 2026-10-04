@@ -2,6 +2,7 @@
 #include <format>
 #include <string_view>
 
+// Timestamped lines in SacredBild.log (SacredBild-server.log in gameserver.exe), from any thread.
 namespace Log
 {
     void init(const wchar_t* path);

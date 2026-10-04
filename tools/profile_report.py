@@ -1,4 +1,4 @@
-# Summarizes SacredBild-profile.txt: maps sampled addresses to DE function names (from .funcs_de.json) and
+# Summarizes SacredBild-profile.txt: maps sampled addresses to DE function names (tools/data/functions_de.tsv) and
 # SacredBild's own samples to its functions (from the linker map of the build that ran).
 # usage: python tools/profile_report.py [path-to-SacredBild-profile.txt] [top-N] [path-to-ddraw.map]
 import sys, os, re, bisect, collections

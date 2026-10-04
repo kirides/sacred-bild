@@ -20,7 +20,6 @@ namespace UiCanvas
     bool fullScreenWindowOpen();
 
     // Canvas placement in physical pixels (in game or menus, see above).
-    float scale();
     float left();
     float top();
     float right();
@@ -91,7 +90,6 @@ namespace UiCanvas
     enum class Mode { Canvas, Overlay };
     void enter(Mode mode = Mode::Canvas);
     void leave();
-    bool active();
 
     struct Scope
     {

@@ -34,8 +34,6 @@ namespace
     using LockBackFn = void*(__fastcall*)(void* self, void* edx, void* desc);
     using RenderFn = void(__fastcall*)(void* self, void* edx, void* device);
     using ThreadRunFn = void(__fastcall*)(void* engine);
-    using Call2Fn = void(__fastcall*)(void* self, void* edx, void* a, void* b);
-    using Call5Fn = void(__fastcall*)(void* self, void* edx, void* a, void* b, void* c, void* d, void* e);
 
     InitFn g_origInit = nullptr;
     FlipFn g_origFlip = nullptr;
@@ -45,34 +43,6 @@ namespace
     ThreadRunFn g_origRenderThreadRun = nullptr;
     void* volatile g_engine = nullptr;
     void* volatile g_dxDriver = nullptr;
-
-    // Diagnostics: calls along the 3D model path, logged with the probe every 5 s.
-    Call2Fn g_origCreatureRender = nullptr;
-    Call2Fn g_origObjectRender = nullptr;
-    Call5Fn g_origDrawModel = nullptr;
-    volatile long g_creatureRenders = 0, g_objectRenders = 0, g_objectAttached = 0, g_modelDraws = 0;
-
-    void __fastcall hookCreatureRender(void* self, void* edx, void* a, void* b)
-    {
-        _InterlockedIncrement(&g_creatureRenders);
-        g_origCreatureRender(self, edx, a, b);
-    }
-
-    void __fastcall hookObjectRender(void* self, void* edx, void* a, void* b)
-    {
-        _InterlockedIncrement(&g_objectRenders);
-        g_origObjectRender(self, edx, a, b);
-        if (member<uint32_t>(self, 0x14) & 0x4000000)
-        {
-            _InterlockedIncrement(&g_objectAttached);
-        }
-    }
-
-    void __fastcall hookDrawModel(void* self, void* edx, void* a, void* b, void* c, void* d, void* e)
-    {
-        _InterlockedIncrement(&g_modelDraws);
-        g_origDrawModel(self, edx, a, b, c, d, e);
-    }
 
     // Logs changes of the engine's fade/loading flags and the UI manager's mode (once per frame, on change).
     void logGameState()
@@ -205,34 +175,26 @@ namespace
             }
             lastUsed = used;
         }
-        D3DStats::onFrame();
+        if (g_config.d3dStats)
+        {
+            D3DStats::onFrame();
+        }
         GrannyAsync::onFrame();
         Focus::onFrame();
         logGameState();
-        // Every 5 s, log where the next frame's 3D draws land (characters are 3D models).
         if (DeviceProxy* proxy = DeviceProxy::instance())
         {
             proxy->onPresent(thread);
-            static DWORD nextProbe = GetTickCount() + 5000;
-            static bool probing = false;
-            if (probing)
+        }
+        // Every 5 s, the texture memory in use.
+        static DWORD nextTextureLog = GetTickCount() + 5000;
+        if (g_config.d3dStats && static_cast<int>(GetTickCount() - nextTextureLog) >= 0)
+        {
+            nextTextureLog = GetTickCount() + 5000;
+            if (void* textures = *reinterpret_cast<void**>(Addr::g_pTextureManager))
             {
-                proxy->setProbe(false);
-                probing = false;
-            }
-            else if (static_cast<int>(GetTickCount() - nextProbe) >= 0)
-            {
-                if (void* textures = *reinterpret_cast<void**>(Addr::g_pTextureManager))
-                {
-                    LOG("Textures: {} / {} MB loaded | {}", member<uint32_t>(textures, TextureManager::usedBytes) >> 20,
-                        member<uint32_t>(textures, TextureManager::budgetBytes) >> 20, D3DStats::memorySummary());
-                }
-                LOG("Probe3D: last 5 s: creature renders {}, object renders {} (model attached {}), model draws {}",
-                    _InterlockedExchange(&g_creatureRenders, 0), _InterlockedExchange(&g_objectRenders, 0),
-                    _InterlockedExchange(&g_objectAttached, 0), _InterlockedExchange(&g_modelDraws, 0));
-                proxy->setProbe(true);
-                probing = true;
-                nextProbe = GetTickCount() + 5000;
+                LOG("Textures: {} / {} MB loaded | {}", member<uint32_t>(textures, TextureManager::usedBytes) >> 20,
+                    member<uint32_t>(textures, TextureManager::budgetBytes) >> 20, D3DStats::memorySummary());
             }
         }
         return hr;
@@ -344,11 +306,5 @@ void FrameHooks::install()
         LOG("Frame limit in game: {}, in the background: {}",
             g_config.fpsLimit > 0 ? std::to_string(g_config.fpsLimit) : std::string("off"),
             g_config.fpsLimitInactive > 0 ? std::to_string(g_config.fpsLimitInactive) : std::string("off"));
-    }
-    if (g_config.d3dStats)
-    {
-        Patch::hook(g_origCreatureRender, Addr::cCreature_render, &hookCreatureRender, "cCreature::render");
-        Patch::hook(g_origObjectRender, Addr::cObject3D_render, &hookObjectRender, "cObject3D::render");
-        Patch::hook(g_origDrawModel, Addr::cObject3D_drawModel, &hookDrawModel, "cObject3D::drawModel");
     }
 }

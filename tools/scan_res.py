@@ -1,11 +1,12 @@
-# Find instructions referencing 1024x768-related constants in the DE exe
+# Lists the instructions of the DE sacred.exe that use 1024x768-related constants (1024, 768, 512, 384, ...),
+# the candidates gen_res_sites.py's site list was picked from. Writes them to .res_hits.json.
+# Usage: python tools/scan_res.py
 import sys, struct, collections, json
 sys.path.insert(0, 'tools')
 from de import *
 import capstone
 from capstone import x86
 md2 = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32); md2.detail = True
-funcs = json.load(open('.funcs_de.json')) if len(sys.argv) > 1 else None
 code = IMG[TLO - BASE:THI - BASE]
 hits = collections.defaultdict(list)
 INTS = {0x400: '1024', 0x300: '768', 0x3ff: '1023', 0x2ff: '767', 0x200: '512', 0x180: '384'}

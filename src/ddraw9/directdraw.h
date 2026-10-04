@@ -100,7 +100,6 @@ namespace DDraw9
 
         LONG m_refs = 1;
         HWND m_window = nullptr;
-        DWORD m_cooperativeFlags = 0;
         DWORD m_modeWidth = 0, m_modeHeight = 0, m_modeBpp = 0;    // SetDisplayMode (not applied)
         DirectDraw1 m_v1{*this};
     };

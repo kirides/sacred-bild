@@ -75,9 +75,6 @@ SACRED = [
     ('renderLimiterReturn', 0x0060EB0E, 'code'),
     ('captureLockBackReturn', 0x0061374B, 'code'),
     ('captureScreenshot', 0x00648900, 'func'),
-    ('cCreature_render', 0x00599880, 'func'),
-    ('cObject3D_render', 0x0044B400, 'func'),
-    ('cObject3D_drawModel', 0x0044ABA0, 'func'),
     # world view
     ('pixelsToWorld', 0x00623A20, 'func'),
     ('worldToPixels', 0x00623C40, 'func'),

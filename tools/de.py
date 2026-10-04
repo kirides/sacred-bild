@@ -1,6 +1,7 @@
-# Helpers over the on-disk DE sacred.exe (the hook target)
+# Helpers over the DE sacred.exe (SACRED_DE, see gen_sigs.py), shared by the other tools.
+# Run alone: python tools/de.py <address> [count] disassembles from there.
 import pefile, struct, re, capstone
-EXE = r"B:\Spiele\GOG Games\Sacred Gold\sacred.exe"
+from gen_sigs import SACRED_DE as EXE
 pe = pefile.PE(EXE, fast_load=True)
 BASE = pe.OPTIONAL_HEADER.ImageBase
 IMG = pe.get_memory_mapped_image()

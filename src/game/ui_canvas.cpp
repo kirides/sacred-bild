@@ -264,7 +264,6 @@ UiCanvas::Bounds UiCanvas::menuCanvas()
 {
     return {g_menu.left, g_menu.top, g_menu.left + 1024.0f * g_menu.scale, g_menu.top + 768.0f * g_menu.scale};
 }
-float UiCanvas::scale() { return layout().scale; }
 float UiCanvas::left() { return layout().left; }
 float UiCanvas::top() { return layout().top; }
 float UiCanvas::right() { const Layout& l = layout(); return l.left + 1024.0f * l.scale; }
@@ -416,11 +415,6 @@ void UiCanvas::resume(int depth)
             proxy->beginUi();
         }
     }
-}
-
-bool UiCanvas::active()
-{
-    return g_enabled && t_depth > 0;
 }
 
 void UiCanvas::install()

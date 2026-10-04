@@ -40,8 +40,10 @@ Two threads present frames:
 | `0x644960` | `dxDriver7_ctor` |
 | `0x645390` | `dxDriver7_init` (3 args): DirectDrawCreateEx, cooperative level, surfaces, z-buffer, CreateDevice |
 | `0x644BE0` | `dxDriver7_createSurface` |
+| `0x645000` | `dxDriver7_createZBuffer` |
 | `0x645F70` | `dxDriver7_flip`: windowed = `primary->Blt(back)`; also a CPU fade effect |
 | `0x646280` / `0x6462F0` | `dxDriver7_lockBack` / `unlockBack` |
+| `0x646510` | `dxDriver7_setFullViewport` |
 | `0x6466B0` | `dxDriver7_drawTexturedQuad`: one `DrawPrimitive(TRIANGLESTRIP, 0x1C4, 4)` per sprite |
 | `0x6469D0` | `dxDriver7_drawLoadingScreen`: GDI on the back buffer DC, 1024x768 layout |
 | `0x646F50` / `0x646FD0` | `beginScene` / `endScene` (ref-counted) |
@@ -248,7 +250,9 @@ First measurement (1920x1200, zoom 2.0): 9,500 game draws -> ~780 device draws (
 
 Profile after batching (2560x1440, zoom 2.0, ~46 fps, render thread): granny.dll 23 %, SacredBild 15 %,
 AMD user-mode driver 12 %, DDrawCompat 10 %, ntdll 9 %, msvcrt 6 % (memcpy), d3dim700 5 %, sacred.exe 16 %.
-- 3D characters are about half the frame. Per creature `cObject3D_drawModel` (`0x44ABA0`) runs a visibility
+- 3D characters are about half the frame. Model path: `cCreature` vtable[5] render (`0x599880`, thiscall (device, 0))
+  -> `cObject3D_render` (`0x44B400`; only with the Granny model attached, flags `+0x14` bit 26) -> `cObject3D_drawModel`
+  (`0x44ABA0`, thiscall (device, model, instance, flags64)). Per creature `cObject3D_drawModel` runs a visibility
   test `0x405810` (reads world/view/projection back with `GetTransform`), `cGranny_render` (`0x405CD0`: per
   mesh piece `GrannyLockNextRenderingState`, SetTexture, SetTransform(WORLD), `DrawIndexedPrimitiveStrided`
   FVF `0x112`/`0x152`, lighting on) and `cGranny_renderShadow` (`0x407030`: the same meshes flattened through

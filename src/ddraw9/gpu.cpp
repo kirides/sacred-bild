@@ -167,11 +167,6 @@ namespace DDraw9::Gpu
         g_fpuPreserve = fpuPreserve;
     }
 
-    HWND window()
-    {
-        return g_window;
-    }
-
     d9::IDirect3DDevice9Ex* existingDevice()
     {
         return g_device;
@@ -346,19 +341,9 @@ namespace DDraw9::Gpu
         return check(0, d9::D3DRTYPE_TEXTURE, format);
     }
 
-    bool renderTargetFormat(d9::D3DFORMAT format)
-    {
-        return check(D3DUSAGE_RENDERTARGET, d9::D3DRTYPE_TEXTURE, format);
-    }
-
     bool depthFormat(d9::D3DFORMAT format)
     {
         return check(D3DUSAGE_DEPTHSTENCIL, d9::D3DRTYPE_SURFACE, format);
-    }
-
-    RecursiveSpinLock& lock()
-    {
-        return g_lock;
     }
 }
 

@@ -386,7 +386,6 @@ namespace DDraw9
     HRESULT DirectDraw::SetCooperativeLevel(HWND window, DWORD flags)
     {
         m_window = window;
-        m_cooperativeFlags = flags;
         Gpu::setWindow(window, (flags & (DDSCL_FPUSETUP | DDSCL_FPUPRESERVE)) != 0);
         return DD_OK;
     }

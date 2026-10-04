@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <string>
 
-// Per-frame counters and phase timers; logs a summary about once per second.
+// Per-frame counters and phase timers; with [Debug] D3DStats, onFrame logs a summary about once per second.
 namespace D3DStats
 {
     enum Counter

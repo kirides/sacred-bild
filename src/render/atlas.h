@@ -85,7 +85,6 @@ public:
     // textures still in use get copied again compactly.
     void beginFrame();
 
-    int pageCount() const { return static_cast<int>(m_pages.size()); }
     bool isPage(IDirectDrawSurface7* surface) const;
 
 private:

@@ -13,7 +13,6 @@ namespace DDraw9::Format
 
     UINT bitsPerPixel(d9::D3DFORMAT format);    // DXT1: 4, DXT2-5: 8
     bool blockCompressed(d9::D3DFORMAT format);
-    bool depth(d9::D3DFORMAT format);
     bool stencil(d9::D3DFORMAT format);
     // Bytes per row of a tightly packed surface (per row of 4x4 blocks for DXT) and the number of such rows.
     UINT pitch(d9::D3DFORMAT format, UINT width);

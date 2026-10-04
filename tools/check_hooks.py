@@ -40,9 +40,6 @@ HOOKS = {
     0x00617360: ('cEngine::worldMouse', 2),
     0x00623A20: ('pixelsToWorld (cdecl)', 0),
     0x00623C40: ('worldToPixels (cdecl)', 0),
-    0x00599880: ('cCreature::render', 2),
-    0x0044B400: ('cObject3D::render', 2),
-    0x0044ABA0: ('cObject3D::drawModel', 5),
     # call-site redirect target: replacement takes the same (x, y) as cUI_Manager::isCursorOverUi
     0x0075A370: ('cUI_Manager::isCursorOverUi', 2),
     # call-site redirect targets (ui_canvas.cpp): replacements take no stack arguments

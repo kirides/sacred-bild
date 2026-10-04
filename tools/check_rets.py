@@ -1,4 +1,6 @@
-# Prints the ret sizes of DE functions; used to verify hook signatures (stack args = ret/4).
+# Prints the ret sizes of DE functions: a hook must declare ret/4 stack arguments (check_hooks.py checks the
+# hooked ones).
+# Usage: python tools/check_rets.py <address>...
 import sys, bisect
 sys.path.insert(0, 'tools')
 from de import *
