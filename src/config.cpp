@@ -69,6 +69,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     const std::wstring ini = gameDir + L"\\SacredBild.ini";
     g_config.ddrawD3D9 = _wcsicmp(readString(ini, L"DDraw", L"Backend", L"d3d9").c_str(), L"chain") != 0;
     g_config.ddrawChain = readString(ini, L"DDraw", L"Chain", g_config.ddrawChain);
+    g_config.d3d9Path = readString(ini, L"DDraw", L"D3D9", L"");
     g_config.mediaFoundation = g_config.ddrawD3D9 || readBool(ini, L"DDraw", L"MediaFoundation", g_config.mediaFoundation);
     g_config.width = readInt(ini, L"Display", L"Width", g_config.width);
     g_config.height = readInt(ini, L"Display", L"Height", g_config.height);
@@ -110,10 +111,10 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
     g_config.uiTrace = readInt(ini, L"Debug", L"UiTrace", g_config.uiTrace) != 0;
 
-    LOG("Config: Backend={} MediaFoundation={} Width={} Height={} Borderless={} FpsLimit={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
+    LOG("Config: Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} FpsLimit={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
         "Screenshot.Format={} Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} D3DStats={} Profiler={} ({} us) UiTrace={}",
-        g_config.ddrawD3D9 ? "d3d9" : "chain", g_config.mediaFoundation, g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit,
+        g_config.ddrawD3D9 ? "d3d9" : "chain", ascii(g_config.d3d9Path), g_config.mediaFoundation, g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit,
         g_config.vsync, g_config.maxFrameLatency, g_config.uiScale,
         g_config.uiScaleMenus ? "Full" : "InGame", g_config.uiLinearFilter, g_config.uiAnchor,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,

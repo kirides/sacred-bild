@@ -6,6 +6,7 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace DDraw9::Gpu
 {
@@ -43,6 +44,70 @@ namespace DDraw9::Gpu
         {
             return effect == d9::D3DSWAPEFFECT_FLIPEX ? "flip model" : "blit model";
         }
+
+        std::string narrow(const std::wstring& s)
+        {
+            std::string out;
+            for (wchar_t c : s)
+            {
+                out += c < 0x80 ? static_cast<char>(c) : '?';
+            }
+            return out;
+        }
+
+        std::wstring exeDirectory()
+        {
+            wchar_t path[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, path, MAX_PATH);
+            std::wstring dir = path;
+            return dir.substr(0, dir.find_last_of(L"\\/"));
+        }
+
+        // Where d3d9.dll may come from, in order: [DDraw] D3D9 (relative to the game folder unless absolute), a
+        // d3d9.dll next to the exe (e.g. DXVK), Windows' own.
+        std::vector<std::wstring> d3d9Candidates()
+        {
+            std::vector<std::wstring> paths;
+            const std::wstring gameDir = exeDirectory();
+            if (!g_config.d3d9Path.empty())
+            {
+                const std::wstring& p = g_config.d3d9Path;
+                const bool absolute = (p.size() > 1 && p[1] == L':') || p.starts_with(L"\\\\");
+                paths.push_back(absolute ? p : gameDir + L"\\" + p);
+            }
+            const std::wstring local = gameDir + L"\\d3d9.dll";
+            if (GetFileAttributesW(local.c_str()) != INVALID_FILE_ATTRIBUTES)
+            {
+                paths.push_back(local);
+            }
+            wchar_t system[MAX_PATH] = {};
+            GetSystemDirectoryW(system, MAX_PATH);
+            paths.push_back(std::wstring(system) + L"\\d3d9.dll");
+            return paths;
+        }
+
+        // Loads `path` and creates the Direct3D 9Ex object from it.
+        d9::IDirect3D9Ex* createFrom(const std::wstring& path)
+        {
+            HMODULE module = LoadLibraryW(path.c_str());
+            if (!module)
+            {
+                LOG("Direct3D 9: {} not loaded ({})", narrow(path), GetLastError());
+                return nullptr;
+            }
+            auto create = reinterpret_cast<CreateFn>(GetProcAddress(module, "Direct3DCreate9Ex"));
+            d9::IDirect3D9Ex* d3d = nullptr;
+            const HRESULT hr = create ? create(D3D_SDK_VERSION, &d3d) : E_NOINTERFACE;
+            if (FAILED(hr) || !d3d)
+            {
+                LOG("Direct3D 9: {}: {} ({:08x})", narrow(path), create ? "Direct3DCreate9Ex failed" : "no Direct3DCreate9Ex",
+                    static_cast<uint32_t>(hr));
+                FreeLibrary(module);
+                return nullptr;
+            }
+            LOG("Direct3D 9: using {}", narrow(path));
+            return d3d;
+        }
     }
 
     bool available()
@@ -53,20 +118,15 @@ namespace DDraw9::Gpu
             return g_d3d != nullptr;
         }
         g_loaded = true;
-        wchar_t path[MAX_PATH] = {};
-        GetSystemDirectoryW(path, MAX_PATH);
-        HMODULE module = LoadLibraryW((std::wstring(path) + L"\\d3d9.dll").c_str());
-        auto create = module ? reinterpret_cast<CreateFn>(GetProcAddress(module, "Direct3DCreate9Ex")) : nullptr;
-        if (!create)
+        for (const std::wstring& path : d3d9Candidates())
         {
-            LOG("Direct3D 9: d3d9.dll or Direct3DCreate9Ex not found");
-            return false;
+            if ((g_d3d = createFrom(path)) != nullptr)
+            {
+                break;
+            }
         }
-        const HRESULT hr = create(D3D_SDK_VERSION, &g_d3d);
-        if (FAILED(hr) || !g_d3d)
+        if (!g_d3d)
         {
-            LOG("Direct3D 9: Direct3DCreate9Ex failed ({:08x})", static_cast<uint32_t>(hr));
-            g_d3d = nullptr;
             return false;
         }
         g_d3d->GetDeviceCaps(g_adapter, d9::D3DDEVTYPE_HAL, &g_caps);
