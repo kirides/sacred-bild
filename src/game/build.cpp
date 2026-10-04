@@ -1,4 +1,5 @@
 #include "game/build.h"
+#include "game/d3d_stats.h"
 #include "game/sacred_addr.h"
 #include "game/focus.h"
 #include "game/frame_hooks.h"
@@ -72,6 +73,7 @@ bool Sacred::resolveAddresses()
 
 void Sacred::installHooks()
 {
+    D3DStats::setTiming(g_config.d3dStats);
     GrannyAsync::install();
     Patch::begin();
     FrameHooks::install();

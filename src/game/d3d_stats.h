@@ -120,11 +120,28 @@ namespace D3DStats
     // State that ended a batch: render state number, or 0x10000 | stage << 8 | stage state type.
     void onFlushCause(uint32_t key);
 
+    namespace Detail
+    {
+        // Timers only run with [Debug] D3DStats: two rdtsc per device call add up over ~40,000 calls per frame.
+        inline bool timing = false;
+    }
+
+    inline void setTiming(bool on)
+    {
+        Detail::timing = on;
+    }
+
     struct Scope
     {
         Timer timer;
-        int64_t start = now();
-        ~Scope() { addTime(timer, now() - start); }
+        int64_t start = Detail::timing ? now() : 0;
+        ~Scope()
+        {
+            if (start)
+            {
+                addTime(timer, now() - start);
+            }
+        }
     };
 
     // Passes of cWorldView0::render. Time, device-call time, game draws and submits go to the innermost pass
