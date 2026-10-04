@@ -1,0 +1,258 @@
+{
+ "sacred.exe": {
+  "dxDriver7_init": {
+   "451BBE74": "00645390",
+   "452F85C7": "00645260"
+  },
+  "dxDriver7_flip": {
+   "451BBE74": "00645F70",
+   "452F85C7": "00645E40"
+  },
+  "dxDriver7_lockBack": {
+   "451BBE74": "00646280",
+   "452F85C7": "00646150"
+  },
+  "dxDriver7_drawLoadingScreen": {
+   "451BBE74": "006469D0",
+   "452F85C7": "006468A0"
+  },
+  "cDxDevices_findMode": {
+   "451BBE74": "00644260",
+   "452F85C7": "00644130"
+  },
+  "mainWindowCreateReturn": {
+   "451BBE74": "00664A5E",
+   "452F85C7": "006647DE"
+  },
+  "getClientCursorPos": {
+   "451BBE74": "0066E500",
+   "452F85C7": "0066E280"
+  },
+  "cMouse_instance": {
+   "451BBE74": "006550F0",
+   "452F85C7": "00654F60"
+  },
+  "cMouse_renderCursor": {
+   "451BBE74": "006555E0",
+   "452F85C7": "00655450"
+  },
+  "renderSavePortrait": {
+   "451BBE74": "004B1740",
+   "452F85C7": "004B1450"
+  },
+  "playVideo": {
+   "451BBE74": "006A0C60",
+   "452F85C7": "006A0EA0"
+  },
+  "g_pUiManager": {
+   "451BBE74": "017ECB3C",
+   "452F85C7": "017EEBBC"
+  },
+  "cUI_Manager_isCursorOverUi": {
+   "451BBE74": "0075A370",
+   "452F85C7": "0075AA90"
+  },
+  "cUI_Manager_render": {
+   "451BBE74": "007587B0",
+   "452F85C7": "00758ED0"
+  },
+  "worldCursorUiTestCall": {
+   "451BBE74": "00611F83",
+   "452F85C7": "00611EE3"
+  },
+  "cEngine_worldMouse": {
+   "451BBE74": "00617360",
+   "452F85C7": "006172C0"
+  },
+  "cEventMouseDown_vtable": {
+   "451BBE74": "008950A8",
+   "452F85C7": "0089704C"
+  },
+  "cEventMouseUp_vtable": {
+   "451BBE74": "00897248",
+   "452F85C7": "00899248"
+  },
+  "worldGetXCalls[0]": {
+   "451BBE74": "00611FF4",
+   "452F85C7": "00611F54"
+  },
+  "worldGetXCalls[1]": {
+   "451BBE74": "0061203D",
+   "452F85C7": "00611F9D"
+  },
+  "worldGetXCalls[2]": {
+   "451BBE74": "006127DC",
+   "452F85C7": "0061273C"
+  },
+  "worldGetXCalls[3]": {
+   "451BBE74": "00612868",
+   "452F85C7": "006127C8"
+  },
+  "worldGetXCalls[4]": {
+   "451BBE74": "00617E9C",
+   "452F85C7": "00617DFC"
+  },
+  "worldGetXCalls[5]": {
+   "451BBE74": "00617F09",
+   "452F85C7": "00617E69"
+  },
+  "worldGetYCalls[0]": {
+   "451BBE74": "00611FE7",
+   "452F85C7": "00611F47"
+  },
+  "worldGetYCalls[1]": {
+   "451BBE74": "00612030",
+   "452F85C7": "00611F90"
+  },
+  "worldGetYCalls[2]": {
+   "451BBE74": "006127ED",
+   "452F85C7": "0061274D"
+  },
+  "worldGetYCalls[3]": {
+   "451BBE74": "00612879",
+   "452F85C7": "006127D9"
+  },
+  "worldGetYCalls[4]": {
+   "451BBE74": "00617EAD",
+   "452F85C7": "00617E0D"
+  },
+  "worldGetYCalls[5]": {
+   "451BBE74": "00617EFC",
+   "452F85C7": "00617E5C"
+  },
+  "worldMouseReads[0]": {
+   "451BBE74": "004FB6C1",
+   "452F85C7": "004FB881"
+  },
+  "worldMouseReads[1]": {
+   "451BBE74": "0060F308",
+   "452F85C7": "0060F268"
+  },
+  "worldMouseReads[2]": {
+   "451BBE74": "00610567",
+   "452F85C7": "006104C7"
+  },
+  "worldMouseReads[3]": {
+   "451BBE74": "00611F63",
+   "452F85C7": "00611EC3"
+  },
+  "worldMouseReads[4]": {
+   "451BBE74": "0062772E",
+   "452F85C7": "0062764E"
+  },
+  "g_pTextureManager": {
+   "451BBE74": "013E57B8",
+   "452F85C7": "013E7838"
+  },
+  "cTextureManager_init": {
+   "451BBE74": "0065EA20",
+   "452F85C7": "0065E7A0"
+  },
+  "cEngine_renderThreadRun": {
+   "451BBE74": "0060E3F0",
+   "452F85C7": "0060E350"
+  },
+  "frameLimiter": {
+   "451BBE74": "0060AA90",
+   "452F85C7": "0060A9F0"
+  },
+  "renderLimiterReturn": {
+   "451BBE74": "0060EB0E",
+   "452F85C7": "0060EA6E"
+  },
+  "captureLockBackReturn": {
+   "451BBE74": "0061374B",
+   "452F85C7": "006136AB"
+  },
+  "cCreature_render": {
+   "451BBE74": "00599880",
+   "452F85C7": "00599910"
+  },
+  "cObject3D_render": {
+   "451BBE74": "0044B400",
+   "452F85C7": "0044B230"
+  },
+  "cObject3D_drawModel": {
+   "451BBE74": "0044ABA0",
+   "452F85C7": "0044A9D0"
+  },
+  "pixelsToWorld": {
+   "451BBE74": "00623A20",
+   "452F85C7": "00623940"
+  },
+  "worldToPixels": {
+   "451BBE74": "00623C40",
+   "452F85C7": "00623B60"
+  },
+  "g_unzoomedProjection": {
+   "451BBE74": "0182CCF0",
+   "452F85C7": "0182ED70"
+  },
+  "cWorldView0_render": {
+   "451BBE74": "006322B0",
+   "452F85C7": "00632140"
+  },
+  "cWorldView_renderTileRow": {
+   "451BBE74": "0062B000",
+   "452F85C7": "0062AE90"
+  },
+  "cWorldView_drawTileLayers": {
+   "451BBE74": "0062D530",
+   "452F85C7": "0062D3C0"
+  },
+  "cQuadBatcher_flush": {
+   "451BBE74": "00629420",
+   "452F85C7": "00629340"
+  },
+  "cWorldView_drawWaterTiles": {
+   "451BBE74": "0062DE70",
+   "452F85C7": "0062DD00"
+  },
+  "cWorldView_initRowWalk": {
+   "451BBE74": "00632A30",
+   "452F85C7": "006328C0"
+  },
+  "g_viewCameraX": {
+   "451BBE74": "00AD5918",
+   "452F85C7": "00AD7998"
+  },
+  "g_viewCameraY": {
+   "451BBE74": "00AD591C",
+   "452F85C7": "00AD799C"
+  },
+  "layerRecordCache": {
+   "451BBE74": "006360E0",
+   "452F85C7": "00635FE0"
+  },
+  "recordCache": {
+   "451BBE74": "00635F50",
+   "452F85C7": "00635E50"
+  },
+  "recordMapFind": {
+   "451BBE74": "006404C0",
+   "452F85C7": "00640410"
+  },
+  "g_recordStamp": {
+   "451BBE74": "00CD59D0",
+   "452F85C7": "00CD7A50"
+  },
+  "g_pGameClient": {
+   "451BBE74": "0182CB70",
+   "452F85C7": "0182EBF0"
+  },
+  "initNetworkNagleTest": {
+   "451BBE74": "007D294E",
+   "452F85C7": "007D310E"
+  }
+ },
+ "gameserver.exe": {
+  "g_pApp": {
+   "451BBDBF": "00634238",
+   "452F8580": "00634238"
+  },
+  "firstContactTimeoutImm": {
+   "451BBDBF": "004DC523",
+   "452F8580": "004DC523"
+  }
+ }
+}

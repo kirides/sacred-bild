@@ -1,6 +1,6 @@
 #include "game/map_cache.h"
 #include "game/d3d_stats.h"
-#include "game/sacred_de.h"
+#include "game/sacred_addr.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
@@ -19,7 +19,7 @@ namespace
     using CacheFn = uint8_t*(__fastcall*)(void* owner, void* edx, uint32_t id);
     using FindFn = uint8_t*(__fastcall*)(void* map, void* edx, const uint32_t* id);
 
-    const auto g_find = reinterpret_cast<FindFn>(Addr::recordMapFind);
+    FindFn g_find = nullptr;
     constexpr uintptr_t kNodeRecord = 0x14;
 
     // The ids one owner's map holds, valid while the map still has the head and size it had when the index last
@@ -42,8 +42,8 @@ namespace
         uint32_t next = 0;
     };
 
-    Cache g_layers{reinterpret_cast<CacheFn>(Addr::layerRecordCache), 0xDE5C, 0x24};
-    Cache g_records{reinterpret_cast<CacheFn>(Addr::recordCache), 0xDE50, 0x54};
+    Cache g_layers{nullptr, 0xDE5C, 0x24};
+    Cache g_records{nullptr, 0xDE50, 0x54};
 
     uint8_t*& mapHead(uint8_t* map) { return *reinterpret_cast<uint8_t**>(map); }
     uint32_t mapSize(uint8_t* map) { return *reinterpret_cast<uint32_t*>(map + 4); }
@@ -137,7 +137,8 @@ void MapCache::install()
     {
         return;
     }
-    Patch::hook(g_layers.original, &hookLayers, "layerRecordCache");
-    Patch::hook(g_records.original, &hookRecords, "recordCache");
+    g_find = reinterpret_cast<FindFn>(Addr::recordMapFind);
+    Patch::hook(g_layers.original, Addr::layerRecordCache, &hookLayers, "layerRecordCache");
+    Patch::hook(g_records.original, Addr::recordCache, &hookRecords, "recordCache");
     LOG("Record caches: hash index in front of the tree lookups");
 }

@@ -1,5 +1,5 @@
 #include "game/build.h"
-#include "game/sacred_de.h"
+#include "game/sacred_addr.h"
 #include "game/frame_hooks.h"
 #include "game/granny_async.h"
 #include "game/map_cache.h"
@@ -9,25 +9,55 @@
 #include "net/lan_client.h"
 #include "log.h"
 #include "patch.h"
+#include "sig.h"
 
 #include <windows.h>
+#include <cstdint>
+#include <iterator>
 
-bool Sacred::isSupportedBuild()
+namespace
 {
-    return hostExeIs(Addr::kTimestamp, Addr::kSizeOfImage, Addr::kEntryPoint);
+#include "game/sacred_sigs.inc"
+
+    // Builds the signatures were checked against (tools/gen_sigs.py); others work if their code is the same.
+    struct KnownBuild
+    {
+        uint32_t timestamp;
+        const char* name;
+    };
+    constexpr KnownBuild kKnownBuilds[] = {
+        {0x451BBE74, "sacred.exe, German"},
+        {0x452F85C7, "Sacred.exe, English (GOG)"},
+        {0x451BBDBF, "gameserver.exe, German"},
+        {0x452F8580, "GameServer.exe, English (GOG)"},
+    };
 }
 
-bool Sacred::hostExeIs(uint32_t timestamp, uint32_t sizeOfImage, uint32_t entryPoint)
+void Sacred::logHostExe()
 {
     const auto* base = reinterpret_cast<const uint8_t*>(GetModuleHandleW(nullptr));
-    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS32*>(base + dos->e_lfanew);
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS32*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
     const auto ts = nt->FileHeader.TimeDateStamp;
-    const auto size = nt->OptionalHeader.SizeOfImage;
-    const auto entry = nt->OptionalHeader.AddressOfEntryPoint;
-    LOG("Host exe: timestamp={:08x} sizeOfImage={:08x} entry={:08x}", ts, size, entry);
-    return reinterpret_cast<uintptr_t>(base) == 0x400000 && ts == timestamp && size == sizeOfImage &&
-        entry == entryPoint;
+    const char* name = "unknown build";
+    for (const KnownBuild& b : kKnownBuilds)
+    {
+        if (b.timestamp == ts)
+        {
+            name = b.name;
+        }
+    }
+    LOG("Host exe: timestamp={:08x} sizeOfImage={:08x} ({})", ts, nt->OptionalHeader.SizeOfImage, name);
+}
+
+bool Sacred::resolveAddresses()
+{
+    logHostExe();
+    const size_t missing = Sig::resolve(kAddressSigs);
+    if (missing)
+    {
+        LOG("{} of {} game addresses not found", missing, std::size(kAddressSigs));
+    }
+    return missing == 0;
 }
 
 void Sacred::installHooks()

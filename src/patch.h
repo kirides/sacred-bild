@@ -30,6 +30,14 @@ namespace Patch
         return hook(reinterpret_cast<void**>(&original), reinterpret_cast<void*>(detour), name);
     }
 
+    // Detours the function at `target` (a resolved address; 0 is logged and skipped).
+    template <class T, class D>
+    bool hook(T& original, uintptr_t target, D detour, const char* name)
+    {
+        original = reinterpret_cast<T>(target);
+        return hook(reinterpret_cast<void**>(&original), reinterpret_cast<void*>(detour), name);
+    }
+
     // Detours transaction around a batch of hook() calls.
     void begin();
     bool commit();

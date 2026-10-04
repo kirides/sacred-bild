@@ -23,6 +23,7 @@ add_library(ddraw SHARED
   src/config.cpp
   src/patch.cpp
   src/profiler.cpp
+  src/sig.cpp
   src/game/build.cpp
   src/game/frame_hooks.cpp
   src/game/gameserver.cpp

@@ -7,6 +7,11 @@
 
 bool Patch::write(uintptr_t addr, const void* data, size_t size)
 {
+    if (!addr)
+    {
+        LOG("Patch: write without an address");
+        return false;
+    }
     DWORD old = 0;
     auto* p = reinterpret_cast<void*>(addr);
     if (!VirtualProtect(p, size, PAGE_EXECUTE_READWRITE, &old))
@@ -22,7 +27,7 @@ bool Patch::write(uintptr_t addr, const void* data, size_t size)
 
 bool Patch::verify(uintptr_t addr, std::initializer_list<uint8_t> expected)
 {
-    if (std::memcmp(reinterpret_cast<const void*>(addr), expected.begin(), expected.size()) == 0)
+    if (addr && std::memcmp(reinterpret_cast<const void*>(addr), expected.begin(), expected.size()) == 0)
     {
         return true;
     }
@@ -33,6 +38,11 @@ bool Patch::verify(uintptr_t addr, std::initializer_list<uint8_t> expected)
 bool Patch::imm32(uintptr_t addr, uint32_t expected, uint32_t value)
 {
     uint32_t cur = 0;
+    if (!addr)
+    {
+        LOG("Patch: imm32 without an address");
+        return false;
+    }
     std::memcpy(&cur, reinterpret_cast<const void*>(addr), 4);
     if (cur != expected)
     {
@@ -44,7 +54,7 @@ bool Patch::imm32(uintptr_t addr, uint32_t expected, uint32_t value)
 
 bool Patch::redirectCall(uintptr_t callSite, const void* target)
 {
-    if (*reinterpret_cast<const uint8_t*>(callSite) != 0xE8)
+    if (!callSite || *reinterpret_cast<const uint8_t*>(callSite) != 0xE8)
     {
         LOG("Patch: no call instruction at {:08x}", callSite);
         return false;
@@ -95,6 +105,11 @@ void Patch::begin()
 
 bool Patch::hook(void** original, void* detour, const char* name)
 {
+    if (!*original)
+    {
+        LOG("Patch: {} has no address", name);
+        return false;
+    }
     const LONG err = DetourAttach(original, detour);
     if (err != NO_ERROR)
     {

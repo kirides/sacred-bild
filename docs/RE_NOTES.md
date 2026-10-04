@@ -2,8 +2,9 @@
 
 Target: German `sacred.exe` 2.0, PE timestamp `0x451BBE74`, image base `0x400000`.
 Ghidra program: `/sacred.exe (DE)` (functions below are named there). An English build
-(`/Sacred.exe`, timestamp `0x452F85C7`) is in the same project; around the renderer its addresses are
-ENG + `0x130`, elsewhere the offset differs. All addresses below are DE.
+(`/Sacred.exe (GOG)`, timestamp `0x452F85C7`) is in the same project; around the renderer its addresses are
+ENG + `0x130`, elsewhere the offset differs. All addresses below are DE. SacredBild supports both through byte
+signatures (`tools/gen_sigs.py`, `tools/data/addresses.json` lists every patched address in both builds).
 
 ## Big picture
 

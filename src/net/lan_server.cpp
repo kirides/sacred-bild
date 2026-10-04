@@ -1,7 +1,7 @@
 #include "net/lan_server.h"
 #include "net/adapters.h"
 #include "net/lan_protocol.h"
-#include "game/gameserver_de.h"
+#include "game/gameserver_addr.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"

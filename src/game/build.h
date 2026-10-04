@@ -1,14 +1,14 @@
 #pragma once
-#include <cstdint>
 
 namespace Sacred
 {
-    // True when the host exe is the build our address table was made for.
-    bool isSupportedBuild();
+    // Logs the host exe's build and finds the game addresses (Sacred::Addr) from their signatures; true if every
+    // one was found.
+    bool resolveAddresses();
 
-    // Logs the host exe's PE header and compares it with the build an address table was made for.
-    bool hostExeIs(uint32_t timestamp, uint32_t sizeOfImage, uint32_t entryPoint);
-
-    // Installs all game hooks; call once from DllMain after the build check.
+    // Installs all game hooks; call once from DllMain after resolveAddresses().
     void installHooks();
+
+    // Logs the host exe's PE timestamp, naming the build if the signatures were checked against it.
+    void logHostExe();
 }

@@ -3,7 +3,7 @@
 #include "game/device_proxy.h"
 #include "game/granny_async.h"
 #include "game/resolution.h"
-#include "game/sacred_de.h"
+#include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
 #include "config.h"
 #include "log.h"
@@ -36,18 +36,18 @@ namespace
     using Call2Fn = void(__fastcall*)(void* self, void* edx, void* a, void* b);
     using Call5Fn = void(__fastcall*)(void* self, void* edx, void* a, void* b, void* c, void* d, void* e);
 
-    InitFn g_origInit = reinterpret_cast<InitFn>(Addr::dxDriver7_init);
-    FlipFn g_origFlip = reinterpret_cast<FlipFn>(Addr::dxDriver7_flip);
-    LockBackFn g_origLockBack = reinterpret_cast<LockBackFn>(Addr::dxDriver7_lockBack);
-    RenderFn g_origWorldRender = reinterpret_cast<RenderFn>(Addr::cWorldView0_render);
-    RenderFn g_origUiRender = reinterpret_cast<RenderFn>(Addr::cUI_Manager_render);
-    ThreadRunFn g_origRenderThreadRun = reinterpret_cast<ThreadRunFn>(Addr::cEngine_renderThreadRun);
+    InitFn g_origInit = nullptr;
+    FlipFn g_origFlip = nullptr;
+    LockBackFn g_origLockBack = nullptr;
+    RenderFn g_origWorldRender = nullptr;
+    RenderFn g_origUiRender = nullptr;
+    ThreadRunFn g_origRenderThreadRun = nullptr;
     void* volatile g_engine = nullptr;
 
     // Diagnostics: calls along the 3D model path, logged with the probe every 5 s.
-    Call2Fn g_origCreatureRender = reinterpret_cast<Call2Fn>(Addr::cCreature_render);
-    Call2Fn g_origObjectRender = reinterpret_cast<Call2Fn>(Addr::cObject3D_render);
-    Call5Fn g_origDrawModel = reinterpret_cast<Call5Fn>(Addr::cObject3D_drawModel);
+    Call2Fn g_origCreatureRender = nullptr;
+    Call2Fn g_origObjectRender = nullptr;
+    Call5Fn g_origDrawModel = nullptr;
     volatile long g_creatureRenders = 0, g_objectRenders = 0, g_objectAttached = 0, g_modelDraws = 0;
 
     void __fastcall hookCreatureRender(void* self, void* edx, void* a, void* b)
@@ -97,7 +97,7 @@ namespace
 
     // The in-game frame limit (the game passes 60); menus keep theirs.
     using LimiterFn = void(__cdecl*)(double unused, uint32_t fps);
-    LimiterFn g_origLimiter = reinterpret_cast<LimiterFn>(Addr::frameLimiter);
+    LimiterFn g_origLimiter = nullptr;
 
     void __cdecl hookLimiter(double unused, uint32_t fps)
     {
@@ -287,21 +287,21 @@ namespace
 
 void FrameHooks::install()
 {
-    Patch::hook(g_origInit, &hookInit, "dxDriver7::init");
-    Patch::hook(g_origFlip, &hookFlip, "dxDriver7::flip");
-    Patch::hook(g_origLockBack, &hookLockBack, "dxDriver7::lockBack");
-    Patch::hook(g_origWorldRender, &hookWorldRender, "cWorldView0::render");
-    Patch::hook(g_origUiRender, &hookUiRender, "cUI_Manager::render");
-    Patch::hook(g_origRenderThreadRun, &hookRenderThreadRun, "cEngine::renderThreadRun");
+    Patch::hook(g_origInit, Addr::dxDriver7_init, &hookInit, "dxDriver7::init");
+    Patch::hook(g_origFlip, Addr::dxDriver7_flip, &hookFlip, "dxDriver7::flip");
+    Patch::hook(g_origLockBack, Addr::dxDriver7_lockBack, &hookLockBack, "dxDriver7::lockBack");
+    Patch::hook(g_origWorldRender, Addr::cWorldView0_render, &hookWorldRender, "cWorldView0::render");
+    Patch::hook(g_origUiRender, Addr::cUI_Manager_render, &hookUiRender, "cUI_Manager::render");
+    Patch::hook(g_origRenderThreadRun, Addr::cEngine_renderThreadRun, &hookRenderThreadRun, "cEngine::renderThreadRun");
     if (g_config.fpsLimit != 60)
     {
-        Patch::hook(g_origLimiter, &hookLimiter, "frameLimiter");
+        Patch::hook(g_origLimiter, Addr::frameLimiter, &hookLimiter, "frameLimiter");
         LOG("Frame limit in game: {}", g_config.fpsLimit > 0 ? std::to_string(g_config.fpsLimit) : std::string("off"));
     }
     if (g_config.d3dStats)
     {
-        Patch::hook(g_origCreatureRender, &hookCreatureRender, "cCreature::render");
-        Patch::hook(g_origObjectRender, &hookObjectRender, "cObject3D::render");
-        Patch::hook(g_origDrawModel, &hookDrawModel, "cObject3D::drawModel");
+        Patch::hook(g_origCreatureRender, Addr::cCreature_render, &hookCreatureRender, "cCreature::render");
+        Patch::hook(g_origObjectRender, Addr::cObject3D_render, &hookObjectRender, "cObject3D::render");
+        Patch::hook(g_origDrawModel, Addr::cObject3D_drawModel, &hookDrawModel, "cObject3D::drawModel");
     }
 }

@@ -1,7 +1,7 @@
 #include "net/lan_client.h"
 #include "net/adapters.h"
 #include "net/lan_protocol.h"
-#include "game/sacred_de.h"
+#include "game/sacred_addr.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"

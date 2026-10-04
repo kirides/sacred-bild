@@ -1,9 +1,12 @@
-# Verifies that every Detours hook declares as many stack arguments as the target pops (ret N).
+# Verifies that every Detours hook declares as many stack arguments as the target pops (ret N), in the DE build
+# and, for targets with a signature (tools/data/addresses.json), in the other reference builds.
 # A mismatch corrupts the stack on the first call. Keep this table in sync with src/game/*.cpp.
-import sys, bisect
+import sys, bisect, json, os
 sys.path.insert(0, 'tools')
 from de import *
 from funcs import _A
+import sigs
+from gen_sigs import SACRED_ENG
 
 # address: (name, stack argument count excluding `this`)
 HOOKS = {
@@ -43,11 +46,8 @@ HOOKS = {
     0x006550F0: ('cMouse::instance', 0),
 }
 
-ok = True
-for addr, (name, args) in sorted(HOOKS.items()):
-    i = bisect.bisect_right(_A, addr)
-    end = _A[i] if i < len(_A) else addr + 0x4000
-    code = rd(addr, end - addr)
+def rets_of(read, addr, length):
+    code = read(addr, length)
     rets = set()
     for ins in md.disasm(code, addr):
         if ins.mnemonic != 'ret':
@@ -58,7 +58,29 @@ for addr, (name, args) in sorted(HOOKS.items()):
         pad = code[nxt - addr:((nxt + 15) & ~15) - addr]
         if pad and set(pad) <= {0x90, 0xCC}:
             break
+    return rets
+
+
+# DE address -> address in another build, from the signature report
+with open(os.path.join(os.path.dirname(__file__), 'data', 'addresses.json')) as f:
+    resolved = json.load(f)['sacred.exe']
+eng = sigs.Image(SACRED_ENG)
+eng_of = {int(v['451BBE74'], 16): int(v[f'{eng.timestamp:08X}'], 16) for v in resolved.values()}
+
+ok = True
+for addr, (name, args) in sorted(HOOKS.items()):
+    i = bisect.bisect_right(_A, addr)
+    end = _A[i] if i < len(_A) else addr + 0x4000
+    rets = rets_of(rd, addr, end - addr)
     good = rets == {args * 4}
+    line = f"{'OK ' if good else 'BAD'} {addr:08x} {name:34} declared {args} args, ret {sorted(rets)}"
+    if addr in eng_of:
+        e = eng_of[addr]
+        eng_rets = rets_of(eng.rd, e, end - addr)
+        good &= eng_rets == {args * 4}
+        line += f"; ENG {e:08x} ret {sorted(eng_rets)}"
+    else:
+        line += "; ENG: no signature"
     ok &= good
-    print(f"{'OK ' if good else 'BAD'} {addr:08x} {name:34} declared {args} args, ret {sorted(rets)}")
+    print(('OK ' if good else 'BAD') + line[3:])
 sys.exit(0 if ok else 1)

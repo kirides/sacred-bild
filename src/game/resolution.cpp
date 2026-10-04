@@ -1,8 +1,9 @@
 #include "game/resolution.h"
-#include "game/sacred_de.h"
+#include "game/sacred_addr.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
+#include "sig.h"
 
 #include <windows.h>
 #include <ddraw.h>
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 namespace
 {
@@ -38,7 +40,10 @@ namespace
     struct Site
     {
         Kind kind;
-        uint32_t addr;
+        const char* pattern;    // signature of the instruction (tools/gen_res_sites.py)
+        uint16_t offset;        // of the patched operand in the match
+        // What the operand holds before patching: immediates the value; memory operands the float bits of the
+        // constant they point to (a double for Proj*); MemUnzX/Y the offset into g_unzoomedProjection.
         uint32_t expected;
     };
 #include "game/resolution_sites.inc"
@@ -54,8 +59,7 @@ namespace
     float g_cullHF = 818.0f;
     float g_cullH2F = 888.0f;
     // g_unzoomedProjection (+0x00 = _11, +0x14 = _22) is built from +-267/+-200 and never patched.
-    constexpr uintptr_t kUnzoomed11 = 0x0182CCF0;
-    constexpr uintptr_t kUnzoomed22 = 0x0182CD04;
+    constexpr uintptr_t kUnzoomed22 = 0x14;
     float g_unzXF = 2.0f / 534.0f;
     float g_unzYF = 2.0f / 400.0f;
     double g_projNegW = -267.0;
@@ -75,6 +79,44 @@ namespace
         uint32_t u;
         std::memcpy(&u, &f, 4);
         return u;
+    }
+
+    bool inExe(uintptr_t addr, size_t size)
+    {
+        const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+        return addr >= base && addr + size <= base + nt->OptionalHeader.SizeOfImage;
+    }
+
+    // The site holds what the table expects: its address came from a signature, so check before patching.
+    bool holdsExpected(const Site& s, uintptr_t addr)
+    {
+        uint32_t operand;
+        std::memcpy(&operand, reinterpret_cast<const void*>(addr), 4);
+        switch (s.kind)
+        {
+        case Kind::MemUnzX:
+        case Kind::MemUnzY:
+            return operand == Addr::g_unzoomedProjection + s.expected;
+        case Kind::ProjNegW:
+        case Kind::ProjPosW:
+        case Kind::ProjNegH:
+        case Kind::ProjPosH:
+            return inExe(operand, 8) && floatBits(*reinterpret_cast<const double*>(operand)) == s.expected;
+        case Kind::MemW:
+        case Kind::MemH:
+        case Kind::MemHalfW:
+        case Kind::MemHalfH:
+        case Kind::MemCullH:
+        case Kind::MemCullH2:
+        case Kind::MemDepthHalfH:
+        case Kind::MemDepthNear:
+        case Kind::MemDepthScale:
+        case Kind::MemDepthBias:
+            return inExe(operand, 4) && *reinterpret_cast<const uint32_t*>(operand) == s.expected;
+        default:
+            return operand == s.expected;
+        }
     }
 
     uint32_t replacement(Kind kind)
@@ -121,7 +163,7 @@ namespace
 
     // cDxDevices::findMode(w, h, bpp, flags) returns a 0x84-byte mode record (DDSURFACEDESC2 + extras).
     using FindModeFn = void*(__fastcall*)(void* self, void* edx, int w, int h, int bpp, int flags);
-    FindModeFn g_origFindMode = reinterpret_cast<FindModeFn>(Addr::cDxDevices_findMode);
+    FindModeFn g_origFindMode = nullptr;
     uint8_t g_syntheticMode[0x84];
 
     void* __fastcall hookFindMode(void* self, void* edx, int w, int h, int bpp, int flags)
@@ -195,8 +237,8 @@ namespace
     // g_unzoomedProjection (a 1024x768 view, kept original) or the device projection fetched with GetTransform
     // (widened to W x H): scale by the pixel size of whichever matrix they pass. Same math as the originals.
     using ConvertFn = float*(__cdecl*)(float* out, const float* p, const float* m, const float* proj);
-    ConvertFn g_origPixelsToWorld = reinterpret_cast<ConvertFn>(Addr::pixelsToWorld);
-    ConvertFn g_origWorldToPixels = reinterpret_cast<ConvertFn>(Addr::worldToPixels);
+    ConvertFn g_origPixelsToWorld = nullptr;
+    ConvertFn g_origWorldToPixels = nullptr;
 
     bool isUnzoomed(const float* proj)
     {
@@ -237,10 +279,10 @@ namespace
     // column (~92 at 3840 wide, zoomed out).
     using TileRowFn = void(__fastcall*)(void* self, void* edx, void* device, void* rowPos, int detail);
     using DeviceFn = void(__fastcall*)(void* self, void* edx, void* device);
-    TileRowFn g_origTileRow = reinterpret_cast<TileRowFn>(Addr::cWorldView_renderTileRow);
-    const auto g_flushBatcher = reinterpret_cast<DeviceFn>(Addr::cQuadBatcher_flush);
-    const auto g_drawTileLayers = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawTileLayers);
-    const auto g_drawWaterTiles = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawWaterTiles);
+    TileRowFn g_origTileRow = nullptr;
+    DeviceFn g_flushBatcher = nullptr;
+    DeviceFn g_drawTileLayers = nullptr;
+    DeviceFn g_drawWaterTiles = nullptr;
     constexpr uint32_t kRowMargin = 256;
 
     // Row walk. Only the 3x3 sectors around the camera (64x64 tiles each) are loaded. cWorldView0_render walks the
@@ -276,7 +318,7 @@ namespace
     uint32_t g_walkMismatchLogs = 0;    // logged disagreements with the game's walk (would be bugs here)
 
     using InitRowWalkFn = void(__fastcall*)(void* self, void* edx, const int32_t* pos, void* map);
-    InitRowWalkFn g_origInitRowWalk = reinterpret_cast<InitRowWalkFn>(Addr::cWorldView_initRowWalk);
+    InitRowWalkFn g_origInitRowWalk = nullptr;
 
     RowPos* rowPos(void* view, uintptr_t offset)
     {
@@ -438,7 +480,7 @@ namespace
     }
 
     using TextureInitFn = uint32_t(__fastcall*)(void* self, void* edx, uint32_t budget);
-    TextureInitFn g_origTextureInit = reinterpret_cast<TextureInitFn>(Addr::cTextureManager_init);
+    TextureInitFn g_origTextureInit = nullptr;
 
     uint32_t __fastcall hookTextureInit(void* self, void* edx, uint32_t budget)
     {
@@ -449,7 +491,7 @@ namespace
     }
 
     using LoadingScreenFn = void(__fastcall*)(void* self, void* edx, uint32_t progress, const char* text);
-    LoadingScreenFn g_origLoadingScreen = reinterpret_cast<LoadingScreenFn>(Addr::dxDriver7_drawLoadingScreen);
+    LoadingScreenFn g_origLoadingScreen = nullptr;
 
     void __fastcall hookLoadingScreen(void* self, void* edx, uint32_t progress, const char* text)
     {
@@ -511,8 +553,8 @@ bool Resolution::active() { return g_width != 1024 || g_height != 768; }
 
 void Resolution::refresh()
 {
-    const float m11 = *reinterpret_cast<const float*>(kUnzoomed11);
-    const float m22 = *reinterpret_cast<const float*>(kUnzoomed22);
+    const float m11 = *reinterpret_cast<const float*>(Addr::g_unzoomedProjection);
+    const float m22 = *reinterpret_cast<const float*>(Addr::g_unzoomedProjection + kUnzoomed22);
     if (m11 != 0.0f && m22 != 0.0f)
     {
         g_unzXF = m11 * 1024.0f / g_widthF;
@@ -531,10 +573,28 @@ void Resolution::install()
         return;
     }
 
-    int patched = 0;
-    for (const Site& s : kResolutionSites)
+    std::vector<uintptr_t> addrs(std::size(kResolutionSites));
+    std::vector<Sig::Entry> entries;
+    for (size_t i = 0; i < std::size(kResolutionSites); ++i)
     {
-        patched += Patch::imm32(s.addr, s.expected, replacement(s.kind)) ? 1 : 0;
+        const Site& s = kResolutionSites[i];
+        entries.push_back({"resolution site", s.pattern, s.offset, Sig::Take::Match, &addrs[i]});
+    }
+    Sig::resolve(entries);
+    int patched = 0;
+    for (size_t i = 0; i < std::size(kResolutionSites); ++i)
+    {
+        const Site& s = kResolutionSites[i];
+        if (!addrs[i])
+        {
+            continue;
+        }
+        if (!holdsExpected(s, addrs[i]))
+        {
+            LOG("Resolution: site {} ({:08x}) does not hold {:08x}", i, addrs[i], s.expected);
+            continue;
+        }
+        patched += Patch::value(addrs[i], replacement(s.kind)) ? 1 : 0;
     }
     LOG("Resolution: patched {}/{} sites", patched, std::size(kResolutionSites));
 
@@ -543,11 +603,14 @@ void Resolution::install()
     g_origCreateWindowExA = static_cast<CreateWindowExAFn>(
         Patch::iat("USER32.dll", "CreateWindowExA", reinterpret_cast<void*>(&hookCreateWindowExA)));
 
-    Patch::hook(g_origFindMode, &hookFindMode, "cDxDevices::findMode");
-    Patch::hook(g_origLoadingScreen, &hookLoadingScreen, "dxDriver7::drawLoadingScreen");
-    Patch::hook(g_origTextureInit, &hookTextureInit, "cTextureManager::init");
-    Patch::hook(g_origTileRow, &hookTileRow, "cWorldView::renderTileRow");
-    Patch::hook(g_origInitRowWalk, &hookInitRowWalk, "cWorldView::initRowWalk");
-    Patch::hook(g_origPixelsToWorld, &hookPixelsToWorld, "pixelsToWorld");
-    Patch::hook(g_origWorldToPixels, &hookWorldToPixels, "worldToPixels");
+    g_flushBatcher = reinterpret_cast<DeviceFn>(Addr::cQuadBatcher_flush);
+    g_drawTileLayers = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawTileLayers);
+    g_drawWaterTiles = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawWaterTiles);
+    Patch::hook(g_origFindMode, Addr::cDxDevices_findMode, &hookFindMode, "cDxDevices::findMode");
+    Patch::hook(g_origLoadingScreen, Addr::dxDriver7_drawLoadingScreen, &hookLoadingScreen, "dxDriver7::drawLoadingScreen");
+    Patch::hook(g_origTextureInit, Addr::cTextureManager_init, &hookTextureInit, "cTextureManager::init");
+    Patch::hook(g_origTileRow, Addr::cWorldView_renderTileRow, &hookTileRow, "cWorldView::renderTileRow");
+    Patch::hook(g_origInitRowWalk, Addr::cWorldView_initRowWalk, &hookInitRowWalk, "cWorldView::initRowWalk");
+    Patch::hook(g_origPixelsToWorld, Addr::pixelsToWorld, &hookPixelsToWorld, "pixelsToWorld");
+    Patch::hook(g_origWorldToPixels, Addr::worldToPixels, &hookWorldToPixels, "worldToPixels");
 }

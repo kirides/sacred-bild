@@ -1,16 +1,19 @@
 #include "game/gameserver.h"
 #include "game/build.h"
-#include "game/gameserver_de.h"
+#include "game/gameserver_addr.h"
 #include "net/lan_server.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
+#include "sig.h"
 
 #include <windows.h>
 #include <algorithm>
 
 namespace
 {
+#include "game/gameserver_sigs.inc"
+
     constexpr uint32_t kGameFirstContactMs = 5000;
 
     // A player that connected has 5 s to send its first message, or the watchdog drops the connection: tight for
@@ -35,7 +38,8 @@ bool GameServer::isHostProcess()
 
 void GameServer::installHooks()
 {
-    if (!Sacred::hostExeIs(Addr::kTimestamp, Addr::kSizeOfImage, Addr::kEntryPoint))
+    Sacred::logHostExe();
+    if (Sig::resolve(kAddressSigs) != 0)
     {
         LOG("Unsupported gameserver.exe build: no patches");
         return;
