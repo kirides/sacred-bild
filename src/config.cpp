@@ -19,6 +19,28 @@ namespace
         return buf;
     }
 
+    // 1/0, true/false, yes/no, on/off.
+    bool readBool(const std::wstring& ini, const wchar_t* section, const wchar_t* key, bool def)
+    {
+        wchar_t buf[16] = {};
+        GetPrivateProfileStringW(section, key, L"", buf, static_cast<DWORD>(std::size(buf)), ini.c_str());
+        for (const wchar_t* yes : {L"1", L"true", L"yes", L"on"})
+        {
+            if (_wcsicmp(buf, yes) == 0)
+            {
+                return true;
+            }
+        }
+        for (const wchar_t* no : {L"0", L"false", L"no", L"off"})
+        {
+            if (_wcsicmp(buf, no) == 0)
+            {
+                return false;
+            }
+        }
+        return def;
+    }
+
     std::string ascii(const std::wstring& s)
     {
         std::string out;
@@ -35,6 +57,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     const std::wstring ini = gameDir + L"\\SacredBild.ini";
     g_config.ddrawD3D9 = _wcsicmp(readString(ini, L"DDraw", L"Backend", L"d3d9").c_str(), L"chain") != 0;
     g_config.ddrawChain = readString(ini, L"DDraw", L"Chain", g_config.ddrawChain);
+    g_config.mediaFoundation = g_config.ddrawD3D9 || readBool(ini, L"DDraw", L"MediaFoundation", g_config.mediaFoundation);
     g_config.width = readInt(ini, L"Display", L"Width", g_config.width);
     g_config.height = readInt(ini, L"Display", L"Height", g_config.height);
     g_config.borderless = readInt(ini, L"Display", L"Borderless", g_config.borderless) != 0;
@@ -63,10 +86,10 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.profiler = readInt(ini, L"Debug", L"Profiler", g_config.profiler) != 0;
     g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
 
-    LOG("Config: Backend={} Width={} Height={} Borderless={} FpsLimit={} VSync={} MaxFrameLatency={} UI.Scale={} UI.LinearFilter={} TextureBudgetMB={} Batch={} "
+    LOG("Config: Backend={} MediaFoundation={} Width={} Height={} Borderless={} FpsLimit={} VSync={} MaxFrameLatency={} UI.Scale={} UI.LinearFilter={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
         "Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} D3DStats={} Profiler={} ({} us)",
-        g_config.ddrawD3D9 ? "d3d9" : "chain", g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit,
+        g_config.ddrawD3D9 ? "d3d9" : "chain", g_config.mediaFoundation, g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit,
         g_config.vsync, g_config.maxFrameLatency, g_config.uiScale, g_config.uiLinearFilter,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
         g_config.batchModels, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,

@@ -43,6 +43,7 @@ namespace
     RenderFn g_origUiRender = nullptr;
     ThreadRunFn g_origRenderThreadRun = nullptr;
     void* volatile g_engine = nullptr;
+    void* volatile g_dxDriver = nullptr;
 
     // Diagnostics: calls along the 3D model path, logged with the probe every 5 s.
     Call2Fn g_origCreatureRender = nullptr;
@@ -115,6 +116,7 @@ namespace
     uint32_t __fastcall hookInit(void* self, void* edx, void* devices, void* deviceDesc, void* mode)
     {
         const uint32_t ok = g_origInit(self, edx, devices, deviceDesc, mode);
+        g_dxDriver = self;
         auto& device = member<IDirect3DDevice7*>(self, DxDriver::device);
         LOG("dxDriver7::init -> {} ({}x{} {}bpp, {}, device {})", ok & 0xFF, member<uint16_t>(self, DxDriver::width),
             member<uint16_t>(self, DxDriver::height), member<int>(self, DxDriver::bpp),
@@ -283,6 +285,17 @@ namespace
         UiCanvas::Scope ui;
         g_origUiRender(self, edx, device);
     }
+}
+
+bool FrameHooks::flip()
+{
+    void* dxDriver = g_dxDriver;
+    if (!dxDriver)
+    {
+        return false;
+    }
+    hookFlip(dxDriver, nullptr);
+    return true;
 }
 
 void FrameHooks::install()

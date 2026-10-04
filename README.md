@@ -28,10 +28,11 @@ ddraw calls through and logs which one.
   states, so device calls translate almost one to one. Frames are presented with the flip model (`VSync`,
   `MaxFrameLatency`), and the per-call layers of Windows' Direct3D 7 runtime and DDrawCompat are gone. Anything the
   backend doesn't implement is logged once (`Direct3D 9 backend: not supported: ...`).
-- **Movies through Media Foundation** (with the Direct3D 9 backend): the game decodes its WMV movies with DirectShow
-  into DirectDraw surfaces, which needs a real DirectDraw. SacredBild plays them with the Media Engine instead (audio
-  included), draws them over the whole screen with their aspect ratio kept, and keeps the window responsive; ESC,
-  space and mouse buttons skip as before.
+- **Movies through Media Foundation** (`[DDraw] MediaFoundation`, always with the Direct3D 9 backend): the game
+  decodes its WMV movies with DirectShow into DirectDraw surfaces, which needs a real DirectDraw, and its loop stops
+  processing window messages. SacredBild plays them with the Media Engine instead (audio included), draws them over
+  the whole screen with their aspect ratio kept, and keeps the window responsive; ESC, space and mouse buttons skip
+  as before.
 - **Batched world rendering**: the world view issues thousands of small sprite and ground draws per frame
   (almost 10,000 zoomed out at 1920x1200). SacredBild records state changes instead of applying them and
   merges consecutive draws that end up with the same state into one call; small textures are copied into
@@ -96,6 +97,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Net | JoinTimeout | 30 | Seconds a joining player has to send its first message to a gameserver Sacred started (the game: 5). |
 | DDraw | Backend | d3d9 | `d3d9` = SacredBild's own Direct3D 9Ex backend; `chain` = the ddraw below. |
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | `Backend=chain`: ddraw loaded behind SacredBild; empty = system ddraw. |
+| DDraw | MediaFoundation | 1 | Movies through Media Foundation; always on with `Backend=d3d9`, 0 = the game's own player with `Backend=chain`. |
 | Debug | D3DStats | 1 | Frame statistics in `SacredBild.log` (wraps the D3D device in a proxy). |
 | Debug | Profiler | 0 | Sampling profiler; writes `SacredBild-profile.txt` every 15 s. |
 | Debug | ProfilerIntervalUs | 500 | Sampling interval. |

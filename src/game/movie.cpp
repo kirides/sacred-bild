@@ -1,5 +1,6 @@
 #include "game/movie.h"
 #include "game/device_proxy.h"
+#include "game/frame_hooks.h"
 #include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
 #include "config.h"
@@ -427,7 +428,11 @@ namespace
             {
                 m_device->EndScene();
             }
-            m_primary->Blt(nullptr, m_target, nullptr, DDBLT_WAIT, nullptr);
+            // The game's own flip knows how to show the back buffer on this DirectDraw (windowed or flip chain).
+            if (!FrameHooks::flip())
+            {
+                m_primary->Blt(nullptr, m_target, nullptr, DDBLT_WAIT, nullptr);
+            }
         }
 
         void setupStates()
@@ -464,21 +469,36 @@ namespace
                 return false;   // not known before the metadata is loaded
             }
             HRESULT hr = m_wic->CreateBitmap(w, h, kWicPixelFormat32bppBGRA, WICBitmapCacheOnLoad, &m_bitmap);
-            if (SUCCEEDED(hr))
+            // A managed texture stays lockable on any DirectDraw; frames are BGRA, alpha unused.
+            for (const DWORD alpha : {0u, 0xFF000000u})
             {
+                if (FAILED(hr))
+                {
+                    break;
+                }
                 DDSURFACEDESC2 desc = {};
                 desc.dwSize = sizeof(desc);
                 desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
                 desc.dwWidth = w;
                 desc.dwHeight = h;
                 desc.ddsCaps.dwCaps = DDSCAPS_TEXTURE;
+                desc.ddsCaps.dwCaps2 = DDSCAPS2_TEXTUREMANAGE;
                 desc.ddpfPixelFormat.dwSize = sizeof(DDPIXELFORMAT);
-                desc.ddpfPixelFormat.dwFlags = DDPF_RGB;
+                desc.ddpfPixelFormat.dwFlags = DDPF_RGB | (alpha ? DDPF_ALPHAPIXELS : 0);
                 desc.ddpfPixelFormat.dwRGBBitCount = 32;
                 desc.ddpfPixelFormat.dwRBitMask = 0xFF0000;
                 desc.ddpfPixelFormat.dwGBitMask = 0xFF00;
                 desc.ddpfPixelFormat.dwBBitMask = 0xFF;
-                hr = m_ddraw->CreateSurface(&desc, &m_frame, nullptr);
+                desc.ddpfPixelFormat.dwRGBAlphaBitMask = alpha;
+                if (SUCCEEDED(m_ddraw->CreateSurface(&desc, &m_frame, nullptr)))
+                {
+                    break;
+                }
+                m_frame.Reset();
+            }
+            if (SUCCEEDED(hr) && !m_frame)
+            {
+                hr = DDERR_INVALIDPIXELFORMAT;
             }
             if (FAILED(hr))
             {
@@ -555,9 +575,9 @@ namespace
                     }
                     const bool fresh = player.update();
                     player.draw();
-                    if (!fresh && !g_config.vsync)
+                    if (!fresh && !(g_config.ddrawD3D9 && g_config.vsync))
                     {
-                        Sleep(1);
+                        Sleep(1);   // presenting doesn't wait for the display here
                     }
                 }
             }
@@ -589,13 +609,36 @@ namespace
         return skipped ? -1 : 0;
     }
 
+    // The Media Engine exists from Windows 8 on (not on N editions without the Media Feature Pack).
+    bool mediaEngineAvailable()
+    {
+        static const bool available = [] {
+            const bool found = LoadLibraryExW(L"mfmediaengine.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32) != nullptr;
+            if (!found)
+            {
+                LOG("Movie: Media Foundation's Media Engine is not available");
+            }
+            return found;
+        }();
+        return available;
+    }
+
     HRESULT __cdecl hookOpenStream(const char* path, IUnknown* ddraw, IUnknown** stream)
     {
-        if (!g_config.ddrawD3D9 || !path || !stream)
+        if (!g_config.mediaFoundation || !path || !stream)
         {
             return g_origOpenStream(path, ddraw, stream);
         }
-        // amstream needs a real DirectDraw: playVideo plays the file with Media Foundation instead.
+        if (!mediaEngineAvailable())
+        {
+            if (!g_config.ddrawD3D9)
+            {
+                return g_origOpenStream(path, ddraw, stream);
+            }
+            *stream = nullptr;  // amstream can't decode into the Direct3D 9 backend's surfaces: no movie
+            return E_FAIL;
+        }
+        // playVideo plays the file with Media Foundation instead of amstream.
         char full[MAX_PATH] = {};
         if (!GetFullPathNameA(path, MAX_PATH, full, nullptr))
         {

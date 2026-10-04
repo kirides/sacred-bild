@@ -8,6 +8,9 @@ struct Config
     // (Backend=chain): `ddrawChain`, or the system ddraw.dll if that is empty or missing.
     bool ddrawD3D9 = true;
     std::wstring ddrawChain = L"SacredBild\\DDrawCompat.dll";
+    // Movies through Media Foundation instead of the game's DirectShow/DirectDraw path. Backend=d3d9 always does
+    // (DirectShow can't decode into its surfaces); with Backend=chain this decides.
+    bool mediaFoundation = true;
 
     // Render resolution; 0 = desktop size. 1024x768 runs the game unpatched.
     int width = 0;
