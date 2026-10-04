@@ -1,4 +1,5 @@
 #include "config.h"
+#include "crash_dump.h"
 #include "log.h"
 #include "profiler.h"
 #include "proxy.h"
@@ -44,12 +45,14 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID)
             Log::init((gameDir + L"\\SacredBild-server.log").c_str());
             LOG("SacredBild " __DATE__ " " __TIME__ " in gameserver.exe");
             ConfigFile::load(gameDir);
+            CrashDump::install(gameDir, L"SacredBild-server-crash");
             GameServer::installHooks();
             return TRUE;
         }
         Log::init((gameDir + L"\\SacredBild.log").c_str());
         LOG("SacredBild " __DATE__ " " __TIME__);
         ConfigFile::load(gameDir);
+        CrashDump::install(gameDir, L"SacredBild-crash");
 
         if (!Proxy::init(gameDir))
         {

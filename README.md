@@ -60,6 +60,8 @@ ddraw calls through and logs which one.
   install runs every language you have the files for (see below).
 - **Diagnostics**: per-second frame stats (draw calls, texture switches, unique textures, time spent in
   the world renderer, UI, flip and inside Direct3D, what ended each batch) and an optional sampling profiler.
+  When the game or its gameserver crashes, a minidump goes next to the exe (`SacredBild-crash-*.dmp`,
+  `SacredBild-server-crash-*.dmp`; `[Debug] CrashDump`) and the log names the exception and where it happened.
 
 ## Build
 
@@ -134,6 +136,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Debug | Profiler | 0 | Sampling profiler; writes `SacredBild-profile.txt` every 15 s. |
 | Debug | ProfilerIntervalUs | 500 | Sampling interval. |
 | Debug | UiTrace | 0 | Scroll Lock logs one UI frame's draws (`UiTrace:` lines: position, UI frame, calling game code) and popups set during the next 5 s. |
+| Debug | CrashDump | 1 | Minidump next to the exe on a crash: 0 = off, 1 = stacks and the memory they point to (small), 2 = all memory (for the game's globals; hundreds of MB). |
 | Debug | MovieFallback | 0 | Movies always through the fallback (DirectShow into a system memory surface), as without the Media Engine. |
 
 ### LAN games over a VPN

@@ -21,6 +21,7 @@ add_library(ddraw SHARED
   src/proxy.cpp
   src/log.cpp
   src/config.cpp
+  src/crash_dump.cpp
   src/patch.cpp
   src/profiler.cpp
   src/sig.cpp
