@@ -178,9 +178,12 @@ namespace Sacred::Addr
     constexpr int languageCount = 11;
     inline uintptr_t cTextTable_load{};                 // DE 0080DBF0; thiscall (path) -> bool, this = g_textTable
     inline uintptr_t textTableAllocCall{};              // DE 0080DC60; its `call operator new` (cdecl (size))
-    // initApp passes ".\PAK\SOUND.PAK" (speech and sound effects) before it creates the sound system: the path is
-    // copied into a 256-byte buffer (0x9D5624) that cMSS's constructor opens once.
-    inline uintptr_t cMSS_setPakPath{};                 // DE 00677440; cdecl (path)
+    // Speech and sound effects: cMSS's constructor (only called by the instance getter 0x6773C0, on first use) opens
+    // g_soundPakPath once and keeps the FILE*. initApp copies ".\PAK\SOUND.PAK" there (cMSS_setPakPath 0x677440)
+    // and creates cMSS, but the startup movies (0x6A14A0, called from initApp before that) can create it first,
+    // with the buffer's initial ".\PAK\SOUND.PAK".
+    inline uintptr_t cMSS_ctor{};                       // DE 006764E0; thiscall (44100, 16, 1)
+    inline uintptr_t g_soundPakPath{};                  // DE 009D5624; char[256]
 }
 
 // Text table (g_textTable, DE 0182CCD0; a static object, destroyed at exit). global.res, in memory as on disk:

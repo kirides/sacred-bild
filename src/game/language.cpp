@@ -17,15 +17,16 @@ namespace
 
     // thiscall on the text table, hooked as fastcall.
     using LoadTextFn = int(__fastcall*)(void* table, void* edx, const char* path);
-    using SetPakPathFn = void(__cdecl*)(const char* path);
+    // thiscall (44100, 16, 1) on the new cMSS, hooked as fastcall.
+    using SoundCtorFn = void*(__fastcall*)(void* self, void* edx, int rate, int bits, int channels);
     using OperatorNewFn = void*(__cdecl*)(size_t size);
 
     LoadTextFn g_origLoadText = nullptr;
-    SetPakPathFn g_origSetPakPath = nullptr;
+    SoundCtorFn g_origSoundCtor = nullptr;
     // The game's own: the text table's buffer is freed by the game at exit.
     OperatorNewFn g_operatorNew = nullptr;
 
-    constexpr size_t kPakPathSize = 256;            // cMSS_setPakPath's buffer
+    constexpr size_t kPakPathSize = 256;            // g_soundPakPath
     constexpr size_t kMaxTextBytes = 64 << 20;      // global.res is about 3 MB
 
     // Reads a file of at most `limit` bytes, or with `head` its first `limit` bytes (paths relative to the working
@@ -214,16 +215,18 @@ namespace
         return g_origLoadText(table, edx, path);
     }
 
-    // `path` is ".\PAK\SOUND.PAK"; the language's own is ".\PAK\SOUND.<code>.PAK".
-    void __cdecl hookSetPakPath(const char* path)
+    // The sound system opens g_soundPakPath (".\PAK\SOUND.PAK") when it is created; the language's own is
+    // ".\PAK\SOUND.<code>.PAK". Whoever creates it first (initApp, or the startup movies before that), the language
+    // is set by then: WinMain decides it before initApp.
+    void* __fastcall hookSoundCtor(void* self, void* edx, int rate, int bits, int channels)
     {
-        const std::string_view original = path ? path : "";
+        char* path = reinterpret_cast<char*>(Addr::g_soundPakPath);
+        const std::string original(path, strnlen(path, kPakPathSize - 1));
         const size_t dot = original.find_last_of('.');
         const std::string_view language = currentCode();
-        if (!language.empty() && dot != std::string_view::npos && original.find_first_of("\\/", dot) == std::string_view::npos)
+        if (!language.empty() && dot != std::string::npos && original.find_first_of("\\/", dot) == std::string::npos)
         {
-            const std::string localized = std::string(original.substr(0, dot)) + "." + std::string(language) +
-                std::string(original.substr(dot));
+            const std::string localized = original.substr(0, dot) + "." + std::string(language) + original.substr(dot);
             uint32_t count = 0;
             uint32_t ownCount = 0;
             if (localized.size() >= kPakPathSize)
@@ -238,18 +241,17 @@ namespace
             {
                 LOG("Language: {} is not a sound file the game can read, speech from {}", localized, original);
             }
-            else if (soundCount(path, ownCount) && count != ownCount)
+            else if (soundCount(original.c_str(), ownCount) && count != ownCount)
             {
                 LOG("Language: {} has {} sounds, {} has {}; speech from {}", localized, count, original, ownCount, original);
             }
             else
             {
                 LOG("Language: speech from {}", localized);
-                g_origSetPakPath(localized.c_str());
-                return;
+                std::memcpy(path, localized.c_str(), localized.size() + 1);
             }
         }
-        g_origSetPakPath(path);
+        return g_origSoundCtor(self, edx, rate, bits, channels);
     }
 
     // The target of the `call rel32` at `site`, 0 if there is none.
@@ -276,5 +278,5 @@ void Language::install()
     {
         LOG("Language: unexpected code at textTableAllocCall; the text stays the exe's own");
     }
-    Patch::hook(g_origSetPakPath, Addr::cMSS_setPakPath, &hookSetPakPath, "cMSS_setPakPath");
+    Patch::hook(g_origSoundCtor, Addr::cMSS_ctor, &hookSoundCtor, "cMSS_ctor");
 }

@@ -99,7 +99,8 @@ SACRED = [
     # language files (language.cpp)
     ('cTextTable_load', 0x0080DBF0, 'func'),
     ('textTableAllocCall', 0x0080DC60, 'code'),
-    ('cMSS_setPakPath', 0x00677440, 'func'),
+    ('cMSS_ctor', 0x006764E0, 'func'),
+    ('g_soundPakPath', 0x009D5624, 'data'),
     ('g_language', 0x017E5CB4, 'data'),
     ('g_languageCodes', 0x00897394, 'data'),
 ]

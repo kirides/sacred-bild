@@ -529,9 +529,16 @@ second; SacredBild makes that `[Net] JoinTimeout`, 30 s by default); loading may
   `+4` size). `scripts\us\global.res` in both GOG installs is that resource decoded, byte for byte. Format: uint32
   count, count entries {id, offset, flags (0/1/3/5), bytes} with strictly ascending ids, UTF-16 strings at
   `4 + offset`. DE and ENG have the same 23,123 ids, so the files are interchangeable.
-- **Speech**: `initApp` calls `cMSS_setPakPath` (`0x677440`, cdecl) with `.\PAK\SOUND.PAK`, copied into the 256-byte
-  `g_soundPakPath` (`0x9D5624`); cMSS's constructor (`0x6764E0`) opens it once and keeps the `FILE*` (`+0xB7F0`).
-  Header: `SND`, version 1, uint32 sound count (50,000 in both), sounds addressed by slot.
+- **Speech**: cMSS's constructor (`0x6764E0`, only called by the instance getter `0x6773C0` on first use) opens the
+  256-byte `g_soundPakPath` (`0x9D5624`, initially `.\PAK\SOUND.PAK`) once and keeps the `FILE*` (`+0xB7F0`);
+  `playSFX` (`0x6932D0`) reads every sample through it. `initApp` copies `.\PAK\SOUND.PAK` there with
+  `cMSS_setPakPath` (`0x677440`) and creates cMSS, but the startup movies (`0x6A14A0`, called from `initApp` at
+  `0x815DAC`, earlier) call the getter unguarded and may create it first. Header: `SND`, version 1, uint32 sound
+  count (50,000 in both), 50,000 entries {flags, offset, size}, RIFF WAV samples. Sounds are named in the exe
+  (`SOUND_FX_<name>` -> slot, `0x962888`, the same in DE and ENG); the speech slots (hero lines such as
+  `NOTMYITEM01_GLAD`, location remarks `SFX_LOC01_SCGLAD`) hold different recordings in the two paks, the effects
+  are identical. The language argument passed to `cMSS_playSound` (`0x693DA0`) is unused. Music and ambience
+  stream from `.\MP3\<name>.mp3` (`AIL_open_stream`).
 - gameserver.exe loads neither. Besides the exes, the two GOG installs differ in these two files, `credits*.txt`
   (lists of text ids, different localization staff) and some data without text (`PAK\motions.pak` 85 bytes and 396
   longer in ENG, `bin\sets.bin` 259 bytes, 4 header bytes of each `startcode.bin`); movies, music, fonts and loading

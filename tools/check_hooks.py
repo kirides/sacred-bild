@@ -31,7 +31,7 @@ HOOKS = {
     0x006404C0: ('recordMapFind (called)', 1),
     0x0065EA20: ('cTextureManager::init', 1),
     0x0080DBF0: ('cTextTable::load', 1),
-    0x00677440: ('cMSS_setPakPath (cdecl)', 0),
+    0x006764E0: ('cMSS::cMSS', 3),
     0x0062B000: ('cWorldView::renderTileRow', 3),
     0x00632A30: ('cWorldView::initRowWalk', 2),
     0x0062D530: ('cWorldView::drawTileLayers (called)', 1),
