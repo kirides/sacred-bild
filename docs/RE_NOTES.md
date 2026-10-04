@@ -46,8 +46,10 @@ Two threads present frames:
 | `0x6469D0` | `dxDriver7_drawLoadingScreen`: GDI on the back buffer DC, 1024x768 layout |
 | `0x646F50` / `0x646FD0` | `beginScene` / `endScene` (ref-counted) |
 
-Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAPPEDWINDOW|WS_VISIBLE`
-(return address `0x664A5E`).
+Main window: `0x813240` registers class "Sacred" (`sacredWndProc` `0x8122A0`) and creates it with `CreateWindowExA`
+as `WS_POPUP|WS_VISIBLE` (return address `0x813337`); `dxDriver7_init` sizes it with `SetWindowPos`: the screen in
+fullscreen mode, the mode's size centered on the primary screen when windowed. (`0x664910` creates the debug
+"LogWindow", `WS_OVERLAPPEDWINDOW`.)
 
 ## What the game needs from DirectDraw (SacredBild's Direct3D 9 backend, `src/ddraw9/`)
 

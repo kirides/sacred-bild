@@ -13,7 +13,8 @@ ddraw calls through and logs which one.
 ## What it does
 
 - **Any resolution** (default: desktop resolution) instead of the hard-coded 1024x768:
-  - back buffer and window at the target size, borderless window so the client area matches;
+  - back buffer and window at the target size: borderless when it fills the screen, otherwise with a frame
+    (caption and system menu: it can be moved and minimized) around a client area of that size (`[Display] Borderless`);
   - world view: orthographic projection (including its depth range), visible area, culling and
     overhead-label layout scaled so the world keeps its original pixel density and simply shows more
     (including the 0.5x-2.0x zoom);
@@ -107,7 +108,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Section | Key | Default | Meaning |
 |---|---|---|---|
 | Display | Width, Height | 0 | Render resolution; 0 = desktop. 1024x768 = unpatched game. |
-| Display | Borderless | 1 | Main window without frame. |
+| Display | Borderless | auto | Main window frame: `auto` = a frame when the window is smaller than the screen, `1` = never (the game's frameless window), `0` = always. The client area is `Width` x `Height` either way. |
 | Display | ClipCursor | 1 | Confine the mouse to the game window while it is in the foreground. |
 | Display | FpsLimit | 60 | The game's own in-game frame limit; 0 = off. |
 | Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh; 0 = right away. |

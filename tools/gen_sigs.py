@@ -24,7 +24,7 @@ SACRED = [
     ('dxDriver7_lockBack', 0x00646280, 'func'),
     ('dxDriver7_drawLoadingScreen', 0x006469D0, 'func'),
     ('cDxDevices_findMode', 0x00644260, 'func'),
-    ('mainWindowCreateReturn', 0x00664A5E, 'code'),
+    ('mainWindowCreateReturn', 0x00813337, 'code'),
     # mouse and UI
     ('getClientCursorPos', 0x0066E500, 'func'),
     ('cMouse_instance', 0x006550F0, 'func'),

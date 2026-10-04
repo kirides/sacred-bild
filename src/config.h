@@ -18,7 +18,16 @@ struct Config
     // Render resolution; 0 = desktop size. 1024x768 runs the game unpatched.
     int width = 0;
     int height = 0;
-    bool borderless = true;       // main window without frame, client area = back buffer
+    // Main window frame ([Display] Borderless): Auto = a frame (caption, system menu) when the window is smaller than
+    // the screen, Never (Borderless=1) = the game's frameless popup, Always (Borderless=0). The client area is the
+    // render resolution either way.
+    enum class Frame
+    {
+        Auto,
+        Never,
+        Always,
+    };
+    Frame frame = Frame::Auto;
     bool clipCursor = true;       // mouse confined to the game window while it is in the foreground
     int fpsLimit = 60;            // the game's own in-game frame limit (it uses 60); 0 = off
     // Direct3D 9 backend: wait for the display's refresh when presenting, and how many frames the CPU may

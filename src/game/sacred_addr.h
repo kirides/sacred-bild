@@ -25,7 +25,7 @@ namespace Sacred::Addr
     inline uintptr_t cDxDevices_findMode{};             // DE 00644260
 
     // Return address of the CreateWindowExA call that creates the main game window.
-    inline uintptr_t mainWindowCreateReturn{};          // DE 00664A5E
+    inline uintptr_t mainWindowCreateReturn{};          // DE 00813337
 
     // Mouse: getClientCursorPos(hwnd, POINT*) is the only cursor read; cMouse is the singleton the UI and world poll.
     inline uintptr_t getClientCursorPos{};              // DE 0066E500

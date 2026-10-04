@@ -226,20 +226,87 @@ namespace
         return g_origDrawTextA(dc, text, len, rect, format);
     }
 
+    // The game's main window is a frameless popup; dxDriver7::init sizes it with SetWindowPos (the screen in
+    // fullscreen mode, the mode's size centered on the screen when windowed). A framed window gets that as its client
+    // area instead.
+    using SetWindowPosFn = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
+    SetWindowPosFn g_origSetWindowPos;
+    HWND g_mainWindow = nullptr;
+    bool g_framed = false;
+    constexpr DWORD kFramedStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+
+    bool wantFrame()
+    {
+        switch (g_config.frame)
+        {
+        case Config::Frame::Never: return false;
+        case Config::Frame::Always: return true;
+        case Config::Frame::Auto: break;
+        }
+        return g_width < GetSystemMetrics(SM_CXSCREEN) || g_height < GetSystemMetrics(SM_CYSCREEN);
+    }
+
+    // Window rectangle around the client rectangle `rect`, at the window's DPI.
+    void addFrame(HWND window, RECT& rect)
+    {
+        using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
+        using AdjustForDpiFn = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
+        static const HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        static const auto getDpi = reinterpret_cast<GetDpiForWindowFn>(GetProcAddress(user32, "GetDpiForWindow"));
+        static const auto adjustForDpi = reinterpret_cast<AdjustForDpiFn>(GetProcAddress(user32, "AdjustWindowRectExForDpi"));
+        const DWORD style = static_cast<DWORD>(GetWindowLongA(window, GWL_STYLE));
+        const DWORD exStyle = static_cast<DWORD>(GetWindowLongA(window, GWL_EXSTYLE));
+        if (getDpi && adjustForDpi)
+        {
+            adjustForDpi(&rect, style, FALSE, exStyle, getDpi(window));
+        }
+        else
+        {
+            AdjustWindowRectEx(&rect, style, FALSE, exStyle);
+        }
+    }
+
+    BOOL WINAPI hookSetWindowPos(HWND window, HWND after, int x, int y, int cx, int cy, UINT flags)
+    {
+        if (window && window == g_mainWindow && g_framed && !(flags & SWP_NOSIZE))
+        {
+            RECT rect = {x, y, x + cx, y + cy};
+            addFrame(window, rect);
+            if (!(flags & SWP_NOMOVE))
+            {
+                // Keep the caption on the screen.
+                MONITORINFO monitor = {};
+                monitor.cbSize = sizeof(monitor);
+                if (GetMonitorInfoW(MonitorFromRect(&rect, MONITOR_DEFAULTTOPRIMARY), &monitor))
+                {
+                    OffsetRect(&rect, std::max(0L, monitor.rcWork.left - rect.left), std::max(0L, monitor.rcWork.top - rect.top));
+                }
+            }
+            x = rect.left;
+            y = rect.top;
+            cx = rect.right - rect.left;
+            cy = rect.bottom - rect.top;
+        }
+        return g_origSetWindowPos(window, after, x, y, cx, cy, flags);
+    }
+
     HWND WINAPI hookCreateWindowExA(DWORD exStyle, LPCSTR cls, LPCSTR name, DWORD style, int x, int y, int w, int h,
         HWND parent, HMENU menu, HINSTANCE inst, LPVOID param)
     {
-        // Main game window: borderless so the client area matches the back buffer.
         const bool mainWindow = reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::mainWindowCreateReturn;
-        if (mainWindow && g_config.borderless)
+        if (mainWindow)
         {
-            LOG("Main window style {:08x} -> borderless", style);
-            style = (style & WS_VISIBLE) | WS_POPUP;
-            exStyle &= ~(WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_DLGMODALFRAME);
+            g_framed = wantFrame();
+            if (g_framed)
+            {
+                style = (style & WS_VISIBLE) | kFramedStyle;
+            }
+            LOG("Main window: {}", g_framed ? "framed" : "borderless");
         }
         HWND window = g_origCreateWindowExA(exStyle, cls, name, style, x, y, w, h, parent, menu, inst, param);
         if (mainWindow && window)
         {
+            g_mainWindow = window;
             Focus::windowCreated(window);
         }
         return window;
@@ -683,6 +750,8 @@ void Resolution::install()
     g_origDrawTextA = static_cast<DrawTextAFn>(Patch::iat("USER32.dll", "DrawTextA", reinterpret_cast<void*>(&hookDrawTextA)));
     g_origCreateWindowExA = static_cast<CreateWindowExAFn>(
         Patch::iat("USER32.dll", "CreateWindowExA", reinterpret_cast<void*>(&hookCreateWindowExA)));
+    g_origSetWindowPos = static_cast<SetWindowPosFn>(
+        Patch::iat("USER32.dll", "SetWindowPos", reinterpret_cast<void*>(&hookSetWindowPos)));
 
     g_flushBatcher = reinterpret_cast<DeviceFn>(Addr::cQuadBatcher_flush);
     g_drawTileLayers = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawTileLayers);
