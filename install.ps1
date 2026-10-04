@@ -49,7 +49,7 @@ if (Test-Path $target) {
     }
 }
 if (-not (Test-Path $chain)) {
-    Write-Warning "No DDrawCompat at $chain: SacredBild will fall back to Windows' ddraw.dll. Get DDrawCompat from https://github.com/narzoul/DDrawCompat/releases and place its ddraw.dll there as DDrawCompat.dll."
+    Write-Host "No DDrawCompat at $chain. Not needed with the default [DDraw] Backend=d3d9; for Backend=chain, get it from https://github.com/narzoul/DDrawCompat/releases and place its ddraw.dll there as DDrawCompat.dll."
 }
 
 Copy-Item -Force (Join-Path $BuildDir "ddraw.dll") $target
@@ -62,4 +62,4 @@ if (-not (Test-Path $ini)) {
     Copy-Item (Join-Path $PSScriptRoot "dist\SacredBild.ini") $ini
     Write-Host "Created $ini"
 }
-Write-Host "Done. Logs: SacredBild.log (and DDrawCompat-sacred.log) in $GameDir"
+Write-Host "Done. Log: SacredBild.log in $GameDir (with Backend=chain and DDrawCompat also DDrawCompat-sacred.log)"

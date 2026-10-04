@@ -33,11 +33,14 @@ namespace
 void ConfigFile::load(const std::wstring& gameDir)
 {
     const std::wstring ini = gameDir + L"\\SacredBild.ini";
+    g_config.ddrawD3D9 = _wcsicmp(readString(ini, L"DDraw", L"Backend", L"d3d9").c_str(), L"chain") != 0;
     g_config.ddrawChain = readString(ini, L"DDraw", L"Chain", g_config.ddrawChain);
     g_config.width = readInt(ini, L"Display", L"Width", g_config.width);
     g_config.height = readInt(ini, L"Display", L"Height", g_config.height);
     g_config.borderless = readInt(ini, L"Display", L"Borderless", g_config.borderless) != 0;
     g_config.fpsLimit = readInt(ini, L"Display", L"FpsLimit", g_config.fpsLimit);
+    g_config.vsync = readInt(ini, L"Display", L"VSync", g_config.vsync) != 0;
+    g_config.maxFrameLatency = readInt(ini, L"Display", L"MaxFrameLatency", g_config.maxFrameLatency);
     g_config.uiScale = static_cast<float>(_wtof(readString(ini, L"UI", L"Scale", L"0").c_str()));
     g_config.uiLinearFilter = readInt(ini, L"UI", L"LinearFilter", g_config.uiLinearFilter) != 0;
     g_config.textureBudgetMB = readInt(ini, L"Render", L"TextureBudgetMB", g_config.textureBudgetMB);
@@ -60,10 +63,11 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.profiler = readInt(ini, L"Debug", L"Profiler", g_config.profiler) != 0;
     g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
 
-    LOG("Config: Width={} Height={} Borderless={} FpsLimit={} UI.Scale={} UI.LinearFilter={} TextureBudgetMB={} Batch={} "
+    LOG("Config: Backend={} Width={} Height={} Borderless={} FpsLimit={} VSync={} MaxFrameLatency={} UI.Scale={} UI.LinearFilter={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
         "Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} D3DStats={} Profiler={} ({} us)",
-        g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit, g_config.uiScale, g_config.uiLinearFilter,
+        g_config.ddrawD3D9 ? "d3d9" : "chain", g_config.width, g_config.height, g_config.borderless, g_config.fpsLimit,
+        g_config.vsync, g_config.maxFrameLatency, g_config.uiScale, g_config.uiLinearFilter,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
         g_config.batchModels, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
         g_config.atlasMaxTextureSize, g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs);

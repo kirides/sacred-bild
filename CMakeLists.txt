@@ -33,6 +33,12 @@ add_library(ddraw SHARED
   src/game/device_proxy.cpp
   src/game/resolution.cpp
   src/game/ui_canvas.cpp
+  src/ddraw9/device.cpp
+  src/ddraw9/directdraw.cpp
+  src/ddraw9/format.cpp
+  src/ddraw9/gpu.cpp
+  src/ddraw9/surface.cpp
+  src/ddraw9/vertex_buffer.cpp
   src/render/atlas.cpp
   src/render/batcher.cpp
   src/net/adapters.cpp
@@ -44,7 +50,7 @@ add_library(ddraw SHARED
   src/version.rc
 )
 target_include_directories(ddraw PRIVATE src ${DETOURS_INCLUDE_DIRS})
-target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} psapi dxguid ws2_32 iphlpapi delayimp)
+target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} psapi dxguid gdi32 ws2_32 iphlpapi delayimp)
 target_compile_definitions(ddraw PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 target_compile_options(ddraw PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.

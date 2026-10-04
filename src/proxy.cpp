@@ -1,8 +1,10 @@
 #include "proxy.h"
 #include "config.h"
 #include "log.h"
+#include "ddraw9/backend.h"
 
 #include <windows.h>
+#include <cstring>
 
 #define DDRAW_PROCS(X) \
     X(AcquireDDThreadLock) \
@@ -71,7 +73,7 @@ namespace
 bool Proxy::init(const std::wstring& gameDir)
 {
     HMODULE chain = nullptr;
-    if (!g_config.ddrawChain.empty())
+    if (!g_config.ddrawD3D9 && !g_config.ddrawChain.empty())
     {
         const std::wstring path = gameDir + L"\\" + g_config.ddrawChain;
         chain = LoadLibraryW(path.c_str());
@@ -88,7 +90,10 @@ bool Proxy::init(const std::wstring& gameDir)
     if (!chain)
     {
         chain = system;
-        LOG("Using system ddraw: {}", narrow(sysPath));
+        if (!g_config.ddrawD3D9)
+        {
+            LOG("Using system ddraw: {}", narrow(sysPath));
+        }
     }
 
 #define RESOLVE(name) \
@@ -97,5 +102,19 @@ bool Proxy::init(const std::wstring& gameDir)
     if (!g_procs.name) LOG("WARNING: ddraw export {} not found", #name);
     DDRAW_PROCS(RESOLVE)
 #undef RESOLVE
+
+    if (g_config.ddrawD3D9)
+    {
+        // DirectDraw objects come from SacredBild's backend; the system ddraw.dll keeps the remaining exports and
+        // takes over if Direct3D 9Ex turns out to be unavailable.
+        DDraw9::setFallback(system);
+        for (const DDraw9::Export& entry : DDraw9::exports())
+        {
+#define OVERRIDE(p) if (std::strcmp(entry.name, #p) == 0) g_procs.p = entry.proc;
+            DDRAW_PROCS(OVERRIDE)
+#undef OVERRIDE
+        }
+        LOG("ddraw: SacredBild's Direct3D 9 backend");
+    }
     return true;
 }

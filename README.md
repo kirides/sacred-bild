@@ -1,9 +1,9 @@
 # SacredBild
 
 A `ddraw.dll` hook for **Sacred Gold** that runs the game at modern resolutions and instruments its
-renderer, as groundwork for replacing the slow parts. It loads [DDrawCompat](https://github.com/narzoul/DDrawCompat)
-behind itself for DirectDraw/Direct3D 7 compatibility on current Windows, and patches the game's internals
-(the approach of [GD3D11](https://github.com/kirides/GD3D11) for Gothic).
+renderer, as groundwork for replacing the slow parts. It runs the game's DirectDraw / Direct3D 7 on Direct3D 9Ex
+itself (or loads [DDrawCompat](https://github.com/narzoul/DDrawCompat) behind itself, `Backend=chain`), and patches
+the game's internals (the approach of [GD3D11](https://github.com/kirides/GD3D11) for Gothic).
 
 Supported executables: the **German** `sacred.exe` 2.0 (PE timestamp `0x451BBE74`) and the **English** GOG
 `Sacred.exe` (`0x452F85C7`), with their `gameserver.exe`. SacredBild finds what it patches by byte signatures, not
@@ -22,6 +22,12 @@ ddraw calls through and logs which one.
     scaled to fit the screen height (`[UI] Scale`, `LinearFilter`); the mouse is mapped into that canvas
     for the UI while world picking keeps physical screen coordinates;
   - loading screen and splash (GDI) centered; savegame thumbnails taken from the screen center.
+- **Direct3D 9Ex backend** (`src/ddraw9/`): DirectDraw 7 and Direct3D 7 implemented on Direct3D 9Ex, for the
+  subset Sacred uses (windowed swap chain, one render target with z-buffer, managed textures, system memory surfaces
+  for GDI text, the fixed-function device). Both APIs are fixed-function with the same vertex formats and render
+  states, so device calls translate almost one to one. Frames are presented with the flip model (`VSync`,
+  `MaxFrameLatency`), and the per-call layers of Windows' Direct3D 7 runtime and DDrawCompat are gone. Anything the
+  backend doesn't implement is logged once (`Direct3D 9 backend: not supported: ...`).
 - **Batched world rendering**: the world view issues thousands of small sprite and ground draws per frame
   (almost 10,000 zoomed out at 1920x1200). SacredBild records state changes instead of applying them and
   merges consecutive draws that end up with the same state into one call; small textures are copied into
@@ -45,7 +51,7 @@ cmake --build --preset release      # -> out/build/msvc-x86/RelWithDebInfo/ddraw
 python tools/check_hooks.py         # verifies hook signatures against the exe (German and English)
 ```
 
-The DLL is statically linked against the CRT and only imports `KERNEL32.dll`.
+The DLL is statically linked against the CRT and imports only Windows system DLLs (`d3d9.dll` is loaded at run time).
 
 ## Install
 
@@ -55,7 +61,7 @@ The DLL is statically linked against the CRT and only imports `KERNEL32.dll`.
 
 This backs up the current `ddraw.dll`, moves an existing DDrawCompat to `SacredBild\DDrawCompat.dll`,
 copies SacredBild's `ddraw.dll` and creates `SacredBild.ini`. `uninstall.ps1` restores the backup.
-Without DDrawCompat, SacredBild falls back to Windows' own `ddraw.dll`.
+DDrawCompat is only used with `[DDraw] Backend=chain`; without it, that falls back to Windows' own `ddraw.dll`.
 
 For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build output instead.
 
@@ -66,6 +72,8 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Display | Width, Height | 0 | Render resolution; 0 = desktop. 1024x768 = unpatched game. |
 | Display | Borderless | 1 | Main window without frame. |
 | Display | FpsLimit | 60 | The game's own in-game frame limit; 0 = off. |
+| Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh; 0 = right away. |
+| Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |
 | Render | TextureBudgetMB | 0 | Texture memory the game may keep loaded; 0 = the game's value, at least 256. |
 | Render | Batch | 1 | Merge the world view's draw calls. |
 | Render | BatchNoClip | 1 | Merged draws skip Direct3D 7's software clipping; the GPU clips. |
@@ -82,7 +90,8 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Net | Hosts | | Hosts whose games are listed even without broadcasts: IPv4 addresses or names, comma-separated, optional `:port`. |
 | Net | NoDelay | 1 | Game connection without Nagle's algorithm in both data flow modes (the game: LAN only). |
 | Net | JoinTimeout | 30 | Seconds a joining player has to send its first message to a gameserver Sacred started (the game: 5). |
-| DDraw | Chain | `SacredBild\DDrawCompat.dll` | ddraw loaded behind SacredBild; empty = system ddraw. |
+| DDraw | Backend | d3d9 | `d3d9` = SacredBild's own Direct3D 9Ex backend; `chain` = the ddraw below. |
+| DDraw | Chain | `SacredBild\DDrawCompat.dll` | `Backend=chain`: ddraw loaded behind SacredBild; empty = system ddraw. |
 | Debug | D3DStats | 1 | Frame statistics in `SacredBild.log` (wraps the D3D device in a proxy). |
 | Debug | Profiler | 0 | Sampling profiler; writes `SacredBild-profile.txt` every 15 s. |
 | Debug | ProfilerIntervalUs | 500 | Sampling interval. |
@@ -103,7 +112,11 @@ Read a profile with `python tools/profile_report.py <SacredBild-profile.txt>`.
 
 ## Layout
 
-- `src/main.cpp`, `src/proxy.cpp`, `src/exports.def`: DLL entry, DDrawCompat chain-loading, ddraw exports.
+- `src/main.cpp`, `src/proxy.cpp`, `src/exports.def`: DLL entry, ddraw exports (to the Direct3D 9 backend or the
+  chain-loaded ddraw).
+- `src/ddraw9/`: the Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7 + IDirect3D7, exports), `surface.*`
+  (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `gpu.*` (device, presentation),
+  `format.*`. `d3d9_api.h` puts Direct3D 9 into namespace `d9`: its headers clash with Direct3D 7's.
 - `src/game/sacred_addr.h`, `gameserver_addr.h`: the addresses SacredBild patches and the struct offsets it uses.
   The addresses are resolved at startup (`src/sig.*`) from `sacred_sigs.inc` / `gameserver_sigs.inc`, generated by
   `tools/gen_sigs.py`: signatures taken from the German build and accepted only if they match exactly once in

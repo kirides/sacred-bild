@@ -4,7 +4,9 @@
 // Settings from SacredBild.ini next to the game exe.
 struct Config
 {
-    // Chain-loaded ddraw implementation; empty or missing falls back to the system ddraw.dll.
+    // DirectDraw / Direct3D 7 on SacredBild's own Direct3D 9Ex backend (Backend=d3d9), or on the chain-loaded ddraw
+    // (Backend=chain): `ddrawChain`, or the system ddraw.dll if that is empty or missing.
+    bool ddrawD3D9 = true;
     std::wstring ddrawChain = L"SacredBild\\DDrawCompat.dll";
 
     // Render resolution; 0 = desktop size. 1024x768 runs the game unpatched.
@@ -12,6 +14,10 @@ struct Config
     int height = 0;
     bool borderless = true;       // main window without frame, client area = back buffer
     int fpsLimit = 60;            // the game's own in-game frame limit (it uses 60); 0 = off
+    // Direct3D 9 backend: wait for the display's refresh when presenting, and how many frames the CPU may
+    // queue ahead of the GPU (1 = lowest input latency).
+    bool vsync = true;
+    int maxFrameLatency = 1;
 
     // UI canvas: the 1024x768 UI drawn centered. 0 = scale to fit the screen height.
     float uiScale = 0.0f;

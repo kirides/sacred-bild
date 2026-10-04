@@ -49,6 +49,33 @@ Two threads present frames:
 Main window: `createMainWindow` (`0x664910`), `CreateWindowExA` with `WS_OVERLAPPEDWINDOW|WS_VISIBLE`
 (return address `0x664A5E`).
 
+## What the game needs from DirectDraw (SacredBild's Direct3D 9 backend, `src/ddraw9/`)
+
+- Imports `DirectDrawCreateEx`, `DirectDrawCreate`, `DirectDrawEnumerateExA`. Interfaces it asks for: IDirectDraw7,
+  IDirect3D7, the HAL / T&L HAL device GUIDs, and IDirectDraw + IDirectDrawSurface (version 1) for the video stream
+  only. No gamma control, no other interface versions.
+- Startup enumeration (`0x644390`): DirectDrawEnumerateExA, then per device DirectDrawCreateEx, QI IDirect3D7,
+  GetCaps (DDCAPS size 0x17C), EnumDisplayModes, EnumDevices.
+- `dxDriver7_init`, windowed: SetCooperativeLevel(hwnd, NORMAL | MULTITHREADED | FPUSETUP); primary
+  (PRIMARYSURFACE | 3DDEVICE | VIDEOMEMORY, color-filled); back buffer `dxDriver7_createSurface(0, w, h, 0xd)` =
+  3DDEVICE | VIDEOMEMORY, no pixel format; EnumZBufferFormats for 32 bits with 8 stencil bits (16 bits at 16 bpp,
+  callback `0x644F90` matches flags, depth and stencil depth); the z-buffer is AddAttachedSurface'd to the back
+  buffer; CreateDevice with the back buffer (three tries), then the primary; a clipper on the primary; Lock/Unlock of
+  primary and back buffer only to read pitch and format. Fullscreen: SetDisplayMode, flip chain, Flip.
+- Frames: windowed `primary->Blt(client rect in screen coordinates, back buffer, rect, DDBLT_WAIT)`.
+  `IDirectDraw7::WaitForVerticalBlank` runs before every `dxDriver7_lockBack` and `+0x290` times per flip.
+- `dxDriver7_createSurface` types: 1 = texture (TEXTURE + DDSCAPS2_TEXTUREMANAGE, pixel format from
+  EnumTextureFormats; the callback `0x647030` keeps the last format matching bit count and alpha mask); 0 with flag 2 =
+  OFFSCREENPLAIN | SYSTEMMEMORY (fonts: GetDC/ReleaseDC for GDI text, Lock, then copied into textures); 3 = windowed
+  primary + back buffer; 2 = fullscreen flip chain. GDI also draws the loading screen into the back buffer's DC.
+- Granny textures: `0x401BE0` enumerates texture formats (callback `0x403F60` takes 4444, 565, 555, 1555, 888,
+  8888, no FourCC) for `GrannyAllowTextureFormat`.
+- Video (`playVideo`, `0x6A0C60`, 640x480 movies): IAMMultiMediaStream gets the DirectDraw object as IDirectDraw.
+  With `COMPAT_VIDEO` the game creates a 1024x512 texture (caps TEXTURE only), hands it to
+  `IDirectDrawMediaStream::CreateSample` as IDirectDrawSurface and draws it as a TL quad after each
+  `IDirectDrawStreamSample::Update`; without, amstream creates its own surface and the game Blts it to the primary
+  (not supported by the backend).
+
 ## World view (`cWorldView`, vtables `0x89009C`, `cWorldView0` `0x8900F8`)
 
 - `+0xB60` float **zoom**, clamped to [`g_flZoomMin` 0.5, `g_flZoomMax` 2.0].
