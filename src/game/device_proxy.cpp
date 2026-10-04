@@ -28,7 +28,7 @@ namespace
         constexpr float eps = 0.02f;
         auto isWhole = [](float v) { return std::fabs(v - std::round(v)) < eps; };
         float lo = std::min(e0, e1), hi = std::max(e0, e1);
-        // The game's UI image records reach half a texel past the image (FUN_00760e60: u1 = (x1 + 0.5) / 256).
+        // The game's UI image records reach half a texel past the image (FUN_00761580: u1 = (x1 + 0.5) / 256).
         if (isWhole(lo) && isWhole(hi - 0.5f) && hi - lo > 1.0f)
         {
             (e1 > e0 ? e1 : e0) -= 0.5f;

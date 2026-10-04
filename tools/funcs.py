@@ -1,8 +1,8 @@
-# Map addresses to the containing DE function (nearest preceding entry point).
-# Data: tools/data/functions_de.tsv, exported from the Ghidra program "/sacred.exe (DE)".
+# Map addresses to the containing function of the English Sacred.exe (nearest preceding entry point).
+# Data: tools/data/functions_eng.tsv, exported from the Ghidra program "/Sacred.exe (GOG)".
 import bisect, os
 _A, _N = [], []
-with open(os.path.join(os.path.dirname(__file__), 'data', 'functions_de.tsv')) as f:
+with open(os.path.join(os.path.dirname(__file__), 'data', 'functions_eng.tsv')) as f:
     for line in f:
         if line.startswith('#'):
             continue

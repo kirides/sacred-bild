@@ -1,7 +1,7 @@
-# Helpers over the DE sacred.exe (SACRED_DE, see gen_sigs.py), shared by the other tools.
-# Run alone: python tools/de.py <address> [count] disassembles from there.
+# Helpers over the English Sacred.exe (SACRED_ENG, see gen_sigs.py), shared by the other tools.
+# Run alone: python tools/eng.py <address> [count] disassembles from there.
 import pefile, struct, re, capstone
-from gen_sigs import SACRED_DE as EXE
+from gen_sigs import SACRED_ENG as EXE
 pe = pefile.PE(EXE, fast_load=True)
 BASE = pe.OPTIONAL_HEADER.ImageBase
 IMG = pe.get_memory_mapped_image()

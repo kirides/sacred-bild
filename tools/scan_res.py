@@ -1,9 +1,9 @@
-# Lists the instructions of the DE sacred.exe that use 1024x768-related constants (1024, 768, 512, 384, ...),
+# Lists the instructions of the English Sacred.exe that use 1024x768-related constants (1024, 768, 512, 384, ...),
 # the candidates gen_res_sites.py's site list was picked from. Writes them to .res_hits.json.
 # Usage: python tools/scan_res.py
 import sys, struct, collections, json
 sys.path.insert(0, 'tools')
-from de import *
+from eng import *
 import capstone
 from capstone import x86
 md2 = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32); md2.detail = True

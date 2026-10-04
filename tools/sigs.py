@@ -1,4 +1,4 @@
-# Byte signatures for code locations in the DE build that have to be found in other builds as well.
+# Byte signatures for code locations in the reference build (English) that have to be found in other builds as well.
 # A signature is a run of whole instructions around the location with build-specific bytes left open:
 # absolute addresses (4-byte displacements and immediates that point into the image) and rel32 branch targets.
 # It is accepted only if it matches exactly once in the code section of every reference build.

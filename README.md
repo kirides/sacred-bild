@@ -10,8 +10,8 @@ renderer, as groundwork for replacing the slow parts. It runs the game's DirectD
 itself (or loads [DDrawCompat](https://github.com/narzoul/DDrawCompat) behind itself, `Backend=chain`), and patches
 the game's internals (the approach of [GD3D11](https://github.com/kirides/GD3D11) for Gothic).
 
-Supported executables: the **German** `sacred.exe` 2.0 (PE timestamp `0x451BBE74`) and the **English** GOG
-`Sacred.exe` (`0x452F85C7`), with their `gameserver.exe`. SacredBild finds what it patches by byte signatures, not
+Supported executables: the **English** GOG `Sacred.exe` (PE timestamp `0x452F85C7`) and the **German**
+`sacred.exe` 2.0 (`0x451BBE74`), with their `gameserver.exe`. SacredBild finds what it patches by byte signatures, not
 fixed addresses, so other builds with the same code should work too; if a signature isn't found, it only passes
 ddraw calls through and logs which one.
 
@@ -200,7 +200,7 @@ the game in its `install()` with [Detours](https://github.com/microsoft/Detours)
 (`src/patch.*`: a write happens only if the bytes there are the expected ones).
 
 What the game's code at those addresses does is in `docs/RE_NOTES.md` and in the comments of
-`src/game/sacred_addr.h`; the addresses and names refer to the German build in Ghidra.
+`src/game/sacred_addr.h`; the addresses refer to the English GOG build (Ghidra program `/Sacred.exe (GOG)`).
 
 ### Source files
 
@@ -237,23 +237,25 @@ Every header starts with what its module does and why.
 
 ### Tools
 
-Python 3 with `pefile` and `capstone`. They read the game's exes from the paths in `tools/gen_sigs.py`, or from
-the environment variables `SACRED_DE`, `SACRED_ENG`, `GAMESERVER_DE` and `GAMESERVER_ENG`.
+Python 3 with `pefile` and `capstone`. They work on the English GOG exes, set with the environment variables
+`SACRED_ENG` and `GAMESERVER_ENG` (defaults in `tools/gen_sigs.py`). With `SACRED_DE` and `GAMESERVER_DE` pointing
+at the German ones, the generators and `check_hooks.py` check those as well; without them they skip them with a
+warning, and the generated files name only the builds they were checked against.
 
 Generated files in the repository, and the checks:
 
 | Tool | Does |
 |---|---|
-| `tools/gen_sigs.py` | Writes `src/game/sacred_sigs.inc`, `gameserver_sigs.inc` and `tools/data/addresses.json`: a signature for every address, taken from the German build and accepted only if it matches exactly once in the English one too |
+| `tools/gen_sigs.py` | Writes `src/game/sacred_sigs.inc`, `gameserver_sigs.inc` and `tools/data/addresses.json`: a signature for every address, taken from the English build and accepted only if it matches exactly once in it and in the German one |
 | `tools/gen_res_sites.py` | Writes `src/game/resolution_sites.inc`: the 1024x768 constants to patch, each verified and with a signature |
-| `tools/check_hooks.py` | Checks that every hook declares as many stack arguments as the hooked function pops, in both builds |
-| `tools/sigs.py`, `funcs.py`, `de.py` | Shared code: signature search, function boundaries (`tools/data/functions_de.tsv`, exported from Ghidra), the German exe |
+| `tools/check_hooks.py` | Checks that every hook declares as many stack arguments as the hooked function pops |
+| `tools/sigs.py`, `funcs.py`, `eng.py` | Shared code: signature search, function boundaries and names (`tools/data/functions_eng.tsv`, exported from Ghidra), the English exe |
 
 Reverse engineering helpers (how addresses and offsets were found):
 
 | Tool | Does |
 |---|---|
-| `tools/de.py <address> [count]` | Disassembles the German exe |
+| `tools/eng.py <address> [count]` | Disassembles the English exe |
 | `tools/rtti.py [regex]` | Class names -> vtables, from the RTTI |
 | `tools/vt.py <vtable>...` | Vtable slots |
 | `tools/scan_res.py` | Every instruction that uses a 1024x768-related constant |
@@ -268,7 +270,7 @@ Requires Visual Studio 2026 (MSVC, Win32 toolset), CMake 3.25+ and vcpkg with `V
 ```sh
 cmake --preset msvc-x86
 cmake --build --preset release      # -> out/build/msvc-x86/RelWithDebInfo/ddraw.dll
-python tools/check_hooks.py         # verifies hook signatures against the exe (German and English)
+python tools/check_hooks.py         # checks the hooks against the exe (English, and German if set)
 ```
 
 The DLL is statically linked against the CRT and imports only Windows system DLLs (`d3d9.dll` is loaded at run time).

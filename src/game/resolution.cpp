@@ -369,7 +369,7 @@ namespace
     // with fixed index changes. The original view plus its margins (6 tiles left, 5 rows up, 19 rows down) always
     // lies inside the loaded sectors; a large zoomed-out one does not near a sector edge. The corner then lies in no
     // sector (-1, its tile index computed from out-of-range tables), the steps turn that into a valid sector with a
-    // negative tile index, and renderTileRow reads before the tile table (crash at 0x62B203). Rows that run out of
+    // negative tile index, and renderTileRow reads before the tile table (crash at 0x62B093). Rows that run out of
     // the loaded sectors on the other side step into wrong sectors. Instead, every row gets its position in the
     // 192x192 loaded tiles from one anchor per frame and is clipped to them.
     struct RowPos
