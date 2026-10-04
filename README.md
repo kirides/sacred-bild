@@ -57,6 +57,9 @@ ddraw calls through and logs which one.
   (almost 10,000 zoomed out at 1920x1200). SacredBild records state changes instead of applying them and
   merges consecutive draws that end up with the same state into one call; small textures are copied into
   shared atlas pages so draws with different textures merge as well.
+- **Characters animated on the GPU**: Granny skinned every character and its shadow on the CPU each frame (a fifth
+  of the render thread zoomed out). With the Direct3D 9 backend, a vertex shader does that from meshes kept on the GPU
+  and lights them as Direct3D 7 did (2560x1440 zoomed out: 94 -> 132 fps).
 - **LAN games over VPNs**: Sacred finds LAN games through broadcasts that Windows sends on one network adapter
   only and that many VPNs don't carry, and the announced address is one Sacred picked from the first three
   adapters it found. When Sacred starts the gameserver for a hosted game, SacredBild goes along: every
@@ -128,7 +131,7 @@ The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll`
 | Render | BatchNoClip | 1 | Merged draws skip Direct3D 7's software clipping; the GPU clips. |
 | Render | BatchVertexBuffer | 1 | Merged draws go through vertex buffers instead of user memory. |
 | Render | BatchModels | 1 | 3D model draws go through the batcher too (vertex buffers, merged where possible). |
-| Render | GpuSkinning | 0 | Characters and their shadows skinned (animated) in a vertex shader instead of by Granny on the CPU; `Backend=d3d9` only. Experimental. |
+| Render | GpuSkinning | 1 | Characters and their shadows skinned (animated) in a vertex shader instead of by Granny on the CPU; `Backend=d3d9` only. |
 | Render | BatchGround | 1 | The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls per quad. |
 | Render | RecordIndex | 1 | Hash index (gtl::flat_hash_map) in front of the game's tile/object record caches. |
 | Render | AsyncAnimation | 1 | Advance Granny animations on a worker thread, overlapping the start of the frame. |

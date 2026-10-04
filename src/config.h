@@ -76,7 +76,7 @@ struct Config
     // The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls.
     bool batchGround = true;
     // Characters skinned in a vertex shader instead of by Granny on the CPU (Direct3D 9 backend only).
-    bool gpuSkinning = false;
+    bool gpuSkinning = true;
     // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.
     bool asyncAnimation = true;
     // Hash index in front of the map data's record caches (std::map lookups per tile and object).
