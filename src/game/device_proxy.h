@@ -131,6 +131,10 @@ private:
     void traceUiDraw(const char* what, DWORD count);
     // Clips an axis-aligned 4-vertex quad (strip/fan) to the UI frame in place; false if it can't.
     bool clipQuad(DWORD fvf, uint8_t* verts);
+    // Texture coordinates of a mapped, axis-aligned, textured 4-vertex quad: each pixel samples the stage 0 texture
+    // at its middle and the edges stay inside the quad's texels (no seams between UI images under scaling and
+    // bilinear filtering). Leaves other quads alone.
+    void fitTexels(DWORD fvf, uint8_t* verts);
     // Mapped into the UI frame; clamped to the frame, or the screen if unconfined (or `confined` is false).
     D3DVIEWPORT7 canvasViewport(const D3DVIEWPORT7& virt, bool confined = true) const;
     void probe3D(const char* what, DWORD fvf, const void* positions, DWORD stride, DWORD count, const void* site);
@@ -144,6 +148,7 @@ private:
 
     IDirect3DDevice7* m_real;
     LPDIRECTDRAWSURFACE7 m_texture0 = nullptr;
+    DWORD m_texture0Width = 0, m_texture0Height = 0;    // 0: not looked up since the last SetTexture(0)
     std::unique_ptr<Batcher> m_batcher;
     bool m_recording = false;               // between BeginStateBlock and EndStateBlock
 

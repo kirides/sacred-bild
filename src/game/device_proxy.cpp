@@ -24,6 +24,40 @@ namespace
 
     bool isNear(float a, float b) { return std::fabs(a - b) < 0.05f; }
 
+    // One axis of a textured UI rectangle: screen positions p0 < p1 carry texture coordinates e0, e1 (texels).
+    // Replaces e0, e1 so that each covered pixel samples the texture at its middle, as the unscaled game's texels
+    // were drawn, and the outermost pixels stay `margin` texels inside the rectangle's texels: UI textures are sheets
+    // of images, and the next image is often transparent or dark (bilinear filtering blended it in as seams).
+    void fitTexelAxis(float p0, float p1, float& e0, float& e1, float margin)
+    {
+        constexpr float eps = 0.02f;
+        auto isWhole = [](float v) { return std::fabs(v - std::round(v)) < eps; };
+        float lo = std::min(e0, e1), hi = std::max(e0, e1);
+        // The game's UI image records reach half a texel past the image (FUN_00760e60: u1 = (x1 + 0.5) / 256).
+        if (isWhole(lo) && isWhole(hi - 0.5f) && hi - lo > 1.0f)
+        {
+            (e1 > e0 ? e1 : e0) -= 0.5f;
+            hi -= 0.5f;
+        }
+        // Pixels lie on whole coordinates (Direct3D 7/9) and are covered from p0 up to, not including, p1.
+        const float c0 = std::ceil(p0), c1 = std::ceil(p1) - 1.0f;
+        if (c1 < c0)
+        {
+            return;
+        }
+        const float r = (e1 - e0) / (p1 - p0);
+        float lowest = std::floor(lo + eps) + margin, highest = std::ceil(hi - eps) - margin;
+        if (lowest > highest)
+        {
+            lowest = highest = (lo + hi) / 2.0f;
+        }
+        const float s0 = std::clamp(e0 + (c0 + 0.5f - p0) * r, lowest, highest);
+        const float s1 = std::clamp(e0 + (c1 + 0.5f - p0) * r, lowest, highest);
+        const float k = c1 > c0 ? (s1 - s0) / (c1 - c0) : 0.0f;
+        e0 = s0 + (p0 - c0) * k;
+        e1 = s0 + (p1 - c0) * k;
+    }
+
     D3DMATRIX multiply(const D3DMATRIX& a, const D3DMATRIX& b)
     {
         D3DMATRIX r;
@@ -530,6 +564,72 @@ bool DeviceProxy::clipQuad(DWORD fvf, uint8_t* verts)
     return true;
 }
 
+void DeviceProxy::fitTexels(DWORD fvf, uint8_t* verts)
+{
+    if (!m_texture0 || Fvf::texCount(fvf) == 0)
+    {
+        return;
+    }
+    if (m_texture0Width == 0)
+    {
+        DDSURFACEDESC2 desc = {};
+        desc.dwSize = sizeof(desc);
+        if (FAILED(m_texture0->GetSurfaceDesc(&desc)) || !desc.dwWidth || !desc.dwHeight)
+        {
+            return;
+        }
+        m_texture0Width = desc.dwWidth;
+        m_texture0Height = desc.dwHeight;
+    }
+    const UINT stride = Fvf::stride(fvf);
+    const UINT uv = Fvf::texCoordOffset(fvf, 0) / 4;
+    float* v[4];
+    float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
+    for (int i = 0; i < 4; ++i)
+    {
+        v[i] = reinterpret_cast<float*>(verts + i * stride);
+        minX = std::min(minX, v[i][0]);
+        maxX = std::max(maxX, v[i][0]);
+        minY = std::min(minY, v[i][1]);
+        maxY = std::max(maxY, v[i][1]);
+    }
+    if (maxX - minX < 0.5f || maxY - minY < 0.5f)
+    {
+        return;
+    }
+    // Only axis-aligned rectangles whose texture coordinates follow one axis each.
+    float u[2] = {}, t[2] = {};
+    bool haveU[2] = {}, haveT[2] = {};
+    for (int i = 0; i < 4; ++i)
+    {
+        const bool left = isNear(v[i][0], minX), top = isNear(v[i][1], minY);
+        if (!(left || isNear(v[i][0], maxX)) || !(top || isNear(v[i][1], maxY)))
+        {
+            return;
+        }
+        const int x = left ? 0 : 1, y = top ? 0 : 1;
+        if ((haveU[x] && std::fabs(u[x] - v[i][uv]) > 0.0001f) || (haveT[y] && std::fabs(t[y] - v[i][uv + 1]) > 0.0001f))
+        {
+            return;
+        }
+        u[x] = v[i][uv];
+        t[y] = v[i][uv + 1];
+        haveU[x] = haveT[y] = true;
+    }
+    const float w = static_cast<float>(m_texture0Width), h = static_cast<float>(m_texture0Height);
+    float eu[2] = {u[0] * w, u[1] * w}, ev[2] = {t[0] * h, t[1] * h};
+    // Bilinear sampling reads half a texel around the sample position; point sampling only the texel under it.
+    const bool linear = uiFilter(m_filters[0][0]) != D3DTFG_POINT || uiFilter(m_filters[0][1]) != D3DTFN_POINT;
+    const float margin = linear ? 0.5f : 0.05f;
+    fitTexelAxis(minX, maxX, eu[0], eu[1], margin);
+    fitTexelAxis(minY, maxY, ev[0], ev[1], margin);
+    for (int i = 0; i < 4; ++i)
+    {
+        v[i][uv] = eu[isNear(v[i][0], minX) ? 0 : 1] / w;
+        v[i][uv + 1] = ev[isNear(v[i][1], minY) ? 0 : 1] / h;
+    }
+}
+
 HRESULT DeviceProxy::QueryInterface(REFIID riid, LPVOID* ppvObj)
 {
     if (ppvObj && (riid == IID_IDirect3DDevice7 || riid == IID_IUnknown))
@@ -827,9 +927,13 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
         {
             return dimmed;
         }
-        if (quad && UiCanvas::frame().confine)
+        if (quad)
         {
-            clipQuad(fvf, m_scratch.data());
+            fitTexels(fvf, m_scratch.data());
+            if (UiCanvas::frame().confine)
+            {
+                clipQuad(fvf, m_scratch.data());
+            }
         }
         D3DStats::count(CSubmit);
         Scope s{TDraw};
@@ -1079,6 +1183,10 @@ HRESULT DeviceProxy::SetTexture(DWORD stage, LPDIRECTDRAWSURFACE7 texture)
     Scope p{TProxy};
     D3DStats::count(CSetTexture);
     CallLock lock(*this, _ReturnAddress());
+    if (stage == 0)
+    {
+        m_texture0Width = m_texture0Height = 0;     // the pointer may name a new texture of another size
+    }
     if (stage == 0 && texture != m_texture0)
     {
         m_texture0 = texture;
