@@ -79,6 +79,8 @@ ddraw calls through and logs which one.
   title bar still drags.
 - **Rendering in the background**: the game stopped drawing when it lost the focus, which often left the main menu
   black. It now keeps drawing at `[Display] FpsLimitInactive` frames per second.
+- **Frame limiter without a busy core**: the game's limiter (60 fps in game and in the menus) spun on `Sleep(0)`
+  for the rest of every frame. SacredBild sleeps on a high-resolution timer instead.
 - **Diagnostics**: optional per-second frame stats (`[Debug] D3DStats`: draw calls, texture switches, unique
   textures, time spent in the world renderer, UI, flip and inside Direct3D, what ended each batch, texture memory)
   and an optional sampling profiler (`[Debug] Profiler`).

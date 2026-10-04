@@ -204,8 +204,10 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
 - In game the frame only clears Z (`cEngine_renderThreadRun`); the ground has to cover the screen.
   SacredBild clears the target before `cWorldView0_render`.
 - Frame limit: before each flip `cEngine_renderThreadRun` calls `0x60A9F0` (cdecl (double, fps)) with
-  `push 0x3c` = 60 unless global options `0x182EE3C` have `0x4000`; it spins with `Sleep(0)` until 1/fps passed.
-  `cUI_Manager_runThread` calls it as well (menus). SacredBild's `FpsLimit` replaces the in-game value only.
+  `push 0x3c` = 60 unless global options `0x182EE3C` have `0x4000`; it spins with `Sleep(0)` until 1/fps passed
+  since its last return (QPC in `0xAD6E88`, read nowhere else), plus `Sleep(1)` per turn while `0x182EBEC` is set
+  and the singleton at `0x182EBE8` has byte `+0x1C`. `cUI_Manager_runThread` calls it as well (menus, also 60).
+  SacredBild replaces it with a high-resolution waitable timer (no spin), `FpsLimit` for the in-game value.
 - Fade: `cEngine_renderFadeOverlay` (`0x60E060`) draws a full-screen TL quad while engine flags
   (`+0x54`) have `0x20000` (fade out, then latches `0x80000` = black), `0x40000` (fade in) or `0x80000`.
   `cEngine_setFadeMode` and many script functions toggle them.

@@ -68,65 +68,87 @@ namespace
         g_origRenderThreadRun(engine);
     }
 
-    // [Display] FpsLimitInactive: in the background, waits out the rest of the frame on a timer instead of the game's
-    // limiter, which spins on Sleep(0). False in the foreground.
-    bool limitInactive()
+    int64_t qpcNow()
     {
-        static LARGE_INTEGER freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return f; }();
-        static int64_t next = 0;
-        if (g_config.fpsLimitInactive <= 0 || Focus::foreground())
-        {
-            next = 0;
-            return false;
-        }
         LARGE_INTEGER now;
         QueryPerformanceCounter(&now);
-        const int64_t period = freq.QuadPart / std::min(g_config.fpsLimitInactive, 1000);
-        if (next == 0 || now.QuadPart - next > period)
-        {
-            next = now.QuadPart;   // first background frame, or far behind: no catching up
-        }
-        next += period;
-        const int64_t wait = next - now.QuadPart;
-        if (wait <= 0)
-        {
-            return true;
-        }
-        static HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-        if (timer)
-        {
-            LARGE_INTEGER due;
-            due.QuadPart = -(wait * 10000000 / freq.QuadPart);   // relative, 100 ns units
-            if (SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE))
-            {
-                WaitForSingleObject(timer, INFINITE);
-                return true;
-            }
-        }
-        Sleep(static_cast<DWORD>(wait * 1000 / freq.QuadPart));
-        return true;
+        return now.QuadPart;
     }
 
-    // The game's frame limiter, called after the flip by the menus and the game: the in-game limit (the game passes
-    // 60; menus keep theirs), and [Display] FpsLimitInactive in the background.
+    // The timer the frame waits sleep on. A high-resolution one (Windows 10 1803+) fires within a fraction of a
+    // millisecond whatever the system timer resolution; without it, the system timer is set to its finest interval
+    // (usually 0.5 ms) for a plain one.
+    HANDLE createFrameTimer()
+    {
+        if (HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS))
+        {
+            return timer;
+        }
+        static const ULONG resolution = [] {
+            using QueryFn = LONG(NTAPI*)(PULONG minimum, PULONG maximum, PULONG current);
+            using SetFn = LONG(NTAPI*)(ULONG desired, BOOLEAN set, PULONG current);
+            const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+            const auto query = reinterpret_cast<QueryFn>(GetProcAddress(ntdll, "NtQueryTimerResolution"));
+            const auto set = reinterpret_cast<SetFn>(GetProcAddress(ntdll, "NtSetTimerResolution"));
+            ULONG minimum = 0, maximum = 0, current = 0;
+            return query && set && query(&minimum, &maximum, &current) == 0 && set(maximum, TRUE, &current) == 0
+                ? current : 0ul;
+        }();
+        LOG("Frame limiter: no high-resolution timer, system timer {}",
+            resolution ? std::to_string(resolution / 10) + " us" : std::string("unchanged"));
+        return CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+    }
+
+    // Waits for the next frame at `fps`, in place of the game's limiter, which spun on Sleep(0) for the whole wait and
+    // kept a core busy. Sleeps on the timer in 100 ns units, without a final spin: waking a little off costs less
+    // than a busy core. Each frame is due one period after the previous one was due, so the next wait makes up for
+    // that and the rate averages out exactly; a frame more than a period late restarts the cadence from now instead
+    // of catching up. Per thread: the menus and the game pace their own loops.
+    void paceFrame(int fps)
+    {
+        static const int64_t freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return f.QuadPart; }();
+        thread_local const HANDLE timer = createFrameTimer();
+        thread_local int64_t due = 0;
+        const int64_t period = freq / std::clamp(fps, 1, 1000);
+        const int64_t now = qpcNow();
+        if (due == 0 || now - due > period)
+        {
+            due = now;
+        }
+        due += period;
+        const int64_t wait = due - now;
+        LARGE_INTEGER relative;
+        relative.QuadPart = -(wait * 10000000 / freq);
+        if (timer && SetWaitableTimer(timer, &relative, 0, nullptr, nullptr, FALSE))
+        {
+            WaitForSingleObject(timer, INFINITE);
+        }
+        else
+        {
+            Sleep(static_cast<DWORD>(wait * 1000 / freq));
+        }
+    }
+
+    // The game's frame limiter, called by the menus and the game once per frame, replaced by paceFrame: the in-game
+    // limit (the game passes 60; menus keep theirs), and [Display] FpsLimitInactive in the background.
     using LimiterFn = void(__cdecl*)(double unused, uint32_t fps);
     LimiterFn g_origLimiter = nullptr;
 
-    void __cdecl hookLimiter(double unused, uint32_t fps)
+    void __cdecl hookLimiter(double, uint32_t fps)
     {
-        if (limitInactive())
+        int limit = static_cast<uint16_t>(fps);     // the game reads the low word only
+        if (g_config.fpsLimitInactive > 0 && !Focus::foreground())
         {
-            return;
+            limit = g_config.fpsLimitInactive;
         }
-        if (reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::renderLimiterReturn)
+        else if (reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::renderLimiterReturn)
         {
-            if (g_config.fpsLimit <= 0)
-            {
-                return;
-            }
-            fps = (fps & 0xFFFF0000u) | static_cast<uint16_t>(std::min(g_config.fpsLimit, 1000));
+            limit = g_config.fpsLimit;
         }
-        g_origLimiter(unused, fps);
+        if (limit > 0)
+        {
+            paceFrame(limit);
+        }
     }
 
     uint32_t __fastcall hookInit(void* self, void* edx, void* devices, void* deviceDesc, void* mode)
@@ -303,11 +325,8 @@ void FrameHooks::install()
     Patch::hook(g_origWorldRender, Addr::cWorldView0_render, &hookWorldRender, "cWorldView0::render");
     Patch::hook(g_origUiRender, Addr::cUI_Manager_render, &hookUiRender, "cUI_Manager::render");
     Patch::hook(g_origRenderThreadRun, Addr::cEngine_renderThreadRun, &hookRenderThreadRun, "cEngine::renderThreadRun");
-    if (g_config.fpsLimit != 60 || g_config.fpsLimitInactive > 0)
-    {
-        Patch::hook(g_origLimiter, Addr::frameLimiter, &hookLimiter, "frameLimiter");
-        LOG("Frame limit in game: {}, in the background: {}",
-            g_config.fpsLimit > 0 ? std::to_string(g_config.fpsLimit) : std::string("off"),
-            g_config.fpsLimitInactive > 0 ? std::to_string(g_config.fpsLimitInactive) : std::string("off"));
-    }
+    Patch::hook(g_origLimiter, Addr::frameLimiter, &hookLimiter, "frameLimiter");
+    LOG("Frame limit in game: {}, in the background: {}",
+        g_config.fpsLimit > 0 ? std::to_string(g_config.fpsLimit) : std::string("off"),
+        g_config.fpsLimitInactive > 0 ? std::to_string(g_config.fpsLimitInactive) : std::string("off"));
 }
