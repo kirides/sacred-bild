@@ -38,6 +38,14 @@ public:
     // Draws what is batched and applies recorded state, for code that touches the frame outside the device.
     void syncBatch();
 
+    // The ground's quad batcher (GroundQuads): texture handles for stage 0 and, if not 0, stage 1, looked up with
+    // `lookup` in the game's order (stage 0 is set before stage 1 is looked up: a lookup may load and evict), and one
+    // pretransformed indexed triangle list. While batching, one call into the batcher; otherwise SetTexture and
+    // DrawIndexedPrimitive as the game makes them.
+    using TextureLookup = IDirectDrawSurface7* (*)(uint32_t handle);
+    HRESULT drawQuads(TextureLookup lookup, uint32_t texture0, uint32_t texture1, DWORD fvf, const void* verts,
+        DWORD vertCount, const WORD* indices, DWORD indexCount);
+
     // Once per presented frame, from the presenting thread: device calls from any other thread are counted
     // (they decide whether the proxy could do without its lock) and logged every few seconds.
     void onPresent(DWORD thread);

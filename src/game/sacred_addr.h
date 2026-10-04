@@ -76,6 +76,9 @@ namespace Sacred::Addr
     // Texture manager (one instance): loads textures on use, evicts least recently used ones above a budget.
     // initApp computes the budget from GlobalMemoryStatus and the reported video memory (min 32 MB).
     inline uintptr_t g_pTextureManager{};               // ENG 013E7838
+    // Texture by handle (thiscall on *g_pTextureManager (handle, 0)): stamps it as used and loads it if it isn't;
+    // the DirectDraw surface is at +0x14 of the result (null: no texture).
+    inline uintptr_t cTextureManager_get{};             // ENG 0065ED90
     inline uintptr_t cTextureManager_init{};            // ENG 0065E7A0; thiscall (budgetBytes)
 
     // cEngine
@@ -232,6 +235,21 @@ namespace Sacred::WorldView
     constexpr uintptr_t rowEdgeLeft = 0x96AB8;  // 6: renderTileRow draws ground from column edgeLeft - 1 ...
     constexpr uintptr_t rowEdgeRight = 0x96ABC; // 6: ... to column rowLength - edgeRight + 1 (rest: margins)
     constexpr uintptr_t rowLength = 0x96AC8;    // tiles per row: view width / 96 + 12
+}
+
+// cQuadBatcher (cWorldView + 0x86890) member offsets: ground and layer quads (FVF 0x244: XYZRHW, diffuse, two
+// texture coordinate sets, 36 bytes) collected at +0 until the texture changes, then drawn by cQuadBatcher_flush with
+// one DrawIndexedPrimitive.
+namespace Sacred::QuadBatcher
+{
+    constexpr uint32_t fvf = 0x244;
+    constexpr uintptr_t indices = 0x5460;   // WORD[]
+    constexpr uintptr_t vertCount = 0x5910;
+    constexpr uintptr_t indexCount = 0x5914;
+    constexpr uintptr_t flushes = 0x5918;   // statistics, counted by the flush
+    constexpr uintptr_t triangles = 0x591C;
+    constexpr uintptr_t texture0 = 0x5920;  // texture manager handles; texture1 0: stage 1 is left as it is
+    constexpr uintptr_t texture1 = 0x5924;
 }
 
 // cTextureManager member offsets.

@@ -99,6 +99,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.batchNoClip = readInt(ini, L"Render", L"BatchNoClip", g_config.batchNoClip) != 0;
     g_config.batchVertexBuffer = readInt(ini, L"Render", L"BatchVertexBuffer", g_config.batchVertexBuffer) != 0;
     g_config.batchModels = readInt(ini, L"Render", L"BatchModels", g_config.batchModels) != 0;
+    g_config.batchGround = readInt(ini, L"Render", L"BatchGround", g_config.batchGround) != 0;
     g_config.asyncAnimation = readInt(ini, L"Render", L"AsyncAnimation", g_config.asyncAnimation) != 0;
     g_config.recordIndex = readInt(ini, L"Render", L"RecordIndex", g_config.recordIndex) != 0;
     g_config.atlas = readInt(ini, L"Render", L"Atlas", g_config.atlas) != 0;
@@ -119,14 +120,14 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.movieFallback = readInt(ini, L"Debug", L"MovieFallback", g_config.movieFallback) != 0;
 
     LOG("Config: Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} ClipCursor={} FpsLimit={} FpsLimitInactive={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
-        "BatchNoClip={} BatchVertexBuffer={} BatchModels={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
+        "BatchNoClip={} BatchVertexBuffer={} BatchModels={} BatchGround={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
         "Screenshot.Format={} Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} D3DStats={} Profiler={} ({} us) UiTrace={} CrashDump={} MovieFallback={}",
         g_config.ddrawD3D9 ? "d3d9" : "chain", ascii(g_config.d3d9Path), g_config.mediaFoundation, g_config.width, g_config.height,
         g_config.frame == Config::Frame::Auto ? "auto" : g_config.frame == Config::Frame::Never ? "1" : "0", g_config.clipCursor, g_config.fpsLimit, g_config.fpsLimitInactive,
         g_config.vsync, g_config.maxFrameLatency, g_config.uiScale,
         g_config.uiScaleMenus ? "Full" : "InGame", g_config.uiLinearFilter, g_config.uiAnchor,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
-        g_config.batchModels, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
+        g_config.batchModels, g_config.batchGround, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
         g_config.atlasMaxTextureSize, g_config.screenshotJpeg ? "jpg" : "png", g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs, g_config.uiTrace, g_config.crashDump, g_config.movieFallback);
     const auto pos = [](const Config::UiPosition& p) { return std::format("{},{}", p.x, p.y); };
     LOG("Config: UI.Layout Taskbar={} Chat={} Inventory={} Equipment={} Stats={} Minimap={} Portraits={} Shops={}",

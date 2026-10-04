@@ -82,7 +82,7 @@ void WorldPasses::install()
 {
     Patch::begin();
     Patch::hook(g_origTileRow, Addr::cWorldView_renderTileRow, &hookTileRow, "cWorldView::renderTileRow (passes)");
-    Patch::hook(g_origFlush, Addr::cQuadBatcher_flush, &hookFlush, "cQuadBatcher::flush");
+    Patch::hook(g_origFlush, Addr::cQuadBatcher_flush, &hookFlush, "cQuadBatcher::flush (passes)");
     Patch::hook(g_origLayers, Addr::cWorldView_drawTileLayers, &hookLayers, "cWorldView::drawTileLayers");
     Patch::hook(g_origWater, Addr::cWorldView_drawWaterTiles, &hookWater, "cWorldView::drawWaterTiles");
     Patch::hook(g_origObjects, Addr::cWorldView_drawObjects, &hookObjects, "cWorldView::drawObjects");

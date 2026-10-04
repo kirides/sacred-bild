@@ -220,6 +220,11 @@ texture than the one before, so the game's own batching rarely gets past one qua
   0..1024 / 0..768, appends a quad (FVF `0x244`: XYZRHW, diffuse, two texture coordinate sets) and flushes at
   0x252 indices; `0x629340` flushes with one `DrawIndexedPrimitive` and is called whenever the texture changes
   (`0x6292C0` one texture, `0x629300` two). The detail histogram shows mostly 6-index draws: one quad each.
+  The flush looks its texture handles (`+0x5920`, `+0x5924`; 0 = leave stage 1 alone) up with
+  `cTextureManager_get` (`0x65ED90`, thiscall on `*0x13E7838` (handle, 0): stamps the texture as used, loads it if
+  needed, surface at `+0x14`), stage 0 before stage 1. `BatchGround` replaces the flush: same lookups, then the
+  textures and quads go to the batcher in one call (zoomed out ~7,000 flushes per frame, each two `SetTexture` and a
+  `DrawIndexedPrimitive` through the proxy before).
 - `cTileRenderer` (`0x61E800`/`0x61FAB0`, vertex buffer) is not used in game (no `DrawPrimitiveVB` calls).
 - Sprites: `dxDriver7_drawTexturedQuad` and the object passes draw FVF `0x1C4` strips and small indexed lists.
 - Render state cache: `0x643430` (thiscall (flag, on)) skips redundant changes of a flag word at device

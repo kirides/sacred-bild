@@ -4,6 +4,7 @@
 #include "game/frame_hooks.h"
 #include "game/movie.h"
 #include "game/granny_async.h"
+#include "game/ground_quads.h"
 #include "game/language.h"
 #include "game/map_cache.h"
 #include "game/resolution.h"
@@ -79,6 +80,7 @@ void Sacred::installHooks()
     Movie::install();
     Screenshot::install();
     MapCache::install();
+    GroundQuads::install();
     Language::install();
     if (Patch::commit())
     {

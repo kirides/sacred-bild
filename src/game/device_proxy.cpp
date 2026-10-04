@@ -863,6 +863,45 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
     return hr;
 }
 
+HRESULT DeviceProxy::drawQuads(TextureLookup lookup, uint32_t texture0, uint32_t texture1, DWORD fvf, const void* verts,
+    DWORD vertCount, const WORD* indices, DWORD indexCount)
+{
+    CallLock lock(*this, _ReturnAddress());
+    if (!batching())
+    {
+        SetTexture(0, lookup(texture0));
+        if (texture1)
+        {
+            SetTexture(1, lookup(texture1));
+        }
+        return DrawIndexedPrimitive(D3DPT_TRIANGLELIST, fvf, const_cast<void*>(verts), vertCount,
+            const_cast<WORD*>(indices), indexCount, 0);
+    }
+    // The stage 0 lookup counts as game time, as it did inside the game's flush; the stage 1 lookup (layers only)
+    // falls into the proxy time below.
+    IDirectDrawSurface7* surface0 = lookup(texture0);
+    // What SetTexture and DrawIndexedPrimitive count and record, once.
+    Scope p{TProxy};
+    D3DStats::count(CSetTexture, texture1 ? 2 : 1);
+    D3DStats::count(CDrawIndexed);
+    D3DStats::count(CVerts, vertCount);
+    D3DStats::count(CDrawTL);
+    D3DStats::onDraw(D3DPT_TRIANGLELIST, fvf, indexCount, true);
+    m_texture0Width = m_texture0Height = 0;
+    if (surface0 != m_texture0)
+    {
+        m_texture0 = surface0;
+        D3DStats::count(CTexSwitch);
+        D3DStats::onTexture(surface0);
+    }
+    m_batcher->setTexture(0, surface0);
+    if (texture1)
+    {
+        m_batcher->setTexture(1, lookup(texture1));
+    }
+    return m_batcher->draw(D3DPT_TRIANGLELIST, fvf, verts, vertCount, indices, indexCount, 0);
+}
+
 HRESULT DeviceProxy::SetClipStatus(LPD3DCLIPSTATUS status)
 {
     CallLock lock(*this, _ReturnAddress());

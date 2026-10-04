@@ -73,6 +73,8 @@ struct Config
     bool batchVertexBuffer = true;
     // 3D models (characters and their shadows) go through the batcher too: vertex buffers, merged where possible.
     bool batchModels = true;
+    // The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls.
+    bool batchGround = true;
     // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.
     bool asyncAnimation = true;
     // Hash index in front of the map data's record caches (std::map lookups per tile and object).

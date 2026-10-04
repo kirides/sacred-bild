@@ -528,6 +528,10 @@
    "452F85C7": "00629340",
    "451BBE74": "00629420"
   },
+  "cTextureManager_get": {
+   "452F85C7": "0065ED90",
+   "451BBE74": "0065F010"
+  },
   "cWorldView_drawWaterTiles": {
    "452F85C7": "0062DD00",
    "451BBE74": "0062DE70"

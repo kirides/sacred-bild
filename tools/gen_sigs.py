@@ -96,6 +96,7 @@ SACRED = [
     ('cWorldView_renderTileRow', 0x0062AE90, 'func'),
     ('cWorldView_drawTileLayers', 0x0062D3C0, 'func'),
     ('cQuadBatcher_flush', 0x00629340, 'func'),
+    ('cTextureManager_get', 0x0065ED90, 'func'),
     ('cWorldView_drawWaterTiles', 0x0062DD00, 'func'),
     ('cWorldView_drawObjects', 0x0062E410, 'func'),
     ('cWorldView_drawObjects2', 0x0062FF60, 'func'),
