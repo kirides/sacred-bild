@@ -512,7 +512,13 @@ HRESULT Batcher::setTexture(DWORD stage, IDirectDrawSurface7* texture)
     drainDestroyed();
     if (texture)
     {
-        m_atlas->entry(texture);    // registered so its destruction is noticed while only recorded
+        // Registered so its destruction is noticed while only recorded; one with a binding in this atlas generation
+        // already is.
+        const AtlasBinding& b = m_bindings[(reinterpret_cast<uintptr_t>(texture) >> 4) % kBindings];
+        if (b.texture != texture || b.generation != m_atlasGeneration)
+        {
+            m_atlas->entry(texture);
+        }
     }
     m_tex[stage] = texture;
     m_texFlags[stage] |= Known;
@@ -888,6 +894,100 @@ HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD
     Source source;
     source.interleaved = verts;
     append(Kind::Pretransformed, type, fvf, source, vertCount, indices, tris, flags);
+    return D3D_OK;
+}
+
+HRESULT Batcher::drawQuads(DWORD fvf, const void* verts, DWORD vertCount, const WORD* indices, DWORD indexCount)
+{
+    drainDestroyed();
+    if (!m_useAtlas || !verts || !indices || indexCount < 3 || indexCount % 3 || !Fvf::pretransformed(fvf))
+    {
+        return draw(D3DPT_TRIANGLELIST, fvf, verts, vertCount, indices, indexCount, 0);
+    }
+    const Layout& vertexLayout = layout(fvf);
+    const UINT stride = vertexLayout.stride;
+    const StageSetup& setup = stageSetup(fvf, vertexLayout);
+
+    // Every textured stage through its atlas copy (as draw() would bind them).
+    IDirectDrawSurface7* binding[kStages];
+    uint32_t textured = 0;
+    for (DWORD s = 0; s < setup.stages; ++s)
+    {
+        binding[s] = texture(s);
+        textured |= binding[s] ? 1u << s : 0u;
+    }
+    Remap remaps[kStages];
+    UINT remapCount = 0;
+    for (DWORD s = 0; s < setup.stages; ++s)
+    {
+        if (!binding[s])
+        {
+            continue;
+        }
+        if (!setup.atlas[s] || (setup.sameSet[s] & textured))
+        {
+            return draw(D3DPT_TRIANGLELIST, fvf, verts, vertCount, indices, indexCount, 0);
+        }
+        const AtlasBinding& b = atlasBinding(binding[s], setup.clampEdges[s]);
+        if (!b.page)
+        {
+            return draw(D3DPT_TRIANGLELIST, fvf, verts, vertCount, indices, indexCount, 0);
+        }
+        const UINT offset = setup.offset[s];
+        const uint8_t* p = static_cast<const uint8_t*>(verts) + offset;
+        for (DWORD i = 0; i < vertCount; ++i, p += stride)
+        {
+            const float* uv = reinterpret_cast<const float*>(p);
+            if (!(uv[0] >= -b.marginU && uv[0] <= 1.0f + b.marginU && uv[1] >= -b.marginV && uv[1] <= 1.0f + b.marginV))
+            {
+                return draw(D3DPT_TRIANGLELIST, fvf, verts, vertCount, indices, indexCount, 0);
+            }
+        }
+        binding[s] = b.page;
+        remaps[remapCount++] = {offset, b.scaleU, b.scaleV, b.offsetU, b.offsetV};
+    }
+
+    // The pending batch, as it stands after the bindings (placing a copy may have drawn it).
+    if (m_indexCount == 0 || m_kind != Kind::Pretransformed || m_fvf != fvf || m_flags != 0 || !m_rsDirty.empty() ||
+        !m_tssDirty.empty() || (m_vpFlags & Dirty) || m_vertCount + vertCount > kMaxVerts ||
+        m_indexCount + indexCount > kMaxIndices)
+    {
+        return draw(D3DPT_TRIANGLELIST, fvf, verts, vertCount, indices, indexCount, 0);
+    }
+    for (DWORD s = 0; s < setup.stages; ++s)
+    {
+        if (!(m_texFlags[s] & Applied) || m_texDevice[s] != binding[s])
+        {
+            return draw(D3DPT_TRIANGLELIST, fvf, verts, vertCount, indices, indexCount, 0);
+        }
+    }
+
+    count(CMerged);
+    if (remapCount)
+    {
+        count(CAtlasDraw);
+    }
+    uint8_t* dst = m_verts.data() + size_t(m_vertCount) * stride;
+    std::memcpy(dst, verts, size_t(vertCount) * stride);
+    for (UINT r = 0; r < remapCount; ++r)
+    {
+        const Remap& m = remaps[r];
+        uint8_t* p = dst + m.offset;
+        for (DWORD i = 0; i < vertCount; ++i, p += stride)
+        {
+            float* uv = reinterpret_cast<float*>(p);
+            uv[0] = uv[0] * m.scaleU + m.offsetU;
+            uv[1] = uv[1] * m.scaleV + m.offsetV;
+        }
+    }
+    WORD* out = m_indices.data() + m_indexCount;
+    const DWORD base = m_vertCount;
+    for (DWORD i = 0; i < indexCount; ++i)
+    {
+        out[i] = static_cast<WORD>(base + indices[i]);
+    }
+    m_vertCount += vertCount;
+    m_indexCount += indexCount;
     return D3D_OK;
 }
 

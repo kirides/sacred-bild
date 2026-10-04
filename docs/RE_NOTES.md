@@ -224,7 +224,9 @@ texture than the one before, so the game's own batching rarely gets past one qua
   `cTextureManager_get` (`0x65ED90`, thiscall on `*0x13E7838` (handle, 0): stamps the texture as used, loads it if
   needed, surface at `+0x14`), stage 0 before stage 1. `BatchGround` replaces the flush: same lookups, then the
   textures and quads go to the batcher in one call (zoomed out ~7,000 flushes per frame, each two `SetTexture` and a
-  `DrawIndexedPrimitive` through the proxy before).
+  `DrawIndexedPrimitive` through the proxy before). The batcher appends such a flush straight to the pending batch
+  when it fits (`Batcher::drawQuads`: same format, no recorded state change, every textured stage through the atlas
+  page the batch already uses), without the generic per-draw work.
 - `cTileRenderer` (`0x61E800`/`0x61FAB0`, vertex buffer) is not used in game (no `DrawPrimitiveVB` calls).
 - Sprites: `dxDriver7_drawTexturedQuad` and the object passes draw FVF `0x1C4` strips and small indexed lists.
 - Render state cache: `0x643430` (thiscall (flag, on)) skips redundant changes of a flag word at device

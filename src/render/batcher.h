@@ -62,6 +62,10 @@ public:
     // is drawn directly.
     HRESULT draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD vertCount, const WORD* indices,
         DWORD indexCount, DWORD flags);
+    // The ground's quad batcher (GroundQuads): a pretransformed indexed triangle list drawn with the textures just
+    // set. Appended straight to the pending batch when it fits (same format, no state change since, every textured
+    // stage through the atlas page the batch uses); anything else goes through draw().
+    HRESULT drawQuads(DWORD fvf, const void* verts, DWORD vertCount, const WORD* indices, DWORD indexCount);
 
     // An untransformed draw (from strided or interleaved vertices). False if it can't be batched: then the
     // caller calls sync(Reason::Direct) and draws it itself.

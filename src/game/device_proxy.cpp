@@ -900,7 +900,7 @@ HRESULT DeviceProxy::drawQuads(TextureLookup lookup, uint32_t texture0, uint32_t
     {
         m_batcher->setTexture(1, lookup(texture1));
     }
-    return m_batcher->draw(D3DPT_TRIANGLELIST, fvf, verts, vertCount, indices, indexCount, 0);
+    return m_batcher->drawQuads(fvf, verts, vertCount, indices, indexCount);
 }
 
 HRESULT DeviceProxy::SetClipStatus(LPD3DCLIPSTATUS status)
