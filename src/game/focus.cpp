@@ -1,4 +1,5 @@
 #include "game/focus.h"
+#include "game/sacred_addr.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
@@ -163,6 +164,19 @@ void Focus::install()
     g_origSetWindowsHookExA = static_cast<SetWindowsHookExAFn>(
         Patch::iat("USER32.dll", "SetWindowsHookExA", reinterpret_cast<void*>(&hookSetWindowsHookExA)));
     LOG("Focus: input only in the foreground, ClipCursor={}", g_config.clipCursor);
+
+    // The window procedure no longer pauses rendering when the game loses the foreground: the menu loop's last
+    // frame was often cleared without its UI (a black screen), and switching back during an intro movie resumed the
+    // menu under it. [Display] FpsLimitInactive paces the frames in the background.
+    // and eax, 0xFFFDFFFF -> and eax, 0xFFFFFFFF; or eax, edi -> mov eax, eax
+    constexpr uint8_t kKeep[] = {0x8B, 0xC0};
+    if (Patch::verify(Sacred::Addr::activateAppResumeAnd, {0x25, 0xFF, 0xFF, 0xFD, 0xFF}) &&
+        Patch::verify(Sacred::Addr::activateAppPauseOr, {0x0B, 0xC7}) &&
+        Patch::imm32(Sacred::Addr::activateAppResumeAnd + 1, 0xFFFDFFFF, 0xFFFFFFFF) &&
+        Patch::write(Sacred::Addr::activateAppPauseOr, kKeep, sizeof(kKeep)))
+    {
+        LOG("Focus: rendering continues in the background");
+    }
 }
 
 void Focus::windowCreated(HWND window)
@@ -170,6 +184,11 @@ void Focus::windowCreated(HWND window)
     g_window = window;
     subclass(window);
     EnableMenuItem(GetSystemMenu(window, FALSE), SC_CLOSE, MF_BYCOMMAND | MF_GRAYED);   // greys the close button
+}
+
+bool Focus::foreground()
+{
+    return active();
 }
 
 void Focus::onFrame()

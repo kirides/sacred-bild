@@ -97,12 +97,56 @@ namespace
         g_origRenderThreadRun(engine);
     }
 
-    // The in-game frame limit (the game passes 60); menus keep theirs.
+    // [Display] FpsLimitInactive: in the background, waits out the rest of the frame on a timer instead of the game's
+    // limiter, which spins on Sleep(0). False in the foreground.
+    bool limitInactive()
+    {
+        static LARGE_INTEGER freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return f; }();
+        static int64_t next = 0;
+        if (g_config.fpsLimitInactive <= 0 || Focus::foreground())
+        {
+            next = 0;
+            return false;
+        }
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        const int64_t period = freq.QuadPart / std::min(g_config.fpsLimitInactive, 1000);
+        if (next == 0 || now.QuadPart - next > period)
+        {
+            next = now.QuadPart;   // first background frame, or far behind: no catching up
+        }
+        next += period;
+        const int64_t wait = next - now.QuadPart;
+        if (wait <= 0)
+        {
+            return true;
+        }
+        static HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+        if (timer)
+        {
+            LARGE_INTEGER due;
+            due.QuadPart = -(wait * 10000000 / freq.QuadPart);   // relative, 100 ns units
+            if (SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE))
+            {
+                WaitForSingleObject(timer, INFINITE);
+                return true;
+            }
+        }
+        Sleep(static_cast<DWORD>(wait * 1000 / freq.QuadPart));
+        return true;
+    }
+
+    // The game's frame limiter, called after the flip by the menus and the game: the in-game limit (the game passes
+    // 60; menus keep theirs), and [Display] FpsLimitInactive in the background.
     using LimiterFn = void(__cdecl*)(double unused, uint32_t fps);
     LimiterFn g_origLimiter = nullptr;
 
     void __cdecl hookLimiter(double unused, uint32_t fps)
     {
+        if (limitInactive())
+        {
+            return;
+        }
         if (reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::renderLimiterReturn)
         {
             if (g_config.fpsLimit <= 0)
@@ -294,10 +338,12 @@ void FrameHooks::install()
     Patch::hook(g_origWorldRender, Addr::cWorldView0_render, &hookWorldRender, "cWorldView0::render");
     Patch::hook(g_origUiRender, Addr::cUI_Manager_render, &hookUiRender, "cUI_Manager::render");
     Patch::hook(g_origRenderThreadRun, Addr::cEngine_renderThreadRun, &hookRenderThreadRun, "cEngine::renderThreadRun");
-    if (g_config.fpsLimit != 60)
+    if (g_config.fpsLimit != 60 || g_config.fpsLimitInactive > 0)
     {
         Patch::hook(g_origLimiter, Addr::frameLimiter, &hookLimiter, "frameLimiter");
-        LOG("Frame limit in game: {}", g_config.fpsLimit > 0 ? std::to_string(g_config.fpsLimit) : std::string("off"));
+        LOG("Frame limit in game: {}, in the background: {}",
+            g_config.fpsLimit > 0 ? std::to_string(g_config.fpsLimit) : std::string("off"),
+            g_config.fpsLimitInactive > 0 ? std::to_string(g_config.fpsLimitInactive) : std::string("off"));
     }
     if (g_config.d3dStats)
     {

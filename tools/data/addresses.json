@@ -24,6 +24,14 @@
    "451BBE74": "00813337",
    "452F85C7": "00813C87"
   },
+  "activateAppResumeAnd": {
+   "451BBE74": "00812445",
+   "452F85C7": "00812D95"
+  },
+  "activateAppPauseOr": {
+   "451BBE74": "00812478",
+   "452F85C7": "00812DC8"
+  },
   "getClientCursorPos": {
    "451BBE74": "0066E500",
    "452F85C7": "0066E280"

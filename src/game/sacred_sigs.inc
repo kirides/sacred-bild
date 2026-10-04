@@ -7,6 +7,8 @@ static const Sig::Entry kAddressSigs[] = {
     {"dxDriver7_drawLoadingScreen", "83 EC 14 53 57 8B F9 89 7C 24 08 8B 87 BC 00 00 00", 0, Sig::Take::Match, &Sacred::Addr::dxDriver7_drawLoadingScreen}, // 006469D0, 006468A0
     {"cDxDevices_findMode", "53 55 56 57 66 8B B9 94 88 00 00 33 D2", 0, Sig::Take::Match, &Sacred::Addr::cDxDevices_findMode}, // 00644260, 00644130
     {"mainWindowCreateReturn", "8B 4C 24 44 5F 5E 89 01 8B C8 85 C9", 0, Sig::Take::Match, &Sacred::Addr::mainWindowCreateReturn}, // 00813337, 00813C87
+    {"activateAppResumeAnd", "8B 94 24 B8 02 00 00 25 FF FF FD FF", 7, Sig::Take::Match, &Sacred::Addr::activateAppResumeAnd}, // 00812445, 00812D95
+    {"activateAppPauseOr", "6A 04 6A 0C E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? EB 3D 0B C7", 18, Sig::Take::Match, &Sacred::Addr::activateAppPauseOr}, // 00812478, 00812DC8
     {"getClientCursorPos", "83 EC 18 56 8B 74 24 24 57 56 FF 15 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::getClientCursorPos}, // 0066E500, 0066E280
     {"cMouse_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 70", 0, Sig::Take::Match, &Sacred::Addr::cMouse_instance}, // 006550F0, 00654F60
     {"cMouse_renderCursor", "56 8B F1 57 8D 7E 24 8B CF E8 ?? ?? ?? ?? 8B 4E 64", 0, Sig::Take::Match, &Sacred::Addr::cMouse_renderCursor}, // 006555E0, 00655450

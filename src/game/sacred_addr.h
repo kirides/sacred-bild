@@ -27,6 +27,12 @@ namespace Sacred::Addr
     // Return address of the CreateWindowExA call that creates the main game window.
     inline uintptr_t mainWindowCreateReturn{};          // DE 00813337
 
+    // The main window procedure (sacredWndProc, DE 008122A0) pauses all rendering on WM_ACTIVATEAPP: bit 0x20000 of
+    // the engine flags (DE 0182CDB8), which the menu and game render loops and the intro movies also test. These
+    // are its windowed-mode clear and set of the bit (the game's fullscreen mode handles it separately).
+    inline uintptr_t activateAppResumeAnd{};            // DE 00812445; and eax, 0xFFFDFFFF (activated)
+    inline uintptr_t activateAppPauseOr{};              // DE 00812478; or eax, edi (edi = 0x20000; deactivated)
+
     // Mouse: getClientCursorPos(hwnd, POINT*) is the only cursor read; cMouse is the singleton the UI and world poll.
     inline uintptr_t getClientCursorPos{};              // DE 0066E500
     inline uintptr_t cMouse_instance{};                 // DE 006550F0

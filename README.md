@@ -69,6 +69,8 @@ ddraw calls through and logs which one.
   or a borderless game next to a second monitor; it is let go while the window is moved (Alt+Space, Move) or a
   menu of it is open, and while Alt is held; it is only taken once the cursor is over the window, so a click on the
   title bar still drags.
+- **Rendering in the background**: the game stopped drawing when it lost the focus, which often left the main menu
+  black. It now keeps drawing at `[Display] FpsLimitInactive` frames per second.
 - **Diagnostics**: per-second frame stats (draw calls, texture switches, unique textures, time spent in
   the world renderer, UI, flip and inside Direct3D, what ended each batch) and an optional sampling profiler.
   When the game or its gameserver crashes, a minidump goes next to the exe (`SacredBild-crash-*.dmp`,
@@ -113,6 +115,7 @@ For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build
 | Display | Borderless | auto | Main window frame: `auto` = a frame when the window is smaller than the screen, `1` = never (the game's frameless window), `0` = always. The client area is `Width` x `Height` either way. |
 | Display | ClipCursor | 1 | Confine the mouse to the game window while it is in the foreground; hold Alt to move it out. |
 | Display | FpsLimit | 60 | The game's own in-game frame limit; 0 = off. |
+| Display | FpsLimitInactive | 20 | Frame limit while the game is in the background, in game and in the menus; 0 = off. |
 | Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh; 0 = right away. |
 | Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |
 | UI | Scale | 0 | UI scale; 0 = as large as fits the screen height, otherwise a factor (1 = native pixels), capped at that. |
