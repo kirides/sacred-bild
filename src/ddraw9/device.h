@@ -31,6 +31,7 @@ namespace DDraw9
         // GPU skinning (device_skin.cpp, see skin.h).
         bool skinAvailable();
         Skin::Mesh* createSkinMesh(const Skin::Vertex* vertices, uint32_t count);
+        Skin::Indices* createSkinIndices(const WORD* indices, uint32_t count);
         bool drawSkinned(const Skin::Draw& draw);
 
         // IUnknown
@@ -202,7 +203,7 @@ namespace DDraw9
         bool m_skinBound = false;
         int m_skinBoundVariant = -1;
         // Constants as last uploaded, to skip repeats.
-        float m_skinConstants[72][4] = {};
+        float m_skinConstants[73][4] = {};
         UINT m_skinConstantCount = 0;
         BOOL m_skinFlags[5] = {};
         int m_skinLightCount = -1;

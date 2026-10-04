@@ -17,12 +17,13 @@ float4 g_materialSpecular : register(c12);
 float4 g_materialEmissive : register(c13);
 float4 g_ambientPower : register(c14);      // rgb: D3DRENDERSTATE_AMBIENT, w: material power
 float4 g_sources : register(c15);          // 1 = from the vertex diffuse color: x diffuse, y ambient, z specular, w emissive
+float4 g_vertexColor : register(c16);      // without a diffuse stream: the vertices' one color (shadows), else white
 
 // Per light, 7 registers: position (camera space) + range, direction (camera space, pointing away from the light) +
 // falloff, diffuse, specular, ambient, attenuation 0-2 + 1 for point/spot lights, cos(theta/2), cos(phi/2), 1 for spot.
 #define LIGHT_REGISTERS 7
-float4 g_lights[8 * LIGHT_REGISTERS] : register(c16);
-float4 g_bones[180] : register(c72);        // 60 bones
+float4 g_lights[8 * LIGHT_REGISTERS] : register(c17);
+float4 g_bones[177] : register(c73);        // 59 bones; the compiler keeps its literals above
 
 int g_lightCount : register(i0);
 bool g_normalizeSkinned : register(b0);     // Granny normalized the skinned normals
@@ -154,7 +155,7 @@ VsOut main(VsIn v)
 #ifdef DIFFUSE
     const float4 vertexColor = v.diffuse;
 #else
-    const float4 vertexColor = float4(1, 1, 1, 1);
+    const float4 vertexColor = g_vertexColor;
 #endif
     o.diffuse = vertexColor;
     o.specular = 0;

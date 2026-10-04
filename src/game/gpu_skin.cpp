@@ -56,11 +56,26 @@ namespace
         };
         std::vector<Buffer> buffers;
 
+        // Static index buffers of the pieces: their triangle lists are the mesh's own arrays.
+        struct Piece
+        {
+            IDirect3DDevice7* device;
+            const WORD* source;
+            uint32_t count;
+            uint32_t check;             // of a few of the indices, in case the array changed after all
+            Skin::Indices* indices;
+        };
+        std::vector<Piece> pieces;
+
         ~MeshInfo()
         {
             for (Buffer& b : buffers)
             {
                 Skin::releaseMesh(b.mesh);
+            }
+            for (Piece& p : pieces)
+            {
+                Skin::releaseIndices(p.indices);
             }
         }
 
@@ -330,6 +345,42 @@ namespace
         return mesh;
     }
 
+    uint32_t indexCheck(const WORD* indices, uint32_t count)
+    {
+        uint32_t check = count;
+        const uint32_t step = count / 16 + 1;
+        for (uint32_t i = 0; i < count; i += step)
+        {
+            check = check * 31 + indices[i];
+        }
+        return check * 31 + indices[count - 1];
+    }
+
+    Skin::Indices* staticIndices(MeshInfo& info, IDirect3DDevice7* device, const WORD* indices, uint32_t count)
+    {
+        const uint32_t check = indexCheck(indices, count);
+        for (MeshInfo::Piece& piece : info.pieces)
+        {
+            if (piece.device == device && piece.source == indices && piece.count == count)
+            {
+                if (piece.check == check)
+                {
+                    return piece.indices;
+                }
+                Skin::releaseIndices(piece.indices);
+                piece.indices = Skin::createIndices(device, indices, count);
+                piece.check = check;
+                return piece.indices;
+            }
+        }
+        Skin::Indices* created = Skin::createIndices(device, indices, count);
+        if (created)
+        {
+            info.pieces.push_back({device, indices, count, check, created});
+        }
+        return created;
+    }
+
     bool drawGpu(IDirect3DDevice7* real, Pending& p, void (*prepare)(void*), void* context, D3DPRIMITIVETYPE type,
         DWORD fvf, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD vertCount, const WORD* indices, DWORD indexCount)
     {
@@ -352,22 +403,32 @@ namespace
             return false;
         }
         Skin::Mesh* mesh = staticBuffer(*p.info, real, data.textureCoords[0]);
-        if (!mesh)
+        Skin::Indices* pieceIndices = mesh ? staticIndices(*p.info, real, indices, indexCount) : nullptr;
+        if (!pieceIndices)
         {
             return false;
         }
         prepare(context);
         Skin::Draw draw = {};
         draw.mesh = mesh;
+        draw.indices = pieceIndices;
         draw.palette = p.palette.data();
         draw.bones = p.info->bindingCount;
         draw.paletteId = p.paletteId;
         draw.normals = normals;
         draw.normalizeSkinned = p.normalize;
-        draw.diffuse = diffuse ? static_cast<const DWORD*>(data.diffuse.lpvData) : nullptr;
-        draw.diffuseStride = data.diffuse.dwStride;
-        draw.indices = indices;
-        draw.indexCount = indexCount;
+        // The shadows' one color comes with stride 0: a constant instead of a stream copied per draw.
+        draw.vertexColor = diffuse;
+        draw.color = 0xFFFFFFFF;
+        if (diffuse && data.diffuse.dwStride == 0)
+        {
+            draw.color = *static_cast<const DWORD*>(data.diffuse.lpvData);
+        }
+        else if (diffuse)
+        {
+            draw.diffuse = static_cast<const DWORD*>(data.diffuse.lpvData);
+            draw.diffuseStride = data.diffuse.dwStride;
+        }
         return Skin::draw(real, draw);
     }
 }

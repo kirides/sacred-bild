@@ -17,6 +17,12 @@ namespace DDraw9
             d9::IDirect3DVertexBuffer9* buffer;
             uint32_t count;
         };
+
+        struct Indices
+        {
+            d9::IDirect3DIndexBuffer9* buffer;
+            uint32_t count;
+        };
     }
 
     namespace
@@ -25,10 +31,11 @@ namespace DDraw9
 
         static_assert(sizeof(Skin::Vertex) == 52);
 
-        constexpr UINT kLightRegister = 16;
+        constexpr UINT kColorRegister = 16;
+        constexpr UINT kLightRegister = 17;
         constexpr UINT kLightRegisters = 7;
         constexpr UINT kMaxLights = 8;
-        constexpr UINT kBoneRegister = 72;
+        constexpr UINT kBoneRegister = 73;
         constexpr UINT kDiffuseRing = 1u << 16;     // diffuse colors per pass through the ring
 
         using Float4 = float[4];
@@ -217,6 +224,34 @@ namespace DDraw9
         return new Skin::Mesh{buffer, count};
     }
 
+    Skin::Indices* Device::createSkinIndices(const WORD* indices, uint32_t count)
+    {
+        std::scoped_lock lock(m_lock);
+        if (!initSkin() || !indices || count < 3)
+        {
+            return nullptr;
+        }
+        d9::IDirect3DIndexBuffer9* buffer = nullptr;
+        HRESULT hr = m_dev->CreateIndexBuffer(count * sizeof(WORD), D3DUSAGE_WRITEONLY, d9::D3DFMT_INDEX16,
+            d9::D3DPOOL_DEFAULT, &buffer, nullptr);
+        if (FAILED(hr))
+        {
+            logSkinFailure("CreateIndexBuffer", hr);
+            return nullptr;
+        }
+        void* data = nullptr;
+        hr = buffer->Lock(0, 0, &data, 0);
+        if (FAILED(hr) || !data)
+        {
+            logSkinFailure("Lock (indices)", hr);
+            buffer->Release();
+            return nullptr;
+        }
+        std::memcpy(data, indices, count * sizeof(WORD));
+        buffer->Unlock();
+        return new Skin::Indices{buffer, count};
+    }
+
     bool Device::skinConstants(const Skin::Draw& draw, bool diffuse)
     {
         // What the fixed-function pipeline would do that the shader doesn't: the caller skins on the CPU instead.
@@ -279,7 +314,10 @@ namespace DDraw9
         const DWORD ambient = m_rs[D3DRENDERSTATE_AMBIENT];
         set(c[14], ((ambient >> 16) & 0xFF) / 255.0f, ((ambient >> 8) & 0xFF) / 255.0f, (ambient & 0xFF) / 255.0f,
             m_material.dvPower);
-        const bool colorVertex = diffuse && m_rs[D3DRENDERSTATE_COLORVERTEX];
+        const DWORD color = diffuse ? 0xFFFFFFFF : draw.color;
+        set(c[kColorRegister], ((color >> 16) & 0xFF) / 255.0f, ((color >> 8) & 0xFF) / 255.0f, (color & 0xFF) / 255.0f,
+            (color >> 24) / 255.0f);
+        const bool colorVertex = draw.vertexColor && m_rs[D3DRENDERSTATE_COLORVERTEX];
         auto fromVertex = [&](DWORD source) { return colorVertex && source == D3DMCS_COLOR1 ? 1.0f : 0.0f; };
         set(c[15], fromVertex(m_rs[D3DRENDERSTATE_DIFFUSEMATERIALSOURCE]), fromVertex(m_rs[D3DRENDERSTATE_AMBIENTMATERIALSOURCE]),
             fromVertex(m_rs[D3DRENDERSTATE_SPECULARMATERIALSOURCE]), fromVertex(m_rs[D3DRENDERSTATE_EMISSIVEMATERIALSOURCE]));
@@ -357,8 +395,8 @@ namespace DDraw9
     bool Device::drawSkinned(const Skin::Draw& draw)
     {
         std::scoped_lock lock(m_lock);
-        if (!initSkin() || !draw.mesh || !draw.palette || draw.bones == 0 || draw.bones > Skin::kMaxBones ||
-            !draw.indices || draw.indexCount < 3 || draw.paletteId == 0)
+        if (!initSkin() || !draw.mesh || !draw.indices || !draw.palette || draw.bones == 0 ||
+            draw.bones > Skin::kMaxBones || draw.paletteId == 0)
         {
             return false;
         }
@@ -411,11 +449,6 @@ namespace DDraw9
             m_skinDiffuseCursor += vertices;
         }
 
-        const int first = uploadIndices(draw.indices, draw.indexCount);
-        if (first < 0)
-        {
-            return false;
-        }
         prepareTarget();
         if (!m_skinBound || m_skinBoundVariant != int(diffuse))
         {
@@ -430,13 +463,12 @@ namespace DDraw9
         {
             m_dev->SetStreamSource(1, m_skinDiffuse, diffuseOffset, 4);
         }
-        if (m_ib9Bound != m_indexBuffer)
+        if (m_ib9Bound != draw.indices->buffer)
         {
-            m_ib9Bound = m_indexBuffer;
-            m_dev->SetIndices(m_indexBuffer);
+            m_ib9Bound = draw.indices->buffer;
+            m_dev->SetIndices(draw.indices->buffer);
         }
-        const HRESULT hr = m_dev->DrawIndexedPrimitive(d9::D3DPT_TRIANGLELIST, 0, 0, vertices, static_cast<UINT>(first),
-            draw.indexCount / 3);
+        const HRESULT hr = m_dev->DrawIndexedPrimitive(d9::D3DPT_TRIANGLELIST, 0, 0, vertices, 0, draw.indices->count / 3);
         if (FAILED(hr))
         {
             logSkinFailure("DrawIndexedPrimitive", hr);
@@ -462,6 +494,21 @@ namespace DDraw9
         {
             mesh->buffer->Release();
             delete mesh;
+        }
+    }
+
+    Skin::Indices* Skin::createIndices(IDirect3DDevice7* device, const WORD* indices, uint32_t count)
+    {
+        Device* d = Device::from(device);
+        return d ? d->createSkinIndices(indices, count) : nullptr;
+    }
+
+    void Skin::releaseIndices(Indices* indices)
+    {
+        if (indices)
+        {
+            indices->buffer->Release();
+            delete indices;
         }
     }
 
