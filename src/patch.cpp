@@ -65,7 +65,17 @@ bool Patch::redirectCall(uintptr_t callSite, const void* target)
 
 void* Patch::iat(const char* dll, const char* function, void* replacement)
 {
-    auto* base = reinterpret_cast<uint8_t*>(GetModuleHandleW(nullptr));
+    return iat(nullptr, dll, function, replacement);
+}
+
+void* Patch::iat(const char* importer, const char* dll, const char* function, void* replacement)
+{
+    auto* base = reinterpret_cast<uint8_t*>(GetModuleHandleA(importer));
+    if (!base)
+    {
+        LOG("Patch: module {} not loaded", importer);
+        return nullptr;
+    }
     auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + reinterpret_cast<IMAGE_DOS_HEADER*>(base)->e_lfanew);
     const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
     // Imports by ordinal (Winsock in Sacred) carry no name: those slots are matched by the address they are bound to.

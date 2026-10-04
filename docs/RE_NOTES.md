@@ -516,7 +516,12 @@ not use. `cGCclass_initNetwork` creates the TinCat API once when the multiplayer
   list draws ISDN players in another color.
 
 Community reports: joining in LAN mode fails over the internet ("IP: Cannot Connect!", connect time-outs),
-joining in MODEM/ISDN works and switching to LAN afterwards is fine; ISDN hides most ambient NPCs. Switching after
+joining in MODEM/ISDN works and switching to LAN afterwards is fine; ISDN hides most ambient NPCs. Cause:
+`KRNL_SendAsyncLogonRequest` (tincat2 `0x10004650`) starts a non-blocking connect (`NET_Async_Connect`
+`0x1000D1C0`) and, with `drv_disable_nagle`, immediately calls `NET_SetTCPNodelay` (`0x1000D130`). Windows refuses
+TCP_NODELAY with WSAEINVAL while the handshake is under way, and TinCat fails the join with the default code -20
+(its table text: "Kernel: Cannot allocate logdata message"). On a LAN the handshake is usually done by then.
+SacredBild hooks tincat2's WSOCK32 imports and sets the option before the first send instead (`src/net/connection.cpp`). Switching after
 the join keeps TCP_NODELAY off (TinCat is not re-initialised) but makes the player an owner candidate.
 
 Server time-outs (`cNetServer_watchdogThread` `0x4DBCB0`, 5 ms loop, times from `0x6340C8`; player record =

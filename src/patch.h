@@ -20,6 +20,8 @@ namespace Patch
     // Replaces an import of the main exe (by name, or by ordinal if the slot is bound to `function`); returns the
     // previous target or nullptr.
     void* iat(const char* dll, const char* function, void* replacement);
+    // The same for an import of a loaded module (`importer`, e.g. "tincat2.dll"; nullptr = the main exe).
+    void* iat(const char* importer, const char* dll, const char* function, void* replacement);
 
     // Detours a function; `original` receives the trampoline.
     bool hook(void** original, void* detour, const char* name);
