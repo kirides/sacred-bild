@@ -29,6 +29,7 @@ namespace DDraw9::Skin
         const float* palette;   // per bone 12 floats: row-major 3x3 matrix, then translation (out = M v + t)
         uint32_t bones;
         uint32_t paletteId;     // the same id means the same palette values (not uploaded again); never 0
+        bool normals;           // the draw has vertex normals (shadows: none, drawn unlit)
         bool normalizeSkinned;  // normalize the skinned normals, as Granny did
         const DWORD* diffuse;   // per-vertex diffuse color (FVF 0x152), `diffuseStride` bytes apart; null: none
         uint32_t diffuseStride;

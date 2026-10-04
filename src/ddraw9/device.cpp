@@ -570,6 +570,24 @@ namespace DDraw9
 
     void Device::prepare(DWORD fvf)
     {
+        prepareTarget();
+        if (m_skinBound)
+        {
+            // Back from the skinning shader to the fixed-function pipeline.
+            m_skinBound = false;
+            m_dev->SetVertexShader(nullptr);
+            m_dev->SetStreamSource(1, nullptr, 0, 0);
+            m_fvf9 = 0;
+        }
+        if (fvf != m_fvf9)
+        {
+            m_fvf9 = fvf;
+            m_dev->SetFVF(fvf);
+        }
+    }
+
+    void Device::prepareTarget()
+    {
         syncDepth();
         for (DWORD stage = 0; stage <= m_maxStage; ++stage)
         {
@@ -583,11 +601,6 @@ namespace DDraw9
                     m_dev->SetTexture(stage, texture9);
                 }
             }
-        }
-        if (fvf != m_fvf9)
-        {
-            m_fvf9 = fvf;
-            m_dev->SetFVF(fvf);
         }
     }
 

@@ -178,6 +178,9 @@ namespace DDraw9
             m_skinDiffuse = nullptr;
         }
         m_skinPaletteId = 0;
+        m_skinBound = false;
+        m_skinConstantCount = 0;
+        m_skinLightCount = -1;
     }
 
     bool Device::skinAvailable()
@@ -217,8 +220,9 @@ namespace DDraw9
     bool Device::skinConstants(const Skin::Draw& draw, bool diffuse)
     {
         // What the fixed-function pipeline would do that the shader doesn't: the caller skins on the CPU instead.
+        const bool lighting = m_rs[D3DRENDERSTATE_LIGHTING] != 0;
         if (m_rs[D3DRENDERSTATE_FOGENABLE] || m_rs[D3DRENDERSTATE_CLIPPLANEENABLE] ||
-            m_rs[D3DRENDERSTATE_VERTEXBLEND] != D3DVBLEND_DISABLE)
+            m_rs[D3DRENDERSTATE_VERTEXBLEND] != D3DVBLEND_DISABLE || (lighting && !draw.normals))
         {
             return false;
         }
@@ -245,14 +249,15 @@ namespace DDraw9
             }
         }
 
-        // Camera space: world x view, its normal matrix, the projection (see skin.hlsl).
+        // Camera space: world x view, its normal matrix (lit draws only: a shadow's world matrix flattens it onto the
+        // ground and has no inverse), the projection (see skin.hlsl).
         Float4 c[kBoneRegister] = {};
         const D3DMATRIX worldView = multiply(m_transforms[D3DTRANSFORMSTATE_WORLD], m_transforms[D3DTRANSFORMSTATE_VIEW]);
         const float(*wv)[4] = rows(worldView);
         const float(*view)[4] = rows(m_transforms[D3DTRANSFORMSTATE_VIEW]);
         const float(*projection)[4] = rows(m_transforms[D3DTRANSFORMSTATE_PROJECTION]);
-        float inverse[3][3];
-        if (!invert3x3(wv, inverse))
+        float inverse[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+        if (lighting && !invert3x3(wv, inverse))
         {
             return false;
         }
@@ -309,13 +314,27 @@ namespace DDraw9
             set(r[6], std::cos(l.dvTheta * 0.5f), std::cos(l.dvPhi * 0.5f), l.dltType == D3DLIGHT_SPOT ? 1.0f : 0.0f, 0.0f);
         }
 
-        m_dev->SetVertexShaderConstantF(0, &c[0][0], kLightRegister + lightCount * kLightRegisters);
+        // Uploaded only where they changed: a character's pieces and its shadow mostly repeat them.
+        const UINT count = kLightRegister + lightCount * kLightRegisters;
+        if (count != m_skinConstantCount || std::memcmp(c, m_skinConstants, count * sizeof(Float4)) != 0)
+        {
+            m_dev->SetVertexShaderConstantF(0, &c[0][0], count);
+            std::memcpy(m_skinConstants, c, count * sizeof(Float4));
+            m_skinConstantCount = count;
+        }
         const BOOL flags[5] = {draw.normalizeSkinned, m_rs[D3DRENDERSTATE_NORMALIZENORMALS] != 0,
-            m_rs[D3DRENDERSTATE_LOCALVIEWER] != 0, m_rs[D3DRENDERSTATE_SPECULARENABLE] != 0,
-            m_rs[D3DRENDERSTATE_LIGHTING] != 0};
-        m_dev->SetVertexShaderConstantB(0, flags, 5);
-        const int loop[4] = {static_cast<int>(lightCount), 0, 0, 0};
-        m_dev->SetVertexShaderConstantI(0, loop, 1);
+            m_rs[D3DRENDERSTATE_LOCALVIEWER] != 0, m_rs[D3DRENDERSTATE_SPECULARENABLE] != 0, lighting};
+        if (std::memcmp(flags, m_skinFlags, sizeof(flags)) != 0)
+        {
+            m_dev->SetVertexShaderConstantB(0, flags, 5);
+            std::memcpy(m_skinFlags, flags, sizeof(flags));
+        }
+        if (static_cast<int>(lightCount) != m_skinLightCount)
+        {
+            const int loop[4] = {static_cast<int>(lightCount), 0, 0, 0};
+            m_dev->SetVertexShaderConstantI(0, loop, 1);
+            m_skinLightCount = static_cast<int>(lightCount);
+        }
 
         // Bones: Granny's matrix rows with the translation in w.
         if (draw.paletteId != m_skinPaletteId)
@@ -397,9 +416,15 @@ namespace DDraw9
         {
             return false;
         }
-        prepare(m_fvf9);    // z-buffer and textures; the vertex format is the declaration below
-        m_dev->SetVertexDeclaration(m_skinDecls[diffuse]);
-        m_dev->SetVertexShader(m_skinShaders[diffuse]);
+        prepareTarget();
+        if (!m_skinBound || m_skinBoundVariant != int(diffuse))
+        {
+            m_dev->SetVertexDeclaration(m_skinDecls[diffuse]);
+            m_dev->SetVertexShader(m_skinShaders[diffuse]);
+            m_skinBound = true;
+            m_skinBoundVariant = diffuse;
+            m_fvf9 = 0;     // the declaration replaced the FVF: the next fixed-function draw sets its own
+        }
         bindVertexBuffer(draw.mesh->buffer, sizeof(Skin::Vertex));
         if (diffuse)
         {
@@ -412,12 +437,6 @@ namespace DDraw9
         }
         const HRESULT hr = m_dev->DrawIndexedPrimitive(d9::D3DPT_TRIANGLELIST, 0, 0, vertices, static_cast<UINT>(first),
             draw.indexCount / 3);
-        m_dev->SetVertexShader(nullptr);
-        if (diffuse)
-        {
-            m_dev->SetStreamSource(1, nullptr, 0, 0);
-        }
-        m_fvf9 = 0;     // the declaration replaced the FVF: the next fixed-function draw sets its own
         if (FAILED(hr))
         {
             logSkinFailure("DrawIndexedPrimitive", hr);

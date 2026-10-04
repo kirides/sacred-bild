@@ -24,6 +24,7 @@ namespace
     constexpr uint32_t kInfluences = 4;
     constexpr DWORD kFvfModel = D3DFVF_XYZ | D3DFVF_NORMAL | D3DFVF_TEX1;          // 0x112
     constexpr DWORD kFvfModelDiffuse = kFvfModel | D3DFVF_DIFFUSE;                 // 0x152
+    constexpr DWORD kFvfShadow = D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1;        // 0x142: one color, stride 0
 
     GrannyMesh::DeformFn g_origDeform = nullptr;
     uintptr_t g_renderReturn = 0;   // the rendering path's deform call returns here
@@ -78,7 +79,7 @@ namespace
     {
         std::shared_ptr<MeshInfo> info;
         float* positions = nullptr;     // Granny's output buffers, as the draw's streams point at them
-        float* normals = nullptr;
+        float* normals = nullptr;       // null: the deform wanted positions only (shadows)
         bool normalize = false;
         std::vector<float> palette;     // kPaletteFloats per binding, for this pose
         uint32_t paletteId = 0;
@@ -225,9 +226,9 @@ namespace
         p.filled = true;
         for (uint32_t v = 0; v < p.info->vertexCount; ++v)
         {
-            float* n = p.normals + size_t(v) * 3;
+            float* n = p.normals ? p.normals + size_t(v) * 3 : nullptr;
             skinOne(*p.info, p.palette.data(), v, p.positions + size_t(v) * 3, n);
-            if (p.normalize)
+            if (n && p.normalize)
             {
                 const float inv = 1.0f / std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
                 n[0] *= inv;
@@ -240,16 +241,18 @@ namespace
     void __fastcall hookDeform(uint8_t* mesh, void* edx, void* bones, uint32_t* positionsOut, uint32_t doPositions,
         uint32_t* normalsOut, uint32_t doNormals, uint32_t normalizeNormals)
     {
+        // The model pass wants positions and normals, the shadow pass positions only.
         const bool render = reinterpret_cast<uintptr_t>(_ReturnAddress()) == g_renderReturn;
         const bool positions = (doPositions & 0xFF) && positionsOut && positionsOut[1];
-        const bool normals = (doNormals & 0xFF) && normalsOut && normalsOut[1];
+        const bool wantNormals = (doNormals & 0xFF) != 0;
+        const bool normals = wantNormals && normalsOut && normalsOut[1];
         std::shared_ptr<MeshInfo> info;
-        if (render && positions && normals && g_gpuUsable.load(std::memory_order_relaxed))
+        if (render && positions && normals == wantNormals && g_gpuUsable.load(std::memory_order_relaxed))
         {
             std::scoped_lock lock(g_mutex);
             info = meshInfo(mesh);
             // Granny allocates its output buffers in a full deform; until then it has to do one.
-            if (!info->gpu || positionsOut[0] < info->vertexCount || normalsOut[0] < info->vertexCount)
+            if (!info->gpu || positionsOut[0] < info->vertexCount || (normals && normalsOut[0] < info->vertexCount))
             {
                 info.reset();
             }
@@ -270,7 +273,7 @@ namespace
         auto p = std::make_shared<Pending>();
         p->info = info;
         p->positions = reinterpret_cast<float*>(positionsOut[1]);
-        p->normals = reinterpret_cast<float*>(normalsOut[1]);
+        p->normals = normals ? reinterpret_cast<float*>(normalsOut[1]) : nullptr;
         p->normalize = (normalizeNormals & 0xFF) != 0;
         p->palette.resize(size_t(info->bindingCount) * kPaletteFloats);
         const uint8_t* binding = field<const uint8_t*>(mesh, Mesh::bindings);
@@ -330,11 +333,13 @@ namespace
     bool drawGpu(IDirect3DDevice7* real, Pending& p, void (*prepare)(void*), void* context, D3DPRIMITIVETYPE type,
         DWORD fvf, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD vertCount, const WORD* indices, DWORD indexCount)
     {
-        // The draw cGranny_render makes from the rendering state; anything else is drawn as it comes.
-        const bool diffuse = fvf == kFvfModelDiffuse;
-        if (type != D3DPT_TRIANGLELIST || (fvf != kFvfModel && !diffuse) || vertCount != p.info->vertexCount ||
-            data.normal.lpvData != p.normals || !data.textureCoords[0].lpvData || !indices || indexCount < 3 ||
-            (diffuse && !data.diffuse.lpvData))
+        // The draws cGranny_render and cGranny_renderShadow make from the rendering state; anything else is drawn as it
+        // comes.
+        const bool diffuse = (fvf & D3DFVF_DIFFUSE) != 0;
+        const bool normals = (fvf & D3DFVF_NORMAL) != 0;
+        if (type != D3DPT_TRIANGLELIST || (fvf != kFvfModel && fvf != kFvfModelDiffuse && fvf != kFvfShadow) ||
+            vertCount != p.info->vertexCount || (normals && (!p.normals || data.normal.lpvData != p.normals)) ||
+            !data.textureCoords[0].lpvData || !indices || indexCount < 3 || (diffuse && !data.diffuse.lpvData))
         {
             return false;
         }
@@ -357,6 +362,7 @@ namespace
         draw.palette = p.palette.data();
         draw.bones = p.info->bindingCount;
         draw.paletteId = p.paletteId;
+        draw.normals = normals;
         draw.normalizeSkinned = p.normalize;
         draw.diffuse = diffuse ? static_cast<const DWORD*>(data.diffuse.lpvData) : nullptr;
         draw.diffuseStride = data.diffuse.dwStride;

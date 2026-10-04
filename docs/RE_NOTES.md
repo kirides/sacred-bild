@@ -333,12 +333,15 @@ vertices): at most 4 influences, at most 56 bones per mesh, normals weighted exa
 rigid / vertex-major / normal lists; differences of one float step (Granny accumulates in x87 extended precision).
 
 `[Render] GpuSkinning` (`src/game/gpu_skin.*`, `src/ddraw9/device_skin.cpp`, `skin.hlsl`): for the rendering
-path's deforms that want normals (the model pass; the shadow pass wants positions only) the deform runs with both
+path's deforms (the model pass wants positions and normals, the shadow pass positions only) the deform runs with both
 outputs off, which still computes every binding's matrix; the module keeps those and CPU-skins only the vertices
 `cGranny_render` samples for its bounding box (every `count < 12 ? 1 : count < 23 ? 2 : count < 34 ? 3 : count / 11`-th).
 The draw that follows is recognized by its position pointer and drawn by the backend from a static vertex buffer
 (bind pose, texture coordinates, 4 bones and weights) with a vs_2_0 shader that skins and lights like Direct3D 7's
-fixed-function pipeline; otherwise the module skins the whole mesh on the CPU first.
+fixed-function pipeline; otherwise the module skins the whole mesh on the CPU first. The shadow pass
+(`cGranny_renderShadow`, `0x406FF0`) locks the sequence with flags `0x21` (positions only) and draws FVF `0x142`:
+positions, one constant diffuse color (stride 0), texture coordinates, lighting off, stencil on, its world matrix
+flattening the mesh onto the ground (singular: the shader's normal matrix is only computed for lit draws).
 
 ## UI (`cUI_Control2` / `cUI_Window2` / `cUI_Manager`)
 

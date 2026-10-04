@@ -4,13 +4,13 @@
 #include <ddraw.h>
 #include <d3d.h>
 
-// [Render] GpuSkinning: characters skinned in a vertex shader instead of by Granny on the CPU (~20 % of the render
-// thread zoomed out). For the model pass (Granny's rendering path, deforms that want normals) the deform only computes
-// the bone matrices of the pose; this module keeps them, skins on the CPU just the vertices cGranny_render samples
-// for its bounding box, and the following DrawIndexedPrimitiveStrided of those vertices is drawn by the Direct3D 9
-// backend from a static per-mesh vertex buffer (DDraw9::Skin). Wherever that can't be done (another backend, state
-// the shader doesn't reproduce, UI mode) the vertices are skinned on the CPU after all and drawn as before. Shadows
-// and picking keep Granny's own deform.
+// [Render] GpuSkinning: characters and their shadows skinned in a vertex shader instead of by Granny on the CPU
+// (~20 % of the render thread zoomed out). For Granny's rendering path (the model pass wants positions and normals, the
+// shadow pass positions only) the deform only computes the bone matrices of the pose; this module keeps them, skins
+// on the CPU just the vertices cGranny_render samples for its bounding box, and the following
+// DrawIndexedPrimitiveStrided of those vertices is drawn by the Direct3D 9 backend from a static per-mesh vertex
+// buffer (DDraw9::Skin). Wherever that can't be done (another backend, state the shader doesn't reproduce, UI mode)
+// the vertices are skinned on the CPU after all and drawn as before. Picking keeps Granny's own deform.
 namespace GpuSkin
 {
     // Queues the hook in the caller's Patch transaction.

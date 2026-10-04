@@ -133,8 +133,10 @@ namespace DDraw9
         HRESULT applyStageState(DWORD stage, DWORD type, DWORD value);
         HRESULT applyTransform(DWORD type, const D3DMATRIX& m);
         void syncDepth();
-        // Before every draw: z-buffer, vertex format, and textures with CPU changes uploaded.
+        // Before every fixed-function draw: z-buffer, vertex format, and textures with CPU changes uploaded.
         void prepare(DWORD fvf);
+        // The z-buffer and texture part of it (skinned draws set their own vertex format).
+        void prepareTarget();
         void bindVertexBuffer(d9::IDirect3DVertexBuffer9* vb, UINT stride);
         // Copies `indices` into the dynamic index buffer; returns the start index or -1.
         int uploadIndices(const WORD* indices, DWORD count);
@@ -195,6 +197,15 @@ namespace DDraw9
         d9::IDirect3DVertexBuffer9* m_skinDiffuse = nullptr;    // ring of per-vertex diffuse colors
         UINT m_skinDiffuseCursor = 0;
         uint32_t m_skinPaletteId = 0;           // palette in the bone constants (0: none)
+        // The skinning shader stays bound until the next fixed-function draw (prepare): a character's pieces and
+        // its shadow are consecutive skinned draws.
+        bool m_skinBound = false;
+        int m_skinBoundVariant = -1;
+        // Constants as last uploaded, to skip repeats.
+        float m_skinConstants[72][4] = {};
+        UINT m_skinConstantCount = 0;
+        BOOL m_skinFlags[5] = {};
+        int m_skinLightCount = -1;
 
         std::vector<uint8_t> m_scratch;
         std::vector<std::unique_ptr<StateBlock>> m_stateBlocks;
