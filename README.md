@@ -150,6 +150,7 @@ The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll`
 | Debug | ProfilerIntervalUs | 500 | Sampling interval. |
 | Debug | UiTrace | 0 | Scroll Lock logs one UI frame's draws (`UiTrace:` lines: position, UI frame, calling game code) and popups set during the next 5 s. |
 | Debug | CrashDump | 1 | Minidump next to the exe on a crash: 0 = off, 1 = stacks and the memory they point to (small), 2 = all memory (for the game's globals; hundreds of MB). |
+| Debug | SkinCheck | 0 | Compares Granny's CPU skinning of characters with per-vertex bone weights rebuilt from its meshes (`Skin check:` lines every 10 s): groundwork for skinning on the GPU. |
 | Debug | MovieFallback | 0 | Movies always through the fallback (DirectShow into a system memory surface), as without the Media Engine. |
 
 ## LAN games over a VPN
@@ -229,6 +230,7 @@ What the game's code at those addresses does is in `docs/RE_NOTES.md` and in the
 | `src/game/screenshot.*` | Print Screen as PNG / JPEG |
 | `src/game/language.*` | Text and speech files of the game's language |
 | `src/game/granny_async.*` | Animation update on a worker thread (`[Render] AsyncAnimation`) |
+| `src/game/skin_check.*` | `[Debug] SkinCheck`: Granny's skinning data read back and checked |
 | `src/game/ground_quads.*` | The ground's quad batcher straight to the batcher (`[Render] BatchGround`) |
 | `src/game/map_cache.*` | Hash index in front of the map record caches (`[Render] RecordIndex`) |
 | `src/game/d3d_stats.*` | `[Debug] D3DStats` frame statistics |

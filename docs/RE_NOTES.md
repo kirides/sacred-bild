@@ -291,6 +291,37 @@ DDrawCompat's default `CpuAffinity = 1` the process affinity mask still covered 
 overlapped; the log reports the mask in case a setup really is limited to one CPU. Limitation: a raw (non-atlas) texture the game locks and changes in the
 middle of the world pass would show its new content in draws batched before the change.
 
+## Character skinning (granny.dll, Granny 1.x)
+
+granny.dll (image base `0x10000000`) is the same file in the English and German installs; addresses below are
+granny.dll's. Sacred uses the 1.x sequence API: `cGranny_render` (`0x405C90`) and the shadow pass (`0x406FF0`) each
+call `GrannyLockSequenceForRendering`, then `GrannyLockNextRenderingState` per mesh piece (a 0xCC-byte state: vertex
+streams for positions, normals and texture coordinates, the piece's index range, texture cookie, a matrix). At
+2560x1440 zoomed out those two `LockNextRenderingState` call sites were 14 % + 5.6 % of the render thread.
+
+- `LockNextRenderingState` -> engine `0x10034200`: on the first state of a sequence lock it deforms the whole mesh
+  with `0x1001E660` (thiscall on the mesh (bones, positions out, do positions, normals out, do normals, normalize),
+  `ret 0x18`); the following states point into the result. The shadow pass locks the sequence again, so every
+  character is deformed twice per frame.
+- A rigid path skips the deformation: meshes uploaded through the mesh cookie API (`GrannyLockNextNewMesh`), if
+  `0x1001DA00` calls them rigid (one bone binding, no vertex-major lists). Sacred never uploads meshes.
+- Mesh: `+0x0C` bone binding count, `+0x14` bindings (0x7C bytes each), `+0x18` vertex count, `+0x1C` bind-pose
+  positions (float3), `+0x20` normal count, `+0x24` normals, `+0x4C` vertex-major vertex count, `+0x50`/`+0x54`
+  vertex-major lists (int stream: per vertex a count and (binding, float weight) pairs), `+0x5C` duplicates (per
+  vertex-major vertex a count and offsets, relative to the vertex, of copies), `+0x60`/`+0x64` per-normal list
+  pointers (count, (binding, float weight) pairs).
+- Binding: `+0x44` length and `+0x48` bone-major runs (first vertex, count, `count` float weights; used for
+  positions and normals), `+0x4C` 3x3 matrix (row-major) and `+0x70` translation, computed by the deform for the
+  pose: out = M v + t.
+- Deform order: zero the outputs; per binding compute its matrix and add the weighted bone-major runs
+  (`0x1001DE00`); then either one rigid bone for every vertex/normal (`0x1001E050`/`0x1001E0E0`, if no vertex-major
+  vertices and fewer than 2 bindings) or the vertex-major lists (`0x1001DF00`) plus duplicates and the per-normal
+  lists (`0x1001E490`), each overwriting; optionally normalize the normals.
+- `cGranny_render` reads about 11 deformed positions per piece for a bounding box.
+
+`[Debug] SkinCheck` (`src/game/skin_check.*`) rebuilds per-vertex weights from these lists and compares its own
+skinning with Granny's output, with all influences and with at most four per vertex.
+
 ## UI (`cUI_Control2` / `cUI_Window2` / `cUI_Manager`)
 
 `cUI_Control2` (vtable `0x897488`): `+0x10` flags (bit 0 visible), `+0x24` x, `+0x28` y, `+0x2C`/`+0x2E`

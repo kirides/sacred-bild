@@ -109,6 +109,8 @@ struct Config
     int crashDump = 1;
     // Movies always through the fallback (DirectShow into a system memory surface) instead of Media Foundation.
     bool movieFallback = false;
+    // Compare Granny's CPU skinning with per-vertex weights (groundwork for skinning on the GPU).
+    bool skinCheck = false;
     int profilerIntervalUs = 500;
 };
 

@@ -9,6 +9,7 @@
 #include "game/map_cache.h"
 #include "game/resolution.h"
 #include "game/screenshot.h"
+#include "game/skin_check.h"
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
 #include "game/world_passes.h"
@@ -81,6 +82,7 @@ void Sacred::installHooks()
     Screenshot::install();
     MapCache::install();
     GroundQuads::install();
+    SkinCheck::install();
     Language::install();
     if (Patch::commit())
     {
