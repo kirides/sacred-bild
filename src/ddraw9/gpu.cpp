@@ -25,7 +25,6 @@ namespace DDraw9::Gpu
         d9::D3DPRESENT_PARAMETERS g_params = {};
         bool g_backBufferFrozen = false;
         bool g_presentFailed = false;
-        bool g_forceImmediateFailed = false;
 
         UINT adapterOf(HWND window)
         {
@@ -209,6 +208,14 @@ namespace DDraw9::Gpu
         g_params.hDeviceWindow = window;
         g_params.Windowed = TRUE;
         g_params.PresentationInterval = g_config.vsync ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
+        if (!g_config.vsync)
+        {
+            // In a window, flip model presentation waits for the display's refresh once its queue is full, whatever the
+            // interval (and with D3DPRESENT_FORCEIMMEDIATE): VSync=0 stopped at the refresh rate. A blit model present
+            // hands the frame to the compositor and returns.
+            g_params.SwapEffect = d9::D3DSWAPEFFECT_DISCARD;
+            g_params.BackBufferCount = 1;
+        }
 
         // The game calls the device from two threads and loads textures while drawing, so Direct3D serializes.
         // A pure device first: the Direct3D 7 device keeps its own copy of all state and never reads it back.
@@ -232,10 +239,12 @@ namespace DDraw9::Gpu
                 hr = g_d3d->CreateDeviceEx(g_adapter, d9::D3DDEVTYPE_HAL, window, flags, &g_params, nullptr, &g_device);
                 if (SUCCEEDED(hr))
                 {
-                    LOG("Direct3D 9: device {}x{}, {}, {}, {}vertex processing{}, vsync {}, frame latency {}", width, height,
-                        swapEffectName(g_params.SwapEffect), g_params.BackBufferCount == 1 ? "1 back buffer" : "2 back buffers",
+                    LOG("Direct3D 9: device {}x{}, {}, {}, {}vertex processing{}, vsync {}, frame latency {}, display {} Hz",
+                        width, height, swapEffectName(g_params.SwapEffect),
+                        g_params.BackBufferCount == 1 ? "1 back buffer" : "2 back buffers",
                         (flags & D3DCREATE_SOFTWARE_VERTEXPROCESSING) ? "software " : "hardware ",
-                        (flags & D3DCREATE_PUREDEVICE) ? " (pure)" : "", g_config.vsync ? "on" : "off", g_config.maxFrameLatency);
+                        (flags & D3DCREATE_PUREDEVICE) ? " (pure)" : "", g_config.vsync ? "on" : "off", g_config.maxFrameLatency,
+                        displayMode().RefreshRate);
                     break;
                 }
                 g_device = nullptr;
@@ -303,21 +312,7 @@ namespace DDraw9::Gpu
         }
         if (SUCCEEDED(hr))
         {
-            // Without vsync: in a window, flip model presentation still queues each frame for the next refresh and blocks
-            // once the queue is full, whatever the interval (the frame rate stopped at the refresh rate). Forced
-            // immediate presents replace the queued frame instead of waiting.
-            DWORD flags = 0;
-            if (!g_config.vsync && g_params.SwapEffect == d9::D3DSWAPEFFECT_FLIPEX && !g_forceImmediateFailed)
-            {
-                flags = D3DPRESENT_FORCEIMMEDIATE;
-            }
-            hr = dev->PresentEx(nullptr, nullptr, nullptr, nullptr, flags);
-            if (hr == D3DERR_INVALIDCALL && flags)
-            {
-                g_forceImmediateFailed = true;
-                LOG("Direct3D 9: immediate presents not accepted, frames wait for the display's refresh");
-                hr = dev->PresentEx(nullptr, nullptr, nullptr, nullptr, 0);
-            }
+            hr = dev->PresentEx(nullptr, nullptr, nullptr, nullptr, 0);
         }
         if (FAILED(hr) && !g_presentFailed)
         {

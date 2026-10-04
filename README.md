@@ -43,8 +43,8 @@ ddraw calls through and logs which one.
 - **Direct3D 9Ex backend** (`src/ddraw9/`): DirectDraw 7 and Direct3D 7 implemented on Direct3D 9Ex, for the
   subset Sacred uses (windowed swap chain, one render target with z-buffer, managed textures, system memory surfaces
   for GDI text, the fixed-function device). Both APIs are fixed-function with the same vertex formats and render
-  states, so device calls translate almost one to one. Frames are presented with the flip model (`VSync`,
-  `MaxFrameLatency`), and the per-call layers of Windows' Direct3D 7 runtime and DDrawCompat are gone. Anything the
+  states, so device calls translate almost one to one. Frames are presented with the flip model (the blit model
+  with `VSync=0`, which is not held to the refresh rate; `MaxFrameLatency`), and the per-call layers of Windows' Direct3D 7 runtime and DDrawCompat are gone. Anything the
   backend doesn't implement is logged once (`Direct3D 9 backend: not supported: ...`).
 - **Movies through Media Foundation** (`[DDraw] MediaFoundation`, always with the Direct3D 9 backend): the game
   decodes its WMV movies with DirectShow into DirectDraw surfaces, which needs a real DirectDraw, and its loop stops
@@ -113,7 +113,7 @@ The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll`
 | Display | ClipCursor | 1 | Confine the mouse to the game window while it is in the foreground; hold Alt to move it out. |
 | Display | FpsLimit | 60 | The game's own in-game frame limit; 0 = off. |
 | Display | FpsLimitInactive | 20 | Frame limit while the game is in the background, in game and in the menus; 0 = off. |
-| Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh; 0 = right away (a new frame replaces one still waiting for the refresh, so the frame rate is not limited by it). |
+| Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh (flip model); 0 = right away, not limited by the refresh rate (blit model). |
 | Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |
 | UI | Scale | 0 | UI scale; 0 = as large as fits the screen height, otherwise a factor (1 = native pixels), capped at that. |
 | UI | ScaleMode | InGame | Where `Scale` applies: `InGame` = the in-game UI only; the menus, the full-screen windows in game (options, save/load, character export, map) and the loading screen always fill the screen height. `Full` = those too. |
