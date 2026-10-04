@@ -132,6 +132,33 @@ private:
     static constexpr DWORD kStages = 8;
     static constexpr DWORD kStageTypes = 32;
 
+    // What a draw needs from the texture stages: the active ones, their coordinate sets, and whether an atlas copy
+    // may stand in for their textures. It only changes with render and stage states, so it is kept for a state
+    // epoch (bumped by every recorded stage state change, WRAP0-7 change and invalidate()).
+    struct StageSetup
+    {
+        uint32_t epoch = 0;             // 0: never made
+        DWORD fvf = ~0u;
+        DWORD stages = 0;
+        uint8_t sameSet[kStages] = {};  // other stages that use this stage's coordinate set (bit mask)
+        bool atlas[kStages] = {};       // the setup allows a copy (coordinate set, no transform, no wrap, addressing)
+        UINT offset[kStages] = {};      // byte offset of the stage's 2D coordinates
+        bool clampEdges[kStages] = {};  // gutter for clamp/mirror instead of wrap
+    };
+    // A texture's atlas copy as placed in a frame and atlas generation (bumped whenever pages change or textures were
+    // destroyed): one probe per textured stage instead of the atlas entry, its node and the setup checks.
+    struct AtlasBinding
+    {
+        IDirectDrawSurface7* texture = nullptr;
+        uint32_t frame = 0, generation = 0;
+        bool clampEdges = false;
+        IDirectDrawSurface7* page = nullptr;    // null: kept on the original texture (skip says why)
+        uint8_t skip = 0;                       // D3DStats counter
+        float marginU = 0, marginV = 0;         // half a texel: coordinates may reach that far beyond the edges
+        float scaleU = 1, scaleV = 1, offsetU = 0, offsetV = 0;
+    };
+    static constexpr size_t kBindings = 512;
+
     DWORD renderState(DWORD state);
     DWORD stageState(DWORD stage, DWORD type);
     IDirectDrawSurface7* texture(DWORD stage);
@@ -145,8 +172,8 @@ private:
     void bindWorld(const D3DMATRIX& m);
     DWORD tnlRenderState(DWORD state);
     void endModelBatch();   // draws a pending model batch: something it depends on is about to change
-    void useAtlas(DWORD stage, IDirectDrawSurface7* texture, const Layout& layout, const void* verts,
-        DWORD vertCount, IDirectDrawSurface7*& binding, Remap* remaps, UINT& remapCount);
+    const StageSetup& stageSetup(DWORD fvf, const Layout& layout);
+    const AtlasBinding& atlasBinding(IDirectDrawSurface7* texture, bool clampEdges);
     bool stateChanged(Reason& reason);
     void applyStates();
     void bindTexture(DWORD stage, IDirectDrawSurface7* texture);
@@ -162,6 +189,11 @@ private:
 
     IDirect3DDevice7* m_real;
     std::unique_ptr<TextureAtlas> m_atlas;
+    uint32_t m_stateEpoch = 1;
+    uint32_t m_atlasGeneration = 1;
+    StageSetup m_setups[2];
+    uint32_t m_nextSetup = 0;
+    AtlasBinding m_bindings[kBindings];
     DWORD m_submitFlags = 0;
     bool m_useAtlas = false;
     IDirect3D7* m_d3d = nullptr;            // creates the vertex buffers; null: submit from user memory

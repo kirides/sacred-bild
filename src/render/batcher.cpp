@@ -176,7 +176,9 @@ DWORD Batcher::triangles(D3DPRIMITIVETYPE type, DWORD count)
 
 void Batcher::beforeAtlasChange(void* self)
 {
-    static_cast<Batcher*>(self)->submit(Reason::Atlas);
+    auto* batcher = static_cast<Batcher*>(self);
+    batcher->submit(Reason::Atlas);
+    ++batcher->m_atlasGeneration;   // copies may move or go: cached bindings are stale
 }
 
 void Batcher::begin()
@@ -195,6 +197,7 @@ void Batcher::end()
 
 void Batcher::invalidate()
 {
+    ++m_stateEpoch;
     std::memset(m_rsFlags, 0, sizeof(m_rsFlags));
     std::memset(m_tssFlags, 0, sizeof(m_tssFlags));
     std::memset(m_texFlags, 0, sizeof(m_texFlags));
@@ -263,6 +266,10 @@ void Batcher::drainDestroyed()
     }
     m_destroyed.clear();
     m_atlas->drain(m_destroyed);
+    if (!m_destroyed.empty())
+    {
+        ++m_atlasGeneration;    // a new texture may come back at a destroyed one's address
+    }
     // The device holds a reference to what it has bound, so only recorded bindings can point at a destroyed
     // texture: the game released it while it was still selected. Select nothing instead of a dangling pointer.
     for (IDirectDrawSurface7* texture : m_destroyed)
@@ -301,6 +308,10 @@ HRESULT Batcher::setRenderState(DWORD state, DWORD value)
     if ((flags & Known) && m_rs[state] == value)
     {
         return D3D_OK;
+    }
+    if (state >= D3DRENDERSTATE_WRAP0 && state <= D3DRENDERSTATE_WRAP7)
+    {
+        ++m_stateEpoch;     // part of the stage setup
     }
     m_rs[state] = value;
     flags |= Known;
@@ -466,6 +477,7 @@ HRESULT Batcher::setStageState(DWORD stage, DWORD type, DWORD value)
     {
         return D3D_OK;
     }
+    ++m_stateEpoch;         // the stage setup depends on stage states
     m_tss[i] = value;
     flags |= Known;
     if (!(flags & Dirty))
@@ -774,63 +786,94 @@ HRESULT Batcher::drawDirect(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts,
     return m_real->DrawPrimitive(type, fvf, const_cast<void*>(verts), vertCount, flags);
 }
 
-void Batcher::useAtlas(DWORD stage, IDirectDrawSurface7* texture, const Layout& layout, const void* verts,
-    DWORD vertCount, IDirectDrawSurface7*& binding, Remap* remaps, UINT& remapCount)
+const Batcher::StageSetup& Batcher::stageSetup(DWORD fvf, const Layout& layout)
 {
+    for (const StageSetup& s : m_setups)
+    {
+        if (s.epoch == m_stateEpoch && s.fvf == fvf)
+        {
+            return s;
+        }
+    }
+    StageSetup& s = m_setups[m_nextSetup++ % std::size(m_setups)];
+    s = {};
+    s.epoch = m_stateEpoch;
+    s.fvf = fvf;
+    DWORD sets[kStages] = {};
+    for (; s.stages < kStages; ++s.stages)
+    {
+        const DWORD op = stageState(s.stages, D3DTSS_COLOROP);
+        if (op == D3DTOP_DISABLE || op == 0)    // 0: stage not supported by the device
+        {
+            break;
+        }
+        sets[s.stages] = stageState(s.stages, D3DTSS_TEXCOORDINDEX);   // also generated coordinates (high bits)
+    }
+    auto edgeClamped = [](DWORD mode) { return mode == D3DTADDRESS_CLAMP || mode == D3DTADDRESS_MIRROR; };
+    for (DWORD st = 0; st < s.stages; ++st)
+    {
+        for (DWORD o = 0; o < s.stages; ++o)
+        {
+            if (o != st && sets[o] == sets[st])
+            {
+                s.sameSet[st] |= static_cast<uint8_t>(1u << o);
+            }
+        }
+        // An atlas copy only behaves like the original for plain 2D coordinates, and its gutter for wrap addressing
+        // or for clamp/mirror (identical within half a texel of the edges) on both axes.
+        const DWORD set = sets[st];
+        if (set >= layout.texCount || !layout.texOffset[set] ||
+            stageState(st, D3DTSS_TEXTURETRANSFORMFLAGS) != D3DTTFF_DISABLE || renderState(D3DRENDERSTATE_WRAP0 + set) != 0)
+        {
+            continue;
+        }
+        const DWORD addressU = stageState(st, D3DTSS_ADDRESSU), addressV = stageState(st, D3DTSS_ADDRESSV);
+        if (edgeClamped(addressU) && edgeClamped(addressV))
+        {
+            s.clampEdges[st] = true;
+        }
+        else if (addressU != D3DTADDRESS_WRAP || addressV != D3DTADDRESS_WRAP)
+        {
+            continue;
+        }
+        s.atlas[st] = true;
+        s.offset[st] = layout.texOffset[set];
+    }
+    return s;
+}
+
+const Batcher::AtlasBinding& Batcher::atlasBinding(IDirectDrawSurface7* texture, bool clampEdges)
+{
+    AtlasBinding& b = m_bindings[(reinterpret_cast<uintptr_t>(texture) >> 4) % kBindings];
+    if (b.texture == texture && b.frame == m_frame && b.generation == m_atlasGeneration && b.clampEdges == clampEdges)
+    {
+        return b;
+    }
     TextureAtlas::Entry& e = m_atlas->entry(texture);
+    b.page = nullptr;
     if (!e.eligible)
     {
-        count(CAtlasSkipTexture);
-        return;
+        b.skip = CAtlasSkipTexture;
     }
-    // The copy only behaves like the original for plain 2D coordinates, and its gutter for wrap addressing or
-    // for clamp/mirror (identical within half a texel of the edges) on both axes.
-    const DWORD set = stageState(stage, D3DTSS_TEXCOORDINDEX);   // also rejects generated coordinates (high bits)
-    if (set >= layout.texCount || !layout.texOffset[set] ||
-        stageState(stage, D3DTSS_TEXTURETRANSFORMFLAGS) != D3DTTFF_DISABLE ||
-        renderState(D3DRENDERSTATE_WRAP0 + set) != 0)
+    else if (!m_atlas->place(texture, e, m_frame, clampEdges))    // may change pages: generation read below
     {
-        count(CAtlasSkipSetup);
-        return;
+        b.skip = CAtlasSkipFull;
     }
-    const DWORD addressU = stageState(stage, D3DTSS_ADDRESSU), addressV = stageState(stage, D3DTSS_ADDRESSV);
-    auto edgeClamped = [](DWORD mode) { return mode == D3DTADDRESS_CLAMP || mode == D3DTADDRESS_MIRROR; };
-    bool clampEdges = false;
-    if (edgeClamped(addressU) && edgeClamped(addressV))
+    else
     {
-        clampEdges = true;
+        b.page = e.page->surface;
+        b.marginU = 0.5f / e.width;
+        b.marginV = 0.5f / e.height;
+        b.scaleU = e.scaleU;
+        b.scaleV = e.scaleV;
+        b.offsetU = e.offsetU;
+        b.offsetV = e.offsetV;
     }
-    else if (addressU != D3DTADDRESS_WRAP || addressV != D3DTADDRESS_WRAP)
-    {
-        count(CAtlasSkipSetup);
-        return;
-    }
-    const UINT offset = layout.texOffset[set];
-    const UINT stride = layout.stride;
-    // Coordinates may reach half a texel beyond the edges: the gutter covers that.
-    float u0 = FLT_MAX, u1 = -FLT_MAX, v0 = FLT_MAX, v1 = -FLT_MAX;
-    const uint8_t* p = static_cast<const uint8_t*>(verts) + offset;
-    for (DWORD i = 0; i < vertCount; ++i, p += stride)
-    {
-        const float* uv = reinterpret_cast<const float*>(p);
-        u0 = std::min(u0, uv[0]);
-        u1 = std::max(u1, uv[0]);
-        v0 = std::min(v0, uv[1]);
-        v1 = std::max(v1, uv[1]);
-    }
-    const float mu = 0.5f / e.width, mv = 0.5f / e.height;
-    if (!(u0 >= -mu && u1 <= 1.0f + mu && v0 >= -mv && v1 <= 1.0f + mv))
-    {
-        count(CAtlasRange);
-        return;
-    }
-    if (!m_atlas->place(texture, e, m_frame, clampEdges))
-    {
-        count(CAtlasSkipFull);
-        return;
-    }
-    binding = e.page->surface;
-    remaps[remapCount++] = {offset, e.scaleU, e.scaleV, e.offsetU, e.offsetV};
+    b.texture = texture;
+    b.clampEdges = clampEdges;
+    b.frame = m_frame;
+    b.generation = m_atlasGeneration;
+    return b;
 }
 
 HRESULT Batcher::draw(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD vertCount, const WORD* indices,
@@ -950,18 +993,15 @@ void Batcher::append(Kind kind, D3DPRIMITIVETYPE type, DWORD fvf, const Source& 
     const UINT stride = vertexLayout.stride;
 
     // Textures the draw samples, replaced by atlas pages where possible. A coordinate set shared by two
-    // stages keeps the original textures: remapping it for one would break the other.
+    // textured stages keeps the original textures: remapping it for one would break the other.
+    const StageSetup& setup = stageSetup(fvf, vertexLayout);
+    const DWORD stages = setup.stages;
     IDirectDrawSurface7* binding[kStages];
-    DWORD sets[kStages];
-    DWORD stages = 0;
-    auto enabled = [this](DWORD stage) {
-        const DWORD op = stageState(stage, D3DTSS_COLOROP);
-        return op != D3DTOP_DISABLE && op != 0;     // 0: stage not supported by the device
-    };
-    for (; stages < kStages && enabled(stages); ++stages)
+    uint32_t textured = 0;
+    for (DWORD s = 0; s < stages; ++s)
     {
-        binding[stages] = texture(stages);
-        sets[stages] = stageState(stages, D3DTSS_TEXCOORDINDEX);
+        binding[s] = texture(s);
+        textured |= binding[s] ? 1u << s : 0u;
     }
     Remap remaps[kStages];
     UINT remapCount = 0;
@@ -974,19 +1014,41 @@ void Batcher::append(Kind kind, D3DPRIMITIVETYPE type, DWORD fvf, const Source& 
             {
                 continue;
             }
-            bool shared = false;
-            for (DWORD o = 0; o < stages; ++o)
-            {
-                shared |= o != s && m_tex[o] && sets[o] == sets[s];
-            }
-            if (shared)
+            if (setup.sameSet[s] & textured)
             {
                 count(CAtlasSkipShared);
+                continue;
             }
-            else
+            if (!setup.atlas[s])
             {
-                useAtlas(s, binding[s], vertexLayout, source.interleaved, vertCount, binding[s], remaps, remapCount);
+                count(CAtlasSkipSetup);
+                continue;
             }
+            const AtlasBinding& b = atlasBinding(binding[s], setup.clampEdges[s]);
+            if (!b.page)
+            {
+                count(static_cast<Counter>(b.skip));
+                continue;
+            }
+            // Coordinates may reach half a texel beyond the edges: the gutter covers that.
+            const UINT offset = setup.offset[s];
+            float u0 = FLT_MAX, u1 = -FLT_MAX, v0 = FLT_MAX, v1 = -FLT_MAX;
+            const uint8_t* p = static_cast<const uint8_t*>(source.interleaved) + offset;
+            for (DWORD i = 0; i < vertCount; ++i, p += stride)
+            {
+                const float* uv = reinterpret_cast<const float*>(p);
+                u0 = std::min(u0, uv[0]);
+                u1 = std::max(u1, uv[0]);
+                v0 = std::min(v0, uv[1]);
+                v1 = std::max(v1, uv[1]);
+            }
+            if (!(u0 >= -b.marginU && u1 <= 1.0f + b.marginU && v0 >= -b.marginV && v1 <= 1.0f + b.marginV))
+            {
+                count(CAtlasRange);
+                continue;
+            }
+            binding[s] = b.page;
+            remaps[remapCount++] = {offset, b.scaleU, b.scaleV, b.offsetU, b.offsetV};
         }
     }
 
