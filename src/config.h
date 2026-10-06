@@ -128,6 +128,7 @@ struct Config
     int controllerAimCone = 90;         // ... preferring those within this many degrees around the aim
     bool controllerArtClick = true;     // combat art slot buttons: select the slot (6-0) and right-click the target
     bool controllerWalk = true;         // the left stick pushed less than halfway walks (Shift) instead of running
+    bool controllerPrompts = true;      // button icons beside what a button does (Direct3D 9 backend)
 
     // SacredBild.ini itself, for the settings changed in game.
     std::wstring iniPath;

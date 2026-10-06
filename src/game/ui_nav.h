@@ -6,6 +6,11 @@
 // are found in the UI manager's visible windows, their classes told apart through the exe's RTTI.
 namespace UiNav
 {
+    struct Rect
+    {
+        float left, top, right, bottom;     // screen pixels
+    };
+
     // The center of the nearest control from (x, y) in direction (dx, dy) (screen pixels, y down); false if there is
     // none that way.
     bool next(float x, float y, float dx, float dy, float& outX, float& outY);
@@ -21,6 +26,12 @@ namespace UiNav
     // The open message box's Cancel: the bottom-most, then right-most button (its only one if it has one); false if
     // no message box is open.
     bool cancelButton(float& outX, float& outY);
+    // The control D-pad navigation would stop at that lies under (x, y) (screen pixels), the smallest if they
+    // overlap; false if there is none.
+    bool controlAt(float x, float y, Rect& out);
+    // A visible control's rect in screen pixels, `window` being the top-level window whose frame it is drawn in;
+    // false if it is hidden or has no sensible size.
+    bool controlRect(void* control, void* window, Rect& out);
     // How many buttons D-pad navigation finds in `window` (diagnostics).
     int buttonCount(void* window);
 
@@ -48,4 +59,5 @@ namespace UiNav
     bool npcDialogOpen();
     // The screen point of the open NPC dialog's answer `index` (0..3), to click it; false if it has none there.
     bool npcAnswer(int index, float& outX, float& outY);
+    bool npcAnswerRect(int index, Rect& out);
 }

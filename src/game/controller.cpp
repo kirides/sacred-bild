@@ -12,6 +12,7 @@
 #include "input/inject.h"
 #include "input/input_mode.h"
 #include "overlay/overlay.h"
+#include "overlay/prompts.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
@@ -849,6 +850,175 @@ namespace
     }
 }
 
+namespace
+{
+    // ---- Button prompts ----
+
+    constexpr float kPromptSize = 20.0f;        // 1024x768 pixels, scaled like the UI
+    constexpr float kPromptMargin = 4.0f;
+
+    // Screen pixels per 1024x768 pixel.
+    float canvasScale()
+    {
+        return (UiCanvas::toPhysicalY(768) - UiCanvas::toPhysicalY(0)) / 768.0f;
+    }
+
+    Bindings::Binding single(uint32_t button)
+    {
+        return {button, 0};
+    }
+
+    // `binding` left of `r` (right of it if there is no room), vertically centered.
+    void promptBeside(Bindings::Binding binding, const UiNav::Rect& r)
+    {
+        const float scale = canvasScale();
+        const float size = kPromptSize * scale, margin = kPromptMargin * scale;
+        const float y = (r.top + r.bottom) * 0.5f;
+        if (r.left - margin - Prompts::width(binding, size) >= 0.0f)
+        {
+            Prompts::add(binding, r.left - margin, y, size, 1.0f, 0.5f);
+        }
+        else
+        {
+            Prompts::add(binding, r.right + margin, y, size, 0.0f, 0.5f);
+        }
+    }
+
+    // `binding` centered above the point (a tab's center).
+    void promptAbove(Bindings::Binding binding, float x, float y)
+    {
+        const float scale = canvasScale();
+        Prompts::add(binding, x, y - 10.0f * scale, kPromptSize * scale, 0.5f, 1.0f);
+    }
+
+    void uiPrompts()
+    {
+        UiNav::Rect r;
+        if (UiNav::controlAt(g_x, g_y, r))
+        {
+            promptBeside(single(Gamepad::A), r);
+        }
+        float x, y;
+        if (UiNav::cancelButton(x, y) && UiNav::controlAt(x, y, r))
+        {
+            promptBeside(single(Gamepad::B), r);
+        }
+        if (!UiNav::modal())
+        {
+            if (UiNav::inventoryTab(-1, x, y))
+            {
+                promptAbove(single(Gamepad::LB), x, y);
+            }
+            if (UiNav::inventoryTab(1, x, y))
+            {
+                promptAbove(single(Gamepad::RB), x, y);
+            }
+        }
+    }
+
+    void dialogPrompts()
+    {
+        UiNav::Rect r;
+        if (UiNav::npcAnswerRect(0, r))
+        {
+            promptBeside(single(Gamepad::A), r);
+        }
+        if (UiNav::npcAnswerRect(1, r))
+        {
+            promptBeside(single(Gamepad::B), r);
+        }
+    }
+
+    void bookPrompts()
+    {
+        float x, y;
+        if (UiNav::bookTab(-1, x, y))
+        {
+            promptAbove(single(Gamepad::LB), x, y);
+        }
+        if (UiNav::bookTab(1, x, y))
+        {
+            promptAbove(single(Gamepad::RB), x, y);
+        }
+        const float scale = canvasScale();
+        const float size = kPromptSize * scale, margin = kPromptMargin * scale;
+        if (UiNav::bookSection(-1, x, y))
+        {
+            Prompts::add(single(Gamepad::Up), x - 12.0f * scale - margin, y, size, 1.0f, 0.5f);
+        }
+        if (UiNav::bookSection(1, x, y))
+        {
+            Prompts::add(single(Gamepad::Down), x - 12.0f * scale - margin, y, size, 1.0f, 0.5f);
+        }
+    }
+
+    // The bindings of the HUD's slots while Show names is held or the help screen is up.
+    void hudPrompts(const Bindings::Set& held)
+    {
+        void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager);
+        const bool help = manager && (member<uint32_t>(manager, UiManager::flags) & UiManager::helpScreen);
+        if (!help && !held[static_cast<int>(Action::ShowItems)])
+        {
+            return;
+        }
+        void* taskbar = member<void*>(manager, UiManager::taskbar);
+        if (!taskbar || !(member<uint32_t>(taskbar, UiControl::flags) & 1))
+        {
+            return;
+        }
+        const float scale = canvasScale();
+        const float size = kPromptSize * scale, gap = 3.0f * scale;
+        UiNav::Rect r;
+        // Weapon and combat art slots: above each, side by side.
+        for (int i = 0; i < Taskbar::slotCount; ++i)
+        {
+            const auto weapon = static_cast<Action>(static_cast<int>(Action::Weapon1) + i);
+            const auto art = static_cast<Action>(static_cast<int>(Action::Art1) + i);
+            for (const auto& [offset, action] : {std::pair{Taskbar::weaponSlots, weapon}, std::pair{Taskbar::artSlots, art}})
+            {
+                void* slot = member<void*>(taskbar, offset + i * 4);
+                if (slot && UiNav::controlRect(slot, taskbar, r))
+                {
+                    Prompts::add(Bindings::get(action), (r.left + r.right) * 0.5f, r.top - gap, size, 0.5f, 1.0f);
+                }
+            }
+        }
+        // Potions (Space Q W E R): the buttons stand close together, so their bindings stand upright.
+        constexpr Action kPotions[] = {Action::Heal, Action::UndeadDeath, Action::Mentor, Action::Antidote,
+            Action::Concentration};
+        for (int i = 0; i < Taskbar::slotCount; ++i)
+        {
+            auto* full = static_cast<uint8_t*>(taskbar) + Taskbar::potionButtons + i * Taskbar::potionButtonSize;
+            auto* empty = static_cast<uint8_t*>(taskbar) + Taskbar::potionButtonsEmpty + i * Taskbar::potionButtonSize;
+            if (UiNav::controlRect(full, taskbar, r) || UiNav::controlRect(empty, taskbar, r))
+            {
+                Prompts::addStacked(Bindings::get(kPotions[i]), (r.left + r.right) * 0.5f, r.top - gap, size * 0.8f);
+            }
+        }
+    }
+
+    void showPrompts(Context context, const Bindings::Set& held)
+    {
+        switch (context)
+        {
+        case Context::Ui:
+            uiPrompts();
+            break;
+        case Context::Dialog:
+            dialogPrompts();
+            break;
+        case Context::Book:
+            bookPrompts();
+            break;
+        case Context::Game:
+            hudPrompts(held);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
 void Controller::install()
 {
     LARGE_INTEGER f;
@@ -886,6 +1056,12 @@ void Controller::onFrame()
     }
     Gamepad::setDeadzone(g_config.controllerDeadzone / 100.0f);
     Gamepad::poll();
+    // This frame's prompts (none unless the controller drives), drawn into the next.
+    Prompts::begin(Gamepad::state().style);
+    struct PromptsDone
+    {
+        ~PromptsDone() { Prompts::end(); }
+    } promptsDone;
     const int64_t now = qpc();
     const float dt = g_lastQpc ? std::clamp(seconds(now - g_lastQpc), 0.0f, 0.1f) : 0.0f;
     g_lastQpc = now;
@@ -981,6 +1157,10 @@ void Controller::onFrame()
     else if (context == Context::Game)
     {
         gameFrame(held, pressed);
+    }
+    if (g_config.controllerPrompts)
+    {
+        showPrompts(context, held);
     }
 }
 

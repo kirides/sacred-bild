@@ -188,6 +188,21 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
 - Hold-to-move: after 0.5 s of holding the button (`0x6172C0`, timer `0xAD6F1C`) the hero walks toward
   `cursor - (512, 384)` turned into an iso direction (`0x4FB7E0`, `lea reg, [mouse + 2*off - 0x200]`). That
   read is redirected to screen pixels, so the center is patched to W/2, H/2.
+- Move orders: the mouse handler and the per-frame hold-to-walk (`0x60F130`) build a 0x44-byte order (vtable
+  `0x89095C`, `+4` type 4, `+0x14` mode 2 walk / 0 stop, `+0x18/+0x1C` world target from the view's screenToWorld,
+  `+0x20` 1 = follow the cursor) and hand it to `cEngine_sendOrder` (`0x617030`, thiscall on the engine (creature,
+  order), `ret 8`), which snaps a walk target to a walkable cell (`0x616AD0`) and calls the creature's vtable `+0x18`.
+  The move executor (`0x4F4770`, "EiMove") walks a follow order straight at the cursor through `0x4FB7E0`, but for
+  a player only while cMouse `+0` bit `0x100` (left button held, set and cleared only by the window procedure) is
+  set (`0x4F681A`); otherwise it ends after the next waypoint. Hold-to-walk re-sends the order only while the hero
+  is still moving, so a walk something blocked never restarts while the button stays down. SacredBild's stick walk
+  (`src/game/hero_move.*`) sends the follow order itself and sets that bit, without the click's path-finding start.
+- Taskbar slots (`cUI_Manager +0x80`, setup `0x6E4DF0`, relayout `0x6E01F0`): weapon slots (keys 1-5) at `+0x164`
+  and combat art slots (6-0) at `+0x178` (cUI_Static* each, 64x64, taskbar-relative, slots past the hero's slot count
+  hidden; the weapon slots move with the count), potion buttons (Space Q W E R) embedded at `+0x258 + i * 0xBC`
+  (greyed copies at `+0x604`), absolute (435,667) (465,653) (497,649) (530,653) (560,667) 32x32, drawn only with the
+  SHOWPOTIONS option. Keys: the taskbar's receiveEvent `0x6E1BC0` ('1'-'5' `0x6E1690`, '6'-'0' `0x6E1A20`); potions
+  through `usePotion` `0x612FA0(type, toHirelings)` from the key switch at `0x6186EE` (B: healing to the hirelings).
 - Animated water/lava tiles (record type `0x90`/`0xA0`): `renderTileRow` appends 0x98-byte entries at
   `+0x3FF2C` (count `+0x80E3C`) with no bounds check; `cWorldView_drawWaterTiles` (`0x62DD00`) draws them after
   all rows (glow pass, tile pass) and sets the water ambience from their count and average position. Entry 1750

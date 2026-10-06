@@ -61,6 +61,7 @@ add_library(ddraw SHARED
   src/input/inject.cpp
   src/input/input_mode.cpp
   src/overlay/overlay.cpp
+  src/overlay/prompts.cpp
   src/ddraw9/device.cpp
   src/ddraw9/device_skin.cpp
   src/ddraw9/directdraw.cpp
@@ -87,6 +88,8 @@ add_library(ddraw SHARED
   src/version.rc
 )
 target_include_directories(ddraw PRIVATE src ${DETOURS_INCLUDE_DIRS})
+# The resource script embeds the button prompts' atlas (tools/gen_prompts.py).
+set_source_files_properties(src/version.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/overlay/prompts.png)
 target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
 target_compile_definitions(ddraw PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 target_compile_options(ddraw PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc)

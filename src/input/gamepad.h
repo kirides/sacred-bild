@@ -29,9 +29,18 @@ namespace Gamepad
     };
     constexpr int buttonCount = 16;
 
+    // Whose labels the pad's buttons carry (for button prompts).
+    enum class Style : uint8_t
+    {
+        Xbox,           // also anything SDL doesn't know
+        PlayStation,
+        Switch,         // south is B, east A, west Y, north X
+    };
+
     struct State
     {
         bool connected = false;
+        Style style = Style::Xbox;
         uint32_t buttons = 0;
         // Sticks with the deadzone taken out (radial, rescaled to 0..1 beyond it), y up.
         float lx = 0.0f, ly = 0.0f;

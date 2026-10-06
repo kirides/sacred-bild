@@ -455,6 +455,22 @@ namespace Sacred::UiManager
     constexpr uintptr_t popupsEnd = 0x128;
 }
 
+// The taskbar (cUI_Manager +0x80, vtable 0x896AC0, setup ENG 006E4DF0) and its slots, all with rects through
+// cUI_Control2_getAbsoluteRect. Weapon slots (keys 1-5, "UI_TB_SKILL1".., 64x64) and combat art slots (keys 6-0,
+// "UI_TB_SPELL1".., 64x64): pointers; the relayout (ENG 006E01F0) hides the slots past the hero's slot count and
+// moves the weapon slots so they end at the center. Potion buttons (Space Q W E R: healing, then types 2-5; 32x32 in
+// an arc above the center ornament): embedded controls, drawn only with the SHOWPOTIONS option; the greyed copies
+// stand for potions the hero has none of.
+namespace Sacred::Taskbar
+{
+    constexpr uintptr_t weaponSlots = 0x164;     // cUI_Static*[5]
+    constexpr uintptr_t artSlots = 0x178;        // cUI_Static*[5]
+    constexpr uintptr_t potionButtons = 0x258;   // 5 embedded buttons, 0xBC apart
+    constexpr uintptr_t potionButtonsEmpty = 0x604;
+    constexpr uintptr_t potionButtonSize = 0xBC;
+    constexpr int slotCount = 5;
+}
+
 // cUI_Window2 members: child controls (std::vector of cUI_Control2*, positioned relative to the window).
 namespace Sacred::UiWindow
 {

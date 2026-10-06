@@ -177,7 +177,7 @@ namespace
     struct ControllerOptions
     {
         int deadzone, cursorSpeed, moveRadius, aimRange, aimCone;
-        bool artClick, walk;
+        bool artClick, walk, prompts;
         std::array<Binding, Bindings::actionCount> bindings;
 
         bool operator==(const ControllerOptions&) const = default;
@@ -261,7 +261,8 @@ namespace
     ControllerOptions readController()
     {
         ControllerOptions o{g_config.controllerDeadzone, g_config.controllerCursorSpeed, g_config.controllerMoveRadius,
-            g_config.controllerAimRange, g_config.controllerAimCone, g_config.controllerArtClick, g_config.controllerWalk, {}};
+            g_config.controllerAimRange, g_config.controllerAimCone, g_config.controllerArtClick, g_config.controllerWalk,
+            g_config.controllerPrompts, {}};
         for (int i = 0; i < Bindings::actionCount; ++i)
         {
             o.bindings[i] = Bindings::get(static_cast<Action>(i));
@@ -273,7 +274,7 @@ namespace
     {
         const Config d;
         ControllerOptions o{d.controllerDeadzone, d.controllerCursorSpeed, d.controllerMoveRadius, d.controllerAimRange,
-            d.controllerAimCone, d.controllerArtClick, d.controllerWalk, {}};
+            d.controllerAimCone, d.controllerArtClick, d.controllerWalk, d.controllerPrompts, {}};
         for (int i = 0; i < Bindings::actionCount; ++i)
         {
             o.bindings[i] = Bindings::info(static_cast<Action>(i)).defaults;
@@ -291,6 +292,7 @@ namespace
         g_config.controllerAimCone = o.aimCone;
         g_config.controllerArtClick = o.artClick;
         g_config.controllerWalk = o.walk;
+        g_config.controllerPrompts = o.prompts;
         for (int i = 0; i < Bindings::actionCount; ++i)
         {
             Bindings::set(static_cast<Action>(i), o.bindings[i]);
@@ -301,7 +303,8 @@ namespace
         };
         const bool ok = put(L"Deadzone", o.deadzone) & put(L"CursorSpeed", o.cursorSpeed) &
             put(L"MoveRadius", o.moveRadius) & put(L"AimRange", o.aimRange) & put(L"AimCone", o.aimCone) &
-            put(L"ArtClick", o.artClick) & put(L"Walk", o.walk) & Bindings::save(g_config.iniPath);
+            put(L"ArtClick", o.artClick) & put(L"Walk", o.walk) & put(L"Prompts", o.prompts) &
+            Bindings::save(g_config.iniPath);
         LOG("Controller: settings and bindings {} SacredBild.ini", ok ? "saved to" : "could not all be written to");
     }
 
@@ -496,6 +499,9 @@ namespace
         ImGui::Checkbox("Combat art slots also cast at the target", &o.artClick);
         ImGui::SetItemTooltip("On: the slot button selects the combat art and right-clicks the target.\nOff: it only selects it.");
         ImGui::Checkbox("Walk when the stick is pushed less than halfway", &o.walk);
+        ImGui::Checkbox("Show button prompts", &o.prompts);
+        ImGui::SetItemTooltip("Button icons beside the control a button presses, and the bindings at the HUD's slots\n"
+            "while Show names is held or the help screen (H) is up.");
 
         heading("Buttons");
         ImGui::TextDisabled("A: change   X: clear   hold a button and press another for a two-button binding");

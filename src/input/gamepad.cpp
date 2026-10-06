@@ -17,6 +17,7 @@ namespace
     struct Reading
     {
         SDL_JoystickID id = 0;
+        Gamepad::Style style = Gamepad::Style::Xbox;
         uint32_t buttons = 0;
         int16_t lx = 0, ly = 0, rx = 0, ry = 0;
         int16_t lt = 0, rt = 0;     // 0..32767
@@ -71,10 +72,29 @@ namespace
         return static_cast<int16_t>(std::clamp(-static_cast<int>(v), -32768, 32767));
     }
 
+    Gamepad::Style styleOf(SDL_Gamepad* pad)
+    {
+        switch (SDL_GetGamepadType(pad))
+        {
+        case SDL_GAMEPAD_TYPE_PS3:
+        case SDL_GAMEPAD_TYPE_PS4:
+        case SDL_GAMEPAD_TYPE_PS5:
+            return Gamepad::Style::PlayStation;
+        case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO:
+        case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
+        case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
+        case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
+            return Gamepad::Style::Switch;
+        default:
+            return Gamepad::Style::Xbox;
+        }
+    }
+
     Reading read(SDL_Gamepad* pad)
     {
         Reading r;
         r.id = SDL_GetGamepadID(pad);
+        r.style = styleOf(pad);
         for (const auto& [button, bit] : kButtons)
         {
             if (SDL_GetGamepadButton(pad, button))
@@ -191,6 +211,7 @@ namespace
     {
         Gamepad::State s;
         s.connected = true;
+        s.style = r.style;
         s.buttons = r.buttons;
         s.lt = std::clamp(r.lt / 32767.0f, 0.0f, 1.0f);
         s.rt = std::clamp(r.rt / 32767.0f, 0.0f, 1.0f);

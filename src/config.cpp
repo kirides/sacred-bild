@@ -128,6 +128,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.controllerAimCone = std::clamp(readInt(ini, L"Controller", L"AimCone", g_config.controllerAimCone), 10, 360);
     g_config.controllerArtClick = readBool(ini, L"Controller", L"ArtClick", g_config.controllerArtClick);
     g_config.controllerWalk = readBool(ini, L"Controller", L"Walk", g_config.controllerWalk);
+    g_config.controllerPrompts = readBool(ini, L"Controller", L"Prompts", g_config.controllerPrompts);
     g_config.d3dStats = readInt(ini, L"Debug", L"D3DStats", g_config.d3dStats) != 0;
     g_config.profiler = readInt(ini, L"Debug", L"Profiler", g_config.profiler) != 0;
     g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
@@ -146,9 +147,10 @@ void ConfigFile::load(const std::wstring& gameDir)
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
         g_config.batchModels, g_config.batchGround, g_config.gpuSkinning, g_config.offscreenPoses, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
         g_config.atlasMaxTextureSize, g_config.screenshotJpeg ? "jpg" : "png", g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.netUdp, g_config.netMatchmaker, g_config.netPublish, g_config.netPreferIpv6 ? "IPv6" : "IPv4", g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs, g_config.uiTrace, g_config.crashDump, g_config.movieFallback, g_config.skinCheck);
-    LOG("Config: Controller Enabled={} Deadzone={} CursorSpeed={} MoveRadius={} AimRange={} AimCone={} ArtClick={} Walk={}",
+    LOG("Config: Controller Enabled={} Deadzone={} CursorSpeed={} MoveRadius={} AimRange={} AimCone={} ArtClick={} Walk={} Prompts={}",
         g_config.controller, g_config.controllerDeadzone, g_config.controllerCursorSpeed, g_config.controllerMoveRadius,
-        g_config.controllerAimRange, g_config.controllerAimCone, g_config.controllerArtClick, g_config.controllerWalk);
+        g_config.controllerAimRange, g_config.controllerAimCone, g_config.controllerArtClick, g_config.controllerWalk,
+        g_config.controllerPrompts);
     const auto pos = [](const Config::UiPosition& p) { return std::format("{},{}", p.x, p.y); };
     LOG("Config: UI.Layout Taskbar={} Chat={} Inventory={} Equipment={} Stats={} Minimap={} Portraits={} Shops={}",
         pos(g_config.uiTaskbar), pos(g_config.uiChat), pos(g_config.uiInventory), pos(g_config.uiEquipment),

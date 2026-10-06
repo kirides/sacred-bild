@@ -140,17 +140,29 @@ namespace
     {
         float x, y;
         bool button;
+        UiNav::Rect rect;   // the control's, screen pixels
     };
+
+    float physicalX(float x, const UiCanvas::Frame& frame)
+    {
+        return static_cast<float>(UiCanvas::toPhysicalX(static_cast<int>(std::lround(x + frame.x))));
+    }
+
+    float physicalY(float y, const UiCanvas::Frame& frame)
+    {
+        return static_cast<float>(UiCanvas::toPhysicalY(static_cast<int>(std::lround(y + frame.y))));
+    }
 
     // A point of the 1024x768 layout of a window shifted by `frame`, in screen pixels.
     Point screen(float x, float y, const UiCanvas::Frame& frame, bool button = false)
     {
-        return {static_cast<float>(UiCanvas::toPhysicalX(static_cast<int>(std::lround(x + frame.x)))),
-            static_cast<float>(UiCanvas::toPhysicalY(static_cast<int>(std::lround(y + frame.y)))), button};
+        const float px = physicalX(x, frame), py = physicalY(y, frame);
+        return {px, py, button, {px, py, px, py}};
     }
 
-    // A control's center (its parents' positions added, as the game hit-tests it), false if it has no sensible size.
-    bool center(void* control, float& x, float& y)
+    // A control's rect in the 1024x768 layout (its parents' positions added, as the game hit-tests it), false if it
+    // has no sensible size.
+    bool layoutRect(void* control, float& left, float& top, float& width, float& height)
     {
         int32_t rect[3] = {};
         reinterpret_cast<RectFn>(Addr::cUI_Control2_getAbsoluteRect)(control, nullptr, rect);
@@ -159,17 +171,39 @@ namespace
         {
             return false;
         }
-        x = rect[0] + w * 0.5f;
-        y = rect[1] + h * 0.5f;
+        left = static_cast<float>(rect[0]);
+        top = static_cast<float>(rect[1]);
+        width = static_cast<float>(w);
+        height = static_cast<float>(h);
         return true;
+    }
+
+    bool center(void* control, float& x, float& y)
+    {
+        float left, top, w, h;
+        if (!layoutRect(control, left, top, w, h))
+        {
+            return false;
+        }
+        x = left + w * 0.5f;
+        y = top + h * 0.5f;
+        return true;
+    }
+
+    // A layout rect in screen pixels.
+    UiNav::Rect screenRect(float left, float top, float w, float h, const UiCanvas::Frame& frame)
+    {
+        return {physicalX(left, frame), physicalY(top, frame), physicalX(left + w, frame), physicalY(top + h, frame)};
     }
 
     void addControl(void* control, bool button, const UiCanvas::Frame& frame, std::vector<Point>& out)
     {
-        float x, y;
-        if (out.size() < kMaxControls && center(control, x, y))
+        float left, top, w, h;
+        if (out.size() < kMaxControls && layoutRect(control, left, top, w, h))
         {
-            out.push_back(screen(x, y, frame, button));
+            Point p = screen(left + w * 0.5f, top + h * 0.5f, frame, button);
+            p.rect = screenRect(left, top, w, h, frame);
+            out.push_back(p);
         }
     }
 
@@ -398,6 +432,35 @@ bool UiNav::cancelButton(float& outX, float& outY)
     return found;
 }
 
+bool UiNav::controlAt(float x, float y, Rect& out)
+{
+    bool found = false;
+    float area = 0.0f;
+    for (const Point& p : controls())
+    {
+        const Rect& r = p.rect;
+        const float a = (r.right - r.left) * (r.bottom - r.top);
+        if (x >= r.left && x < r.right && y >= r.top && y < r.bottom && (!found || a < area))
+        {
+            out = r;
+            area = a;
+            found = true;
+        }
+    }
+    return found;
+}
+
+bool UiNav::controlRect(void* control, void* window, Rect& out)
+{
+    float left, top, w, h;
+    if (!visible(control) || !layoutRect(control, left, top, w, h))
+    {
+        return false;
+    }
+    out = screenRect(left, top, w, h, frameOf(window));
+    return true;
+}
+
 int UiNav::buttonCount(void* window)
 {
     std::vector<Point> controls;
@@ -486,6 +549,18 @@ bool UiNav::npcDialogOpen()
 
 bool UiNav::npcAnswer(int index, float& outX, float& outY)
 {
+    Rect r;
+    if (!npcAnswerRect(index, r))
+    {
+        return false;
+    }
+    outX = std::round((r.left + r.right) * 0.5f);
+    outY = std::round((r.top + r.bottom) * 0.5f);
+    return true;
+}
+
+bool UiNav::npcAnswerRect(int index, Rect& out)
+{
     void* popup = npcDialog();
     if (!popup || index < 0 || index >= Popup::answerCount)
     {
@@ -506,10 +581,8 @@ bool UiNav::npcAnswer(int index, float& outX, float& outY)
     {
         frame = {};
     }
-    const float cx = rect[0] + member<int32_t>(popup, answer + Popup::answerX) + w * 0.5f + frame.x;
-    const float cy = rect[1] + member<int32_t>(popup, answer + Popup::answerY) + h * 0.5f + frame.y;
-    outX = static_cast<float>(UiCanvas::toPhysicalX(static_cast<int>(std::lround(cx))));
-    outY = static_cast<float>(UiCanvas::toPhysicalY(static_cast<int>(std::lround(cy))));
+    out = screenRect(static_cast<float>(rect[0] + member<int32_t>(popup, answer + Popup::answerX)),
+        static_cast<float>(rect[1] + member<int32_t>(popup, answer + Popup::answerY)), w, h, frame);
     return true;
 }
 

@@ -1,4 +1,5 @@
 #include "overlay/overlay.h"
+#include "overlay/prompts.h"
 #include "ddraw9/gpu.h"
 #include "input/gamepad.h"
 #include "input/input_mode.h"
@@ -185,19 +186,9 @@ namespace
         analog(ImGuiKey_GamepadRStickDown, -s.ry);
     }
 
-    void render(d9::IDirect3DDevice9Ex* device, d9::IDirect3DSurface9* backBuffer, HWND window)
+    // One ImGui frame of the open screen; false closes it.
+    bool frame(Overlay::DrawFn draw, HWND window)
     {
-        g_lastPresent = GetTickCount();
-        const Overlay::DrawFn draw = g_draw.load(std::memory_order_acquire);
-        if (!draw)
-        {
-            return;
-        }
-        if (!init(device, backBuffer, window))
-        {
-            g_draw = nullptr;
-            return;
-        }
         {
             std::vector<Message> queue;
             {
@@ -228,6 +219,29 @@ namespace
         ImGui::NewFrame();
         const bool keep = draw();
         ImGui::Render();
+        return keep;
+    }
+
+    // Before each present: the button prompts, then the open screen.
+    void render(d9::IDirect3DDevice9Ex* device, d9::IDirect3DSurface9* backBuffer, HWND window)
+    {
+        g_lastPresent = GetTickCount();
+        Overlay::DrawFn draw = g_draw.load(std::memory_order_acquire);
+        const bool prompts = Prompts::pending();
+        if (!draw && !prompts)
+        {
+            return;
+        }
+        if (draw && !init(device, backBuffer, window))
+        {
+            g_draw = nullptr;
+            draw = nullptr;
+            if (!prompts)
+            {
+                return;
+            }
+        }
+        const bool keep = draw ? frame(draw, window) : true;
 
         d9::IDirect3DSurface9* target = nullptr;
         d9::IDirect3DSurface9* depth = nullptr;
@@ -239,7 +253,16 @@ namespace
         device->SetDepthStencilSurface(nullptr);
         if (SUCCEEDED(device->BeginScene()))
         {
-            ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+            if (prompts)
+            {
+                d9::D3DSURFACE_DESC desc = {};
+                backBuffer->GetDesc(&desc);
+                Prompts::draw(device, static_cast<float>(desc.Width), static_cast<float>(desc.Height));
+            }
+            if (draw)
+            {
+                ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+            }
             device->EndScene();
         }
         device->SetRenderTarget(0, target);
@@ -254,7 +277,7 @@ namespace
             depth->Release();
         }
 
-        if (!keep)
+        if (draw && !keep)
         {
             Overlay::DrawFn expected = draw;
             g_draw.compare_exchange_strong(expected, nullptr);
