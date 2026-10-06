@@ -13,7 +13,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <format>
 #include <string>
 #include <thread>
 #include <utility>
@@ -58,7 +57,7 @@ namespace
             bool taken = false;
             for (const wchar_t* used : {L"tga", L"jpg", L"png"})
             {
-                taken = taken || GetFileAttributesW(std::format(L"Capture\\shot{:04}.{}", i, used).c_str()) != INVALID_FILE_ATTRIBUTES;
+                taken = taken || GetFileAttributesW(Fmt::format(L"Capture\\shot{:04}.{}", i, used).c_str()) != INVALID_FILE_ATTRIBUTES;
             }
             if (!taken)
             {
@@ -143,7 +142,7 @@ namespace
     void save(Image image, int number, bool jpeg)
     {
         const char* extension = jpeg ? "jpg" : "png";
-        const std::string name = std::format("Capture\\shot{:04}.{}", number, extension);
+        const std::string name = Fmt::format("Capture\\shot{:04}.{}", number, extension);
         const std::wstring path(name.begin(), name.end());
         const auto start = std::chrono::steady_clock::now();
         const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);

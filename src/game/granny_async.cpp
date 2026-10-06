@@ -250,7 +250,7 @@ void GrannyAsync::onFrame()
     std::string top;
     for (size_t i = 0; i < std::min<size_t>(sites.size(), 4); ++i)
     {
-        top += std::format(" {:08x} x{}", sites[i].first, sites[i].second);
+        top += Fmt::format(" {:08x} x{}", sites[i].first, sites[i].second);
     }
     LOG("Animation: per frame advance {:.2f} ms on the worker, game waited {:.2f} ms ({:.1f} waits); first waits at{}",
         g_advanceTicks.exchange(0) * ms, g_waitTicks.exchange(0) * ms,

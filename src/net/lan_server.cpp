@@ -50,7 +50,7 @@ namespace
 
     std::string endpoint(const sockaddr_in& a)
     {
-        return std::format("{}:{}", Net::toString(a.sin_addr.s_addr), ntohs(a.sin_port));
+        return Fmt::format("{}:{}", Net::toString(a.sin_addr.s_addr), ntohs(a.sin_port));
     }
 
     void refreshAddresses(uint64_t now)
@@ -67,7 +67,7 @@ namespace
         std::string list;
         for (const auto& a : g_addresses)
         {
-            list += std::format("{}{} (adapter {}, {})", list.empty() ? "" : ", ", Net::toString(a.address), a.ifIndex,
+            list += Fmt::format("{}{} (adapter {}, {})", list.empty() ? "" : ", ", Net::toString(a.address), a.ifIndex,
                 a.ifIndex == g_limitedIf ? "game's broadcast"
                     : a.broadcast ? "broadcast " + Net::toString(a.broadcast) : "no broadcast");
         }

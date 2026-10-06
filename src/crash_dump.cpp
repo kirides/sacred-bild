@@ -5,7 +5,6 @@
 
 #include <windows.h>
 #include <dbghelp.h>
-#include <format>
 
 namespace
 {
@@ -45,10 +44,10 @@ namespace
                 static_cast<LPCWSTR>(address), &module) && GetModuleFileNameW(module, path, MAX_PATH))
         {
             const wchar_t* name = wcsrchr(path, L'\\');
-            return std::format("{}+{:x}", narrow(name ? name + 1 : path),
+            return Fmt::format("{}+{:x}", narrow(name ? name + 1 : path),
                 reinterpret_cast<uintptr_t>(address) - reinterpret_cast<uintptr_t>(module));
         }
-        return std::format("{}", address);
+        return Fmt::format("{}", address);
     }
 
     // Runs on its own thread: MiniDumpWriteDump wants the crashed thread stopped, and a stack overflow leaves
@@ -58,7 +57,7 @@ namespace
         const Crash& crash = *static_cast<Crash*>(param);
         SYSTEMTIME t;
         GetLocalTime(&t);
-        const std::wstring path = std::format(L"{}\\{}-{:04}{:02}{:02}-{:02}{:02}{:02}.dmp", g_dir, g_prefix, t.wYear,
+        const std::wstring path = Fmt::format(L"{}\\{}-{:04}{:02}{:02}-{:02}{:02}{:02}.dmp", g_dir, g_prefix, t.wYear,
             t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
         const DWORD full = MiniDumpWithFullMemory | MiniDumpWithHandleData | MiniDumpWithThreadInfo |
             MiniDumpWithUnloadedModules;

@@ -136,7 +136,7 @@ namespace
             freeaddrinfo(result);
             addr.sin_port = htons(host.port);
             const std::string text = Net::toString(addr.sin_addr.s_addr);
-            log += std::format("{}{}:{}", host.name == text ? "" : host.name + " = ", text, host.port);
+            log += Fmt::format("{}{}:{}", host.name == text ? "" : host.name + " = ", text, host.port);
             // This PC's own games arrive by broadcast.
             if (std::ranges::find(local, addr.sin_addr.s_addr, &Net::LocalAddress::address) != local.end())
             {

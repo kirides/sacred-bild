@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <format>
 #include <iterator>
 #include <mutex>
 
@@ -163,7 +162,7 @@ namespace
     {
         if (UiCanvas::tracing())
         {
-            UiCanvas::trace(what == 1 ? std::format("popup {}", slot) : std::format("window +{:x} {}", what, slot));
+            UiCanvas::trace(what == 1 ? Fmt::format("popup {}", slot) : Fmt::format("window +{:x} {}", what, slot));
         }
     }
 
@@ -415,7 +414,7 @@ namespace
     {
         if (UiCanvas::tracingPopups())
         {
-            UiCanvas::trace(std::format("popup {} text set", popup));
+            UiCanvas::trace(Fmt::format("popup {} text set", popup));
         }
         setPopupFrame(popup, UiCanvas::frame());
     }
@@ -497,7 +496,7 @@ namespace
         flags = (flags & ~own) | (saved & own);
         if (UiCanvas::tracingPopups())
         {
-            UiCanvas::trace(std::format("popup {} laid out at {},{} size {}x{} flags {:x}", popup, x, y, w, h, saved));
+            UiCanvas::trace(Fmt::format("popup {} laid out at {},{} size {}x{} flags {:x}", popup, x, y, w, h, saved));
         }
         if (!(saved & Popup::keepChildren))
         {

@@ -479,7 +479,7 @@ namespace
         {
             ++g_walkStateLogs;
             LOG("Row walk: view corner outside the loaded sectors (sector {}, tile {}), {}", saved[0].sector,
-                saved[0].tile, probed ? std::format("clipping rows from tile ({}, {})", row, col)
+                saved[0].tile, probed ? Fmt::format("clipping rows from tile ({}, {})", row, col)
                                       : std::string("no tile next to the camera either, skipping the ground"));
         }
     }

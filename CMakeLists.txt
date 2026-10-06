@@ -21,12 +21,31 @@ find_library(DETOURS_LIBRARY_RELEASE detours PATHS "${VCPKG_INSTALLED_DIR}/${VCP
 find_library(DETOURS_LIBRARY_DEBUG detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/lib" NO_DEFAULT_PATH REQUIRED)
 set(DETOURS_LIBRARY optimized ${DETOURS_LIBRARY_RELEASE} debug ${DETOURS_LIBRARY_DEBUG})
 
-add_library(ddraw SHARED
+# Largest sources first: MSBuild (/MP) and Ninja start compiles in list order, so a big file listed late would
+# finish alone at the end of a fresh build.
+function(sort_sources_by_size_desc var)
+  set(sized)
+  set(rest)
+  foreach(src IN LISTS ${var})
+    if(src MATCHES "\\.cpp$")
+      file(SIZE "${CMAKE_CURRENT_SOURCE_DIR}/${src}" size)
+      list(APPEND sized "${size}|${src}")
+    else()
+      list(APPEND rest "${src}")
+    endif()
+  endforeach()
+  list(SORT sized COMPARE NATURAL ORDER DESCENDING)
+  list(TRANSFORM sized REPLACE "^[0-9]+\\|" "")
+  set(${var} ${sized} ${rest} PARENT_SCOPE)
+endfunction()
+
+set(DDRAW_SOURCES
   src/main.cpp
   src/proxy.cpp
   src/log.cpp
   src/config.cpp
   src/crash_dump.cpp
+  src/fmt.cpp
   src/patch.cpp
   src/profiler.cpp
   src/settings_window.cpp
@@ -87,6 +106,8 @@ add_library(ddraw SHARED
   src/exports.def
   src/version.rc
 )
+sort_sources_by_size_desc(DDRAW_SOURCES)
+add_library(ddraw SHARED ${DDRAW_SOURCES})
 target_include_directories(ddraw PRIVATE src ${DETOURS_INCLUDE_DIRS})
 # The resource script embeds the button prompts' atlas (tools/gen_prompts.py).
 set_source_files_properties(src/version.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/overlay/prompts.png)
@@ -116,6 +137,7 @@ if(SACREDBILD_NETTEST)
   add_executable(nettest
     tools/nettest/nettest.cpp
     src/config.cpp
+    src/fmt.cpp
     src/log.cpp
     src/net/address.cpp
     src/net/adapters.cpp

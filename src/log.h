@@ -1,5 +1,6 @@
 #pragma once
-#include <format>
+#include "fmt.h"
+
 #include <string_view>
 
 // Timestamped lines in SacredBild.log (SacredBild-server.log in gameserver.exe), from any thread.
@@ -9,9 +10,9 @@ namespace Log
     void write(std::string_view line);
 
     template <class... Args>
-    void info(std::format_string<Args...> fmt, Args&&... args)
+    void info(std::format_string<std::decay_t<Args>...> fmt, Args&&... args)
     {
-        write(std::format(fmt, std::forward<Args>(args)...));
+        write(Fmt::vformat(fmt.get(), std::make_format_args(args...)));
     }
 }
 

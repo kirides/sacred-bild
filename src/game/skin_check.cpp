@@ -9,7 +9,6 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdint>
-#include <format>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -194,7 +193,7 @@ namespace
                 pathNames(paths), maxInf, over4, unweighted, maxNormalInf, normalsOver4, unlike, pos.max, pos4.max,
                 pos.magnitude, nrm.max, nrm4.max, normalsOut ? "" : " (positions only)",
                 problems.outOfRange || problems.tooMany || pos.nonFinite || nrm.nonFinite
-                    ? std::format(" | out of range {}, too many {}, not finite {}", problems.outOfRange, problems.tooMany,
+                    ? Fmt::format(" | out of range {}, too many {}, not finite {}", problems.outOfRange, problems.tooMany,
                           pos.nonFinite + nrm.nonFinite)
                     : std::string());
         }

@@ -98,7 +98,7 @@ namespace
 
     std::string describeFormat(const DDPIXELFORMAT& pf)
     {
-        return std::format("{}bpp A{:x}R{:x}G{:x}B{:x}", pf.dwRGBBitCount,
+        return Fmt::format("{}bpp A{:x}R{:x}G{:x}B{:x}", pf.dwRGBBitCount,
             (pf.dwFlags & DDPF_ALPHAPIXELS) ? pf.dwRGBAlphaBitMask : 0, pf.dwRBitMask, pf.dwGBitMask, pf.dwBBitMask);
     }
 }

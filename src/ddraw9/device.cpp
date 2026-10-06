@@ -10,7 +10,6 @@
 #include <intrin.h>
 #include <algorithm>
 #include <cstring>
-#include <format>
 #include <mutex>
 
 namespace DDraw9
@@ -499,7 +498,7 @@ namespace DDraw9
             }
             return D3D_OK;
         }
-        unsupported(std::format("render state {}", state).c_str());
+        unsupported(Fmt::format("render state {}", state).c_str());
         return D3D_OK;
     }
 
@@ -541,7 +540,7 @@ namespace DDraw9
             }
             else
             {
-                unsupported(std::format("texture stage state {}", type).c_str());
+                unsupported(Fmt::format("texture stage state {}", type).c_str());
             }
             break;
         }
@@ -596,7 +595,7 @@ namespace DDraw9
                     const HRESULT hr = m_dev->SetLight(index, reinterpret_cast<const d9::D3DLIGHT9*>(&light));
                     if (FAILED(hr))
                     {
-                        logFailure(std::format("SetLight (type {}, range {}, attenuation {} {} {})",
+                        logFailure(Fmt::format("SetLight (type {}, range {}, attenuation {} {} {})",
                             static_cast<int>(light.dltType), light.dvRange, light.dvAttenuation0, light.dvAttenuation1,
                             light.dvAttenuation2).c_str(), hr);
                     }

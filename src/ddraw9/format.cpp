@@ -1,8 +1,8 @@
 #include "ddraw9/format.h"
+#include "fmt.h"
 
 #include <algorithm>
 #include <cstring>
-#include <format>
 
 namespace DDraw9::Format
 {
@@ -299,7 +299,7 @@ namespace DDraw9::Format
         case d9::D3DFMT_DXT3: return "DXT3";
         case d9::D3DFMT_DXT4: return "DXT4";
         case d9::D3DFMT_DXT5: return "DXT5";
-        default: return std::format("format {}", static_cast<int>(format));
+        default: return Fmt::format("format {}", static_cast<int>(format));
         }
     }
 

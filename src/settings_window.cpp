@@ -4,7 +4,6 @@
 #include "ui/form.h"
 
 #include <algorithm>
-#include <format>
 #include <string>
 #include <vector>
 
@@ -67,17 +66,17 @@ namespace
         std::ranges::sort(sizes, std::greater{});
         sizes.erase(std::unique(sizes.begin(), sizes.end()), sizes.end());
         std::vector<Choice> choices{
-            {std::format(L"Desktop ({} x {})", GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)), L"0,0"}};
+            {Fmt::format(L"Desktop ({} x {})", GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)), L"0,0"}};
         for (const auto [w, h] : sizes)
         {
-            choices.push_back({std::format(L"{} x {}{}", w, h, w == 1024 && h == 768 ? L" (original)" : L""), std::format(L"{},{}", w, h)});
+            choices.push_back({Fmt::format(L"{} x {}{}", w, h, w == 1024 && h == 768 ? L" (original)" : L""), Fmt::format(L"{},{}", w, h)});
         }
         return choices;
     }
 
     std::wstring resolution()
     {
-        return g_config.width > 0 && g_config.height > 0 ? std::format(L"{},{}", g_config.width, g_config.height) : L"0,0";
+        return g_config.width > 0 && g_config.height > 0 ? Fmt::format(L"{},{}", g_config.width, g_config.height) : L"0,0";
     }
 
     // Percent in the list, the ini's factor as the value.
@@ -86,15 +85,15 @@ namespace
         std::vector<Choice> choices{{L"Fit to the screen height", L"0"}};
         for (int percent : {100, 125, 150, 175, 200, 250, 300})
         {
-            choices.push_back({percent == 100 ? std::wstring(L"100 % (native pixels)") : std::format(L"{} %", percent),
-                std::format(L"{}", percent / 100.0)});
+            choices.push_back({percent == 100 ? std::wstring(L"100 % (native pixels)") : Fmt::format(L"{} %", percent),
+                Fmt::format(L"{}", percent / 100.0)});
         }
         return choices;
     }
 
     std::wstring fps(int n)
     {
-        return n ? std::format(L"{} fps", n) : L"Off";
+        return n ? Fmt::format(L"{} fps", n) : L"Off";
     }
 
     struct HudWindow
@@ -148,8 +147,8 @@ namespace
         }
         ui.combo(L"Frame limit:", {L"Display", L"FpsLimit"}, limits, std::max(g_config.fpsLimit, 0),
               [&](int n) {
-                  return n == 60     ? std::format(L"60 fps (original{})", n == refresh ? L", display refresh" : L"")
-                      : n == refresh ? std::format(L"{} fps (display refresh)", n)
+                  return n == 60     ? Fmt::format(L"60 fps (original{})", n == refresh ? L", display refresh" : L"")
+                      : n == refresh ? Fmt::format(L"{} fps (display refresh)", n)
                                      : fps(n);
               })
             .tip(L"The game's own frame limit in game (it uses 60), e.g. 144 for a 144 Hz display. The menus are unchanged.");
@@ -163,7 +162,7 @@ namespace
 
         ui.column();
         ui.group(L"Interface");
-        ui.combo(L"UI size:", {L"UI", L"Scale"}, uiScales(), g_config.uiScale > 0.0f ? std::format(L"{}", g_config.uiScale) : L"0")
+        ui.combo(L"UI size:", {L"UI", L"Scale"}, uiScales(), g_config.uiScale > 0.0f ? Fmt::format(L"{}", g_config.uiScale) : L"0")
             .tip(L"The game's 1024 x 768 interface is drawn centered and scaled. Fit = as large as fits the screen "
                  L"height; a percentage = a fixed size (100 % = native pixels), capped at what fits.");
         ui.check(L"Use the UI size in the menus too", {L"UI", L"ScaleMode"}, g_config.uiScaleMenus)
@@ -199,11 +198,11 @@ namespace
                  L"Needs the SacredBild (Direct3D 9) renderer.");
         ui.group(L"Rendering");
         ui.combo(L"Texture memory:", {L"Render", L"TextureBudgetMB"}, {0, 256, 512, 1024, 2048}, g_config.textureBudgetMB,
-              [](int mb) { return mb ? std::format(L"{} MB", mb) : std::wstring(L"Automatic"); })
+              [](int mb) { return mb ? Fmt::format(L"{} MB", mb) : std::wstring(L"Automatic"); })
             .tip(L"Texture memory the game may keep loaded. A zoomed-out view at a high resolution shows far more "
                  L"different ground textures than the original 1024 x 768. Automatic = the game's own value, at least 256 MB.");
         ui.combo(L"Off-screen poses:", {L"Render", L"OffscreenPoses"}, {1, 2, 4, 8}, g_config.offscreenPoses,
-              [](int n) { return n <= 1 ? std::wstring(L"Every frame") : n == 2 ? std::wstring(L"Every 2nd frame") : std::format(L"Every {}th frame", n); })
+              [](int n) { return n <= 1 ? std::wstring(L"Every frame") : n == 2 ? std::wstring(L"Every 2nd frame") : Fmt::format(L"Every {}th frame", n); })
             .enabledIf([](const Form& f) { return d3d9(f) && f.on(L"Render", L"GpuSkinning"); })
             .tip(L"Characters not drawn in the last frames get their skeleton posed this often instead of every frame "
                  L"(most animated characters are off screen). Every frame = as the game does. Needs GPU animation.");
@@ -224,15 +223,15 @@ namespace
         ui.indent();
         ui.beginEnabledIf([](const Form& f) { return f.on(L"Render", L"Atlas"); });
         ui.combo(nullptr, {L"Render", L"AtlasPageSize"}, {2048, 4096, 8192, 16384}, g_config.atlasPageSize,
-              [](int px) { return std::format(L"{} px", px); })
+              [](int px) { return Fmt::format(L"{} px", px); })
             .tip(L"Atlas page size in texels (clamped to what the GPU supports).");
         ui.sameLine();
         ui.combo(nullptr, {L"Render", L"AtlasPages"}, {1, 2, 3, 4}, g_config.atlasPages,
-              [](int n) { return std::format(L"{} page{}", n, n == 1 ? L"" : L"s"); })
+              [](int n) { return Fmt::format(L"{} page{}", n, n == 1 ? L"" : L"s"); })
             .tip(L"Atlas pages per texture format; the least recently used one is reused when full.");
         ui.sameLine();
         ui.combo(nullptr, {L"Render", L"AtlasMaxTextureSize"}, {128, 256, 512, 1024}, g_config.atlasMaxTextureSize,
-              [](int px) { return std::format(L"up to {} px", px); })
+              [](int px) { return Fmt::format(L"up to {} px", px); })
             .tip(L"The largest texture copied into the atlas; larger ones are used directly.");
         ui.endEnabledIf();
         ui.endEnabledIf();
@@ -356,7 +355,7 @@ namespace
         const auto position = [](const wchar_t* low, const wchar_t* high) {
             return [=](int v) {
                 return v == 0 ? std::wstring(low) : v == 2048 ? std::wstring(L"Center") : v == 4096 ? std::wstring(high)
-                                                                                                    : std::format(L"Custom ({})", v);
+                                                                                                    : Fmt::format(L"Custom ({})", v);
             };
         };
         for (const HudWindow& window : kHudWindows)
@@ -379,7 +378,7 @@ namespace
               for (const HudWindow& window : kHudWindows)
               {
                   const Config::UiPosition& pos = defaults.*window.position;
-                  f.set(L"UI.Layout", window.key, std::format(L"{},{}", pos.x, pos.y));
+                  f.set(L"UI.Layout", window.key, Fmt::format(L"{},{}", pos.x, pos.y));
               }
           })
             .tip(L"Back to SacredBild's default positions.");
@@ -395,7 +394,7 @@ namespace
     BOOL CALLBACK firstResourceName(HMODULE, LPCWSTR, LPWSTR name, LONG_PTR param)
     {
         auto& out = *reinterpret_cast<std::wstring*>(param);
-        out = IS_INTRESOURCE(name) ? std::format(L"#{}", reinterpret_cast<uintptr_t>(name)) : name;
+        out = IS_INTRESOURCE(name) ? Fmt::format(L"#{}", reinterpret_cast<uintptr_t>(name)) : name;
         return FALSE;
     }
 
@@ -450,12 +449,12 @@ namespace
                 const DWORD error = GetLastError();
                 LOG("Settings window: writing [{}] {} failed: {}", ascii(change.section), ascii(change.name), error);
                 MessageBoxW(nullptr,
-                    std::format(L"SacredBild couldn't save the settings to {} (error {}).\n\n"
+                    Fmt::format(L"SacredBild couldn't save the settings to {} (error {}).\n\n"
                                 L"The game starts with the settings saved there before.", ini, error).c_str(),
                     L"SacredBild", MB_OK | MB_ICONWARNING);
                 break;
             }
-            written += std::format(L" [{}] {}={}", change.section, change.name, change.value);
+            written += Fmt::format(L" [{}] {}={}", change.section, change.name, change.value);
         }
         LOG("Settings window: Play;{}", written.empty() ? " nothing changed" : ascii(written));
         return !written.empty();

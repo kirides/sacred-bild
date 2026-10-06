@@ -1,7 +1,7 @@
 #include "net/address.h"
+#include "fmt.h"
 
 #include <cstring>
-#include <format>
 
 namespace
 {
@@ -75,12 +75,12 @@ std::string Net::toString(const Address& a)
     if (a.si_family == AF_INET)
     {
         inet_ntop(AF_INET, &a.Ipv4.sin_addr, text, sizeof(text));
-        return std::format("{}:{}", text, port(a));
+        return Fmt::format("{}:{}", text, port(a));
     }
     if (a.si_family == AF_INET6)
     {
         inet_ntop(AF_INET6, &a.Ipv6.sin6_addr, text, sizeof(text));
-        return std::format("[{}]:{}", text, port(a));
+        return Fmt::format("[{}]:{}", text, port(a));
     }
     return "(none)";
 }

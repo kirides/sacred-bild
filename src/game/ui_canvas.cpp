@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <format>
 
 namespace
 {
@@ -121,7 +120,7 @@ namespace
         {
             if (*p >= lo + 8 && *p < hi && isCallSite(*p))
             {
-                out += std::format(" {:08x}", *p);
+                out += Fmt::format(" {:08x}", *p);
                 ++found;
             }
         }

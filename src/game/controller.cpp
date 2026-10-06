@@ -21,7 +21,6 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
-#include <format>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -369,7 +368,7 @@ namespace
             void* window = member<void*>(manager, offset);
             if (window && (member<uint32_t>(window, UiControl::flags) & 1))
             {
-                shown += std::format("{}@{:x} ", UiNav::className(window), offset);
+                shown += Fmt::format("{}@{:x} ", UiNav::className(window), offset);
             }
         };
         for (uintptr_t offset = UiManager::firstGameWindow; offset <= UiManager::lastGameWindow; offset += 4)
@@ -383,7 +382,7 @@ namespace
         add(0x14C);
         if (void* box = member<void*>(manager, UiManagerMenus::dialog); box && (member<uint32_t>(box, UiControl::flags) & 1))
         {
-            shown += std::format("[{} buttons] ", UiNav::buttonCount(box));
+            shown += Fmt::format("[{} buttons] ", UiNav::buttonCount(box));
         }
         void** popup = member<void**>(manager, UiManager::popupsBegin);
         void** end = member<void**>(manager, UiManager::popupsEnd);
@@ -394,7 +393,7 @@ namespace
                 shown += "popup:" + UiNav::className(*popup) + "{" + UiNav::contents(*popup) + "} ";
             }
         }
-        shown += std::format("| flags {:x}", member<uint32_t>(manager, UiManager::flags));
+        shown += Fmt::format("| flags {:x}", member<uint32_t>(manager, UiManager::flags));
         if (shown != last)
         {
             last = shown;

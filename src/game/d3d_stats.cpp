@@ -8,7 +8,6 @@
 #include <psapi.h>
 #include <algorithm>
 #include <atomic>
-#include <format>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -44,7 +43,7 @@ namespace
             const char cc[5] = {char(pf.dwFourCC), char(pf.dwFourCC >> 8), char(pf.dwFourCC >> 16), char(pf.dwFourCC >> 24), 0};
             return cc;
         }
-        return std::format("{}bpp A{:x}R{:x}G{:x}B{:x}", pf.dwRGBBitCount, (pf.dwFlags & DDPF_ALPHAPIXELS) ? pf.dwRGBAlphaBitMask : 0,
+        return Fmt::format("{}bpp A{:x}R{:x}G{:x}B{:x}", pf.dwRGBBitCount, (pf.dwFlags & DDPF_ALPHAPIXELS) ? pf.dwRGBAlphaBitMask : 0,
             pf.dwRBitMask, pf.dwGBitMask, pf.dwBBitMask);
     }
 
@@ -195,7 +194,7 @@ std::string D3DStats::memorySummary()
             break;
         }
     }
-    return std::format("private {} MB, address space {} MB used, largest free {} MB", pmc.PrivateUsage >> 20,
+    return Fmt::format("private {} MB, address space {} MB used, largest free {} MB", pmc.PrivateUsage >> 20,
         used >> 20, largestFree >> 20);
 }
 
@@ -443,7 +442,7 @@ void D3DStats::onFrame()
         for (int p = PWorld; p < PassCount; ++p)
         {
             const PassTotals& pt = g_passTotals[p];
-            line += std::format("{}{} {:.2f} (device {:.2f}, {:.0f}->{:.0f})", p == PWorld ? "" : " | ", kPassNames[p],
+            line += Fmt::format("{}{} {:.2f} (device {:.2f}, {:.0f}->{:.0f})", p == PWorld ? "" : " | ", kPassNames[p],
                 static_cast<double>(pt.ticks) / tscPerMs / frames, static_cast<double>(pt.proxyTicks) / tscPerMs / frames,
                 pt.draws / frames, pt.submits / frames);
         }

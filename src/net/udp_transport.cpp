@@ -128,7 +128,7 @@ namespace
 
     std::string name(const Session& s)
     {
-        return std::format("{} {} (session {:08x})", s.host ? "player" : "gameserver", Net::toString(s.peer), s.id);
+        return Fmt::format("{} {} (session {:08x})", s.host ? "player" : "gameserver", Net::toString(s.peer), s.id);
     }
 
     void sendControl(Session& s, char type)
@@ -804,7 +804,7 @@ UdpTransport::SessionPtr UdpTransport::connect(const sockaddr_in& tcpTarget)
         g_sessions.push_back(s);
     }
     LOG("UDP: connecting to the gameserver at {} (game port {}){}", candidateList(*s), ntohs(tcpTarget.sin_port),
-        s->gameId ? std::format(", matchmaker game {:08x}", s->gameId) : std::string());
+        s->gameId ? Fmt::format(", matchmaker game {:08x}", s->gameId) : std::string());
     UdpEndpoint::wake();
     return s;
 }

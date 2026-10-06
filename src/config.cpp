@@ -151,7 +151,7 @@ void ConfigFile::load(const std::wstring& gameDir)
         g_config.controller, g_config.controllerDeadzone, g_config.controllerCursorSpeed, g_config.controllerMoveRadius,
         g_config.controllerAimRange, g_config.controllerAimCone, g_config.controllerArtClick, g_config.controllerWalk,
         g_config.controllerPrompts);
-    const auto pos = [](const Config::UiPosition& p) { return std::format("{},{}", p.x, p.y); };
+    const auto pos = [](const Config::UiPosition& p) { return Fmt::format("{},{}", p.x, p.y); };
     LOG("Config: UI.Layout Taskbar={} Chat={} Inventory={} Equipment={} Stats={} Minimap={} Portraits={} Shops={}",
         pos(g_config.uiTaskbar), pos(g_config.uiChat), pos(g_config.uiInventory), pos(g_config.uiEquipment),
         pos(g_config.uiStats), pos(g_config.uiMinimap), pos(g_config.uiPortraits), pos(g_config.uiShops));

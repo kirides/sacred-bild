@@ -132,7 +132,7 @@ void DeviceProxy::onPresent(DWORD thread)
     std::string sites;
     for (size_t i = 0; i < std::min<size_t>(m_foreignSites.size(), 8); ++i)
     {
-        sites += std::format(" {}(thread {}) x{}", m_foreignSites[i].site, m_foreignSites[i].thread, m_foreignSites[i].calls);
+        sites += Fmt::format(" {}(thread {}) x{}", m_foreignSites[i].site, m_foreignSites[i].thread, m_foreignSites[i].calls);
     }
     LOG("Device calls from threads other than the presenting one ({}) in 10 s: {}{}", thread, m_foreignCalls,
         sites.empty() ? "" : ";" + sites);
@@ -397,7 +397,7 @@ bool DeviceProxy::drawScreenDim(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, D
 
 void DeviceProxy::traceUiDraw(const char* what, DWORD count)
 {
-    UiCanvas::trace(std::format("{} {} vertices {:.0f},{:.0f} .. {:.0f},{:.0f} texture {}", what, count, m_virtMinX,
+    UiCanvas::trace(Fmt::format("{} {} vertices {:.0f},{:.0f} .. {:.0f},{:.0f} texture {}", what, count, m_virtMinX,
         m_virtMinY, m_virtMaxX, m_virtMaxY, static_cast<void*>(m_texture0)));
 }
 
