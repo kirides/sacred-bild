@@ -119,6 +119,19 @@ struct Config
     // first and the other one too if it has no answer within a second.
     bool netPreferIpv6 = true;
 
+    // Controller ([Controller]; the bindings are [Controller.Bindings], see input/bindings.h).
+    bool controller = true;
+    int controllerDeadzone = 24;        // percent of a stick's travel ignored around its center
+    int controllerCursorSpeed = 900;    // cursor speed at full deflection, in 1024x768 pixels per second
+    int controllerMoveRadius = 160;     // how far ahead of the hero the left stick walks to, screen pixels
+    int controllerAimRange = 450;       // aim assist: enemies within this many pixels of the hero
+    int controllerAimCone = 90;         // ... preferring those within this many degrees around the aim
+    bool controllerArtClick = true;     // combat art slot buttons: select the slot (6-0) and right-click the target
+    bool controllerWalk = true;         // the left stick pushed less than halfway walks (Shift) instead of running
+
+    // SacredBild.ini itself, for the settings changed in game.
+    std::wstring iniPath;
+
     // Diagnostics
     bool d3dStats = false;         // per-second D3D7 call counts in the log
     bool profiler = false;        // sample the render thread, dump hot spots on exit

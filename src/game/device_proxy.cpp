@@ -195,16 +195,61 @@ D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt) const
     return vp;
 }
 
-bool DeviceProxy::beginOverlay3D(D3DVIEWPORT7& restore)
+bool DeviceProxy::beginOverlay3D(Overlay3D& restore)
 {
     if (!m_ui || UiCanvas::frame().confine)
     {
         return false;
     }
-    m_real->GetViewport(&restore);
-    D3DVIEWPORT7 vp = canvasViewport(m_uiViewport);
+    constexpr DWORD kProjection = D3DTRANSFORMSTATE_PROJECTION;
+    D3DMATRIX projection;
+    if (m_transformKnown[kProjection])
+    {
+        projection = m_transforms[kProjection];
+    }
+    else if (FAILED(m_real->GetTransform(D3DTRANSFORMSTATE_PROJECTION, &projection)))
+    {
+        return false;
+    }
+    // Where the game's viewport lands (x0, y0, w0, h0) ...
+    const UiCanvas::Placement p = UiCanvas::placement();
+    const float x0 = p.originX + m_uiViewport.dwX * p.scale, y0 = p.originY + m_uiViewport.dwY * p.scale;
+    const float w0 = m_uiViewport.dwWidth * p.scale, h0 = m_uiViewport.dwHeight * p.scale;
+    // ... inside the viewport the device gets: the frame's whole clip rect.
+    D3DVIEWPORT7 vp = m_uiViewport;
+    vp.dwX = static_cast<DWORD>(std::lround(p.clipLeft));
+    vp.dwY = static_cast<DWORD>(std::lround(p.clipTop));
+    vp.dwWidth = static_cast<DWORD>(std::max(0L, std::lround(p.clipRight - p.clipLeft)));
+    vp.dwHeight = static_cast<DWORD>(std::max(0L, std::lround(p.clipBottom - p.clipTop)));
+    if (vp.dwWidth == 0 || vp.dwHeight == 0 || w0 < 1.0f || h0 < 1.0f)
+    {
+        return false;
+    }
+    // Screen x = X + (1 + ndc) W / 2 (y: Y + (1 - ndc) H / 2): in clip space x' = a x + b w, y' = c y + d w keep
+    // each point where the game's viewport would have put it.
+    const float tw = static_cast<float>(vp.dwWidth), th = static_cast<float>(vp.dwHeight);
+    const float a = w0 / tw, b = (2.0f * (x0 - vp.dwX) + w0) / tw - 1.0f;
+    const float c = h0 / th, d = 1.0f - (2.0f * (y0 - vp.dwY) + h0) / th;
+    D3DMATRIX adjusted = projection;
+    for (int r = 0; r < 4; ++r)
+    {
+        D3DVALUE* row = &adjusted._11 + r * 4;
+        row[0] = row[0] * a + row[3] * b;
+        row[1] = row[1] * c + row[3] * d;
+    }
+    m_real->GetViewport(&restore.viewport);
+    restore.projection = projection;
     m_real->SetViewport(&vp);
+    m_real->SetTransform(D3DTRANSFORMSTATE_PROJECTION, &adjusted);
     return true;
+}
+
+void DeviceProxy::endOverlay3D(const Overlay3D& restore)
+{
+    D3DVIEWPORT7 vp = restore.viewport;
+    D3DMATRIX projection = restore.projection;
+    m_real->SetViewport(&vp);
+    m_real->SetTransform(D3DTRANSFORMSTATE_PROJECTION, &projection);
 }
 
 DWORD DeviceProxy::uiFilter(DWORD value) const
@@ -799,12 +844,12 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
     }
     D3DStats::count(CSubmit);
     Scope s{TDraw};
-    D3DVIEWPORT7 restore;
+    Overlay3D restore;
     const bool overlay = beginOverlay3D(restore);
     const HRESULT hr = m_real->DrawPrimitive(type, fvf, verts, count, flags);
     if (overlay)
     {
-        m_real->SetViewport(&restore);
+        endOverlay3D(restore);
     }
     return hr;
 }
@@ -854,12 +899,12 @@ HRESULT DeviceProxy::DrawIndexedPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVO
     }
     D3DStats::count(CSubmit);
     Scope s{TDraw};
-    D3DVIEWPORT7 restore;
+    Overlay3D restore;
     const bool overlay = beginOverlay3D(restore);
     const HRESULT hr = m_real->DrawIndexedPrimitive(type, fvf, verts, vertCount, indices, indexCount, flags);
     if (overlay)
     {
-        m_real->SetViewport(&restore);
+        endOverlay3D(restore);
     }
     return hr;
 }
@@ -945,12 +990,12 @@ HRESULT DeviceProxy::DrawPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fvf, LPD3
     }
     D3DStats::count(CSubmit);
     Scope s{TDraw};
-    D3DVIEWPORT7 restore;
+    Overlay3D restore;
     const bool overlay = beginOverlay3D(restore);
     const HRESULT hr = m_real->DrawPrimitiveStrided(type, fvf, data, count, flags);
     if (overlay)
     {
-        m_real->SetViewport(&restore);
+        endOverlay3D(restore);
     }
     return hr;
 }
@@ -994,12 +1039,12 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fv
     }
     D3DStats::count(CSubmit);
     Scope s{TDraw};
-    D3DVIEWPORT7 restore;
+    Overlay3D restore;
     const bool overlay = beginOverlay3D(restore);
     const HRESULT hr = m_real->DrawIndexedPrimitiveStrided(type, fvf, data, vertCount, indices, indexCount, flags);
     if (overlay)
     {
-        m_real->SetViewport(&restore);
+        endOverlay3D(restore);
     }
     return hr;
 }
@@ -1021,12 +1066,12 @@ HRESULT DeviceProxy::DrawPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVERTEXBUFF
     }
     D3DStats::count(CSubmit);
     Scope s{TDraw};
-    D3DVIEWPORT7 restore;
+    Overlay3D restore;
     const bool overlay = beginOverlay3D(restore);
     const HRESULT hr = m_real->DrawPrimitiveVB(type, vb, start, count, flags);
     if (overlay)
     {
-        m_real->SetViewport(&restore);
+        endOverlay3D(restore);
     }
     return hr;
 }
@@ -1049,12 +1094,12 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVER
     }
     D3DStats::count(CSubmit);
     Scope s{TDraw};
-    D3DVIEWPORT7 restore;
+    Overlay3D restore;
     const bool overlay = beginOverlay3D(restore);
     const HRESULT hr = m_real->DrawIndexedPrimitiveVB(type, vb, start, vertCount, indices, indexCount, flags);
     if (overlay)
     {
-        m_real->SetViewport(&restore);
+        endOverlay3D(restore);
     }
     return hr;
 }

@@ -179,6 +179,45 @@ namespace Sacred::Addr
     // with the buffer's initial ".\PAK\SOUND.PAK".
     inline uintptr_t cMSS_ctor{};                       // ENG 00676200; thiscall (44100, 16, 1)
     inline uintptr_t g_soundPakPath{};                  // ENG 009D760C; char[256]
+
+    // World pick: thiscall on the world view (x, y, excludeId, int32 outRect[3]) -> object id, 0 for none. Scans the
+    // view's list of what can be picked on the screen (Sacred::WorldView::pick*), ranks the hits under (x, y) by
+    // category (object vtable +0x24) and distance to their centers. Called by cEngine_updateWorldCursor (the hovered
+    // object, kept in cMouse +0x6C) and by the world mouse handler (cEngine_worldMouse) for clicks.
+    inline uintptr_t worldPick{};                       // ENG 00626C50
+    // Objects: *g_pObjectManager is the object manager; getData is thiscall (id) -> object, 0 if there is none;
+    // hero is thiscall () -> the local player's hero as cCreature*, 0 if there is none.
+    inline uintptr_t g_pObjectManager{};                // ENG 00AD5C40
+    inline uintptr_t cObjectManager_getData{};          // ENG 005FE000
+    inline uintptr_t cObjectManager_hero{};             // ENG 00603E30
+    // MSVC's __RTDynamicCast: cdecl (object, 0, source type descriptor, target type descriptor, 0) -> object or 0.
+    inline uintptr_t rtDynamicCast{};                   // ENG 0084A961
+    inline uintptr_t cObject_typeDescriptor{};          // ENG 008EB648
+    inline uintptr_t cCreature_typeDescriptor{};        // ENG 008EB660
+    // thiscall on a creature (target creature) -> true if the target is alive and hostile to it (the cursor's
+    // attack symbol).
+    inline uintptr_t cCreature_isEnemy{};               // ENG 00548F60
+
+    // The options window (in game and from the main menu): its vtable (Sacred::UiWindowSlot), and the control
+    // functions its show and OK use. setFlags / clearFlags: thiscall (mask) on a control; bit 0x10 is a check box's
+    // or radio button's checked state. Sliders: getValue fastcall (slider) -> 0..count-1, setValue thiscall (value).
+    // getAbsoluteRect: thiscall (int32 out[3]: x, y, width | height << 16), in the 1024x768 UI space.
+    inline uintptr_t cUI_Options_vtable{};              // ENG 00897078
+    inline uintptr_t cUI_Control2_setFlags{};           // ENG 00732550
+    inline uintptr_t cUI_Control2_clearFlags{};         // ENG 007325C0
+    inline uintptr_t cUI_Control2_getAbsoluteRect{};    // ENG 00732350
+    inline uintptr_t cUI_Slider_getValue{};             // ENG 00753430
+    inline uintptr_t cUI_Slider_setValue{};             // ENG 007533B0
+
+    // The engine singleton: cdecl (int, -1 to just get it) -> cEngine. getViewOffset is thiscall (int* x, int* y): how
+    // far the view trails the hero; the hero stands at the screen center minus twice that (the hold-to-walk direction
+    // at ENG 004FB8AF is measured from there).
+    inline uintptr_t cEngine_instance{};                // ENG 0060D6C0
+    inline uintptr_t cEngine_getViewOffset{};           // ENG 006113E0
+
+    // The log book's line hit test: thiscall on a cUI_Book (int x, int y, uint16* index) -> bool, whether (x, y)
+    // (1024x768 UI space) lies on an entry of the left page's list, and which (Sacred::Book).
+    inline uintptr_t cUI_Book_lineAt{};                 // ENG 006B3640
 }
 
 // Text table (g_textTable, ENG 0182ED50; a static object, destroyed at exit). global.res, in memory as on disk:
@@ -216,6 +255,8 @@ namespace Sacred::UiControl
 namespace Sacred::Engine
 {
     constexpr uintptr_t flags = 0x54;        // 0x10000 loading screen, 0x20000 fade out, 0x40000 fade in, 0x80000 black
+    constexpr uintptr_t views = 0x08;        // view pointers; the world view is views[viewIndex] (the world pick's this)
+    constexpr uintptr_t viewIndex = 0x48;    // uint16
 }
 
 // cWorldView member offsets (ground layers).
@@ -235,6 +276,70 @@ namespace Sacred::WorldView
     constexpr uintptr_t rowEdgeLeft = 0x96AB8;  // 6: renderTileRow draws ground from column edgeLeft - 1 ...
     constexpr uintptr_t rowEdgeRight = 0x96ABC; // 6: ... to column rowLength - edgeRight + 1 (rest: margins)
     constexpr uintptr_t rowLength = 0x96AC8;    // tiles per row: view width / 96 + 12
+    // What can be picked on the screen, rebuilt by the world renderer every frame: std::vector of 0x1C-byte entries
+    // (Sacred::PickEntry) guarded by a CRITICAL_SECTION. worldPick gives up on more than 1000 entries.
+    constexpr uintptr_t pickLock = 0x96B0C;
+    constexpr uintptr_t pickBegin = 0x96B24;
+    constexpr uintptr_t pickEnd = 0x96B28;
+}
+
+// An entry of the world view's pick list: an object's rect on the screen (physical pixels). Ids with bit 31 set are
+// not objects (the picker ranks them separately).
+namespace Sacred::PickEntry
+{
+    constexpr uintptr_t size = 0x1C;
+    constexpr uintptr_t id = 0x00;
+    constexpr uintptr_t x = 0x04;           // int32, left
+    constexpr uintptr_t y = 0x08;           // int32, top
+    constexpr uintptr_t width = 0x0C;       // int16
+    constexpr uintptr_t height = 0x0E;      // int16
+}
+
+// Game objects (cObject and subclasses).
+// cCreature health (ENG 00549460 reads +0x4D0 + 4 * i). The hero's portrait (ENG 006D73D0) shows health / maxHealth
+// and pulses below a quarter (the low-health mark; the options object's +8, default 0.25, is the same mark).
+namespace Sacred::Creature
+{
+    constexpr uintptr_t maxHealth = 0x4D4;
+    constexpr uintptr_t health = 0x4D8;
+}
+
+namespace Sacred::Object
+{
+    constexpr uintptr_t id = 0x0C;
+    // thiscall (1, 0) -> uint16: the pick category, 0..3 ranked in that order; with Alt held 2 (items), 1, 0, 3.
+    constexpr uintptr_t pickCategorySlot = 0x24;
+}
+
+// cUI_Options members: its controls (the build at ENG 00718CA0), as show (00718660) fills them from the settings and
+// OK (00717C20) stores them. Radio groups list their buttons in the order of the setting's values.
+namespace Sacred::Options
+{
+    constexpr uintptr_t cancel = 0x158;
+    constexpr uintptr_t ok = 0x15C;
+    constexpr uintptr_t detail = 0x160;         // DETAILLEVEL 0, 1, 2: +0x160, +0x164, +0x168
+    constexpr uintptr_t pickupAuto = 0x16C;     // PICKUPAUTO 0, 1, 2 (gold, gold and uniques, everything)
+    constexpr uintptr_t pickupAnim = 0x178;     // PICKUPANIM ("Atmospheric Animation")
+    constexpr uintptr_t netFast = 0x17C;        // NETWORK_SPEEDSETTINGS 2 (DSL / cable / LAN)
+    constexpr uintptr_t netSlow = 0x180;        // NETWORK_SPEEDSETTINGS 1 (modem / ISDN)
+    constexpr uintptr_t autoTrack = 0x184;      // AUTOTRACKENEMY
+    constexpr uintptr_t violence = 0x188;       // VIOLENCE (hidden in builds that don't allow it)
+    constexpr uintptr_t sound = 0x18C;          // SOUND
+    constexpr uintptr_t soundQuality = 0x190;   // SOUNDQUALITY 0, 1, 2: +0x190, +0x194, +0x198
+    constexpr uintptr_t exploreMap = 0x19C;     // EXPLOREMAP
+    constexpr uintptr_t autosave = 0x1A0;       // AUTOSAVE
+    constexpr uintptr_t fsaa = 0x1A4;           // FSAA_FILTER
+    constexpr uintptr_t sfxVolume = 0x1A8;      // sliders: SFXVOLUME, VOICEVOLUME, MUSICVOLUME, MINIMAP_ALPHA
+    constexpr uintptr_t voiceVolume = 0x1AC;
+    constexpr uintptr_t musicVolume = 0x1B0;
+    constexpr uintptr_t mapAlpha = 0x1B4;
+    constexpr uint32_t checked = 0x10;          // control flag
+}
+
+// cUI_Slider members.
+namespace Sacred::Slider
+{
+    constexpr uintptr_t count = 0x88;           // values 0..count-1
 }
 
 // cQuadBatcher (cWorldView + 0x86890) member offsets: ground and layer quads (FVF 0x244: XYZRHW, diffuse, two
@@ -265,6 +370,13 @@ namespace Sacred::Mouse
     constexpr uintptr_t x = 0x04;
     constexpr uintptr_t y = 0x08;
     constexpr uintptr_t cursorImage = 0x64;  // getCursorPos writes its outputs only while this is set
+    // setPosition (ENG 006554E0, called on WM_MOUSEMOVE) copies x/y to the drawn position first, then sets them; with
+    // bit 0 of the flags (+0) it clamps them to the bounds instead when the previous position was outside them.
+    constexpr uintptr_t flags = 0x00;
+    constexpr uintptr_t drawnX = 0x0C;
+    constexpr uintptr_t drawnY = 0x10;
+    constexpr uintptr_t clampLeft = 0x14;    // left, top, right, bottom
+    constexpr uintptr_t heldItem = 0x68;     // the item the cursor carries
 }
 
 // cUI_Manager member offsets. The in-game windows created by createGameWindows are pointers in
@@ -284,10 +396,17 @@ namespace Sacred::UiManager
     constexpr uintptr_t equipment = 0x88;    // 656,388 256x256
     constexpr uintptr_t blacksmith = 0x8C;   // 0,0 640x352
     constexpr uintptr_t merchant = 0x90;     // 0,0 640x336
+    constexpr uintptr_t megamap = 0x94;      // world map (M), full screen
+    constexpr uintptr_t overviewMap = 0x98;  // the map over the world (Tab)
     constexpr uintptr_t minimap = 0x9C;      // UI_WND_MERC: minimap and party portraits, 932,0 92x676
     constexpr uintptr_t stats = 0xA0;        // 656,0 256x420
     constexpr uintptr_t console = 0xA4;      // chat input, 256,640 512x128
+    constexpr uintptr_t questbook = 0xA8;
+    constexpr uintptr_t savegame = 0xAC;     // full screen
+    constexpr uintptr_t escapeMenu = 0xB0;
     constexpr uintptr_t master = 0xB8;       // combat art master, 0,0 640x336
+    constexpr uintptr_t options = 0xBC;      // full screen
+    constexpr uintptr_t character = 0xD0;    // character export, full screen
     constexpr uintptr_t chest = 0xC0;        // 0,0 640x320
     constexpr uintptr_t netPortraits = 0xCC; // 0,0 896x64
     constexpr uintptr_t cube = 0xD4;         // 0,0 640x320
@@ -295,6 +414,22 @@ namespace Sacred::UiManager
     // std::vector of popup windows (vtable: render +0x14, events +0x10, hit test +0x1c, like a window).
     constexpr uintptr_t popupsBegin = 0x124;
     constexpr uintptr_t popupsEnd = 0x128;
+}
+
+// cUI_Window2 members: child controls (std::vector of cUI_Control2*, positioned relative to the window).
+namespace Sacred::UiWindow
+{
+    constexpr uintptr_t childrenBegin = 0x78;
+    constexpr uintptr_t childrenEnd = 0x7C;
+}
+
+// cUI_Manager: the menu screens (start menu and the screens reached from it), drawn while flags have 0x01; +0x144 is
+// a dialog over them (also in game).
+namespace Sacred::UiManagerMenus
+{
+    constexpr uintptr_t first = 0x130;
+    constexpr uintptr_t last = 0x140;
+    constexpr uintptr_t dialog = 0x144;
 }
 
 // cUI_Window2 virtual functions (thiscall; byte offsets into the vtable) that SacredBild wraps for UI frames.
@@ -324,6 +459,102 @@ namespace Sacred::Popup
     constexpr uint32_t clampToScreen = 0x08;    // layout keeps it 16 px inside the 1024x768 screen
     constexpr uint32_t centerOnScreen = 0x20;   // layout centers it on (512, 384)
     constexpr uint32_t keepChildren = 0x200;    // layout leaves the children where they are
+    // An NPC dialog is a popup with up to four answers (ENG 006E6D20 sets them, the layout places them; the text
+    // setters clear them). Enter (vtable +0x38) picks the first, Esc (+0x34) the second; a click picks the one under
+    // the cursor, which the render highlights.
+    constexpr uintptr_t answers = 0x217C;
+    constexpr uintptr_t answerSize = 0x14;
+    constexpr int answerCount = 4;
+    constexpr uintptr_t answerText = 0x00;      // text id, 0 = no answer
+    constexpr uintptr_t answerX = 0x08;         // int32, relative to the popup
+    constexpr uintptr_t answerY = 0x0C;         // int32
+    constexpr uintptr_t answerWidth = 0x10;     // int16
+    constexpr uintptr_t answerHeight = 0x12;    // int16
+}
+
+// The game menu (Esc in game, cUI_EscMenu, UiManager::escapeMenu): its entries (options, save, export, quit,
+// continue) are cUI_StaticText64 controls in a vector of its own, not children; their parent is the menu, and its
+// event and render functions (ENG 006BBA80, 006BB390) hit-test them with the mouse.
+namespace Sacred::EscMenu
+{
+    constexpr uintptr_t entriesBegin = 0x158;
+    constexpr uintptr_t entriesEnd = 0x15C;
+}
+
+// The start menu (cUI_MainMenu, UiManagerMenus::first; constructor ENG 007119B0, entries built in 00713670): its
+// entries are cUI_StaticText64FX controls (384,y 256x30, 32 apart) in one vector per screen, not children; event and
+// render (ENG 007125B0, 007128D0) use the vector of the screen shown.
+namespace Sacred::MainMenu
+{
+    constexpr uintptr_t screen = 0x154;         // 0 main, 1 multiplayer, 2 extras, 3 credits (no entries)
+    constexpr uintptr_t entries = 0x158;        // per screen {begin, end, capacity}
+    constexpr uintptr_t entriesStride = 0x0C;
+    constexpr uint32_t screensWithEntries = 3;
+}
+
+// The message box (cUI_BusyDlg, UiManagerMenus::dialog: "Load savegame?", network waits): one object of `size`
+// bytes (ENG 00756A90 allocates it) whose buttons are members (OK left of Cancel), laid out per kind of box
+// (ENG 00722500). Esc (vtable +0x34) cancels only two kinds, so the controller clicks the buttons.
+namespace Sacred::BusyDlg
+{
+    constexpr uintptr_t size = 0x644;
+}
+
+// The log book (L, cUI_Diary, UiManager::questbook): four tabs across the top, embedded buttons (parent set)
+// that select a cUI_Book each (ENG 006AF0E0, from the diary's receiveEvent 006AED40).
+namespace Sacred::Diary
+{
+    constexpr uintptr_t tabs = 0x538;
+    constexpr uintptr_t tabSize = 0x7C;
+    constexpr int tabCount = 4;
+    constexpr uintptr_t currentTab = 0x7A4;     // uint16; 4 before the first was picked
+    constexpr uintptr_t booksBegin = 0x7A8;     // cUI_Book*, one per tab
+    constexpr uintptr_t booksEnd = 0x7AC;
+}
+
+// The inventory window (cUI_Inventory3, UiManager::inventory): its pages (backpack, combat arts, combos) are a
+// cUI_TabControl, the `tabControl` member of its `tabs` member (its receiveEvent ENG 006C61C0 switches pages through
+// 00729940 for the taskbar's buttons and keys).
+namespace Sacred::Inventory
+{
+    constexpr uintptr_t tabs = 0x154;
+    constexpr uintptr_t tabControl = 0x78;
+}
+
+// cUI_TabControl: a vector of pages (`pageSize` bytes each: `pageButton` the tab, +0x14 the page's window), the
+// active one at `activePage` (setActivePage ENG 00729260). Its receiveEvent (00728350) hit-tests the tabs 4 pixels
+// below their rects and switches to the one clicked, hidden or not.
+namespace Sacred::TabControl
+{
+    constexpr uintptr_t pagesBegin = 0x78;
+    constexpr uintptr_t pagesEnd = 0x7C;
+    constexpr uintptr_t pageSize = 0x18;
+    constexpr uintptr_t pageButton = 0x10;
+    constexpr uintptr_t activePage = 0x84;      // uint16
+}
+
+// cUI_Book (0xA24 bytes): up to seven tabs down its left edge, a list on the left page and the selected entry's
+// text on the right, each page side with its previous / next buttons. Its receiveEvent (ENG 006B3940) hit-tests
+// the members below (whatever their visible bit says; the page functions 006AFFD0 / 006B0120 stop at the ends and
+// hide the buttons there) and the list through Addr::cUI_Book_lineAt.
+namespace Sacred::Book
+{
+    constexpr uintptr_t verticalTabs = 0x168;
+    constexpr uintptr_t verticalTabSize = 0xBC;
+    constexpr int verticalTabCount = 7;
+    constexpr uintptr_t selectedTab = 0x15E;    // uint16
+    constexpr uintptr_t leftPage = 0x162;       // uint16, the list's page
+    constexpr uintptr_t leftPrevious = 0x68C;
+    constexpr uintptr_t leftNext = 0x748;
+    constexpr uintptr_t rightPrevious = 0x804;
+    constexpr uintptr_t rightNext = 0x8C0;
+    // Per tab {begin, end, capacity} of the list's pages (pageSize bytes each; +4 the selected entry's index).
+    constexpr uintptr_t pages = 0x97C;
+    constexpr uintptr_t pagesStride = 0x0C;
+    constexpr uintptr_t pageSize = 0x1C;
+    constexpr uintptr_t pageSelected = 0x04;
+    // The left page in book coordinates (ENG 006B0240).
+    constexpr int listX = 0x60, listY = 0x20, listWidth = 0x11C, listHeight = 0x1C0;
 }
 
 // cEvent member offsets (mouse button events: cEventMouseDown_vtable / cEventMouseUp_vtable).

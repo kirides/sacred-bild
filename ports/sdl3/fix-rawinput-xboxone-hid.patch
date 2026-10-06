@@ -1,0 +1,104 @@
+diff --git a/src/joystick/windows/SDL_rawinputjoystick.c b/src/joystick/windows/SDL_rawinputjoystick.c
+index 6846288..3243172 100644
+--- a/src/joystick/windows/SDL_rawinputjoystick.c
++++ b/src/joystick/windows/SDL_rawinputjoystick.c
+@@ -137,6 +137,9 @@ struct joystick_hwdata
+     bool guide_hack;
+     bool trigger_hack;
+     USHORT trigger_hack_index;
++    bool trigger_split;             // Xbox One HID layout: Z left trigger, Rz right trigger, each from 0
++    USHORT trigger_split_right_index;
++    LONG trigger_max[2];
+ 
+ #ifdef SDL_JOYSTICK_RAWINPUT_MATCHING
+     Uint64 match_state; // Lowest 16 bits for button states, higher 24 for 6 4bit axes
+@@ -1223,7 +1226,11 @@ static int SDLCALL RAWINPUT_SortValueCaps(const void *A, const void *B)
+     HIDP_VALUE_CAPS *capsA = (HIDP_VALUE_CAPS *)A;
+     HIDP_VALUE_CAPS *capsB = (HIDP_VALUE_CAPS *)B;
+ 
+-    // Sort by Usage for single values, or UsageMax for range of values
++    // Sort by usage page, then by Usage for single values, or UsageMax for range of values
++    // (a battery strength on the device controls page must not come before X)
++    if (capsA->UsagePage != capsB->UsagePage) {
++        return (int)capsA->UsagePage - capsB->UsagePage;
++    }
+     return (int)capsA->NotRange.Usage - capsB->NotRange.Usage;
+ }
+ 
+@@ -1344,6 +1351,20 @@ static bool RAWINPUT_JoystickOpen(SDL_Joystick *joystick, int device_index)
+ 
+     SDL_stack_free(button_caps);
+ 
++    // The Xbox One HID layout has a trigger each on Z and Rz (and a battery strength, which is not an axis);
++    // the Xbox 360 one has both triggers on Z.
++    if (ctx->is_xinput) {
++        bool has_z = false, has_rz = false;
++        for (i = 0; i < caps.NumberInputValueCaps; ++i) {
++            HIDP_VALUE_CAPS *cap = &value_caps[i];
++            if (!cap->IsRange && cap->UsagePage == USB_USAGEPAGE_GENERIC_DESKTOP) {
++                has_z |= (cap->NotRange.Usage == USB_USAGE_GENERIC_Z);
++                has_rz |= (cap->NotRange.Usage == USB_USAGE_GENERIC_RZ);
++            }
++        }
++        ctx->trigger_split = has_z && has_rz;
++    }
++
+     for (i = 0; i < caps.NumberInputValueCaps; ++i) {
+         HIDP_VALUE_CAPS *cap = &value_caps[i];
+ 
+@@ -1351,6 +1372,14 @@ static bool RAWINPUT_JoystickOpen(SDL_Joystick *joystick, int device_index)
+             continue;
+         }
+ 
++        if (ctx->is_xinput && cap->UsagePage != USB_USAGEPAGE_GENERIC_DESKTOP) {
++            continue;
++        }
++
++        if (ctx->trigger_split && cap->NotRange.Usage == USB_USAGE_GENERIC_RZ) {
++            continue;
++        }
++
+         if (ctx->trigger_hack && cap->NotRange.Usage == USB_USAGE_GENERIC_Z) {
+             continue;
+         }
+@@ -1388,9 +1417,20 @@ static bool RAWINPUT_JoystickOpen(SDL_Joystick *joystick, int device_index)
+                 continue;
+             }
+ 
++            if (ctx->is_xinput && cap->UsagePage != USB_USAGEPAGE_GENERIC_DESKTOP) {
++                continue;
++            }
++
+             if (ctx->is_xinput && cap->NotRange.Usage == USB_USAGE_GENERIC_Z) {
+                 ctx->trigger_hack = true;
+                 ctx->trigger_hack_index = cap->NotRange.DataIndex;
++                ctx->trigger_max[0] = cap->LogicalMax;
++                continue;
++            }
++
++            if (ctx->trigger_split && cap->NotRange.Usage == USB_USAGE_GENERIC_RZ) {
++                ctx->trigger_split_right_index = cap->NotRange.DataIndex;
++                ctx->trigger_max[1] = cap->LogicalMax;
+                 continue;
+             }
+ 
+@@ -1704,10 +1744,18 @@ static void RAWINPUT_HandleStatePacket(SDL_Joystick *joystick, Uint8 *data, int
+ #endif
+         {
+             HIDP_DATA *item = GetData(ctx->trigger_hack_index, ctx->data, data_length);
+-            if (item) {
++            HIDP_DATA *right_item = ctx->trigger_split ? GetData(ctx->trigger_split_right_index, ctx->data, data_length) : NULL;
++            if (item && (!ctx->trigger_split || right_item)) {
+                 Sint16 value = (int)(Uint16)item->RawValue - 0x8000;
+                 Sint16 left_value = (value > 0) ? (value * 2 - 32767) : SDL_MIN_SINT16;
+                 Sint16 right_value = (value < 0) ? (-value * 2 - 32769) : SDL_MIN_SINT16;
++                if (ctx->trigger_split) {
++                    // 0 .. LogicalMax each (10 bits on Xbox One controllers)
++                    const LONG left_max = SDL_max(ctx->trigger_max[0], 1);
++                    const LONG right_max = SDL_max(ctx->trigger_max[1], 1);
++                    left_value = (Sint16)(SDL_min((LONG)item->RawValue, left_max) * 65535 / left_max - 32768);
++                    right_value = (Sint16)(SDL_min((LONG)right_item->RawValue, right_max) * 65535 / right_max - 32768);
++                }
+ 
+ #ifdef SDL_JOYSTICK_RAWINPUT_MATCH_TRIGGERS
+                 AddTriggerToMatchState(left_trigger, left_value);

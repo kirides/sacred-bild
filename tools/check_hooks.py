@@ -81,6 +81,23 @@ HOOKS = {
         ('trade', 0x006E98D0))},
     **{a: (f'{n} +0x44 render2', 3) for n, a in (
         ('blacksmith', 0x006A33A0), ('merchant', 0x006DBAC0), ('netPortraits', 0x006D8D70))},
+    # aim_assist.cpp, ui_nav.cpp: the world pick (hooked) and what the controller calls
+    0x00626C50: ('worldPick', 4),
+    0x005FE000: ('cObjectManager::getData (called)', 1),
+    0x00603E30: ('cObjectManager::hero (called)', 0),
+    0x00548F60: ('cCreature::isEnemy (called)', 1),
+    0x0084A961: ('rtDynamicCast (called, cdecl)', 0),
+    # options_screen.cpp: the options window's vtable slots (render is cUI_Window2's) and the control functions
+    0x00717040: ('cUI_Options +0x24 show', 1, 0x0071717D),
+    0x00716E00: ('cUI_Options +0x44 render2', 3, 0x00717034),
+    0x00732550: ('cUI_Control2::setFlags (called)', 1),
+    0x007325C0: ('cUI_Control2::clearFlags (called)', 1),
+    0x00732350: ('cUI_Control2::getAbsoluteRect (called)', 1),
+    0x00753430: ('cUI_Slider::getValue (called, fastcall)', 0),
+    0x007533B0: ('cUI_Slider::setValue (called)', 1),
+    0x0060D6C0: ('cEngine::instance (called, cdecl)', 0),
+    0x006113E0: ('cEngine::getViewOffset (called)', 2),
+    0x006B3640: ('cUI_Book::lineAt (called)', 3),
 }
 
 def rets_of(read, addr, length):

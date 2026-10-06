@@ -551,3 +551,8 @@ void UiAnchor::install()
     g_layoutChildren = reinterpret_cast<LayoutFn>(Addr::cUI_Window2_layoutChildren);
     Patch::hook(g_origPopupLayout, Addr::cUI_Popup_layout, &hookPopupLayout, "cUI_Popup::layout");
 }
+
+bool UiAnchor::frame(void* window, UiCanvas::Frame& out)
+{
+    return window && frameOf(window, out);
+}

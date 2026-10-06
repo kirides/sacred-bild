@@ -153,4 +153,21 @@ static const Sig::Entry kAddressSigs[] = {
     {"g_soundPakPath", "68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 08 3B C3 89 86 F0 B7 00 00", 1, Sig::Take::Abs32, &Sacred::Addr::g_soundPakPath}, // 009D760C, 009D5624
     {"g_language", "EB 21 8B 94 24 04 02 00 00 A1 ?? ?? ?? ?? 6A 01", 10, Sig::Take::Abs32, &Sacred::Addr::g_language}, // 017E7D34, 017E5CB4
     {"g_languageCodes", "68 ?? ?? ?? ?? C7 84 24 E8 00 00 00 08 01 00 00", 1, Sig::Take::Abs32, &Sacred::Addr::g_languageCodes}, // 00899394, 00897394
+    {"worldPick", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 68 53 8B D9", 0, Sig::Take::Match, &Sacred::Addr::worldPick}, // 00626C50, 00626D30
+    {"g_pObjectManager", "83 C4 08 85 C0 74 1E 8B 0D ?? ?? ?? ?? 6A 00 56", 9, Sig::Take::Abs32, &Sacred::Addr::g_pObjectManager}, // 00AD5C40, 00AD3BC0
+    {"cObjectManager_getData", "56 8B 74 24 08 57 8B F9 85 F6 74 42", 0, Sig::Take::Match, &Sacred::Addr::cObjectManager_getData}, // 005FE000, 005FE060
+    {"cObjectManager_hero", "56 57 8B F9 E8 ?? ?? ?? ?? 8B 70 14 85 F6 76 5B", 0, Sig::Take::Match, &Sacred::Addr::cObjectManager_hero}, // 00603E30, 00603E90
+    {"rtDynamicCast", "55 8B EC 6A FF 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 3C", 0, Sig::Take::Match, &Sacred::Addr::rtDynamicCast}, // 0084A961, 00849701
+    {"cObject_typeDescriptor", "8D 14 80 68 ?? ?? ?? ?? 56 8D 04 50 8B 0C 81 51", 4, Sig::Take::Abs32, &Sacred::Addr::cObject_typeDescriptor}, // 008EB648, 008E9648
+    {"cCreature_typeDescriptor", "8B 44 24 04 83 EC 44 56 57 6A 00 68 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::cCreature_typeDescriptor}, // 008EB660, 008E9660
+    {"cCreature_isEnemy", "8B 44 24 04 85 C0 74 3E 66 83 B8 FC 00 00 00 09", 0, Sig::Take::Match, &Sacred::Addr::cCreature_isEnemy}, // 00548F60, 00548DD0
+    {"cUI_Options_vtable", "89 44 24 10 C7 06 ?? ?? ?? ?? 88 86 54 01 00 00", 6, Sig::Take::Abs32, &Sacred::Addr::cUI_Options_vtable}, // 00897078, 0089505C
+    {"cUI_Control2_setFlags", "53 8B 5C 24 08 56 8B F1 F6 46 10 01", 0, Sig::Take::Match, &Sacred::Addr::cUI_Control2_setFlags}, // 00732550, 00731E70
+    {"cUI_Control2_clearFlags", "53 8B 5C 24 08 56 8B F1 F6 C3 30 74 3E", 0, Sig::Take::Match, &Sacred::Addr::cUI_Control2_clearFlags}, // 007325C0, 00731EE0
+    {"cUI_Control2_getAbsoluteRect", "83 EC 30 66 8B 41 2C 66 8B 51 2E 53", 0, Sig::Take::Match, &Sacred::Addr::cUI_Control2_getAbsoluteRect}, // 00732350, 00731C70
+    {"cUI_Slider_getValue", "83 EC 08 56 8B B1 88 00 00 00 89 74 24 04", 0, Sig::Take::Match, &Sacred::Addr::cUI_Slider_getValue}, // 00753430, 00752D10
+    {"cUI_Slider_setValue", "83 EC 08 8B 44 24 0C 8B 91 88 00 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Slider_setValue}, // 007533B0, 00752C90
+    {"cEngine_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 44 68 CC 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::cEngine_instance}, // 0060D6C0, 0060D760
+    {"cEngine_getViewOffset", "8B 44 24 08 8B 54 24 04 50 33 C0 66 8B 41 48", 0, Sig::Take::Match, &Sacred::Addr::cEngine_getViewOffset}, // 006113E0, 00611480
+    {"cUI_Book_lineAt", "83 EC 3C 53 55 56 57 8B F1 E8 ?? ?? ?? ?? 89 44 24 1C", 0, Sig::Take::Match, &Sacred::Addr::cUI_Book_lineAt}, // 006B3640, 006B3320
 };

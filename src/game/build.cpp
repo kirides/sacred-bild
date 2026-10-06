@@ -1,9 +1,11 @@
 #include "game/build.h"
+#include "game/controller.h"
 #include "game/d3d_stats.h"
 #include "game/sacred_addr.h"
 #include "game/focus.h"
 #include "game/frame_hooks.h"
 #include "game/movie.h"
+#include "game/options_screen.h"
 #include "game/gpu_skin.h"
 #include "game/granny_async.h"
 #include "game/ground_quads.h"
@@ -20,6 +22,7 @@
 #include "net/matchmaker.h"
 #include "net/tincat_shim.h"
 #include "net/udp_transport.h"
+#include "overlay/overlay.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
@@ -84,6 +87,9 @@ void Sacred::installHooks()
     Focus::install();
     UiCanvas::install();
     UiAnchor::install();
+    Overlay::install();
+    Controller::install();
+    OptionsScreen::install();
     Movie::install();
     Screenshot::install();
     MapCache::install();

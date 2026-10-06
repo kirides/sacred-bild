@@ -5,6 +5,7 @@
 
 #include <windows.h>
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -181,9 +182,13 @@ namespace
         }
     }
 
+    // The text table (g_textTable), once loaded.
+    std::atomic<void*> g_textTable{nullptr};
+
     // `path` is ".\SCRIPTS\<code>\global.res", which the exe would ignore.
     int __fastcall hookLoadText(void* table, void* edx, const char* path)
     {
+        g_textTable = table;
         logLanguage();
         std::vector<uint8_t> file;
         const DWORD error = path ? readFile(path, file, kMaxTextBytes) : ERROR_INVALID_PARAMETER;
@@ -279,4 +284,62 @@ void Language::install()
         LOG("Language: unexpected code at textTableAllocCall; the text stays the exe's own");
     }
     Patch::hook(g_origSoundCtor, Addr::cMSS_ctor, &hookSoundCtor, "cMSS_ctor");
+}
+
+std::wstring Language::text(const char* key)
+{
+    const auto* table = static_cast<const uint8_t*>(g_textTable.load());
+    if (!table || !key)
+    {
+        return {};
+    }
+    const auto* data = *reinterpret_cast<const uint8_t* const*>(table + TextTable::data);
+    const uint32_t size = *reinterpret_cast<const uint32_t*>(table + TextTable::size);
+    if (!data || size < 4)
+    {
+        return {};
+    }
+    // The game's hash (0x80EAA0): id = (toupper(c) + id * 0x71) % 0x3B9AC9F7 in signed 32-bit arithmetic.
+    uint32_t id = 0;
+    for (const char* c = key; *c; ++c)
+    {
+        uint32_t ch = static_cast<uint8_t>(*c);
+        if (ch >= 'a' && ch <= 'z')
+        {
+            ch -= 0x20;
+        }
+        id = static_cast<uint32_t>(static_cast<int32_t>(ch + id * 0x71u) % 0x3B9AC9F7);
+    }
+    id &= 0x7FFFFFFF;
+    uint32_t count;
+    std::memcpy(&count, data, 4);
+    count = std::min(count, (size - 4) / 16);
+    uint32_t lo = 0, hi = count;
+    while (lo < hi)
+    {
+        const uint32_t mid = (lo + hi) / 2;
+        uint32_t entry[4];
+        std::memcpy(entry, data + 4 + static_cast<size_t>(mid) * 16, sizeof(entry));
+        if (entry[0] < id)
+        {
+            lo = mid + 1;
+        }
+        else if (entry[0] > id)
+        {
+            hi = mid;
+        }
+        else
+        {
+            const uint64_t begin = 4ull + entry[1];
+            if (begin + entry[3] > size)
+            {
+                return {};
+            }
+            std::wstring s(entry[3] / 2, L'\0');
+            std::memcpy(s.data(), data + begin, s.size() * 2);
+            s.resize(std::wcslen(s.c_str()));
+            return s;
+        }
+    }
+    return {};
 }

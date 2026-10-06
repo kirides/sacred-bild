@@ -21,4 +21,7 @@ namespace Focus
 
     // One of the game's windows (the main window, a dialog, a message box) is in the foreground.
     bool foreground();
+
+    // The main game window, nullptr before it exists.
+    HWND window();
 }

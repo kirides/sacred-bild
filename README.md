@@ -94,6 +94,14 @@ ddraw calls through and logs which one.
   black. It now keeps drawing at `[Display] FpsLimitInactive` frames per second.
 - **Frame limiter without a busy core**: the game's limiter (60 fps in game and in the menus) spun on `Sleep(0)`
   for the rest of every frame. SacredBild sleeps on a high-resolution timer instead.
+- **Controller** (`[Controller]`, through [SDL3](https://www.libsdl.org): Xbox, PlayStation and Switch pads; under
+  Wine / Proton through Wine's own controller support), in the
+  manner of Diablo 2 Resurrected: the left stick walks, the attack and combat art buttons hit the nearest enemy in
+  the stick's direction, potions, weapon slots and windows are buttons, and the menus and windows get a cursor the
+  sticks move and the D-pad jumps from button to button (with the game's own hover effect). Whatever you used last,
+  controller or keyboard and mouse, is in charge. Opening the Options with the controller shows them as
+  SacredBild's own screen (Direct3D 9 backend), laid out for the pad, with a page for the controller's buttons and
+  settings (see [Controller](#controller)).
 - **Diagnostics**: optional per-second frame stats (`[Debug] D3DStats`: draw calls, texture switches, unique
   textures, time spent in the world renderer, UI, flip and inside Direct3D, what ended each batch, texture memory)
   and an optional sampling profiler (`[Debug] Profiler`).
@@ -128,7 +136,7 @@ The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll`
 ## Configuration (`SacredBild.ini`)
 
 Before the game starts, a settings window offers the settings below with tooltips: General (resolution, window frame,
-frame limit, VSync, UI size, renderer), Advanced (everything else) and HUD layout (`[UI.Layout]`). Play saves the
+frame limit, VSync, UI size, renderer), Advanced (everything else; the controller's buttons are set in game) and HUD layout (`[UI.Layout]`). Play saves the
 changed ones to `SacredBild.ini`; Exit quits. "Don't show this window
 again" sets `[Launcher] HideSettingsWindow=1`; holding Shift as the game starts shows it anyway.
 
@@ -185,6 +193,62 @@ again" sets `[Launcher] HideSettingsWindow=1`; holding Shift as the game starts 
 | Debug | CrashDump | 1 | Minidump next to the exe on a crash: 0 = off, 1 = stacks and the memory they point to (small), 2 = all memory (for the game's globals; hundreds of MB). |
 | Debug | SkinCheck | 0 | Compares Granny's CPU skinning of characters with per-vertex bone weights rebuilt from its meshes (`Skin check:` lines every 10 s): groundwork for skinning on the GPU. |
 | Debug | MovieFallback | 0 | Movies always through the fallback (DirectShow into a system memory surface), as without the Media Engine. |
+| Controller | Enabled | 1 | Play with a controller. |
+| Controller | Deadzone | 24 | Percent of a stick's travel ignored around its center. |
+| Controller | CursorSpeed | 900 | Cursor speed in menus and windows at full deflection, in 1024x768 pixels per second. |
+| Controller | MoveRadius | 160 | How far ahead of the hero (screen pixels) the left stick walks to. |
+| Controller | AimRange | 450 | Aim assist: enemies within this many pixels of the hero. |
+| Controller | AimCone | 90 | Aim assist: enemies within this angle (degrees) around the stick's direction come first. |
+| Controller | ArtClick | 1 | Combat art slot buttons select the art (keys 6-0) and right-click the target; 0 = select only. |
+| Controller | Walk | 1 | The left stick pushed less than halfway walks (Shift) instead of running. |
+| Controller.Bindings | *action* | see below | Button for each action: `A B X Y LB RB LT RT Back Start L3 R3 Up Down Left Right`, or `Modifier+Button` (e.g. `LT+A`); empty = none. |
+
+## Controller
+
+With `[Controller] Enabled=1` (the default) a controller plays the game; the first input from it takes over
+from the keyboard and mouse, moving the mouse a few pixels or pressing a key hands it back.
+
+In game:
+
+- **Left stick**: walk (pushed less than halfway: walk instead of run, `Walk`). Walking clicks the ground ahead of the
+  hero with the world pick turned off, so it never attacks, talks or picks something up on the way.
+- **Attack** (A): attacks the nearest enemy in the left stick's direction (the right stick aims instead when pushed),
+  as long as the button is held, and moves on to the next one when it dies. Without an enemy it talks to, opens or
+  picks up what is nearest; with nothing there it attacks in place (Ctrl).
+- **Combat art** (X): right click at the nearest enemy (the active combat art). The **art slot** buttons select
+  slot 1-5 (keys 6-0) and do the same (`ArtClick`).
+- Everything else presses the game's key: weapon slots 1-5, the potions, windows, quick save / load, zoom.
+
+Default layout ("LT+" = with LT held):
+
+| Button | Action | With LT |
+|---|---|---|
+| A | Attack / interact | Combat art slot 5 |
+| X | Combat art (right click) | Weapon slot 1 |
+| Y, B, RB, RT | Combat art slots 1, 2, 3, 4 | Weapon slots 2, 3, 4, 5 |
+| LB | Stand still (Ctrl) | |
+| D-pad up / down / left / right | Healing potion / heal hirelings / antidote / concentration | Undead Death / Mentor / zoom out / zoom in |
+| Start / Back | Game menu (Esc) / inventory | Options / world map |
+| L3 / R3 | Show names (Alt) / overview map (Tab) | Collect all / cursor mode on and off |
+
+In menus and windows (and in game in cursor mode, e.g. for a conversation the game shows as a window SacredBild doesn't
+recognize): the left stick moves the cursor, the D-pad jumps to the next button, menu entry, list or check box that
+way, A and X are the left and right mouse button (A twice quickly: a double click, e.g. to load a savegame), B is Esc,
+the right stick scrolls; Start and Back keep their window keys; LB / RB switch the inventory's pages (backpack, combat
+arts, combos). While a message box or the game menu is open, the D-pad stays in it and the cursor starts on its OK or
+first entry; in a message box B is its Cancel (or its only button). In an NPC dialog with answers, A is Enter (the
+first answer) and B clicks the second one. R3 shows or hides the overview map (one press each, where Tab on the
+keyboard shows it while held).
+
+The log book (L) has no cursor: LB / RB switch the tabs across the top, the D-pad (up / down) the tabs down the left
+edge; the left stick picks an entry of the list (up / down) and turns the list's pages (left / right), the right stick
+turns the right page's (right or down: the next); B closes it. In cursor mode it works with the cursor instead.
+
+Opening the Options with the controller shows SacredBild's own screen: the game's settings (with the game's own
+texts), and a Controller page with the settings above and every action's button: select one and press a button, or
+hold one and press another for a two-button binding; X clears one. LB / RB switch pages, Start accepts (the game
+saves and applies its settings as from its own window; the controller's go to `SacredBild.ini`), B cancels. With
+the keyboard or mouse the game's own Options window opens.
 
 ## LAN games over a VPN
 
@@ -302,6 +366,12 @@ What the game's code at those addresses does is in `docs/RE_NOTES.md` and in the
 | `src/game/ground_quads.*` | The ground's quad batcher straight to the batcher (`[Render] BatchGround`) |
 | `src/game/map_cache.*` | Hash index in front of the map record caches (`[Render] RecordIndex`) |
 | `src/game/d3d_stats.*` | `[Debug] D3DStats` frame statistics |
+| `src/game/controller.*` | `[Controller]`: the pad driving the game through injected input and its own cursor (walking, attacks, windows) |
+| `src/game/aim_assist.*` | Controller targets from the game's list of what can be picked on the screen; the world pick hooked for walking and aiming |
+| `src/game/ui_nav.*` | D-pad navigation: the controls of the open windows, told apart by the exe's RTTI |
+| `src/game/options_screen.*` | The game's Options window as SacredBild's own screen while the controller is in use, with the controller's settings and bindings |
+| `src/input/` | `gamepad.*` (SDL3 on a thread of its own), `inject.*` (keys and mouse buttons handed to the game's window procedure and polls), `input_mode.*` (controller or keyboard and mouse), `bindings.*` (`[Controller.Bindings]`) |
+| `src/overlay/` | Dear ImGui drawn into the back buffer before each present (Direct3D 9 backend) |
 | `src/game/world_passes.*` | `[Debug] D3DStats`: the world view's passes timed separately |
 | `src/render/batcher.*`, `atlas.*`, `fvf.h` | Draw merging, the texture atlas, vertex format layout |
 | `src/net/` | LAN games over VPNs: `lan_client.*` (sacred.exe), `lan_server.*` (gameserver.exe), `lan_protocol.*` (announcements), `adapters.*` (network adapters), `connection.*` (`NoDelay`, one send per message, TCP statistics) |
@@ -343,7 +413,8 @@ Reverse engineering helpers (how addresses and offsets were found):
 ### Build
 
 Requires Visual Studio 2026 (MSVC, Win32 toolset), CMake 3.25+ and vcpkg with `VCPKG_ROOT` set
-(vcpkg provides [Detours](https://github.com/microsoft/Detours), [gtl](https://github.com/greg7mdp/gtl) and
+(vcpkg provides [Detours](https://github.com/microsoft/Detours), [gtl](https://github.com/greg7mdp/gtl),
+[Dear ImGui](https://github.com/ocornut/imgui), [SDL3](https://www.libsdl.org) and
 [KCP](https://github.com/skywind3000/kcp)). The matchmaker needs Go 1.27 (`cd matchmaker && go build`).
 
 ```sh
@@ -353,6 +424,7 @@ python tools/check_hooks.py         # checks the hooks against the exe (English,
 ```
 
 The DLL is statically linked against the CRT and imports only Windows system DLLs (`d3d9.dll` is loaded at run time).
+vcpkg builds SDL3 with its gamepad support only (`triplets/x86-windows-static.cmake`, an overlay of vcpkg's triplet).
 For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build output instead of installing.
 `.github/workflows/` builds every push and pull request; pushes to `main` publish a nightly prerelease, `v*` tags a
 release.

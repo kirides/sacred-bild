@@ -453,7 +453,9 @@ Per-window re-anchoring does not work: children are absolute, many renderers dra
 1024x768 space and is drawn into a centered canvas (`src/game/ui_canvas.*`):
 
 - UI scopes: `cUI_Manager_render`, `playVideo` (confined to the canvas) and `cMouse_renderCursor`
-  (overlay: mapped, but not culled or clipped, so the cursor also shows beside the canvas).
+  (overlay: mapped, but not culled or clipped, so the cursor also shows beside the canvas; its 3D draws, the
+  carried item, get the whole screen as viewport and a projection scaled and shifted in clip space so that the
+  game's 1024x768 viewport still lands on the canvas).
   `renderSavePortrait` suspends it.
 - In a scope the device proxy sets the viewport to the canvas (3D UI elements follow), maps
   pretransformed vertices `x*s + left`, culls draws entirely outside 1024x768 (parked windows) and clips
@@ -623,6 +625,69 @@ Server time-outs (`cNetServer_watchdogThread` `0x4DBCB0`, 5 ms loop, times from 
 second; SacredBild makes that `[Net] JoinTimeout`, 30 s by default); loading may take 4 min (`+0x74` set, `+0x64` last receive); in game, three 30 s ticks without any data
 (`+0x6C..+0x6E`, cleared by `cNetServer_onReceive`) kick the player; idle warning at 14 min, kick at 15 min
 (`+0x68` last activity, not the host).
+
+## Input, the world pick and the options window (controller)
+
+- No DirectInput: keys and buttons come through `sacredWndProc` (`0x812BF0`) and 48 `GetAsyncKeyState` polls (Shift,
+  Ctrl, Alt, `VK_LBUTTON` for hold-to-move in `0x6172C0`, the zoom keys in `cEngine_handleZoomInput`). `WM_KEYDOWN`
+  calls `GetKeyboardState` and `ToAscii` / `ToUnicode` and posts a key event (vtable `0x897568`) through
+  `0x808E50` / `0x8092F0`; Shift / Ctrl / Alt are tracked in `0x182EE70` from their own key messages; Ctrl+B and
+  Print Screen take screenshots right there. Mouse button messages take the position from `getClientCursorPos`, not
+  from lParam. Keys are fixed (Quickstart.pdf): Esc, Tab, I, F, C, L, M, O, S, H, N, P, A (collect all), F8 / F9,
+  numpad +/-, Space Q W E R (potions), B (heal hirelings), 1-5 weapon slots, 6-0 select the active combat art (the
+  right mouse button uses it), Ctrl+click attacks in place, Shift+click on the ground walks.
+- World pick `0x626C50` (thiscall on the world view, `(x, y, excludeId, int32 outRect[3])` -> id): the view's pick
+  list is a std::vector of 0x1C-byte entries at `+0x96B24` / `+0x96B28` (id, x, y, int16 w, h, in screen pixels),
+  rebuilt by the renderer each frame and guarded by the CRITICAL_SECTION at `+0x96B0C`; more than 1000 entries give
+  0. Hits under the point are grouped by category (object vtable `+0x24` (1, 0), 0..3, ranked 0 1 2 3, with Alt
+  2 1 0 3: 2 are items) and the nearest center wins. Callers: `cEngine_updateWorldCursor` (stores the hovered id in
+  cMouse `+0x6C`, picks the cursor image) and twice the world mouse handler `0x6172C0`. The world view is
+  `engine +8 + 4 * (uint16 at engine +0x48)`.
+- Objects: `*0xAD5C40` is the object manager; `0x5FE000` thiscall (id) -> object (it logs and fixes a stale id at
+  object `+0xC`); `0x603E30` thiscall () -> the local hero, already `__RTDynamicCast` (`0x84A961`) from cObject
+  (`0x8EB648`) to cCreature (`0x8EB660`), via the player info singleton `0x7D84A0` (`0x182EBE8`, hero id at `+0x14`).
+  `0x548F60` thiscall on a creature (target) -> 1 if the target is alive (`+0xFC` != 9, `+0x150` != 6, `+0x4D8`)
+  and hostile (relation of the ids at `+0xC`); the cursor's attack symbol uses it.
+- Options window `cUI_Options` (vtable `0x897078`, constructor `0x716D30`, controls built in `0x718CA0`): show
+  (`+0x24`, `0x717040`) fills the controls from the options object `0x182EE78` (`0x718660`), OK (`+0x15C`, Cancel
+  `+0x158`) stores them under their settings.cfg keys and applies them (`0x717C20`). Check boxes and radio buttons
+  are bit 0x10 of the control flags (`0x732550` sets, `0x7325C0` clears; both call show on visibility changes);
+  sliders: `0x753430` fastcall get (0..count-1, count at `+0x88`), `0x7533B0` thiscall set. Controls: see
+  `Sacred::Options` in `src/game/sacred_addr.h` (the fourth slider is MINIMAP_ALPHA). The main menu uses the same
+  class. Labels are text keys (`UI_CFG_*`) looked up by `0x672740`: id = hash of the key (`0x80EAA0`: upper case,
+  `id = (c + id * 0x71) % 0x3B9AC9F7` in signed 32-bit arithmetic, then `& 0x7FFFFFFF`), searched in the text table.
+- UI manager windows: `createGameWindows` (`0x759AF0`) fills `+0x80` taskbar, `+0x84` inventory, `+0x88` equipment,
+  `+0x8C` blacksmith, `+0x90` merchant, `+0x94` megamap, `+0x98` overview map (Tab), `+0x9C` minimap, `+0xA0` stats,
+  `+0xA4` console, `+0xA8` questbook, `+0xB0` escape menu, `+0xB4` purchase, `+0xB8` master, `+0xAC` savegame,
+  `+0xBC` options, `+0xC0` chest, `+0xC4` horse, `+0xCC` net portraits, `+0xD0` character, `+0xD4` cube, `+0xD8`
+  trade. The menus (flags `0x01`) are the windows at `+0x130` .. `+0x140`; `+0x144` is drawn over both when set.
+  Window children: std::vector of controls at `+0x78` / `+0x7C`. Hit tests (`+0x1C`, `0x732420`) add the parents'
+  positions (`+0x50`) like `getAbsoluteRect` (`0x732350`).
+- Game menu `cUI_EscMenu` (vtable `0x8964DC`, rect 380,284 264x200): `0x6BBBD0` builds its five entries as
+  `cUI_StaticText64` (`0x753B90`, 0x9C bytes, rect 0,y,width,0x20 at y = 8, 0x2C, 0x50, 0x74, 0x98; parent the menu)
+  in a vector at `+0x158` / `+0x15C`, not among the children; receiveEvent `0x6BBA80` and render `0x6BB390` walk it.
+- Start menu `cUI_MainMenu` (`+0x130`, vtable `0x897004`, constructor `0x7119B0`): `0x713670` builds its entries as
+  `cUI_StaticText64FX` (`0x754490`, 0x8C bytes, 384,y 256x30, 32 apart) in a vector per screen, `+0x158` main,
+  `+0x164` multiplayer, `+0x170` extras (12 bytes apart), not among the children; the screen shown is `+0x154` (3:
+  credits), and receiveEvent `0x7125B0` / render `0x7128D0` walk that screen's vector.
+- Message box `cUI_BusyDlg` (`+0x144`, vtable `0x897134`, 0x644 bytes from `0x756A90`): its buttons are members
+  (`0x72A8F0`), laid out per kind of box by `0x722500` (OK left of Cancel). Esc (`+0x34`, `0x721320`) only cancels
+  kinds 5 and 6 (`+0x154`).
+- Log book `cUI_Diary` (`+0xA8`, vtable `0x8963E4`, receiveEvent `0x6AED40`): four tab buttons at `+0x538` (0x7C
+  apart, parent set), the selected one at `+0x7A4` (uint16, 4 until one is picked, `0x6AF0E0` selects), one `cUI_Book`
+  per tab in the vector at `+0x7A8` that gets the events. `cUI_Book` (0xA24 bytes, receiveEvent `0x6B3940`): seven
+  tabs down the left at `+0x168` (0xBC apart, selected `+0x15E`, `0x6B1880`), page buttons left previous / next
+  `+0x68C` / `+0x748`, right `+0x804` / `+0x8C0` (`0x6B0120` / `0x6AFFD0` with side 0 / 1; pages `+0x162` / `+0x160`).
+  The left page (`0x6B0240`: book +0x60,+0x20, 0x11C x 0x1C0) lists entries: `0x6B3640` thiscall (x, y, uint16*)
+  hit-tests them by measuring their texts; per tab a vector at `+0x97C + 0xC * tab` of 0x1C-byte pages, `+4` the
+  selected entry, whose text the right page shows.
+- Inventory `cUI_Inventory3` (`+0x84`, vtable `0x896668`, receiveEvent `0x6C61C0`): its pages (backpack, combat
+  arts, combos) are a `cUI_TabControl` (vtable `0x897220`) at `[[inventory +0x154] +0x78]`; event 5 / `0x11` with
+  1..3 selects one (`0x729940`). `cUI_TabControl`: vector of 0x18-byte pages at `+0x78` / `+0x7C` (`+0x10` the tab
+  button, `+0x14` the page window), active page `+0x84` (uint16), `setActivePage` `0x729260`; receiveEvent `0x728350`
+  hit-tests the tabs at their absolute rect moved 4 pixels down, visible or not.
+- The cursor (`cMouse_renderCursor` `0x655450`, image `0x6548A0`): while it carries an item (cursor image flag 2)
+  it draws the item's model in 3D at the cursor, projected into the UI's 1024x768 viewport.
 
 ## Language files
 

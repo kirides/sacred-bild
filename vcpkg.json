@@ -4,6 +4,14 @@
   "dependencies": [
     "detours",
     "gtl",
-    "kcp"
+    {
+      "name": "imgui",
+      "features": [
+        "dx9-binding",
+        "win32-binding"
+      ]
+    },
+    "kcp",
+    "sdl3"
   ]
 }

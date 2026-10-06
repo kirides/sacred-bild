@@ -27,6 +27,11 @@ namespace DDraw9::Gpu
     // Shows `sourceRect` of the render target `source` in the window.
     HRESULT present(d9::IDirect3DSurface9* source, const RECT* sourceRect);
 
+    // Drawn into the back buffer right before each present (after the game's frame is in it), on the presenting
+    // thread: SacredBild's own UI (Overlay).
+    using OverlayFn = void (*)(d9::IDirect3DDevice9Ex* device, d9::IDirect3DSurface9* backBuffer, HWND window);
+    void setOverlay(OverlayFn draw);
+
     // Display mode of the adapter the window is on.
     d9::D3DDISPLAYMODE displayMode();
 

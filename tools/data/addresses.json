@@ -607,6 +607,74 @@
   "g_languageCodes": {
    "452F85C7": "00899394",
    "451BBE74": "00897394"
+  },
+  "worldPick": {
+   "452F85C7": "00626C50",
+   "451BBE74": "00626D30"
+  },
+  "g_pObjectManager": {
+   "452F85C7": "00AD5C40",
+   "451BBE74": "00AD3BC0"
+  },
+  "cObjectManager_getData": {
+   "452F85C7": "005FE000",
+   "451BBE74": "005FE060"
+  },
+  "cObjectManager_hero": {
+   "452F85C7": "00603E30",
+   "451BBE74": "00603E90"
+  },
+  "rtDynamicCast": {
+   "452F85C7": "0084A961",
+   "451BBE74": "00849701"
+  },
+  "cObject_typeDescriptor": {
+   "452F85C7": "008EB648",
+   "451BBE74": "008E9648"
+  },
+  "cCreature_typeDescriptor": {
+   "452F85C7": "008EB660",
+   "451BBE74": "008E9660"
+  },
+  "cCreature_isEnemy": {
+   "452F85C7": "00548F60",
+   "451BBE74": "00548DD0"
+  },
+  "cUI_Options_vtable": {
+   "452F85C7": "00897078",
+   "451BBE74": "0089505C"
+  },
+  "cUI_Control2_setFlags": {
+   "452F85C7": "00732550",
+   "451BBE74": "00731E70"
+  },
+  "cUI_Control2_clearFlags": {
+   "452F85C7": "007325C0",
+   "451BBE74": "00731EE0"
+  },
+  "cUI_Control2_getAbsoluteRect": {
+   "452F85C7": "00732350",
+   "451BBE74": "00731C70"
+  },
+  "cUI_Slider_getValue": {
+   "452F85C7": "00753430",
+   "451BBE74": "00752D10"
+  },
+  "cUI_Slider_setValue": {
+   "452F85C7": "007533B0",
+   "451BBE74": "00752C90"
+  },
+  "cEngine_instance": {
+   "452F85C7": "0060D6C0",
+   "451BBE74": "0060D760"
+  },
+  "cEngine_getViewOffset": {
+   "452F85C7": "006113E0",
+   "451BBE74": "00611480"
+  },
+  "cUI_Book_lineAt": {
+   "452F85C7": "006B3640",
+   "451BBE74": "006B3320"
   }
  },
  "gameserver.exe": {

@@ -142,9 +142,16 @@ private:
     void fitTexels(DWORD fvf, uint8_t* verts);
     // `virt` (1024x768 space) mapped into the UI frame and clamped to it.
     D3DVIEWPORT7 canvasViewport(const D3DVIEWPORT7& virt) const;
-    // Unconfined (cursor) mode: 3D draws such as a dragged item model project into 1024x768 and need the
-    // frame-mapped viewport; returns false if nothing changed.
-    bool beginOverlay3D(D3DVIEWPORT7& restore);
+    // Unconfined (cursor) mode: 3D draws such as the item the cursor carries project into the game's 1024x768
+    // viewport. They get the whole screen as viewport and a projection that puts the game's viewport where the frame
+    // maps it, so the canvas's edge doesn't cut them off; returns false if nothing changed.
+    struct Overlay3D
+    {
+        D3DVIEWPORT7 viewport;
+        D3DMATRIX projection;
+    };
+    bool beginOverlay3D(Overlay3D& restore);
+    void endOverlay3D(const Overlay3D& restore);
     DWORD uiFilter(DWORD value) const;
 
     IDirect3DDevice7* m_real;

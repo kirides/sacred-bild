@@ -119,6 +119,24 @@ SACRED = [
     ('g_soundPakPath', 0x009D760C, 'data'),
     ('g_language', 0x017E7D34, 'data'),
     ('g_languageCodes', 0x00899394, 'data'),
+    # controller: aim assist on the world pick (aim_assist.cpp), the options window (options_screen.cpp)
+    ('worldPick', 0x00626C50, 'func'),
+    ('g_pObjectManager', 0x00AD5C40, 'data'),
+    ('cObjectManager_getData', 0x005FE000, 'func'),
+    ('cObjectManager_hero', 0x00603E30, 'func'),
+    ('rtDynamicCast', 0x0084A961, 'func'),
+    ('cObject_typeDescriptor', 0x008EB648, 'data'),
+    ('cCreature_typeDescriptor', 0x008EB660, 'data'),
+    ('cCreature_isEnemy', 0x00548F60, 'func'),
+    ('cUI_Options_vtable', 0x00897078, 'data'),
+    ('cUI_Control2_setFlags', 0x00732550, 'func'),
+    ('cUI_Control2_clearFlags', 0x007325C0, 'func'),
+    ('cUI_Control2_getAbsoluteRect', 0x00732350, 'func'),
+    ('cUI_Slider_getValue', 0x00753430, 'func'),
+    ('cUI_Slider_setValue', 0x007533B0, 'func'),
+    ('cEngine_instance', 0x0060D6C0, 'func'),
+    ('cEngine_getViewOffset', 0x006113E0, 'func'),
+    ('cUI_Book_lineAt', 0x006B3640, 'func'),
 ]
 
 # gameserver.exe (the same addresses in both builds) has no function table here: each entry gives the instruction
@@ -131,9 +149,9 @@ GAMESERVER = [
 
 def resolve(ref, others, name, va, kind, start=None):
     if kind == 'data':
-        refs = [sigs.operand_of(ref, start, va)] if start is not None else sigs.xrefs(ref, va)
+        refs = [sigs.operand_of(ref, start, va)] if start is not None else sigs.xrefs(ref, va, 40)
         best = None
-        for insn, op in refs[:40]:
+        for insn, op in refs:
             r = sigs.make(ref, op, others, start=start)
             if r and (best is None or len(r[0]) < len(best[0])):
                 best = r

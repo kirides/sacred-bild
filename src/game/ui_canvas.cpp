@@ -1,4 +1,5 @@
 #include "game/ui_canvas.h"
+#include "game/controller.h"
 #include "game/device_proxy.h"
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
@@ -138,9 +139,18 @@ namespace
         }
     }
 
+    // The mouse's position, or the controller's cursor while it drives the game.
     void __cdecl hookGetClientCursorPos(HWND hwnd, POINT* pt)
     {
-        g_origGetClientCursorPos(hwnd, pt);
+        POINT controller;
+        if (pt && Controller::cursor(controller))
+        {
+            *pt = controller;
+        }
+        else
+        {
+            g_origGetClientCursorPos(hwnd, pt);
+        }
         if (pt)
         {
             pt->x = UiCanvas::toVirtualX(pt->x);
@@ -150,6 +160,10 @@ namespace
 
     void __fastcall hookRenderCursor(void* self, void* edx, void* device, int flag)
     {
+        if (Controller::hideGameCursor())
+        {
+            return;
+        }
         UiCanvas::Scope ui{UiCanvas::Mode::Overlay};
         UiCanvas::FrameScope canvas{{0.0f, 0.0f, false}};
         g_origRenderCursor(self, edx, device, flag);

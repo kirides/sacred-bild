@@ -3,6 +3,7 @@
 #include "config.h"
 #include "log.h"
 
+#include <atomic>
 #include <mutex>
 #include <set>
 #include <string>
@@ -25,6 +26,7 @@ namespace DDraw9::Gpu
         d9::D3DPRESENT_PARAMETERS g_params = {};
         bool g_backBufferFrozen = false;
         bool g_presentFailed = false;
+        std::atomic<OverlayFn> g_overlay{nullptr};
 
         UINT adapterOf(HWND window)
         {
@@ -308,6 +310,13 @@ namespace DDraw9::Gpu
             const UINT h = sourceRect ? sourceRect->bottom - sourceRect->top : src.Height;
             const bool scaled = w != g_params.BackBufferWidth || h != g_params.BackBufferHeight;
             hr = dev->StretchRect(source, sourceRect, backBuffer, nullptr, scaled ? d9::D3DTEXF_LINEAR : d9::D3DTEXF_POINT);
+            if (SUCCEEDED(hr))
+            {
+                if (const OverlayFn overlay = g_overlay.load(std::memory_order_acquire))
+                {
+                    overlay(dev, backBuffer, g_window);
+                }
+            }
             backBuffer->Release();
         }
         if (SUCCEEDED(hr))
@@ -322,6 +331,11 @@ namespace DDraw9::Gpu
         }
         // Occluded (minimized) windows and mode changes are not errors for the game.
         return SUCCEEDED(hr) || hr == D3DERR_DEVICELOST ? DD_OK : DDERR_GENERIC;
+    }
+
+    void setOverlay(OverlayFn draw)
+    {
+        g_overlay.store(draw, std::memory_order_release);
     }
 
     d9::D3DDISPLAYMODE displayMode()

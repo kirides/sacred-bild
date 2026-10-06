@@ -11,4 +11,7 @@ namespace FrameHooks
 
     // The game's dxDriver7 instance; nullptr before dxDriver7::init ran.
     void* dxDriver();
+
+    // The cEngine running the in-game render loop; nullptr before the first game started.
+    void* engine();
 }

@@ -1,5 +1,9 @@
 #include "game/focus.h"
+#include "game/controller.h"
 #include "game/sacred_addr.h"
+#include "input/inject.h"
+#include "input/input_mode.h"
+#include "overlay/overlay.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
@@ -10,10 +14,12 @@
 namespace
 {
     using GetAsyncKeyStateFn = SHORT(WINAPI*)(int);
+    using GetKeyboardStateFn = BOOL(WINAPI*)(PBYTE);
     using SetCursorPosFn = BOOL(WINAPI*)(int, int);
     using SetWindowsHookExAFn = HHOOK(WINAPI*)(int, HOOKPROC, HINSTANCE, DWORD);
 
     GetAsyncKeyStateFn g_origGetAsyncKeyState = nullptr;
+    GetKeyboardStateFn g_origGetKeyboardState = nullptr;
     SetCursorPosFn g_origSetCursorPos = nullptr;
     SetWindowsHookExAFn g_origSetWindowsHookExA = nullptr;
     HOOKPROC g_gameKeyboardHook = nullptr;
@@ -33,15 +39,58 @@ namespace
         return foreground && GetWindowThreadProcessId(foreground, &process) && process == GetCurrentProcessId();
     }
 
+    // Keys and buttons the controller holds (Inject) count as pressed; while SacredBild's own screen is open the game
+    // sees nothing pressed.
     SHORT WINAPI hookGetAsyncKeyState(int key)
     {
         const SHORT state = g_origGetAsyncKeyState(key);   // also consumes the "pressed since last call" bit
-        return active() ? state : 0;
+        if (!active() || Overlay::isOpen())
+        {
+            return 0;
+        }
+        return Inject::held(key) ? static_cast<SHORT>(state | 0x8000) : state;
     }
 
+    // The window procedure reads it for each key message (ToAscii).
+    BOOL WINAPI hookGetKeyboardState(PBYTE keys)
+    {
+        const BOOL ok = g_origGetKeyboardState(keys);
+        if (ok && keys)
+        {
+            Inject::merge(keys);
+        }
+        return ok;
+    }
+
+    // Not while the controller has the cursor: the game warps it to keep it on its world spot as the view scrolls.
     BOOL WINAPI hookSetCursorPos(int x, int y)
     {
-        return active() ? g_origSetCursorPos(x, y) : TRUE;
+        return active() && !Controller::ownsCursor() ? g_origSetCursorPos(x, y) : TRUE;
+    }
+
+    // The player's own input (never the controller's injected messages): who is in charge, the controller or the
+    // keyboard and mouse.
+    void noteInput(UINT message, WPARAM wParam)
+    {
+        switch (message)
+        {
+        case WM_KEYDOWN: case WM_SYSKEYDOWN:
+            // Windows can turn an Xbox pad's input into gamepad keys (VK_GAMEPAD_A 0xC3 .. 0xDA) for the focused
+            // window: that is the controller, not the keyboard.
+            if (wParam < 0xC3 || wParam > 0xDA)
+            {
+                InputMode::keyboardUsed(message, wParam);
+            }
+            break;
+        case WM_LBUTTONDOWN: case WM_RBUTTONDOWN: case WM_MBUTTONDOWN: case WM_XBUTTONDOWN: case WM_MOUSEWHEEL:
+            InputMode::keyboardUsed(message, wParam);
+            break;
+        case WM_MOUSEMOVE:
+            InputMode::mouseMoved();
+            break;
+        default:
+            break;
+        }
     }
 
     // The game's hook swallows the Windows keys, Ctrl+Esc, Alt+Tab and Alt+Esc. Only in the foreground, and Alt+Tab /
@@ -91,6 +140,12 @@ namespace
     // Alt+F4 still does.
     LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
     {
+        LRESULT injected = 0;
+        if (Inject::unwrap(window, message, wParam, lParam, g_origWindowProc.load(), injected))
+        {
+            return injected;
+        }
+        noteInput(message, wParam);
         if ((message == WM_ACTIVATE && LOWORD(wParam) == WA_INACTIVE) || (message == WM_ACTIVATEAPP && !wParam) ||
             message == WM_ENTERSIZEMOVE || message == WM_ENTERMENULOOP || message == WM_DESTROY)
         {
@@ -108,6 +163,10 @@ namespace
         if (message == WM_SYSCOMMAND && (wParam & 0xFFF0) == SC_KEYMENU && lParam == 0)
         {
             return 0;   // Alt alone (the game shows item names with it) doesn't enter the menu; Alt+Space still opens it
+        }
+        if (Overlay::message(window, message, wParam, lParam))
+        {
+            return 0;   // SacredBild's own screen has the keyboard and mouse
         }
         return CallWindowProcA(g_origWindowProc.load(), window, message, wParam, lParam);
     }
@@ -175,6 +234,12 @@ void Focus::install()
         Patch::iat("USER32.dll", "SetCursorPos", reinterpret_cast<void*>(&hookSetCursorPos)));
     g_origSetWindowsHookExA = static_cast<SetWindowsHookExAFn>(
         Patch::iat("USER32.dll", "SetWindowsHookExA", reinterpret_cast<void*>(&hookSetWindowsHookExA)));
+    g_origGetKeyboardState = static_cast<GetKeyboardStateFn>(
+        Patch::iat("USER32.dll", "GetKeyboardState", reinterpret_cast<void*>(&hookGetKeyboardState)));
+    if (!g_origGetKeyboardState)
+    {
+        g_origGetKeyboardState = &GetKeyboardState;
+    }
     LOG("Focus: input only in the foreground, ClipCursor={}", g_config.clipCursor);
 
     // The window procedure no longer pauses rendering when the game loses the foreground: the menu loop's last
@@ -194,6 +259,7 @@ void Focus::install()
 void Focus::windowCreated(HWND window)
 {
     g_window = window;
+    Inject::setWindow(window);
     subclass(window, false);
     EnableMenuItem(GetSystemMenu(window, FALSE), SC_CLOSE, MF_BYCOMMAND | MF_GRAYED);   // greys the close button
 }
@@ -201,6 +267,11 @@ void Focus::windowCreated(HWND window)
 bool Focus::foreground()
 {
     return active();
+}
+
+HWND Focus::window()
+{
+    return g_window;
 }
 
 void Focus::onFrame()

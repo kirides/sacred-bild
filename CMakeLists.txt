@@ -10,8 +10,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 # RelWithDebInfo is the build that ships: inline like Release (CMake's default for it is /Ob1).
 string(REPLACE "/Ob1" "/Ob2" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+# ... and link like Release: CMake's default incremental linking pads every function and keeps unreferenced ones.
+string(REPLACE "/INCREMENTAL" "/INCREMENTAL:NO /OPT:REF /OPT:ICF" CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO}")
 
+find_package(imgui CONFIG REQUIRED)
 find_package(kcp CONFIG REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h" REQUIRED)
 find_library(DETOURS_LIBRARY_RELEASE detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH REQUIRED)
 find_library(DETOURS_LIBRARY_DEBUG detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/lib" NO_DEFAULT_PATH REQUIRED)
@@ -40,6 +44,10 @@ add_library(ddraw SHARED
   src/game/granny_mesh.cpp
   src/game/gpu_skin.cpp
   src/game/world_passes.cpp
+  src/game/aim_assist.cpp
+  src/game/controller.cpp
+  src/game/options_screen.cpp
+  src/game/ui_nav.cpp
   src/game/movie.cpp
   src/game/d3d_stats.cpp
   src/game/device_proxy.cpp
@@ -47,6 +55,11 @@ add_library(ddraw SHARED
   src/game/screenshot.cpp
   src/game/ui_anchor.cpp
   src/game/ui_canvas.cpp
+  src/input/bindings.cpp
+  src/input/gamepad.cpp
+  src/input/inject.cpp
+  src/input/input_mode.cpp
+  src/overlay/overlay.cpp
   src/ddraw9/device.cpp
   src/ddraw9/device_skin.cpp
   src/ddraw9/directdraw.cpp
@@ -73,7 +86,7 @@ add_library(ddraw SHARED
   src/version.rc
 )
 target_include_directories(ddraw PRIVATE src ${DETOURS_INCLUDE_DIRS})
-target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} kcp::kcp psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
+target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
 target_compile_definitions(ddraw PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 target_compile_options(ddraw PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.

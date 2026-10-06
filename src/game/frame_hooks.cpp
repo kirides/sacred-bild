@@ -1,4 +1,5 @@
 #include "game/frame_hooks.h"
+#include "game/controller.h"
 #include "game/d3d_stats.h"
 #include "game/device_proxy.h"
 #include "game/focus.h"
@@ -205,6 +206,7 @@ namespace
         GrannyAsync::onFrame();
         GpuSkin::onFrame();
         Focus::onFrame();
+        Controller::onFrame();
         logGameState();
         if (DeviceProxy* proxy = DeviceProxy::instance())
         {
@@ -315,6 +317,11 @@ bool FrameHooks::flip()
 void* FrameHooks::dxDriver()
 {
     return g_dxDriver;
+}
+
+void* FrameHooks::engine()
+{
+    return g_engine;
 }
 
 void FrameHooks::install()

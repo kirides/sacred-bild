@@ -257,6 +257,12 @@ namespace
             .enabledIf([](const Form& f) { return !d3d9(f); })
             .tip(L"Play the intro and cutscene movies through Media Foundation instead of the game's DirectShow path "
                  L"(the window stays responsive). Always on with the SacredBild (Direct3D 9) renderer.");
+        ui.group(L"Controller");
+        ui.check(L"Play with a controller", {L"Controller", L"Enabled"}, g_config.controller)
+            .tip(L"Play with a controller (Xbox, PlayStation, Switch), as in Diablo 2 Resurrected: the left stick walks, the "
+                 L"buttons attack the nearest enemy, cast combat arts, drink potions and open windows. Whatever you used "
+                 L"last, controller or keyboard and mouse, is in charge. Its buttons and settings are in the game's "
+                 L"Options when you open them with the controller (SacredBild (Direct3D 9) renderer).");
         ui.group(L"Screenshots and diagnostics");
         ui.combo(L"Screenshots:", {L"Screenshot", L"Format"}, {{L"PNG", L"png"}, {L"JPEG (smaller)", L"jpg"}},
               g_config.screenshotJpeg ? L"jpg" : L"png")

@@ -59,7 +59,7 @@ jobs:
           path: |
             ${{ github.workspace }}/vcpkg_binary_cache
             ${{ github.workspace }}/vcpkg/downloads
-          key: vcpkg-x86-windows-static-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-x86-windows-static-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake', 'ports/**') }}
           restore-keys: |
             vcpkg-x86-windows-static-${{ env.VCPKG_COMMIT }}-
 

@@ -1,0 +1,2 @@
+# vcpkg overlay ports stay byte for byte as vcpkg has them (patches apply to sources with LF line endings).
+ports/** -text

@@ -7,6 +7,8 @@ import capstone, pefile
 
 cs = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
 cs.detail = True
+# Without operand details: instruction boundaries only, many times faster.
+cs_lite = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
 
 MAX_INSNS = 40          # longest window tried, in instructions
 MIN_CONCRETE = 12        # fixed bytes a signature needs at least
@@ -25,6 +27,7 @@ class Image:
         self.thi = self.tlo + text.Misc_VirtualSize
         self.text = self.img[text.VirtualAddress:text.VirtualAddress + text.Misc_VirtualSize]
         self.funcs = funcs or []    # sorted function entry points, for instruction boundaries
+        self._starts = {}           # function entry -> its instruction addresses
 
     def rd(self, va, n):
         return self.img[va - self.base:va - self.base + n]
@@ -35,10 +38,32 @@ class Image:
     def in_image(self, v):
         return self.base <= v < self.base + self.size
 
-    def find(self, sig):
-        """Start addresses of all (overlapping) matches of sig in the code section."""
-        rx = re.compile(b'(?=' + b''.join(b'.' if b is None else re.escape(bytes([b])) for b in sig) + b')', re.DOTALL)
-        return [self.tlo + m.start() for m in rx.finditer(self.text)]
+    def find(self, sig, limit=None):
+        """Start addresses of the (overlapping) matches of sig in the code section, the first `limit` of them.
+
+        Anchored on the longest run of fixed bytes: bytes.find skips through the section at memchr speed, and only
+        its hits are compared in full."""
+        run = best_len = best_off = 0
+        for i, b in enumerate(sig):
+            run = run + 1 if b is not None else 0
+            if run > best_len:
+                best_len, best_off = run, i - run + 1
+        if best_len == 0:
+            rx = re.compile(b'(?=' + b'.' * len(sig) + b')', re.DOTALL)
+            hits = [self.tlo + m.start() for m in rx.finditer(self.text)]
+            return hits[:limit] if limit else hits
+        needle = bytes(sig[best_off:best_off + best_len])
+        rest = [(i, b) for i, b in enumerate(sig) if b is not None and not best_off <= i < best_off + best_len]
+        text, n, out = self.text, len(sig), []
+        pos = text.find(needle)
+        while pos >= 0:
+            start = pos - best_off
+            if start >= 0 and start + n <= len(text) and all(text[start + i] == b for i, b in rest):
+                out.append(self.tlo + start)
+                if limit and len(out) >= limit:
+                    break
+            pos = text.find(needle, pos + 1)
+        return out
 
     def matches_at(self, sig, va):
         if va < self.tlo or va + len(sig) > self.thi:
@@ -62,6 +87,20 @@ class Image:
             if i.address >= hi:
                 break
         return out
+
+    def insn_starts(self, va):
+        """Instruction addresses of the function containing va (as insns_around sweeps it), cached per function."""
+        lo, hi = self.func_range(va)
+        starts = self._starts.get(lo)
+        if starts is None:
+            hi = max(hi, va + 0x40)
+            starts = []
+            for addr, _, _, _ in cs_lite.disasm_lite(self.rd(lo, hi - lo), lo):
+                starts.append(addr)
+                if addr >= hi:
+                    break
+            self._starts[lo] = starts
+        return starts
 
 
 def masked(img, insn):
@@ -107,12 +146,12 @@ def make(ref, va, others, *, start=None, forward_only=False):
             if concrete(sig) < MIN_CONCRETE:
                 continue
             anchor = insns[first].address
-            hits = ref.find(sig)
+            hits = ref.find(sig, 2)
             if hits != [anchor]:
                 continue
             found = []
             for o in others:
-                h = o.find(sig)
+                h = o.find(sig, 2)
                 if len(h) != 1:
                     break
                 found.append(h[0] + (va - anchor))
@@ -137,18 +176,22 @@ def operand_of(img, insn_va, target):
     raise ValueError(f'{insn_va:#x} does not use {target:#x}')
 
 
-def xrefs(img, target):
-    """Instructions in img's code that use target as a 4-byte displacement or immediate (needs a function table)."""
+def xrefs(img, target, limit=None):
+    """Instructions in img's code that use target as a 4-byte displacement or immediate (needs a function table), the
+    first `limit` of them. Only the instruction holding each candidate operand is decoded in full; the boundaries
+    come from a cached sweep of its function."""
     pat = target.to_bytes(4, 'little')
     out = []
     pos = img.text.find(pat)
-    while pos >= 0:
+    while pos >= 0 and (limit is None or len(out) < limit):
         op_va = img.tlo + pos
-        for i in img.insns_around(op_va):
-            if i.address <= op_va < i.address + i.size:
-                if (i.disp_size == 4 and i.address + i.disp_offset == op_va) or \
-                        (i.imm_size == 4 and i.address + i.imm_offset == op_va):
-                    out.append((i.address, op_va))
-                break
+        starts = img.insn_starts(op_va)
+        k = bisect.bisect_right(starts, op_va) - 1
+        if k >= 0:
+            i = next(cs.disasm(img.rd(starts[k], 16), starts[k]), None)
+            if i and i.address <= op_va < i.address + i.size and (
+                    (i.disp_size == 4 and i.address + i.disp_offset == op_va) or
+                    (i.imm_size == 4 and i.address + i.imm_offset == op_va)):
+                out.append((i.address, op_va))
         pos = img.text.find(pat, pos + 1)
     return out
