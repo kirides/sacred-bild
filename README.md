@@ -111,8 +111,14 @@ The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll`
 
 ## Configuration (`SacredBild.ini`)
 
+Before the game starts, a settings window offers the settings below with tooltips: General (resolution, window frame,
+frame limit, VSync, UI size, renderer), Advanced (everything else) and HUD layout (`[UI.Layout]`). Play saves the
+changed ones to `SacredBild.ini`; Exit quits. "Don't show this window
+again" sets `[Launcher] HideSettingsWindow=1`; holding Shift as the game starts shows it anyway.
+
 | Section | Key | Default | Meaning |
 |---|---|---|---|
+| Launcher | HideSettingsWindow | 0 | 1 = no settings window before the game starts; holding Shift as the game starts shows it anyway. |
 | Display | Width, Height | 0 | Render resolution; 0 = desktop. 1024x768 = unpatched game. |
 | Display | Borderless | auto | Main window frame: `auto` = a frame when the window is smaller than the screen, `1` = never (the game's frameless window), `0` = always. The client area is `Width` x `Height` either way. |
 | Display | ClipCursor | 1 | Confine the mouse to the game window while it is in the foreground; hold Alt to move it out. |
@@ -202,7 +208,8 @@ the difference.
 ## Reading the code
 
 SacredBild is one DLL, `ddraw.dll`, which the game loads from its folder in place of Windows' own. Start in
-`src/main.cpp`: `DllMain` reads `SacredBild.ini` (`src/config.*`), loads the DirectDraw implementation the game
+`src/main.cpp`: `DllMain` reads `SacredBild.ini` (`src/config.*`); with the settings window, the rest waits for the
+exe's entry point, after the window (`src/settings_window.*`). Then it loads the DirectDraw implementation the game
 will get (`src/proxy.*`), finds the game's code by byte signature (`Sacred::resolveAddresses`) and installs the
 patches (`Sacred::installHooks` in `src/game/build.cpp`, which lists every module in order). Each module patches
 the game in its `install()` with [Detours](https://github.com/microsoft/Detours) hooks or checked byte patches
@@ -219,6 +226,7 @@ What the game's code at those addresses does is in `docs/RE_NOTES.md` and in the
 | `src/proxy.*`, `src/exports.def` | The `ddraw.dll` exports, to the Direct3D 9 backend or the chain-loaded ddraw |
 | `src/system_ddraw.*` | `Backend=chain` on Windows' own ddraw: render targets over 2048 pixels |
 | `src/config.*` | `SacredBild.ini` |
+| `src/settings_window.*` | The settings window before the game starts (`[Launcher] HideSettingsWindow`) |
 | `src/log.*`, `src/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
 | `src/patch.*`, `src/sig.*` | Code patches and hooks; byte signature search |
 | `src/spin_lock.h` | Locks for the render thread's hot paths |

@@ -67,6 +67,7 @@ namespace
 void ConfigFile::load(const std::wstring& gameDir)
 {
     const std::wstring ini = gameDir + L"\\SacredBild.ini";
+    g_config.settingsWindow = !readBool(ini, L"Launcher", L"HideSettingsWindow", false);
     g_config.ddrawD3D9 = _wcsicmp(readString(ini, L"DDraw", L"Backend", L"d3d9").c_str(), L"chain") != 0;
     g_config.ddrawChain = readString(ini, L"DDraw", L"Chain", g_config.ddrawChain);
     g_config.d3d9Path = readString(ini, L"DDraw", L"D3D9", L"");
@@ -122,10 +123,10 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.movieFallback = readInt(ini, L"Debug", L"MovieFallback", g_config.movieFallback) != 0;
     g_config.skinCheck = readInt(ini, L"Debug", L"SkinCheck", g_config.skinCheck) != 0;
 
-    LOG("Config: Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} ClipCursor={} FpsLimit={} FpsLimitInactive={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
+    LOG("Config: HideSettingsWindow={} Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} ClipCursor={} FpsLimit={} FpsLimitInactive={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} BatchGround={} GpuSkinning={} OffscreenPoses={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
         "Screenshot.Format={} Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} D3DStats={} Profiler={} ({} us) UiTrace={} CrashDump={} MovieFallback={} SkinCheck={}",
-        g_config.ddrawD3D9 ? "d3d9" : "chain", ascii(g_config.d3d9Path), g_config.mediaFoundation, g_config.width, g_config.height,
+        !g_config.settingsWindow, g_config.ddrawD3D9 ? "d3d9" : "chain", ascii(g_config.d3d9Path), g_config.mediaFoundation, g_config.width, g_config.height,
         g_config.frame == Config::Frame::Auto ? "auto" : g_config.frame == Config::Frame::Never ? "1" : "0", g_config.clipCursor, g_config.fpsLimit, g_config.fpsLimitInactive,
         g_config.vsync, g_config.maxFrameLatency, g_config.uiScale,
         g_config.uiScaleMenus ? "Full" : "InGame", g_config.uiLinearFilter, g_config.uiAnchor,

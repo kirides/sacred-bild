@@ -4,6 +4,9 @@
 // Settings from SacredBild.ini next to the game exe.
 struct Config
 {
+    // The settings window before the game starts ([Launcher] HideSettingsWindow=0).
+    bool settingsWindow = true;
+
     // DirectDraw / Direct3D 7 on SacredBild's own Direct3D 9Ex backend (Backend=d3d9), or on the chain-loaded ddraw
     // (Backend=chain): `ddrawChain`, or the system ddraw.dll if that is empty or missing.
     bool ddrawD3D9 = true;
