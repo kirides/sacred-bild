@@ -225,8 +225,12 @@ namespace
         AimAssist::pickGame();
     }
 
+    // The savegame window the controller saw open last (snapToNewestSavegame).
+    void* g_savegames = nullptr;
+
     void start()
     {
+        g_savegames = UiNav::savegames();   // what is open was the mouse's to pick from
         POINT p = {};
         GetCursorPos(&p);
         if (HWND window = Focus::window())
@@ -267,6 +271,34 @@ namespace
         g_modal = m;
         float x, y;
         if (m && UiNav::home(m, x, y))
+        {
+            setCursor(x, y);
+        }
+    }
+
+    // The load screen that just opened selects its newest savegame, with the cursor on it. Its list is filled and
+    // its rows are selected on the window's thread, so the newest one is looked for there.
+    std::atomic<int> g_newestRow{-1};
+
+    void selectNewest(void*)
+    {
+        g_newestRow = UiNav::selectNewestSavegame();
+    }
+
+    void snapToNewestSavegame()
+    {
+        void* window = UiNav::savegames();
+        if (window != g_savegames)
+        {
+            g_savegames = window;
+            g_newestRow = -1;
+            if (window)
+            {
+                Inject::call(&selectNewest, nullptr);
+            }
+        }
+        float x, y;
+        if (const int row = g_newestRow.exchange(-1); row >= 0 && window && UiNav::savegameRowPoint(row, x, y))
         {
             setCursor(x, y);
         }
@@ -392,14 +424,41 @@ namespace
         Controller::clickAt(static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)));
     }
 
+    // On the window's thread: scrolls the savegame list (high half, -1: not) and selects a row (low half).
+    void selectSavegame(void* rowAndScroll)
+    {
+        const auto packed = static_cast<int32_t>(reinterpret_cast<intptr_t>(rowAndScroll));
+        UiNav::selectSavegame(static_cast<int16_t>(packed >> 16), static_cast<int16_t>(packed & 0xFFFF));
+    }
+
+    void selectSavegame(int scrollTo, int row)
+    {
+        Inject::call(&selectSavegame, reinterpret_cast<void*>(static_cast<intptr_t>((scrollTo << 16) | (row & 0xFFFF))));
+    }
+
     void dpadStep(uint32_t button)
     {
         const float dx = button == Gamepad::Left ? -1.0f : button == Gamepad::Right ? 1.0f : 0.0f;
         const float dy = button == Gamepad::Up ? -1.0f : button == Gamepad::Down ? 1.0f : 0.0f;
         float x, y;
+        // Up / down in the savegame list: row by row, scrolling it at its ends; the row is selected.
+        int row, scrollTo;
+        if (dy != 0.0f && UiNav::savegameStep(g_x, g_y, static_cast<int>(dy), row, scrollTo))
+        {
+            if (row >= 0 && UiNav::savegameRowPoint(row, x, y))
+            {
+                selectSavegame(scrollTo, row);
+                setCursor(x, y);
+            }
+            return;
+        }
         if (UiNav::next(g_x, g_y, dx, dy, x, y))
         {
             setCursor(x, y);
+            if (const int onRow = UiNav::savegameRow(x, y); onRow >= 0)
+            {
+                selectSavegame(-1, onRow);
+            }
         }
         else
         {
@@ -1133,6 +1192,7 @@ void Controller::onFrame()
     {
         lowHealthRumble();
     }
+    snapToNewestSavegame();
     if (context == Context::Ui)
     {
         snapToModal();

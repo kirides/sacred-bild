@@ -685,6 +685,14 @@ second; SacredBild makes that `[Net] JoinTimeout`, 30 s by default); loading may
   `cUI_StaticText64FX` (`0x754490`, 0x8C bytes, 384,y 256x30, 32 apart) in a vector per screen, `+0x158` main,
   `+0x164` multiplayer, `+0x170` extras (12 bytes apart), not among the children; the screen shown is `+0x154` (3:
   credits), and receiveEvent `0x7125B0` / render `0x7128D0` walk that screen's vector.
+- Savegame window `cUI_Savegame` (in game `+0xAC`: saving; menus `+0x13C`: loading; vtable `0x8970E4`, constructor
+  `0x71BD40`, layout `0x71EFE0`, show `0x71D720`, receiveEvent `0x71D8A0`, render `0x71E4F0`, commands `0x71CC90`):
+  mode `+0x75C` (1 saving, 2 loading, 3-5 asking with the mode at `+0x760`). Four rows with hit rects at `+0x72C`
+  (0xC apart): row 0 the quicksave `GAME00.PAK` (entry at `+0x168`), rows 1-3 the list's entries (vector of 0x310
+  bytes at `+0x15C`, `+4` file name; filled by `0x71EAA0`, sorted by file name) from the first listed one (`0x71C2B0`:
+  slider `+0x478` value, capped at count - 3 loading / count - 2 saving). Selected row `+0x156` (`0x71C360`
+  selects). Buttons are members (`+0x764` load / save, `+0x820`, `+0x8DC` delete, `+0x998` back). The file header
+  (`0x71E600`) holds the save time at `+0x5C` (year, month, day, day of week, hour, minute, second, ms; int32 each).
 - Message box `cUI_BusyDlg` (`+0x144`, vtable `0x897134`, 0x644 bytes from `0x756A90`): its buttons are members
   (`0x72A8F0`), laid out per kind of box by `0x722500` (OK left of Cancel). Esc (`+0x34`, `0x721320`) only cancels
   kinds 5 and 6 (`+0x154`).

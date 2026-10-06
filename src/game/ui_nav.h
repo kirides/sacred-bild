@@ -55,6 +55,21 @@ namespace UiNav
     bool bookPage(bool right, int step, float& outX, float& outY);
     bool bookEntry(int step, float& outX, float& outY);
 
+    // The savegame window while it lists savegames (to load or to save over), else nullptr. Its rows are D-pad stops;
+    // the rest give the row (0 the quicksave, 1..3 the list's) under (x, y) that shows a savegame (or the new one
+    // when saving), else -1; a row's screen point; and the row D-pad up / down (step -1 / 1) goes to from the row
+    // under (x, y): `row` -1 at the end of the list, `scrollTo` the first listed savegame to scroll to before, else
+    // -1. savegameStep is false if (x, y) is on no row.
+    void* savegames();
+    int savegameRow(float x, float y);
+    bool savegameRowPoint(int row, float& outX, float& outY);
+    bool savegameStep(float x, float y, int step, int& row, int& scrollTo);
+    // On the window's thread: scrolls the list (unless `scrollTo` is -1) and selects the row as a click on it does.
+    void selectSavegame(int scrollTo, int row);
+    // On the window's thread: scrolls the load screen's list so that the newest savegame (by the time saved in its
+    // header, else its file's) shows and selects it; its row, -1 if nothing is listed.
+    int selectNewestSavegame();
+
     // An NPC dialog with answers is open (a popup whose answers are set); Enter picks the first.
     bool npcDialogOpen();
     // The screen point of the open NPC dialog's answer `index` (0..3), to click it; false if it has none there.

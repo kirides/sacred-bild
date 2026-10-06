@@ -219,6 +219,8 @@ namespace Sacred::Addr
     // The log book's line hit test: thiscall on a cUI_Book (int x, int y, uint16* index) -> bool, whether (x, y)
     // (1024x768 UI space) lies on an entry of the left page's list, and which (Sacred::Book).
     inline uintptr_t cUI_Book_lineAt{};                 // ENG 006B3640
+    // What a click on a savegame row does: thiscall on a cUI_Savegame (uint16 row) (Sacred::Savegame).
+    inline uintptr_t cUI_Savegame_selectRow{};          // ENG 0071C360
 
     // Move orders, as the world mouse handler (0x6172C0) and its hold-to-walk (0x60F130) give them: sendOrder is
     // thiscall on the cEngine (cCreature*, Sacred::Order*), callee pops; it snaps a walk target to a walkable cell
@@ -545,6 +547,35 @@ namespace Sacred::MainMenu
     constexpr uintptr_t entries = 0x158;        // per screen {begin, end, capacity}
     constexpr uintptr_t entriesStride = 0x0C;
     constexpr uint32_t screensWithEntries = 3;
+}
+
+// The savegame window (cUI_Savegame, vtable ENG 008970E4): in game UiManager::savegame (saving), in the menus
+// `inMenus` (loading). Four rows of one hit rect each (receiveEvent ENG 0071D8A0 selects the row clicked through
+// 0071C360, a double click or Enter loads / saves it): row 0 the quicksave (GAME00.PAK), rows 1-3 the list's
+// savegames from the first listed one on (`slider` value, at most count - 3 when loading, count - 2 when saving: a
+// row past the end is a new savegame). The list (filled by 0071EAA0 when the window opens) is sorted by file name.
+namespace Sacred::Savegame
+{
+    constexpr uintptr_t inMenus = 0x13C;        // cUI_Manager member
+    constexpr uintptr_t selectedRow = 0x156;    // uint16
+    constexpr uintptr_t entriesBegin = 0x15C;   // std::vector of `entrySize`-byte entries
+    constexpr uintptr_t entriesEnd = 0x160;
+    constexpr uintptr_t quicksave = 0x168;      // the quicksave's entry; its name is empty without one
+    constexpr uintptr_t entrySize = 0x310;
+    constexpr uintptr_t entryName = 0x04;       // char[256], the file in .\SAVE
+    constexpr uintptr_t slider = 0x478;         // cUI_Slider (embedded): the first listed savegame
+    // Embedded buttons (not children; the window draws and hit-tests them): load / save, overwrite, delete, back.
+    constexpr uintptr_t buttons[] = {0x764, 0x820, 0x8DC, 0x998};
+    constexpr uintptr_t rows = 0x72C;           // {int32 x, y; int16 width, height}, 1024x768 layout
+    constexpr uintptr_t rowSize = 0x0C;
+    constexpr int rowCount = 4;
+    constexpr uintptr_t mode = 0x75C;           // 0 closed, 1 saving, 2 loading, 3-5 asking (a message box is open)
+    constexpr uintptr_t askedMode = 0x760;      // the mode while asking
+    constexpr uint32_t saving = 1;
+    constexpr uint32_t loading = 2;
+    // The savegame file's header (read by ENG 0071E600): when it was saved, local time, int32 each; zero in old ones.
+    constexpr size_t headerSize = 0x100;
+    constexpr size_t headerYear = 0x5C;         // then month, day, day of week, hour, minute, second, milliseconds
 }
 
 // The message box (cUI_BusyDlg, UiManagerMenus::dialog: "Load savegame?", network waits): one object of `size`

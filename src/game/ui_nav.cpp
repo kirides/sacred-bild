@@ -27,6 +27,7 @@ namespace
         Button,     // ... a button
         GameMenu,   // the game menu: its entries are in a vector of their own (Sacred::EscMenu)
         MainMenu,   // the start menu: a vector per screen (Sacred::MainMenu)
+        Savegames,  // the savegame window: a window whose list rows are hit rects (Sacred::Savegame)
     };
 
     // RTTI class names (MSVC decorated) of the controls D-pad navigation stops at; their subclasses count too.
@@ -38,6 +39,7 @@ namespace
     constexpr const char* kWindow = ".?AVcUI_Window2@@";
     constexpr const char* kGameMenu = ".?AVcUI_EscMenu@@";
     constexpr const char* kMainMenu = ".?AVcUI_MainMenu@@";
+    constexpr const char* kSavegames = ".?AVcUI_Savegame@@";
     constexpr size_t kMaxControls = 512;
 
     // By vtable; only the presenting thread asks.
@@ -90,7 +92,7 @@ namespace
         {
             const uint32_t count = std::min<uint32_t>(*reinterpret_cast<const uint32_t*>(hierarchy + 8), 64);
             for (uint32_t i = 0; i < count && kind != Button && kind != GameMenu && kind != MainMenu &&
-                inImage(bases + i * 4); ++i)
+                kind != Savegames && inImage(bases + i * 4); ++i)
             {
                 const uintptr_t base = read(bases + i * 4);
                 const uintptr_t type = inImage(base) ? read(base) : 0;
@@ -106,6 +108,10 @@ namespace
                 if (i == 0 && std::strcmp(name, kMainMenu) == 0)
                 {
                     kind = MainMenu;
+                }
+                if (i == 0 && std::strcmp(name, kSavegames) == 0)
+                {
+                    kind = Savegames;
                 }
                 for (const char* button : kButtons)
                 {
@@ -207,6 +213,64 @@ namespace
         }
     }
 
+    // ---- The savegame window's list (Sacred::Savegame) ----
+
+    using SliderGetFn = uint32_t(__fastcall*)(void* slider);
+    using SliderSetFn = void(__fastcall*)(void* slider, void* edx, uint32_t value);
+
+    // Saving or loading, also while a message box asks about it; 0 if neither.
+    uint32_t listMode(void* window)
+    {
+        uint32_t mode = member<uint32_t>(window, Savegame::mode);
+        if (mode > Savegame::loading)
+        {
+            mode = member<uint32_t>(window, Savegame::askedMode);
+        }
+        return mode == Savegame::saving || mode == Savegame::loading ? mode : 0;
+    }
+
+    uint32_t listed(void* window)
+    {
+        const auto begin = member<uintptr_t>(window, Savegame::entriesBegin);
+        const auto end = member<uintptr_t>(window, Savegame::entriesEnd);
+        return begin && end > begin ? static_cast<uint32_t>((end - begin) / Savegame::entrySize) : 0;
+    }
+
+    // The first listed savegame, row 1's, as the window works it out (ENG 0071C2B0).
+    uint32_t firstListed(void* window)
+    {
+        void* slider = static_cast<uint8_t*>(window) + Savegame::slider;
+        const uint32_t value = reinterpret_cast<SliderGetFn>(Addr::cUI_Slider_getValue)(slider) & 0xFFFF;
+        const uint32_t last = member<uint32_t>(slider, Slider::count) - (listMode(window) == Savegame::saving ? 2 : 3);
+        return last <= value ? last : value;
+    }
+
+    // The row shows a savegame, or the new one (the row past the end) when saving.
+    bool rowShows(void* window, int row)
+    {
+        if (row == 0)
+        {
+            return member<char>(window, Savegame::quicksave + Savegame::entryName) != '\0';
+        }
+        const uint32_t index = firstListed(window) + row - 1;
+        return row > 0 && row < Savegame::rowCount &&
+            index < listed(window) + (listMode(window) == Savegame::saving ? 1 : 0);
+    }
+
+    // Sets the first listed savegame (the slider; the window renders the rows anew when it changes).
+    void scrollList(void* window, uint32_t first)
+    {
+        reinterpret_cast<SliderSetFn>(Addr::cUI_Slider_setValue)(static_cast<uint8_t*>(window) + Savegame::slider,
+            nullptr, first);
+    }
+
+    UiNav::Rect rowRect(void* window, int row, const UiCanvas::Frame& frame)
+    {
+        const uintptr_t r = Savegame::rows + row * Savegame::rowSize;
+        return screenRect(static_cast<float>(member<int32_t>(window, r)), static_cast<float>(member<int32_t>(window, r + 4)),
+            member<int16_t>(window, r + 8), member<int16_t>(window, r + 10), frame);
+    }
+
     // The visible controls under `control` (in the 1024x768 layout of a window shifted by `frame`), as screen points.
     void collect(void* control, const UiCanvas::Frame& frame, std::vector<Point>& out, int depth)
     {
@@ -219,6 +283,25 @@ namespace
         {
             addControl(control, kind == Button, frame, out);
             return;
+        }
+        if (kind == Savegames && listMode(control))
+        {
+            for (int row = 0; row < Savegame::rowCount; ++row)
+            {
+                if (rowShows(control, row))
+                {
+                    const UiNav::Rect r = rowRect(control, row, frame);
+                    out.push_back({(r.left + r.right) * 0.5f, (r.top + r.bottom) * 0.5f, false, r});
+                }
+            }
+            for (uintptr_t offset : Savegame::buttons)
+            {
+                void* button = static_cast<uint8_t*>(control) + offset;
+                if (visible(button) && kindOf(button) == Button)
+                {
+                    addControl(button, true, frame, out);
+                }
+            }
         }
         if (kind == GameMenu || kind == MainMenu)
         {
@@ -243,7 +326,7 @@ namespace
             }
             return;
         }
-        if (kind == Window)
+        if (kind == Window || kind == Savegames)
         {
             void** child = member<void**>(control, UiWindow::childrenBegin);
             void** end = member<void**>(control, UiWindow::childrenEnd);
@@ -374,7 +457,7 @@ std::string UiNav::contents(void* window)
 {
     std::string out;
     const auto walk = [&](auto&& self, void* control, int depth) -> void {
-        if (depth > 3 || out.size() > 300 || kindOf(control) != Window)
+        if (depth > 3 || out.size() > 300 || (kindOf(control) != Window && kindOf(control) != Savegames))
         {
             return;
         }
@@ -821,4 +904,170 @@ bool UiNav::next(float x, float y, float dx, float dy, float& outX, float& outY)
         }
     }
     return found;
+}
+
+void* UiNav::savegames()
+{
+    void* manager = ::manager();
+    if (!manager)
+    {
+        return nullptr;
+    }
+    const bool menus = member<uint32_t>(manager, UiManager::flags) & 0x01;
+    void* window = member<void*>(manager, menus ? Savegame::inMenus : UiManager::savegame);
+    return visible(window) && kindOf(window) == Savegames && listMode(window) ? window : nullptr;
+}
+
+int UiNav::savegameRow(float x, float y)
+{
+    void* window = savegames();
+    if (!window)
+    {
+        return -1;
+    }
+    const UiCanvas::Frame frame = frameOf(window);
+    for (int row = 0; row < Savegame::rowCount; ++row)
+    {
+        const Rect r = rowRect(window, row, frame);
+        if (rowShows(window, row) && x >= r.left && x < r.right && y >= r.top && y < r.bottom)
+        {
+            return row;
+        }
+    }
+    return -1;
+}
+
+bool UiNav::savegameRowPoint(int row, float& outX, float& outY)
+{
+    void* window = savegames();
+    if (!window || row < 0 || row >= Savegame::rowCount)
+    {
+        return false;
+    }
+    const Rect r = rowRect(window, row, frameOf(window));
+    outX = std::round((r.left + r.right) * 0.5f);
+    outY = std::round((r.top + r.bottom) * 0.5f);
+    return true;
+}
+
+bool UiNav::savegameStep(float x, float y, int step, int& row, int& scrollTo)
+{
+    void* window = savegames();
+    const int current = savegameRow(x, y);
+    if (!window || current < 0)
+    {
+        return false;
+    }
+    row = -1;
+    scrollTo = -1;
+    const int target = current + step;
+    const uint32_t first = firstListed(window);
+    if (target == Savegame::rowCount && rowShows(window, current))
+    {
+        // Below the last row: the list scrolls a line if there is more.
+        if (first + Savegame::rowCount - 1 < listed(window) + (listMode(window) == Savegame::saving ? 1 : 0))
+        {
+            row = current;
+            scrollTo = static_cast<int>(first + 1);
+        }
+    }
+    else if (target == 0 && first > 0)
+    {
+        row = current;  // above row 1: the list scrolls back before the quicksave row
+        scrollTo = static_cast<int>(first - 1);
+    }
+    else if (target >= 0 && target < Savegame::rowCount && rowShows(window, target))
+    {
+        row = target;
+    }
+    return true;
+}
+
+void UiNav::selectSavegame(int scrollTo, int row)
+{
+    using SelectFn = void(__fastcall*)(void* window, void* edx, uint16_t row);
+    void* window = savegames();
+    if (!window)
+    {
+        return;
+    }
+    if (scrollTo >= 0)
+    {
+        scrollList(window, static_cast<uint32_t>(scrollTo));
+    }
+    if (rowShows(window, row))
+    {
+        reinterpret_cast<SelectFn>(Addr::cUI_Savegame_selectRow)(window, nullptr, static_cast<uint16_t>(row));
+    }
+}
+
+namespace
+{
+    // When a savegame was saved, as FILETIME ticks in local time: its header's time, else its file's; 0 if the file
+    // can't be opened.
+    uint64_t savedAt(const char* name)
+    {
+        const std::string path = ".\\SAVE\\" + std::string(name, strnlen(name, 0x100));
+        HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+            OPEN_EXISTING, 0, nullptr);
+        if (file == INVALID_HANDLE_VALUE)
+        {
+            return 0;
+        }
+        int32_t header[Savegame::headerSize / 4] = {};
+        DWORD read = 0;
+        const bool complete = ReadFile(file, header, sizeof(header), &read, nullptr) && read == sizeof(header);
+        FILETIME written{};
+        GetFileTime(file, nullptr, nullptr, &written);
+        CloseHandle(file);
+        const int32_t* t = header + Savegame::headerYear / 4;   // year, month, day, day of week, hour, ...
+        const SYSTEMTIME saved = {static_cast<WORD>(t[0]), static_cast<WORD>(t[1]), static_cast<WORD>(t[3]),
+            static_cast<WORD>(t[2]), static_cast<WORD>(t[4]), static_cast<WORD>(t[5]), static_cast<WORD>(t[6]),
+            static_cast<WORD>(t[7])};
+        FILETIME time{};
+        if (!complete || t[0] <= 0 || !SystemTimeToFileTime(&saved, &time))
+        {
+            FileTimeToLocalFileTime(&written, &time);
+        }
+        return (static_cast<uint64_t>(time.dwHighDateTime) << 32) | time.dwLowDateTime;
+    }
+}
+
+int UiNav::selectNewestSavegame()
+{
+    void* window = savegames();
+    if (!window || listMode(window) != Savegame::loading)
+    {
+        return -1;
+    }
+    // -1: the quicksave.
+    int64_t newest = -2;
+    uint64_t newestTime = 0;
+    if (const char* quicksave = &member<char>(window, Savegame::quicksave + Savegame::entryName); *quicksave)
+    {
+        newest = -1;
+        newestTime = savedAt(quicksave);
+    }
+    const auto* entries = member<const uint8_t*>(window, Savegame::entriesBegin);
+    const uint32_t count = listed(window);
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const uint64_t time = savedAt(reinterpret_cast<const char*>(entries + i * Savegame::entrySize + Savegame::entryName));
+        if (newest == -2 || time > newestTime)
+        {
+            newest = i;
+            newestTime = time;
+        }
+    }
+    if (newest == -2)
+    {
+        return -1;
+    }
+    if (const uint32_t first = firstListed(window); newest >= 0 && (newest < first || newest >= first + Savegame::rowCount - 1))
+    {
+        scrollList(window, static_cast<uint32_t>(newest));   // the window keeps the list's end at row 3
+    }
+    const int row = newest < 0 ? 0 : static_cast<int>(newest - firstListed(window) + 1);
+    selectSavegame(-1, row);
+    return row;
 }
