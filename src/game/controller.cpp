@@ -2,6 +2,7 @@
 #include "game/aim_assist.h"
 #include "game/focus.h"
 #include "game/frame_hooks.h"
+#include "game/hero_move.h"
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
@@ -73,9 +74,7 @@ namespace
     // Game
     float g_faceX = 0.0f, g_faceY = 1.0f;       // the hero's last walking direction (screen)
     bool g_moving = false;
-    bool g_stopPending = false;                 // the stop click is down; up next frame
-    float g_pressX = 0.0f, g_pressY = 0.0f;     // walking direction of the last click
-    int64_t g_pressQpc = 0;
+    int64_t g_orderQpc = 0;                     // the last move order or check (HeroMove)
 
     struct Attack
     {
@@ -101,8 +100,7 @@ namespace
     constexpr float kRepeatInterval = 0.12f;
     constexpr float kNudge = 24.0f;             // D-pad step without a control that way, 1024x768 pixels
     constexpr float kWheelRate = 10.0f;         // wheel notches per second at full deflection
-    constexpr float kRedirectAngle = 0.906f;    // cos 25 degrees: a new walking click within the first 0.6 s
-    constexpr float kRedirectTime = 0.6f;
+    constexpr float kStallCheck = 0.2f;         // walking: whether the hero still moves, this often
     constexpr uint32_t kUiButtons = Gamepad::A | Gamepad::B | Gamepad::X | Gamepad::Up | Gamepad::Down |
         Gamepad::Left | Gamepad::Right;
     constexpr uint32_t kBookButtons = Gamepad::B | Gamepad::LB | Gamepad::RB | Gamepad::Up | Gamepad::Down;
@@ -215,8 +213,11 @@ namespace
         Inject::releaseAll();
         g_tapUp.clear();
         g_attack = {};
-        g_moving = false;
-        g_stopPending = false;
+        if (g_moving)
+        {
+            HeroMove::stop();
+            g_moving = false;
+        }
         g_repeatButton = 0;
         g_wheel = 0.0f;
         g_bookSection = g_bookLeftPage = g_bookEntry = g_bookRightPage = {};
@@ -596,31 +597,29 @@ namespace
         y = Resolution::height() * 0.5f - 2.0f * oy;
     }
 
-    // Ends the walk: with the button let go the hero would go on to the last click, so it clicks where the hero
-    // stands (up next frame). `click` false: just let go (an attack takes over).
-    void stopMoving(bool click)
+    // Ends the walk: the hero would go on following the cursor, so he gets the order to stop that letting go of
+    // hold-to-walk gives. `order` false: an attack takes over and gives its own.
+    void stopMoving(bool order)
     {
         if (!g_moving)
         {
             return;
         }
         g_moving = false;
-        Inject::button(VK_LBUTTON, false);
         Inject::key(VK_SHIFT, false);
-        if (click)
+        if (order)
         {
-            float x, y;
-            heroGround(x, y);
-            setCursor(x, y);
-            Inject::button(VK_LBUTTON, true);
-            g_stopPending = true;
+            HeroMove::stop();
         }
         else
         {
-            AimAssist::pickGame();
+            HeroMove::release();
         }
+        AimAssist::pickGame();
     }
 
+    // The cursor goes `radius` ahead of the hero and the hero follows it (HeroMove), in any direction to the pixel.
+    // One order starts the walk; a hero something stopped gets it again, so he walks on once the way is free.
     void walk(float mx, float my, float magnitude)
     {
         if (magnitude <= 0.0f)
@@ -630,30 +629,27 @@ namespace
         }
         const float dx = mx / magnitude, dy = my / magnitude;
         const float radius = static_cast<float>(g_config.controllerMoveRadius);
-        AimAssist::pickNothing();   // a click while walking never attacks, talks or picks up
+        AimAssist::pickNothing();   // the cursor ahead never highlights what it passes over
         Inject::key(VK_SHIFT, g_config.controllerWalk && magnitude < 0.5f);
         float gx, gy;
         heroGround(gx, gy);
         setCursor(gx + dx * radius, gy + dy * radius);
         const int64_t now = qpc();
+        const int x = static_cast<int>(std::lround(g_x)), y = static_cast<int>(std::lround(g_y));
         if (!g_moving)
         {
             g_moving = true;
-            Inject::button(VK_LBUTTON, true);
+            HeroMove::follow(x, y);
         }
-        else if (seconds(now - g_pressQpc) < kRedirectTime && dx * g_pressX + dy * g_pressY < kRedirectAngle)
+        else if (seconds(now - g_orderQpc) >= kStallCheck)
         {
-            // Before the game follows the held button (half a second), it walks to the click: click again.
-            Inject::button(VK_LBUTTON, false);
-            Inject::button(VK_LBUTTON, true);
+            HeroMove::keepWalking(x, y);
         }
         else
         {
             return;
         }
-        g_pressX = dx;
-        g_pressY = dy;
-        g_pressQpc = now;
+        g_orderQpc = now;
     }
 
     void endAttack()
@@ -894,12 +890,6 @@ void Controller::onFrame()
     const float dt = g_lastQpc ? std::clamp(seconds(now - g_lastQpc), 0.0f, 0.1f) : 0.0f;
     g_lastQpc = now;
 
-    if (g_stopPending)
-    {
-        Inject::button(VK_LBUTTON, false);
-        g_stopPending = false;
-        AimAssist::pickGame();
-    }
     std::erase_if(g_tapUp, [&](const TapUp& t) {
         if (now < t.due)
         {

@@ -137,6 +137,10 @@ SACRED = [
     ('cEngine_instance', 0x0060D6C0, 'func'),
     ('cEngine_getViewOffset', 0x006113E0, 'func'),
     ('cUI_Book_lineAt', 0x006B3640, 'func'),
+    # controller: walking by move orders (hero_move.cpp)
+    ('cEngine_sendOrder', 0x00617030, 'func'),
+    ('cOrder_vtable', 0x0089095C, 'data'),
+    ('g_worldInputFlags', 0x00AB73DC, 'data'),
 ]
 
 # gameserver.exe (the same addresses in both builds) has no function table here: each entry gives the instruction

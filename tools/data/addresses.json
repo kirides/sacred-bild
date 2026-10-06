@@ -675,6 +675,18 @@
   "cUI_Book_lineAt": {
    "452F85C7": "006B3640",
    "451BBE74": "006B3320"
+  },
+  "cEngine_sendOrder": {
+   "452F85C7": "00617030",
+   "451BBE74": "006170D0"
+  },
+  "cOrder_vtable": {
+   "452F85C7": "0089095C",
+   "451BBE74": "0088E95C"
+  },
+  "g_worldInputFlags": {
+   "452F85C7": "00AB73DC",
+   "451BBE74": "00AB535C"
   }
  },
  "gameserver.exe": {

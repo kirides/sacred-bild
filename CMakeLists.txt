@@ -46,6 +46,7 @@ add_library(ddraw SHARED
   src/game/world_passes.cpp
   src/game/aim_assist.cpp
   src/game/controller.cpp
+  src/game/hero_move.cpp
   src/game/options_screen.cpp
   src/game/ui_nav.cpp
   src/game/movie.cpp
