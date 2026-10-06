@@ -277,8 +277,10 @@ namespace
                 Matchmaker::poll(games);
                 if (!games.empty())
                 {
-                    target.sin_addr = games.front().host.sin_addr;
-                    std::printf("client: matchmaker lists '%s'\n", LanAnnounce::gameName(games.front().plain).c_str());
+                    target.sin_addr.s_addr = games.front().address;
+                    std::printf("client: matchmaker lists '%s', announced as %s\n",
+                        LanAnnounce::gameName(games.front().plain).c_str(),
+                        Net::toString(Net::ipv4(target.sin_addr.s_addr, kTcpPort)).c_str());
                     break;
                 }
                 if (i == 100)

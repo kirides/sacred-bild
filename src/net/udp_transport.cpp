@@ -1,5 +1,4 @@
 #include "net/udp_transport.h"
-#include "net/adapters.h"
 #include "net/lan_client.h"
 #include "net/matchmaker.h"
 #include "net/udp_endpoint.h"
@@ -44,15 +43,14 @@ namespace
     constexpr uint32_t kTinCatMagic = 0xDABAFBEF;
     constexpr int kTinCatHeader = 0x1C;
 
-    std::string endpoint(const sockaddr_in& a)
+    // Player: an address of the host to say HELLO to, with the cookie it gave.
+    struct Candidate
     {
-        return std::format("{}:{}", Net::toString(a.sin_addr.s_addr), ntohs(a.sin_port));
-    }
-
-    bool sameAddress(const sockaddr_in& a, const sockaddr_in& b)
-    {
-        return a.sin_addr.s_addr == b.sin_addr.s_addr && a.sin_port == b.sin_port;
-    }
+        Net::Address address;
+        uint8_t cookie[kCookieSize];
+        bool hasCookie;
+        bool refused;
+    };
 }
 
 struct UdpTransport::Session
@@ -64,7 +62,7 @@ struct UdpTransport::Session
     ikcpcb* kcp = nullptr;
     uint32_t id = 0;
     uint64_t token = 0;
-    sockaddr_in peer{};
+    Net::Address peer{};
 
     std::vector<uint8_t> rx;
     size_t rxPos = 0;
@@ -76,11 +74,10 @@ struct UdpTransport::Session
 
     uint64_t created = 0, lastRecv = 0, lastSend = 0, closedAt = 0, lastStats = 0;
 
-    // Player handshake.
+    // Player handshake: HELLO to every address of the host (IPv6, IPv4), the first WELCOME wins.
     sockaddr_in tcpTarget{};
-    uint32_t nonce = 0;
-    uint8_t cookie[kCookieSize]{};
-    bool hasCookie = false;
+    uint32_t nonce = 0;     // host: the handshake's, one session per nonce
+    std::vector<Candidate> candidates;
     uint64_t nextHello = 0, deadline = 0, nextJoin = 0;
     uint32_t gameId = 0;
     const char* failure = nullptr;
@@ -123,7 +120,7 @@ namespace
 
     std::string name(const Session& s)
     {
-        return std::format("{} {} (session {:08x})", s.host ? "player" : "gameserver", endpoint(s.peer), s.id);
+        return std::format("{} {} (session {:08x})", s.host ? "player" : "gameserver", Net::toString(s.peer), s.id);
     }
 
     void sendControl(Session& s, char type)
@@ -229,22 +226,43 @@ namespace
         return nullptr;
     }
 
-    void sendHello(Session& s)
+    void sendHello(Session& s, const Candidate& c)
     {
         uint8_t p[T::kHelloSize] = {};
         magic(p, kTransport, T::Hello);
         put<uint32_t>(p, 4, kVersion);
         put<uint32_t>(p, 8, s.nonce);
         put<uint16_t>(p, 12, ntohs(s.tcpTarget.sin_port));
-        if (s.hasCookie)
+        if (c.hasCookie)
         {
-            std::memcpy(p + 16, s.cookie, kCookieSize);
+            std::memcpy(p + 16, c.cookie, kCookieSize);
         }
-        UdpEndpoint::sendTo(p, sizeof(p), s.peer);
+        UdpEndpoint::sendTo(p, sizeof(p), c.address);
         ++s.datagramsOut;
     }
 
-    void refuse(const sockaddr_in& to, uint32_t nonce, uint32_t reason)
+    void sendHellos(Session& s)
+    {
+        for (const Candidate& c : s.candidates)
+        {
+            if (!c.refused)
+            {
+                sendHello(s, c);
+            }
+        }
+    }
+
+    std::string candidateList(const Session& s)
+    {
+        std::string list;
+        for (const Candidate& c : s.candidates)
+        {
+            list += (list.empty() ? "" : ", ") + Net::toString(c.address);
+        }
+        return list;
+    }
+
+    void refuse(const Net::Address& to, uint32_t nonce, uint32_t reason)
     {
         uint8_t p[T::kRefusedSize] = {};
         magic(p, kTransport, T::Refused);
@@ -254,7 +272,7 @@ namespace
         UdpEndpoint::sendTo(p, sizeof(p), to);
     }
 
-    void sendWelcome(const Session& s, const sockaddr_in& to, uint32_t nonce)
+    void sendWelcome(const Session& s, const Net::Address& to, uint32_t nonce)
     {
         uint8_t p[T::kWelcomeSize] = {};
         magic(p, kTransport, T::Welcome);
@@ -267,7 +285,7 @@ namespace
 
     // --- host ---
 
-    void onHello(const uint8_t* p, int n, const sockaddr_in& from)
+    void onHello(const uint8_t* p, int n, const Net::Address& from)
     {
         if (n < static_cast<int>(T::kHelloSize))
         {
@@ -295,22 +313,23 @@ namespace
             refuse(from, nonce, T::NotListening);
             return;
         }
-        if (!validCookie(from.sin_addr.s_addr, from.sin_port, nonce, p + 16))
+        if (!validCookie(from, nonce, p + 16))
         {
             uint8_t c[T::kChallengeSize] = {};
             magic(c, kTransport, T::Challenge);
             put<uint32_t>(c, 4, kVersion);
             put<uint32_t>(c, 8, nonce);
-            cookie(from.sin_addr.s_addr, from.sin_port, nonce, c + 16);
+            cookie(from, nonce, c + 16);
             UdpEndpoint::sendTo(c, T::kChallengeSize, from);
             return;
         }
 
         std::unique_lock lock(g_mutex);
-        // A repeated HELLO (our WELCOME got lost): the same answer.
+        // A repeated HELLO (our WELCOME got lost), or the same handshake over the other address family: the same
+        // session. The player sends to whichever WELCOME it gets first; the session follows its datagrams.
         for (const auto& s : g_sessions)
         {
-            if (s->host && s->nonce == nonce && sameAddress(s->peer, from))
+            if (s->host && s->nonce == nonce)
             {
                 sendWelcome(*s, from, nonce);
                 return;
@@ -362,12 +381,14 @@ namespace
     {
         s.status = Status::Failed;
         s.failure = why;
-        LOG("UDP: no connection to the gameserver at {} ({}): connecting over TCP", endpoint(s.peer), why);
+        LOG("UDP: no connection to the gameserver at {} ({}): {}", candidateList(s), why,
+            Matchmaker::isStandIn(s.tcpTarget.sin_addr.s_addr) ? "it has no IPv4 address for TCP, the join fails"
+                                                               : "connecting over TCP");
         s.cv.notify_all();
         notifyChange();
     }
 
-    void onHandshakeReply(char type, const uint8_t* p, int n, const sockaddr_in& from)
+    void onHandshakeReply(char type, const uint8_t* p, int n, const Net::Address& from)
     {
         if (n < 12 || get<uint32_t>(p, 4) != kVersion)
         {
@@ -379,7 +400,8 @@ namespace
             return;
         }
         std::scoped_lock lock(s->m);
-        if (s->status != Status::Connecting || !sameAddress(s->peer, from))
+        const auto c = std::ranges::find_if(s->candidates, [&](const Candidate& c) { return Net::same(c.address, from); });
+        if (s->status != Status::Connecting || c == s->candidates.end())
         {
             return;
         }
@@ -387,13 +409,13 @@ namespace
         ++s->datagramsIn;
         if (type == T::Challenge && n >= static_cast<int>(T::kChallengeSize))
         {
-            std::memcpy(s->cookie, p + 16, kCookieSize);
-            s->hasCookie = true;
-            sendHello(*s);
-            s->nextHello = now + kHelloIntervalMs;
+            std::memcpy(c->cookie, p + 16, kCookieSize);
+            c->hasCookie = true;
+            sendHello(*s, *c);
         }
         else if (type == T::Welcome && n >= static_cast<int>(T::kWelcomeSize))
         {
+            s->peer = from;
             s->id = get<uint32_t>(p, 12);
             s->token = get<uint64_t>(p, 16);
             s->lastRecv = s->lastSend = s->lastStats = now;
@@ -406,6 +428,12 @@ namespace
         }
         else if (type == T::Refused && n >= static_cast<int>(T::kRefusedSize))
         {
+            // The host refuses the same way over every address; wait for the others only while they are silent.
+            c->refused = true;
+            if (std::ranges::any_of(s->candidates, [](const Candidate& c) { return !c.refused; }))
+            {
+                return;
+            }
             const uint32_t reason = get<uint32_t>(p, 12);
             fail(*s, reason == T::Disabled ? "the host has [Net] Udp off"
                 : reason == T::NotListening ? "no game on that port"
@@ -416,7 +444,7 @@ namespace
 
     // --- both ---
 
-    void onSessionPacket(char type, const uint8_t* p, int n, const sockaddr_in& from)
+    void onSessionPacket(char type, const uint8_t* p, int n, const Net::Address& from)
     {
         if (n < static_cast<int>(T::kHeaderSize))
         {
@@ -433,11 +461,11 @@ namespace
             return;
         }
         const uint64_t now = nowMs();
-        if (!sameAddress(s->peer, from))
+        if (!Net::same(s->peer, from))
         {
-            // Roaming or NAT rebinding: answer where the other side is now.
+            // Roaming, NAT rebinding, or the other address family: answer where the other side is now.
             ++s->moves;
-            LOG("UDP: {} now at {}", name(*s), endpoint(from));
+            LOG("UDP: {} now at {}", name(*s), Net::toString(from));
             s->peer = from;
         }
         const uint64_t silence = now - s->lastRecv;
@@ -472,7 +500,7 @@ namespace
         notifyChange();
     }
 
-    void onPacket(const uint8_t* p, int n, const sockaddr_in& from)
+    void onPacket(const uint8_t* p, int n, const Net::Address& from)
     {
         switch (static_cast<char>(p[3]))
         {
@@ -500,18 +528,27 @@ namespace
         }
     }
 
-    // Player: the endpoint of the gameserver at `tcpTarget`: from the matchmaker, else the relay port.
+    void addCandidate(Session& s, const Net::Address& a)
+    {
+        if (Net::isSet(a) && std::ranges::none_of(s.candidates, [&](const Candidate& c) { return Net::same(c.address, a); }))
+        {
+            s.candidates.push_back({a, {}, false, false});
+        }
+    }
+
+    // Player: the endpoints of the gameserver at `tcpTarget`: from the matchmaker (IPv6 first), else its relay port.
+    // Called again while connecting: the matchmaker may learn newer addresses.
     void target(Session& s)
     {
         Matchmaker::Target t{};
         if (Matchmaker::lookup(s.tcpTarget.sin_addr.s_addr, ntohs(s.tcpTarget.sin_port), t))
         {
             s.gameId = t.gameId;
-            s.peer = t.udp;
+            addCandidate(s, t.ipv6);
+            addCandidate(s, t.ipv4);
             return;
         }
-        s.peer = s.tcpTarget;
-        s.peer.sin_port = htons(LanClient::relayPort(s.tcpTarget.sin_addr.s_addr));
+        addCandidate(s, Net::ipv4(s.tcpTarget.sin_addr.s_addr, LanClient::relayPort(s.tcpTarget.sin_addr.s_addr)));
     }
 
     uint32_t tick(uint64_t now)
@@ -536,8 +573,8 @@ namespace
                 {
                     if (now >= s->nextHello)
                     {
-                        target(*s);     // the matchmaker may have a newer address for the host
-                        sendHello(*s);
+                        target(*s);
+                        sendHellos(*s);
                         s->nextHello = now + kHelloIntervalMs;
                     }
                     if (s->gameId && now >= s->nextJoin)
@@ -651,7 +688,11 @@ UdpTransport::SessionPtr UdpTransport::connect(const sockaddr_in& tcpTarget)
         std::scoped_lock lock(g_mutex);
         g_sessions.push_back(s);
     }
-    LOG("UDP: connecting to the gameserver at {} (game port {}){}", endpoint(s->peer), ntohs(tcpTarget.sin_port),
+    if (s->candidates.empty())
+    {
+        return nullptr;
+    }
+    LOG("UDP: connecting to the gameserver at {} (game port {}){}", candidateList(*s), ntohs(tcpTarget.sin_port),
         s->gameId ? std::format(", matchmaker game {:08x}", s->gameId) : std::string());
     UdpEndpoint::wake();
     return s;
@@ -853,10 +894,25 @@ void UdpTransport::close(const SessionPtr& s)
     UdpEndpoint::wake();
 }
 
-sockaddr_in UdpTransport::peer(Session& s)
+Net::Address UdpTransport::peer(Session& s)
 {
     std::scoped_lock lock(s.m);
     return s.peer;
+}
+
+sockaddr_in UdpTransport::peerForGame(Session& s)
+{
+    std::scoped_lock lock(s.m);
+    if (!Net::isV6(s.peer))
+    {
+        return s.peer.Ipv4;
+    }
+    // TinCat only takes IPv4: an IPv6 player gets a stand-in from 198.19.0.0/16 (benchmarking range, never routed).
+    sockaddr_in a{};
+    a.sin_family = AF_INET;
+    a.sin_addr.s_addr = htonl(0xC6130000u | (s.id & 0xFFFF));
+    a.sin_port = s.peer.Ipv6.sin6_port;
+    return a;
 }
 
 uint64_t UdpTransport::changes()

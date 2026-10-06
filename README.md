@@ -75,8 +75,9 @@ ddraw calls through and logs which one.
 - **Matchmaker** (`[Net] Matchmaker`, `matchmaker/`): a small server (Go; Linux, Windows, macOS) that lists the games
   of everyone using it in Sacred's own LAN list, so that LAN mode becomes a global lobby. Joining a game gets the
   player introduced to the host, and both open their way to each other (UDP hole punching), so hosts don't need port
-  forwarding with the UDP connection. Its web page shows the games (name, players), never addresses, and it logs no
-  addresses unless told to (see [Online games](#online-games-matchmaker)).
+  forwarding with the UDP connection. Over IPv6 as well as IPv4, so hosts without a public IPv4 address (CGNAT,
+  DS-Lite) can host too. Its web page shows the games (name, players), never addresses, and it logs no addresses
+  unless told to (see [Online games](#online-games-matchmaker)).
 - **Languages**: the GOG builds ignore the game's `LANGUAGE` for text and speech (the text is built into the exe,
   the speech is always `PAK\sound.pak`). SacredBild loads the language's own files when they are there, so one
   install runs every language you have the files for (see below).
@@ -204,8 +205,16 @@ creates a LAN game as usual; it shows up in everyone's LAN list, with the host's
 1. the player asks the matchmaker to introduce it to the host; both send each other a few UDP packets, which opens
    their routers (most home routers; two players behind the strictest kind, e.g. some mobile networks on both
    sides, still need port forwarding);
-2. the game connection runs over UDP to the host's `[Net] Port`; if that doesn't answer within 3 s, the player
-   connects over TCP to the game's port, which then needs to be forwarded on the host.
+2. the game connection runs over UDP to the host's `[Net] Port`, over IPv6 and IPv4 at once (whichever answers
+   first); if neither answers within 3 s, the player connects over TCP to the game's port, which then needs to be
+   forwarded on the host.
+
+IPv6 needs no address translation, so step 1 almost always works there, and it reaches hosts that have no public
+IPv4 address of their own (mobile networks' CGNAT, DS-Lite cable and fibre connections). Both sides need IPv6 for
+that, and the matchmaker an IPv6 address (an AAAA record). Sacred itself only knows IPv4: a game the matchmaker
+reaches over IPv6 only is listed with a stand-in address from 198.18.0.0/15 (Sacred has 4 bytes for a game's address,
+and its LAN list tells games apart by address and name; the address is not shown in game). Such a game can only be
+joined over UDP: if that fails, joining fails right away. `SacredBild.log` names the game behind each stand-in.
 
 Players behind the same router as the host see the game twice; the LAN one is the one to join. The host's
 gameserver logs the matchmaker and its players to `SacredBild-server.log`, a player's joins go to `SacredBild.log`
@@ -291,7 +300,7 @@ What the game's code at those addresses does is in `docs/RE_NOTES.md` and in the
 | `src/game/world_passes.*` | `[Debug] D3DStats`: the world view's passes timed separately |
 | `src/render/batcher.*`, `atlas.*`, `fvf.h` | Draw merging, the texture atlas, vertex format layout |
 | `src/net/` | LAN games over VPNs: `lan_client.*` (sacred.exe), `lan_server.*` (gameserver.exe), `lan_protocol.*` (announcements), `adapters.*` (network adapters), `connection.*` (`NoDelay`, one send per message, TCP statistics) |
-| `src/net/udp_*`, `tincat_shim.*` | `[Net] Udp`: `udp_endpoint.*` (the UDP socket and its I/O thread), `udp_transport.*` (KCP sessions), `tincat_shim.*` (TinCat's sockets on those sessions), `udp_protocol.*` (wire formats) |
+| `src/net/udp_*`, `tincat_shim.*`, `address.*` | `[Net] Udp`: `udp_endpoint.*` (the IPv4 and IPv6 sockets and their I/O thread), `address.*` (either family), `udp_transport.*` (KCP sessions), `tincat_shim.*` (TinCat's sockets on those sessions), `udp_protocol.*` (wire formats) |
 | `src/net/matchmaker.*` | `[Net] Matchmaker` client: publishing (gameserver), listing and joining (sacred.exe) |
 | `matchmaker/` | The matchmaking server (Go) |
 | `tools/nettest/` | Test bench for the UDP connection and the matchmaker without the game: loss, delay, outages, address changes (`-DSACREDBILD_NETTEST=ON`) |

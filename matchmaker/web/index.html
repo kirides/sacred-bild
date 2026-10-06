@@ -20,6 +20,7 @@
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.name { word-break: break-word; }
   .empty { padding: 32px 0; text-align: center; color: var(--muted); }
+  .tag { display: inline-block; margin-right: 4px; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 0.8rem; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -28,10 +29,10 @@
   <p>{{len .Games}} game{{if ne (len .Games) 1}}s{{end}}, {{.Players}} player{{if ne .Players 1}}s{{end}}. Updates every 10 seconds.</p>
   {{if .Games}}
   <table>
-    <thead><tr><th>Name</th><th class="num">Players</th><th class="num">Version</th><th>UDP</th><th class="num">Running</th></tr></thead>
+    <thead><tr><th>Name</th><th class="num">Players</th><th class="num">Version</th><th>UDP</th><th>Reachable</th><th class="num">Running</th></tr></thead>
     <tbody>
     {{range .Games}}
-      <tr><td class="name">{{.Name}}</td><td class="num">{{.Players}} / {{.MaxPlayers}}</td><td class="num">{{.Version}}</td><td>{{if .UDP}}yes{{else}}no{{end}}</td><td class="num">{{age .AgeSeconds}}</td></tr>
+      <tr><td class="name">{{.Name}}</td><td class="num">{{.Players}} / {{.MaxPlayers}}</td><td class="num">{{.Version}}</td><td>{{if .UDP}}yes{{else}}no{{end}}</td><td>{{if .IPv4}}<span class="tag">IPv4</span>{{end}}{{if .IPv6}}<span class="tag">IPv6</span>{{end}}</td><td class="num">{{age .AgeSeconds}}</td></tr>
     {{end}}
     </tbody>
   </table>

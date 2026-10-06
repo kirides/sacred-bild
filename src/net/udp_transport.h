@@ -1,14 +1,15 @@
 #pragma once
+#include "net/address.h"
+
 #include <cstdint>
 #include <memory>
-
-struct sockaddr_in;
 
 // The game connection over UDP ([Net] Udp): TinCat's TCP byte stream carried by KCP (reliable, ordered) between a
 // player's sacred.exe and the host's gameserver.exe, on SacredBild's UDP endpoint (docs/UDP_PROTOCOL.md). Lost
 // datagrams are resent after about one round trip instead of TCP's 300 ms and more, the resend delay doesn't
 // double over an outage, and a player whose address changes (Wi-Fi <-> mobile, NAT rebinding) keeps the
-// connection. TincatShim gives TinCat sockets backed by these sessions.
+// connection. Sessions run over IPv4 or IPv6, whichever answers first. TincatShim gives TinCat sockets backed by
+// these sessions.
 namespace UdpTransport
 {
     struct Session;
@@ -45,7 +46,9 @@ namespace UdpTransport
     void shutdown(Session& s);
     // The socket is gone: data still queued is sent (up to 5 s), then the peer is told.
     void close(const SessionPtr& s);
-    sockaddr_in peer(Session& s);
+    Net::Address peer(Session& s);
+    // The peer for TinCat, which only takes IPv4: an IPv6 peer gets a stand-in address.
+    sockaddr_in peerForGame(Session& s);
 
     // select(): a counter that changes whenever a session may have become readable or writable, and a wait for it.
     uint64_t changes();

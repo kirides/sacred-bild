@@ -30,9 +30,10 @@ func testAnnouncement(name string, players, maxPlayers uint8) (a [announcementSi
 }
 
 func TestRoundTrips(t *testing.T) {
-	reg := registerMsg{Nonce: 7, Flags: flagUDP, Cookie: cookie{1, 2, 3}, Announcement: testAnnouncement("x", 1, 4)}
+	reg := registerMsg{Nonce: 7, Flags: flagUDP, Cookie: cookie{1, 2, 3}, HostKey: 0x1122334455667788,
+		Announcement: testAnnouncement("x", 1, 4)}
 	b := reg.encode()
-	if len(b) != registerSize || messageType(b) != typeRegister {
+	if len(b) != registerSize || registerSize != 214 || messageType(b) != typeRegister {
 		t.Fatalf("register: %d bytes, type %c", len(b), messageType(b))
 	}
 	if got, ok := decodeRegister(b); !ok || got != reg {
@@ -44,34 +45,54 @@ func TestRoundTrips(t *testing.T) {
 		t.Fatalf("request round trip: %+v", got)
 	}
 
-	host := netip.MustParseAddrPort("203.0.113.5:40000")
-	entries := []gameEntry{{ID: 1, Addr: host, Flags: flagUDP, Announcement: testAnnouncement("a", 1, 2)},
-		{ID: 2, Addr: netip.MustParseAddrPort("198.51.100.1:2105"), Announcement: testAnnouncement("b", 0, 4)}}
+	host4 := netip.MustParseAddrPort("203.0.113.5:40000")
+	host6 := netip.MustParseAddrPort("[2001:db8::5]:2105")
+
+	// IPv4 goes on the wire as ::ffff:a.b.c.d; all zero is no address.
+	var a [addrSize]byte
+	putAddr(a[:], host4)
+	if string(a[:16]) != "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\xcb\x00\x71\x05" || le.Uint16(a[16:]) != 40000 {
+		t.Fatalf("IPv4 address: % x", a)
+	}
+	if getAddr(a[:]) != host4 || getAddr(make([]byte, addrSize)).IsValid() {
+		t.Fatal("address round trip")
+	}
+
+	entries := []gameEntry{
+		{ID: 1, Flags: flagUDP, Addr4: host4, Addr6: host6, Announcement: testAnnouncement("a", 1, 2)},
+		{ID: 2, Addr6: host6, Announcement: testAnnouncement("b", 0, 4)},
+		{ID: 3, Addr4: host4, Announcement: testAnnouncement("c", 0, 4)},
+	}
 	g := encodeGames(5, 1, 3, entries)
-	if len(g) != gamesHeader+2*gameEntrySize {
+	if len(g) != gamesHeader+3*gameEntrySize || gameEntrySize != 218 {
 		t.Fatalf("games: %d bytes", len(g))
 	}
 	nonce, page, pageCount, got, ok := decodeGames(g)
-	if !ok || nonce != 5 || page != 1 || pageCount != 3 || len(got) != 2 || got[0] != entries[0] || got[1] != entries[1] {
+	if !ok || nonce != 5 || page != 1 || pageCount != 3 || len(got) != 3 {
 		t.Fatalf("games round trip: %v %v %v %v %+v", ok, nonce, page, pageCount, got)
+	}
+	for i := range entries {
+		if got[i] != entries[i] {
+			t.Fatalf("entry %d: %+v, want %+v", i, got[i], entries[i])
+		}
 	}
 	if full := gamesHeader + gamesPerPage*gameEntrySize; full > maxDatagram {
 		t.Fatalf("a full page is %d bytes", full)
 	}
 
-	j := encodeJoined(3, 4, host, flagUDP)
-	if len(j) != joinedSize || getAddr(j[16:]) != host || binary.LittleEndian.Uint16(j[22:]) != flagUDP {
+	j := encodeJoined(3, 4, flagUDP, host4, host6)
+	if len(j) != joinedSize || le.Uint16(j[16:]) != flagUDP || getAddr(j[20:]) != host4 || getAddr(j[38:]) != host6 {
 		t.Fatalf("joined: % x", j)
 	}
-	if n := encodeJoined(3, 4, netip.AddrPort{}, 0); string(n[16:20]) != "\x00\x00\x00\x00" {
+	if n := encodeJoined(3, 4, 0, netip.AddrPort{}, netip.AddrPort{}); getAddr(n[20:]).IsValid() || getAddr(n[38:]).IsValid() {
 		t.Fatalf("joined, no game: % x", n)
 	}
-	i := encodeIntroduce(4, host)
-	if len(i) != introduceSize || binary.LittleEndian.Uint32(i[8:]) != 4 || getAddr(i[12:]) != host {
+	i := encodeIntroduce(4, host6)
+	if len(i) != introduceSize || le.Uint32(i[8:]) != 4 || getAddr(i[12:]) != host6 {
 		t.Fatalf("introduce: % x", i)
 	}
-	r := encodeRegistered(1, 2, 5000, host)
-	if len(r) != registeredSize || getAddr(r[20:]) != host || binary.LittleEndian.Uint32(r[16:]) != 5000 {
+	r := encodeRegistered(1, 2, 5000, host6)
+	if len(r) != registeredSize || getAddr(r[20:]) != host6 || le.Uint32(r[16:]) != 5000 {
 		t.Fatalf("registered: % x", r)
 	}
 }
@@ -89,20 +110,32 @@ func TestAnnouncementName(t *testing.T) {
 }
 
 func TestCookieBuckets(t *testing.T) {
-	s := NewServer(defaultConfig(), nil)
-	from := netip.MustParseAddrPort("203.0.113.5:1000")
+	s := NewServer(defaultConfig())
 	t0 := time.Unix(1_000_000_040, 0) // 20 s into a bucket (1_000_000_020 is a multiple of 60)
-	c := s.currentCookie(from, t0)
-	for _, tc := range []struct {
-		after time.Duration
-		valid bool
-	}{{0, true}, {39 * time.Second, true}, {41 * time.Second, true}, {99 * time.Second, true}, {101 * time.Second, false}} {
-		if got := s.validCookie(from, c, t0.Add(tc.after)); got != tc.valid {
-			t.Errorf("after %v: valid %v, want %v", tc.after, got, tc.valid)
+	for _, from := range []netip.AddrPort{netip.MustParseAddrPort("203.0.113.5:1000"),
+		netip.MustParseAddrPort("[2001:db8::5]:1000")} {
+		c := s.currentCookie(from, t0)
+		for _, tc := range []struct {
+			after time.Duration
+			valid bool
+		}{{0, true}, {39 * time.Second, true}, {41 * time.Second, true}, {99 * time.Second, true}, {101 * time.Second, false}} {
+			if got := s.validCookie(from, c, t0.Add(tc.after)); got != tc.valid {
+				t.Errorf("%v after %v: valid %v, want %v", from, tc.after, got, tc.valid)
+			}
+		}
+		if s.validCookie(netip.AddrPortFrom(from.Addr(), 1001), c, t0) {
+			t.Errorf("%v: cookie valid for another port", from)
 		}
 	}
-	if s.validCookie(netip.MustParseAddrPort("203.0.113.5:1001"), c, t0) {
-		t.Error("cookie valid for another port")
+}
+
+func TestLimitKey(t *testing.T) {
+	a, b := netip.MustParseAddr("2001:db8:1:2::1"), netip.MustParseAddr("2001:db8:1:2:ffff:ffff:ffff:ffff")
+	if limitKey(a) != limitKey(b) || limitKey(a) == limitKey(netip.MustParseAddr("2001:db8:1:3::1")) {
+		t.Fatal("IPv6 addresses are limited per /64")
+	}
+	if v4 := netip.MustParseAddr("203.0.113.5"); limitKey(v4) != v4 {
+		t.Fatal("IPv4 addresses are limited per address")
 	}
 }
 
@@ -125,8 +158,13 @@ type peer struct {
 	to   *net.UDPAddr
 }
 
+// newPeer binds a loopback socket in the family of the server address it talks to.
 func newPeer(t *testing.T, server *net.UDPAddr) *peer {
-	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	network, ip := "udp4", net.IPv4(127, 0, 0, 1)
+	if server.IP.To4() == nil {
+		network, ip = "udp6", net.IPv6loopback
+	}
+	conn, err := net.ListenUDP(network, &net.UDPAddr{IP: ip})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +172,10 @@ func newPeer(t *testing.T, server *net.UDPAddr) *peer {
 	return &peer{t, conn, server}
 }
 
-func (p *peer) addr() netip.AddrPort { return p.conn.LocalAddr().(*net.UDPAddr).AddrPort() }
+func (p *peer) addr() netip.AddrPort {
+	a := p.conn.LocalAddr().(*net.UDPAddr).AddrPort()
+	return netip.AddrPortFrom(a.Addr().Unmap(), a.Port())
+}
 
 // exchange sends a request and returns the reply; it checks that a reply to a request without a valid cookie is
 // never larger than the request.
@@ -152,11 +193,19 @@ func (p *peer) exchange(req []byte, withCookie bool) []byte {
 
 func (p *peer) read() []byte {
 	p.t.Helper()
+	b := p.tryRead(2 * time.Second)
+	if b == nil {
+		p.t.Fatal("no reply")
+	}
+	return b
+}
+
+func (p *peer) tryRead(timeout time.Duration) []byte {
 	buf := make([]byte, 2048)
-	_ = p.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = p.conn.SetReadDeadline(time.Now().Add(timeout))
 	n, err := p.conn.Read(buf)
 	if err != nil {
-		p.t.Fatal(err)
+		return nil
 	}
 	return buf[:n]
 }
@@ -170,33 +219,76 @@ func challengeCookie(t *testing.T, b []byte, nonce uint32) (c cookie) {
 	return c
 }
 
-func startServer(t *testing.T, cfg Config) (*Server, *fakeClock, *net.UDPAddr) {
-	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+// register runs CHALLENGE -> REGISTER with cookie and returns the REGISTERED reply.
+func (p *peer) register(reg registerMsg) []byte {
+	p.t.Helper()
+	reg.Cookie = challengeCookie(p.t, p.exchange(reg.encode(), false), reg.Nonce)
+	r := p.exchange(reg.encode(), true)
+	if messageType(r) != typeRegistered || len(r) != registeredSize || le.Uint32(r[8:]) != reg.Nonce {
+		p.t.Fatalf("want REGISTERED, got % x", r)
+	}
+	return r
+}
+
+// cookie gets a cookie for further requests.
+func (p *peer) cookie() cookie {
+	p.t.Helper()
+	return challengeCookie(p.t, p.exchange(requestMsg{Nonce: 99}.encode(typeList), false), 99)
+}
+
+type testServer struct {
+	s     *Server
+	clock *fakeClock
+	addr4 *net.UDPAddr
+	addr6 *net.UDPAddr // nil without IPv6 loopback
+}
+
+// startServer serves 127.0.0.1 and, where it can be bound, ::1.
+func startServer(t *testing.T, cfg Config) testServer {
+	conn4, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewServer(cfg, conn)
-	clock := &fakeClock{t: time.Unix(1_000_000_000, 0)}
-	s.now = clock.now
+	conn6, _ := net.ListenUDP("udp6", &net.UDPAddr{IP: net.IPv6loopback})
+	ts := testServer{s: NewServer(cfg, conn4, conn6), clock: &fakeClock{t: time.Unix(1_000_000_000, 0)},
+		addr4: conn4.LocalAddr().(*net.UDPAddr)}
+	if conn6 != nil {
+		ts.addr6 = conn6.LocalAddr().(*net.UDPAddr)
+	}
+	ts.s.now = ts.clock.now
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { _ = s.Serve(ctx); close(done) }()
-	t.Cleanup(func() { cancel(); conn.Close(); <-done })
-	return s, clock, conn.LocalAddr().(*net.UDPAddr)
+	go func() { _ = ts.s.Serve(ctx); close(done) }()
+	t.Cleanup(func() {
+		cancel()
+		conn4.Close()
+		if conn6 != nil {
+			conn6.Close()
+		}
+		<-done
+	})
+	return ts
+}
+
+func checkWebHasNoAddresses(t *testing.T, s *Server, want string) {
+	t.Helper()
+	for _, path := range []string{"/api/games", "/"} {
+		rec := httptest.NewRecorder()
+		newWebHandler(s, "Test").ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+		body := rec.Body.String()
+		if !strings.Contains(body, want) || strings.Contains(body, "127.0.0.1") || strings.Contains(body, "::1") {
+			t.Fatalf("%s: %s", path, body)
+		}
+	}
 }
 
 func TestEndToEnd(t *testing.T) {
 	cfg := defaultConfig()
-	s, clock, addr := startServer(t, cfg)
-	host, player := newPeer(t, addr), newPeer(t, addr)
+	ts := startServer(t, cfg)
+	host, player := newPeer(t, ts.addr4), newPeer(t, ts.addr4)
 
 	// Host: REGISTER -> CHALLENGE -> REGISTER with cookie -> REGISTERED.
-	reg := registerMsg{Nonce: 11, Flags: flagUDP, Announcement: testAnnouncement("Ancaria", 1, 4)}
-	reg.Cookie = challengeCookie(t, host.exchange(reg.encode(), false), 11)
-	r := host.exchange(reg.encode(), true)
-	if messageType(r) != typeRegistered || len(r) != registeredSize || le.Uint32(r[8:]) != 11 {
-		t.Fatalf("want REGISTERED, got % x", r)
-	}
+	r := host.register(registerMsg{Nonce: 11, Flags: flagUDP, HostKey: 42, Announcement: testAnnouncement("Ancaria", 1, 4)})
 	gameID := le.Uint32(r[12:])
 	if gameID == 0 || le.Uint32(r[16:]) != cfg.RefreshMs || getAddr(r[20:]) != host.addr() {
 		t.Fatalf("REGISTERED: % x", r)
@@ -208,15 +300,14 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// Player: LIST sees the game, with the host's address as seen by the matchmaker and the LAN address removed.
-	list := requestMsg{Nonce: 21}
-	list.Cookie = challengeCookie(t, player.exchange(list.encode(typeList), false), 21)
+	list := requestMsg{Nonce: 21, Cookie: player.cookie()}
 	nonce, page, pageCount, entries, ok := decodeGames(player.exchange(list.encode(typeList), true))
 	if !ok || nonce != 21 || page != 0 || pageCount != 1 || len(entries) != 1 {
 		t.Fatalf("GAMES: %v %d %d %d %+v", ok, nonce, page, pageCount, entries)
 	}
 	e := entries[0]
-	if e.ID != gameID || e.Addr != host.addr() || e.Flags != flagUDP || string(e.Announcement[4:8]) != "\x00\x00\x00\x00" ||
-		parseAnnouncement(&e.Announcement).Name != "Ancaria" {
+	if e.ID != gameID || e.Addr4 != host.addr() || e.Addr6.IsValid() || e.Flags != flagUDP ||
+		string(e.Announcement[4:8]) != "\x00\x00\x00\x00" || parseAnnouncement(&e.Announcement).Name != "Ancaria" {
 		t.Fatalf("entry: %+v", e)
 	}
 
@@ -224,7 +315,7 @@ func TestEndToEnd(t *testing.T) {
 	join := requestMsg{Nonce: 31, Arg: gameID, Cookie: list.Cookie}
 	j := player.exchange(join.encode(typeJoin), true)
 	if messageType(j) != typeJoined || le.Uint32(j[8:]) != 31 || le.Uint32(j[12:]) != gameID ||
-		getAddr(j[16:]) != host.addr() || le.Uint16(j[22:]) != flagUDP {
+		le.Uint16(j[16:]) != flagUDP || getAddr(j[20:]) != host.addr() || getAddr(j[38:]).IsValid() {
 		t.Fatalf("JOINED: % x", j)
 	}
 	i := host.read()
@@ -234,65 +325,172 @@ func TestEndToEnd(t *testing.T) {
 
 	// An unknown game: JOINED with no address, nothing to any host.
 	join.Arg = gameID + 1
-	if j := player.exchange(join.encode(typeJoin), true); le.Uint32(j[16:]) != 0 {
+	if j := player.exchange(join.encode(typeJoin), true); getAddr(j[20:]).IsValid() || getAddr(j[38:]).IsValid() {
 		t.Fatalf("JOINED for an unknown game: % x", j)
 	}
 
-	// The web views carry no addresses.
-	rec := httptest.NewRecorder()
-	newWebHandler(s, "Test").ServeHTTP(rec, httptest.NewRequest("GET", "/api/games", nil))
-	body := rec.Body.String()
-	if !strings.Contains(body, `"name":"Ancaria"`) || strings.Contains(body, "127.0.0.1") {
-		t.Fatalf("/api/games: %s", body)
-	}
-	rec = httptest.NewRecorder()
-	newWebHandler(s, "Test").ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
-	if body := rec.Body.String(); !strings.Contains(body, "Ancaria") || strings.Contains(body, "127.0.0.1") {
-		t.Fatalf("/: %s", body)
-	}
+	checkWebHasNoAddresses(t, ts.s, "Ancaria")
 
 	// Expiry: no REGISTER for longer than GameTimeout.
-	clock.add(cfg.GameTimeout + time.Second)
-	s.expire(clock.now())
+	ts.clock.add(cfg.GameTimeout + time.Second)
+	ts.s.expire(ts.clock.now())
+	list.Cookie = player.cookie()
 	if _, _, _, entries, _ := decodeGames(player.exchange(list.encode(typeList), true)); len(entries) != 0 {
 		t.Fatalf("game didn't expire: %+v", entries)
+	}
+}
+
+func TestDualStack(t *testing.T) {
+	cfg := defaultConfig()
+	ts := startServer(t, cfg)
+	if ts.addr6 == nil {
+		t.Skip("no IPv6 loopback")
+	}
+	host4, host6 := newPeer(t, ts.addr4), newPeer(t, ts.addr6)
+	player4, player6 := newPeer(t, ts.addr4), newPeer(t, ts.addr6)
+
+	// The same hostKey over both families: one game with both addresses.
+	reg := registerMsg{Nonce: 1, Flags: flagUDP, HostKey: 0xABCDEF, Announcement: testAnnouncement("Dual", 2, 4)}
+	r4, r6 := host4.register(reg), host6.register(reg)
+	id := le.Uint32(r4[12:])
+	if le.Uint32(r6[12:]) != id || getAddr(r4[20:]) != host4.addr() || getAddr(r6[20:]) != host6.addr() {
+		t.Fatalf("REGISTERED: % x / % x", r4, r6)
+	}
+	if v := ts.s.Snapshot(); len(v) != 1 || !v[0].IPv4 || !v[0].IPv6 {
+		t.Fatalf("snapshot: %+v", v)
+	}
+
+	// LIST over either family shows both addresses.
+	for _, p := range []*peer{player4, player6} {
+		list := requestMsg{Nonce: 2, Cookie: p.cookie()}
+		_, _, _, entries, ok := decodeGames(p.exchange(list.encode(typeList), true))
+		if !ok || len(entries) != 1 || entries[0].Addr4 != host4.addr() || entries[0].Addr6 != host6.addr() {
+			t.Fatalf("GAMES: %+v", entries)
+		}
+	}
+
+	// JOIN is introduced to the host in the family it came over.
+	for _, tc := range []struct{ player, host, other *peer }{{player6, host6, host4}, {player4, host4, host6}} {
+		join := requestMsg{Nonce: 3, Arg: id, Cookie: tc.player.cookie()}
+		j := tc.player.exchange(join.encode(typeJoin), true)
+		if getAddr(j[20:]) != host4.addr() || getAddr(j[38:]) != host6.addr() {
+			t.Fatalf("JOINED: % x", j)
+		}
+		if i := tc.host.read(); messageType(i) != typeIntroduce || getAddr(i[12:]) != tc.player.addr() {
+			t.Fatalf("INTRODUCE: % x", i)
+		}
+		if b := tc.other.tryRead(100 * time.Millisecond); b != nil {
+			t.Fatalf("INTRODUCE in the other family: % x", b)
+		}
+	}
+
+	checkWebHasNoAddresses(t, ts.s, "Dual")
+
+	// Only IPv4 keeps registering: IPv6 is dropped, the game stays.
+	ts.clock.add(cfg.GameTimeout / 2)
+	host4.register(reg)
+	ts.clock.add(cfg.GameTimeout/2 + time.Second)
+	ts.s.expire(ts.clock.now())
+	if v := ts.s.Snapshot(); len(v) != 1 || !v[0].IPv4 || v[0].IPv6 {
+		t.Fatalf("after IPv6 expired: %+v", v)
+	}
+
+	// A game reachable over IPv6 only: JOIN over IPv4 gets JOINED with its IPv6 address, but no INTRODUCE (the host
+	// has no IPv4 address to send it to).
+	ts.clock.add(cfg.GameTimeout + time.Second)
+	host6.register(reg)
+	ts.s.expire(ts.clock.now())
+	if v := ts.s.Snapshot(); len(v) != 1 || v[0].IPv4 || !v[0].IPv6 {
+		t.Fatalf("after IPv4 expired: %+v", v)
+	}
+	join := requestMsg{Nonce: 4, Arg: id, Cookie: player4.cookie()}
+	j := player4.exchange(join.encode(typeJoin), true)
+	if getAddr(j[20:]).IsValid() || getAddr(j[38:]) != host6.addr() {
+		t.Fatalf("JOINED: % x", j)
+	}
+	for _, h := range []*peer{host4, host6} {
+		if b := h.tryRead(100 * time.Millisecond); b != nil {
+			t.Fatalf("unexpected INTRODUCE: % x", b)
+		}
+	}
+}
+
+// handleAt drives the server without sockets (its replies go nowhere): for addresses loopback can't provide.
+func handleAt(s *Server, from netip.AddrPort, reg registerMsg) {
+	reg.Cookie = s.currentCookie(from, s.now())
+	s.handle(reg.encode(), from)
+}
+
+func TestLimitsPerNetwork(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.MaxGamesPerAddress = 1
+	s := NewServer(cfg)
+	clock := &fakeClock{t: time.Unix(1_000_000_000, 0)}
+	s.now = clock.now
+	a := testAnnouncement("g", 0, 4)
+
+	// Two hosts in the same /64: the second game is refused; another /64 is fine.
+	handleAt(s, netip.MustParseAddrPort("[2001:db8:1:2::1]:2105"), registerMsg{HostKey: 1, Announcement: a})
+	handleAt(s, netip.MustParseAddrPort("[2001:db8:1:2::2]:2105"), registerMsg{HostKey: 2, Announcement: a})
+	handleAt(s, netip.MustParseAddrPort("[2001:db8:1:3::1]:2105"), registerMsg{HostKey: 3, Announcement: a})
+	if n := len(s.Snapshot()); n != 2 {
+		t.Fatalf("%d games, want 2", n)
+	}
+
+	// The rate limit counts the /64 as one requester.
+	cfg.RequestsPerSecond = 2
+	s = NewServer(cfg)
+	now := time.Unix(1_000_000_000, 0)
+	allowed := 0
+	for i := range 10 {
+		if s.allow(netip.AddrFrom16([16]byte{0x20, 0x01, 0x0d, 0xb8, 15: byte(i)}), now) {
+			allowed++
+		}
+	}
+	if allowed != 4 {
+		t.Fatalf("burst allowed %d, want 4", allowed)
+	}
+}
+
+func TestNewGameAtSameAddress(t *testing.T) {
+	s := NewServer(defaultConfig())
+	clock := &fakeClock{t: time.Unix(1_000_000_000, 0)}
+	s.now = clock.now
+	from := netip.MustParseAddrPort("203.0.113.5:2105")
+	handleAt(s, from, registerMsg{HostKey: 1, Announcement: testAnnouncement("old", 0, 4)})
+	// The gameserver restarted: a new hostKey from the same socket replaces the old game right away.
+	handleAt(s, from, registerMsg{HostKey: 2, Announcement: testAnnouncement("new", 0, 4)})
+	if v := s.Snapshot(); len(v) != 1 || v[0].Name != "new" {
+		t.Fatalf("%+v", v)
 	}
 }
 
 func TestUnregisterAndLimits(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.MaxGamesPerAddress = 1
-	s, _, addr := startServer(t, cfg)
-	a, b := newPeer(t, addr), newPeer(t, addr) // same IP, different ports
+	ts := startServer(t, cfg)
+	a, b := newPeer(t, ts.addr4), newPeer(t, ts.addr4) // same IP, different ports
 
-	register := func(p *peer) []byte {
-		reg := registerMsg{Nonce: 1, Announcement: testAnnouncement("g", 0, 4)}
-		reg.Cookie = challengeCookie(t, p.exchange(reg.encode(), false), 1)
-		_, _ = p.conn.WriteToUDP(reg.encode(), p.to)
-		_ = p.conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
-		buf := make([]byte, 64)
-		n, err := p.conn.Read(buf)
-		if err != nil {
-			return nil
-		}
-		return buf[:n]
-	}
-	r := register(a)
-	if messageType(r) != typeRegistered {
-		t.Fatalf("first game: % x", r)
-	}
-	if r := register(b); r != nil {
+	r := a.register(registerMsg{Nonce: 1, HostKey: 1, Announcement: testAnnouncement("g", 0, 4)})
+	// A second game from the same IP is refused: no answer.
+	reg := registerMsg{Nonce: 1, HostKey: 2, Announcement: testAnnouncement("g", 0, 4)}
+	reg.Cookie = challengeCookie(t, b.exchange(reg.encode(), false), 1)
+	_, _ = b.conn.WriteToUDP(reg.encode(), b.to)
+	if r := b.tryRead(300 * time.Millisecond); r != nil {
 		t.Fatalf("second game from the same IP accepted: % x", r)
 	}
 
-	// UNREGISTER with the wrong gameId is ignored, with the right one removes the game.
-	c := challengeCookie(t, a.exchange(requestMsg{Nonce: 2}.encode(typeList), false), 2)
+	// UNREGISTER from another address or with the wrong gameId is ignored; from the host with its id it removes it.
 	id := le.Uint32(r[12:])
-	for _, arg := range []uint32{id + 1, id} {
-		_, _ = a.conn.WriteToUDP(requestMsg{Nonce: 3, Arg: arg, Cookie: c}.encode(typeUnregister), a.to)
+	for _, tc := range []struct {
+		p    *peer
+		arg  uint32
+		left int
+	}{{b, id, 1}, {a, id + 1, 1}, {a, id, 0}} {
+		_, _ = tc.p.conn.WriteToUDP(requestMsg{Nonce: 3, Arg: tc.arg, Cookie: tc.p.cookie()}.encode(typeUnregister), tc.p.to)
 		time.Sleep(50 * time.Millisecond)
-		if got, want := len(s.Snapshot()), map[bool]int{true: 0, false: 1}[arg == id]; got != want {
-			t.Fatalf("UNREGISTER %d: %d games, want %d", arg, got, want)
+		if got := len(ts.s.Snapshot()); got != tc.left {
+			t.Fatalf("UNREGISTER %d: %d games, want %d", tc.arg, got, tc.left)
 		}
 	}
 }
@@ -300,7 +498,7 @@ func TestUnregisterAndLimits(t *testing.T) {
 func TestRateLimit(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.RequestsPerSecond = 2
-	s := NewServer(cfg, nil)
+	s := NewServer(cfg)
 	ip := netip.MustParseAddr("203.0.113.5")
 	now := time.Unix(1_000_000_000, 0)
 	allowed := 0
@@ -311,6 +509,23 @@ func TestRateLimit(t *testing.T) {
 	}
 	if allowed != 4 || !s.allow(ip, now.Add(time.Second)) {
 		t.Fatalf("burst allowed %d, want 4", allowed)
+	}
+}
+
+func TestListenUDP(t *testing.T) {
+	conns, err := listenUDP("127.0.0.1:0")
+	if err != nil || len(conns) != 1 || conns[0].LocalAddr().(*net.UDPAddr).IP.To4() == nil {
+		t.Fatalf("IPv4: %v %v", conns, err)
+	}
+	conns[0].Close()
+	if conns, err := listenUDP("[::1]:0"); err == nil {
+		if len(conns) != 1 || conns[0].LocalAddr().(*net.UDPAddr).IP.To4() != nil {
+			t.Fatalf("IPv6: %v", conns)
+		}
+		conns[0].Close()
+	}
+	if _, err := listenUDP(":notaport"); err == nil {
+		t.Fatal("bad port accepted")
 	}
 }
 

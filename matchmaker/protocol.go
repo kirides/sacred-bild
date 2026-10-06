@@ -1,7 +1,7 @@
 package main
 
-// Wire format of the matchmaker protocol (docs/UDP_PROTOCOL.md, "Matchmaker"): little-endian integers, IPv4
-// addresses as 4 raw bytes in network order.
+// Wire format of the matchmaker protocol (docs/UDP_PROTOCOL.md, "Matchmaker"): little-endian integers, addresses
+// as 18 bytes (16-byte IPv6, IPv4 as ::ffff:a.b.c.d, then the port; all zero = none).
 
 import (
 	"encoding/binary"
@@ -15,20 +15,21 @@ const (
 	protocolVersion  = 1
 	maxDatagram      = 1200
 	cookieSize       = 16
+	addrSize         = 18
 	announcementSize = 0xAE
 	nameChars        = (announcementSize - 0x0E) / 2
-	gamesPerPage     = 6
+	gamesPerPage     = 5
 
 	challengeSize  = 32
-	registerSize   = 32 + announcementSize
-	registeredSize = 32
+	registerSize   = 40 + announcementSize
+	registeredSize = 40
 	unregisterSize = 32
 	listSize       = 32
 	gamesHeader    = 20
-	gameEntrySize  = 4 + 4 + 2 + 2 + announcementSize
+	gameEntrySize  = 4 + 2 + 2 + 2*addrSize + announcementSize
 	joinSize       = 32
-	joinedSize     = 24
-	introduceSize  = 24
+	joinedSize     = 56
+	introduceSize  = 32
 
 	flagUDP = 1 // REGISTER flags bit 0: the host accepts the UDP transport
 )
@@ -67,14 +68,23 @@ func messageType(b []byte) byte {
 	return b[3]
 }
 
+// putAddr writes an 18-byte address; an invalid one (no address) stays all zero.
 func putAddr(b []byte, a netip.AddrPort) {
-	ip := a.Addr().Unmap().As4()
+	if !a.IsValid() {
+		return
+	}
+	ip := a.Addr().As16() // IPv4 as ::ffff:a.b.c.d
 	copy(b, ip[:])
-	le.PutUint16(b[4:], a.Port())
+	le.PutUint16(b[16:], a.Port())
 }
 
 func getAddr(b []byte) netip.AddrPort {
-	return netip.AddrPortFrom(netip.AddrFrom4([4]byte(b[:4])), le.Uint16(b[4:]))
+	ip := [16]byte(b[:16])
+	port := le.Uint16(b[16:])
+	if ip == [16]byte{} && port == 0 {
+		return netip.AddrPort{}
+	}
+	return netip.AddrPortFrom(netip.AddrFrom16(ip).Unmap(), port)
 }
 
 // --- requests (host / player -> matchmaker) ---
@@ -83,6 +93,7 @@ type registerMsg struct {
 	Nonce        uint32
 	Flags        uint16
 	Cookie       cookie
+	HostKey      uint64
 	Announcement [announcementSize]byte
 }
 
@@ -91,7 +102,8 @@ func (m registerMsg) encode() []byte {
 	le.PutUint32(b[8:], m.Nonce)
 	le.PutUint16(b[12:], m.Flags)
 	copy(b[16:], m.Cookie[:])
-	copy(b[32:], m.Announcement[:])
+	le.PutUint64(b[32:], m.HostKey)
+	copy(b[40:], m.Announcement[:])
 	return b
 }
 
@@ -102,7 +114,8 @@ func decodeRegister(b []byte) (m registerMsg, ok bool) {
 	m.Nonce = le.Uint32(b[8:])
 	m.Flags = le.Uint16(b[12:])
 	copy(m.Cookie[:], b[16:32])
-	copy(m.Announcement[:], b[32:registerSize])
+	m.HostKey = le.Uint64(b[32:])
+	copy(m.Announcement[:], b[40:registerSize])
 	return m, true
 }
 
@@ -152,8 +165,9 @@ func encodeRegistered(nonce, gameID, refreshMs uint32, host netip.AddrPort) []by
 
 type gameEntry struct {
 	ID           uint32
-	Addr         netip.AddrPort
 	Flags        uint16
+	Addr4        netip.AddrPort // invalid: not reachable over IPv4
+	Addr6        netip.AddrPort // invalid: not reachable over IPv6
 	Announcement [announcementSize]byte
 }
 
@@ -166,9 +180,10 @@ func encodeGames(nonce uint32, page, pageCount uint16, entries []gameEntry) []by
 	for i, e := range entries {
 		o := b[gamesHeader+i*gameEntrySize:]
 		le.PutUint32(o, e.ID)
-		putAddr(o[4:], e.Addr)
-		le.PutUint16(o[10:], e.Flags)
-		copy(o[12:], e.Announcement[:])
+		le.PutUint16(o[4:], e.Flags)
+		putAddr(o[8:], e.Addr4)
+		putAddr(o[8+addrSize:], e.Addr6)
+		copy(o[8+2*addrSize:], e.Announcement[:])
 	}
 	return b
 }
@@ -186,22 +201,21 @@ func decodeGames(b []byte) (nonce uint32, page, pageCount uint16, entries []game
 	}
 	for i := range count {
 		o := b[gamesHeader+i*gameEntrySize:]
-		e := gameEntry{ID: le.Uint32(o), Addr: getAddr(o[4:]), Flags: le.Uint16(o[10:])}
-		copy(e.Announcement[:], o[12:12+announcementSize])
+		e := gameEntry{ID: le.Uint32(o), Flags: le.Uint16(o[4:]), Addr4: getAddr(o[8:]), Addr6: getAddr(o[8+addrSize:])}
+		copy(e.Announcement[:], o[8+2*addrSize:8+2*addrSize+announcementSize])
 		entries = append(entries, e)
 	}
 	return nonce, page, pageCount, entries, true
 }
 
-// encodeJoined: a zero address (netip.AddrPort{}) means "no such game".
-func encodeJoined(nonce, gameID uint32, host netip.AddrPort, flags uint16) []byte {
+// encodeJoined: no address in either family means "no such game".
+func encodeJoined(nonce, gameID uint32, flags uint16, addr4, addr6 netip.AddrPort) []byte {
 	b := header(typeJoined, joinedSize)
 	le.PutUint32(b[8:], nonce)
 	le.PutUint32(b[12:], gameID)
-	if host.IsValid() {
-		putAddr(b[16:], host)
-		le.PutUint16(b[22:], flags)
-	}
+	le.PutUint16(b[16:], flags)
+	putAddr(b[20:], addr4)
+	putAddr(b[20+addrSize:], addr6)
 	return b
 }
 

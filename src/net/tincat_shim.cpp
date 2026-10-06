@@ -50,6 +50,7 @@ namespace
         sockaddr_in target{};       // player: where the game wanted to connect (the TCP fallback)
         bool nonBlocking = false;
         int noDelay = -1;           // TCP_NODELAY TinCat set meanwhile, for the TCP fallback
+        bool unreachable = false;   // the handshake failed and there is no TCP fallback (a stand-in address)
     };
 
     bool g_host = false;
@@ -96,9 +97,24 @@ namespace
         ++g_count;
     }
 
-    // The UDP handshake failed: the socket (still unconnected) connects over TCP as the game wanted.
+    // The UDP handshake failed: the socket (still unconnected) connects over TCP as the game wanted. A game listed
+    // with a stand-in address has no TCP address: the connect fails as on an unreachable network, right away
+    // instead of after TCP's time-outs.
     int fallBack(SOCKET s)
     {
+        if (const auto v = find(s); v && Matchmaker::isStandIn(v->target.sin_addr.s_addr))
+        {
+            {
+                std::scoped_lock lock(g_mutex);
+                if (const auto it = g_vsocks.find(s); it != g_vsocks.end())
+                {
+                    it->second.unreachable = true;
+                }
+            }
+            UdpTransport::close(v->session);
+            WSASetLastError(WSAENETUNREACH);
+            return SOCKET_ERROR;
+        }
         const auto v = take(s);
         if (!v)
         {
@@ -133,6 +149,11 @@ namespace
             return g_connect(s, name, len);     // a host without [Net] Udp
         }
         auto session = UdpTransport::connect(to);
+        if (!session && Matchmaker::isStandIn(to.sin_addr.s_addr))
+        {
+            WSASetLastError(WSAENETUNREACH);
+            return SOCKET_ERROR;
+        }
         if (!session)
         {
             return g_connect(s, name, len);
@@ -189,13 +210,13 @@ namespace
                 }
                 if (const auto v = find(s))
                 {
-                    if (UdpTransport::status(*v->session) == UdpTransport::Status::Failed)
+                    if (!v->unreachable && UdpTransport::status(*v->session) == UdpTransport::Status::Failed)
                     {
                         fallBack(s);
                     }
-                    else
+                    if (find(s))
                     {
-                        virt.push_back(s);
+                        virt.push_back(s);      // still virtual: open, connecting, or unreachable
                     }
                 }
             }
@@ -225,7 +246,7 @@ namespace
             {
                 if (contains(virt, s))
                 {
-                    if (const auto v = find(s); v && UdpTransport::readable(*v->session))
+                    if (const auto v = find(s); v && !v->unreachable && UdpTransport::readable(*v->session))
                     {
                         outR.push_back(s);
                     }
@@ -239,13 +260,24 @@ namespace
             {
                 if (contains(virt, s))
                 {
-                    if (const auto v = find(s); v && UdpTransport::writable(*v->session))
+                    if (const auto v = find(s); v && !v->unreachable && UdpTransport::writable(*v->session))
                     {
                         outW.push_back(s);
                     }
                 }
             }
-            const bool virtualReady = !outR.empty() || !outW.empty();
+            // A failed non-blocking connect shows as an exception; SO_ERROR says why (NET_CheckConnected).
+            for (const SOCKET s : inE)
+            {
+                if (contains(virt, s))
+                {
+                    if (const auto v = find(s); v && v->unreachable)
+                    {
+                        outE.push_back(s);
+                    }
+                }
+            }
+            const bool virtualReady = !outR.empty() || !outW.empty() || !outE.empty();
             const uint64_t elapsed = GetTickCount64() - start;
             const uint64_t remaining = elapsed >= limit ? 0 : limit - elapsed;
             if (anyReal)
@@ -303,7 +335,7 @@ namespace
                     UdpTransport::close(session);
                     return INVALID_SOCKET;
                 }
-                const sockaddr_in peer = UdpTransport::peer(*session);
+                const sockaddr_in peer = UdpTransport::peerForGame(*session);
                 add(handle, {session, peer});
                 if (addr && addrLen && *addrLen >= static_cast<int>(sizeof(peer)))
                 {
@@ -367,9 +399,10 @@ namespace
 
     int WSAAPI hookGetSockOpt(SOCKET s, int level, int name, char* value, int* len)
     {
-        if (level == SOL_SOCKET && name == SO_ERROR && value && len && *len >= static_cast<int>(sizeof(int)) && find(s))
+        const auto v = level == SOL_SOCKET && name == SO_ERROR ? find(s) : std::nullopt;
+        if (v && value && len && *len >= static_cast<int>(sizeof(int)))
         {
-            *reinterpret_cast<int*>(value) = 0;
+            *reinterpret_cast<int*>(value) = v->unreachable ? WSAENETUNREACH : 0;
             *len = sizeof(int);
             return 0;
         }
@@ -383,11 +416,12 @@ namespace
         {
             return g_getsockname(s, name, len);
         }
-        // The local address towards the peer, as a connected TCP socket would report it.
+        // The local address towards the peer, as a connected TCP socket would report it (over IPv6: 0.0.0.0).
         sockaddr_in local{};
         local.sin_family = AF_INET;
-        const sockaddr_in peer = UdpTransport::peer(*v->session);
-        const SOCKET probe = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        const Net::Address peerAddress = UdpTransport::peer(*v->session);
+        const sockaddr_in& peer = peerAddress.Ipv4;
+        const SOCKET probe = Net::isV6(peerAddress) ? INVALID_SOCKET : socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (probe != INVALID_SOCKET)
         {
             int localLen = sizeof(local);

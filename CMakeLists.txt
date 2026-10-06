@@ -58,6 +58,7 @@ add_library(ddraw SHARED
   src/render/batcher.cpp
   src/ui/form.cpp
   src/ui/form.rc
+  src/net/address.cpp
   src/net/adapters.cpp
   src/net/connection.cpp
   src/net/lan_client.cpp
@@ -98,6 +99,7 @@ if(SACREDBILD_NETTEST)
     tools/nettest/nettest.cpp
     src/config.cpp
     src/log.cpp
+    src/net/address.cpp
     src/net/adapters.cpp
     src/net/lan_protocol.cpp
     src/net/matchmaker.cpp

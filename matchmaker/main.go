@@ -179,27 +179,26 @@ func run() error {
 		"MaxGamesPerAddress=%d RequestsPerSecond=%g Title=%q", cfg.Listen, cfg.WebListen, cfg.LogSensitiveData,
 		cfg.GameTimeout, cfg.RefreshMs, cfg.MaxGames, cfg.MaxGamesPerAddress, cfg.RequestsPerSecond, cfg.Title)
 
-	// The protocol carries IPv4 addresses only.
-	addr, err := net.ResolveUDPAddr("udp4", cfg.Listen)
-	if err != nil {
-		return fmt.Errorf("Listen: %w", err)
-	}
-	conn, err := net.ListenUDP("udp4", addr)
+	conns, err := listenUDP(cfg.Listen)
 	if err != nil {
 		return err
 	}
-	log.Printf("matchmaker on UDP %s", conn.LocalAddr())
+	closeAll := func() {
+		for _, c := range conns {
+			c.Close()
+		}
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	server := NewServer(cfg, conn)
+	server := NewServer(cfg, conns...)
 
 	var web *http.Server
 	if cfg.WebListen != "" {
 		web = newWebServer(cfg.WebListen, newWebHandler(server, cfg.Title))
 		listener, err := net.Listen("tcp", cfg.WebListen)
 		if err != nil {
-			conn.Close()
+			closeAll()
 			return fmt.Errorf("WebListen: %w", err)
 		}
 		log.Printf("web UI on http://%s/", listener.Addr())
@@ -213,7 +212,7 @@ func run() error {
 	go func() {
 		<-ctx.Done()
 		log.Printf("shutting down")
-		conn.Close() // ends Serve's read loop
+		closeAll() // ends Serve's read loops
 	}()
 	err = server.Serve(ctx)
 	if web != nil {
@@ -222,6 +221,49 @@ func run() error {
 		_ = web.Shutdown(shutdownCtx)
 	}
 	return err
+}
+
+// listenUDP opens the matchmaker's sockets. Without a host (":2107") there is one per family, IPv4 and IPv6 (the
+// IPv6 one only where the system has IPv6); separate sockets don't depend on dual-stack sockets, which some
+// systems turn off. With an address, just that one.
+func listenUDP(listen string) ([]*net.UDPConn, error) {
+	host, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return nil, fmt.Errorf("Listen: %w", err)
+	}
+	if host != "" {
+		addr, err := net.ResolveUDPAddr("udp", listen)
+		if err != nil {
+			return nil, fmt.Errorf("Listen: %w", err)
+		}
+		network := "udp6"
+		if addr.IP.To4() != nil {
+			network = "udp4"
+		}
+		conn, err := net.ListenUDP(network, addr)
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("matchmaker on UDP %s", conn.LocalAddr())
+		return []*net.UDPConn{conn}, nil
+	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 0 || portNumber > 0xFFFF {
+		return nil, fmt.Errorf("Listen: bad port %q", port)
+	}
+	conn4, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: portNumber})
+	if err != nil {
+		return nil, err
+	}
+	conns := []*net.UDPConn{conn4}
+	log.Printf("matchmaker on UDP %s (IPv4)", conn4.LocalAddr())
+	if conn6, err := net.ListenUDP("udp6", &net.UDPAddr{IP: net.IPv6unspecified, Port: portNumber}); err != nil {
+		log.Printf("no IPv6: %v", err)
+	} else {
+		conns = append(conns, conn6)
+		log.Printf("matchmaker on UDP %s (IPv6)", conn6.LocalAddr())
+	}
+	return conns, nil
 }
 
 func main() {

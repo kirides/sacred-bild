@@ -74,13 +74,14 @@ namespace
         LOG("LAN relay: addresses {}", list.empty() ? "none" : list);
     }
 
-    // On the endpoint's I/O thread.
-    void onSubscription(const uint8_t* msg, int n, const sockaddr_in& from)
+    // On the endpoint's I/O thread. Players subscribe over IPv4 only (Sacred's LAN list).
+    void onSubscription(const uint8_t* msg, int n, const Net::Address& address)
     {
-        if (!LanRelay::hasHeader(msg, n, LanRelay::kSubscribeMagic, LanRelay::kSubscribeSize))
+        if (Net::isV6(address) || !LanRelay::hasHeader(msg, n, LanRelay::kSubscribeMagic, LanRelay::kSubscribeSize))
         {
             return;
         }
+        const sockaddr_in& from = address.Ipv4;
         std::scoped_lock lock(g_mutex);
         const uint64_t now = GetTickCount64();
         const auto it = std::ranges::find_if(g_subscribers, [&](const Subscriber& s) {
@@ -167,9 +168,7 @@ namespace
                     continue;
                 }
                 LanAnnounce::encode(plain, a.address, wire);
-                sockaddr_in to = target;
-                to.sin_addr.s_addr = a.broadcast;
-                UdpEndpoint::sendTo(wire, sizeof(wire), to);
+                UdpEndpoint::sendTo(wire, sizeof(wire), Net::ipv4(a.broadcast, ntohs(target.sin_port)));
                 ++broadcasts;
             }
             dropExpiredSubscribers(now);
@@ -178,7 +177,7 @@ namespace
             std::memcpy(msg + 8, plain, LanAnnounce::kSize);
             for (const auto& sub : g_subscribers)
             {
-                UdpEndpoint::sendTo(msg, sizeof(msg), sub.addr);
+                UdpEndpoint::sendTo(msg, sizeof(msg), Net::ipv4(sub.addr.sin_addr.s_addr, ntohs(sub.addr.sin_port)));
             }
         }
 

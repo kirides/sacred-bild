@@ -1,10 +1,12 @@
 #pragma once
+#include "net/address.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 
 // Wire formats of SacredBild's UDP transport (SBT) and of the matchmaker (SBM); docs/UDP_PROTOCOL.md describes
-// them, matchmaker/ implements the server side. Little-endian integers, IPv4 addresses as 4 bytes in network order.
+// them, matchmaker/ implements the server side. Little-endian integers, addresses as Net::encode's 18 bytes.
 namespace UdpProto
 {
     constexpr uint32_t kVersion = 1;
@@ -36,9 +38,9 @@ namespace UdpProto
     {
         constexpr char Challenge = 'C', Register = 'R', Registered = 'A', Unregister = 'U', List = 'L', Games = 'G',
             Join = 'J', Joined = 'O', Introduce = 'I';
-        constexpr size_t kChallengeSize = 32, kRegisterSize = 32 + 0xAE, kRegisteredSize = 32, kUnregisterSize = 32,
-            kListSize = 32, kGamesHeader = 20, kGameEntry = 12 + 0xAE, kJoinSize = 32, kJoinedSize = 24,
-            kIntroduceSize = 24;
+        constexpr size_t kChallengeSize = 32, kRegisterSize = 40 + 0xAE, kRegisteredSize = 40, kUnregisterSize = 32,
+            kListSize = 32, kGamesHeader = 20, kGameEntry = 44 + 0xAE, kJoinSize = 32, kJoinedSize = 56,
+            kIntroduceSize = 32;
         constexpr uint16_t kFlagUdp = 1;        // the host accepts the UDP transport
     }
 
@@ -71,9 +73,9 @@ namespace UdpProto
     uint32_t random32();
     uint64_t random64();
 
-    // 16-byte cookie for (address, port, nonce) in the current or previous 30 s period, keyed per process.
-    void cookie(uint32_t address, uint16_t port, uint32_t nonce, uint8_t* out);
-    bool validCookie(uint32_t address, uint16_t port, uint32_t nonce, const uint8_t* cookie);
+    // 16-byte cookie for (address, nonce) in the current or previous 30 s period, keyed per process.
+    void cookie(const Net::Address& from, uint32_t nonce, uint8_t* out);
+    bool validCookie(const Net::Address& from, uint32_t nonce, const uint8_t* cookie);
 
     // Monotonic milliseconds (the transport's clock; KCP takes its low 32 bits).
     uint64_t nowMs();

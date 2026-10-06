@@ -211,10 +211,14 @@ namespace
             {
                 break;
             }
-            // Joining connects to the address in the announcement: the host's as the matchmaker sees it.
+            // Joining connects to the address in the announcement: the host's as the matchmaker sees it, or a
+            // stand-in the transport maps back to the game.
             Pending p{};
-            LanAnnounce::encode(g.plain, g.host.sin_addr.s_addr, p.wire);
-            p.from = g.host;
+            LanAnnounce::encode(g.plain, g.address, p.wire);
+            p.from.sin_family = AF_INET;
+            p.from.sin_addr.s_addr = g.address;
+            std::memcpy(&p.from.sin_port, g.plain + 2, 2);
+            p.from.sin_port = htons(p.from.sin_port);
             g_pending.push_back(p);
         }
     }

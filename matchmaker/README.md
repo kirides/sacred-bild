@@ -5,8 +5,11 @@ players see them in Sacred's own LAN list. When a player joins, the matchmaker i
 other so that SacredBild's UDP transport gets through home routers without port forwarding (UDP hole punching).
 Game traffic never passes through the matchmaker. Protocol: [docs/UDP_PROTOCOL.md](../docs/UDP_PROTOCOL.md).
 
-A web page (`WebListen`) lists the current games: name, players, game version, UDP transport, and how long each
-has been running. `/api/games` returns the same list as JSON, and `/healthz` returns `ok`. Neither shows addresses.
+It serves IPv4 and IPv6. Hosts register over both, so players can reach hosts that have no public IPv4 address of
+their own (CGNAT, DS-Lite) over IPv6, where there is no address translation and hole punching almost always works.
+
+A web page (`WebListen`) lists the current games: name, players, game version, UDP transport, whether the host is
+reachable over IPv4 and/or IPv6, and how long each has been running. `/api/games` returns the same list as JSON, and `/healthz` returns `ok`. Neither shows addresses.
 
 ## Build
 
@@ -35,17 +38,19 @@ Every key can be overridden on the command line in lower camel case: `-listen=:2
 
 | Key | Default | Meaning |
 |---|---|---|
-| Listen | `:2107` | UDP address for hosts and players (IPv4). |
+| Listen | `:2107` | UDP address for hosts and players. Without a host: IPv4 and IPv6 (one socket each, IPv6 where the system has it); with one (`0.0.0.0:2107`, `[::]:2107`, ...) only that. |
 | WebListen | `:8080` | HTTP address of the web page; empty = none. |
 | LogSensitiveData | 0 | 1 = log IP addresses and ports. |
 | GameTimeout | 20 | Seconds without a REGISTER after which a game is dropped. |
 | RefreshMs | 5000 | How often hosts send REGISTER (must be shorter than GameTimeout). |
 | MaxGames | 1000 | Games listed at most. |
-| MaxGamesPerAddress | 4 | Games per host IP address. |
-| RequestsPerSecond | 20 | Requests per IP address and second (bursts of twice that); more are dropped. |
+| MaxGamesPerAddress | 4 | Games per host IPv4 address or IPv6 /64 network. |
+| RequestsPerSecond | 20 | Requests per IPv4 address or IPv6 /64 network and second (bursts of twice that); more are dropped. |
 | Title | Sacred games | Heading of the web page. |
 
-Open the UDP port (`Listen`) in the firewall, and the TCP port of `WebListen` if the page should be reachable.
+Open the UDP port (`Listen`) in the firewall for IPv4 and IPv6, and the TCP port of `WebListen` if the page should
+be reachable. Give the server's name both an A and an AAAA record: players and hosts use every address it resolves
+to.
 Players and hosts set `[Net] Matchmaker=<server>:2107` in `SacredBild.ini`.
 
 ## Privacy
