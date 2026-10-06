@@ -42,7 +42,9 @@ namespace
     constexpr uint32_t kStatsMs = 5 * 60000;
     constexpr size_t kMaxSessions = 64;
     constexpr uint32_t kTinCatMagic = 0xDABAFBEF;
-    constexpr int kTinCatHeader = 0x1C;
+    constexpr size_t kTinCatHeader = 0x1C;
+    constexpr uint32_t kMaxTinCatPayload = 64 << 20;    // larger: not TinCat's framing after all
+    constexpr int kMaxMessageSegments = 64;     // ikcp_send takes fewer than IKCP_WND_RCV (128) at once
 
     // Player: an address of the host to say HELLO to, with the cookie it gave.
     struct Candidate
@@ -67,6 +69,10 @@ struct UdpTransport::Session
 
     std::vector<uint8_t> rx;
     size_t rxPos = 0;
+    // send(): the TinCat message being collected (header, then its payload), handed to KCP once complete.
+    std::vector<uint8_t> tx;
+    size_t txSize = 0;          // header + payload; 0 while the header is incomplete
+    bool txRaw = false;         // not TinCat's framing: every send() goes to KCP as it is
     bool peerClosed = false;    // CLOSE received: recv() returns 0 once the data is read
     bool dead = false;          // nothing heard for kDeadMs
     bool shut = false;          // shutdown()
@@ -160,6 +166,9 @@ namespace
         // no congestion window (the game's traffic is small, and a window that collapses after a loss is what
         // makes TCP stall).
         ikcp_nodelay(s.kcp, 1, 10, 1, 1);
+        // Stream mode: small messages share segments when the send queue backs up. Receivers read KCP messages as
+        // one byte stream either way, so message mode (stream = 0, one KCP message per TinCat message) would work
+        // with these peers too.
         s.kcp->stream = 1;
         s.kcp->dead_link = 0xFFFFFFFF;  // our own time-out decides
         ikcp_update(s.kcp, kcpNow(now));
@@ -183,6 +192,73 @@ namespace
     {
         s.kcp->current = kcpNow(now);
         ikcp_flush(s.kcp);
+    }
+
+    // At most kMaxMessageSegments per ikcp_send: a larger TinCat message goes in several pieces, which the
+    // receiver reads as one byte stream.
+    bool submit(Session& s, const uint8_t* data, size_t size)
+    {
+        const size_t piece = kMaxMessageSegments * static_cast<size_t>(s.kcp->mss);
+        for (size_t done = 0; done < size;)
+        {
+            const int n = static_cast<int>(std::min(size - done, piece));
+            if (ikcp_send(s.kcp, reinterpret_cast<const char*>(data + done), n) != n)
+            {
+                return false;
+            }
+            done += n;
+        }
+        return true;
+    }
+
+    // Collects TinCat's messages: the 28-byte header, then the payload in one or more send() calls. A complete
+    // message goes to KCP at once and is flushed, so header and payload travel together and nothing waits for a
+    // later send(). `complete`: something went to KCP (to be flushed). False if KCP refused.
+    bool collect(Session& s, const uint8_t* data, size_t size, bool& complete)
+    {
+        complete = false;
+        if (s.txRaw)
+        {
+            complete = size > 0;
+            return submit(s, data, size);
+        }
+        for (size_t used = 0; used < size;)
+        {
+            const size_t want = s.txSize ? s.txSize : kTinCatHeader;
+            const size_t n = std::min(size - used, want - s.tx.size());
+            s.tx.insert(s.tx.end(), data + used, data + used + n);
+            used += n;
+            if (!s.txSize && s.tx.size() == kTinCatHeader)
+            {
+                const uint32_t payload = get<uint32_t>(s.tx.data(), 0x14);
+                if (get<uint32_t>(s.tx.data(), 0) != kTinCatMagic || payload > kMaxTinCatPayload)
+                {
+                    LOG("UDP: {} sends something other than TinCat messages, passing it on as it comes", name(s));
+                    s.txRaw = true;
+                    complete = true;
+                    const bool ok = submit(s, s.tx.data(), s.tx.size()) && submit(s, data + used, size - used);
+                    s.tx.clear();
+                    return ok;
+                }
+                s.txSize = kTinCatHeader + payload;
+                s.tx.reserve(s.txSize);
+            }
+            if (s.txSize && s.tx.size() == s.txSize)
+            {
+                if (!submit(s, s.tx.data(), s.tx.size()))
+                {
+                    return false;
+                }
+                complete = true;
+                if (s.tx.capacity() > 1024 * 1024)
+                {
+                    std::vector<uint8_t>().swap(s.tx);
+                }
+                s.tx.clear();
+                s.txSize = 0;
+            }
+        }
+        return true;
     }
 
     void drain(Session& s)
@@ -812,33 +888,19 @@ int UdpTransport::send(Session& s, const char* data, int size, bool nonBlocking)
         }
         s.cv.wait_for(lock, std::chrono::milliseconds(50));
     }
-    // ikcp_send refuses more than its receive window in segments at once.
-    const int chunk = 64 * static_cast<int>(s.kcp->mss);
-    int sent = 0;
-    while (sent < size)
-    {
-        const int n = ikcp_send(s.kcp, data + sent, std::min(size - sent, chunk));
-        if (n <= 0)
-        {
-            break;
-        }
-        sent += n;
-    }
-    if (sent == 0 && size > 0)
+    const int n = std::max(size, 0);
+    bool complete = false;
+    if (!collect(s, reinterpret_cast<const uint8_t*>(data), static_cast<size_t>(n), complete))
     {
         wsaError(WSAENOBUFS);
         return SOCKET_ERROR;
     }
-    s.bytesOut += sent;
-    // TinCat sends each message's 28-byte header and its payload with two send() calls: the header waits for the
-    // payload so both go out in one datagram.
-    const bool header = size == kTinCatHeader && get<uint32_t>(reinterpret_cast<const uint8_t*>(data), 0) == kTinCatMagic &&
-        get<uint32_t>(reinterpret_cast<const uint8_t*>(data), 0x14) != 0;
-    if (!header)
+    s.bytesOut += n;
+    if (complete)
     {
         flush(s, nowMs());
     }
-    return sent;
+    return n;
 }
 
 int UdpTransport::recv(Session& s, char* data, int size, bool nonBlocking)

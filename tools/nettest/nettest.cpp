@@ -379,7 +379,8 @@ namespace
             }
         }).detach();
 
-        // TinCat-like: a 28-byte header and the payload as two sends, ~50 messages a second.
+        // TinCat-like: a 28-byte header, then the payload (every third message in 4 KB pieces, as TinCat does
+        // with its configured send size), ~50 messages a second.
         std::vector<char> payload;
         uint32_t seq = 0;
         while (micros() - start < uint64_t(seconds) * 1000000 && ok)
@@ -396,8 +397,14 @@ namespace
             char header[0x1C] = {};
             std::memcpy(header, &kMagic, 4);
             std::memcpy(header + 0x14, &size, 4);
-            if (UdpTransport::send(*s, header, sizeof(header), false) != sizeof(header) ||
-                UdpTransport::send(*s, payload.data(), static_cast<int>(size), false) != static_cast<int>(size))
+            const uint32_t piece = seq % 3 == 0 ? 4096 : size;
+            bool sent = UdpTransport::send(*s, header, sizeof(header), false) == sizeof(header);
+            for (uint32_t at = 0; sent && at < size; at += piece)
+            {
+                const int n = static_cast<int>(std::min(piece, size - at));
+                sent = UdpTransport::send(*s, payload.data() + at, n, false) == n;
+            }
+            if (!sent)
             {
                 std::printf("client: FAIL: send (%d)\n", WSAGetLastError());
                 ok = false;

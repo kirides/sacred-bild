@@ -60,7 +60,8 @@ Client (player) C, host H (gameserver).
 - KEEPALIVE every second without other traffic, every 200 ms while nothing arrives from the other side (so both
   notice within a round trip when a link comes back). A session that receives nothing for 45 s is dead; the game sees a
   connection reset.
-- KCP: stream mode, nodelay 1, interval 10 ms, fast resend once a later segment is acknowledged, no congestion window, send window
+- KCP: stream mode; each TinCat message (header and payload) is handed to KCP and flushed once complete. A receiver
+  reads the KCP messages as one byte stream, so senders in message mode work as well. nodelay 1, interval 10 ms, fast resend once a later segment is acknowledged, no congestion window, send window
   128, receive window 256, MTU 1200 - 16. Segments are resent at once when the peer is heard again after 300 ms of
   silence (KCP's own back-off would wait seconds after an outage).
 
