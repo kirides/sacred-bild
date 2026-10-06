@@ -268,6 +268,19 @@ namespace
 
     BOOL WINAPI hookSetWindowPos(HWND window, HWND after, int x, int y, int cx, int cy, UINT flags)
     {
+        // dxDriver7::init's fullscreen branch sizes the window screen width x screen width (GetSystemMetrics(SM_CXSCREEN)
+        // for both), which an exclusive mode never showed. The Direct3D 9 backend emulates fullscreen in the window and
+        // presents into its client area: the mode's size centered on the screen, as when windowed.
+        const int screenW = GetSystemMetrics(SM_CXSCREEN);
+        if (g_config.ddrawD3D9 && x == 0 && y == 0 && cx == screenW && cy == screenW && flags == SWP_SHOWWINDOW)
+        {
+            const int screenH = GetSystemMetrics(SM_CYSCREEN);
+            cx = g_width;
+            cy = g_height;
+            x = (screenW - cx) / 2;
+            y = (screenH - cy) / 2;
+            LOG("Main window: fullscreen as a {}x{} window", cx, cy);
+        }
         if (window && window == g_mainWindow && g_framed && !(flags & SWP_NOSIZE))
         {
             RECT rect = {x, y, x + cx, y + cy};
@@ -716,6 +729,11 @@ void Resolution::install()
     chooseSize();
     LOG("Resolution: {}x{}, world depth range {:.0f}..{:.0f}", g_width, g_height, g_near, g_far);
     Patch::hook(g_origFindMode, Addr::cDxDevices_findMode, &hookFindMode, "cDxDevices::findMode");
+    if (active() || g_config.ddrawD3D9)
+    {
+        g_origSetWindowPos = static_cast<SetWindowPosFn>(
+            Patch::iat("USER32.dll", "SetWindowPos", reinterpret_cast<void*>(&hookSetWindowPos)));
+    }
     if (!active())
     {
         return;
@@ -750,8 +768,6 @@ void Resolution::install()
     g_origDrawTextA = static_cast<DrawTextAFn>(Patch::iat("USER32.dll", "DrawTextA", reinterpret_cast<void*>(&hookDrawTextA)));
     g_origCreateWindowExA = static_cast<CreateWindowExAFn>(
         Patch::iat("USER32.dll", "CreateWindowExA", reinterpret_cast<void*>(&hookCreateWindowExA)));
-    g_origSetWindowPos = static_cast<SetWindowPosFn>(
-        Patch::iat("USER32.dll", "SetWindowPos", reinterpret_cast<void*>(&hookSetWindowPos)));
 
     g_flushBatcher = reinterpret_cast<DeviceFn>(Addr::cQuadBatcher_flush);
     g_drawTileLayers = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawTileLayers);
