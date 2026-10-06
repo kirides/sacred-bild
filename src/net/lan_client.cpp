@@ -1,6 +1,7 @@
 #include "net/lan_client.h"
 #include "net/adapters.h"
 #include "net/lan_protocol.h"
+#include "net/matchmaker.h"
 #include "game/sacred_addr.h"
 #include "config.h"
 #include "log.h"
@@ -15,6 +16,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -47,7 +49,7 @@ namespace
             if (DetourCreateProcessWithDllExA(app, cmd, processAttr, threadAttr, inherit, flags, env, dir, startup, info,
                     dll, g_createProcess))
             {
-                LOG("Started {} with SacredBild (LAN relay, see SacredBild-server.log)", app);
+                LOG("Started {} with SacredBild (see SacredBild-server.log)", app);
                 return TRUE;
             }
             LOG("Starting {} with SacredBild failed ({}); starting it without", app, GetLastError());
@@ -76,9 +78,13 @@ namespace
     SOCKET g_socket = INVALID_SOCKET;
     bool g_socketFailed = false;
     uint64_t g_lastSubscribe = 0;
-    uint8_t g_pending[LanAnnounce::kWireSize];
-    sockaddr_in g_pendingFrom{};
-    bool g_hasPending = false;
+    struct Pending
+    {
+        uint8_t wire[LanAnnounce::kWireSize];
+        sockaddr_in from;
+    };
+    std::deque<Pending> g_pending;      // announcements the poll's next recvfrom calls return
+    constexpr size_t kMaxPending = 64;
     std::vector<uint32_t> g_heardFrom;
     std::vector<Net::LocalAddress> g_localAddresses;
     uint64_t g_localAddressesTime = 0;
@@ -195,9 +201,32 @@ namespace
         }
     }
 
-    // Renews the subscriptions and takes the next announcement from a host, if there is one.
+    void pollMatchmaker()
+    {
+        std::vector<Matchmaker::Listed> games;
+        Matchmaker::poll(games);
+        for (const auto& g : games)
+        {
+            if (g_pending.size() >= kMaxPending)
+            {
+                break;
+            }
+            // Joining connects to the address in the announcement: the host's as the matchmaker sees it.
+            Pending p{};
+            LanAnnounce::encode(g.plain, g.host.sin_addr.s_addr, p.wire);
+            p.from = g.host;
+            g_pending.push_back(p);
+        }
+    }
+
+    // Renews the subscriptions and queues the announcements from hosts and from the matchmaker.
     void poll()
     {
+        pollMatchmaker();
+        if (g_hosts.empty())
+        {
+            return;
+        }
         const uint64_t now = GetTickCount64();
         if (g_lastResolve == 0 || now - g_lastResolve >= kResolveMs)
         {
@@ -233,7 +262,7 @@ namespace
         }
 
         uint8_t msg[512];
-        while (!g_hasPending)
+        while (g_pending.size() < kMaxPending)
         {
             sockaddr_in from{};
             int fromLen = sizeof(from);
@@ -250,9 +279,10 @@ namespace
                 continue;
             }
             // Joining connects to the address in the announcement: the one this host answered from.
-            LanAnnounce::encode(msg + 8, from.sin_addr.s_addr, g_pending);
-            g_pendingFrom = from;
-            g_hasPending = true;
+            Pending p{};
+            LanAnnounce::encode(msg + 8, from.sin_addr.s_addr, p.wire);
+            p.from = from;
+            g_pending.push_back(p);
             if (std::ranges::find(g_heardFrom, from.sin_addr.s_addr) == g_heardFrom.end())
             {
                 g_heardFrom.push_back(from.sin_addr.s_addr);
@@ -284,7 +314,7 @@ namespace
         if (s == lanSocket())
         {
             poll();
-            if (g_hasPending)
+            if (!g_pending.empty())
             {
                 return 1;
             }
@@ -298,16 +328,17 @@ namespace
         {
             return g_recvfrom(s, buf, len, flags, from, fromLen);
         }
-        if (g_hasPending && len >= static_cast<int>(sizeof(g_pending)))
+        if (!g_pending.empty() && len >= static_cast<int>(LanAnnounce::kWireSize))
         {
-            std::memcpy(buf, g_pending, sizeof(g_pending));
-            if (from && fromLen && *fromLen >= static_cast<int>(sizeof(g_pendingFrom)))
+            const Pending& p = g_pending.front();
+            std::memcpy(buf, p.wire, sizeof(p.wire));
+            if (from && fromLen && *fromLen >= static_cast<int>(sizeof(p.from)))
             {
-                std::memcpy(from, &g_pendingFrom, sizeof(g_pendingFrom));
-                *fromLen = sizeof(g_pendingFrom);
+                std::memcpy(from, &p.from, sizeof(p.from));
+                *fromLen = sizeof(p.from);
             }
-            g_hasPending = false;
-            return sizeof(g_pending);
+            g_pending.pop_front();
+            return static_cast<int>(LanAnnounce::kWireSize);
         }
         sockaddr_in sender{};
         int senderLen = sizeof(sender);
@@ -328,29 +359,50 @@ namespace
 
 void LanClient::install()
 {
-    if (g_config.netRelay)
+    // The gameserver needs SacredBild for the relay, the UDP transport and the matchmaker.
+    if (g_config.netRelay || g_config.netUdp || Matchmaker::enabled())
     {
         g_createProcess = reinterpret_cast<CreateProcessAFn>(
             Patch::iat("KERNEL32.dll", "CreateProcessA", reinterpret_cast<void*>(&hookCreateProcessA)));
         if (g_createProcess)
         {
-            LOG("LAN relay: hosted games start their gameserver with SacredBild");
+            LOG("Hosted games start their gameserver with SacredBild");
         }
     }
 
     g_hosts = parseHosts(g_config.netHosts);
-    if (!g_config.netRelay && g_hosts.empty())
+    const bool listMore = !g_hosts.empty() || Matchmaker::enabled();
+    if (!g_config.netRelay && !listMore)
     {
         return;
     }
     g_recvfrom = reinterpret_cast<RecvFromFn>(Patch::iat("WS2_32.dll", "recvfrom", reinterpret_cast<void*>(&hookRecvfrom)));
-    if (!g_recvfrom || g_hosts.empty())
+    if (!g_recvfrom || !listMore)
     {
         return;
     }
     g_fdIsSet = reinterpret_cast<FdIsSetFn>(Patch::iat("WS2_32.dll", "__WSAFDIsSet", reinterpret_cast<void*>(&hookFdIsSet)));
-    if (g_fdIsSet)
+    if (g_fdIsSet && !g_hosts.empty())
     {
         LOG("LAN list: also lists the games of {} host(s) from [Net] Hosts", g_hosts.size());
     }
+    if (g_fdIsSet && Matchmaker::enabled())
+    {
+        LOG("LAN list: also lists the games of the matchmaker {}", g_config.netMatchmaker);
+    }
+}
+
+uint16_t LanClient::relayPort(uint32_t address)
+{
+    {
+        std::scoped_lock lock(g_targetsMutex);
+        for (const auto& t : g_targets)
+        {
+            if (t.sin_addr.s_addr == address)
+            {
+                return ntohs(t.sin_port);
+            }
+        }
+    }
+    return static_cast<uint16_t>(g_config.netPort);
 }

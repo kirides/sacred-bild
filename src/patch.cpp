@@ -68,6 +68,36 @@ void* Patch::iat(const char* dll, const char* function, void* replacement)
     return iat(nullptr, dll, function, replacement);
 }
 
+namespace
+{
+    // The ordinal `dll` exports `function` under, 0 if none.
+    WORD exportOrdinal(HMODULE dll, const char* function)
+    {
+        if (!dll)
+        {
+            return 0;
+        }
+        auto* base = reinterpret_cast<const uint8_t*>(dll);
+        auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+        const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+        if (!dir.VirtualAddress)
+        {
+            return 0;
+        }
+        auto* exports = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(base + dir.VirtualAddress);
+        auto* names = reinterpret_cast<const DWORD*>(base + exports->AddressOfNames);
+        auto* ordinals = reinterpret_cast<const WORD*>(base + exports->AddressOfNameOrdinals);
+        for (DWORD i = 0; i < exports->NumberOfNames; ++i)
+        {
+            if (std::strcmp(reinterpret_cast<const char*>(base + names[i]), function) == 0)
+            {
+                return static_cast<WORD>(exports->Base + ordinals[i]);
+            }
+        }
+        return 0;
+    }
+}
+
 void* Patch::iat(const char* importer, const char* dll, const char* function, void* replacement)
 {
     auto* base = reinterpret_cast<uint8_t*>(GetModuleHandleA(importer));
@@ -78,9 +108,11 @@ void* Patch::iat(const char* importer, const char* dll, const char* function, vo
     }
     auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + reinterpret_cast<IMAGE_DOS_HEADER*>(base)->e_lfanew);
     const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-    // Imports by ordinal (Winsock in Sacred) carry no name: those slots are matched by the address they are bound to.
+    // Imports by ordinal (Winsock in Sacred) carry no name: those slots are matched by the ordinal the dll exports
+    // the function under, or by the address they are bound to.
     const HMODULE module = GetModuleHandleA(dll);
     const auto bound = module ? reinterpret_cast<ULONG_PTR>(GetProcAddress(module, function)) : 0;
+    const WORD ordinal = exportOrdinal(module, function);
     for (auto* imp = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + dir.VirtualAddress); imp->Name; ++imp)
     {
         if (_stricmp(reinterpret_cast<const char*>(base + imp->Name), dll) != 0)
@@ -92,7 +124,7 @@ void* Patch::iat(const char* importer, const char* dll, const char* function, vo
         for (; names->u1.AddressOfData; ++names, ++slots)
         {
             const bool match = IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal)
-                ? bound && slots->u1.Function == bound
+                ? (ordinal && IMAGE_ORDINAL(names->u1.Ordinal) == ordinal) || (bound && slots->u1.Function == bound)
                 : std::strcmp(reinterpret_cast<const char*>(
                       reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(base + names->u1.AddressOfData)->Name), function) == 0;
             if (match)

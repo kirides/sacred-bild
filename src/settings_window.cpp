@@ -244,27 +244,6 @@ namespace
             .tip(L"Hash index in front of the game's record caches (looked up for every ground tile and object).");
 
         ui.column();
-        ui.group(L"LAN games");
-        ui.check(L"Announce hosted games on every adapter", {L"Net", L"Relay"}, g_config.netRelay)
-            .tip(L"Hosting: the gameserver Sacred starts for your game announces it on every network adapter (VPN "
-                 L"adapters included) with that adapter's address, and to players who list your PC under Hosts.");
-        ui.check(L"Send game messages right away", {L"Net", L"NoDelay"}, g_config.netNoDelay)
-            .tip(L"Send each message to the server right away in both data flow modes. With MODEM/ISDN the game holds "
-                 L"small messages back until the previous one is acknowledged (Nagle's algorithm), adding latency. "
-                 L"Off = as the game does.");
-        ui.edit(L"Relay port:", {L"Net", L"Port"}, std::to_wstring(g_config.netPort))
-            .digits()
-            .width(32)
-            .tip(L"UDP port for players who list the host under Hosts (allow it in the firewall on the host).");
-        ui.sameLine();
-        ui.edit(L"Join timeout (s):", {L"Net", L"JoinTimeout"}, std::to_wstring(g_config.netJoinTimeout))
-            .digits()
-            .width(30)
-            .tip(L"Hosting: seconds a joining player has to send its first message to the gameserver. The game allows "
-                 L"5, which slow or distant connections can miss (\"connect timed out\"). Minimum 5.");
-        ui.edit(L"Hosts:", {L"Net", L"Hosts"}, widen(g_config.netHosts))
-            .tip(L"Joining: PCs whose LAN games should show up although their broadcasts don't reach you (VPNs like "
-                 L"WireGuard or Tailscale). Comma-separated IP addresses or names, e.g. 10.8.0.2, 10.8.0.3:2105");
         ui.group(L"DirectDraw");
         ui.edit(L"Chain ddraw:", {L"DDraw", L"Chain"}, g_config.ddrawChain)
             .enabledIf([](const Form& f) { return !d3d9(f); })
@@ -312,6 +291,46 @@ namespace
         ui.sameLine();
         ui.label(L"µs");
         ui.endEnabledIf();
+
+        ui.page(L"Network");
+        ui.group(L"LAN games");
+        ui.check(L"Announce hosted games on every adapter", {L"Net", L"Relay"}, g_config.netRelay)
+            .tip(L"Hosting: the gameserver Sacred starts for your game announces it on every network adapter (VPN "
+                 L"adapters included) with that adapter's address, and to players who list your PC under Hosts.");
+        ui.check(L"Send game messages right away", {L"Net", L"NoDelay"}, g_config.netNoDelay)
+            .tip(L"Send each message to the server right away in both data flow modes. With MODEM/ISDN the game holds "
+                 L"small messages back until the previous one is acknowledged (Nagle's algorithm), adding latency. "
+                 L"Off = as the game does.");
+        ui.edit(L"UDP port:", {L"Net", L"Port"}, std::to_wstring(g_config.netPort))
+            .digits()
+            .width(32)
+            .tip(L"Hosting: UDP port for players who list the host under Hosts, for the UDP game connection and for "
+                 L"the matchmaker (allow it in the firewall on the host).");
+        ui.sameLine();
+        ui.edit(L"Join timeout (s):", {L"Net", L"JoinTimeout"}, std::to_wstring(g_config.netJoinTimeout))
+            .digits()
+            .width(30)
+            .tip(L"Hosting: seconds a joining player has to send its first message to the gameserver. The game allows "
+                 L"5, which slow or distant connections can miss (\"connect timed out\"). Minimum 5.");
+        ui.edit(L"Hosts:", {L"Net", L"Hosts"}, widen(g_config.netHosts))
+            .tip(L"Joining: PCs whose LAN games should show up although their broadcasts don't reach you (VPNs like "
+                 L"WireGuard or Tailscale). Comma-separated IP addresses or names, e.g. 10.8.0.2, 10.8.0.3:2105");
+        ui.column();
+        ui.group(L"Online games");
+        ui.check(L"Game connection over UDP", {L"Net", L"Udp"}, g_config.netUdp)
+            .tip(L"Carry the game connection over UDP instead of TCP when the other side has this on too: lost "
+                 L"packets are resent after about one round trip instead of after 300 ms and more, the connection "
+                 L"recovers right away after an outage, and survives a change of your address (Wi-Fi to mobile). "
+                 L"Joining a host without it connects over TCP as before. Hosting: allow the UDP port in the "
+                 L"firewall.");
+        ui.edit(L"Matchmaker:", {L"Net", L"Matchmaker"}, widen(g_config.netMatchmaker))
+            .tip(L"A SacredBild matchmaking server (name or address, optionally :port, default 2107). Its games show "
+                 L"up in the LAN list, and joining one gets you introduced to the host, so that hosts don't need "
+                 L"port forwarding (needs the UDP game connection on both sides). Empty = none.");
+        ui.check(L"Publish hosted games at the matchmaker", {L"Net", L"Publish"}, g_config.netPublish)
+            .enabledIf([](const Form& f) { return !f.value(L"Net", L"Matchmaker").empty(); })
+            .tip(L"Hosting: list your games at the matchmaker. Its web page shows their name and players, not your "
+                 L"address; the SacredBild players it lists them for get the address, as they need it to connect.");
 
         ui.page(L"HUD layout");
         ui.text(L"With \"Place the HUD windows at the screen edges\" (General tab), each in-game window's 1024 x 768 "

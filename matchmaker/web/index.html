@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="10">
+<title>{{.Title}}</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f7f5f0; --fg: #1d1b18; --muted: #6b665d; --line: #dcd6ca; --accent: #8a5a12; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17161a; --fg: #e8e4dc; --muted: #9b958a; --line: #34312c; --accent: #e0a64b; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; color: var(--accent); }
+  p { margin: 0 0 20px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.name { word-break: break-word; }
+  .empty { padding: 32px 0; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>{{.Title}}</h1>
+  <p>{{len .Games}} game{{if ne (len .Games) 1}}s{{end}}, {{.Players}} player{{if ne .Players 1}}s{{end}}. Updates every 10 seconds.</p>
+  {{if .Games}}
+  <table>
+    <thead><tr><th>Name</th><th class="num">Players</th><th class="num">Version</th><th>UDP</th><th class="num">Running</th></tr></thead>
+    <tbody>
+    {{range .Games}}
+      <tr><td class="name">{{.Name}}</td><td class="num">{{.Players}} / {{.MaxPlayers}}</td><td class="num">{{.Version}}</td><td>{{if .UDP}}yes{{else}}no{{end}}</td><td class="num">{{age .AgeSeconds}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <div class="empty">No games right now.</div>
+  {{end}}
+</main>
+</body>
+</html>

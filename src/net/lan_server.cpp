@@ -1,13 +1,15 @@
 #include "net/lan_server.h"
 #include "net/adapters.h"
 #include "net/lan_protocol.h"
+#include "net/matchmaker.h"
+#include "net/udp_endpoint.h"
+#include "net/udp_protocol.h"
 #include "game/gameserver_addr.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
 
 #include <winsock2.h>
-#include <mswsock.h>
 
 #include <algorithm>
 #include <cstring>
@@ -33,12 +35,12 @@ namespace
     constexpr uint32_t kLoggedAnnouncements = 3;
 
     std::mutex g_mutex;     // announcements come from the main loop and from player join/leave handling
-    SOCKET g_socket = INVALID_SOCKET;
     std::vector<Subscriber> g_subscribers;
     std::vector<Net::LocalAddress> g_addresses;
     uint32_t g_limitedIf = 0;
     uint64_t g_addressesTime = 0;
     uint32_t g_announcements = 0;
+    bool g_loggedEndpoint = false;
 
     const uint8_t* networkObject()
     {
@@ -49,37 +51,6 @@ namespace
     std::string endpoint(const sockaddr_in& a)
     {
         return std::format("{}:{}", Net::toString(a.sin_addr.s_addr), ntohs(a.sin_port));
-    }
-
-    void openSocket()
-    {
-        g_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (g_socket == INVALID_SOCKET)
-        {
-            LOG("LAN relay: socket failed: {}", WSAGetLastError());
-            return;
-        }
-        BOOL on = TRUE;
-        setsockopt(g_socket, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char*>(&on), sizeof(on));
-        u_long nonBlocking = 1;
-        ioctlsocket(g_socket, FIONBIO, &nonBlocking);
-        // Otherwise an ICMP "port unreachable" from a subscriber that is gone fails the next recvfrom.
-        BOOL report = FALSE;
-        DWORD bytes = 0;
-        WSAIoctl(g_socket, SIO_UDP_CONNRESET, &report, sizeof(report), nullptr, 0, &bytes, nullptr, nullptr);
-
-        sockaddr_in local{};
-        local.sin_family = AF_INET;
-        local.sin_port = htons(static_cast<u_short>(g_config.netPort));
-        if (bind(g_socket, reinterpret_cast<const sockaddr*>(&local), sizeof(local)) == SOCKET_ERROR)
-        {
-            LOG("LAN relay: UDP port {} is not available ({}); players who list this PC under [Net] Hosts won't "
-                "see its games", g_config.netPort, WSAGetLastError());
-        }
-        else
-        {
-            LOG("LAN relay: subscriptions on UDP port {}", g_config.netPort);
-        }
     }
 
     void refreshAddresses(uint64_t now)
@@ -103,36 +74,31 @@ namespace
         LOG("LAN relay: addresses {}", list.empty() ? "none" : list);
     }
 
-    void readSubscriptions(uint64_t now)
+    // On the endpoint's I/O thread.
+    void onSubscription(const uint8_t* msg, int n, const sockaddr_in& from)
     {
-        uint8_t msg[512];
-        for (int i = 0; i < 64; ++i)
+        if (!LanRelay::hasHeader(msg, n, LanRelay::kSubscribeMagic, LanRelay::kSubscribeSize))
         {
-            sockaddr_in from{};
-            int fromLen = sizeof(from);
-            const int n = recvfrom(g_socket, reinterpret_cast<char*>(msg), sizeof(msg), 0,
-                reinterpret_cast<sockaddr*>(&from), &fromLen);
-            if (n == SOCKET_ERROR)
-            {
-                break;
-            }
-            if (!LanRelay::hasHeader(msg, n, LanRelay::kSubscribeMagic, LanRelay::kSubscribeSize))
-            {
-                continue;
-            }
-            const auto it = std::ranges::find_if(g_subscribers, [&](const Subscriber& s) {
-                return s.addr.sin_addr.s_addr == from.sin_addr.s_addr && s.addr.sin_port == from.sin_port;
-            });
-            if (it != g_subscribers.end())
-            {
-                it->until = now + LanRelay::kSubscriptionMs;
-            }
-            else if (g_subscribers.size() < kMaxSubscribers)
-            {
-                g_subscribers.push_back({from, now + LanRelay::kSubscriptionMs});
-                LOG("LAN relay: {} subscribed", endpoint(from));
-            }
+            return;
         }
+        std::scoped_lock lock(g_mutex);
+        const uint64_t now = GetTickCount64();
+        const auto it = std::ranges::find_if(g_subscribers, [&](const Subscriber& s) {
+            return s.addr.sin_addr.s_addr == from.sin_addr.s_addr && s.addr.sin_port == from.sin_port;
+        });
+        if (it != g_subscribers.end())
+        {
+            it->until = now + LanRelay::kSubscriptionMs;
+        }
+        else if (g_subscribers.size() < kMaxSubscribers)
+        {
+            g_subscribers.push_back({from, now + LanRelay::kSubscriptionMs});
+            LOG("LAN relay: {} subscribed", endpoint(from));
+        }
+    }
+
+    void dropExpiredSubscribers(uint64_t now)
+    {
         std::erase_if(g_subscribers, [&](const Subscriber& s) {
             if (s.until > now)
             {
@@ -152,11 +118,24 @@ namespace
         {
             return g_send(s, buf, len, flags);
         }
-        const uint64_t now = GetTickCount64();
-        if (g_socket == INVALID_SOCKET)
+        // The endpoint (relay subscriptions, UDP transport, matchmaker) on [Net] Port; the first announcement
+        // comes after TinCat listens, which usually opened it already.
+        const bool endpoint = UdpEndpoint::open(static_cast<uint16_t>(g_config.netPort), true);
+        if (!g_loggedEndpoint)
         {
-            openSocket();
+            g_loggedEndpoint = true;
+            if (!endpoint)
+            {
+                LOG("LAN relay: UDP port {} is not available; no announcements on other adapters, players who list "
+                    "this PC under [Net] Hosts won't see its games", g_config.netPort);
+            }
         }
+        Matchmaker::publish(plain);
+        if (!g_config.netRelay)
+        {
+            return g_send(s, buf, len, flags);
+        }
+        const uint64_t now = GetTickCount64();
         if (g_addressesTime == 0 || now - g_addressesTime >= kAdapterRefreshMs)
         {
             refreshAddresses(now);
@@ -179,7 +158,7 @@ namespace
         // Every other adapter (VPN adapters among them) gets a subnet broadcast with its own address, and the
         // subscribers the plain announcement (they put in the address they received it from).
         int broadcasts = 0;
-        if (g_socket != INVALID_SOCKET)
+        if (endpoint)
         {
             for (const auto& a : g_addresses)
             {
@@ -190,18 +169,16 @@ namespace
                 LanAnnounce::encode(plain, a.address, wire);
                 sockaddr_in to = target;
                 to.sin_addr.s_addr = a.broadcast;
-                sendto(g_socket, reinterpret_cast<const char*>(wire), sizeof(wire), 0,
-                    reinterpret_cast<const sockaddr*>(&to), sizeof(to));
+                UdpEndpoint::sendTo(wire, sizeof(wire), to);
                 ++broadcasts;
             }
-            readSubscriptions(now);
+            dropExpiredSubscribers(now);
             uint8_t msg[LanRelay::kAnnounceSize];
             LanRelay::writeHeader(msg, LanRelay::kAnnounceMagic);
             std::memcpy(msg + 8, plain, LanAnnounce::kSize);
             for (const auto& sub : g_subscribers)
             {
-                sendto(g_socket, reinterpret_cast<const char*>(msg), sizeof(msg), 0,
-                    reinterpret_cast<const sockaddr*>(&sub.addr), sizeof(sub.addr));
+                UdpEndpoint::sendTo(msg, sizeof(msg), sub.addr);
             }
         }
 
@@ -230,13 +207,20 @@ namespace
 
 void LanServer::install()
 {
-    if (!g_config.netRelay)
+    if (g_config.netRelay)
+    {
+        UdpEndpoint::onPacket(UdpProto::kLanRelay, onSubscription);
+    }
+    else
     {
         LOG("LAN relay off ([Net] Relay=0)");
-        return;
+        if (!Matchmaker::enabled())
+        {
+            return;
+        }
     }
     g_send = reinterpret_cast<SendFn>(Patch::iat("WS2_32.dll", "send", reinterpret_cast<void*>(&hookSend)));
-    if (g_send)
+    if (g_send && g_config.netRelay)
     {
         LOG("LAN relay: announcements go out on every adapter and to subscribers");
     }

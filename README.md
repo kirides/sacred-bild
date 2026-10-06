@@ -65,6 +65,18 @@ ddraw calls through and logs which one.
   adapters it found. When Sacred starts the gameserver for a hosted game, SacredBild goes along: every
   announcement goes out on every adapter with that adapter's own address, and to players who list the host in
   `[Net] Hosts` (see below).
+- **Game connection over UDP** (`[Net] Udp`, optional): Sacred's game connection is TCP, which waits at least
+  300 ms (doubling on every further loss) before it resends a lost packet, and after a loss holds everything behind it
+  back; distant and wireless connections show that as stalls and rubber banding. With SacredBild on both sides, the
+  connection runs over UDP instead (the same byte stream, kept in order by [KCP](https://github.com/skywind3000/kcp)):
+  a lost packet is resent after about one round trip, the connection picks up within a round trip after an outage,
+  and it survives the player's address changing (Wi-Fi to mobile, a new address from the provider). Joining a host
+  without it connects over TCP as before. Every game connection logs its round trip and resends when it closes.
+- **Matchmaker** (`[Net] Matchmaker`, `matchmaker/`): a small server (Go; Linux, Windows, macOS) that lists the games
+  of everyone using it in Sacred's own LAN list, so that LAN mode becomes a global lobby. Joining a game gets the
+  player introduced to the host, and both open their way to each other (UDP hole punching), so hosts don't need port
+  forwarding with the UDP connection. Its web page shows the games (name, players), never addresses, and it logs no
+  addresses unless told to (see [Online games](#online-games-matchmaker)).
 - **Languages**: the GOG builds ignore the game's `LANGUAGE` for text and speech (the text is built into the exe,
   the speech is always `PAK\sound.pak`). SacredBild loads the language's own files when they are there, so one
   install runs every language you have the files for (see below).
@@ -153,10 +165,13 @@ again" sets `[Launcher] HideSettingsWindow=1`; holding Shift as the game starts 
 | Render | AtlasMaxTextureSize | 512 | Larger textures are used directly. |
 | Screenshot | Format | png | Print Screen saves `Capture\shotNNNN.png`; `jpg` = JPEG (quality 95) instead. |
 | Net | Relay | 1 | Hosted games: the gameserver announces on every adapter and answers `Hosts` subscriptions. |
-| Net | Port | 2105 | UDP port of that relay (host side). |
+| Net | Port | 2105 | Host side: UDP port of the relay, the UDP game connection and the matchmaker. |
 | Net | Hosts | | Hosts whose games are listed even without broadcasts: IPv4 addresses or names, comma-separated, optional `:port`. |
 | Net | NoDelay | 1 | Game connection without Nagle's algorithm in both data flow modes (the game: LAN only). |
 | Net | JoinTimeout | 30 | Seconds a joining player has to send its first message to a gameserver Sacred started (the game: 5). |
+| Net | Udp | 0 | Game connection over UDP when the other side has it on too (hosting: accept it); otherwise TCP. |
+| Net | Matchmaker | | Matchmaking server, name or address with optional `:port` (default 2107); empty = none. |
+| Net | Publish | 1 | Hosting with a `Matchmaker`: the game is listed there. |
 | DDraw | Backend | d3d9 | `d3d9` = SacredBild's own Direct3D 9Ex backend; `chain` = the ddraw below. |
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | `Backend=chain`: ddraw loaded behind SacredBild; empty = system ddraw. |
 | DDraw | D3D9 | | `Backend=d3d9`: `d3d9.dll` to use (e.g. DXVK), relative to the game folder or absolute. Empty or not loadable: a `d3d9.dll` next to the exe, then Windows' own. |
@@ -180,6 +195,24 @@ VPN adapters are often in the "Public" profile).
   e.g. `Hosts=10.8.0.2` or a Tailscale name. A shared list of all players works, a PC skips its own addresses.
 
 The host's relay logs to `SacredBild-server.log`, the LAN list to `SacredBild.log` (lines starting with `LAN`).
+
+## Online games (matchmaker)
+
+Everyone sets `[Net] Matchmaker` to the same server and `Udp=1` (the settings window: Network tab). The host
+creates a LAN game as usual; it shows up in everyone's LAN list, with the host's public address. Joining it:
+
+1. the player asks the matchmaker to introduce it to the host; both send each other a few UDP packets, which opens
+   their routers (most home routers; two players behind the strictest kind, e.g. some mobile networks on both
+   sides, still need port forwarding);
+2. the game connection runs over UDP to the host's `[Net] Port`; if that doesn't answer within 3 s, the player
+   connects over TCP to the game's port, which then needs to be forwarded on the host.
+
+Players behind the same router as the host see the game twice; the LAN one is the one to join. The host's
+gameserver logs the matchmaker and its players to `SacredBild-server.log`, a player's joins go to `SacredBild.log`
+(lines starting with `Matchmaker` and `UDP`).
+
+Running a matchmaker: see [`matchmaker/README.md`](matchmaker/README.md) (one executable, UDP 2107 and a web page on
+8080). The protocol is described in [`docs/UDP_PROTOCOL.md`](docs/UDP_PROTOCOL.md).
 
 ## Languages
 
@@ -257,7 +290,11 @@ What the game's code at those addresses does is in `docs/RE_NOTES.md` and in the
 | `src/game/d3d_stats.*` | `[Debug] D3DStats` frame statistics |
 | `src/game/world_passes.*` | `[Debug] D3DStats`: the world view's passes timed separately |
 | `src/render/batcher.*`, `atlas.*`, `fvf.h` | Draw merging, the texture atlas, vertex format layout |
-| `src/net/` | LAN games over VPNs: `lan_client.*` (sacred.exe), `lan_server.*` (gameserver.exe), `lan_protocol.*` (announcements), `adapters.*` (network adapters), `connection.*` (`NoDelay`) |
+| `src/net/` | LAN games over VPNs: `lan_client.*` (sacred.exe), `lan_server.*` (gameserver.exe), `lan_protocol.*` (announcements), `adapters.*` (network adapters), `connection.*` (`NoDelay`, one send per message, TCP statistics) |
+| `src/net/udp_*`, `tincat_shim.*` | `[Net] Udp`: `udp_endpoint.*` (the UDP socket and its I/O thread), `udp_transport.*` (KCP sessions), `tincat_shim.*` (TinCat's sockets on those sessions), `udp_protocol.*` (wire formats) |
+| `src/net/matchmaker.*` | `[Net] Matchmaker` client: publishing (gameserver), listing and joining (sacred.exe) |
+| `matchmaker/` | The matchmaking server (Go) |
+| `tools/nettest/` | Test bench for the UDP connection and the matchmaker without the game: loss, delay, outages, address changes (`-DSACREDBILD_NETTEST=ON`) |
 
 Every header starts with what its module does and why.
 
@@ -292,7 +329,8 @@ Reverse engineering helpers (how addresses and offsets were found):
 ### Build
 
 Requires Visual Studio 2026 (MSVC, Win32 toolset), CMake 3.25+ and vcpkg with `VCPKG_ROOT` set
-(vcpkg provides [Detours](https://github.com/microsoft/Detours) and [gtl](https://github.com/greg7mdp/gtl)).
+(vcpkg provides [Detours](https://github.com/microsoft/Detours), [gtl](https://github.com/greg7mdp/gtl) and
+[KCP](https://github.com/skywind3000/kcp)). The matchmaker needs Go 1.27 (`cd matchmaker && go build`).
 
 ```sh
 cmake --preset msvc-x86

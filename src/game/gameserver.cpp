@@ -1,7 +1,11 @@
 #include "game/gameserver.h"
 #include "game/build.h"
 #include "game/gameserver_addr.h"
+#include "net/connection.h"
 #include "net/lan_server.h"
+#include "net/matchmaker.h"
+#include "net/tincat_shim.h"
+#include "net/udp_transport.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
@@ -45,5 +49,10 @@ void GameServer::installHooks()
         return;
     }
     patchJoinTimeout();
+    // The endpoint's handlers first: it opens when TinCat starts listening.
+    Connection::install(true);
     LanServer::install();
+    UdpTransport::install(true);
+    Matchmaker::install(true);
+    TincatShim::install(true);
 }

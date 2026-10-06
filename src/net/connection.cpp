@@ -5,11 +5,14 @@
 #include "patch.h"
 
 #include <winsock2.h>
+#include <mstcpip.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 namespace
@@ -81,11 +84,113 @@ namespace
         g_hasDeferred = !g_deferred.empty();
     }
 
+    // --- statistics: what TCP went through on each game connection, logged when it closes ---
+
+    std::mutex g_statsMutex;
+    std::unordered_map<SOCKET, uint64_t> g_connections;     // sockets TinCat sent on, and since when
+    thread_local SOCKET t_lastNoted = INVALID_SOCKET;
+
+    void noteConnection(SOCKET s)
+    {
+        if (t_lastNoted == s)
+        {
+            return;
+        }
+        t_lastNoted = s;
+        std::scoped_lock lock(g_statsMutex);
+        g_connections.try_emplace(s, GetTickCount64());
+    }
+
+    void logStats(SOCKET s)
+    {
+        uint64_t since = 0;
+        {
+            std::scoped_lock lock(g_statsMutex);
+            const auto it = g_connections.find(s);
+            if (it == g_connections.end())
+            {
+                return;
+            }
+            since = it->second;
+            g_connections.erase(it);
+        }
+        DWORD version = 0;
+        TCP_INFO_v0 info{};
+        DWORD bytes = 0;
+        // Windows 10 1703 and later; Wine has no such ioctl.
+        if (WSAIoctl(s, SIO_TCP_INFO, &version, sizeof(version), &info, sizeof(info), &bytes, nullptr, nullptr) != 0)
+        {
+            return;
+        }
+        LOG("Game connection (TCP) closed after {} min: RTT {} ms (lowest {}), sent {} KB, resent {} KB, {} "
+            "resend time-outs, {} fast resends, received {} KB", (GetTickCount64() - since) / 60000, info.RttUs / 1000,
+            info.MinRttUs / 1000, info.BytesOut / 1024, info.BytesRetrans / 1024, info.TimeoutEpisodes,
+            info.FastRetrans, info.BytesIn / 1024);
+    }
+
+    // --- one send() per message ---
+
+    // TinCat's writer thread sends each message as its 28-byte header and then the payload, as two send() calls:
+    // with TCP_NODELAY two segments, and the message is late if either is lost. The header waits for the payload
+    // (the next send() of the same thread, right after it) and both go out together.
+    constexpr int kHeaderSize = 0x1C;
+    constexpr uint32_t kHeaderMagic = 0xDABAFBEF;
+    thread_local SOCKET t_heldSocket = INVALID_SOCKET;
+    thread_local char t_held[kHeaderSize];
+    thread_local std::vector<char> t_joined;
+
+    int sendAll(SOCKET s, const char* buf, int len, int flags)
+    {
+        int done = 0;
+        while (done < len)
+        {
+            const int n = g_send(s, buf + done, len - done, flags);
+            if (n == SOCKET_ERROR)
+            {
+                return SOCKET_ERROR;
+            }
+            done += n;
+        }
+        return done;
+    }
+
+    bool isHeader(const char* buf, int len, int flags)
+    {
+        uint32_t magic = 0, payload = 0;
+        if (len != kHeaderSize || flags != 0)
+        {
+            return false;
+        }
+        std::memcpy(&magic, buf, 4);
+        std::memcpy(&payload, buf + 0x14, 4);
+        return magic == kHeaderMagic && payload != 0;
+    }
+
     int WSAAPI hookSend(SOCKET s, const char* buf, int len, int flags)
     {
         if (g_hasDeferred)
         {
             applyDeferred(s);
+        }
+        noteConnection(s);
+        if (t_heldSocket != INVALID_SOCKET)
+        {
+            const SOCKET held = t_heldSocket;
+            t_heldSocket = INVALID_SOCKET;
+            if (held == s && flags == 0)
+            {
+                t_joined.assign(t_held, t_held + kHeaderSize);
+                t_joined.insert(t_joined.end(), buf, buf + len);
+                const int sent = sendAll(s, t_joined.data(), static_cast<int>(t_joined.size()), 0);
+                return sent == SOCKET_ERROR ? SOCKET_ERROR : len;
+            }
+            sendAll(held, t_held, kHeaderSize, 0);     // not TinCat's pattern after all
+        }
+        if (isHeader(buf, len, flags))
+        {
+            std::memcpy(t_held, buf, kHeaderSize);
+            t_heldSocket = s;
+            return len;
         }
         return g_send(s, buf, len, flags);
     }
@@ -98,27 +203,46 @@ namespace
             std::erase_if(g_deferred, [&](const Deferred& d) { return d.socket == s; });
             g_hasDeferred = !g_deferred.empty();
         }
+        logStats(s);
+        if (t_lastNoted == s)
+        {
+            t_lastNoted = INVALID_SOCKET;
+        }
         return g_closesocket(s);
     }
 
-    void installDeferredNoDelay()
+    bool installSendHooks()
     {
         constexpr const char* kTinCat = "tincat2.dll";
         constexpr const char* kWinsock = "WSOCK32.dll";
         g_send = reinterpret_cast<SendFn>(Patch::iat(kTinCat, kWinsock, "send", reinterpret_cast<void*>(&hookSend)));
+        if (!g_send)
+        {
+            return false;
+        }
         g_closesocket = reinterpret_cast<CloseSocketFn>(
             Patch::iat(kTinCat, kWinsock, "closesocket", reinterpret_cast<void*>(&hookCloseSocket)));
-        if (!g_send || !g_closesocket)
+        if (!g_closesocket)
         {
-            return;
+            Patch::iat(kTinCat, kWinsock, "send", reinterpret_cast<void*>(g_send));
+            return false;
         }
+        return true;
+    }
+
+    void installDeferredNoDelay()
+    {
         g_setsockopt = reinterpret_cast<SetSockOptFn>(
-            Patch::iat(kTinCat, kWinsock, "setsockopt", reinterpret_cast<void*>(&hookSetSockOpt)));
+            Patch::iat("tincat2.dll", "WSOCK32.dll", "setsockopt", reinterpret_cast<void*>(&hookSetSockOpt)));
     }
 }
 
-void Connection::install()
+void Connection::install(bool host)
 {
+    if (!installSendHooks() || host)
+    {
+        return;
+    }
     installDeferredNoDelay();
     if (!g_config.netNoDelay)
     {

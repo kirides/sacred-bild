@@ -17,6 +17,9 @@
 #include "game/world_passes.h"
 #include "net/connection.h"
 #include "net/lan_client.h"
+#include "net/matchmaker.h"
+#include "net/tincat_shim.h"
+#include "net/udp_transport.h"
 #include "config.h"
 #include "log.h"
 #include "patch.h"
@@ -96,6 +99,9 @@ void Sacred::installHooks()
     {
         WorldPasses::install();
     }
-    Connection::install();
+    Connection::install(false);
+    UdpTransport::install(false);
+    Matchmaker::install(false);
+    TincatShim::install(false);
     LanClient::install();
 }

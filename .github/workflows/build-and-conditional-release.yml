@@ -122,9 +122,62 @@ jobs:
           path: ${{ steps.package.outputs.release-dir }}
           if-no-files-found: error
 
+  # The matchmaking server (Go): tested, then built for the systems people run servers on.
+  matchmaker:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64, ext: "" }
+          - { goos: linux, goarch: arm64, ext: "" }
+          - { goos: windows, goarch: amd64, ext: ".exe" }
+          - { goos: darwin, goarch: arm64, ext: "" }
+
+    defaults:
+      run:
+        working-directory: matchmaker
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: matchmaker/go.mod
+          cache-dependency-path: matchmaker/go.mod
+
+      - name: Test
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Build
+        id: package
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then version="$GITHUB_REF_NAME"; else version="git-${GITHUB_SHA:0:9}"; fi
+          dir="SacredBild-matchmaker-$version-${{ matrix.goos }}-${{ matrix.goarch }}"
+          mkdir -p "../$dir"
+          go build -trimpath -ldflags "-s -w" -o "../$dir/matchmaker${{ matrix.ext }}" .
+          cp matchmaker.ini README.md ../LICENSE "../$dir/"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.dir }}
+          path: ${{ steps.package.outputs.dir }}
+          if-no-files-found: error
+
   create-release:
     if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_type == 'tag')
-    needs: build
+    needs: [build, matchmaker]
     runs-on: ubuntu-latest
 
     permissions:
@@ -136,6 +189,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.build.outputs.artifact-id-release }},${{ needs.build.outputs.artifact-id-debug }}
+          path: downloaded-artifacts
+
+      - name: Download matchmaker artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: SacredBild-matchmaker-*
           path: downloaded-artifacts
 
       - name: Create ZIPs for release

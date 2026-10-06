@@ -11,6 +11,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 # RelWithDebInfo is the build that ships: inline like Release (CMake's default for it is /Ob1).
 string(REPLACE "/Ob1" "/Ob2" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
 
+find_package(kcp CONFIG REQUIRED)
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h" REQUIRED)
 find_library(DETOURS_LIBRARY_RELEASE detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH REQUIRED)
 find_library(DETOURS_LIBRARY_DEBUG detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/lib" NO_DEFAULT_PATH REQUIRED)
@@ -62,11 +63,16 @@ add_library(ddraw SHARED
   src/net/lan_client.cpp
   src/net/lan_protocol.cpp
   src/net/lan_server.cpp
+  src/net/matchmaker.cpp
+  src/net/tincat_shim.cpp
+  src/net/udp_endpoint.cpp
+  src/net/udp_protocol.cpp
+  src/net/udp_transport.cpp
   src/exports.def
   src/version.rc
 )
 target_include_directories(ddraw PRIVATE src ${DETOURS_INCLUDE_DIRS})
-target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
+target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} kcp::kcp psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
 target_compile_definitions(ddraw PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 target_compile_options(ddraw PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.
@@ -83,4 +89,24 @@ if(SACRED_GAME_DIR)
   add_custom_command(TARGET ddraw POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:ddraw> "${SACRED_GAME_DIR}/ddraw.dll"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_PDB_FILE:ddraw> "${SACRED_GAME_DIR}/ddraw.pdb")
+endif()
+
+# Test bench for the UDP transport and the matchmaker client outside the game (tools/nettest/nettest.cpp).
+option(SACREDBILD_NETTEST "Build tools/nettest" OFF)
+if(SACREDBILD_NETTEST)
+  add_executable(nettest
+    tools/nettest/nettest.cpp
+    src/config.cpp
+    src/log.cpp
+    src/net/adapters.cpp
+    src/net/lan_protocol.cpp
+    src/net/matchmaker.cpp
+    src/net/udp_endpoint.cpp
+    src/net/udp_protocol.cpp
+    src/net/udp_transport.cpp
+  )
+  target_include_directories(nettest PRIVATE src)
+  target_link_libraries(nettest PRIVATE kcp::kcp ws2_32 iphlpapi winmm)
+  target_compile_definitions(nettest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+  target_compile_options(nettest PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc)
 endif()

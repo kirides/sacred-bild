@@ -603,6 +603,21 @@ TCP_NODELAY with WSAEINVAL while the handshake is under way, and TinCat fails th
 SacredBild hooks tincat2's WSOCK32 imports and sets the option before the first send instead (`src/net/connection.cpp`). Switching after
 the join keeps TCP_NODELAY off (TinCat is not re-initialised) but makes the player an owner candidate.
 
+**TinCat's sockets** (all through tincat2's WSOCK32 imports, by ordinal): `NET_Connect` `0x1000D9E0` (blocking
+connect, then `select` with a time-out; used by the synchronous logon `0x10004380`), `NET_Async_Connect`
+`0x1000D1C0` (non-blocking, `NET_SetNonblocking` `0x1000D010`), polled by `KRNL_ProcessPendingConnects`
+`0x10004790` through `NET_CheckConnected` `0x1000DBC0` (`select` read/write/except with time-out 0; once writable:
+`NET_SetBlocking` `0x1000D0A0`, `getsockname` `0x1000D470`). Server: `NET_Init` `0x1000CD90` (socket,
+`SO_REUSEADDR`, bind, `listen(5)`), the server thread `0x100026E0` alternates `NETDRV_ServerLookForFlags`
+`0x10001850` (sleeps `drv_serverloop_sleep`) and `NETDRV_ServerLookForNewConnection` `0x10001E40` ->
+`NET_WaitForNewConnection` `0x1000CF10` (`select` on the listening socket, `accept`, `TCP_NODELAY`); the listening
+socket is closed while the game is full (`NETDRV_CheckAcceptConnections` `0x10001AD0`). One TCP connection per
+player, **blocking** once connected: a reader thread blocks in `recv` (`0x1000CC50` / loop `0x1000CB50`), a writer
+thread (`0x10002360`) waits on an event and sends queued messages (`0x1000CBC0` / loop `0x1000CAF0`). Message
+framing: a 0x1C-byte header (+0 magic `0xDABAFBEF`, +0x14 payload length, +0x18 payload checksum `0x1000EA10`) and
+the payload, sent with **two** `send()` calls. Close: `shutdown(SD_BOTH)` + `closesocket` (`0x1000CD60`).
+SacredBild uses this to send each message with one `send()`, and for `[Net] Udp` (`src/net/tincat_shim.cpp`).
+
 Server time-outs (`cNetServer_watchdogThread` `0x4DBCB0`, 5 ms loop, times from `0x6340C8`; player record =
 `net + 0x1B0 + slot * 0x518`): first contact must arrive within **5 s** of the connection (`+0x60`, checked every
 second; SacredBild makes that `[Net] JoinTimeout`, 30 s by default); loading may take 4 min (`+0x74` set, `+0x64` last receive); in game, three 30 s ticks without any data

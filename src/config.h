@@ -107,6 +107,14 @@ struct Config
     bool netNoDelay = true;
     // Seconds a player connecting to a gameserver Sacred started has to send its first message (the game: 5).
     int netJoinTimeout = 30;
+    // The game connection over SacredBild's UDP transport (KCP) when the other side has it on too; otherwise TCP.
+    // Hosting: the gameserver accepts it on UDP `netPort`.
+    bool netUdp = false;
+    // Matchmaking server (host[:port], UDP; empty = none): its games are listed in the LAN list, and joining one
+    // gets the player introduced to the host (hole punching for the UDP transport).
+    std::string netMatchmaker;
+    // Hosting: games are published at the matchmaker.
+    bool netPublish = true;
 
     // Diagnostics
     bool d3dStats = false;         // per-second D3D7 call counts in the log
