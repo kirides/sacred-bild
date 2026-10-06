@@ -72,6 +72,10 @@
    "452F85C7": "00611EE3",
    "451BBE74": "00611F83"
   },
+  "worldCursorSpecialRenderReturn": {
+   "452F85C7": "00612E6F",
+   "451BBE74": "00612F0F"
+  },
   "cEngine_worldMouse": {
    "452F85C7": "006172C0",
    "451BBE74": "00617360"

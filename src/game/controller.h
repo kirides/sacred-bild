@@ -20,8 +20,10 @@ namespace Controller
     bool cursor(POINT& client);
     // The game must not move the system cursor (its view scrolling warps it) while the controller has the cursor.
     bool ownsCursor();
-    // The game's cursor is not drawn: the controller walks and fights, or SacredBild's own screen is open.
-    bool hideGameCursor();
+    // The game's cursor is not drawn: the controller walks and fights, or SacredBild's own screen is open. `caller`:
+    // the cMouse_renderCursor call's return address; the hover cursor (talk, trade, use) of what Attack would use
+    // while the hero stands still is drawn.
+    bool hideGameCursor(uintptr_t caller = 0);
 
     // A left click at `client` (client pixels) whatever drives the cursor: for SacredBild's screens to press the
     // game's buttons.

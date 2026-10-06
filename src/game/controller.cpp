@@ -17,6 +17,7 @@
 #include "log.h"
 #include "patch.h"
 
+#include <intrin.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -44,6 +45,7 @@ namespace
     std::atomic<int64_t> g_override{0};         // clickAt's position ...
     std::atomic<DWORD> g_overrideUntil{0};      // ... until this tick
     std::atomic<bool> g_overrideOn{false};
+    std::atomic<bool> g_focusCursor{false};     // the hover cursor of what the hero stands at is drawn
 
     // The presenting thread's.
     float g_x = 0.0f, g_y = 0.0f;
@@ -221,6 +223,7 @@ namespace
         g_repeatButton = 0;
         g_wheel = 0.0f;
         g_bookSection = g_bookLeftPage = g_bookEntry = g_bookRightPage = {};
+        g_focusCursor = false;
         AimAssist::pickGame();
     }
 
@@ -721,23 +724,30 @@ namespace
         AimAssist::pickGame();
     }
 
-    // Aims the attack: the best enemy (for Primary, else something to use nearby), or in place toward `ax, ay`.
-    void acquire(float ax, float ay, bool directed, float hx, float hy)
+    // The best enemy, else (`interact`) the best thing to use nearby; toward `ax, ay` if `directed`, else the nearest.
+    bool findTarget(bool interact, float ax, float ay, bool directed, AimAssist::Kind& kind, AimAssist::Target& t)
     {
         const float range = static_cast<float>(g_config.controllerAimRange);
         const float cone = static_cast<float>(g_config.controllerAimCone);
         const float dx = directed ? ax : 0.0f, dy = directed ? ay : 0.0f;
-        AimAssist::Target t;
         if (AimAssist::find(AimAssist::Kind::Enemy, dx, dy, range, cone, t))
         {
-            g_attack.kind = AimAssist::Kind::Enemy;
+            kind = AimAssist::Kind::Enemy;
+            return true;
         }
-        else if (g_attack.action == Action::Primary && !g_attack.target &&
-            AimAssist::find(AimAssist::Kind::Interact, dx, dy, range * 0.5f, cone, t))
+        if (interact && AimAssist::find(AimAssist::Kind::Interact, dx, dy, range * 0.5f, cone, t))
         {
-            g_attack.kind = AimAssist::Kind::Interact;
+            kind = AimAssist::Kind::Interact;
+            return true;
         }
-        else
+        return false;
+    }
+
+    // Aims the attack: the best enemy (for Primary, else something to use nearby), or in place toward `ax, ay`.
+    void acquire(float ax, float ay, bool directed, float hx, float hy)
+    {
+        AimAssist::Target t;
+        if (!findTarget(g_attack.action == Action::Primary && !g_attack.target, ax, ay, directed, g_attack.kind, t))
         {
             g_attack.target = 0;
             g_attack.ctrl = g_attack.action == Action::Primary;
@@ -818,6 +828,23 @@ namespace
         }
     }
 
+    // The hero stands: what Attack would hit or use is hovered as with the mouse (the world pick returns it, the
+    // cursor is on it), so the game highlights it and picks its hover cursor (talk, trade, use), which is drawn.
+    void focus(float ax, float ay, bool directed)
+    {
+        AimAssist::Kind kind;
+        AimAssist::Target t;
+        if (!findTarget(true, ax, ay, directed, kind, t))
+        {
+            g_focusCursor = false;
+            AimAssist::pickNothing();
+            return;
+        }
+        AimAssist::pickTarget(t.id);
+        setCursor(t.x, t.y);
+        g_focusCursor = kind == AimAssist::Kind::Interact;
+    }
+
     // At 1024x768 UiCanvas is off and leaves the cursor alone; then the controller hooks it itself.
     using GetClientCursorPosFn = void(__cdecl*)(HWND window, POINT* pt);
     using RenderCursorFn = void(__fastcall*)(void* self, void* edx, void* device, int flag);
@@ -837,7 +864,7 @@ namespace
 
     void __fastcall hookRenderCursor(void* self, void* edx, void* device, int flag)
     {
-        if (!Controller::hideGameCursor())
+        if (!Controller::hideGameCursor(reinterpret_cast<uintptr_t>(_ReturnAddress())))
         {
             g_origRenderCursor(self, edx, device, flag);
         }
@@ -898,11 +925,20 @@ namespace
         }
         if (g_attack.active)
         {
+            g_focusCursor = false;
             updateAttack(ax, ay, directed, hx, hy);
         }
         else
         {
             walk(mx, my, magnitude);
+            if (magnitude > 0.0f)
+            {
+                g_focusCursor = false;
+            }
+            else
+            {
+                focus(ax, ay, directed);
+            }
         }
         Inject::key(VK_CONTROL, held[static_cast<int>(Action::StandStill)] || (g_attack.active && g_attack.ctrl));
     }
@@ -1247,9 +1283,17 @@ bool Controller::ownsCursor()
     return g_drive.load(std::memory_order_relaxed) || g_overrideOn.load(std::memory_order_relaxed);
 }
 
-bool Controller::hideGameCursor()
+bool Controller::hideGameCursor(uintptr_t caller)
 {
-    return Overlay::isOpen() || (g_drive.load(std::memory_order_relaxed) && g_hideCursor.load(std::memory_order_relaxed));
+    if (Overlay::isOpen())
+    {
+        return true;
+    }
+    if (!g_drive.load(std::memory_order_relaxed) || !g_hideCursor.load(std::memory_order_relaxed))
+    {
+        return false;
+    }
+    return !(caller && caller == Addr::worldCursorSpecialRenderReturn && g_focusCursor.load(std::memory_order_relaxed));
 }
 
 void Controller::clickAt(int x, int y)

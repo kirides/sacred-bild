@@ -21,6 +21,9 @@ input from it takes over from the keyboard and mouse, moving the mouse a few pix
   opens or picks up what is nearest; with nothing there it attacks in place (Ctrl).
 - **Combat art** (X): right click at the nearest enemy (the active combat art). The **art slot** buttons select
   slot 1-5 (keys 6-0) and do the same (`ArtClick`).
+- **Standing still**: what Attack would hit or use is hovered as with the mouse: the game highlights it (an enemy's
+  name and health, a chest, door or item lit up) and shows its cursor at it for someone to talk to, trade with or
+  something to use (the talk bubble, ...).
 - Everything else presses the game's key: weapon slots 1-5, the potions, windows, quick save / load, zoom.
 
 Default layout ("LT+" = with LT held):

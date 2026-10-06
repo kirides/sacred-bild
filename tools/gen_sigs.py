@@ -51,6 +51,7 @@ SACRED = [
     ('cUI_Manager_isCursorOverUi', 0x0075AA90, 'func'),
     ('cUI_Manager_render', 0x00758ED0, 'func'),
     ('worldCursorUiTestCall', 0x00611EE3, 'code'),
+    ('worldCursorSpecialRenderReturn', 0x00612E6F, 'code'),
     ('cEngine_worldMouse', 0x006172C0, 'func'),
     ('cEventMouseDown_vtable', 0x0089704C, 'data'),
     ('cEventMouseUp_vtable', 0x00899248, 'data'),

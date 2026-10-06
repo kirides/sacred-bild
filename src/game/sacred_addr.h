@@ -90,6 +90,9 @@ namespace Sacred::Addr
     inline uintptr_t renderLimiterReturn{};             // ENG 0060EA6E
     // cEngine_updateWorldCursor (0x611E70) asks the UI whether the cursor is over a window before picking.
     inline uintptr_t worldCursorUiTestCall{};           // ENG 00611EE3
+    // Its draw of a hover cursor (talk, trade, use, attack, ...): pushed (cMouse ENG 00655060), cMouse_renderCursor,
+    // popped (00655180); this is that renderCursor call's return address. The plain cursor is drawn by another call.
+    inline uintptr_t worldCursorSpecialRenderReturn{};  // ENG 00612E6F
     inline uintptr_t captureLockBackReturn{};           // ENG 006136AB; after captureInternal's call to lockBack
     // Screenshots: dxDriver7_startCapture (ENG 00648660, thiscall (frames)) sets dxDriver7 +0xA8 (frames left) and
     // +0xAC (frames taken); every caller (Print Screen, the game's screenshot key, a debug key) asks for one frame.

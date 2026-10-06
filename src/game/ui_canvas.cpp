@@ -159,7 +159,7 @@ namespace
 
     void __fastcall hookRenderCursor(void* self, void* edx, void* device, int flag)
     {
-        if (Controller::hideGameCursor())
+        if (Controller::hideGameCursor(reinterpret_cast<uintptr_t>(_ReturnAddress())))
         {
             return;
         }

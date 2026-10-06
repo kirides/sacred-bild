@@ -19,6 +19,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"cUI_Manager_isCursorOverUi", "53 55 56 8B F1 57 F6 46 08 08 0F 84 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cUI_Manager_isCursorOverUi}, // 0075AA90, 0075A370
     {"cUI_Manager_render", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC 54 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Manager_render}, // 00758ED0, 007587B0
     {"worldCursorUiTestCall", "E8 ?? ?? ?? ?? 84 C0 0F 85 ?? ?? ?? ?? 39 5C 24 18 0F 84 ?? ?? ?? ?? 33 C0", 0, Sig::Take::Match, &Sacred::Addr::worldCursorUiTestCall}, // 00611EE3, 00611F83
+    {"worldCursorSpecialRenderReturn", "E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? EB 19 8B 44 24 54 8B 8C 24 10 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::worldCursorSpecialRenderReturn}, // 00612E6F, 00612F0F
     {"cEngine_worldMouse", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC D8 00 00 00 53 55 56 8B F1", 0, Sig::Take::Match, &Sacred::Addr::cEngine_worldMouse}, // 006172C0, 00617360
     {"cEventMouseDown_vtable", "C6 44 24 3A 00 8B 0C A8 C7 44 24 28 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::cEventMouseDown_vtable}, // 0089704C, 008950A8
     {"cEventMouseUp_vtable", "C7 00 ?? ?? ?? ?? 5E C3 33 C0 5E C3 90 90 90 56", 2, Sig::Take::Abs32, &Sacred::Addr::cEventMouseUp_vtable}, // 00899248, 00897248
