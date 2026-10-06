@@ -323,6 +323,11 @@ namespace
                  L"recovers right away after an outage, and survives a change of your address (Wi-Fi to mobile). "
                  L"Joining a host without it connects over TCP as before. Hosting: allow the UDP port in the "
                  L"firewall.");
+        ui.combo(L"Prefer:", {L"Net", L"Prefer"}, {{L"IPv6", L"IPv6"}, {L"IPv4", L"IPv4"}},
+              g_config.netPreferIpv6 ? L"IPv6" : L"IPv4")
+            .enabledIf([](const Form& f) { return f.on(L"Net", L"Udp"); })
+            .tip(L"Joining a host that has both IPv4 and IPv6 addresses: the UDP connection is tried over this one "
+                 L"first, and over the other one as well if there is no answer within a second.");
         ui.edit(L"Matchmaker:", {L"Net", L"Matchmaker"}, widen(g_config.netMatchmaker))
             .tip(L"A SacredBild matchmaking server (name or address, optionally :port, default 2107). Its games show "
                  L"up in the LAN list, and joining one gets you introduced to the host, so that hosts don't need "

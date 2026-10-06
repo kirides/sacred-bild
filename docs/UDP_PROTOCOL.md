@@ -45,10 +45,12 @@ Client (player) C, host H (gameserver).
 | `SBTX` CLOSE | both | 16 | +4 sessionId, +8 token |
 | `SBTP` PUNCH | both | 16 | +4 u32 gameId, +8 u64 0 — opens NAT mappings, ignored on arrival |
 
-- Handshake: HELLO (no cookie) -> CHALLENGE -> HELLO (cookie) -> WELCOME. The client sends HELLO to every address
-  it knows for the host at once (IPv6 and IPv4), each with the cookie that address gave it, every 200 ms until a
-  WELCOME, a REFUSED from every address, or its time-out (1.5 s, 3 s for games from the matchmaker); then it connects
-  over TCP instead. The first WELCOME decides the address the session starts on.
+- Handshake: HELLO (no cookie) -> CHALLENGE -> HELLO (cookie) -> WELCOME. The client sends HELLO every 200 ms, each
+  with the cookie that address gave it, to the host's addresses in the family `[Net] Prefer` names (IPv6 by default),
+  and also to its addresses in the other family once the preferred one had 1 s without a WELCOME, refused, or has
+  none. It stops at a WELCOME, a REFUSED from every address, or its time-out (1.5 s, 3 s for games from the
+  matchmaker, 1 s more when the host has both families); then it connects over TCP instead. The first WELCOME
+  decides the address the session starts on.
 - The host creates a session only for a valid cookie, one per clientNonce: a HELLO with a known clientNonce (a
   repeat, or the same handshake over the other address family) gets that session's WELCOME again.
 - sessionId and token are random (sessionId != 0). A DATA/KEEPALIVE/CLOSE is accepted only if both match.

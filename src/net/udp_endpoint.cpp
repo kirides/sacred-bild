@@ -33,6 +33,7 @@ namespace
     HANDLE g_wakeEvent = nullptr;
     uint16_t g_port = 0;
     uint16_t g_port6 = 0;
+    std::atomic<int> g_dropFamily = 0;
 
     void dispatch(const uint8_t* data, int size, const Net::Address& from)
     {
@@ -72,7 +73,9 @@ namespace
                 return;
             }
             const Net::Address address = Net::fromSockaddr(reinterpret_cast<const sockaddr*>(&from));
-            if (Net::isSet(address))
+            const bool dropped = address.si_family == g_dropFamily && n >= 3 &&
+                std::memcmp(buffer, UdpProto::kTransport, 3) == 0;
+            if (Net::isSet(address) && !dropped)
             {
                 dispatch(buffer, n, address);
             }
@@ -245,4 +248,9 @@ void UdpEndpoint::wake()
     {
         SetEvent(g_wakeEvent);
     }
+}
+
+void UdpEndpoint::dropReceived(int family)
+{
+    g_dropFamily = family;
 }

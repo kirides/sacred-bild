@@ -171,6 +171,7 @@ again" sets `[Launcher] HideSettingsWindow=1`; holding Shift as the game starts 
 | Net | NoDelay | 1 | Game connection without Nagle's algorithm in both data flow modes (the game: LAN only). |
 | Net | JoinTimeout | 30 | Seconds a joining player has to send its first message to a gameserver Sacred started (the game: 5). |
 | Net | Udp | 0 | Game connection over UDP when the other side has it on too (hosting: accept it); otherwise TCP. |
+| Net | Prefer | IPv6 | Joining over UDP a host with IPv4 and IPv6 addresses: `IPv6` or `IPv4` is tried first, the other one as well after a second without an answer. |
 | Net | Matchmaker | | Matchmaking server, name or address with optional `:port` (default 2107); empty = none. |
 | Net | Publish | 1 | Hosting with a `Matchmaker`: the game is listed there. |
 | DDraw | Backend | d3d9 | `d3d9` = SacredBild's own Direct3D 9Ex backend; `chain` = the ddraw below. |
@@ -205,9 +206,10 @@ creates a LAN game as usual; it shows up in everyone's LAN list, with the host's
 1. the player asks the matchmaker to introduce it to the host; both send each other a few UDP packets, which opens
    their routers (most home routers; two players behind the strictest kind, e.g. some mobile networks on both
    sides, still need port forwarding);
-2. the game connection runs over UDP to the host's `[Net] Port`, over IPv6 and IPv4 at once (whichever answers
-   first); if neither answers within 3 s, the player connects over TCP to the game's port, which then needs to be
-   forwarded on the host.
+2. the game connection runs over UDP to the host's `[Net] Port`: over the family `[Net] Prefer` names (IPv6 by
+   default) first, and over the other one as well if that has no answer within a second (whichever answers first
+   then); if neither answers within 3 s (4 s with both), the player connects over TCP to the game's port, which then
+   needs to be forwarded on the host.
 
 IPv6 needs no address translation, so step 1 almost always works there, and it reaches hosts that have no public
 IPv4 address of their own (mobile networks' CGNAT, DS-Lite cable and fibre connections). Both sides need IPv6 for

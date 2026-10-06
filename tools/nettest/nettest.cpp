@@ -9,7 +9,8 @@
 //   nettest client <udpPort> <seconds> [matchmaker] connects (to 127.0.0.1:<udpPort>, or to the matchmaker's game),
 //                                                   sends TinCat-like messages, checks the echo, prints round trips
 //
-// Logs go to nettest-<role>.log next to the exe.
+// Logs go to nettest-<role>.log next to the exe. Environment: NETTEST_PREFER=4 is [Net] Prefer=IPv4; NETTEST_DROP=4
+// or 6 drops the game connection's datagrams arriving over that family (e.g. on the host: a broken IPv6 path).
 #include "net/lan_client.h"
 #include "net/lan_protocol.h"
 #include "net/matchmaker.h"
@@ -445,6 +446,15 @@ int main(int argc, char** argv)
     timeBeginPeriod(1);     // the proxy's delays and the 20 ms send interval at 1 ms, not 15.6 ms
     const std::string role = argc > 1 ? argv[1] : "";
     initLog(role.c_str());
+    // NETTEST_PREFER=4: [Net] Prefer=IPv4. NETTEST_DROP=4 or 6: the game connection over that family doesn't get through.
+    if (const char* prefer = std::getenv("NETTEST_PREFER"))
+    {
+        g_config.netPreferIpv6 = std::strcmp(prefer, "4") != 0;
+    }
+    if (const char* drop = std::getenv("NETTEST_DROP"))
+    {
+        UdpEndpoint::dropReceived(std::strcmp(drop, "6") == 0 ? AF_INET6 : AF_INET);
+    }
     if (role == "host" && argc >= 3)
     {
         return host(static_cast<uint16_t>(std::atoi(argv[2])), argc >= 4 ? argv[3] : nullptr);

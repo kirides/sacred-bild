@@ -115,6 +115,9 @@ struct Config
     std::string netMatchmaker;
     // Hosting: games are published at the matchmaker.
     bool netPublish = true;
+    // Joining over UDP a host with IPv4 and IPv6 addresses ([Net] Prefer=IPv6 / IPv4): the handshake tries this family
+    // first and the other one too if it has no answer within a second.
+    bool netPreferIpv6 = true;
 
     // Diagnostics
     bool d3dStats = false;         // per-second D3D7 call counts in the log

@@ -28,4 +28,8 @@ namespace UdpEndpoint
     bool sendTo(const void* data, int size, const Net::Address& to);
     // Runs the ticks now (e.g. after queueing work for them).
     void wake();
+
+    // tools/nettest: drops the transport's datagrams (SBT) that arrive over this family (AF_INET, AF_INET6; 0 = none),
+    // like a path that is broken for the game connection.
+    void dropReceived(int family);
 }

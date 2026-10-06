@@ -30,6 +30,7 @@ namespace
     constexpr uint32_t kHelloIntervalMs = 200;
     constexpr uint32_t kHandshakeMs = 1500;
     constexpr uint32_t kHandshakeMatchmakerMs = 3000;   // the host punches towards us first
+    constexpr uint32_t kOtherFamilyMs = 1000;   // [Net] Prefer's family alone, then the other one too
     constexpr uint32_t kJoinIntervalMs = 1000;
     constexpr uint32_t kKeepAliveMs = 1000;
     constexpr uint32_t kProbeMs = 200;          // keep-alive while the other side is silent: notices its return
@@ -78,7 +79,8 @@ struct UdpTransport::Session
     sockaddr_in tcpTarget{};
     uint32_t nonce = 0;     // host: the handshake's, one session per nonce
     std::vector<Candidate> candidates;
-    uint64_t nextHello = 0, deadline = 0, nextJoin = 0;
+    uint64_t nextHello = 0, handshakeMs = 0, nextJoin = 0;
+    bool otherFamily = false;   // HELLO over the family [Net] Prefer doesn't name as well
     uint32_t gameId = 0;
     const char* failure = nullptr;
 
@@ -241,15 +243,46 @@ namespace
         ++s.datagramsOut;
     }
 
-    void sendHellos(Session& s)
+    bool preferred(const Candidate& c)
     {
+        return Net::isV6(c.address) == g_config.netPreferIpv6;
+    }
+
+    const char* familyName(bool ipv6)
+    {
+        return ipv6 ? "IPv6" : "IPv4";
+    }
+
+    // HELLO over the preferred family ([Net] Prefer) first; the other family too once that had a second without an
+    // answer, or refused, or the host has no address in it. A late answer over the preferred family still counts.
+    void sendHellos(Session& s, uint64_t now)
+    {
+        const bool hasPreferred = std::ranges::any_of(s.candidates, [](const Candidate& c) { return preferred(c) && !c.refused; });
+        const bool hasOther = std::ranges::any_of(s.candidates, [](const Candidate& c) { return !preferred(c); });
+        if (!s.otherFamily && (!hasPreferred || now - s.created >= kOtherFamilyMs))
+        {
+            s.otherFamily = true;
+            if (hasOther && std::ranges::any_of(s.candidates, preferred))
+            {
+                LOG("UDP: no connection over {} after {} ms, trying {} as well", familyName(g_config.netPreferIpv6),
+                    now - s.created, familyName(!g_config.netPreferIpv6));
+            }
+        }
         for (const Candidate& c : s.candidates)
         {
-            if (!c.refused)
+            if (!c.refused && (s.otherFamily || preferred(c)))
             {
                 sendHello(s, c);
             }
         }
+    }
+
+    // Until the player gives up and connects over TCP: longer when there is another family to try.
+    uint64_t deadline(const Session& s)
+    {
+        const bool both = std::ranges::any_of(s.candidates, preferred) &&
+            std::ranges::any_of(s.candidates, [](const Candidate& c) { return !preferred(c); });
+        return s.created + s.handshakeMs + (both ? kOtherFamilyMs : 0);
     }
 
     std::string candidateList(const Session& s)
@@ -432,6 +465,7 @@ namespace
             c->refused = true;
             if (std::ranges::any_of(s->candidates, [](const Candidate& c) { return !c.refused; }))
             {
+                sendHellos(*s, now);    // the other family right away if this was the preferred one
                 return;
             }
             const uint32_t reason = get<uint32_t>(p, 12);
@@ -565,16 +599,17 @@ namespace
             std::scoped_lock lock(s->m);
             if (s->status == Status::Connecting)
             {
-                if (now >= s->deadline)
+                if (now >= deadline(*s))
                 {
                     fail(*s, "no answer");
                 }
                 else
                 {
-                    if (now >= s->nextHello)
+                    const bool switchFamily = !s->otherFamily && now - s->created >= kOtherFamilyMs;
+                    if (now >= s->nextHello || switchFamily)
                     {
                         target(*s);
-                        sendHellos(*s);
+                        sendHellos(*s, now);
                         s->nextHello = now + kHelloIntervalMs;
                     }
                     if (s->gameId && now >= s->nextJoin)
@@ -681,16 +716,16 @@ UdpTransport::SessionPtr UdpTransport::connect(const sockaddr_in& tcpTarget)
         s->nonce = random32();
     } while (s->nonce == 0);
     target(*s);
-    const uint64_t now = nowMs();
-    s->created = now;
-    s->deadline = now + (s->gameId ? kHandshakeMatchmakerMs : kHandshakeMs);
-    {
-        std::scoped_lock lock(g_mutex);
-        g_sessions.push_back(s);
-    }
     if (s->candidates.empty())
     {
         return nullptr;
+    }
+    const uint64_t now = nowMs();
+    s->created = now;
+    s->handshakeMs = s->gameId ? kHandshakeMatchmakerMs : kHandshakeMs;
+    {
+        std::scoped_lock lock(g_mutex);
+        g_sessions.push_back(s);
     }
     LOG("UDP: connecting to the gameserver at {} (game port {}){}", candidateList(*s), ntohs(tcpTarget.sin_port),
         s->gameId ? std::format(", matchmaker game {:08x}", s->gameId) : std::string());
