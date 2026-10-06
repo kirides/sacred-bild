@@ -531,6 +531,11 @@ void Matchmaker::poll(std::vector<Listed>& out)
         Listed l{};
         std::memcpy(l.plain, g.plain, sizeof(l.plain));
         l.address = g.address;
+        // Games on the UDP transport that IPv6 reaches say so in their name; all others stay as they are.
+        if ((g.flags & M::kFlagUdp) && Net::isSet(g.ipv6))
+        {
+            LanAnnounce::prefixName(l.plain, Net::isSet(g.ipv4) ? L"[IPv4+6] " : L"[IPv6] ");
+        }
         out.push_back(l);
     }
 }

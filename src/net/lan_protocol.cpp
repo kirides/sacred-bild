@@ -1,6 +1,7 @@
 #include "net/lan_protocol.h"
 
 #include <windows.h>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 
@@ -40,6 +41,17 @@ std::string LanAnnounce::gameName(const uint8_t* plain)
     char out[kNameChars * 3 + 1] = {};
     WideCharToMultiByte(CP_UTF8, 0, name, -1, out, sizeof(out), nullptr, nullptr);
     return out;
+}
+
+void LanAnnounce::prefixName(uint8_t* plain, std::wstring_view prefix)
+{
+    wchar_t name[kNameChars + 1] = {};
+    std::memcpy(name, plain + kNameOffset, kNameChars * sizeof(wchar_t));
+    std::wstring tagged(prefix);
+    tagged += name;
+    tagged.resize(std::min(tagged.size(), kNameChars - 1));
+    std::memset(plain + kNameOffset, 0, kNameChars * sizeof(wchar_t));
+    std::memcpy(plain + kNameOffset, tagged.data(), tagged.size() * sizeof(wchar_t));
 }
 
 bool LanRelay::hasHeader(const uint8_t* msg, size_t size, const uint8_t (&magic)[4], size_t minSize)

@@ -216,6 +216,9 @@ reaches over IPv6 only is listed with a stand-in address from 198.18.0.0/15 (Sac
 and its LAN list tells games apart by address and name; the address is not shown in game). Such a game can only be
 joined over UDP: if that fails, joining fails right away. `SacredBild.log` names the game behind each stand-in.
 
+In the LAN list, matchmaker games on the UDP connection whose host IPv6 reaches show that in front of their name:
+`[IPv4+6]`, or `[IPv6]` (only over IPv6). All other games keep their name.
+
 Players behind the same router as the host see the game twice; the LAN one is the one to join. The host's
 gameserver logs the matchmaker and its players to `SacredBild-server.log`, a player's joins go to `SacredBild.log`
 (lines starting with `Matchmaker` and `UDP`).

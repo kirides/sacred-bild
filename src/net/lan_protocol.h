@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 // LAN game announcements. A gameserver sends one every few seconds (and when players join or leave) as a UDP
 // datagram to 255.255.255.255:<ping port>; the LAN list in sacred.exe listens on that port and connects to the
@@ -24,6 +25,8 @@ namespace LanAnnounce
     void encode(const uint8_t* plain, uint32_t address, uint8_t* wire);
 
     std::string gameName(const uint8_t* plain);    // UTF-8
+    // Puts `prefix` in front of the name (cut to fit, still zero-terminated).
+    void prefixName(uint8_t* plain, std::wstring_view prefix);
 }
 
 // SacredBild's own messages, for hosts whose broadcasts can't reach a player (VPNs without broadcasts): the player
