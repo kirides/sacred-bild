@@ -59,7 +59,7 @@ instead.
 `[Controller] Prompts=1` (the default; Direct3D 9 backend): icons of the pad's buttons, in the labels of its maker
 (Xbox, PlayStation or Switch, as SDL reports the pad), next to what they do:
 
-- in menus and windows, A left of the control under the cursor, B at a message box's Cancel, LB / RB above the
+- in menus and windows, A left of the control under the cursor (of a centered menu entry's text itself), B at a message box's Cancel, LB / RB above the
   inventory tabs they switch to;
 - in the log book, LB / RB above the neighbouring tabs, the D-pad beside the side tabs;
 - in an NPC dialog, A and B beside the first and second answer;

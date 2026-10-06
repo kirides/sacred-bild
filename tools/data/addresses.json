@@ -684,6 +684,18 @@
    "452F85C7": "0071C360",
    "451BBE74": "0071BBF0"
   },
+  "textResources_instance": {
+   "452F85C7": "006725E0",
+   "451BBE74": "006728C0"
+  },
+  "textResources_get": {
+   "452F85C7": "00672C90",
+   "451BBE74": "00672F70"
+  },
+  "g_pFontManager": {
+   "452F85C7": "00CDCA70",
+   "451BBE74": "00CDA9F0"
+  },
   "cEngine_sendOrder": {
    "452F85C7": "00617030",
    "451BBE74": "006170D0"

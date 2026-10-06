@@ -224,6 +224,12 @@ namespace Sacred::Addr
     inline uintptr_t cUI_Book_lineAt{};                 // ENG 006B3640
     // What a click on a savegame row does: thiscall on a cUI_Savegame (uint16 row) (Sacred::Savegame).
     inline uintptr_t cUI_Savegame_selectRow{};          // ENG 0071C360
+    // Texts by id (the button prompts beside menu texts): the text resources (cdecl () -> object, made on first use)
+    // and a text (thiscall on it (id) -> {wchar_t* begin, end}; an empty text for an unknown id).
+    inline uintptr_t textResources_instance{};          // ENG 006725E0
+    inline uintptr_t textResources_get{};               // ENG 00672C90
+    // The UI fonts: +0 a std::vector of cFont* by font id (controls keep theirs as a uint16). ENG 00649BE0 makes it.
+    inline uintptr_t g_pFontManager{};                  // ENG 00CDCA70
 
     // Move orders, as the world mouse handler (0x6172C0) and its hold-to-walk (0x60F130) give them: sendOrder is
     // thiscall on the cEngine (cCreature*, Sacred::Order*), callee pops; it snaps a walk target to a walkable cell
@@ -539,6 +545,28 @@ namespace Sacred::EscMenu
 {
     constexpr uintptr_t entriesBegin = 0x158;
     constexpr uintptr_t entriesEnd = 0x15C;
+}
+
+// Text controls: the start menu's entries (cUI_StaticText64FX, render ENG 00754900: always centered, font flags 0x801)
+// and the game menu's (cUI_StaticText64, render 00754140: UiControl::flags 0x80000 centered, 0x40000 / 0x100000 other
+// alignments, none from the left).
+namespace Sacred::StaticText
+{
+    constexpr uintptr_t fxTextId = 0x78;
+    constexpr uintptr_t fxFont = 0x7C;          // uint16 font id (Addr::g_pFontManager)
+    constexpr uintptr_t textId = 0x84;          // 0: the text at text / textEnd
+    constexpr uintptr_t text = 0x88;            // wchar_t* begin
+    constexpr uintptr_t textEnd = 0x8C;
+    constexpr uintptr_t font = 0x94;            // uint16
+    constexpr uint32_t centered = 0x80000;
+}
+
+// cFont virtual functions.
+namespace Sacred::Font
+{
+    // thiscall (const wchar_t*) -> uint16: the text's width in pixels of the 1024x768 layout, the widest line's
+    // (cFontTTF2 ENG 00650F70); the other fonts return 0.
+    constexpr uintptr_t textWidthSlot = 0x2C;
 }
 
 // The start menu (cUI_MainMenu, UiManagerMenus::first; constructor ENG 007119B0, entries built in 00713670): its

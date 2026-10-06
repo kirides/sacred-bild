@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -147,6 +148,8 @@ namespace
         float x, y;
         bool button;
         UiNav::Rect rect;   // the control's, screen pixels
+        void* control = nullptr;
+        UiCanvas::Frame frame{};
     };
 
     float physicalX(float x, const UiCanvas::Frame& frame)
@@ -209,6 +212,8 @@ namespace
         {
             Point p = screen(left + w * 0.5f, top + h * 0.5f, frame, button);
             p.rect = screenRect(left, top, w, h, frame);
+            p.control = control;
+            p.frame = frame;
             out.push_back(p);
         }
     }
@@ -515,22 +520,88 @@ bool UiNav::cancelButton(float& outX, float& outY)
     return found;
 }
 
+namespace
+{
+    using TextResourcesFn = void*(__cdecl*)();
+    using TextFn = const wchar_t* const*(__fastcall*)(void* texts, void* edx, uint32_t id);
+    using TextWidthFn = uint16_t(__fastcall*)(void* font, void* edx, const wchar_t* text);
+
+    // A menu entry whose text is drawn centered in its rect (Sacred::StaticText): the text's width in the 1024x768
+    // layout, as its font measures it; 0 for other controls or a font that does not measure.
+    float centeredTextWidth(void* control)
+    {
+        const std::string name = UiNav::className(control);
+        const bool fx = name == "cUI_StaticText64FX";
+        if ((!fx && name != "cUI_StaticText64") || !(member<uint32_t>(control, UiControl::flags) & StaticText::centered))
+        {
+            return 0.0f;
+        }
+        const wchar_t* begin = nullptr;
+        const wchar_t* end = nullptr;
+        if (const uint32_t id = member<uint32_t>(control, fx ? StaticText::fxTextId : StaticText::textId))
+        {
+            void* texts = reinterpret_cast<TextResourcesFn>(Addr::textResources_instance)();
+            const wchar_t* const* text = texts ? reinterpret_cast<TextFn>(Addr::textResources_get)(texts, nullptr, id) : nullptr;
+            if (text)
+            {
+                begin = text[0];
+                end = text[1];
+            }
+        }
+        else if (!fx)
+        {
+            begin = member<const wchar_t*>(control, StaticText::text);
+            end = member<const wchar_t*>(control, StaticText::textEnd);
+        }
+        void* fonts = *reinterpret_cast<void**>(Addr::g_pFontManager);
+        if (!begin || end <= begin || end - begin > 256 || !fonts)
+        {
+            return 0.0f;
+        }
+        void** first = member<void**>(fonts, 0);
+        void** last = member<void**>(fonts, 4);
+        const uint16_t index = member<uint16_t>(control, fx ? StaticText::fxFont : StaticText::font);
+        void* font = first && last > first && index < last - first ? first[index] : nullptr;
+        if (!font)
+        {
+            return 0.0f;
+        }
+        const std::wstring text(begin, end);
+        const auto measure = reinterpret_cast<TextWidthFn>((*static_cast<uintptr_t**>(font))[Font::textWidthSlot / 4]);
+        return measure(font, nullptr, text.c_str());
+    }
+}
+
 bool UiNav::controlAt(float x, float y, Rect& out)
 {
-    bool found = false;
+    const Point* best = nullptr;
     float area = 0.0f;
-    for (const Point& p : controls())
+    const std::vector<Point>& points = controls();
+    for (const Point& p : points)
     {
         const Rect& r = p.rect;
         const float a = (r.right - r.left) * (r.bottom - r.top);
-        if (x >= r.left && x < r.right && y >= r.top && y < r.bottom && (!found || a < area))
+        if (x >= r.left && x < r.right && y >= r.top && y < r.bottom && (!best || a < area))
         {
-            out = r;
+            best = &p;
             area = a;
-            found = true;
         }
     }
-    return found;
+    if (!best)
+    {
+        return false;
+    }
+    out = best->rect;
+    // A centered menu text: its own extent, which may be much narrower than its rect (or wider).
+    float left, top, w, h;
+    if (const float width = best->control ? centeredTextWidth(best->control) : 0.0f;
+        width > 0.0f && layoutRect(best->control, left, top, w, h))
+    {
+        const float center = left + w * 0.5f;
+        out.left = physicalX(center - width * 0.5f, best->frame);
+        out.right = physicalX(center + width * 0.5f, best->frame);
+    }
+    return true;
 }
 
 bool UiNav::controlRect(void* control, void* window, Rect& out)

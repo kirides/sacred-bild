@@ -172,6 +172,9 @@ static const Sig::Entry kAddressSigs[] = {
     {"cEngine_getViewOffset", "8B 44 24 08 8B 54 24 04 50 33 C0 66 8B 41 48", 0, Sig::Take::Match, &Sacred::Addr::cEngine_getViewOffset}, // 006113E0, 00611480
     {"cUI_Book_lineAt", "83 EC 3C 53 55 56 57 8B F1 E8 ?? ?? ?? ?? 89 44 24 1C", 0, Sig::Take::Match, &Sacred::Addr::cUI_Book_lineAt}, // 006B3640, 006B3320
     {"cUI_Savegame_selectRow", "53 55 56 8B F1 57 BD 04 00 00 00 8D BE 94 45 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Savegame_selectRow}, // 0071C360, 0071BBF0
+    {"textResources_instance", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A1 ?? ?? ?? ?? 64 89 25 00 00 00 00 83 EC 0C", 0, Sig::Take::Match, &Sacred::Addr::textResources_instance}, // 006725E0, 006728C0
+    {"textResources_get", "8B 44 24 04 56 83 F8 FF 8B F1 74 4A", 0, Sig::Take::Match, &Sacred::Addr::textResources_get}, // 00672C90, 00672F70
+    {"g_pFontManager", "64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 24", 9, Sig::Take::Abs32, &Sacred::Addr::g_pFontManager}, // 00CDCA70, 00CDA9F0
     {"cEngine_sendOrder", "83 EC 28 53 55 8B 6C 24 34 57 8B 7C 24 3C", 0, Sig::Take::Match, &Sacred::Addr::cEngine_sendOrder}, // 00617030, 006170D0
     {"cOrder_vtable", "C7 44 24 18 ?? ?? ?? ?? 89 7C 24 2C 89 7C 24 30", 4, Sig::Take::Abs32, &Sacred::Addr::cOrder_vtable}, // 0089095C, 0088E95C
     {"g_worldInputFlags", "8B 0D ?? ?? ?? ?? C1 E9 03 80 E1 01 80 C9 06 51", 2, Sig::Take::Abs32, &Sacred::Addr::g_worldInputFlags}, // 00AB73DC, 00AB535C

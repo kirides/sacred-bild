@@ -139,6 +139,9 @@ SACRED = [
     ('cEngine_getViewOffset', 0x006113E0, 'func'),
     ('cUI_Book_lineAt', 0x006B3640, 'func'),
     ('cUI_Savegame_selectRow', 0x0071C360, 'func'),
+    ('textResources_instance', 0x006725E0, 'func'),
+    ('textResources_get', 0x00672C90, 'func'),
+    ('g_pFontManager', 0x00CDCA70, 'data'),
     # controller: walking by move orders (hero_move.cpp)
     ('cEngine_sendOrder', 0x00617030, 'func'),
     ('cOrder_vtable', 0x0089095C, 'data'),
