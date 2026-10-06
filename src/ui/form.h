@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <string>
@@ -7,7 +8,9 @@
 
 // Settings forms declared in code, ImGui-style: pages (tabs), columns, group boxes and rows of controls, each control
 // bound to an ini key. The form sizes everything from its text, builds the dialog templates and runs them modally;
-// afterwards changes() lists the keys whose values the user changed.
+// afterwards changes() lists the keys whose values the user changed. A controller works the form too: the D-pad or left
+// stick moves between the controls (left and right change a combo box's value), A clicks or opens, B closes an open
+// list, LB and RB switch tabs, Start is OK.
 //
 //     ui.page(L"General");
 //     ui.group(L"Display");
@@ -176,6 +179,10 @@ namespace Ui
         void updateEnabled();
         void addTooltips();
         void finish(int result);
+        void gamepad();
+        void padSideways(HWND focus, bool right);
+        void padPage(int step);
+        void focusOn(HWND control);
         std::wstring read(const Control& control) const;
         void write(Control& control, const std::wstring& value);
         std::vector<const Control*> bound(const wchar_t* section, const wchar_t* name) const;
@@ -199,5 +206,8 @@ namespace Ui
         HWND m_dlg = nullptr;
         HWND m_tabs = nullptr;
         HWND m_tooltip = nullptr;
+        uint32_t m_padHeld = 0;    // buttons, the left stick as the D-pad
+        DWORD m_padRepeat = 0;     // when a held direction moves again
+        bool m_padUsed = false;
     };
 }

@@ -48,8 +48,10 @@ namespace Gamepad
         float lt = 0.0f, rt = 0.0f;     // 0..1
     };
 
-    // Reads the pads; once per frame.
+    // Reads the pads; once per frame. The first call starts SDL.
     void poll();
+    // Closes the pads and quits SDL; the next poll() starts it again.
+    void stop();
     const State& state();
     uint32_t pressed();     // buttons that went down in the last poll
     uint32_t released();    // ... and up

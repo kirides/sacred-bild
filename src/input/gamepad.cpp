@@ -25,14 +25,16 @@ namespace
         bool operator==(const Reading&) const = default;
     };
 
-    std::once_flag g_start;
     HANDLE g_wake = nullptr;        // a frame wants readings
+    HANDLE g_thread = nullptr;
+    std::atomic<bool> g_stop{false};
     std::mutex g_lock;
     std::vector<Reading> g_readings;
     // Rumble requests for the SDL thread: a new sequence number, its strength (0..0xFFFF) and length.
     std::atomic<uint32_t> g_rumbleRequest{0}, g_rumbleStrength{0}, g_rumbleMs{0};
 
     // The presenting thread's.
+    bool g_started = false;
     std::vector<Reading> g_previous;
     SDL_JoystickID g_current = 0;   // the pad in use
     Gamepad::State g_state;
@@ -134,7 +136,7 @@ namespace
         LOG("Controller: SDL {}.{}.{}{}", SDL_VERSIONNUM_MAJOR(v), SDL_VERSIONNUM_MINOR(v), SDL_VERSIONNUM_MICRO(v),
             wine ? " (Wine: XInput)" : " (raw input, XInput, HID)");
         std::vector<SDL_Gamepad*> pads;
-        for (;;)
+        while (!g_stop.load())
         {
             WaitForSingleObject(g_wake, kIdleWaitMs);
             SDL_Event e;
@@ -189,6 +191,12 @@ namespace
             std::scoped_lock lock(g_lock);
             g_readings.swap(readings);
         }
+        for (SDL_Gamepad* pad : pads)
+        {
+            SDL_CloseGamepad(pad);
+        }
+        SDL_Quit();
+        return 0;
     }
 
     // A stick with a radial deadzone: inside it 0, beyond it rescaled so the edge of the deadzone is 0.
@@ -236,17 +244,20 @@ namespace
 
 void Gamepad::poll()
 {
-    std::call_once(g_start, [] {
-        g_wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (HANDLE thread = g_wake ? CreateThread(nullptr, 0, &run, nullptr, 0, nullptr) : nullptr)
+    if (!g_started)
+    {
+        g_started = true;
+        if (!g_wake)
         {
-            CloseHandle(thread);
+            g_wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         }
-        else
+        g_stop = false;
+        g_thread = g_wake ? CreateThread(nullptr, 0, &run, nullptr, 0, nullptr) : nullptr;
+        if (!g_thread)
         {
             LOG("Controller: no thread for the controllers");
         }
-    });
+    }
     std::vector<Reading> readings;
     {
         std::scoped_lock lock(g_lock);
@@ -300,6 +311,30 @@ uint32_t Gamepad::released()
 bool Gamepad::active()
 {
     return g_active;
+}
+
+void Gamepad::stop()
+{
+    if (g_thread)
+    {
+        g_stop = true;
+        SetEvent(g_wake);
+        if (WaitForSingleObject(g_thread, 3000) != WAIT_OBJECT_0)
+        {
+            // Not started again while the old thread may still hold SDL.
+            LOG("Controller: SDL didn't stop; no controllers");
+            return;
+        }
+        CloseHandle(g_thread);
+        g_thread = nullptr;
+    }
+    g_started = false;
+    g_readings.clear();
+    g_previous.clear();
+    g_current = 0;
+    g_state = {};
+    g_pressed = g_released = 0;
+    g_active = false;
 }
 
 void Gamepad::rumble(float strength, uint32_t milliseconds)

@@ -5,6 +5,10 @@ frame limit, VSync, UI size, renderer), Advanced (everything else; the controlle
 changed ones to `SacredBild.ini`; Exit quits. "Don't show this window
 again" sets `[Launcher] HideSettingsWindow=1`; holding Shift as the game starts shows it anyway.
 
+A controller works the window too: the D-pad or left stick moves between the settings (left and right change a list's
+value), A ticks a box, presses a button or opens a list, B closes an open list without changing it, LB and RB switch
+tabs, Start is Play. Text fields need the keyboard.
+
 | Section | Key | Default | Meaning |
 |---|---|---|---|
 | Launcher | HideSettingsWindow | 0 | 1 = no settings window before the game starts; holding Shift as the game starts shows it anyway. |

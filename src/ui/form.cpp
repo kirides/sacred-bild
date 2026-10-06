@@ -1,10 +1,12 @@
 #include "ui/form.h"
 #include "ui/form_res.h"
+#include "input/gamepad.h"
 #include "log.h"
 
 #include <commctrl.h>
 #include <uxtheme.h>
 #include <algorithm>
+#include <climits>
 #include <cstring>
 
 namespace
@@ -35,6 +37,12 @@ namespace
     constexpr int kComboDropHeight = 150;
     constexpr int kTabChromeX = 6;       // tab control around its pages
     constexpr int kTabChromeY = 18;
+
+    constexpr UINT_PTR kGamepadTimer = 1;
+    constexpr UINT kGamepadMs = 16;
+    constexpr DWORD kRepeatDelayMs = 400;   // a held direction moves again after this, then every kRepeatMs
+    constexpr DWORD kRepeatMs = 100;
+    constexpr float kStickPush = 0.5f;      // the left stick as the D-pad past this
 
     constexpr int kTabsId = 900;
     constexpr int kFirstId = 1000;       // controls: kFirstId + 2 * index, their labels one more
@@ -769,6 +777,8 @@ Ui::Form::Result Ui::Form::run(HMODULE module, const wchar_t* title)
 {
     m_module = module;
     m_dlg = nullptr;
+    m_padHeld = 0;
+    m_padUsed = false;
     layout();
     DialogTemplate dialog = mainTemplate(title);
     INT_PTR result;
@@ -776,6 +786,8 @@ Ui::Form::Result Ui::Form::run(HMODULE module, const wchar_t* title)
         VisualStyles styles(module);
         result = DialogBoxIndirectParamW(module, dialog.get(), nullptr, dialogProc, reinterpret_cast<LPARAM>(this));
     }
+    // The game starts SDL again if it plays with the controller.
+    Gamepad::stop();
     for (Control& control : m_controls)
     {
         control.m_hwnd = control.m_label = nullptr;
@@ -839,6 +851,7 @@ void Ui::Form::init(HWND dlg)
     addTooltips();
     updateEnabled();
     SetForegroundWindow(dlg);
+    SetTimer(dlg, kGamepadTimer, kGamepadMs, nullptr);
 }
 
 void Ui::Form::showPage(int index)
@@ -922,7 +935,240 @@ void Ui::Form::finish(int result)
     {
         c.m_current = read(c);
     }
+    KillTimer(m_dlg, kGamepadTimer);
     EndDialog(m_dlg, result);
+}
+
+void Ui::Form::gamepad()
+{
+    Gamepad::poll();
+    const Gamepad::State& pad = Gamepad::state();
+    uint32_t held = pad.buttons;
+    held |= pad.ly > kStickPush ? Gamepad::Up : pad.ly < -kStickPush ? Gamepad::Down : 0;
+    held |= pad.lx < -kStickPush ? Gamepad::Left : pad.lx > kStickPush ? Gamepad::Right : 0;
+    uint32_t act = held & ~m_padHeld;
+    m_padHeld = held;
+    // SDL reads the pad with the window in the background too.
+    if (GetForegroundWindow() != m_dlg)
+    {
+        return;
+    }
+    constexpr uint32_t kMoves = Gamepad::Up | Gamepad::Down | Gamepad::Left | Gamepad::Right;
+    const DWORD now = GetTickCount();
+    if (act & kMoves)
+    {
+        m_padRepeat = now + kRepeatDelayMs;
+    }
+    else if ((held & kMoves) && static_cast<int>(now - m_padRepeat) >= 0)
+    {
+        act |= held & kMoves;
+        m_padRepeat = now + kRepeatMs;
+    }
+    if (!act)
+    {
+        return;
+    }
+    if (!m_padUsed)
+    {
+        // Focus rectangles, as after the first key press.
+        m_padUsed = true;
+        SendMessageW(m_dlg, WM_CHANGEUISTATE, MAKEWPARAM(UIS_CLEAR, UISF_HIDEFOCUS), 0);
+    }
+
+    const HWND focus = GetFocus();
+    wchar_t cls[32] = {};
+    if (focus)
+    {
+        GetClassNameW(focus, cls, static_cast<int>(std::size(cls)));
+    }
+    const bool combo = _wcsicmp(cls, WC_COMBOBOXW) == 0;
+    const auto key = [&](WPARAM vk) {
+        SendMessageW(focus, WM_KEYDOWN, vk, 0);
+        SendMessageW(focus, WM_KEYUP, vk, 0xC0000001);
+    };
+    if (combo && SendMessageW(focus, CB_GETDROPPEDSTATE, 0, 0))
+    {
+        // The open list: the D-pad picks, A takes it, B keeps the value from before.
+        if (act & (Gamepad::Up | Gamepad::Left))
+        {
+            key(VK_UP);
+        }
+        else if (act & (Gamepad::Down | Gamepad::Right))
+        {
+            key(VK_DOWN);
+        }
+        else if (act & Gamepad::A)
+        {
+            key(VK_RETURN);
+        }
+        else if (act & Gamepad::B)
+        {
+            key(VK_ESCAPE);
+        }
+        return;
+    }
+    if (act & Gamepad::Start)
+    {
+        SendMessageW(m_dlg, WM_COMMAND, IDOK, 0);
+    }
+    else if (act & (Gamepad::LB | Gamepad::RB))
+    {
+        padPage(act & Gamepad::RB ? 1 : -1);
+    }
+    else if (act & (Gamepad::Up | Gamepad::Down))
+    {
+        // Through the controls in tab order.
+        SendMessageW(m_dlg, WM_NEXTDLGCTL, (act & Gamepad::Up) ? 1 : 0, FALSE);
+    }
+    else if (act & (Gamepad::Left | Gamepad::Right))
+    {
+        const bool right = act & Gamepad::Right;
+        if (combo)
+        {
+            key(right ? VK_DOWN : VK_UP);
+        }
+        else if (focus == m_tabs)
+        {
+            key(right ? VK_RIGHT : VK_LEFT);
+        }
+        else
+        {
+            padSideways(focus, right);
+        }
+    }
+    else if (act & Gamepad::A)
+    {
+        if (combo)
+        {
+            SendMessageW(focus, CB_SHOWDROPDOWN, TRUE, 0);
+        }
+        else if (focus == m_tabs)
+        {
+            SendMessageW(m_dlg, WM_NEXTDLGCTL, 0, FALSE);
+        }
+        else if (_wcsicmp(cls, WC_BUTTONW) == 0)
+        {
+            SendMessageW(focus, BM_CLICK, 0, 0);
+        }
+    }
+}
+
+// Left or right of a control: the next one in its row, else the one closest in height in the next column over. In
+// the footer along its row, OK and Cancel.
+void Ui::Form::padSideways(HWND focus, bool right)
+{
+    using Type = Control::Type;
+    const auto focusable = [](const Control& c) {
+        return c.m_hwnd && c.m_type != Type::Label && c.m_type != Type::Text && IsWindowEnabled(c.m_hwnd);
+    };
+    const int step = right ? 1 : -1;
+    const auto at = std::ranges::find(m_controls, focus, &Control::m_hwnd);
+    if (at == m_controls.end() || at->m_page < 0)
+    {
+        std::vector<HWND> line;
+        for (const Row& row : m_footer.rows)
+        {
+            for (const Control* c : row.controls)
+            {
+                if (focusable(*c))
+                {
+                    line.push_back(c->m_hwnd);
+                }
+            }
+        }
+        line.push_back(GetDlgItem(m_dlg, IDOK));
+        line.push_back(GetDlgItem(m_dlg, IDCANCEL));
+        const auto it = std::ranges::find(line, focus);
+        const ptrdiff_t i = (it - line.begin()) + step;
+        if (it != line.end() && i >= 0 && i < static_cast<ptrdiff_t>(line.size()))
+        {
+            focusOn(line[i]);
+        }
+        return;
+    }
+
+    const Control& from = *at;
+    const std::vector<Column>& columns = m_pages[from.m_page].columns;
+    int column = -1;
+    const Row* row = nullptr;
+    for (size_t c = 0; c < columns.size() && !row; ++c)
+    {
+        for (const Block& block : columns[c].blocks)
+        {
+            for (const Row& r : block.rows)
+            {
+                if (std::ranges::find(r.controls, &from) != r.controls.end())
+                {
+                    column = static_cast<int>(c);
+                    row = &r;
+                }
+            }
+        }
+    }
+    if (!row)
+    {
+        return;
+    }
+    const ptrdiff_t count = static_cast<ptrdiff_t>(row->controls.size());
+    for (ptrdiff_t i = (std::ranges::find(row->controls, &from) - row->controls.begin()) + step; i >= 0 && i < count; i += step)
+    {
+        if (focusable(*row->controls[i]))
+        {
+            focusOn(row->controls[i]->m_hwnd);
+            return;
+        }
+    }
+    const int y = from.m_y + from.m_cy / 2;
+    for (int c = column + step; c >= 0 && c < static_cast<int>(columns.size()); c += step)
+    {
+        const Control* best = nullptr;
+        int distance = INT_MAX;
+        for (const Block& block : columns[c].blocks)
+        {
+            for (const Row& r : block.rows)
+            {
+                for (const Control* control : r.controls)
+                {
+                    const int d = std::abs(control->m_y + control->m_cy / 2 - y);
+                    if (focusable(*control) && d < distance)
+                    {
+                        best = control;
+                        distance = d;
+                    }
+                }
+            }
+        }
+        if (best)
+        {
+            focusOn(best->m_hwnd);
+            return;
+        }
+    }
+}
+
+// The previous or next tab; the focus follows if it was on the page.
+void Ui::Form::padPage(int step)
+{
+    const int from = TabCtrl_GetCurSel(m_tabs);
+    const int to = std::clamp(from + step, 0, static_cast<int>(m_pages.size()) - 1);
+    if (from < 0 || to == from)
+    {
+        return;
+    }
+    const HWND focus = GetFocus();
+    const bool onPage = focus && IsChild(m_pages[from].hwnd, focus);
+    TabCtrl_SetCurSel(m_tabs, to);
+    showPage(to);
+    if (onPage)
+    {
+        const HWND first = GetNextDlgTabItem(m_pages[to].hwnd, nullptr, FALSE);
+        focusOn(first ? first : m_tabs);
+    }
+}
+
+void Ui::Form::focusOn(HWND control)
+{
+    SendMessageW(m_dlg, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(control), TRUE);
 }
 
 std::wstring Ui::Form::read(const Control& c) const
@@ -1121,6 +1367,13 @@ INT_PTR CALLBACK Ui::Form::dialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
         if (const auto* header = reinterpret_cast<const NMHDR*>(lp); header->idFrom == kTabsId && header->code == TCN_SELCHANGE)
         {
             form->showPage(TabCtrl_GetCurSel(form->m_tabs));
+            return TRUE;
+        }
+        break;
+    case WM_TIMER:
+        if (!page && wp == kGamepadTimer)
+        {
+            form->gamepad();
             return TRUE;
         }
         break;
