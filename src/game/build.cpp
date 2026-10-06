@@ -38,9 +38,9 @@ namespace
     };
     constexpr KnownBuild kKnownBuilds[] = {
         {0x451BBE74, "sacred.exe, German"},
-        {0x452F85C7, "Sacred.exe, English (GOG)"},
+        {0x452F85C7, "Sacred.exe, English (GOG; Steam: the same exe wrapped by SteamStub)"},
         {0x451BBDBF, "gameserver.exe, German"},
-        {0x452F8580, "GameServer.exe, English (GOG)"},
+        {0x452F8580, "GameServer.exe, English (GOG, Steam)"},
     };
 }
 

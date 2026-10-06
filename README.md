@@ -93,6 +93,9 @@ From a [release](../../releases) (tagged versions, and a nightly prerelease of e
 zip into the game folder. It replaces the `ddraw.dll` there (if that is DDrawCompat, move it to
 `SacredBild\DDrawCompat.dll` first) and an existing `SacredBild.ini`.
 
+The Steam version works the same way: its `Sacred.exe` is the English GOG exe inside Steam's DRM wrapper
+(SteamStub), and SacredBild starts once the wrapper has decoded the game's code.
+
 From a build (see [Build](#build)):
 
 ```powershell
