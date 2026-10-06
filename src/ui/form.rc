@@ -1,0 +1,4 @@
+#include <winresrc.h>
+#include "form_res.h"
+
+IDR_FORM_MANIFEST RT_MANIFEST "form.manifest"

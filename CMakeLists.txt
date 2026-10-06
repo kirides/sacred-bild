@@ -25,7 +25,6 @@ add_library(ddraw SHARED
   src/patch.cpp
   src/profiler.cpp
   src/settings_window.cpp
-  src/settings_window.rc
   src/sig.cpp
   src/system_ddraw.cpp
   src/game/build.cpp
@@ -56,6 +55,8 @@ add_library(ddraw SHARED
   src/ddraw9/vertex_buffer.cpp
   src/render/atlas.cpp
   src/render/batcher.cpp
+  src/ui/form.cpp
+  src/ui/form.rc
   src/net/adapters.cpp
   src/net/connection.cpp
   src/net/lan_client.cpp

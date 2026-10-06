@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<!-- Activation context for the settings window only (themed controls, tooltips): Common Controls 6. -->
+<!-- Activation context for Ui::Form windows only (themed controls, tooltips): Common Controls 6. -->
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <dependency>
     <dependentAssembly>
