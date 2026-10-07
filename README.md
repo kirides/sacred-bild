@@ -22,7 +22,7 @@ ddraw calls through and logs which one.
   the foreground, the cursor kept in the window, drawing in the background, a frame limiter that doesn't spin, and
   full-screen screenshots. See [Display, UI and input](docs/Display.md).
 - **Faster rendering**: DirectDraw / Direct3D 7 on SacredBild's own Direct3D 9Ex backend, the world's draw calls
-  merged, characters skinned on the GPU, movies through Media Foundation, frame statistics, a profiler and crash
+  merged, the ground kept on the GPU, characters skinned on the GPU and animated on several threads, movies through Media Foundation, frame statistics, a profiler and crash
   dumps. See [Rendering](docs/Rendering.md).
 - **Controller** (Xbox, PlayStation, Switch; through SDL3): walking with the stick, aim-assisted attacks and combat
   arts, a cursor and D-pad navigation for menus and windows, button prompts on screen, bindings set in game. See

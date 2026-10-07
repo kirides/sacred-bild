@@ -185,7 +185,7 @@ namespace
             .enabledIf(d3d9)
             .tip(L"Animate (skin) characters and their shadows in a vertex shader instead of on the CPU. "
                  L"Needs the SacredBild (Direct3D 9) renderer.");
-        ui.check(L"Keep the ground on the GPU (experimental)", {L"Render", L"GroundMesh"}, g_config.groundMesh)
+        ui.check(L"Keep the ground on the GPU", {L"Render", L"GroundMesh"}, g_config.groundMesh)
             .enabledIf(d3d9)
             .tip(L"Keep the ground's tiles and their blend layers in vertex buffers, built once as they come into view, "
                  L"and draw them in a few calls per frame instead of rebuilding every tile each frame. "
@@ -244,10 +244,10 @@ namespace
         ui.unindent();
         ui.check(L"Animate on a second thread", {L"Render", L"AsyncAnimation"}, g_config.asyncAnimation)
             .tip(L"Advance the 3D animations on a second thread while the frame starts drawing (needs a second CPU core).");
-        ui.combo(L"Animation threads:", {L"Render", L"AnimationThreads"}, {1, 0, 2, 3, 4}, g_config.animationThreads,
+        ui.combo(L"Animation threads:", {L"Render", L"AnimationThreads"}, {0, 1, 2, 3, 4}, g_config.animationThreads,
               [](int n) { return n == 1 ? std::wstring(L"1 (Granny's own)") : n == 0 ? std::wstring(L"Automatic") : std::to_wstring(n); })
-            .tip(L"Threads that sample the characters' animations each frame, split by character (experimental). "
-                 L"1 = as Granny does it, on one thread. Automatic = CPU cores - 2, at most 4.");
+            .tip(L"Threads that sample the characters' animations each frame, split by character. "
+                 L"Automatic = CPU cores - 2, at most 4. 1 = as Granny does it, on one thread.");
         ui.check(L"Hash index for the map records", {L"Render", L"RecordIndex"}, g_config.recordIndex)
             .tip(L"Hash index in front of the game's record caches (looked up for every ground tile and object).");
 
@@ -293,6 +293,10 @@ namespace
         ui.sameLine();
         ui.check(L"Skinning check", {L"Debug", L"SkinCheck"}, g_config.skinCheck)
             .tip(L"Compare Granny's character skinning with SacredBild's own, logged every 10 seconds.");
+        ui.check(L"Animation threads check", {L"Debug", L"AnimationCheck"}, g_config.animationCheck)
+            .enabledIf([](const Form& f) { return f.value(L"Render", L"AnimationThreads") != L"1"; })
+            .tip(L"Every 2 seconds, sample the characters' animations on one thread and on the animation threads from "
+                 L"the same state and compare the results (logged). A difference keeps them on one thread.");
         constexpr const wchar_t* kProfilerTip =
             L"Sample the presenting thread at this interval and write SacredBild-profile.txt every 15 seconds.";
         ui.check(L"Profiler, every", {L"Debug", L"Profiler"}, g_config.profiler).tip(kProfilerTip);

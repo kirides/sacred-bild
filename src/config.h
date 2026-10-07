@@ -81,7 +81,7 @@ struct Config
     // The ground's tiles kept in vertex buffers per sector (built once as they come into view) and drawn by a vertex
     // shader in a few draws per frame, instead of the game rebuilding and drawing every tile and blend layer each
     // frame (Direct3D 9 backend only).
-    bool groundMesh = false;
+    bool groundMesh = true;
     // Characters skinned in a vertex shader instead of by Granny on the CPU (Direct3D 9 backend only).
     bool gpuSkinning = true;
     // Skeletons not drawn in the last frames are posed every Nth frame instead of every frame (1 = every frame).
@@ -89,7 +89,7 @@ struct Config
     // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.
     bool asyncAnimation = true;
     // Threads that sample Granny's animation controls (split by skeleton); 1 = Granny's own walk, 0 = automatic.
-    int animationThreads = 1;
+    int animationThreads = 0;
     // Hash index in front of the map data's record caches (std::map lookups per tile and object).
     bool recordIndex = true;
     // Copy small textures into shared pages so draws with different textures can be merged as well.

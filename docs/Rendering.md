@@ -37,7 +37,7 @@ SacredBild records state changes instead of applying them and merges consecutive
 state into one call; small textures are copied into shared atlas pages so draws with different textures merge as
 well (`[Render] Batch*`, `Atlas*`).
 
-## Ground kept on the GPU (experimental)
+## Ground kept on the GPU
 
 Every frame the game rebuilds a quad for each visible ground tile and each of its blend layers (2560x1440 zoomed
 out: ~4,000 tiles and ~7,000 layers, about a third of the world view's time) and draws them through the batcher.
@@ -55,7 +55,8 @@ Granny skinned every character and its shadow on the CPU each frame (a fifth of 
 the Direct3D 9 backend, a vertex shader does that from meshes kept on the GPU and lights them as Direct3D 7 did
 (2560x1440 zoomed out: 94 -> 132 fps; `[Render] GpuSkinning`, `OffscreenPoses`). The animation update runs on a
 worker thread (`AsyncAnimation`); with `AnimationThreads` its biggest part, sampling every character's animations,
-is split by character over several threads (experimental; `[Debug] AnimationCheck` compares it with one thread).
+is split by character over several threads (2560x1440 zoomed out: walk 2.1 -> 0.6 ms, ~150 -> ~200 fps;
+`[Debug] AnimationCheck` compares it with one thread).
 
 ## Diagnostics
 
