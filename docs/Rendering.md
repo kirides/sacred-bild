@@ -37,6 +37,18 @@ SacredBild records state changes instead of applying them and merges consecutive
 state into one call; small textures are copied into shared atlas pages so draws with different textures merge as
 well (`[Render] Batch*`, `Atlas*`).
 
+## Ground kept on the GPU (experimental)
+
+Every frame the game rebuilds a quad for each visible ground tile and each of its blend layers (2560x1440 zoomed
+out: ~4,000 tiles and ~7,000 layers, about a third of the world view's time) and draws them through the batcher.
+A tile's quad only depends on the tile and on the camera, which moves the whole ground at once. With
+`[Render] GroundMesh`, each loaded sector keeps its tiles in vertex buffers, filled once as tiles come into view, and
+a vertex shader places them on the screen where the game would have drawn them: a few draws per sector and pass. The
+ground textures are copied into atlas pages of their own. Tiles that change are noticed when they are walked over,
+and their sector is built again. The water and lava tiles, objects and characters are drawn as before (Direct3D 9
+backend only; idea from the [SacredEngineRemake](https://github.com/Aytackydln/SacredEngineRemake), which composes
+each sector's terrain once).
+
 ## Characters animated on the GPU
 
 Granny skinned every character and its shadow on the CPU each frame (a fifth of the render thread zoomed out). With

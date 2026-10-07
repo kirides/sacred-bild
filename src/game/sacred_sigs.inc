@@ -134,6 +134,11 @@ static const Sig::Entry kAddressSigs[] = {
     {"cWorldView_renderTileRow", "81 EC EC 03 00 00 A1 ?? ?? ?? ?? 53 55 8B E9 8B 08", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_renderTileRow}, // 0062AE90, 0062B000
     {"cWorldView_drawTileLayers", "83 EC 28 53 56 57 8B F9 E8 ?? ?? ?? ?? 8B F0 8B 87 1C FF 03 00", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_drawTileLayers}, // 0062D3C0, 0062D530
     {"cQuadBatcher_flush", "56 8B F1 8B 86 10 59 00 00 85 C0 0F 84 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cQuadBatcher_flush}, // 00629340, 00629420
+    {"cQuadBatcher_add", "53 8B D9 56 81 BB 14 59 00 00 52 02 00 00", 0, Sig::Take::Match, &Sacred::Addr::cQuadBatcher_add}, // 00629180, 00629260
+    {"cQuadBatcher_setTexture", "56 8B F1 57 8B 7C 24 10 3B BE 20 59 00 00", 0, Sig::Take::Match, &Sacred::Addr::cQuadBatcher_setTexture}, // 006292C0, 006293A0
+    {"renderFlags_instance", "A1 ?? ?? ?? ?? 85 C0 75 28 6A 08 E8 ?? ?? ?? ?? 83 C4 04 85 C0", 0, Sig::Take::Match, &Sacred::Addr::renderFlags_instance}, // 00643110, 00643240
+    {"renderFlags_set", "8B 44 24 04 8B 54 24 08 56 8B 71 04", 0, Sig::Take::Match, &Sacred::Addr::renderFlags_set}, // 00643430, 00643560
+    {"worldState_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3F 68 6C 2E 01 00", 0, Sig::Take::Match, &Sacred::Addr::worldState_instance}, // 00417E70, 00417E50
     {"cTextureManager_get", "55 8B 6C 24 08 56 81 FD 00 00 01 00", 0, Sig::Take::Match, &Sacred::Addr::cTextureManager_get}, // 0065ED90, 0065F010
     {"cWorldView_drawWaterTiles", "83 EC 54 55 56 57 8B F9 E8 ?? ?? ?? ?? 8B E8 89 6C 24 2C", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_drawWaterTiles}, // 0062DD00, 0062DE70
     {"cWorldView_drawObjects", "81 EC D4 01 00 00 53 55 56 8B F1 8A 0D ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_drawObjects}, // 0062E410, 0062E580

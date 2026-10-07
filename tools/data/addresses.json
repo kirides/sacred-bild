@@ -532,6 +532,26 @@
    "452F85C7": "00629340",
    "451BBE74": "00629420"
   },
+  "cQuadBatcher_add": {
+   "452F85C7": "00629180",
+   "451BBE74": "00629260"
+  },
+  "cQuadBatcher_setTexture": {
+   "452F85C7": "006292C0",
+   "451BBE74": "006293A0"
+  },
+  "renderFlags_instance": {
+   "452F85C7": "00643110",
+   "451BBE74": "00643240"
+  },
+  "renderFlags_set": {
+   "452F85C7": "00643430",
+   "451BBE74": "00643560"
+  },
+  "worldState_instance": {
+   "452F85C7": "00417E70",
+   "451BBE74": "00417E50"
+  },
   "cTextureManager_get": {
    "452F85C7": "0065ED90",
    "451BBE74": "0065F010"

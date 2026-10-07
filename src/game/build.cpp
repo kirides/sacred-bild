@@ -8,6 +8,7 @@
 #include "game/options_screen.h"
 #include "game/gpu_skin.h"
 #include "game/granny_async.h"
+#include "game/ground_mesh.h"
 #include "game/ground_quads.h"
 #include "game/language.h"
 #include "game/map_cache.h"
@@ -81,6 +82,7 @@ void Sacred::installHooks()
 {
     D3DStats::setTiming(g_config.d3dStats);
     GrannyAsync::install();
+    GroundMesh::install();     // its own transaction first: its renderTileRow hook runs inside Resolution's
     Patch::begin();
     FrameHooks::install();
     Resolution::install();

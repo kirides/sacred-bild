@@ -4,6 +4,7 @@
 #include "game/device_proxy.h"
 #include "game/focus.h"
 #include "game/gpu_skin.h"
+#include "game/ground_mesh.h"
 #include "game/granny_async.h"
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
@@ -266,6 +267,7 @@ namespace
         {
             proxy->beginBatch();
         }
+        GroundMesh::beginFrame(self, device);
         g_origWorldRender(self, edx, device);
         if (proxy && device == proxy)
         {

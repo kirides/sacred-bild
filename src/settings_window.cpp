@@ -185,6 +185,11 @@ namespace
             .enabledIf(d3d9)
             .tip(L"Animate (skin) characters and their shadows in a vertex shader instead of on the CPU. "
                  L"Needs the SacredBild (Direct3D 9) renderer.");
+        ui.check(L"Keep the ground on the GPU (experimental)", {L"Render", L"GroundMesh"}, g_config.groundMesh)
+            .enabledIf(d3d9)
+            .tip(L"Keep the ground's tiles and their blend layers in vertex buffers, built once as they come into view, "
+                 L"and draw them in a few calls per frame instead of rebuilding every tile each frame. "
+                 L"Needs the SacredBild (Direct3D 9) renderer.");
 
         ui.page(L"Advanced");
         ui.group(L"Frame timing");

@@ -25,7 +25,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md) 
 | `src/patch.*`, `src/sig.*` | Code patches and hooks; byte signature search |
 | `src/spin_lock.h` | Locks for the render thread's hot paths |
 | `src/profiler.*` | `[Debug] Profiler` |
-| `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
+| `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
 | `src/game/build.*` | Which exe this is, address lookup, the list of game modules |
 | `src/game/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses and struct offsets SacredBild uses; their signatures (generated) |
 | `src/game/gameserver*` | The same for gameserver.exe, and its patches |
@@ -43,6 +43,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md) 
 | `src/game/gpu_skin.*` | `[Render] GpuSkinning`: Granny's deform reduced to the bone matrices, characters drawn by the backend's skinning shader |
 | `src/game/skin_check.*` | `[Debug] SkinCheck`: Granny's skinning data read back and checked |
 | `src/game/ground_quads.*` | The ground's quad batcher straight to the batcher (`[Render] BatchGround`) |
+| `src/game/ground_mesh.*` | `[Render] GroundMesh`: the ground's tiles and blend layers in vertex buffers per sector, drawn by the backend's ground shader |
 | `src/game/map_cache.*` | Hash index in front of the map record caches (`[Render] RecordIndex`) |
 | `src/game/d3d_stats.*` | `[Debug] D3DStats` frame statistics |
 | `src/game/controller.*` | `[Controller]`: the pad driving the game through injected input and its own cursor (walking, attacks, windows) |
@@ -77,7 +78,7 @@ Generated files in the repository, and the checks:
 | `tools/gen_res_sites.py` | Writes `src/game/resolution_sites.inc`: the 1024x768 constants to patch, each verified and with a signature |
 | `tools/check_hooks.py` | Checks that every hook declares as many stack arguments as the hooked function pops |
 | `tools/gen_prompts.py` | Writes `src/overlay/prompts.png`: the button prompt atlas, from the [Input Prompts](https://github.com/meritite-union/input-prompts) images (needs Pillow; see the script's header) |
-| `tools/gen_shaders.py` | Writes `src/ddraw9/skin_shaders.inc`: `src/ddraw9/skin.hlsl` compiled to vs_2_0 with `fxc` from the Windows SDK |
+| `tools/gen_shaders.py` | Writes `src/ddraw9/skin_shaders.inc` and `ground_shaders.inc`: `skin.hlsl` and `ground.hlsl` compiled to vs_2_0 with `fxc` from the Windows SDK |
 | `tools/sigs.py`, `funcs.py`, `eng.py` | Shared code: signature search, function boundaries and names (`tools/data/functions_eng.tsv`, exported from Ghidra), the English exe |
 
 Reverse engineering helpers (how addresses and offsets were found):

@@ -59,6 +59,7 @@ set(DDRAW_SOURCES
   src/game/language.cpp
   src/game/map_cache.cpp
   src/game/ground_quads.cpp
+  src/game/ground_mesh.cpp
   src/game/skin_check.cpp
   src/game/granny_mesh.cpp
   src/game/gpu_skin.cpp
@@ -83,6 +84,7 @@ set(DDRAW_SOURCES
   src/overlay/prompts.cpp
   src/ddraw9/device.cpp
   src/ddraw9/device_skin.cpp
+  src/ddraw9/device_ground.cpp
   src/ddraw9/directdraw.cpp
   src/ddraw9/format.cpp
   src/ddraw9/gpu.cpp

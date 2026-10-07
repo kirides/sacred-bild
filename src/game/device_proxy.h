@@ -46,6 +46,11 @@ public:
     HRESULT drawQuads(TextureLookup lookup, uint32_t texture0, uint32_t texture1, DWORD fvf, const void* verts,
         DWORD vertCount, const WORD* indices, DWORD indexCount);
 
+    // A draw SacredBild makes on the real device itself (GroundMesh): what is batched is drawn and the recorded state
+    // (textures set through this proxy included) applied first. Returns what `draw` returns.
+    using DirectDrawFn = bool (*)(IDirect3DDevice7* real, void* context);
+    bool drawDirect(DirectDrawFn draw, void* context);
+
     // Once per presented frame, from the presenting thread: device calls from any other thread are counted
     // (they decide whether the proxy could do without its lock) and logged every few seconds.
     void onPresent(DWORD thread);

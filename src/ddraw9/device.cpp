@@ -251,6 +251,7 @@ namespace DDraw9
             m_indexBuffer->Release();
         }
         releaseSkin();
+        releaseGround();
         m_dev->Release();
         m_ddraw->Release();
     }

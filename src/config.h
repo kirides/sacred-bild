@@ -78,6 +78,10 @@ struct Config
     bool batchModels = true;
     // The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls.
     bool batchGround = true;
+    // The ground's tiles kept in vertex buffers per sector (built once as they come into view) and drawn by a vertex
+    // shader in a few draws per frame, instead of the game rebuilding and drawing every tile and blend layer each
+    // frame (Direct3D 9 backend only).
+    bool groundMesh = false;
     // Characters skinned in a vertex shader instead of by Granny on the CPU (Direct3D 9 backend only).
     bool gpuSkinning = true;
     // Skeletons not drawn in the last frames are posed every Nth frame instead of every frame (1 = every frame).

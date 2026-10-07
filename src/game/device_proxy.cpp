@@ -948,6 +948,21 @@ HRESULT DeviceProxy::drawQuads(TextureLookup lookup, uint32_t texture0, uint32_t
     return m_batcher->drawQuads(fvf, verts, vertCount, indices, indexCount);
 }
 
+bool DeviceProxy::drawDirect(DirectDrawFn draw, void* context)
+{
+    CallLock lock(*this, _ReturnAddress());
+    {
+        Scope p{TProxy};
+        if (batching())
+        {
+            m_batcher->sync(Batcher::Reason::Direct);
+        }
+    }
+    D3DStats::count(CSubmit);
+    Scope s{TDraw};
+    return draw(m_real, context);
+}
+
 HRESULT DeviceProxy::SetClipStatus(LPD3DCLIPSTATUS status)
 {
     CallLock lock(*this, _ReturnAddress());

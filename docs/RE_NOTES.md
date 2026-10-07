@@ -203,6 +203,25 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   (greyed copies at `+0x604`), absolute (435,667) (465,653) (497,649) (530,653) (560,667) 32x32, drawn only with the
   SHOWPOTIONS option. Keys: the taskbar's receiveEvent `0x6E1BC0` ('1'-'5' `0x6E1690`, '6'-'0' `0x6E1A20`); potions
   through `usePotion` `0x612FA0(type, toHirelings)` from the key switch at `0x6186EE` (B: healing to the hirelings).
+- A ground quad (`renderTileRow`, `0x62B0xx`): tile `+0` definition index into the map data's tile definitions
+  (`*(view+4) + 0x258`, 0x40 bytes each: `+0x20` texture handle, `+0x24` uint16 cell), `+0xC` first blend layer
+  record, `+0x10..0x13` int8 corner heights and `+0x14..0x17` corner light (gray, alpha 255), both in the order left,
+  top, right, bottom. Vertices (left, top, bottom, right) at row x/y (view units) plus (-48.2, 0), (0, -24.2),
+  (0, 24.2), (48.2, 0), minus the height, all times 1/zoom (`cWorldView_updateViewMetrics` stores the offsets
+  divided by the zoom at `+0xA70`); z 0.9, rhw 1; texture coordinates from the 18-cell table at view `+0x830`
+  (4 corners x (u, v) per cell). Tile (r, c) of the 192x192 loaded tiles lies at (48 (c - r), 24 (c + r)) plus one
+  offset per frame: a row's x grows by 96 per tile, rows step 48 down, odd rows start (48, 24) further. Lighting
+  through `cTileRenderer` instead (`0x620090`, `0x61ED70`) only while the world singleton (`0x417E70`) has
+  `+0x10 & 0x20` or `+0x9E0C` set.
+- Blend layers (`cWorldView_drawTileLayers`): record (`layerRecordCache`) `+4` = stage 0 definition (low 17 bits)
+  and stage 1 definition (high 15 bits, 0 = one texture), `+0xC` next id; a record's cell is its definition index
+  % 18. Passes alternate between two-texture records (render flag `0x2000` off, `0x629300`: both textures) and
+  one-texture records (`0x2000` on, `0x6292C0`: stage 0 only, stage 1 left as it is), starting with the former; each
+  pass draws every chain up to its first record of the other kind. The flag ends on. Render flags: instance
+  `0x643110` (cdecl), set `0x643430` (thiscall (flag, on)).
+- With `[Render] GroundMesh`, SacredBild skips the quad batcher's add (`0x629180`) and texture (`0x6292C0`) calls
+  inside `renderTileRow`, empties the layer list after each row and draws its cached sectors in place of
+  `drawTileLayers` (`src/game/ground_mesh.*`).
 - Animated water/lava tiles (record type `0x90`/`0xA0`): `renderTileRow` appends 0x98-byte entries at
   `+0x3FF2C` (count `+0x80E3C`) with no bounds check; `cWorldView_drawWaterTiles` (`0x62DD00`) draws them after
   all rows (glow pass, tile pass) and sets the water ambience from their count and average position. Entry 1750

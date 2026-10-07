@@ -114,6 +114,19 @@ namespace Sacred::Addr
     inline uintptr_t cWorldView_renderTileRow{};        // ENG 0062AE90; thiscall (device, rowPos, detail)
     inline uintptr_t cWorldView_drawTileLayers{};       // ENG 0062D3C0; thiscall (device)
     inline uintptr_t cQuadBatcher_flush{};              // ENG 00629340; thiscall (device)
+    // The quad batcher's other entries: add (thiscall (device, 4 vertices): culled against the screen, appended, flushed
+    // first when full) and the stage 0 texture (thiscall (device, handle); flushes on a change, stage 1 left alone).
+    inline uintptr_t cQuadBatcher_add{};                // ENG 00629180
+    inline uintptr_t cQuadBatcher_setTexture{};         // ENG 006292C0
+    // Render flags (see RE_NOTES "Draw calls and batching"): instance (cdecl, the 8-byte object at 0xCD7A7C, made on
+    // first use) and set (thiscall (flag, on) -> nothing when unchanged, else applies it to the device).
+    // drawTileLayers switches flag 0x2000 between its two-texture (off) and one-texture (on) blend layer passes.
+    inline uintptr_t renderFlags_instance{};            // ENG 00643110
+    inline uintptr_t renderFlags_set{};                 // ENG 00643430
+    // A world singleton (cdecl, 0x12E6C bytes, made on first use; also holds the view shake offsets at +0x9DC0).
+    // renderTileRow lights the ground through cTileRenderer instead of the tiles' own corner light when its byte +0x10
+    // has 0x20 or its byte +0x9E0C is set.
+    inline uintptr_t worldState_instance{};             // ENG 00417E70
     // Draws the collected water/lava tiles (glow pass, then the tiles) and sets the water ambience from their
     // count and average position.
     inline uintptr_t cWorldView_drawWaterTiles{};       // ENG 0062DD00; thiscall (device)
@@ -321,11 +334,64 @@ namespace Sacred::WorldView
     constexpr uintptr_t rowEdgeLeft = 0x96AB8;  // 6: renderTileRow draws ground from column edgeLeft - 1 ...
     constexpr uintptr_t rowEdgeRight = 0x96ABC; // 6: ... to column rowLength - edgeRight + 1 (rest: margins)
     constexpr uintptr_t rowLength = 0x96AC8;    // tiles per row: view width / 96 + 12
+    constexpr uintptr_t zoom = 0xB60;           // float, 0.5 .. 2.0
+    constexpr uintptr_t mapData = 0x04;         // the map data object (record caches, tile definitions)
+    constexpr uintptr_t sectors = 0x970B0;      // 9 sector pointers, the 3x3 loaded around the camera (row * 3 + column)
+    // Texture coordinates of the 18 tile cells of a 256x256 ground sheet: per cell 4 corners (left, top, bottom,
+    // right) of (u, v) floats. Base tiles use their definition's cell, blend layers the definition index % 18.
+    constexpr uintptr_t tileUvs = 0x830;
+    constexpr uint32_t tileUvCells = 18;
     // What can be picked on the screen, rebuilt by the world renderer every frame: std::vector of 0x1C-byte entries
     // (Sacred::PickEntry) guarded by a CRITICAL_SECTION. worldPick gives up on more than 1000 entries.
     constexpr uintptr_t pickLock = 0x96B0C;
     constexpr uintptr_t pickBegin = 0x96B24;
     constexpr uintptr_t pickEnd = 0x96B28;
+}
+
+// Ground data read by renderTileRow and drawTileLayers (GroundMesh). A tile's quad has the corners left, top, bottom,
+// right at (-48.2, 0), (0, -24.2), (0, 24.2), (48.2, 0) around its position, each raised by its height; tile (row r,
+// column c) of the 192x192 loaded tiles lies at (48 (c - r), 24 (c + r)) in view coordinates, plus one offset per frame.
+namespace Sacred::Sector
+{
+    constexpr uintptr_t tiles = 0x6C;           // 64x64 tiles (row * 64 + column)
+}
+
+namespace Sacred::MapData
+{
+    constexpr uintptr_t tileDefs = 0x258;       // tile definitions (Sacred::TileDef[]), indexed by Tile::def
+}
+
+namespace Sacred::TileDef
+{
+    constexpr uintptr_t size = 0x40;
+    constexpr uintptr_t texture = 0x20;         // texture manager handle
+    constexpr uintptr_t uvCell = 0x24;          // uint16, cell of WorldView::tileUvs
+}
+
+namespace Sacred::Tile
+{
+    constexpr uintptr_t size = 0x20;
+    constexpr uintptr_t def = 0x00;             // int32, tile definition index
+    constexpr uintptr_t layers = 0x0C;          // first blend layer record id (layerRecordCache), 0: none
+    // int8 heights (pixels up) and uint8 light (gray, alpha 255) of the corners, in the order left, top, right, bottom.
+    constexpr uintptr_t heights = 0x10;
+    constexpr uintptr_t light = 0x14;
+}
+
+// A blend layer record (layerRecordCache). drawTileLayers draws a tile's chain in passes: two-texture records with
+// render flag 0x2000 off, one-texture records with it on, alternating until every chain is done; each pass draws its
+// records up to the first one of the other kind.
+namespace Sacred::LayerRecord
+{
+    // Low 17 bits: stage 0 tile definition; high 15 bits: stage 1 tile definition, 0 = a one-texture record.
+    constexpr uintptr_t defs = 0x04;
+    constexpr uintptr_t next = 0x0C;            // next record id, 0: end of the chain
+}
+
+namespace Sacred::WorldState
+{
+    constexpr uintptr_t flags = 0x10;           // uint8; 0x20: ground lit through cTileRenderer
+    constexpr uintptr_t tileRendererLight = 0x9E0C;     // uint8; set: the same
 }
 
 // An entry of the world view's pick list: an object's rect on the screen (physical pixels). Ids with bit 31 set are

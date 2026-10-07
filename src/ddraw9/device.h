@@ -1,5 +1,6 @@
 #pragma once
 #include "ddraw9/d3d9_api.h"
+#include "ddraw9/ground.h"
 #include "ddraw9/skin.h"
 #include "spin_lock.h"
 
@@ -33,6 +34,12 @@ namespace DDraw9
         Skin::Mesh* createSkinMesh(const Skin::Vertex* vertices, uint32_t count);
         Skin::Indices* createSkinIndices(const WORD* indices, uint32_t count);
         bool drawSkinned(const Skin::Draw& draw);
+
+        // Ground from static vertex buffers (device_ground.cpp, see ground.h).
+        bool groundAvailable();
+        Ground::Mesh* createGroundMesh(uint32_t capacity);
+        bool writeGround(Ground::Mesh* mesh, uint32_t first, const Ground::Vertex* vertices, uint32_t count);
+        bool drawGround(const Ground::Draw& draw);
 
         // IUnknown
         STDMETHOD(QueryInterface)(REFIID riid, LPVOID* out) override;
@@ -154,6 +161,9 @@ namespace DDraw9
         // Fills the shader constants from the Direct3D 7 state; false if the state needs something the shader doesn't do.
         bool skinConstants(const Skin::Draw& draw, bool diffuse);
         void releaseSkin();
+        // Creates the ground shader, its declaration and the quad index buffer once; false if the device can't.
+        bool initGround();
+        void releaseGround();
         void recapture(StateBlock& block) const;
         void apply(const StateBlock& block);
         StateBlock* stateBlock(DWORD handle);
@@ -218,6 +228,15 @@ namespace DDraw9
         UINT m_skinConstantCount = 0;
         BOOL m_skinFlags[5] = {};
         int m_skinLightCount = -1;
+
+        // Ground (device_ground.cpp). Bound like the skinning shader: m_skinBound makes the next fixed-function draw
+        // go back to the fixed-function pipeline.
+        int m_groundState = 0;                  // 0 not tried, 1 ready, -1 unavailable
+        d9::IDirect3DVertexShader9* m_groundShader = nullptr;
+        d9::IDirect3DVertexDeclaration9* m_groundDecl = nullptr;
+        d9::IDirect3DIndexBuffer9* m_quadIndices = nullptr;     // 0 1 2 2 1 3 for every 4 vertices
+        float m_groundConstants[2][4] = {};
+        bool m_groundConstantsSet = false;
 
         std::vector<uint8_t> m_scratch;
         std::vector<std::unique_ptr<StateBlock>> m_stateBlocks;

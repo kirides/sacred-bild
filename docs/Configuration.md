@@ -34,6 +34,7 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | BatchModels | 1 | 3D model draws go through the batcher too (vertex buffers, merged where possible). |
 | Render | GpuSkinning | 1 | Characters and their shadows skinned (animated) in a vertex shader instead of by Granny on the CPU; `Backend=d3d9` only. |
 | Render | OffscreenPoses | 4 | Skeletons of characters not drawn in the last frames are posed every Nth frame (staggered) instead of every frame; one drawn after all is posed before it is drawn. 1 = every frame. Needs `GpuSkinning`. |
+| Render | GroundMesh | 0 | Experimental: the ground's tiles and blend layers kept in vertex buffers per sector, built once as they come into view, and drawn by a vertex shader in a few draws per frame; the game no longer rebuilds and draws every tile each frame. `Backend=d3d9` only. |
 | Render | BatchGround | 1 | The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls per quad. |
 | Render | RecordIndex | 1 | Hash index (gtl::flat_hash_map) in front of the game's tile/object record caches. |
 | Render | AsyncAnimation | 1 | Advance Granny animations on a worker thread, overlapping the start of the frame. |

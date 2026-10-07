@@ -34,8 +34,14 @@ HOOKS = {
     0x00676200: ('cMSS::cMSS', 3),
     0x0062AE90: ('cWorldView::renderTileRow', 3),
     0x006328C0: ('cWorldView::initRowWalk', 2),
-    0x0062D3C0: ('cWorldView::drawTileLayers (called)', 1),
+    0x0062D3C0: ('cWorldView::drawTileLayers', 1),
     0x00629340: ('cQuadBatcher::flush', 1),
+    # ground_mesh.cpp
+    0x00629180: ('cQuadBatcher::add', 2),
+    0x006292C0: ('cQuadBatcher::setTexture', 2),
+    0x00643430: ('renderFlags::set (called)', 2),
+    0x00643110: ('renderFlags::instance (cdecl, called)', 0),
+    0x00417E70: ('worldState::instance (cdecl, called)', 0),
     0x0065ED90: ('cTextureManager::get (called)', 2),
     0x0062DD00: ('cWorldView::drawWaterTiles (called)', 1),
     # world_passes.cpp ([Debug] D3DStats)
