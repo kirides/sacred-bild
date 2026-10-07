@@ -216,7 +216,7 @@ bool Prompts::pending()
 
 void Prompts::draw(d9::IDirect3DDevice9Ex* device, float width, float height)
 {
-    std::vector<Vertex> vertices;
+    static std::vector<Vertex> vertices;    // presenting thread only; keeps its room between frames
     {
         std::scoped_lock lock(g_lock);
         if (g_ready.empty() || GetTickCount() - g_readyTick >= kStaleMs)

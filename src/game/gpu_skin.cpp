@@ -421,11 +421,26 @@ namespace
         // Only the bones' matrices for this pose: no positions, no normals.
         g_origDeform(mesh, edx, bones, positionsOut, 0, normalsOut, 0, normalizeNormals);
 
-        auto p = std::make_shared<Pending>();
+        // The entry of this buffer's last pose, once no draw holds it any more: reused, its palette keeps its room
+        // (deforms and draws of the render path are on the render thread, one after the other).
+        std::shared_ptr<Pending> p;
+        {
+            std::scoped_lock lock(g_mutex);
+            const auto it = g_pending.find(reinterpret_cast<const void*>(positionsOut[1]));
+            if (it != g_pending.end() && it->second.use_count() == 1)
+            {
+                p = it->second;
+            }
+        }
+        if (!p)
+        {
+            p = std::make_shared<Pending>();
+        }
         p->info = info;
         p->positions = reinterpret_cast<float*>(positionsOut[1]);
         p->normals = normals ? reinterpret_cast<float*>(normalsOut[1]) : nullptr;
         p->normalize = (normalizeNormals & 0xFF) != 0;
+        p->filled = false;
         p->palette.resize(size_t(info->bindingCount) * kPaletteFloats);
         const uint8_t* binding = field<const uint8_t*>(mesh, Mesh::bindings);
         for (uint32_t b = 0; b < info->bindingCount; ++b, binding += Binding::size)

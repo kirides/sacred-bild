@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <span>
 #include <vector>
 
 namespace
@@ -68,12 +69,20 @@ namespace
     std::atomic<bool> g_inWalk{false};
     bool g_enabled = false;
 
-    // A target skeleton's controls, in list order.
+    // A target skeleton's controls, in list order: g_grouped[first, first + count).
     struct Group
     {
         const uint8_t* bones;
-        std::vector<void*> controls;
+        uint32_t first, count;
     };
+    // The walk's controls by group, one array for all groups: rebuilt every walk without allocating (one walk at a
+    // time, g_inWalk).
+    std::vector<void*> g_grouped;
+
+    std::span<void* const> controlsOf(const Group& group)
+    {
+        return {g_grouped.data() + group.first, group.count};
+    }
 
     // The phase the threads share.
     struct Job
@@ -166,7 +175,7 @@ namespace
         const auto& groups = *job.groups;
         for (uint32_t i; (i = job.next.fetch_add(1, std::memory_order_relaxed)) < groups.size();)
         {
-            for (void* control : groups[job.order[i]].controls)
+            for (void* control : controlsOf(groups[job.order[i]]))
             {
                 sample(control, job.oldTime, job.newTime);
             }
@@ -248,7 +257,7 @@ namespace
                 s.bones[g].clear();
                 continue;
             }
-            const size_t bytes = boneBytes(groups[g].controls.front());
+            const size_t bytes = boneBytes(g_grouped[groups[g].first]);
             s.bones[g].assign(groups[g].bones, groups[g].bones + bytes);
         }
     }
@@ -277,7 +286,7 @@ namespace
         capture(before, groups, controls);
         for (const Group& group : groups)
         {
-            for (void* control : group.controls)
+            for (void* control : controlsOf(group))
             {
                 sample(control, oldTime, newTime);
             }
@@ -383,16 +392,19 @@ namespace
         static std::vector<Group> groups;
         static std::vector<uint32_t> order;
         groups.clear();
+        g_grouped.clear();
         if (known)
         {
-            std::stable_sort(keys.begin(), keys.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+            // By bones, in list order within (the index breaks the ties): no stable_sort, it allocates a buffer.
+            std::sort(keys.begin(), keys.end());
             for (size_t i = 0; i < keys.size(); ++i)
             {
                 if (i == 0 || keys[i].first != keys[i - 1].first)
                 {
-                    groups.push_back({keys[i].first, {}});
+                    groups.push_back({keys[i].first, static_cast<uint32_t>(g_grouped.size()), 0});
                 }
-                groups.back().controls.push_back(controls[keys[i].second]);
+                g_grouped.push_back(controls[keys[i].second]);
+                ++groups.back().count;
             }
         }
         g_stats.walks.fetch_add(1, std::memory_order_relaxed);
@@ -409,8 +421,8 @@ namespace
         {
             order[i] = i;
         }
-        std::stable_sort(order.begin(), order.end(),
-            [](uint32_t a, uint32_t b) { return groups[a].controls.size() > groups[b].controls.size(); });
+        std::sort(order.begin(), order.end(), [](uint32_t a, uint32_t b)
+            { return groups[a].count != groups[b].count ? groups[a].count > groups[b].count : a < b; });
 
         const int64_t parallelStart = qpc();
         if (g_config.animationCheck && static_cast<int>(GetTickCount() - g_nextCheck) >= 0)
