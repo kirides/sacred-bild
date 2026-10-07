@@ -366,16 +366,142 @@ namespace
 
     // The ground layer array holds 0x6D5 tiles and the water/lava tile array 1750: enough for the original view,
     // not for a large zoomed-out one (later rows lost their blend layers; too many water tiles overwrite the
-    // water count and crash). Draw what was collected early, between rows, before either fills up: ground,
-    // layers, then water, the order they have at the end of the frame. A row adds at most one entry per tile
-    // column (~92 at 3840 wide, zoomed out).
+    // water count and crash). Layers are drawn early, between rows, before their array fills up: ground, then
+    // layers, the order they have at the end of the frame. Water tiles are moved out of their array into a longer
+    // list between rows and drawn at the end of the frame as usual, in parts the array holds; the water ambience
+    // each part sets is summed up into the one the whole list gives. (Drawing them early too drew the ground of
+    // later rows over them and left the ambience to the last part.) A row adds at most one entry per tile column
+    // (~92 at 3840 wide, zoomed out).
     using TileRowFn = void(__fastcall*)(void* self, void* edx, void* device, void* rowPos, int detail);
     using DeviceFn = void(__fastcall*)(void* self, void* edx, void* device);
+    using AmbienceFn = void(__fastcall*)(void* sound, void* edx, uint32_t count, int32_t x, int32_t y);
     TileRowFn g_origTileRow = nullptr;
     DeviceFn g_flushBatcher = nullptr;
     DeviceFn g_drawTileLayers = nullptr;
     DeviceFn g_drawWaterTiles = nullptr;
+    DeviceFn g_origDrawWaterTiles = nullptr;
+    AmbienceFn g_origAmbience = nullptr;
     constexpr uint32_t kRowMargin = 256;
+
+    struct WaterList
+    {
+        void* view = nullptr;           // the view whose row walk started last (cleared there)
+        std::vector<uint8_t> entries;   // whole entries moved out of its array, in walk order
+        uint32_t most = 0;              // most tiles in one frame so far
+        uint32_t logs = 0;
+    };
+    WaterList g_water;
+    bool g_waterReady = false;          // both hooks in place
+
+    // The ambience calls of the parts while they are drawn.
+    struct AmbienceSum
+    {
+        bool capturing = false;
+        void* sound = nullptr;          // set once a part called
+        uint32_t part = 0;              // tiles in the part being drawn
+        uint32_t tiles = 0;             // tiles in the parts drawn so far
+        bool drawn = false;             // a part had tiles drawn (a position)
+        int64_t x = 0, y = 0;           // their positions, weighted by their parts' sizes
+    };
+    AmbienceSum g_ambience;
+
+    void __fastcall hookAmbience(void* sound, void* edx, uint32_t count, int32_t x, int32_t y)
+    {
+        if (!g_ambience.capturing)
+        {
+            g_origAmbience(sound, edx, count, x, y);
+            return;
+        }
+        g_ambience.sound = sound;
+        if (static_cast<uint16_t>(count) != 0)
+        {
+            g_ambience.drawn = true;
+            g_ambience.x += static_cast<int64_t>(x) * g_ambience.part;
+            g_ambience.y += static_cast<int64_t>(y) * g_ambience.part;
+        }
+    }
+
+    void __fastcall hookDrawWaterTiles(void* self, void* edx, void* device)
+    {
+        if (self != g_water.view || g_water.entries.empty())
+        {
+            g_origDrawWaterTiles(self, edx, device);
+            return;
+        }
+        auto* base = static_cast<uint8_t*>(self);
+        auto& count = *reinterpret_cast<uint32_t*>(base + WorldView::waterTileCount);
+        uint8_t* array = base + WorldView::waterTiles;
+        auto& entries = g_water.entries;
+        entries.insert(entries.end(), array, array + count * WorldView::waterTileSize);
+        const auto total = static_cast<uint32_t>(entries.size() / WorldView::waterTileSize);
+        if (total > g_water.most)
+        {
+            g_water.most = total;
+            if (g_water.logs < 10)
+            {
+                ++g_water.logs;
+                LOG("Water tiles: {} in one frame (the game's list holds {})", total, WorldView::waterTileCapacity);
+            }
+        }
+
+        g_ambience = {};
+        g_ambience.capturing = true;
+        for (uint32_t first = 0; first < total; first += WorldView::waterTileCapacity)
+        {
+            const uint32_t n = std::min(WorldView::waterTileCapacity, total - first);
+            std::memcpy(array, entries.data() + first * WorldView::waterTileSize, n * WorldView::waterTileSize);
+            count = n;
+            g_ambience.part = n;
+            g_ambience.tiles += n;
+            g_origDrawWaterTiles(self, edx, device);
+        }
+        g_ambience.capturing = false;
+        entries.clear();
+        if (g_ambience.sound)
+        {
+            const AmbienceSum& a = g_ambience;
+            if (a.drawn)
+            {
+                g_origAmbience(a.sound, nullptr, std::min<uint32_t>(a.tiles, 0xFFFF),
+                    static_cast<int32_t>(a.x / a.tiles), static_cast<int32_t>(a.y / a.tiles));
+            }
+            else
+            {
+                g_origAmbience(a.sound, nullptr, 0, 0, 0);
+            }
+        }
+    }
+
+    uintptr_t callTarget(uintptr_t site)
+    {
+        if (*reinterpret_cast<const uint8_t*>(site) != 0xE8)
+        {
+            return 0;
+        }
+        int32_t rel;
+        std::memcpy(&rel, reinterpret_cast<const void*>(site + 1), sizeof(rel));
+        return site + 5 + static_cast<uintptr_t>(static_cast<intptr_t>(rel));
+    }
+
+    // The sound system's water ambience setter, from its calls in drawWaterTiles (0 if they do not agree).
+    uintptr_t findAmbience()
+    {
+        if (!Addr::cWorldView_drawWaterTiles)
+        {
+            return 0;
+        }
+        uintptr_t target = 0;
+        for (uintptr_t offset : WorldView::drawWaterTilesAmbienceCalls)
+        {
+            const uintptr_t t = callTarget(Addr::cWorldView_drawWaterTiles + offset);
+            if (!t || (target && t != target))
+            {
+                return 0;
+            }
+            target = t;
+        }
+        return target;
+    }
 
     // Row walk. Only the 3x3 sectors around the camera (64x64 tiles each) are loaded. cWorldView0_render walks the
     // rows by tile and sector index from the top-left corner of the view (initRowWalk) and steps over sector edges
@@ -441,6 +567,11 @@ namespace
         g_walk.view = self;
         g_walk.rows[0] = 0;
         g_walk.rows[1] = 0;
+        if (g_waterReady)
+        {
+            g_water.view = self;
+            g_water.entries.clear();
+        }
         g_walk.cornerInside = loadedTile(*even, g_walk.row, g_walk.col);
 
         // Look up a point next to the camera (always in the middle sector) and step back to the corner in whole
@@ -543,14 +674,22 @@ namespace
 
     void __fastcall hookTileRow(void* self, void* edx, void* device, void* rowPosArg, int detail)
     {
-        auto& layers = *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(self) + WorldView::layeredTileCount);
-        auto& water = *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(self) + WorldView::waterTileCount);
+        auto* base = static_cast<uint8_t*>(self);
+        auto& layers = *reinterpret_cast<uint32_t*>(base + WorldView::layeredTileCount);
+        auto& water = *reinterpret_cast<uint32_t*>(base + WorldView::waterTileCount);
+        const bool waterList = self == g_water.view;
+        if (waterList && water + kRowMargin > WorldView::waterTileCapacity)
+        {
+            const uint8_t* array = base + WorldView::waterTiles;
+            g_water.entries.insert(g_water.entries.end(), array, array + water * WorldView::waterTileSize);
+            water = 0;
+        }
         if (layers + kRowMargin > WorldView::layeredTileCapacity || water + kRowMargin > WorldView::waterTileCapacity)
         {
-            g_flushBatcher(static_cast<uint8_t*>(self) + WorldView::quadBatcher, nullptr, device);
+            g_flushBatcher(base + WorldView::quadBatcher, nullptr, device);
             g_drawTileLayers(self, nullptr, device);
             layers = 0;
-            if (water)
+            if (water && !waterList)
             {
                 g_drawWaterTiles(self, nullptr, device);
                 water = 0;
@@ -776,6 +915,13 @@ void Resolution::install()
     Patch::hook(g_origTextureInit, Addr::cTextureManager_init, &hookTextureInit, "cTextureManager::init");
     Patch::hook(g_origTileRow, Addr::cWorldView_renderTileRow, &hookTileRow, "cWorldView::renderTileRow");
     Patch::hook(g_origInitRowWalk, Addr::cWorldView_initRowWalk, &hookInitRowWalk, "cWorldView::initRowWalk");
+    const uintptr_t ambience = findAmbience();
+    g_waterReady = ambience && Patch::hook(g_origAmbience, ambience, &hookAmbience, "water ambience") &&
+        Patch::hook(g_origDrawWaterTiles, Addr::cWorldView_drawWaterTiles, &hookDrawWaterTiles, "cWorldView::drawWaterTiles");
+    if (!g_waterReady)
+    {
+        LOG("Resolution: water ambience call not found, water tiles drawn early when their list fills up");
+    }
     Patch::hook(g_origPixelsToWorld, Addr::pixelsToWorld, &hookPixelsToWorld, "pixelsToWorld");
     Patch::hook(g_origWorldToPixels, Addr::worldToPixels, &hookWorldToPixels, "worldToPixels");
 }

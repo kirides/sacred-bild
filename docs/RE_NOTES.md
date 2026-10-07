@@ -221,15 +221,23 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   `0x643110` (cdecl), set `0x643430` (thiscall (flag, on)).
 - With `[Render] GroundMesh`, SacredBild skips the quad batcher's add (`0x629180`) and texture (`0x6292C0`) calls
   inside `renderTileRow`, empties the layer list after each row and draws its cached sectors in place of
-  `drawTileLayers` (`src/game/ground_mesh.*`). That can come in the middle of the walk: when the water list nears
-  its end, SacredBild's row hook draws layers and water early, so the cached ground of every loaded sector is drawn
-  there, walked yet or not. A sector object's `+0x44`/`+0x48` hold its first tile's world column/row.
+  `drawTileLayers` (`src/game/ground_mesh.*`). The cached ground of every loaded sector is drawn there, walked yet
+  or not, in case it comes in the middle of the walk (water tiles drawn early when their list could not be moved
+  aside, below). A sector object's `+0x44`/`+0x48` hold its first tile's world column/row.
 - Animated water/lava tiles (record type `0x90`/`0xA0`): `renderTileRow` appends 0x98-byte entries at
   `+0x3FF2C` (count `+0x80E3C`) with no bounds check; `cWorldView_drawWaterTiles` (`0x62DD00`) draws them after
   all rows (glow pass, tile pass) and sets the water ambience from their count and average position. Entry 1750
   lands on the count: a large water area fully zoomed out at 2560x1440 overwrote it and crashed in
-  `renderTileRow` (`0x62B57C`). SacredBild flushes ground, layers and water tiles between rows before either
-  array fills up.
+  `renderTileRow` (`0x62B57C`). SacredBild draws ground and layers between rows before their array fills up, and
+  moves water entries out of theirs into a longer list (`src/game/resolution.cpp`). `drawWaterTiles` then runs once
+  per part of up to 1750 entries copied back. It costs little (a 2560x1440 frame with lots of water: ~0.13 ms):
+  its own batcher (`0x628D50` add, FVF `0x1C4` indexed quads, flushes every 99 quads
+  and at texture changes `0x628F90`, end `0x629050`) feeds the proxy's TL merging, ~50 draws -> 2.
+  The ambience: `0x6770E0` returns the sound system, `0x690690` (thiscall: count as 16 bit, x, y; ret 0xC) stores
+  them (calls at +0x378, +0x393, +0x6FD into `drawWaterTiles`, the same in the German build). The count is the
+  whole list's, x/y the transformed (`0x622620`) sum of the drawn tiles' world positions divided by that count,
+  (0, 0, 0) when no tile was drawn; at detail < 2 neither the glow pass nor the ambience run. With parts, the
+  ambience calls are caught and summed (count-weighted positions) into one call.
 - Device calls from other threads: in game the main thread calls the device itself, ~3-4 times per second:
   `0x6284E0` (zoom: `GetTransform` + `SetTransform`) and the render flag setter `0x643470` (filtering, stage
   states). The proxy therefore keeps a lock (a spinlock: the render thread never pays a kernel wake-up).

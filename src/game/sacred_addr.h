@@ -325,8 +325,14 @@ namespace Sacred::WorldView
     constexpr uint32_t layeredTileCapacity = 0x6D5;
     // Animated (water/lava, record type 0x90/0xA0) tiles: renderTileRow appends 0x98-byte entries at +0x3FF2C without
     // a bounds check; cWorldView_drawWaterTiles draws them after all rows. Entry 1750 would overwrite the count.
+    constexpr uintptr_t waterTiles = 0x3FF2C;
+    constexpr uint32_t waterTileSize = 0x98;
     constexpr uintptr_t waterTileCount = 0x80E3C;
-    constexpr uint32_t waterTileCapacity = (0x80E3C - 0x3FF2C) / 0x98;
+    constexpr uint32_t waterTileCapacity = (waterTileCount - waterTiles) / waterTileSize;
+    // drawWaterTiles ends by setting the water ambience: calls at these offsets into it to a thiscall on the sound
+    // system (ENG 0x690690: water tile count (16 bit), their average position x, y; ret 0xC). The count is the whole
+    // list's, the position the average of the tiles drawn (0 when there were none).
+    constexpr uintptr_t drawWaterTilesAmbienceCalls[] = {0x378, 0x393, 0x6FD};
     // Row walk positions: x, y (float), tile (int16, row * 64 + column in its sector), sector (int16, 3x3 grid of
     // loaded sectors around the camera, row * 3 + column), steps (int16).
     constexpr uintptr_t rowEven = 0x970D4;
