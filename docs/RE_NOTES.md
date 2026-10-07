@@ -403,9 +403,9 @@ Scene advance (`0x10007080`): clock += seconds; `0x10007420` walks the control l
 control active between the old and new time samples and blends into its skeleton (virtual `+8`), finished ones are
 unlinked and deleted; `0x10007500` poses the skeleton list (scene `+0x10`) with `0x1006DC58` set, then increments
 the pose counter `0x1006DC54`. The game's only call (`0x401953`, in `0x401920`, handle = `this+8`) comes at the
-start of the render loop's frame. With the world view drawn ever faster, the render thread caught up with the worker
-at the first character (waits at `0x4057F8`); `[Render] EarlyAnimation` defers the frame's advance to the end of its
-world view.
+start of the render loop's frame. Starting it after the world view instead (tried 2026-10-07) does not help: the
+UI draws items as 3D models every frame (`0x40E9C0`, `GrannySetSequencePosition`; taskbar, inventory, equipment,
+cursor) and waited for the whole advance there.
 
 ## UI (`cUI_Control2` / `cUI_Window2` / `cUI_Manager`)
 

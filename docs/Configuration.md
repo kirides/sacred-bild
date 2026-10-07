@@ -38,7 +38,6 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | BatchGround | 1 | The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls per quad. |
 | Render | RecordIndex | 1 | Hash index (gtl::flat_hash_map) in front of the game's tile/object record caches. |
 | Render | AsyncAnimation | 1 | Advance Granny animations on a worker thread, overlapping the start of the frame. |
-| Render | EarlyAnimation | 0 | With `AsyncAnimation`: the frame's advance starts after the world view instead of at the frame start (overlapping the UI, the present and the next frame's start); characters show their pose one frame later. |
 | Render | Atlas | 1 | Copy small textures into shared pages so more draws merge. |
 | Render | AtlasPageSize | 8192 | Atlas page size in texels (clamped to the GPU limit, halved if the GPU refuses it). |
 | Render | AtlasPages | 2 | Pages per texture format; the least recently used one is reused when full. |

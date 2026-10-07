@@ -1,6 +1,5 @@
 #include "game/granny_async.h"
 #include "config.h"
-#include "fmt.h"
 #include "log.h"
 #include "patch.h"
 #include "profiler.h"
@@ -36,13 +35,6 @@ namespace
     std::atomic<int64_t> g_advanceTicks{0}, g_waitTicks{0};
     std::atomic<uint32_t> g_jobs{0}, g_waits{0};
     std::atomic<bool> g_firstWaitPending{false};
-    std::atomic<uint32_t> g_earlyJobs{0}, g_lateJobs{0};
-
-    // EarlyAnimation (render thread only): the advance the game asked for, not started yet.
-    bool g_early = false;
-    bool g_pending = false;
-    void* g_pendingHandle = nullptr;
-    double g_pendingSeconds = 0.0;
     std::mutex g_siteMutex;
     std::unordered_map<uintptr_t, uint32_t> g_firstWaitSites;   // where the game first waited after a job started
 
@@ -77,9 +69,13 @@ namespace
         waitIdle(reinterpret_cast<uintptr_t>(*(static_cast<void**>(_AddressOfReturnAddress()) + 1)));
     }
 
-    // On the worker; the caller made sure it is idle.
-    void startJob(void* handle, double seconds)
+    int __stdcall asyncAdvanceTime(void* handle, double seconds)
     {
+        waitIdle(reinterpret_cast<uintptr_t>(_ReturnAddress()));
+        if (GetCurrentThreadId() == g_workerId)
+        {
+            return g_origAdvanceTime(handle, seconds);
+        }
         g_jobHandle = handle;
         g_jobSeconds = seconds;
         g_jobFpu = _control87(0, 0);
@@ -88,32 +84,6 @@ namespace
         g_busy.store(true, std::memory_order_release);
         g_firstWaitPending.store(true);
         SetEvent(g_jobEvent);
-    }
-
-    int __stdcall asyncAdvanceTime(void* handle, double seconds)
-    {
-        const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
-        if (GetCurrentThreadId() == g_workerId)
-        {
-            return g_origAdvanceTime(handle, seconds);
-        }
-        if (g_early)
-        {
-            // Recorded for afterWorld. One still waiting (no world view since) runs now, as it would have without
-            // EarlyAnimation: the time adds up and the lag stays one frame. Never for another animation context.
-            if (g_pending && g_pendingHandle == handle)
-            {
-                waitIdle(caller);
-                startJob(g_pendingHandle, g_pendingSeconds);
-                g_lateJobs.fetch_add(1, std::memory_order_relaxed);
-            }
-            g_pending = true;
-            g_pendingHandle = handle;
-            g_pendingSeconds = seconds;
-            return 0;
-        }
-        waitIdle(caller);
-        startJob(handle, seconds);
         return 0;   // the only caller (0x401953) ignores the result
     }
 
@@ -232,21 +202,8 @@ void GrannyAsync::install()
     {
         Patch::write(slot, &target, sizeof(target));
     }
-    g_early = g_config.earlyAnimation;
-    LOG("Animation: GrannyAdvanceTime runs on worker thread {}{}, {} other Granny imports wait for it", g_workerId,
-        g_early ? ", started after the world view (EarlyAnimation)" : "", count - 1);
-}
-
-void GrannyAsync::afterWorld()
-{
-    // A job still running (no character in this frame waited for it) keeps the recorded one for the next frame's call.
-    if (!g_early || !g_pending || g_busy.load(std::memory_order_acquire))
-    {
-        return;
-    }
-    g_pending = false;
-    startJob(g_pendingHandle, g_pendingSeconds);
-    g_earlyJobs.fetch_add(1, std::memory_order_relaxed);
+    LOG("Animation: GrannyAdvanceTime runs on worker thread {}, {} other Granny imports wait for it", g_workerId,
+        count - 1);
 }
 
 void GrannyAsync::onFrame()
@@ -295,11 +252,9 @@ void GrannyAsync::onFrame()
     {
         top += Fmt::format(" {:08x} x{}", sites[i].first, sites[i].second);
     }
-    const uint32_t early = g_earlyJobs.exchange(0), late = g_lateJobs.exchange(0);
-    LOG("Animation: per frame advance {:.2f} ms on the worker, game waited {:.2f} ms ({:.1f} waits); first waits at{}{}",
+    LOG("Animation: per frame advance {:.2f} ms on the worker, game waited {:.2f} ms ({:.1f} waits); first waits at{}",
         g_advanceTicks.exchange(0) * ms, g_waitTicks.exchange(0) * ms,
-        static_cast<double>(g_waits.exchange(0)) / std::max<uint32_t>(frames, 1), top.empty() ? " -" : top,
-        g_early ? Fmt::format("; started after the world view {}, at the frame start {}", early, late) : std::string());
+        static_cast<double>(g_waits.exchange(0)) / std::max<uint32_t>(frames, 1), top.empty() ? " -" : top);
     g_jobs.exchange(0);
     frames = 0;
 }

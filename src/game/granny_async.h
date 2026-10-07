@@ -10,10 +10,4 @@ namespace GrannyAsync
 
     // Once per presented frame: logs where the game had to wait for the worker, every few seconds.
     void onFrame();
-
-    // [Render] EarlyAnimation: the game's advance at the start of a frame is only recorded, and run here, after the
-    // world view of the same frame (the last Granny use of the frame's world), so it overlaps the UI, the present and
-    // the next frame up to its first character instead of only the latter. Characters show the pose of the frame
-    // before (one frame of animation latency); the time advanced adds up the same. Render thread.
-    void afterWorld();
 }

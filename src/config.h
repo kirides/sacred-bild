@@ -88,9 +88,6 @@ struct Config
     int offscreenPoses = 4;
     // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.
     bool asyncAnimation = true;
-    // With asyncAnimation: the frame's animation advance starts after the world view, overlapping the UI, the present
-    // and the next frame's start; characters show the pose one frame later.
-    bool earlyAnimation = false;
     // Hash index in front of the map data's record caches (std::map lookups per tile and object).
     bool recordIndex = true;
     // Copy small textures into shared pages so draws with different textures can be merged as well.
