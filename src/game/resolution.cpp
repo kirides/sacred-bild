@@ -388,6 +388,7 @@ namespace
         void* view = nullptr;           // the view whose row walk started last (cleared there)
         std::vector<uint8_t> entries;   // whole entries moved out of its array, in walk order
         uint32_t most = 0;              // most tiles in one frame so far
+        uint32_t logged = 0;            // the most logged last
         uint32_t logs = 0;
     };
     WaterList g_water;
@@ -436,11 +437,14 @@ namespace
         const auto total = static_cast<uint32_t>(entries.size() / WorldView::waterTileSize);
         if (total > g_water.most)
         {
+            // Logged when the most grows by a quarter: walking along a coast it grows a few tiles at a time.
+            const bool log = total >= g_water.logged + g_water.logged / 4;
             g_water.most = total;
-            if (g_water.logs < 10)
+            if (log && g_water.logs < 10)
             {
                 ++g_water.logs;
                 LOG("Water tiles: {} in one frame (the game's list holds {})", total, WorldView::waterTileCapacity);
+                g_water.logged = total;
             }
         }
 
