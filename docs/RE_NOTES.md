@@ -221,7 +221,9 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   `0x643110` (cdecl), set `0x643430` (thiscall (flag, on)).
 - With `[Render] GroundMesh`, SacredBild skips the quad batcher's add (`0x629180`) and texture (`0x6292C0`) calls
   inside `renderTileRow`, empties the layer list after each row and draws its cached sectors in place of
-  `drawTileLayers` (`src/game/ground_mesh.*`).
+  `drawTileLayers` (`src/game/ground_mesh.*`). That can come in the middle of the walk: when the water list nears
+  its end, SacredBild's row hook draws layers and water early, so the cached ground of every loaded sector is drawn
+  there, walked yet or not. A sector object's `+0x44`/`+0x48` hold its first tile's world column/row.
 - Animated water/lava tiles (record type `0x90`/`0xA0`): `renderTileRow` appends 0x98-byte entries at
   `+0x3FF2C` (count `+0x80E3C`) with no bounds check; `cWorldView_drawWaterTiles` (`0x62DD00`) draws them after
   all rows (glow pass, tile pass) and sets the water ambience from their count and average position. Entry 1750

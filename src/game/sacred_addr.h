@@ -353,6 +353,8 @@ namespace Sacred::WorldView
 // column c) of the 192x192 loaded tiles lies at (48 (c - r), 24 (c + r)) in view coordinates, plus one offset per frame.
 namespace Sacred::Sector
 {
+    constexpr uintptr_t originX = 0x44;         // int32, world tile column of its tile 0
+    constexpr uintptr_t originY = 0x48;         // int32, world tile row of its tile 0
     constexpr uintptr_t tiles = 0x6C;           // 64x64 tiles (row * 64 + column)
 }
 

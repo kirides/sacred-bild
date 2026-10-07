@@ -111,10 +111,18 @@ namespace
         uint32_t uploaded = 0;  // quads in the mesh
     };
 
-    struct SectorCache
+    // A loaded sector as the cache knows it: the sector objects are reused for other parts of the map.
+    struct SectorId
     {
         uint8_t* sector = nullptr;
         uint8_t* tiles = nullptr;
+        int32_t x = 0, y = 0;
+        bool operator==(const SectorId&) const = default;
+    };
+
+    struct SectorCache
+    {
+        SectorId id;
         uint32_t frame = 0;     // last frame it was used
         std::vector<Group> groups;
         std::vector<TileKey> keys = std::vector<TileKey>(kTilesPerSector);
@@ -507,14 +515,37 @@ namespace
         return Build::Ok;
     }
 
-    SectorCache* cacheFor(uint8_t* sector, uint8_t* tiles)
+    // The loaded sector in `slot`; false if it has no tiles.
+    bool sectorId(int slot, SectorId& id)
+    {
+        id.sector = member<uint8_t*>(g.view, WorldView::sectors + slot * 4);
+        id.tiles = id.sector ? member<uint8_t*>(id.sector, Sacred::Sector::tiles) : nullptr;
+        if (!id.tiles)
+        {
+            return false;
+        }
+        id.x = member<int32_t>(id.sector, Sacred::Sector::originX);
+        id.y = member<int32_t>(id.sector, Sacred::Sector::originY);
+        return true;
+    }
+
+    SectorCache* findCache(const SectorId& id)
     {
         for (auto& c : g.caches)
         {
-            if (c->sector == sector && c->tiles == tiles)
+            if (c->id == id)
             {
                 return c.get();
             }
+        }
+        return nullptr;
+    }
+
+    SectorCache* cacheFor(const SectorId& id)
+    {
+        if (SectorCache* c = findCache(id))
+        {
+            return c;
         }
         if (g.caches.size() >= kMaxSectorCaches)
         {
@@ -535,24 +566,22 @@ namespace
             g.caches.erase(oldest);
         }
         auto& c = g.caches.emplace_back(std::make_unique<SectorCache>());
-        c->sector = sector;
-        c->tiles = tiles;
+        c->id = id;
         return c.get();
     }
 
     // Tile `t` of loaded sector `slot` in the cache, built if it isn't or if it changed.
     bool visitTile(int slot, int t)
     {
-        auto* sector = member<uint8_t*>(g.view, WorldView::sectors + slot * 4);
-        auto* tiles = sector ? member<uint8_t*>(sector, Sacred::Sector::tiles) : nullptr;
-        if (!tiles)
+        SectorId id;
+        if (!sectorId(slot, id))
         {
             return true;
         }
         SectorCache* c = g.slots[slot];
-        if (!c || c->sector != sector || c->tiles != tiles)
+        if (!c || !(c->id == id))
         {
-            c = cacheFor(sector, tiles);
+            c = cacheFor(id);
             if (!c)
             {
                 return true;
@@ -560,7 +589,7 @@ namespace
             g.slots[slot] = c;
         }
         c->frame = g.frame;
-        const uint8_t* tile = tiles + size_t(t) * Tile::size;
+        const uint8_t* tile = id.tiles + size_t(t) * Tile::size;
         const TileKey key = readKey(tile);
         if (c->built[t])
         {
@@ -682,11 +711,20 @@ namespace
         bool visible[9] = {};
         for (int s = 0; s < 9; ++s)
         {
+            // Every loaded sector the cache has, walked this frame or not: water tiles filling up their list make the
+            // walk draw the ground halfway down the screen, before the rows below are walked.
             SectorCache* c = g.slots[s];
-            if (!c || !c->any || c->frame != g.frame)
+            SectorId id;
+            if (!c && sectorId(s, id))
+            {
+                c = findCache(id);
+                g.slots[s] = c;
+            }
+            if (!c || !c->any)
             {
                 continue;
             }
+            c->frame = g.frame;
             // Loaded tile (64 * row, 64 * column) of this slot.
             const int sr = s / 3 * 64, sc = s % 3 * 64;
             slotX[s] = g.offsetX + 48.0f * static_cast<float>(sc - sr);
