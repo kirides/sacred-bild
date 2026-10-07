@@ -25,7 +25,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md) 
 | `src/patch.*`, `src/sig.*` | Code patches and hooks; byte signature search |
 | `src/spin_lock.h` | Locks for the render thread's hot paths |
 | `src/profiler.*` | `[Debug] Profiler` |
-| `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `backdrop.*` (what surrounds the UI canvas: blurred menus, darkened world), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
+| `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
 | `src/game/build.*` | Which exe this is, address lookup, the list of game modules |
 | `src/game/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses and struct offsets SacredBild uses; their signatures (generated) |
 | `src/game/gameserver*` | The same for gameserver.exe, and its patches |

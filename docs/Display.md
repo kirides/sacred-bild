@@ -25,9 +25,7 @@ Default: the desktop resolution, instead of the hard-coded 1024x768.
   explain, and the escape menu and message boxes dim the whole screen.
 - Loading screen (GDI) drawn into a 1024x768 surface and scaled like the menus, splash centered; savegame
   thumbnails taken from the screen center.
-- No black bars around the 4:3 screens (`[UI] Backdrop`, Direct3D 9 backend): the menus and the loading screen
-  continue to the screen edges blurred and darkened, full-screen windows in game (options, save/load, character,
-  map) show the game darkened beside them, and the cinematic letterbox bars run across the whole screen.
+- The cinematic letterbox bars run across the whole screen.
 - Always a 32-bit display mode (`GFX32 : 0` in `Settings.cfg` is ignored).
 
 ## Screenshots

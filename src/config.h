@@ -63,9 +63,6 @@ struct Config
     UiPosition uiPortraits{0, 0};
     UiPosition uiShops{0, 0};       // blacksmith, merchant, combat art master, chest, cube, trade
     bool uiLinearFilter = true;   // bilinear filtering for the scaled UI instead of the game's point sampling
-    // Around the 1024x768 screens drawn into the canvas (menus, loading screen, full-screen windows in game): the
-    // screen blurred and darkened, or the game's world darkened, instead of black (Direct3D 9 backend only).
-    bool uiBackdrop = true;
 
     // Texture memory the game may keep loaded, in MB; 0 = max(game's own value, 256). A zoomed-out view at a
     // high resolution shows far more different ground textures than the original 1024x768.

@@ -548,11 +548,6 @@ Known gap: the party arrows stay in the canvas. The cinematic letterbox bars (`c
 flag `0x10`: untextured opaque black FVF `0x1C4` strips, x 0..1024, y 0..h and 768-h..768, h growing to 64) are
 moved against the screen's top and bottom edge across its width (`DeviceProxy::drawScreenBar`).
 
-Around the canvas (`[UI] Backdrop`, `src/ddraw9/backdrop.*`): a menu frame's canvas is blurred at the flip (halved
-with bilinear StretchRects down to ~32 texels wide) and drawn darkened, scaled to cover the screen, into the bars
-of the next menu frame before `cUI_Manager_render`; the loading screen does both right after its blit; with an
-in-game full-screen window open, the world drawn beside it is darkened instead of cleared.
-
 World map (megamap, `cUI_Manager +0x94`, vtable `0x896714`: render `0x6C9F60`, receiveEvent `0x6C8140`, show
 `0x6C7BB0`): a 1024x768 view scrolled over the map image. Scroll at `+0xC016C`/`+0xC0170`, clamped to the map size
 (`+0xC0160`/`+0xC0162`) minus 0x400/0x300; edge scrolling (4 px per frame) when the cursor is at x < 1 / > 0x3FE,
