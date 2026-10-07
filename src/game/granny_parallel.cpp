@@ -58,6 +58,11 @@ namespace
     ReleaseFn g_origRelease = nullptr;
     uintptr_t g_animationAccumulate = 0;
     uintptr_t g_poseAccumulate = 0;
+    uintptr_t g_clockAccumulate = 0;        // the scene's own timekeeping control: blends nothing
+    // Group key of the controls that write no bones (any thread may take them).
+    const uint8_t* const kNoBones = reinterpret_cast<const uint8_t*>(1);
+    uintptr_t g_grannyBase = 0;
+    uintptr_t g_loggedUnknown = 0;
 
     std::atomic<bool> g_parallel{false};    // the sampling phase runs on several threads
     std::atomic<bool> g_inWalk{false};
@@ -87,7 +92,7 @@ namespace
     // Statistics ([Debug] D3DStats): counted by the thread that runs the advance, read by the presenting one.
     struct Stats
     {
-        std::atomic<uint32_t> walks{0}, serialWalks{0}, controls{0}, groups{0}, checks{0}, checkFailures{0};
+        std::atomic<uint32_t> walks{0}, serialWalks{0}, unknownWalks{0}, controls{0}, groups{0}, checks{0}, checkFailures{0};
         std::atomic<int64_t> parallelTicks{0}, totalTicks{0};
     };
     Stats g_stats;
@@ -238,6 +243,11 @@ namespace
         s.bones.resize(groups.size());
         for (size_t g = 0; g < groups.size(); ++g)
         {
+            if (groups[g].bones == kNoBones)
+            {
+                s.bones[g].clear();
+                continue;
+            }
             const size_t bytes = boneBytes(groups[g].controls.front());
             s.bones[g].assign(groups[g].bones, groups[g].bones + bytes);
         }
@@ -251,7 +261,10 @@ namespace
         }
         for (size_t g = 0; g < groups.size(); ++g)
         {
-            std::memcpy(const_cast<uint8_t*>(groups[g].bones), s.bones[g].data(), s.bones[g].size());
+            if (!s.bones[g].empty())
+            {
+                std::memcpy(const_cast<uint8_t*>(groups[g].bones), s.bones[g].data(), s.bones[g].size());
+            }
         }
     }
 
@@ -349,10 +362,19 @@ namespace
             const uint8_t* skeleton = accumulate == g_animationAccumulate ? field<const uint8_t*>(control, Control::animationTarget)
                 : accumulate == g_poseAccumulate ? field<const uint8_t*>(control, Control::poseTarget)
                                                  : nullptr;
-            const uint8_t* bones = skeleton ? field<const uint8_t*>(skeleton, Skeleton::bones) : nullptr;
+            const uint8_t* bones = accumulate == g_clockAccumulate ? kNoBones
+                : skeleton ? field<const uint8_t*>(skeleton, Skeleton::bones) : nullptr;
             if (!bones)
             {
-                known = false;      // another kind of control: the original walk this time
+                // Another kind of control (IK controls read a second skeleton's bones): the original walk this time.
+                known = false;
+                g_stats.unknownWalks.fetch_add(1, std::memory_order_relaxed);
+                if (accumulate != g_loggedUnknown)
+                {
+                    g_loggedUnknown = accumulate;
+                    LOG("Animation threads: a control of another kind (sampling at granny.dll + {:x}{}), its walks stay "
+                        "on one thread", accumulate - g_grannyBase, skeleton ? "" : ", no target");
+                }
                 break;
             }
             keys.emplace_back(bones, static_cast<uint32_t>(controls.size()));
@@ -436,10 +458,15 @@ void GrannyParallel::install()
     // A pose control's blending (vtable slot 2).
     const uintptr_t pose = GrannyMesh::find(who, "Granny's pose control blending",
         "83 EC 48 53 55 8B E9 8B 45 70 8A 48 6C 84 C9 0F 84", 0);
-    if (!walk || !animation || !pose)
+    // The constructor of the scene's timekeeping control: mov dword ptr [esi], vtable.
+    const uintptr_t clockVtable = GrannyMesh::find(who, "Granny's timekeeping control",
+        "33 C0 8B CE 50 89 44 24 14 89 46 60 89 46 64 C7 06 ?? ?? ?? ?? E8", 17);
+    if (!walk || !animation || !pose || !clockVtable)
     {
         return;
     }
+    g_grannyBase = reinterpret_cast<uintptr_t>(GetModuleHandleW(L"granny.dll"));
+    g_clockAccumulate = (*reinterpret_cast<const uintptr_t* const*>(clockVtable))[Control::accumulateSlot];
     g_active = reinterpret_cast<ActiveFn>(GrannyMesh::callTarget(walk + 0x33));
     g_sample = reinterpret_cast<SampleFn>(GrannyMesh::callTarget(walk + 0x52));
     g_unlink = reinterpret_cast<UnlinkFn>(GrannyMesh::callTarget(walk + 0x86));
@@ -514,9 +541,9 @@ void GrannyParallel::onFrame()
     const uint32_t parallelWalks = walks - serial;
     const double controls = g_stats.controls.exchange(0), groups = g_stats.groups.exchange(0);
     LOG("Animation threads: {:.0f} controls on {:.0f} skeletons per frame, sampled in {:.2f} ms, whole walk {:.2f} ms; "
-        "{} of {} walks on one thread; {} checks, {} failed; {} references kept",
+        "{} of {} walks on one thread ({} with another kind of control); {} checks, {} failed; {} references kept",
         parallelWalks ? controls / parallelWalks : 0.0, parallelWalks ? groups / parallelWalks : 0.0,
-        g_stats.parallelTicks.exchange(0) * ms / f, g_stats.totalTicks.exchange(0) * ms / f, serial, walks,
+        g_stats.parallelTicks.exchange(0) * ms / f, g_stats.totalTicks.exchange(0) * ms / f, serial, walks, g_stats.unknownWalks.exchange(0),
         g_stats.checks.exchange(0), g_stats.checkFailures.exchange(0), g_lostReferences.exchange(0));
     g_frames = 0;
 }

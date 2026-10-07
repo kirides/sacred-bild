@@ -414,7 +414,10 @@ Control walk (`0x10007420`, thiscall on the scene (double old time), `ret 8`), p
 control is deleted (vtable `+0`, flags 3 or 1 by the node's bits). Controls are 0x88 bytes: animation controls
 (vtable `0x1005CB70`, ctor `0x1001AC40`; handle `+0x60`, target skeleton `+0x68`, binding `+0x6C`) sample into the
 target's bone states (`+0xAC` of each 300-byte bone, `0x1001B270`; root motion `0x1001B390` / `0x1001BA50` into the
-root bone); pose controls (vtable `0x1005CA60`, ctor `0x10019F50`; pose `+0x60`, target `+0x70`) copy pose bones.
+root bone); pose controls (vtable `0x1005CA60`, ctor `0x10019F50`; pose `+0x60`, target `+0x70`) copy pose bones. Every
+scene also keeps a timekeeping control (vtable `0x1005C9BC`, ctor `0x10019760` from `0x10007190`; duration `+0x60`)
+whose sampling does nothing; IK controls (vtable `0x1005C878`, `0x10017570`) write one skeleton's bones from another
+skeleton's (not imported by Sacred).
 Curve evaluation (`0x1001B120`, keyframe tracks and spline track classes) only reads the animation. No global
 writes under any of it (disassembly sweep of 65 functions); the one shared write is the handle lock/release around
 an animation control's sampling (`0x100043B0` / `0x10005370`): plain 16-bit increments at handle `+8`/`+0xA`, the
