@@ -8,6 +8,7 @@
 #include "game/options_screen.h"
 #include "game/gpu_skin.h"
 #include "game/granny_async.h"
+#include "game/granny_parallel.h"
 #include "game/ground_mesh.h"
 #include "game/ground_quads.h"
 #include "game/language.h"
@@ -97,6 +98,7 @@ void Sacred::installHooks()
     MapCache::install();
     GroundQuads::install();
     GpuSkin::install();
+    GrannyParallel::install();
     SkinCheck::install();
     Language::install();
     if (Patch::commit())

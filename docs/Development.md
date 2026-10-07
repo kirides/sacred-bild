@@ -39,6 +39,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md) 
 | `src/game/screenshot.*` | Print Screen as PNG / JPEG |
 | `src/game/language.*` | Text and speech files of the game's language |
 | `src/game/granny_async.*` | Animation update on a worker thread (`[Render] AsyncAnimation`) |
+| `src/game/granny_parallel.*` | `[Render] AnimationThreads`: Granny's animation controls sampled on several threads, split by skeleton |
 | `src/game/granny_mesh.*` | Granny's meshes, bone bindings and influence lists as its deform routine sees them |
 | `src/game/gpu_skin.*` | `[Render] GpuSkinning`: Granny's deform reduced to the bone matrices, characters drawn by the backend's skinning shader |
 | `src/game/skin_check.*` | `[Debug] SkinCheck`: Granny's skinning data read back and checked |

@@ -407,6 +407,22 @@ start of the render loop's frame. Starting it after the world view instead (trie
 UI draws items as 3D models every frame (`0x40E9C0`, `GrannySetSequencePosition`; taskbar, inventory, equipment,
 cursor) and waited for the whole advance there.
 
+Control walk (`0x10007420`, thiscall on the scene (double old time), `ret 8`), per node (`+8` = control | flags):
+`0x100013A0` (active at a time: thiscall (double), `ret 8`; duration = vtable `+4`) at the old time, then
+`0x100016E0` (thiscall (double old, double new), `ret 0x10`: playback position, weight `0x10001A30`, then vtable
+`+8`); then, unless active at the new time and if finished (byte `+0x10`), `0x10007AD0` unlinks the node and the
+control is deleted (vtable `+0`, flags 3 or 1 by the node's bits). Controls are 0x88 bytes: animation controls
+(vtable `0x1005CB70`, ctor `0x1001AC40`; handle `+0x60`, target skeleton `+0x68`, binding `+0x6C`) sample into the
+target's bone states (`+0xAC` of each 300-byte bone, `0x1001B270`; root motion `0x1001B390` / `0x1001BA50` into the
+root bone); pose controls (vtable `0x1005CA60`, ctor `0x10019F50`; pose `+0x60`, target `+0x70`) copy pose bones.
+Curve evaluation (`0x1001B120`, keyframe tracks and spline track classes) only reads the animation. No global
+writes under any of it (disassembly sweep of 65 functions); the one shared write is the handle lock/release around
+an animation control's sampling (`0x100043B0` / `0x10005370`): plain 16-bit increments at handle `+8`/`+0xA`, the
+handle being shared by every control playing that animation. The API entry points spin on a global reentrancy
+count (`0x1006CB38`), so Granny is single-threaded by design. `[Render] AnimationThreads` (`src/game/granny_parallel.*`)
+replaces the walk: controls grouped by their target's bone array, groups spread over threads (each group's
+controls in list order), the handle lock/release atomic meanwhile, then the expiry part on the calling thread.
+
 ## UI (`cUI_Control2` / `cUI_Window2` / `cUI_Manager`)
 
 `cUI_Control2` (vtable `0x897488`): `+0x10` flags (bit 0 visible), `+0x24` x, `+0x28` y, `+0x2C`/`+0x2E`

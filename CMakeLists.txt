@@ -56,6 +56,7 @@ set(DDRAW_SOURCES
   src/game/frame_hooks.cpp
   src/game/gameserver.cpp
   src/game/granny_async.cpp
+  src/game/granny_parallel.cpp
   src/game/language.cpp
   src/game/map_cache.cpp
   src/game/ground_quads.cpp

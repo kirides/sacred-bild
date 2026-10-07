@@ -143,6 +143,22 @@ namespace GrannyMesh
         }
     }
 
+    uintptr_t find(const char* who, const char* what, const char* pattern, uint16_t offset)
+    {
+        return findInGranny(who, what, pattern, offset);
+    }
+
+    uintptr_t callTarget(uintptr_t site)
+    {
+        if (!site || *reinterpret_cast<const uint8_t*>(site) != 0xE8)
+        {
+            return 0;
+        }
+        int32_t rel;
+        std::memcpy(&rel, reinterpret_cast<const void*>(site + 1), sizeof(rel));
+        return site + 5 + static_cast<uintptr_t>(static_cast<intptr_t>(rel));
+    }
+
     uintptr_t findDeform(const char* who)
     {
         return findInGranny(who, "Granny's deform routine",

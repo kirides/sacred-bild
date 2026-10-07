@@ -38,6 +38,7 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | BatchGround | 1 | The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls per quad. |
 | Render | RecordIndex | 1 | Hash index (gtl::flat_hash_map) in front of the game's tile/object record caches. |
 | Render | AsyncAnimation | 1 | Advance Granny animations on a worker thread, overlapping the start of the frame. |
+| Render | AnimationThreads | 1 | Experimental: threads that sample Granny's animation controls in the advance, split by skeleton; 1 = Granny's own walk, 0 = automatic (CPU cores - 2, at most 4). |
 | Render | Atlas | 1 | Copy small textures into shared pages so more draws merge. |
 | Render | AtlasPageSize | 8192 | Atlas page size in texels (clamped to the GPU limit, halved if the GPU refuses it). |
 | Render | AtlasPages | 2 | Pages per texture format; the least recently used one is reused when full. |
@@ -62,6 +63,7 @@ tabs, Start is Play. Text fields need the keyboard.
 | Debug | UiTrace | 0 | Scroll Lock logs one UI frame's draws (`UiTrace:` lines: position, UI frame, calling game code) and popups set during the next 5 s. |
 | Debug | CrashDump | 1 | Minidump next to the exe on a crash: 0 = off, 1 = stacks and the memory they point to (small), 2 = all memory (for the game's globals; hundreds of MB). |
 | Debug | SkinCheck | 0 | Compares Granny's CPU skinning of characters with per-vertex bone weights rebuilt from its meshes (`Skin check:` lines every 10 s): groundwork for skinning on the GPU. |
+| Debug | AnimationCheck | 0 | With `AnimationThreads`: every 2 s the controls are sampled on one thread and on the threads from the same state and compared (`Animation threads:` lines); a difference keeps the walk on one thread. |
 | Debug | MovieFallback | 0 | Movies always through the fallback (DirectShow into a system memory surface), as without the Media Engine. |
 
 The controller's settings and bindings (`[Controller]`, `[Controller.Bindings]`) are in [Controller](Controller.md#settings).

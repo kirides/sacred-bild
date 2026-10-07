@@ -106,6 +106,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.gpuSkinning = readInt(ini, L"Render", L"GpuSkinning", g_config.gpuSkinning) != 0;
     g_config.offscreenPoses = readInt(ini, L"Render", L"OffscreenPoses", g_config.offscreenPoses);
     g_config.asyncAnimation = readInt(ini, L"Render", L"AsyncAnimation", g_config.asyncAnimation) != 0;
+    g_config.animationThreads = readInt(ini, L"Render", L"AnimationThreads", g_config.animationThreads);
     g_config.recordIndex = readInt(ini, L"Render", L"RecordIndex", g_config.recordIndex) != 0;
     g_config.atlas = readInt(ini, L"Render", L"Atlas", g_config.atlas) != 0;
     g_config.atlasPageSize = readInt(ini, L"Render", L"AtlasPageSize", g_config.atlasPageSize);
@@ -137,17 +138,18 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.crashDump = readInt(ini, L"Debug", L"CrashDump", g_config.crashDump);
     g_config.movieFallback = readInt(ini, L"Debug", L"MovieFallback", g_config.movieFallback) != 0;
     g_config.skinCheck = readInt(ini, L"Debug", L"SkinCheck", g_config.skinCheck) != 0;
+    g_config.animationCheck = readInt(ini, L"Debug", L"AnimationCheck", g_config.animationCheck) != 0;
 
     LOG("Config: HideSettingsWindow={} Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} ClipCursor={} FpsLimit={} FpsLimitInactive={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
-        "BatchNoClip={} BatchVertexBuffer={} BatchModels={} BatchGround={} GroundMesh={} GpuSkinning={} OffscreenPoses={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
-        "Screenshot.Format={} Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} Net.Udp={} Net.Matchmaker='{}' Net.Publish={} Net.Prefer={} D3DStats={} Profiler={} ({} us) UiTrace={} CrashDump={} MovieFallback={} SkinCheck={}",
+        "BatchNoClip={} BatchVertexBuffer={} BatchModels={} BatchGround={} GroundMesh={} GpuSkinning={} OffscreenPoses={} AsyncAnimation={} AnimationThreads={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
+        "Screenshot.Format={} Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} Net.Udp={} Net.Matchmaker='{}' Net.Publish={} Net.Prefer={} D3DStats={} Profiler={} ({} us) UiTrace={} CrashDump={} MovieFallback={} SkinCheck={} AnimationCheck={}",
         !g_config.settingsWindow, g_config.ddrawD3D9 ? "d3d9" : "chain", ascii(g_config.d3d9Path), g_config.mediaFoundation, g_config.width, g_config.height,
         g_config.frame == Config::Frame::Auto ? "auto" : g_config.frame == Config::Frame::Never ? "1" : "0", g_config.clipCursor, g_config.fpsLimit, g_config.fpsLimitInactive,
         g_config.vsync, g_config.maxFrameLatency, g_config.uiScale,
         g_config.uiScaleMenus ? "Full" : "InGame", g_config.uiLinearFilter, g_config.uiAnchor,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
-        g_config.batchModels, g_config.batchGround, g_config.groundMesh, g_config.gpuSkinning, g_config.offscreenPoses, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
-        g_config.atlasMaxTextureSize, g_config.screenshotJpeg ? "jpg" : "png", g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.netUdp, g_config.netMatchmaker, g_config.netPublish, g_config.netPreferIpv6 ? "IPv6" : "IPv4", g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs, g_config.uiTrace, g_config.crashDump, g_config.movieFallback, g_config.skinCheck);
+        g_config.batchModels, g_config.batchGround, g_config.groundMesh, g_config.gpuSkinning, g_config.offscreenPoses, g_config.asyncAnimation, g_config.animationThreads, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
+        g_config.atlasMaxTextureSize, g_config.screenshotJpeg ? "jpg" : "png", g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.netUdp, g_config.netMatchmaker, g_config.netPublish, g_config.netPreferIpv6 ? "IPv6" : "IPv4", g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs, g_config.uiTrace, g_config.crashDump, g_config.movieFallback, g_config.skinCheck, g_config.animationCheck);
     LOG("Config: Controller Enabled={} Deadzone={} CursorSpeed={} MoveRadius={} AimRange={} AimCone={} ArtClick={} Walk={} Prompts={}",
         g_config.controller, g_config.controllerDeadzone, g_config.controllerCursorSpeed, g_config.controllerMoveRadius,
         g_config.controllerAimRange, g_config.controllerAimCone, g_config.controllerArtClick, g_config.controllerWalk,

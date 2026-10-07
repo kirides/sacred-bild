@@ -56,6 +56,11 @@ namespace GrannyMesh
     using DeformFn = void(__fastcall*)(uint8_t* mesh, void* edx, void* bones, uint32_t* positionsOut, uint32_t doPositions,
         uint32_t* normalsOut, uint32_t doNormals, uint32_t normalize);
 
+    // Code in the loaded granny.dll by signature (`offset` bytes into the match), 0 if not found (logged with `who`).
+    uintptr_t find(const char* who, const char* what, const char* pattern, uint16_t offset);
+    // The target of the `call rel32` at `site`, 0 if there is none.
+    uintptr_t callTarget(uintptr_t site);
+
     // The deform routine in the loaded granny.dll (by signature), 0 if not found (logged with `who`).
     uintptr_t findDeform(const char* who);
     // Where the deform returns to in the rendering path (LockNextRenderingState's engine function 0x10034200, the

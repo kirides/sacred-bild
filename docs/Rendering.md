@@ -53,7 +53,9 @@ each sector's terrain once).
 
 Granny skinned every character and its shadow on the CPU each frame (a fifth of the render thread zoomed out). With
 the Direct3D 9 backend, a vertex shader does that from meshes kept on the GPU and lights them as Direct3D 7 did
-(2560x1440 zoomed out: 94 -> 132 fps; `[Render] GpuSkinning`, `OffscreenPoses`).
+(2560x1440 zoomed out: 94 -> 132 fps; `[Render] GpuSkinning`, `OffscreenPoses`). The animation update runs on a
+worker thread (`AsyncAnimation`); with `AnimationThreads` its biggest part, sampling every character's animations,
+is split by character over several threads (experimental; `[Debug] AnimationCheck` compares it with one thread).
 
 ## Diagnostics
 

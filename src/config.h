@@ -88,6 +88,8 @@ struct Config
     int offscreenPoses = 4;
     // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.
     bool asyncAnimation = true;
+    // Threads that sample Granny's animation controls (split by skeleton); 1 = Granny's own walk, 0 = automatic.
+    int animationThreads = 1;
     // Hash index in front of the map data's record caches (std::map lookups per tile and object).
     bool recordIndex = true;
     // Copy small textures into shared pages so draws with different textures can be merged as well.
@@ -147,6 +149,9 @@ struct Config
     bool movieFallback = false;
     // Compare Granny's CPU skinning with per-vertex weights (groundwork for skinning on the GPU).
     bool skinCheck = false;
+    // With animationThreads: every 2 s the controls are sampled on one thread and on the threads from the same state
+    // and the results compared; a difference keeps the walk on one thread.
+    bool animationCheck = false;
     int profilerIntervalUs = 500;
 };
 

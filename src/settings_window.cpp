@@ -244,6 +244,10 @@ namespace
         ui.unindent();
         ui.check(L"Animate on a second thread", {L"Render", L"AsyncAnimation"}, g_config.asyncAnimation)
             .tip(L"Advance the 3D animations on a second thread while the frame starts drawing (needs a second CPU core).");
+        ui.combo(L"Animation threads:", {L"Render", L"AnimationThreads"}, {1, 0, 2, 3, 4}, g_config.animationThreads,
+              [](int n) { return n == 1 ? std::wstring(L"1 (Granny's own)") : n == 0 ? std::wstring(L"Automatic") : std::to_wstring(n); })
+            .tip(L"Threads that sample the characters' animations each frame, split by character (experimental). "
+                 L"1 = as Granny does it, on one thread. Automatic = CPU cores - 2, at most 4.");
         ui.check(L"Hash index for the map records", {L"Render", L"RecordIndex"}, g_config.recordIndex)
             .tip(L"Hash index in front of the game's record caches (looked up for every ground tile and object).");
 
