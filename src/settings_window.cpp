@@ -244,6 +244,12 @@ namespace
         ui.unindent();
         ui.check(L"Animate on a second thread", {L"Render", L"AsyncAnimation"}, g_config.asyncAnimation)
             .tip(L"Advance the 3D animations on a second thread while the frame starts drawing (needs a second CPU core).");
+        ui.indent();
+        ui.check(L"Start it after the world view (one frame later)", {L"Render", L"EarlyAnimation"}, g_config.earlyAnimation)
+            .enabledIf([](const Form& f) { return f.on(L"Render", L"AsyncAnimation"); })
+            .tip(L"Start each frame's animation update right after the world is drawn, so it overlaps the interface, "
+                 L"the present and the start of the next frame. Characters show their pose one frame later.");
+        ui.unindent();
         ui.check(L"Hash index for the map records", {L"Render", L"RecordIndex"}, g_config.recordIndex)
             .tip(L"Hash index in front of the game's record caches (looked up for every ground tile and object).");
 

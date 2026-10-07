@@ -273,6 +273,7 @@ namespace
         {
             proxy->endBatch();
         }
+        GrannyAsync::afterWorld();
         D3DStats::addTime(D3DStats::TWorldProxy, D3DStats::total(D3DStats::TProxy) - proxyTime);
     }
 
