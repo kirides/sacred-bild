@@ -18,6 +18,8 @@ namespace UiCanvas
 
     // An in-game window covering the whole 1024x768 screen (options, savegame, character, megamap) is open.
     bool fullScreenWindowOpen();
+    // The UI manager is in game (not in the menus or leaving them).
+    bool inGame();
 
     // Canvas placement in physical pixels (in game or menus, see above).
     float left();

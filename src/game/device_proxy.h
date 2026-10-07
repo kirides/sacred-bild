@@ -138,6 +138,9 @@ private:
     // of the escape menu and of message boxes (windows with flag 0x800): draws it over the whole screen instead;
     // false if it is something else.
     bool drawScreenDim(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, DWORD flags, HRESULT& hr);
+    // An untextured black bar across the whole 1024x768 width against its top or bottom edge (the cinematic
+    // letterbox bars): drawn across the screen, its outer edge on the screen's edge.
+    bool drawScreenBar(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, DWORD flags, HRESULT& hr);
     void traceUiDraw(const char* what, DWORD count);
     // Clips an axis-aligned 4-vertex quad (strip/fan) to the UI frame in place; false if it can't.
     bool clipQuad(DWORD fvf, uint8_t* verts);

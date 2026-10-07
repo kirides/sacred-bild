@@ -544,7 +544,24 @@ of message boxes (windows with flag 0x800, `cUI_Control2_render`, 0x9F000000). T
 (stats-relative 242,10, parent set); the game flags controls of that name with 0x20000 on level-up (`0x57F033`), and
 the stats window's show (`0x6A5FA0`) messages them as well. `[Debug] UiTrace` logs a frame's UI draws with their frame
 and the calling code (a stack scan for return addresses into sacred.exe) for finding the rest.
-Known gaps: the party arrows and the cinematic bars stay in the canvas.
+Known gap: the party arrows stay in the canvas. The cinematic letterbox bars (`cUI_Manager_render` with manager
+flag `0x10`: untextured opaque black FVF `0x1C4` strips, x 0..1024, y 0..h and 768-h..768, h growing to 64) are
+moved against the screen's top and bottom edge across its width (`DeviceProxy::drawScreenBar`).
+
+Around the canvas (`[UI] Backdrop`, `src/ddraw9/backdrop.*`): a menu frame's canvas is blurred at the flip (halved
+with bilinear StretchRects down to ~32 texels wide) and drawn darkened, scaled to cover the screen, into the bars
+of the next menu frame before `cUI_Manager_render`; the loading screen does both right after its blit; with an
+in-game full-screen window open, the world drawn beside it is darkened instead of cleared.
+
+World map (megamap, `cUI_Manager +0x94`, vtable `0x896714`: render `0x6C9F60`, receiveEvent `0x6C8140`, show
+`0x6C7BB0`): a 1024x768 view scrolled over the map image. Scroll at `+0xC016C`/`+0xC0170`, clamped to the map size
+(`+0xC0160`/`+0xC0162`) minus 0x400/0x300; edge scrolling (4 px per frame) when the cursor is at x < 1 / > 0x3FE,
+y < 1 / > 0x2FE outside the control rect at `+0xC0538` (cursor shapes per edge, `0x6C7920`); dragging with the
+button held (`+0xC0154` bit 8 and the previous cursor at `0x17EA118`). The map pieces are drawn by `0x6C9C60`,
+`0x6C8A40`, `0x6C8800`, `0x6C9330`, `0x6C9520`; then a 10-vertex black FVF `0x1C4` strip masks everything outside
+(70, 70)..(954, 698), the frame's children (`+0xC04BC`, `+0xC0440`, `+0xC0544`, `+0xC0600`) draw on top, and
+marker popups are centered on (0x200, 0x180). A map filling the screen would need those 1024x768 constants, the
+mask and the children's layout moved to the screen's size.
 
 ## Things that read the back buffer
 

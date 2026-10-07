@@ -1,4 +1,5 @@
 #include "game/frame_hooks.h"
+#include "ddraw9/backdrop.h"
 #include "game/controller.h"
 #include "game/d3d_stats.h"
 #include "game/device_proxy.h"
@@ -168,6 +169,8 @@ namespace
         return ok;
     }
 
+    bool g_captureMenu = false;     // a menu frame: its canvas becomes the backdrop of the next one
+
     int __fastcall hookFlip(void* self, void* edx)
     {
         // Menus flip from the UI thread, the game world from the engine render thread.
@@ -184,6 +187,12 @@ namespace
             }
         }
         Resolution::beforeFlip(self);
+        if (g_captureMenu)
+        {
+            g_captureMenu = false;
+            const UiCanvas::Bounds c = UiCanvas::menuCanvas();
+            DDraw9::Backdrop::capture({std::lround(c.left), std::lround(c.top), std::lround(c.right), std::lround(c.bottom)});
+        }
         int hr;
         {
             D3DStats::Scope s{D3DStats::TFlip};
@@ -279,8 +288,14 @@ namespace
     void __fastcall hookUiRender(void* self, void* edx, void* device)
     {
         D3DStats::Scope s{D3DStats::TUi};
-        // The original screen showed nothing but a full-screen window; keep the world beside the canvas hidden.
-        if (UiCanvas::enabled() && device && UiCanvas::fullScreenWindowOpen())
+        const auto canvasRect = [] {
+            return RECT{std::lround(UiCanvas::left()), std::lround(UiCanvas::top()), std::lround(UiCanvas::right()),
+                std::lround(UiCanvas::bottom())};
+        };
+        // The original screen showed nothing but a full-screen window: the world beside the canvas darkened (with the
+        // backdrop) or hidden.
+        if (UiCanvas::enabled() && device && UiCanvas::fullScreenWindowOpen() &&
+            !(g_config.uiBackdrop && DDraw9::Backdrop::dim(canvasRect())))
         {
             const LONG l = std::lround(UiCanvas::left()), t = std::lround(UiCanvas::top());
             const LONG r = std::lround(UiCanvas::right()), b = std::lround(UiCanvas::bottom());
@@ -298,6 +313,19 @@ namespace
             if (count)
             {
                 static_cast<IDirect3DDevice7*>(device)->Clear(count, used, D3DCLEAR_TARGET, 0xFF000000, 1.0f, 0);
+            }
+        }
+        else if (UiCanvas::enabled() && device && g_config.uiBackdrop && !UiCanvas::fullScreenWindowOpen())
+        {
+            if (UiCanvas::inGame())
+            {
+                DDraw9::Backdrop::forget();
+            }
+            else
+            {
+                // Menus: the last frame's menu screen, blurred, beside the canvas; this one is taken at the flip.
+                DDraw9::Backdrop::fill(canvasRect());
+                g_captureMenu = true;
             }
         }
         UiCanvas::Scope ui;

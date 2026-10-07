@@ -273,6 +273,12 @@ bool UiCanvas::fullScreenWindowOpen()
     return manager && ::fullScreenWindowOpen(manager);
 }
 
+bool UiCanvas::inGame()
+{
+    void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager);
+    return manager && (member<uint32_t>(manager, UiManager::flags) & UiManager::inGame);
+}
+
 UiCanvas::Bounds UiCanvas::menuCanvas()
 {
     return {g_menu.left, g_menu.top, g_menu.left + 1024.0f * g_menu.scale, g_menu.top + 768.0f * g_menu.scale};

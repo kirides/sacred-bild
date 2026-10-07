@@ -1,4 +1,5 @@
 #include "game/resolution.h"
+#include "ddraw9/backdrop.h"
 #include "game/focus.h"
 #include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
@@ -719,6 +720,12 @@ void Resolution::beforeFlip(void* dxDriver)
     const UiCanvas::Bounds r = UiCanvas::menuCanvas();
     RECT dst = {std::lround(r.left), std::lround(r.top), std::lround(r.right), std::lround(r.bottom)};
     back->Blt(&dst, canvas, nullptr, DDBLT_WAIT, nullptr);
+    if (g_config.uiBackdrop)
+    {
+        // The loading screen continues blurred to the screen edges.
+        DDraw9::Backdrop::capture(dst);
+        DDraw9::Backdrop::fill(dst);
+    }
 }
 
 int Resolution::centerX() { return (g_width - 1024) / 2; }

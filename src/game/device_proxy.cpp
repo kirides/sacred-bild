@@ -395,6 +395,49 @@ bool DeviceProxy::drawScreenDim(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, D
     return true;
 }
 
+bool DeviceProxy::drawScreenBar(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, DWORD flags, HRESULT& hr)
+{
+    const bool top = m_virtMinY < 0.5f, bottom = m_virtMaxY > 767.5f;
+    if (m_texture0 || count != 4 || !(fvf & D3DFVF_DIFFUSE) || m_virtMinX > 0.5f || m_virtMaxX < 1023.5f ||
+        top == bottom || !UiCanvas::inGame())
+    {
+        return false;
+    }
+    const UINT stride = Fvf::stride(fvf);
+    const UINT diffuse = 16 + ((fvf & D3DFVF_RESERVED1) ? 4 : 0);
+    for (DWORD i = 0; i < count; ++i)
+    {
+        DWORD color;
+        std::memcpy(&color, m_scratch.data() + size_t(i) * stride + diffuse, sizeof(color));
+        if ((color & 0xFFFFFF) != 0)
+        {
+            return false;
+        }
+    }
+    const UiCanvas::Placement place = UiCanvas::placement();
+    const float midX = place.originX + 512.0f * place.scale;
+    const float l = static_cast<float>(m_savedViewport.dwX), t = static_cast<float>(m_savedViewport.dwY);
+    const float r = l + m_savedViewport.dwWidth, b = t + m_savedViewport.dwHeight;
+    // Moved against the screen's edge with its height kept.
+    const float shift = top ? t - place.originY : b - (place.originY + 768.0f * place.scale);
+    for (DWORD i = 0; i < count; ++i)
+    {
+        auto* p = reinterpret_cast<float*>(m_scratch.data() + size_t(i) * stride);
+        p[0] = p[0] < midX ? l : r;
+        p[1] += shift;
+    }
+    D3DVIEWPORT7 restore;
+    m_real->GetViewport(&restore);
+    m_real->SetViewport(&m_savedViewport);
+    D3DStats::count(CSubmit);
+    {
+        Scope s{TDraw};
+        hr = m_real->DrawPrimitive(type, fvf, m_scratch.data(), count, flags);
+    }
+    m_real->SetViewport(&restore);
+    return true;
+}
+
 void DeviceProxy::traceUiDraw(const char* what, DWORD count)
 {
     UiCanvas::trace(Fmt::format("{} {} vertices {:.0f},{:.0f} .. {:.0f},{:.0f} texture {}", what, count, m_virtMinX,
@@ -822,7 +865,7 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
             return D3D_OK;
         }
         HRESULT dimmed;
-        if (quad && drawScreenDim(type, fvf, count, flags, dimmed))
+        if (quad && (drawScreenDim(type, fvf, count, flags, dimmed) || drawScreenBar(type, fvf, count, flags, dimmed)))
         {
             return dimmed;
         }

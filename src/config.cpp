@@ -87,6 +87,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.uiScale = static_cast<float>(_wtof(readString(ini, L"UI", L"Scale", L"0").c_str()));
     g_config.uiScaleMenus = _wcsicmp(readString(ini, L"UI", L"ScaleMode", L"InGame").c_str(), L"Full") == 0;
     g_config.uiLinearFilter = readInt(ini, L"UI", L"LinearFilter", g_config.uiLinearFilter) != 0;
+    g_config.uiBackdrop = readInt(ini, L"UI", L"Backdrop", g_config.uiBackdrop) != 0;
     g_config.uiAnchor = readInt(ini, L"UI", L"Anchor", g_config.uiAnchor) != 0;
     readPosition(ini, L"Taskbar", g_config.uiTaskbar);
     readPosition(ini, L"Chat", g_config.uiChat);
@@ -138,13 +139,13 @@ void ConfigFile::load(const std::wstring& gameDir)
     g_config.movieFallback = readInt(ini, L"Debug", L"MovieFallback", g_config.movieFallback) != 0;
     g_config.skinCheck = readInt(ini, L"Debug", L"SkinCheck", g_config.skinCheck) != 0;
 
-    LOG("Config: HideSettingsWindow={} Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} ClipCursor={} FpsLimit={} FpsLimitInactive={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
+    LOG("Config: HideSettingsWindow={} Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} ClipCursor={} FpsLimit={} FpsLimitInactive={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Backdrop={} UI.Anchor={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} BatchGround={} GroundMesh={} GpuSkinning={} OffscreenPoses={} AsyncAnimation={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
         "Screenshot.Format={} Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} Net.Udp={} Net.Matchmaker='{}' Net.Publish={} Net.Prefer={} D3DStats={} Profiler={} ({} us) UiTrace={} CrashDump={} MovieFallback={} SkinCheck={}",
         !g_config.settingsWindow, g_config.ddrawD3D9 ? "d3d9" : "chain", ascii(g_config.d3d9Path), g_config.mediaFoundation, g_config.width, g_config.height,
         g_config.frame == Config::Frame::Auto ? "auto" : g_config.frame == Config::Frame::Never ? "1" : "0", g_config.clipCursor, g_config.fpsLimit, g_config.fpsLimitInactive,
         g_config.vsync, g_config.maxFrameLatency, g_config.uiScale,
-        g_config.uiScaleMenus ? "Full" : "InGame", g_config.uiLinearFilter, g_config.uiAnchor,
+        g_config.uiScaleMenus ? "Full" : "InGame", g_config.uiLinearFilter, g_config.uiBackdrop, g_config.uiAnchor,
         g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
         g_config.batchModels, g_config.batchGround, g_config.groundMesh, g_config.gpuSkinning, g_config.offscreenPoses, g_config.asyncAnimation, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
         g_config.atlasMaxTextureSize, g_config.screenshotJpeg ? "jpg" : "png", g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.netUdp, g_config.netMatchmaker, g_config.netPublish, g_config.netPreferIpv6 ? "IPv6" : "IPv4", g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs, g_config.uiTrace, g_config.crashDump, g_config.movieFallback, g_config.skinCheck);

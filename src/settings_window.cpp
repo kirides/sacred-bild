@@ -175,6 +175,11 @@ namespace
                  L"(HUD layout tab). Off: the whole interface stays in the centered 1024 x 768 area.");
         ui.check(L"Smooth UI scaling (bilinear filtering)", {L"UI", L"LinearFilter"}, g_config.uiLinearFilter)
             .tip(L"Bilinear filtering for the scaled interface. Off: the game's sharp point sampling.");
+        ui.check(L"Fill the screen around menus and full-screen windows", {L"UI", L"Backdrop"}, g_config.uiBackdrop)
+            .enabledIf(d3d9)
+            .tip(L"Around the game's 4:3 screens: the menus and the loading screen continue blurred and darkened to the "
+                 L"screen edges, full-screen windows in game (options, save/load, character, map) show the game "
+                 L"darkened beside them. Off: black bars. Needs the SacredBild (Direct3D 9) renderer.");
         ui.group(L"Renderer");
         ui.combo(L"DirectDraw:", {L"DDraw", L"Backend"},
               {{L"SacredBild (Direct3D 9)", L"d3d9"}, {L"Chain-loaded ddraw", L"chain"}}, g_config.ddrawD3D9 ? L"d3d9" : L"chain")

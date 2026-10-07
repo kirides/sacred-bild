@@ -85,6 +85,7 @@ set(DDRAW_SOURCES
   src/ddraw9/device.cpp
   src/ddraw9/device_skin.cpp
   src/ddraw9/device_ground.cpp
+  src/ddraw9/backdrop.cpp
   src/ddraw9/directdraw.cpp
   src/ddraw9/format.cpp
   src/ddraw9/gpu.cpp
