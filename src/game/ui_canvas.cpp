@@ -184,6 +184,19 @@ namespace
         return result;
     }
 
+    // [Debug] UiTrace: the tile a click lands on, as the world mouse handler looks it up (it walks only to a tile that
+    // exists, has +8 == 0 and bit 0 of +0x1E).
+    using TileAtFn = uint8_t*(__fastcall*)(void* map, void* edx, const int32_t* pos);
+    TileAtFn g_origTileAt = nullptr;
+
+    uint8_t* __fastcall tracedTileAt(void* map, void* edx, const int32_t* pos)
+    {
+        uint8_t* tile = g_origTileAt(map, edx, pos);
+        LOG("UI trace: clicked tile region {} at {},{} level {}: {}", pos[0] & 0xFFFF, pos[1], pos[2], pos[3] & 0xFF,
+            tile ? Fmt::format("+8 {} +1E {:02x}", *reinterpret_cast<int32_t*>(tile + 8), tile[0x1E]) : std::string("none"));
+        return tile;
+    }
+
     // [Debug] UiTrace: each mouse button event as the engine gets it, whether the UI claims its position, and what
     // the engine returns (the world mouse handler logs whether it got the event).
     uint32_t __fastcall hookReceiveEvent(cEngine* engine, void* edx, cEvent* event)
@@ -482,5 +495,10 @@ void UiCanvas::install()
     if (Config::debug.uiTrace)
     {
         Patch::hook(g_origReceiveEvent, Addr::cEngine_receiveEvent, &hookReceiveEvent, "cEngine::receiveEvent");
+        if (const uintptr_t site = Addr::worldMouseTileAtCall; site && Patch::verify(site, {0xE8}))
+        {
+            g_origTileAt = reinterpret_cast<TileAtFn>(site + 5 + *reinterpret_cast<const int32_t*>(site + 1));
+            Patch::redirectCall(site, reinterpret_cast<void*>(&tracedTileAt));
+        }
     }
 }

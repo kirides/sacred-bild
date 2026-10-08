@@ -54,6 +54,7 @@ SACRED = [
     ('worldCursorSpecialRenderReturn', 0x00612E6F, 'code'),
     ('cEngine_worldMouse', 0x006172C0, 'func'),
     ('cEngine_receiveEvent', 0x00618090, 'func'),
+    ('worldMouseTileAtCall', 0x0061746E, 'code'),
     ('cEventMouseDown_vtable', 0x0089704C, 'data'),
     ('cEventMouseUp_vtable', 0x00899248, 'data'),
     # world-side reads of the cursor (ui_canvas): calls to cMouse::getX / getY / instance

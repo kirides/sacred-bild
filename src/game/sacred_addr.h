@@ -201,6 +201,9 @@ namespace Sacred::Addr
     // ENG 006172C0; returns a bool
     inline Thiscall<uint32_t(cEngine* self, cEvent* event, int flag)> cEngine_worldMouse{};
     inline Thiscall<uint32_t(cEngine* self, cEvent* event)> cEngine_receiveEvent{}; // ENG 00618090; returns a bool
+    // The world mouse handler's lookup of the clicked tile: call of cMapData::tileAt (ENG 00634AF0, thiscall (int32
+    // pos[4]: uint16 region, tile x, tile y, level byte) -> tile record, 0 if none); a click walks only if it finds one.
+    inline uintptr_t worldMouseTileAtCall{};            // ENG 0061746E
     inline uintptr_t cEventMouseDown_vtable{};          // ENG 0089704C; x at +8, y at +0xC
     inline uintptr_t cEventMouseUp_vtable{};            // ENG 00899248
     // World-side cursor reads, redirected to physical coordinates: calls to cMouse::getX (ENG 00655850),
