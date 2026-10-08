@@ -124,6 +124,9 @@ SACRED = [
     ('cMutex_unlock', 0x0066FA10, 'func'),
     # CRT
     ('rtFtol', 0x0084A1F4, 'func'),
+    # the two particle systems with identical ripple grid code (fast_math.cpp)
+    ('cParticleSystemStargate_vtable', 0x00897E9C, 'data'),
+    ('cParticleSystemStargateUw_vtable', 0x00899118, 'data'),
     # network
     ('g_pGameClient', 0x0182EBF0, 'data'),
     ('initNetworkNagleTest', 0x007D310E, 'code'),

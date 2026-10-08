@@ -221,6 +221,11 @@ namespace Sacred::Addr
 
     // MSVC's __ftol: ST0 -> EDX:EAX, truncated (sets the x87 control word to chop around a fistp and back).
     inline uintptr_t rtFtol{};                          // ENG 0084A1F4
+    // Two particle systems with the same ripple grid code (copies, byte for byte): the teleporter's
+    // cParticleSystem_stargate and cParticleSystem_stargate_uw. Vtable slot 2 updates the grid and calls a vertex
+    // function per grid point (ENG 007802A0 / 007C62D0, see fast_math.cpp).
+    inline uintptr_t cParticleSystemStargate_vtable{};  // ENG 00897E9C
+    inline uintptr_t cParticleSystemStargateUw_vtable{}; // ENG 00899118
 
     // The game client (sacred/net.h).
     inline Global<cGCclass*> g_pGameClient{};           // ENG 0182EBF0

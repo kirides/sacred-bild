@@ -246,6 +246,13 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   whole list's, x/y the transformed (`0x622620`) sum of the drawn tiles' world positions divided by that count,
   (0, 0, 0) when no tile was drawn; at detail < 2 neither the glow pass nor the ambience run. With parts, the
   ambience calls are caught and summed (count-weighted positions) into one call.
+- Teleporter ripple: `cParticleSystem_stargate` (vtable `0x897E9C`) and `cParticleSystem_stargate_uw` (`0x899118`)
+  share their code byte for byte (separate copies). Slot 2 updates a 20x35 grid and calls a vertex function per
+  point (`0x7802A0` / `0x7C62D0`, called at slot 2 + 0x1A8; thiscall (column, row, time, index, vertices,
+  vertices 2), `ret 0x18`): distance r from (9.5, 17) by the 0x5F3759DF estimate, height `5 cos(2r - t)` into both
+  vertex arrays (+4), the slope from `sin(r - t)` lit against (1/3, -2/3, 2/3) into a gray level
+  `(light + 1) * 127.9`, ORed into color tables at `+0x10918` (row `+0x20CC` / `+0x20D0`, column `+0xFE78[index]`,
+  both <= 15, else gray alone) as the vertices' diffuse (+16). `FastMath` retargets both calls.
 - Device calls from other threads: in game the main thread calls the device itself, ~3-4 times per second:
   `0x6284E0` (zoom: `GetTransform` + `SetTransform`) and the render flag setter `0x643470` (filtering, stage
   states). The proxy therefore keeps a lock (a spinlock: the render thread never pays a kernel wake-up).

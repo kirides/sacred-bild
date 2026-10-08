@@ -266,8 +266,8 @@ namespace
             .tip(L"Guard the sound system with a user-mode lock instead of a kernel mutex: the frame takes it several "
                  L"times per object.");
         ui.check(L"Faster math helpers", {L"Render", L"FastMath"}, Config::render.fastMath)
-            .tip(L"Replace the game's slow x87 math helpers (float to integer conversion) with faster ones that give "
-                 L"the same results.");
+            .tip(L"Replace the game's slow x87 math (float to integer conversion, the teleporter ripple's sine and "
+                 L"cosine) with faster code that gives the same results.");
 
         ui.column();
         ui.group(L"DirectDraw");

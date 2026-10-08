@@ -628,6 +628,14 @@
    "452F85C7": "0084A1F4",
    "451BBE74": "00848F94"
   },
+  "cParticleSystemStargate_vtable": {
+   "452F85C7": "00897E9C",
+   "451BBE74": "00895E9C"
+  },
+  "cParticleSystemStargateUw_vtable": {
+   "452F85C7": "00899118",
+   "451BBE74": "00897118"
+  },
   "g_pGameClient": {
    "452F85C7": "0182EBF0",
    "451BBE74": "0182CB70"
