@@ -32,6 +32,7 @@ namespace
         Savegames,  // the savegame window: a window whose list rows are hit rects (cUI_Savegame)
         Network,    // the network menu: it shows one of its screens, not a child (cUI_Network)
         PlayerList, // the player list of a network game: its cells are hit rects (cUI_NetworkInfo)
+        Characters, // the character screens: heroes on slots, controls as pointer members (cUI_Character)
     };
 
     struct Info
@@ -73,6 +74,7 @@ namespace
         {".?AVcUI_Savegame@@", Savegames},
         {".?AVcUI_Network@@", Network},
         {".?AVcUI_NetworkInfo@@", PlayerList},
+        {".?AVcUI_Character@@", Characters},
     };
     constexpr size_t kMaxControls = 512;
 
@@ -383,6 +385,40 @@ namespace
         }
     }
 
+    // The character screen's slots that hold a hero (or class) and can be chosen.
+    template <class F>
+    void forEachSlot(cUI_Character* screen, F&& f)
+    {
+        for (int slot = 0; slot < cUI_Character::slotCount; ++slot)
+        {
+            cUI_NetGranny* hero = screen->slots[slot];
+            float left, top, w, h;
+            if (hero && hero->visible() && hero->hero && !cUI_Character::slotLocked(slot) &&
+                layoutRect(hero, left, top, w, h))
+            {
+                f(hero, left, top, w, h);
+            }
+        }
+    }
+
+    void collect(cUI_Control2* control, const UiCanvas::Frame& frame, std::vector<Point>& out, int depth);
+
+    // Its heroes, then its controls (members it hit-tests and draws itself, children or not).
+    void addCharacters(cUI_Character* screen, const UiCanvas::Frame& frame, std::vector<Point>& out, int depth)
+    {
+        forEachSlot(screen, [&](cUI_NetGranny* hero, float, float, float, float) {
+            addControl(hero, false, frame, out);
+        });
+        for (cUI_Control2* control : {screen->next, screen->back, screen->newCharacter, screen->erase, screen->name,
+                 screen->name2, screen->lock, screen->choiceControl, screen->networkControl})
+        {
+            if (control)
+            {
+                collect(control, frame, out, depth + 1);
+            }
+        }
+    }
+
     // The usable controls under `control` (in the 1024x768 layout of a window shifted by `frame`), as screen points.
     void collect(cUI_Control2* control, const UiCanvas::Frame& frame, std::vector<Point>& out, int depth)
     {
@@ -433,7 +469,7 @@ namespace
             }
             return;
         }
-        if (kind == Window || kind == Savegames || kind == Network || kind == PlayerList)
+        if (kind == Window || kind == Savegames || kind == Network || kind == PlayerList || kind == Characters)
         {
             auto* window = static_cast<cUI_Window2*>(control);
             const Vector<cUI_Control2*>& children = window->children;
@@ -458,6 +494,10 @@ namespace
             if (kind == PlayerList)
             {
                 addPlayerCells(static_cast<cUI_NetworkInfo*>(window), frame, out);
+            }
+            if (kind == Characters)
+            {
+                addCharacters(static_cast<cUI_Character*>(window), frame, out, depth);
             }
         }
     }
@@ -1298,4 +1338,45 @@ int UiNav::selectNewestSavegame()
     const int row = newest < 0 ? 0 : static_cast<int>(newest - firstListed(window) + 1);
     selectSavegame(-1, row);
     return row;
+}
+
+bool UiNav::pickAndContinue(float x, float y)
+{
+    cUI_Manager* manager = ::manager();
+    if (!manager || !(manager->flags & cUI_Manager::inMenus) || modal())
+    {
+        return false;
+    }
+    for (cUI_Window2* menu : manager->menus)
+    {
+        if (!visible(menu))
+        {
+            continue;
+        }
+        cUI_Window2* window = menu;
+        if (kindOf(menu) == Network)
+        {
+            window = static_cast<cUI_Network*>(menu)->current();
+        }
+        if (!visible(window) || kindOf(window) != Characters)
+        {
+            continue;
+        }
+        auto* screen = static_cast<cUI_Character*>(window);
+        if (screen->mode == cUI_Character::creation || screen->mode == cUI_Character::classPicked)
+        {
+            continue;   // a class: picked to read about it, the game starts with "Spiel starten"
+        }
+        const UiCanvas::Frame frame = frameOf(menu);
+        bool on = false;
+        forEachSlot(screen, [&](cUI_NetGranny*, float left, float top, float w, float h) {
+            const Rect r = screenRect(left, top, w, h, frame);
+            on = on || (x >= r.left && x < r.right && y >= r.top && y < r.bottom);
+        });
+        if (on)
+        {
+            return true;
+        }
+    }
+    return false;
 }

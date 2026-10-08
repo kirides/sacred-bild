@@ -31,6 +31,7 @@ namespace
     decltype(cUI_Window2::Vtable::show) g_origShow = nullptr;
     decltype(cUI_Window2::Vtable::render) g_origRender = nullptr;
     decltype(cUI_Window2::Vtable::render2) g_origRender2 = nullptr;
+    decltype(cUI_Window2::Vtable::receiveEvent) g_origReceiveEvent = nullptr;
 
     // The game's options window while the screen stands in for it, and until the game closes it after Accept /
     // Cancel (or a moment later, should the click not close it: then the game's own window shows).
@@ -571,6 +572,7 @@ namespace
         cUI_Options* window = g_window.load();
         if (!window || !g_screen.load())
         {
+            LOG("Controller: options screen closed (the game's window {})", window ? "closed" : "went away");
             return false;
         }
         updateCapture();
@@ -637,6 +639,7 @@ namespace
         }
         if (accept || cancel)
         {
+            LOG("Controller: options screen {}", accept ? "accepted" : "cancelled");
             close(accept);
             return false;
         }
@@ -675,6 +678,7 @@ namespace
                 return true;
             }
             g_screen = false;   // the overlay couldn't show the screen: the game's own window it is
+            LOG("Controller: options screen not shown, the game's window instead");
         }
         else if (static_cast<int>(GetTickCount() - g_hideUntil.load()) < 0)
         {
@@ -697,10 +701,25 @@ namespace
         }
         else if (self == g_window.load())
         {
+            if (g_screen.load())
+            {
+                LOG("Controller: the game closed the options window under the screen");
+            }
             g_screen = false;
             g_window = nullptr;
         }
         return result;
+    }
+
+    // While the screen covers the options window, the game's window gets no mouse events: the click that opened it
+    // (or one of the controller's) would hit its hidden controls. Its OK / Cancel are pressed after the screen closed.
+    uint32_t __fastcall hookReceiveEvent(cUI_Control2* self, void* edx, cEvent* event)
+    {
+        if (self == g_window.load() && g_screen.load() && cEventMouse::of(event))
+        {
+            return 0;
+        }
+        return g_origReceiveEvent(self, edx, event);
     }
 
     uint32_t __fastcall hookRender(cUI_Control2* self, void* edx, IDirect3DDevice7* device)
@@ -731,7 +750,8 @@ void OptionsScreen::install()
     g_origShow = table->show;
     g_origRender = table->render;
     g_origRender2 = table->render2;
+    g_origReceiveEvent = table->receiveEvent;
     const bool ok = patchSlot(table->show, &hookShow) && patchSlot(table->render, &hookRender) &&
-        patchSlot(table->render2, &hookRender2);
+        patchSlot(table->render2, &hookRender2) && patchSlot(table->receiveEvent, &hookReceiveEvent);
     LOG("Controller: options window {}", ok ? "wrapped" : "could not be wrapped");
 }

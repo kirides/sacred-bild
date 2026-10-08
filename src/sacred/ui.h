@@ -358,11 +358,58 @@ namespace Sacred
     {
         uint8_t _84[0xCF8 - 0x84];
     };
-    // The character choice of a network game, also the character export in game (createGameWindows 00759AF0).
+    // A hero in 3D on a slot of the character screens.
+    struct cUI_NetGranny : cUI_Window2
+    {
+        uint8_t _84[0x2F8 - 0x84];
+        uint32_t hero;              // the slot's hero (or class); 0: the slot is empty ("<leer>")
+        uint16_t level;
+    };
+    static_assert(offsetof(cUI_NetGranny, hero) == 0x2F8 && offsetof(cUI_NetGranny, level) == 0x2FC);
+
+    // The character screens: creating one (a class per slot) and choosing one (the heroes saved, locally or on the
+    // server); a menu screen of its own, a screen of cUI_Network, and the character export in game (createGameWindows
+    // 00759AF0). receiveEvent (ENG 0070EE60): a click on a slot with a hero selects it (0070CA30) unless the slot is
+    // locked, a double click also continues as `next` does (0070EC50).
     struct cUI_Character : cUI_Window2
     {
-        uint8_t _84[0x460 - 0x84];
+        enum Mode : uint32_t
+        {
+            creation = 0,       // no class picked yet
+            classPicked = 1,
+            networkChoice = 2,
+            networkPicked = 4,
+            localChoice = 7,    // the heroes saved; newCharacter switches to creation and back
+        };
+        static constexpr int slotCount = 8;
+
+        uint8_t _84[0x1B4 - 0x84];
+        cUI_NetGranny* slots[slotCount];
+        uint8_t _1d4[0x1D6 - 0x1D4];
+        int8_t selectedSlot;        // -1: none
+        uint8_t _1d7[0x300 - 0x1D7];
+        cUI_Control2* choiceControl;    // fed events in classPicked and localChoice
+        uint8_t _304[0x390 - 0x304];
+        Mode mode;
+        Mode previousMode;
+        cUI_Control2* next;         // "Weiter" / "Spiel starten"
+        cUI_Control2* back;         // "Logout" / "Zurück"
+        cUI_Control2* newCharacter;
+        uint8_t _3a4[0x3B0 - 0x3A4];
+        cUI_Control2* networkControl;   // fed events in networkChoice
+        cUI_Control2* erase;        // the hero's delete button (asks first)
+        cUI_Control2* name;         // edit controls
+        cUI_Control2* name2;
+        cUI_Control2* lock;         // check box (networkPicked)
+        uint8_t _3c4[0x460 - 0x3C4];
+
+        // The slot can't be chosen (the game ignores clicks on it).
+        static bool slotLocked(int slot) { return Addr::g_characterSlotLocked.get()[slot] != 0; }
     };
+    static_assert(offsetof(cUI_Character, slots) == 0x1B4 && offsetof(cUI_Character, selectedSlot) == 0x1D6);
+    static_assert(offsetof(cUI_Character, choiceControl) == 0x300 && offsetof(cUI_Character, mode) == 0x390);
+    static_assert(offsetof(cUI_Character, next) == 0x398 && offsetof(cUI_Character, newCharacter) == 0x3A0);
+    static_assert(offsetof(cUI_Character, networkControl) == 0x3B0 && offsetof(cUI_Character, lock) == 0x3C0);
     static_assert(sizeof(cUI_NetLogin) == 0x384C && sizeof(cUI_NetAccount) == 0x40B4);
     static_assert(sizeof(cUI_NetLobby) == 0x88A4 && sizeof(cUI_NetPassword) == 0x168C);
     static_assert(sizeof(cUI_NetLan) == 0x51B8 && sizeof(cUI_NetTest) == 0xCF8 && sizeof(cUI_Character) == 0x460);

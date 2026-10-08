@@ -182,6 +182,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"g_pFontManager", "64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 24", 9, Sig::Take::Abs32, &Sacred::Addr::g_pFontManager}, // 00CDCA70, 00CDA9F0
     {"g_hasAddon", "0F 94 44 24 13 EB 04 8B 74 24 14 A0 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::g_hasAddon}, // 0182EBEC, 0182CB6C
     {"g_portalTexts", "C7 44 24 14 ?? ?? ?? ?? EB 04 8B 5C 24 18 8B 17", 4, Sig::Take::Abs32, &Sacred::Addr::g_portalTexts}, // 017EA420, 017E83A0
+    {"g_characterSlotLocked", "0F BE C3 8A 88 ?? ?? ?? ?? 84 C9 75 0B 6A 01 8B CE", 5, Sig::Take::Abs32, &Sacred::Addr::g_characterSlotLocked}, // 017EA3D0, 017E8350
     {"cUI_NetworkInfo_cellRect", "83 EC 0C 8D 44 24 00 56 8B F1 50 E8 ?? ?? ?? ?? 8B B6 54 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_NetworkInfo_cellRect}, // 006F7130, 006F6DF0
     {"g_pNetPlayers", "A1 ?? ?? ?? ?? 55 3B C3 56 75 47 68 D0 3A 00 00", 1, Sig::Take::Abs32, &Sacred::Addr::g_pNetPlayers}, // 0182EBE8, 0182CB68
     {"cNetPlayers_count", "8B 15 ?? ?? ?? ?? 33 C0 85 D2 53 74 21 8A 5A 2B", 0, Sig::Take::Match, &Sacred::Addr::cNetPlayers_count}, // 007DB2C0, 007DA890

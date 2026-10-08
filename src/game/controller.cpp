@@ -59,6 +59,9 @@ namespace
     };
     Context g_context = Context::None;
     bool g_cursorMode = false;                  // the Cursor action: windows' controls in game too
+    // Buttons held when the context changed (or SacredBild's screen closed): they act again only once released, so
+    // the A that answered a message box doesn't click the next screen too.
+    uint32_t g_suppressed = 0;
 
     Bindings::Resolver g_resolver;
     Bindings::Set g_held;                       // actions held in the last frame
@@ -208,6 +211,7 @@ namespace
     // Lets go of everything the controller holds in the game.
     void releaseAll()
     {
+        g_suppressed = Gamepad::state().buttons;
         Inject::releaseAll();
         g_tapUp.clear();
         g_attack = {};
@@ -502,14 +506,16 @@ namespace
         }
         // A / X: left / right mouse button (held: drag), B: Esc. A second A within the double-click time and
         // distance is a double click, as Windows makes of the mouse's (loading a savegame, ...); a third starts over.
-        const bool aDown = (s.buttons & Gamepad::A) != 0;
+        const uint32_t buttons = s.buttons & ~g_suppressed;
+        const bool aDown = (buttons & Gamepad::A) != 0;
         if (aDown && !Inject::held(VK_LBUTTON))
         {
             const DWORD tick = GetTickCount();
             const bool doubleClick = tick - g_clickTick <= GetDoubleClickTime() &&
                 std::fabs(g_x - g_clickX) * 2.0f <= GetSystemMetrics(SM_CXDOUBLECLK) &&
                 std::fabs(g_y - g_clickY) * 2.0f <= GetSystemMetrics(SM_CYDOUBLECLK);
-            Inject::button(VK_LBUTTON, true, doubleClick);
+            // A hero on a character choice screen: selected and on ("Weiter") at once, as a double click does.
+            Inject::button(VK_LBUTTON, true, doubleClick || UiNav::pickAndContinue(g_x, g_y));
             g_clickTick = doubleClick ? tick - GetDoubleClickTime() - 1 : tick;
             g_clickX = g_x;
             g_clickY = g_y;
@@ -518,7 +524,7 @@ namespace
         {
             Inject::button(VK_LBUTTON, false);
         }
-        Inject::button(VK_RBUTTON, (s.buttons & Gamepad::X) != 0);
+        Inject::button(VK_RBUTTON, (buttons & Gamepad::X) != 0);
         // LB / RB: the inventory's previous / next page.
         if (const uint32_t shoulder = Gamepad::pressed() & (Gamepad::LB | Gamepad::RB); shoulder && !UiNav::modal())
         {
@@ -1165,7 +1171,8 @@ void Controller::onFrame()
         return true;
     });
 
-    const uint32_t buttons = Focus::foreground() ? Gamepad::state().buttons : 0;
+    g_suppressed &= Gamepad::state().buttons;
+    const uint32_t buttons = Focus::foreground() ? Gamepad::state().buttons & ~g_suppressed : 0;
     const Bindings::Set held = g_resolver.update(buttons);
     const Bindings::Set pressed = held & ~g_held;
     g_held = held;
@@ -1215,8 +1222,10 @@ void Controller::onFrame()
     const Context context = detect();
     if (context != g_context)
     {
+        // Nothing acts in this frame: what is held now is the last context's.
         releaseAll();
         g_context = context;
+        return;
     }
     g_hideCursor = context == Context::Game || context == Context::Dialog || context == Context::Book;
     if (context != Context::None)

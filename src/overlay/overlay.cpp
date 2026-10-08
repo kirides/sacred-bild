@@ -9,6 +9,7 @@
 #include <imgui.h>
 #include <imgui_impl_dx9.h>
 #include <imgui_impl_win32.h>
+#include <imgui_internal.h>
 
 #include <atomic>
 #include <initializer_list>
@@ -150,6 +151,21 @@ namespace
         return true;
     }
 
+    // ImGui's Win32 backend reads XInput itself whenever XInput sees a pad. The pad is SDL's alone: two sources polled
+    // at different moments disagree at a press (one press, two steps), and the screens read SDL for their own buttons
+    // (binding capture, B, Start), so the backend's gamepad events are dropped again.
+    void dropBackendGamepad()
+    {
+        ImVector<ImGuiInputEvent>& queue = GImGui->InputEventsQueue;
+        for (int i = queue.Size - 1; i >= 0; --i)
+        {
+            if (queue[i].Type == ImGuiInputEventType_Key && ImGui::IsGamepadKey(queue[i].Key.Key))
+            {
+                queue.erase(queue.Data + i);
+            }
+        }
+    }
+
     void feedGamepad(ImGuiIO& io)
     {
         const Gamepad::State& s = Gamepad::state();
@@ -203,6 +219,7 @@ namespace
         ImGuiIO& io = ImGui::GetIO();
         ImGui_ImplDX9_NewFrame();
         ImGui_ImplWin32_NewFrame();
+        dropBackendGamepad();
         if (g_gamepadNavigation.load(std::memory_order_relaxed))
         {
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;

@@ -724,6 +724,10 @@
    "452F85C7": "017EA420",
    "451BBE74": "017E83A0"
   },
+  "g_characterSlotLocked": {
+   "452F85C7": "017EA3D0",
+   "451BBE74": "017E8350"
+  },
   "cUI_NetworkInfo_cellRect": {
    "452F85C7": "006F7130",
    "451BBE74": "006F6DF0"

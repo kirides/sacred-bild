@@ -149,6 +149,7 @@ SACRED = [
     ('g_pFontManager', 0x00CDCA70, 'data'),
     ('g_hasAddon', 0x0182EBEC, 'data'),
     ('g_portalTexts', 0x017EA420, 'data'),
+    ('g_characterSlotLocked', 0x017EA3D0, 'data'),
     ('cUI_NetworkInfo_cellRect', 0x006F7130, 'func'),
     ('g_pNetPlayers', 0x0182EBE8, 'data'),
     ('cNetPlayers_count', 0x007DB2C0, 'func'),

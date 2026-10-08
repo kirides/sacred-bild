@@ -280,6 +280,8 @@ namespace Sacred::Addr
     inline Global<uint8_t> g_hasAddon{};                // ENG 0182EBEC
     // The portal message box's text ids, made on its first render: the 14 surface portals, then the 14 underworld ones.
     inline Global<uint32_t> g_portalTexts{};            // ENG 017EA420
+    // A byte per slot of the character screens: set, the slot can't be chosen.
+    inline Global<uint8_t> g_characterSlotLocked{};     // ENG 017EA3D0
     // ENG 006F7130; (out rect, row, column)
     inline Thiscall<void(cUI_NetworkInfo* self, UiRect* out, uint32_t row, int column)> cUI_NetworkInfo_cellRect{};
     // The players of a network game (sacred/net.h).

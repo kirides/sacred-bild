@@ -78,6 +78,10 @@ namespace UiNav
     // header, else its file's) shows and selects it; its row, -1 if nothing is listed.
     int selectNewestSavegame();
 
+    // (x, y) (screen pixels) lies on a hero of a character choice screen (not a class of the creation screen): A
+    // double-clicks it, which selects it and continues as "Weiter" does.
+    bool pickAndContinue(float x, float y);
+
     // An NPC dialog with answers is open (a popup whose answers are set); Enter picks the first.
     bool npcDialogOpen();
     // The screen point of the open NPC dialog's answer `index` (0..3), to click it; false if it has none there.
