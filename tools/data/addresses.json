@@ -528,6 +528,14 @@
    "452F85C7": "0062D3C0",
    "451BBE74": "0062D530"
   },
+  "tileRowGroundQuad": {
+   "452F85C7": "0062B103",
+   "451BBE74": "0062B273"
+  },
+  "tileRowAfterGround": {
+   "452F85C7": "0062B7FF",
+   "451BBE74": "0062B96F"
+  },
   "cQuadBatcher_flush": {
    "452F85C7": "00629340",
    "451BBE74": "00629420"

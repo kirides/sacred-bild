@@ -139,6 +139,53 @@ namespace
     State g;
     bool g_inRow = false;       // inside the game's renderTileRow while the cache draws the ground
 
+    // renderTileRow builds every visible tile's quad (positions, cell coordinates, corner colors through byte stores
+    // and dword loads that stall), adds it to the quad batcher, copies it into the blend layer list and, for water
+    // and lava, into a water tile entry: ~7% of the render thread zoomed out. While the cache draws the ground only
+    // the water entry needs it, so for other tiles the walk jumps from the start of the build to where the tile
+    // goes on after it, as for a tile outside the screen (the only difference: the frame's count of drawn tiles, a
+    // statistic, misses them).
+    uintptr_t g_quadConstant = 0;   // operand of the replaced `fld dword ptr [...]` (1.0)
+    uintptr_t g_quadResume = 0;     // the instruction after it
+    uintptr_t g_quadSkip = 0;       // Addr::tileRowAfterGround
+
+    __declspec(naked) void groundQuadStub()
+    {
+        __asm
+        {
+            cmp byte ptr [g_inRow], 0
+            je keep
+            mov eax, dword ptr [esp + 0x64]     // the tile's type byte (+0x1F); eax is free here
+            and eax, 0xF0
+            cmp eax, 0x90                       // water
+            je keep
+            cmp eax, 0xA0                       // lava
+            je keep
+            jmp dword ptr [g_quadSkip]
+        keep:
+            mov eax, dword ptr [g_quadConstant]
+            fld dword ptr [eax]
+            jmp dword ptr [g_quadResume]
+        }
+    }
+
+    bool installQuadSkip()
+    {
+        const uintptr_t site = Addr::tileRowGroundQuad;
+        if (!site || !Addr::tileRowAfterGround || !Patch::verify(site, {0xD9, 0x05}) ||
+            !Patch::verify(Addr::tileRowAfterGround, {0xF6, 0x84, 0x24, 0x90, 0x00, 0x00, 0x00, 0x10}))
+        {
+            return false;
+        }
+        g_quadConstant = *reinterpret_cast<const uint32_t*>(site + 2);
+        g_quadResume = site + 6;
+        g_quadSkip = Addr::tileRowAfterGround;
+        uint8_t jump[6] = {0xE9, 0, 0, 0, 0, 0x90};     // jmp groundQuadStub; nop
+        const int32_t rel = static_cast<int32_t>(reinterpret_cast<uintptr_t>(&groundQuadStub) - (site + 5));
+        std::memcpy(jump + 1, &rel, sizeof(rel));
+        return Patch::write(site, jump, sizeof(jump));
+    }
+
     void releaseCache(SectorCache& c)
     {
         for (Group& group : c.groups)
@@ -881,7 +928,8 @@ void GroundMesh::install()
     if (Patch::commit())
     {
         g.enabled = true;
-        LOG("Ground mesh: on, the ground is drawn from vertex buffers per sector");
+        LOG("Ground mesh: on, the ground is drawn from vertex buffers per sector{}",
+            installQuadSkip() ? "; the row walk builds quads for water tiles only" : "");
     }
 }
 

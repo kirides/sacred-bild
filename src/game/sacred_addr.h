@@ -161,6 +161,11 @@ namespace Sacred::Addr
     inline Thiscall<void(cWorldView* self, IDirect3DDevice7* device, RowPos* row, int detail)>
         cWorldView_renderTileRow{};
     inline Thiscall<void(cWorldView* self, IDirect3DDevice7* device)> cWorldView_drawTileLayers{}; // ENG 0062D3C0
+    // renderTileRow, per tile: where the ground quad's build starts (`fld dword ptr [1.0]`, after the detail and row
+    // range tests) and where the tile goes on after it (`test byte ptr [esp+90h], 10h`; the cull test jumps there).
+    // The quad, its add to the quad batcher, the blend layer copy and the water tile entry lie in between.
+    inline uintptr_t tileRowGroundQuad{};               // ENG 0062B103
+    inline uintptr_t tileRowAfterGround{};              // ENG 0062B7FF
     inline Thiscall<void(cQuadBatcher* self, IDirect3DDevice7* device)> cQuadBatcher_flush{}; // ENG 00629340
     // ENG 00629180; quad: 4 vertices
     inline Thiscall<void(cQuadBatcher* self, IDirect3DDevice7* device, const float* quad)> cQuadBatcher_add{};

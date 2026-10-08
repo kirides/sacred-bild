@@ -224,6 +224,14 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   `drawTileLayers` (`src/game/ground_mesh.*`). The cached ground of every loaded sector is drawn there, walked yet
   or not, in case it comes in the middle of the walk (water tiles drawn early when their list could not be moved
   aside, below). A sector object's `+0x44`/`+0x48` hold its first tile's world column/row.
+- `renderTileRow` per tile: after the detail and row range tests, `0x62B103` (`fld [1.0]`) starts the ground quad
+  (positions and cell coordinates into `cWorldView + 0xAD0`, 4 x 0x24 bytes), culls it (`0x62B2BD`..`0x62B2FF`, off
+  screen: on at `0x62B7FF`), sets its corner colors (lit through `0x620090`/`0x61ED70`, else the tile's light bytes
+  `+0x14..+0x17` widened by byte stores to the stack and dword loads), calls the quad batcher's texture and add,
+  counts it (`+0x97078`, a per-frame statistic), copies it into the blend layer list and, for tile type (`+0x1F` &
+  0xF0, `[esp+0x64]`) 0x90/0xA0, into a water entry (with shore effects for some kinds). `0x62B7FF` goes on with the
+  tile's flag `0x10` list and its objects; the x87 stack is the same at both places. With GroundMesh drawing,
+  SacredBild jumps from `0x62B103` to `0x62B7FF` for tiles that aren't water or lava (~7% of the render thread).
 - Animated water/lava tiles (record type `0x90`/`0xA0`): `renderTileRow` appends 0x98-byte entries at
   `+0x3FF2C` (count `+0x80E3C`) with no bounds check; `cWorldView_drawWaterTiles` (`0x62DD00`) draws them after
   all rows (glow pass, tile pass) and sets the water ambience from their count and average position. Entry 1750
