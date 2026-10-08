@@ -70,6 +70,7 @@ namespace D3DStats
         TLockBack,
         TProxy,         // inside the device proxy's draw and state methods, D3D included
         TWorldProxy,    // the part of TProxy spent inside cWorldView0::render
+        TSoundWait,     // the render thread waiting for the sound system's lock (SoundLock)
         TimerCount
     };
 
@@ -105,6 +106,7 @@ namespace D3DStats
     }
 
     void setRenderThread(unsigned long threadId);
+    bool isRenderThread();
     void onFrame();
 
     // "private N MB, address space N MB used, largest free N MB" (the game is not large address aware).

@@ -18,6 +18,7 @@ namespace Sacred
     struct cGCclass;
     struct cMapData;
     struct cMouse;
+    struct cMutex;
     struct cObject;
     struct cObjectManager;
     struct cOrder;
@@ -203,6 +204,10 @@ namespace Sacred::Addr
     inline Thiscall<uint8_t*(cMapData* self, uint32_t id)> recordCache{}; // ENG 00635E50
     inline Thiscall<uint8_t*(RecordMap* map, const uint32_t* id)> recordMapFind{}; // ENG 00640410
     inline Global<uint32_t> g_recordStamp{};            // ENG 00CD7A50; the current time
+
+    // The sound system's kernel mutex wrapper (sacred/sound.h).
+    inline Thiscall<void(cMutex* self)> cMutex_lock{};      // ENG 0066FA00
+    inline Thiscall<void(cMutex* self)> cMutex_unlock{};    // ENG 0066FA10
 
     // The game client (sacred/net.h).
     inline Global<cGCclass*> g_pGameClient{};           // ENG 0182EBF0

@@ -259,6 +259,9 @@ namespace
                  L"Automatic = CPU cores - 2, at most 4. 1 = as Granny does it, on one thread.");
         ui.check(L"Hash index for the map records", {L"Render", L"RecordIndex"}, Config::render.recordIndex)
             .tip(L"Hash index in front of the game's record caches (looked up for every ground tile and object).");
+        ui.check(L"Light-weight sound lock", {L"Render", L"SoundLock"}, Config::render.soundLock)
+            .tip(L"Guard the sound system with a user-mode lock instead of a kernel mutex: the frame takes it several "
+                 L"times per object.");
 
         ui.column();
         ui.group(L"DirectDraw");

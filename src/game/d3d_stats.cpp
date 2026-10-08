@@ -314,6 +314,11 @@ void D3DStats::setRenderThread(unsigned long threadId)
     g_lastThreadCpu = threadCpu100ns();
 }
 
+bool D3DStats::isRenderThread()
+{
+    return GetCurrentThreadId() == g_renderThreadId;
+}
+
 void D3DStats::onFrame()
 {
     const int64_t t = now();
@@ -354,9 +359,9 @@ void D3DStats::onFrame()
             ++g_hitches;
             if (g_hitchLogs++ < 5)
             {
-                LOG("Hitch: {:.1f} ms (average {:.1f}) world {:.1f} ui {:.1f} flip {:.1f} lockBack {:.1f} | atlas uploads {} "
-                    "page resets {} | record file reads {} | textures loaded {} KB | draws {} submitted {}",
-                    frameMs, g_avgFrameMs, dms[TWorld], dms[TUi], dms[TFlip], dms[TLockBack], dc[CAtlasUpload],
+                LOG("Hitch: {:.1f} ms (average {:.1f}) world {:.1f} ui {:.1f} flip {:.1f} lockBack {:.1f} sound lock {:.1f} | "
+                    "atlas uploads {} page resets {} | record file reads {} | textures loaded {} KB | draws {} submitted {}",
+                    frameMs, g_avgFrameMs, dms[TWorld], dms[TUi], dms[TFlip], dms[TLockBack], dms[TSoundWait], dc[CAtlasUpload],
                     dc[CAtlasReset], dc[CRecordRead], dc[CTextureKB], dc[CDraw] + dc[CDrawIndexed] + dc[CDrawVB],
                     dc[CSubmit]);
             }
@@ -404,12 +409,12 @@ void D3DStats::onFrame()
     LOG("fps={:.1f} frame={:.2f}ms (max {:.1f}, {} hitches) world={:.2f} (game {:.2f}, device calls {:.2f}) ui={:.2f} flip={:.2f} | per frame: "
         "draws={:.0f} (TL {:.0f}, quads {:.0f}, VB {:.0f}) submitted={:.0f} verts={:.0f} setTex={:.0f} texSwitch={:.0f} "
         "uniqueTex={} rs={:.0f} tss={:.0f} xform={:.0f} clear={:.1f} | in d3d: draw={:.2f}ms state={:.2f}ms, "
-        "SacredBild={:.2f}ms | lockBack={:.1f} ({:.2f}ms) | renderCPU={:.0f}%",
+        "SacredBild={:.2f}ms | lockBack={:.1f} ({:.2f}ms) | soundWait={:.2f}ms | renderCPU={:.0f}%",
         frames * 1000.0 / wallMs, ms[TFrame], maxFrameMs, hitches, ms[TWorld], ms[TWorld] - ms[TWorldProxy], ms[TWorldProxy], ms[TUi],
         ms[TFlip], draws / frames, c[CDrawTL] / frames, c[CDrawQuad] / frames, c[CDrawVB] / frames,
         c[CSubmit] / frames, c[CVerts] / frames, c[CSetTexture] / frames, c[CTexSwitch] / frames, c[CUniqueTex],
         c[CRenderState] / frames, c[CStageState] / frames, c[CTransform] / frames, c[CClear] / frames, ms[TDraw],
-        ms[TState], ms[TProxy] - ms[TDraw] - ms[TState], c[CLockBack] / frames, ms[TLockBack], cpuPct);
+        ms[TState], ms[TProxy] - ms[TDraw] - ms[TState], c[CLockBack] / frames, ms[TLockBack], ms[TSoundWait], cpuPct);
     if (c[CMerged] || c[CFlushOther] || c[CFlushDirect])
     {
         LOG("batch: merged={:.0f} atlasDraws={:.0f} uploads={} pageResets={} | models batched={:.0f} ({:.0f} verts) "

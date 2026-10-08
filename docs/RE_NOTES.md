@@ -241,6 +241,13 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
 - Device calls from other threads: in game the main thread calls the device itself, ~3-4 times per second:
   `0x6284E0` (zoom: `GetTransform` + `SetTransform`) and the render flag setter `0x643470` (filtering, stage
   states). The proxy therefore keeps a lock (a spinlock: the render thread never pays a kernel wake-up).
+- Sound system lock: the sound system (one instance, `0x6770E0` makes it) keeps a kernel mutex at `+0x60` in a
+  wrapper (`0x66F9C0` CreateMutexA, `0x66F9E0` close, `0x66FA00` WaitForSingleObject INFINITE, `0x66FA10`
+  ReleaseMutex; the only instance, nothing else touches the handle). Every entry into its state takes it, among them
+  the sound commands (`0x67A7A0`, a switch on the command) the object passes send per object and frame
+  (`0x62FF60`: `0x6770E0` then `0x67A7A0` with commands 10/11). A profile at 2560x1440 had ~4.5% of the render
+  thread in those two system calls. `[Render] SoundLock` replaces lock and unlock with an SRW lock (recursive by
+  owner and depth; an unlock by a non-owner is ignored, as ReleaseMutex fails then).
 - Tile layer records come from `0x635FE0`: a map cache of 0x1000 entries filled from the data file
   (fseek/fread per miss) with an O(n) LRU scan per insert when full. A zoomed-out high-resolution view needs
   more entries and thrashed every frame (~140 ms); the limit is raised to 0x8000. The texture manager budget (`0x65E7A0`, set by `initApp`) is not a limit on modern

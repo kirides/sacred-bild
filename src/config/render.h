@@ -33,6 +33,8 @@ namespace Config
         int animationThreads = 0;
         // Hash index in front of the map data's record caches (std::map lookups per tile and object).
         bool recordIndex = true;
+        // The sound system's lock as a user-mode lock instead of a kernel mutex (two system calls per sound command).
+        bool soundLock = true;
         // Copy small textures into shared pages so draws with different textures can be merged as well.
         bool atlas = true;
         int atlasPageSize = 8192;       // texels per side, clamped to the device limit

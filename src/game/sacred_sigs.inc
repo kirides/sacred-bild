@@ -151,6 +151,8 @@ static const Sig::Entry kAddressSigs[] = {
     {"recordCache", "8B 44 24 04 81 EC A0 00 00 00 85 C0", 0, Sig::Take::Match, &Sacred::Addr::recordCache}, // 00635E50, 00635F50
     {"recordMapFind", "8B 01 56 57 8B 7C 24 0C 8B 48 04 8B D0 85 C9 74 15 8B 37 39 71 10 72 07", 0, Sig::Take::Match, &Sacred::Addr::recordMapFind}, // 00640410, 006404C0
     {"g_recordStamp", "8B 15 ?? ?? ?? ?? 5F 89 45 30 88 5D 02 88 5D 01", 2, Sig::Take::Abs32, &Sacred::Addr::g_recordStamp}, // 00CD7A50, 00CD59D0
+    {"cMutex_lock", "8B 01 6A FF 50 FF 15 ?? ?? ?? ?? C3 90 90 90 90", 0, Sig::Take::Match, &Sacred::Addr::cMutex_lock}, // 0066FA00, 0066FCE0
+    {"cMutex_unlock", "8B 01 50 FF 15 ?? ?? ?? ?? C3 90 90 90 90 90 90 56", 0, Sig::Take::Match, &Sacred::Addr::cMutex_unlock}, // 0066FA10, 0066FCF0
     {"g_pGameClient", "8A 8E 18 38 00 00 8B 56 40 51 8B 0D ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::g_pGameClient}, // 0182EBF0, 0182CB70
     {"initNetworkNagleTest", "8B 9E 14 04 04 00 8B 17 33 C0 83 FB 02", 10, Sig::Take::Match, &Sacred::Addr::initNetworkNagleTest}, // 007D310E, 007D294E
     {"cTextTable_load", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 53 56 57 8B 3D ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cTextTable_load}, // 0080E680, 0080DBF0

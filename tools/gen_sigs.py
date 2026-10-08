@@ -115,6 +115,9 @@ SACRED = [
     ('recordCache', 0x00635E50, 'func'),
     ('recordMapFind', 0x00640410, 'func'),
     ('g_recordStamp', 0x00CD7A50, 'data'),
+    # the sound system's mutex
+    ('cMutex_lock', 0x0066FA00, 'func'),
+    ('cMutex_unlock', 0x0066FA10, 'func'),
     # network
     ('g_pGameClient', 0x0182EBF0, 'data'),
     ('initNetworkNagleTest', 0x007D310E, 'code'),

@@ -16,6 +16,7 @@
 #include "game/resolution.h"
 #include "game/screenshot.h"
 #include "game/skin_check.h"
+#include "game/sound_lock.h"
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
 #include "game/world_passes.h"
@@ -96,6 +97,7 @@ void Sacred::installHooks()
     Movie::install();
     Screenshot::install();
     MapCache::install();
+    SoundLock::install();
     GroundQuads::install();
     GpuSkin::install();
     GrannyParallel::install();
