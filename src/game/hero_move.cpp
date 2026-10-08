@@ -2,6 +2,7 @@
 #include "game/frame_hooks.h"
 #include "game/sacred_addr.h"
 #include "input/inject.h"
+#include "mem.h"
 
 #include <windows.h>
 #include <cstdint>
@@ -26,11 +27,7 @@ namespace
     void* g_walker = nullptr;
     int32_t g_lastX = 0, g_lastY = 0;
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(static_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
     // The creature the mouse commands, as the world mouse handler finds it; nullptr while the world takes no mouse.
     void* controlled(void* engine)

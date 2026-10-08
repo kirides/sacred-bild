@@ -14,7 +14,9 @@
 #include "overlay/overlay.h"
 #include "overlay/prompts.h"
 #include "config.h"
+#include "config/controller.h"
 #include "log.h"
+#include "mem.h"
 #include "patch.h"
 
 #include <intrin.h>
@@ -32,11 +34,7 @@ namespace
     using namespace Sacred;
     using Bindings::Action;
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(static_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
     // Read by the window's thread (getClientCursorPos) as well.
     std::atomic<bool> g_drive{false};           // the controller has the cursor
@@ -475,7 +473,7 @@ namespace
         const float magnitude = std::sqrt(s.lx * s.lx + s.ly * s.ly);
         if (magnitude > 0.0f)
         {
-            const float speed = g_config.controllerCursorSpeed * uiScale() * magnitude * dt;
+            const float speed = Config::controller.cursorSpeed * uiScale() * magnitude * dt;
             setCursor(g_x + s.lx * speed, g_y - s.ly * speed);
         }
         // D-pad: to the next control that way, repeating while held.
@@ -690,9 +688,9 @@ namespace
             return;
         }
         const float dx = mx / magnitude, dy = my / magnitude;
-        const float radius = static_cast<float>(g_config.controllerMoveRadius);
+        const float radius = static_cast<float>(Config::controller.moveRadius);
         AimAssist::pickNothing();   // the cursor ahead never highlights what it passes over
-        Inject::key(VK_SHIFT, g_config.controllerWalk && magnitude < 0.5f);
+        Inject::key(VK_SHIFT, Config::controller.walk && magnitude < 0.5f);
         float gx, gy;
         heroGround(gx, gy);
         setCursor(gx + dx * radius, gy + dy * radius);
@@ -727,8 +725,8 @@ namespace
     // The best enemy, else (`interact`) the best thing to use nearby; toward `ax, ay` if `directed`, else the nearest.
     bool findTarget(bool interact, float ax, float ay, bool directed, AimAssist::Kind& kind, AimAssist::Target& t)
     {
-        const float range = static_cast<float>(g_config.controllerAimRange);
-        const float cone = static_cast<float>(g_config.controllerAimCone);
+        const float range = static_cast<float>(Config::controller.aimRange);
+        const float cone = static_cast<float>(Config::controller.aimCone);
         const float dx = directed ? ax : 0.0f, dy = directed ? ay : 0.0f;
         if (AimAssist::find(AimAssist::Kind::Enemy, dx, dy, range, cone, t))
         {
@@ -752,7 +750,7 @@ namespace
             g_attack.target = 0;
             g_attack.ctrl = g_attack.action == Action::Primary;
             AimAssist::pickNothing();
-            const float reach = g_config.controllerMoveRadius * 0.6f;
+            const float reach = Config::controller.moveRadius * 0.6f;
             setCursor(hx + ax * reach, hy + ay * reach);
             return;
         }
@@ -811,7 +809,7 @@ namespace
         }
         else
         {
-            const float reach = g_config.controllerMoveRadius * 0.6f;
+            const float reach = Config::controller.moveRadius * 0.6f;
             setCursor(hx + ax * reach, hy + ay * reach);
         }
         if (!g_attack.down)
@@ -918,7 +916,7 @@ namespace
         {
             const auto action = static_cast<Action>(i);
             const bool art = action >= Action::Art1 && action <= Action::Art5;
-            if (pressed[i] && isAttack(action) && (!art || g_config.controllerArtClick))
+            if (pressed[i] && isAttack(action) && (!art || Config::controller.artClick))
             {
                 beginAttack(action, ax, ay, directed, hx, hy);
             }
@@ -1118,12 +1116,12 @@ void Controller::install()
     LARGE_INTEGER f;
     QueryPerformanceFrequency(&f);
     g_qpcFrequency = f.QuadPart;
-    if (!g_config.controller)
+    if (!Config::controller.enabled)
     {
         LOG("Controller: off ([Controller] Enabled=0)");
         return;
     }
-    Bindings::load(g_config.iniPath);
+    Bindings::load(ConfigFile::path());
     AimAssist::install();
     if (!UiCanvas::enabled())
     {
@@ -1131,13 +1129,13 @@ void Controller::install()
         Patch::hook(g_origRenderCursor, Addr::cMouse_renderCursor, &hookRenderCursor, "cMouse::renderCursor");
     }
     LOG("Controller: on (deadzone {}%, cursor {} px/s, walk radius {} px, aim {} px / {} degrees)",
-        g_config.controllerDeadzone, g_config.controllerCursorSpeed, g_config.controllerMoveRadius,
-        g_config.controllerAimRange, g_config.controllerAimCone);
+        Config::controller.deadzone, Config::controller.cursorSpeed, Config::controller.moveRadius,
+        Config::controller.aimRange, Config::controller.aimCone);
 }
 
 void Controller::onFrame()
 {
-    if (!g_config.controller)
+    if (!Config::controller.enabled)
     {
         return;
     }
@@ -1148,7 +1146,7 @@ void Controller::onFrame()
     {
         return;
     }
-    Gamepad::setDeadzone(g_config.controllerDeadzone / 100.0f);
+    Gamepad::setDeadzone(Config::controller.deadzone / 100.0f);
     Gamepad::poll();
     // This frame's prompts (none unless the controller drives), drawn into the next.
     Prompts::begin(Gamepad::state().style);
@@ -1253,7 +1251,7 @@ void Controller::onFrame()
     {
         gameFrame(held, pressed);
     }
-    if (g_config.controllerPrompts)
+    if (Config::controller.prompts)
     {
         showPrompts(context, held);
     }

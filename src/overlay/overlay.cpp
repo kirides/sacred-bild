@@ -3,7 +3,7 @@
 #include "ddraw9/gpu.h"
 #include "input/gamepad.h"
 #include "input/input_mode.h"
-#include "config.h"
+#include "config/ddraw.h"
 #include "log.h"
 
 #include <imgui.h>
@@ -287,7 +287,7 @@ namespace
 
 void Overlay::install()
 {
-    if (!g_config.ddrawD3D9)
+    if (!Config::ddraw.d3d9)
     {
         LOG("Overlay: off ([DDraw] Backend=chain)");
         return;
@@ -297,7 +297,7 @@ void Overlay::install()
 
 bool Overlay::available()
 {
-    return g_config.ddrawD3D9 && g_lastPresent.load() && GetTickCount() - g_lastPresent.load() < 1000;
+    return Config::ddraw.d3d9 && g_lastPresent.load() && GetTickCount() - g_lastPresent.load() < 1000;
 }
 
 void Overlay::open(DrawFn draw)

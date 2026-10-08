@@ -1,5 +1,5 @@
 #include "proxy.h"
-#include "config.h"
+#include "config/ddraw.h"
 #include "log.h"
 #include "system_ddraw.h"
 #include "ddraw9/backend.h"
@@ -74,9 +74,9 @@ namespace
 bool Proxy::init(const std::wstring& gameDir)
 {
     HMODULE chain = nullptr;
-    if (!g_config.ddrawD3D9 && !g_config.ddrawChain.empty())
+    if (!Config::ddraw.d3d9 && !Config::ddraw.chain.empty())
     {
-        const std::wstring path = gameDir + L"\\" + g_config.ddrawChain;
+        const std::wstring path = gameDir + L"\\" + Config::ddraw.chain;
         chain = LoadLibraryW(path.c_str());
         LOG("Chain ddraw {}: {}", narrow(path), chain ? "loaded" : "not found");
     }
@@ -91,7 +91,7 @@ bool Proxy::init(const std::wstring& gameDir)
     if (!chain)
     {
         chain = system;
-        if (!g_config.ddrawD3D9)
+        if (!Config::ddraw.d3d9)
         {
             LOG("Using system ddraw: {}", narrow(sysPath));
         }
@@ -104,11 +104,11 @@ bool Proxy::init(const std::wstring& gameDir)
     DDRAW_PROCS(RESOLVE)
 #undef RESOLVE
 
-    if (!g_config.ddrawD3D9 && chain == system)
+    if (!Config::ddraw.d3d9 && chain == system)
     {
         g_procs.DirectDrawCreateEx = SystemDdraw::wrap(g_procs.DirectDrawCreateEx);
     }
-    if (g_config.ddrawD3D9)
+    if (Config::ddraw.d3d9)
     {
         // DirectDraw objects come from SacredBild's backend; the system ddraw.dll keeps the remaining exports and
         // takes over if Direct3D 9Ex turns out to be unavailable.

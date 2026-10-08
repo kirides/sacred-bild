@@ -1,5 +1,5 @@
 #include "profiler.h"
-#include "config.h"
+#include "config/debug.h"
 #include "log.h"
 
 #include <windows.h>
@@ -206,7 +206,7 @@ namespace
     {
         static uint32_t stack[kStackDwords];
         HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-        const LONGLONG interval = -10LL * std::max(100, g_config.profilerIntervalUs);
+        const LONGLONG interval = -10LL * std::max(100, Config::debug.profilerIntervalUs);
         ULONGLONG lastReport = GetTickCount64();
         while (g_running.load())
         {
@@ -254,7 +254,7 @@ namespace
         FILE* f = _wfopen(g_reportPath.c_str(), L"w");
         if (!f) return;
         std::fprintf(f, "# SacredBild profile, interval %d us. Map addresses with tools/profile_report.py\n",
-            g_config.profilerIntervalUs);
+            Config::debug.profilerIntervalUs);
         for (auto& [tid, p] : g_profiles)
         {
             std::fprintf(f, "[thread %lu samples %u]\n", tid, p.samples);
@@ -320,7 +320,7 @@ void Profiler::retarget(unsigned long threadId)
 
     g_thread = CreateThread(nullptr, 0, &samplerThread, nullptr, 0, nullptr);
     SetThreadPriority(g_thread, THREAD_PRIORITY_TIME_CRITICAL);
-    LOG("Profiler: sampling thread {} every {} us", threadId, g_config.profilerIntervalUs);
+    LOG("Profiler: sampling thread {} every {} us", threadId, Config::debug.profilerIntervalUs);
 }
 
 void Profiler::addThread(unsigned long threadId)

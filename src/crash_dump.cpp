@@ -1,5 +1,5 @@
 #include "crash_dump.h"
-#include "config.h"
+#include "config/debug.h"
 #include "log.h"
 #include "patch.h"
 
@@ -69,7 +69,7 @@ namespace
         {
             MINIDUMP_EXCEPTION_INFORMATION exception = {crash.threadId, crash.info, FALSE};
             written = g_writeDump(GetCurrentProcess(), GetCurrentProcessId(), file,
-                static_cast<MINIDUMP_TYPE>(g_config.crashDump >= 2 ? full : small), &exception, nullptr, nullptr);
+                static_cast<MINIDUMP_TYPE>(Config::debug.crashDump >= 2 ? full : small), &exception, nullptr, nullptr);
             CloseHandle(file);
             if (!written)
             {
@@ -107,7 +107,7 @@ namespace
 
 void CrashDump::install(const std::wstring& dir, const wchar_t* prefix)
 {
-    if (g_config.crashDump <= 0)
+    if (Config::debug.crashDump <= 0)
     {
         return;
     }
@@ -127,5 +127,5 @@ void CrashDump::install(const std::wstring& dir, const wchar_t* prefix)
     Patch::begin();
     Patch::hook(g_origSetFilter, &hookSetFilter, "SetUnhandledExceptionFilter");
     Patch::commit();
-    LOG("Crash dumps: {} dumps to {}\\{}-*.dmp", g_config.crashDump >= 2 ? "full" : "small", narrow(dir), narrow(prefix));
+    LOG("Crash dumps: {} dumps to {}\\{}-*.dmp", Config::debug.crashDump >= 2 ? "full" : "small", narrow(dir), narrow(prefix));
 }

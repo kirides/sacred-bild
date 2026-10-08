@@ -3,6 +3,7 @@
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
 #include "log.h"
+#include "mem.h"
 #include "patch.h"
 
 #include <windows.h>
@@ -46,11 +47,7 @@ namespace
         float cy() const { return y + h * 0.5f; }
     };
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(static_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
     // The world view the cursor picks in (the engine's current view), nullptr before a game ran.
     void* worldView()

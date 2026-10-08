@@ -1,6 +1,6 @@
 #include "net/connection.h"
 #include "game/sacred_addr.h"
-#include "config.h"
+#include "config/net.h"
 #include "log.h"
 #include "patch.h"
 
@@ -244,7 +244,7 @@ void Connection::install(bool host)
         return;
     }
     installDeferredNoDelay();
-    if (!g_config.netNoDelay)
+    if (!Config::net.noDelay)
     {
         return;
     }

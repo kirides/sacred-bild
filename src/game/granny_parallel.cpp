@@ -1,7 +1,9 @@
 #include "game/granny_parallel.h"
 #include "game/granny_mesh.h"
-#include "config.h"
+#include "config/debug.h"
+#include "config/render.h"
 #include "log.h"
+#include "mem.h"
 #include "patch.h"
 #include "profiler.h"
 
@@ -116,13 +118,7 @@ namespace
         return v.QuadPart;
     }
 
-    template <class T>
-    T field(const void* p, uintptr_t offset)
-    {
-        T v;
-        std::memcpy(&v, static_cast<const uint8_t*>(p) + offset, sizeof(T));
-        return v;
-    }
+    using Mem::field;
 
     // The handle lock and release a control's sampling makes (granny.dll 0x100043B0 / 0x10005370): plain 16-bit
     // increments and decrements on the animation handle, which other skeletons' controls share. Atomic while the
@@ -425,7 +421,7 @@ namespace
             { return groups[a].count != groups[b].count ? groups[a].count > groups[b].count : a < b; });
 
         const int64_t parallelStart = qpc();
-        if (g_config.animationCheck && static_cast<int>(GetTickCount() - g_nextCheck) >= 0)
+        if (Config::debug.animationCheck && static_cast<int>(GetTickCount() - g_nextCheck) >= 0)
         {
             g_nextCheck = GetTickCount() + 2000;
             if (!check(groups, order, controls, oldTime, newTime))
@@ -448,7 +444,7 @@ namespace
 
 void GrannyParallel::install()
 {
-    int threads = g_config.animationThreads;
+    int threads = Config::render.animationThreads;
     if (threads == 0)
     {
         SYSTEM_INFO info;
@@ -509,7 +505,7 @@ void GrannyParallel::install()
         SetThreadPriority(thread, THREAD_PRIORITY_ABOVE_NORMAL);
         CloseHandle(thread);
         g_helperIds.push_back(id);
-        if (g_config.profiler)
+        if (Config::debug.profiler)
         {
             Profiler::addThread(id);
         }
@@ -523,12 +519,12 @@ void GrannyParallel::install()
     Patch::hook(g_origRelease, release, &hookRelease, "granny animation handle release");
     g_enabled = true;
     LOG("{}: Granny's animation controls sampled on {} threads{}", who, g_helperIds.size() + 1,
-        g_config.animationCheck ? ", checked against one thread every 2 s (AnimationCheck)" : "");
+        Config::debug.animationCheck ? ", checked against one thread every 2 s (AnimationCheck)" : "");
 }
 
 void GrannyParallel::onFrame()
 {
-    if (g_helperIds.empty() || !g_config.d3dStats)
+    if (g_helperIds.empty() || !Config::debug.d3dStats)
     {
         return;
     }

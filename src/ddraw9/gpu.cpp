@@ -1,6 +1,7 @@
 #include "ddraw9/gpu.h"
 #include "ddraw9/format.h"
-#include "config.h"
+#include "config/ddraw.h"
+#include "config/display.h"
 #include "log.h"
 
 #include <atomic>
@@ -71,9 +72,9 @@ namespace DDraw9::Gpu
         {
             std::vector<std::wstring> paths;
             const std::wstring gameDir = exeDirectory();
-            if (!g_config.d3d9Path.empty())
+            if (!Config::ddraw.d3d9Path.empty())
             {
-                const std::wstring& p = g_config.d3d9Path;
+                const std::wstring& p = Config::ddraw.d3d9Path;
                 const bool absolute = (p.size() > 1 && p[1] == L':') || p.starts_with(L"\\\\");
                 paths.push_back(absolute ? p : gameDir + L"\\" + p);
             }
@@ -209,8 +210,8 @@ namespace DDraw9::Gpu
         g_params.SwapEffect = d9::D3DSWAPEFFECT_FLIPEX;
         g_params.hDeviceWindow = window;
         g_params.Windowed = TRUE;
-        g_params.PresentationInterval = g_config.vsync ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
-        if (!g_config.vsync)
+        g_params.PresentationInterval = Config::display.vsync ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
+        if (!Config::display.vsync)
         {
             // In a window, flip model presentation waits for the display's refresh once its queue is full, whatever the
             // interval (and with D3DPRESENT_FORCEIMMEDIATE): VSync=0 stopped at the refresh rate. A blit model present
@@ -245,7 +246,7 @@ namespace DDraw9::Gpu
                         width, height, swapEffectName(g_params.SwapEffect),
                         g_params.BackBufferCount == 1 ? "1 back buffer" : "2 back buffers",
                         (flags & D3DCREATE_SOFTWARE_VERTEXPROCESSING) ? "software " : "hardware ",
-                        (flags & D3DCREATE_PUREDEVICE) ? " (pure)" : "", g_config.vsync ? "on" : "off", g_config.maxFrameLatency,
+                        (flags & D3DCREATE_PUREDEVICE) ? " (pure)" : "", Config::display.vsync ? "on" : "off", Config::display.maxFrameLatency,
                         displayMode().RefreshRate);
                     break;
                 }
@@ -257,9 +258,9 @@ namespace DDraw9::Gpu
             LOG("Direct3D 9: CreateDeviceEx failed ({:08x})", static_cast<uint32_t>(hr));
             return nullptr;
         }
-        if (g_config.maxFrameLatency > 0)
+        if (Config::display.maxFrameLatency > 0)
         {
-            g_device->SetMaximumFrameLatency(static_cast<UINT>(g_config.maxFrameLatency));
+            g_device->SetMaximumFrameLatency(static_cast<UINT>(Config::display.maxFrameLatency));
         }
         return g_device;
     }
@@ -280,9 +281,9 @@ namespace DDraw9::Gpu
         if (SUCCEEDED(hr))
         {
             g_params = params;
-            if (g_config.maxFrameLatency > 0)
+            if (Config::display.maxFrameLatency > 0)
             {
-                g_device->SetMaximumFrameLatency(static_cast<UINT>(g_config.maxFrameLatency));
+                g_device->SetMaximumFrameLatency(static_cast<UINT>(Config::display.maxFrameLatency));
             }
         }
     }

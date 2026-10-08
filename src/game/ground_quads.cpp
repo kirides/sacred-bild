@@ -1,8 +1,9 @@
 #include "game/ground_quads.h"
 #include "game/device_proxy.h"
 #include "game/sacred_addr.h"
-#include "config.h"
+#include "config/render.h"
 #include "log.h"
+#include "mem.h"
 #include "patch.h"
 
 #include <cstdint>
@@ -18,11 +19,7 @@ namespace
     FlushFn g_origFlush = nullptr;
     TextureGetFn g_textureGet = nullptr;
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(static_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
     // The texture manager's surface for a handle, as the game's flush looks it up.
     IDirectDrawSurface7* lookup(uint32_t handle)
@@ -54,7 +51,7 @@ namespace
 
 void GroundQuads::install()
 {
-    if (!g_config.batch || !g_config.batchGround || !Addr::cTextureManager_get || !Addr::g_pTextureManager)
+    if (!Config::render.batch || !Config::render.batchGround || !Addr::cTextureManager_get || !Addr::g_pTextureManager)
     {
         return;
     }

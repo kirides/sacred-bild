@@ -4,8 +4,11 @@
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
 #include "ddraw9/ground.h"
-#include "config.h"
+#include "config/ddraw.h"
+#include "config/debug.h"
+#include "config/render.h"
 #include "log.h"
+#include "mem.h"
 #include "patch.h"
 
 #include <algorithm>
@@ -37,19 +40,9 @@ namespace
     AddFn g_origAdd = nullptr;
     SetTextureFn g_origSetTexture = nullptr;
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(static_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
-    template <class T>
-    T field(const uint8_t* p, uintptr_t offset)
-    {
-        T v;
-        std::memcpy(&v, p + offset, sizeof(T));
-        return v;
-    }
+    using Mem::field;
 
     struct RowPos
     {
@@ -890,11 +883,11 @@ namespace
 
 void GroundMesh::install()
 {
-    if (!g_config.groundMesh)
+    if (!Config::render.groundMesh)
     {
         return;
     }
-    if (!g_config.ddrawD3D9)
+    if (!Config::ddraw.d3d9)
     {
         LOG("Ground mesh: off, it needs [DDraw] Backend=d3d9");
         return;
@@ -994,7 +987,7 @@ void GroundMesh::beginFrame(void* view, void* device)
         return;
     }
     g.active = true;
-    if (g_config.d3dStats)
+    if (Config::debug.d3dStats)
     {
         logStats();
     }

@@ -10,8 +10,11 @@
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
-#include "config.h"
+#include "config/debug.h"
+#include "config/display.h"
+#include "config/render.h"
 #include "log.h"
+#include "mem.h"
 #include "patch.h"
 #include "profiler.h"
 
@@ -26,11 +29,7 @@ namespace
 {
     using namespace Sacred;
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(reinterpret_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
     // thiscall targets are hooked as fastcall with an unused EDX parameter.
     using InitFn = uint32_t(__fastcall*)(void* self, void* edx, void* devices, void* deviceDesc, void* mode);
@@ -140,13 +139,13 @@ namespace
     void __cdecl hookLimiter(double, uint32_t fps)
     {
         int limit = static_cast<uint16_t>(fps);     // the game reads the low word only
-        if (g_config.fpsLimitInactive > 0 && !Focus::foreground())
+        if (Config::display.fpsLimitInactive > 0 && !Focus::foreground())
         {
-            limit = g_config.fpsLimitInactive;
+            limit = Config::display.fpsLimitInactive;
         }
         else if (reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::renderLimiterReturn)
         {
-            limit = g_config.fpsLimit;
+            limit = Config::display.fpsLimit;
         }
         if (limit > 0)
         {
@@ -162,7 +161,7 @@ namespace
         LOG("dxDriver7::init -> {} ({}x{} {}bpp, {}, device {})", ok & 0xFF, member<uint16_t>(self, DxDriver::width),
             member<uint16_t>(self, DxDriver::height), member<int>(self, DxDriver::bpp),
             member<int>(self, DxDriver::windowed) == 1 ? "fullscreen" : "windowed", static_cast<void*>(device));
-        if ((ok & 0xFF) && device && (g_config.d3dStats || g_config.batch || UiCanvas::enabled()))
+        if ((ok & 0xFF) && device && (Config::debug.d3dStats || Config::render.batch || UiCanvas::enabled()))
         {
             device = DeviceProxy::wrap(device, member<IDirectDraw7*>(self, DxDriver::ddraw));
         }
@@ -179,7 +178,7 @@ namespace
             lastThread = thread;
             LOG("Frames now presented by thread {}", thread);
             D3DStats::setRenderThread(thread);
-            if (g_config.profiler)
+            if (Config::debug.profiler)
             {
                 Profiler::retarget(thread);
             }
@@ -201,7 +200,7 @@ namespace
             }
             lastUsed = used;
         }
-        if (g_config.d3dStats)
+        if (Config::debug.d3dStats)
         {
             D3DStats::onFrame();
         }
@@ -217,7 +216,7 @@ namespace
         }
         // Every 5 s, the texture memory in use.
         static DWORD nextTextureLog = GetTickCount() + 5000;
-        if (g_config.d3dStats && static_cast<int>(GetTickCount() - nextTextureLog) >= 0)
+        if (Config::debug.d3dStats && static_cast<int>(GetTickCount() - nextTextureLog) >= 0)
         {
             nextTextureLog = GetTickCount() + 5000;
             if (void* textures = *reinterpret_cast<void**>(Addr::g_pTextureManager))
@@ -338,6 +337,6 @@ void FrameHooks::install()
     Patch::hook(g_origRenderThreadRun, Addr::cEngine_renderThreadRun, &hookRenderThreadRun, "cEngine::renderThreadRun");
     Patch::hook(g_origLimiter, Addr::frameLimiter, &hookLimiter, "frameLimiter");
     LOG("Frame limit in game: {}, in the background: {}",
-        g_config.fpsLimit > 0 ? std::to_string(g_config.fpsLimit) : std::string("off"),
-        g_config.fpsLimitInactive > 0 ? std::to_string(g_config.fpsLimitInactive) : std::string("off"));
+        Config::display.fpsLimit > 0 ? std::to_string(Config::display.fpsLimit) : std::string("off"),
+        Config::display.fpsLimitInactive > 0 ? std::to_string(Config::display.fpsLimitInactive) : std::string("off"));
 }

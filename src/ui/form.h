@@ -14,8 +14,8 @@
 //
 //     ui.page(L"General");
 //     ui.group(L"Display");
-//     ui.combo(L"Frame limit:", {L"Display", L"FpsLimit"}, {0, 30, 60}, g_config.fpsLimit, fpsText).tip(L"...");
-//     ui.check(L"VSync", {L"Display", L"VSync"}, g_config.vsync).enabledIf(isD3d9);
+//     ui.combo(L"Frame limit:", {L"Display", L"FpsLimit"}, {0, 30, 60}, Config::display.fpsLimit, fpsText).tip(L"...");
+//     ui.check(L"VSync", {L"Display", L"VSync"}, Config::display.vsync).enabledIf(isD3d9);
 namespace Ui
 {
     class Form;

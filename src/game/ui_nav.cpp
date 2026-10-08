@@ -2,6 +2,7 @@
 #include "game/sacred_addr.h"
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
+#include "mem.h"
 
 #include <windows.h>
 #include <algorithm>
@@ -47,11 +48,7 @@ namespace
     std::unordered_map<const void*, Kind> g_kinds;
     uintptr_t g_imageBegin = 0, g_imageEnd = 0;
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(static_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
     bool inImage(uintptr_t address)
     {

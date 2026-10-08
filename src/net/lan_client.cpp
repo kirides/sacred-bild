@@ -3,7 +3,7 @@
 #include "net/lan_protocol.h"
 #include "net/matchmaker.h"
 #include "game/sacred_addr.h"
-#include "config.h"
+#include "config/net.h"
 #include "log.h"
 #include "patch.h"
 
@@ -102,7 +102,7 @@ namespace
             }
             std::string item = list.substr(pos, end - pos);
             pos = end + 1;
-            int port = g_config.netPort;
+            int port = Config::net.port;
             if (const size_t colon = item.rfind(':'); colon != std::string::npos)
             {
                 port = std::atoi(item.c_str() + colon + 1);
@@ -299,7 +299,7 @@ namespace
     // the game here already.
     bool fromOwnRelay(const sockaddr_in& from)
     {
-        if (from.sin_family != AF_INET || from.sin_port != htons(static_cast<u_short>(g_config.netPort)))
+        if (from.sin_family != AF_INET || from.sin_port != htons(static_cast<u_short>(Config::net.port)))
         {
             return false;
         }
@@ -347,7 +347,7 @@ namespace
         sockaddr_in sender{};
         int senderLen = sizeof(sender);
         const int n = g_recvfrom(s, buf, len, flags, reinterpret_cast<sockaddr*>(&sender), &senderLen);
-        if (n != SOCKET_ERROR && g_config.netRelay && fromOwnRelay(sender))
+        if (n != SOCKET_ERROR && Config::net.relay && fromOwnRelay(sender))
         {
             WSASetLastError(WSAEWOULDBLOCK);    // the poll skips it and selects again
             return SOCKET_ERROR;
@@ -364,7 +364,7 @@ namespace
 void LanClient::install()
 {
     // The gameserver needs SacredBild for the relay, the UDP transport and the matchmaker.
-    if (g_config.netRelay || g_config.netUdp || Matchmaker::enabled())
+    if (Config::net.relay || Config::net.udp || Matchmaker::enabled())
     {
         g_createProcess = reinterpret_cast<CreateProcessAFn>(
             Patch::iat("KERNEL32.dll", "CreateProcessA", reinterpret_cast<void*>(&hookCreateProcessA)));
@@ -374,9 +374,9 @@ void LanClient::install()
         }
     }
 
-    g_hosts = parseHosts(g_config.netHosts);
+    g_hosts = parseHosts(Config::net.hosts);
     const bool listMore = !g_hosts.empty() || Matchmaker::enabled();
-    if (!g_config.netRelay && !listMore)
+    if (!Config::net.relay && !listMore)
     {
         return;
     }
@@ -392,7 +392,7 @@ void LanClient::install()
     }
     if (g_fdIsSet && Matchmaker::enabled())
     {
-        LOG("LAN list: also lists the games of the matchmaker {}", g_config.netMatchmaker);
+        LOG("LAN list: also lists the games of the matchmaker {}", Config::net.matchmaker);
     }
 }
 
@@ -408,5 +408,5 @@ uint16_t LanClient::relayPort(uint32_t address)
             }
         }
     }
-    return static_cast<uint16_t>(g_config.netPort);
+    return static_cast<uint16_t>(Config::net.port);
 }

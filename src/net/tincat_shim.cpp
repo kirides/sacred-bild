@@ -2,7 +2,7 @@
 #include "net/matchmaker.h"
 #include "net/udp_endpoint.h"
 #include "net/udp_transport.h"
-#include "config.h"
+#include "config/net.h"
 #include "log.h"
 #include "patch.h"
 
@@ -356,7 +356,7 @@ namespace
         if (g_host && result == 0 && getsockname(s, reinterpret_cast<sockaddr*>(&local), &localLen) == 0)
         {
             g_listener = s;
-            UdpEndpoint::open(static_cast<uint16_t>(g_config.netPort), true);
+            UdpEndpoint::open(static_cast<uint16_t>(Config::net.port), true);
             UdpTransport::setListener(ntohs(local.sin_port));
         }
         return result;
@@ -496,7 +496,7 @@ namespace
 
 void TincatShim::install(bool host)
 {
-    if (!g_config.netUdp)
+    if (!Config::net.udp)
     {
         return;
     }
@@ -537,11 +537,11 @@ void TincatShim::install(bool host)
     }
     if (host)
     {
-        LOG("UDP transport: players with [Net] Udp=1 connect over UDP port {}", g_config.netPort);
+        LOG("UDP transport: players with [Net] Udp=1 connect over UDP port {}", Config::net.port);
     }
     else
     {
         LOG("UDP transport: game connections try UDP first (the host's port {} unless the matchmaker knows "
-            "another), then TCP", g_config.netPort);
+            "another), then TCP", Config::net.port);
     }
 }

@@ -6,7 +6,7 @@
 #include "net/matchmaker.h"
 #include "net/tincat_shim.h"
 #include "net/udp_transport.h"
-#include "config.h"
+#include "config/net.h"
 #include "log.h"
 #include "patch.h"
 #include "sig.h"
@@ -24,7 +24,7 @@ namespace
     // slow or distant links, where joins then fail with a connect time-out.
     void patchJoinTimeout()
     {
-        const uint32_t ms = static_cast<uint32_t>(std::max(g_config.netJoinTimeout, 5)) * 1000;
+        const uint32_t ms = static_cast<uint32_t>(std::max(Config::net.joinTimeout, 5)) * 1000;
         if (ms != kGameFirstContactMs && Patch::imm32(GameServer::Addr::firstContactTimeoutImm, kGameFirstContactMs, ms))
         {
             LOG("Join time-out: {} s (game: 5 s)", ms / 1000);

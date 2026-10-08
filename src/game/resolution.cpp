@@ -2,7 +2,9 @@
 #include "game/focus.h"
 #include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
-#include "config.h"
+#include "config/ddraw.h"
+#include "config/display.h"
+#include "config/render.h"
 #include "log.h"
 #include "patch.h"
 #include "sig.h"
@@ -237,11 +239,11 @@ namespace
 
     bool wantFrame()
     {
-        switch (g_config.frame)
+        switch (Config::display.frame)
         {
-        case Config::Frame::Never: return false;
-        case Config::Frame::Always: return true;
-        case Config::Frame::Auto: break;
+        case Config::Display::Frame::Never: return false;
+        case Config::Display::Frame::Always: return true;
+        case Config::Display::Frame::Auto: break;
         }
         return g_width < GetSystemMetrics(SM_CXSCREEN) || g_height < GetSystemMetrics(SM_CYSCREEN);
     }
@@ -272,7 +274,7 @@ namespace
         // for both), which an exclusive mode never showed. The Direct3D 9 backend emulates fullscreen in the window and
         // presents into its client area: the mode's size centered on the screen, as when windowed.
         const int screenW = GetSystemMetrics(SM_CXSCREEN);
-        if (g_config.ddrawD3D9 && x == 0 && y == 0 && cx == screenW && cy == screenW && flags == SWP_SHOWWINDOW)
+        if (Config::ddraw.d3d9 && x == 0 && y == 0 && cx == screenW && cy == screenW && flags == SWP_SHOWWINDOW)
         {
             const int screenH = GetSystemMetrics(SM_CYSCREEN);
             cx = g_width;
@@ -719,7 +721,7 @@ namespace
 
     uint32_t __fastcall hookTextureInit(void* self, void* edx, uint32_t budget)
     {
-        const uint32_t wanted = g_config.textureBudgetMB > 0 ? static_cast<uint32_t>(g_config.textureBudgetMB) << 20
+        const uint32_t wanted = Config::render.textureBudgetMB > 0 ? static_cast<uint32_t>(Config::render.textureBudgetMB) << 20
                                                              : std::max<uint32_t>(budget, 256u << 20);
         LOG("Texture budget: game {} MB, using {} MB", budget >> 20, wanted >> 20);
         return g_origTextureInit(self, edx, wanted);
@@ -793,8 +795,8 @@ namespace
 
     void chooseSize()
     {
-        int w = g_config.width;
-        int h = g_config.height;
+        int w = Config::display.width;
+        int h = Config::display.height;
         if (w <= 0 || h <= 0)
         {
             w = GetSystemMetrics(SM_CXSCREEN);
@@ -872,7 +874,7 @@ void Resolution::install()
     chooseSize();
     LOG("Resolution: {}x{}, world depth range {:.0f}..{:.0f}", g_width, g_height, g_near, g_far);
     Patch::hook(g_origFindMode, Addr::cDxDevices_findMode, &hookFindMode, "cDxDevices::findMode");
-    if (active() || g_config.ddrawD3D9)
+    if (active() || Config::ddraw.d3d9)
     {
         g_origSetWindowPos = static_cast<SetWindowPosFn>(
             Patch::iat("USER32.dll", "SetWindowPos", reinterpret_cast<void*>(&hookSetWindowPos)));

@@ -18,12 +18,13 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md) 
 | `src/main.cpp` | DLL entry: game (`sacred.exe`) or LAN gameserver (`gameserver.exe`) setup |
 | `src/proxy.*`, `src/exports.def` | The `ddraw.dll` exports, to the Direct3D 9 backend or the chain-loaded ddraw |
 | `src/system_ddraw.*` | `Backend=chain` on Windows' own ddraw: render targets over 2048 pixels |
-| `src/config.*` | `SacredBild.ini` |
+| `src/config.*`, `src/config/` | `SacredBild.ini`: loading it, and the settings in a header per ini section (`Config::render`, `Config::net`, ...) |
 | `src/settings_window.*` | The settings window before the game starts (`[Launcher] HideSettingsWindow`): what it shows, declared control by control |
 | `src/ui/form.*` | `Ui::Form`: settings windows declared in code (pages, groups, rows of controls bound to ini keys), laid out and run as dialogs |
 | `src/log.*`, `src/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
 | `src/patch.*`, `src/sig.*` | Code patches and hooks; byte signature search |
 | `src/spin_lock.h` | Locks for the render thread's hot paths |
+| `src/mem.h` | Fields of the game's objects by byte offset (`Mem::member`, `Mem::field`) |
 | `src/profiler.*` | `[Debug] Profiler` |
 | `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
 | `src/game/build.*` | Which exe this is, address lookup, the list of game modules |

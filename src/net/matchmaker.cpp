@@ -2,7 +2,7 @@
 #include "net/lan_protocol.h"
 #include "net/udp_endpoint.h"
 #include "net/udp_protocol.h"
-#include "config.h"
+#include "config/net.h"
 #include "log.h"
 
 #include <ws2tcpip.h>
@@ -126,7 +126,7 @@ namespace
     // host, host:port, [IPv6]:port or a bare IPv6 address.
     void parseServer()
     {
-        std::string text = g_config.netMatchmaker;
+        std::string text = Config::net.matchmaker;
         g_port = kDefaultPort;
         std::string portText;
         if (!text.empty() && text.front() == '[')
@@ -251,7 +251,7 @@ namespace
     void sendRegister(int only = -1)
     {
         uint8_t p[M::kRegisterSize] = {};
-        put<uint16_t>(p, 12, g_config.netUdp ? M::kFlagUdp : 0);
+        put<uint16_t>(p, 12, Config::net.udp ? M::kFlagUdp : 0);
         put<uint64_t>(p, 32, hostKey());
         std::memcpy(p + 40, g_plain, LanAnnounce::kSize);
         request(p, sizeof(p), M::Register, only);
@@ -459,7 +459,7 @@ namespace
 
 bool Matchmaker::enabled()
 {
-    return !g_config.netMatchmaker.empty();
+    return !Config::net.matchmaker.empty();
 }
 
 void Matchmaker::install(bool host)
@@ -472,7 +472,7 @@ void Matchmaker::install(bool host)
     parseServer();
     UdpEndpoint::onPacket(kMatchmaker, onPacket);
     UdpEndpoint::onTick(tick);
-    if (host && !g_config.netPublish)
+    if (host && !Config::net.publish)
     {
         LOG("Matchmaker: hosted games are not published ([Net] Publish=0)");
     }
@@ -480,7 +480,7 @@ void Matchmaker::install(bool host)
 
 void Matchmaker::publish(const uint8_t* plain)
 {
-    if (!enabled() || !g_host || !g_config.netPublish)
+    if (!enabled() || !g_host || !Config::net.publish)
     {
         return;
     }

@@ -1,6 +1,7 @@
 #include "game/skin_check.h"
 #include "game/granny_mesh.h"
-#include "config.h"
+#include "config/debug.h"
+#include "config/render.h"
 #include "log.h"
 #include "patch.h"
 
@@ -247,11 +248,11 @@ namespace
 
 void SkinCheck::install()
 {
-    if (!g_config.skinCheck)
+    if (!Config::debug.skinCheck)
     {
         return;
     }
-    if (g_config.gpuSkinning)
+    if (Config::render.gpuSkinning)
     {
         LOG("Skin check: off, [Render] GpuSkinning replaces Granny's deformation");
         return;

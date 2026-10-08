@@ -1,5 +1,6 @@
 #include "game/granny_async.h"
-#include "config.h"
+#include "config/debug.h"
+#include "config/render.h"
 #include "log.h"
 #include "patch.h"
 #include "profiler.h"
@@ -120,7 +121,7 @@ namespace
 
 void GrannyAsync::install()
 {
-    if (!g_config.asyncAnimation)
+    if (!Config::render.asyncAnimation)
     {
         return;
     }
@@ -193,7 +194,7 @@ void GrannyAsync::install()
     // Animation finishing late holds up the frame: keep up with the render thread.
     SetThreadPriority(thread, THREAD_PRIORITY_ABOVE_NORMAL);
     CloseHandle(thread);
-    if (g_config.profiler)
+    if (Config::debug.profiler)
     {
         Profiler::addThread(g_workerId);
     }

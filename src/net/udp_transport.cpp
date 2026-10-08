@@ -3,7 +3,7 @@
 #include "net/matchmaker.h"
 #include "net/udp_endpoint.h"
 #include "net/udp_protocol.h"
-#include "config.h"
+#include "config/net.h"
 #include "log.h"
 
 #include <winsock2.h>
@@ -321,7 +321,7 @@ namespace
 
     bool preferred(const Candidate& c)
     {
-        return Net::isV6(c.address) == g_config.netPreferIpv6;
+        return Net::isV6(c.address) == Config::net.preferIpv6;
     }
 
     const char* familyName(bool ipv6)
@@ -340,8 +340,8 @@ namespace
             s.otherFamily = true;
             if (hasOther && std::ranges::any_of(s.candidates, preferred))
             {
-                LOG("UDP: no connection over {} after {} ms, trying {} as well", familyName(g_config.netPreferIpv6),
-                    now - s.created, familyName(!g_config.netPreferIpv6));
+                LOG("UDP: no connection over {} after {} ms, trying {} as well", familyName(Config::net.preferIpv6),
+                    now - s.created, familyName(!Config::net.preferIpv6));
             }
         }
         for (const Candidate& c : s.candidates)
@@ -774,7 +774,7 @@ namespace
 void UdpTransport::install(bool host)
 {
     g_host = host;
-    g_hostAccepts = host && g_config.netUdp;
+    g_hostAccepts = host && Config::net.udp;
     UdpEndpoint::onPacket(kTransport, onPacket);
     UdpEndpoint::onTick(tick);
 }

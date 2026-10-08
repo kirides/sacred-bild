@@ -4,7 +4,7 @@
 #include "input/inject.h"
 #include "input/input_mode.h"
 #include "overlay/overlay.h"
-#include "config.h"
+#include "config/display.h"
 #include "log.h"
 #include "patch.h"
 
@@ -240,7 +240,7 @@ void Focus::install()
     {
         g_origGetKeyboardState = &GetKeyboardState;
     }
-    LOG("Focus: input only in the foreground, ClipCursor={}", g_config.clipCursor);
+    LOG("Focus: input only in the foreground, ClipCursor={}", Config::display.clipCursor);
 
     // The window procedure no longer pauses rendering when the game loses the foreground: the menu loop's last
     // frame was often cleared without its UI (a black screen), and switching back during an intro movie resumed the
@@ -282,7 +282,7 @@ void Focus::onFrame()
         return;
     }
     subclass(window, true);
-    if (!g_config.clipCursor)
+    if (!Config::display.clipCursor)
     {
         return;
     }

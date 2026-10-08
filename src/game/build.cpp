@@ -25,7 +25,7 @@
 #include "net/tincat_shim.h"
 #include "net/udp_transport.h"
 #include "overlay/overlay.h"
-#include "config.h"
+#include "config/debug.h"
 #include "log.h"
 #include "patch.h"
 #include "sig.h"
@@ -81,7 +81,7 @@ bool Sacred::resolveAddresses()
 
 void Sacred::installHooks()
 {
-    D3DStats::setTiming(g_config.d3dStats);
+    D3DStats::setTiming(Config::debug.d3dStats);
     GrannyAsync::install();
     GroundMesh::install();     // its own transaction first: its renderTileRow hook runs inside Resolution's
     Patch::begin();
@@ -105,7 +105,7 @@ void Sacred::installHooks()
     {
         LOG("Game hooks installed");
     }
-    if (g_config.d3dStats)
+    if (Config::debug.d3dStats)
     {
         WorldPasses::install();
     }

@@ -1,13 +1,22 @@
 #include "config.h"
+#include "config/controller.h"
+#include "config/ddraw.h"
+#include "config/debug.h"
+#include "config/display.h"
+#include "config/launcher.h"
+#include "config/net.h"
+#include "config/render.h"
+#include "config/screenshot.h"
+#include "config/ui.h"
 #include "log.h"
 
 #include <windows.h>
 #include <algorithm>
 
-Config g_config;
-
 namespace
 {
+    std::wstring g_iniPath;
+
     int readInt(const std::wstring& ini, const wchar_t* section, const wchar_t* key, int def)
     {
         return static_cast<int>(GetPrivateProfileIntW(section, key, def, ini.c_str()));
@@ -43,7 +52,7 @@ namespace
     }
 
     // "X,Y", each clamped to 0..4096.
-    void readPosition(const std::wstring& ini, const wchar_t* key, Config::UiPosition& pos)
+    void readPosition(const std::wstring& ini, const wchar_t* key, Config::Ui::Position& pos)
     {
         const std::wstring value = readString(ini, L"UI.Layout", key, L"");
         int x = 0, y = 0;
@@ -64,98 +73,103 @@ namespace
     }
 }
 
+const std::wstring& ConfigFile::path()
+{
+    return g_iniPath;
+}
+
 void ConfigFile::load(const std::wstring& gameDir)
 {
     const std::wstring ini = gameDir + L"\\SacredBild.ini";
-    g_config.iniPath = ini;
-    g_config.settingsWindow = !readBool(ini, L"Launcher", L"HideSettingsWindow", false);
-    g_config.ddrawD3D9 = _wcsicmp(readString(ini, L"DDraw", L"Backend", L"d3d9").c_str(), L"chain") != 0;
-    g_config.ddrawChain = readString(ini, L"DDraw", L"Chain", g_config.ddrawChain);
-    g_config.d3d9Path = readString(ini, L"DDraw", L"D3D9", L"");
-    g_config.mediaFoundation = g_config.ddrawD3D9 || readBool(ini, L"DDraw", L"MediaFoundation", g_config.mediaFoundation);
-    g_config.width = readInt(ini, L"Display", L"Width", g_config.width);
-    g_config.height = readInt(ini, L"Display", L"Height", g_config.height);
+    g_iniPath = ini;
+    Config::launcher.settingsWindow = !readBool(ini, L"Launcher", L"HideSettingsWindow", false);
+    Config::ddraw.d3d9 = _wcsicmp(readString(ini, L"DDraw", L"Backend", L"d3d9").c_str(), L"chain") != 0;
+    Config::ddraw.chain = readString(ini, L"DDraw", L"Chain", Config::ddraw.chain);
+    Config::ddraw.d3d9Path = readString(ini, L"DDraw", L"D3D9", L"");
+    Config::ddraw.mediaFoundation = Config::ddraw.d3d9 || readBool(ini, L"DDraw", L"MediaFoundation", Config::ddraw.mediaFoundation);
+    Config::display.width = readInt(ini, L"Display", L"Width", Config::display.width);
+    Config::display.height = readInt(ini, L"Display", L"Height", Config::display.height);
     const std::wstring borderless = readString(ini, L"Display", L"Borderless", L"auto");
-    g_config.frame = _wcsicmp(borderless.c_str(), L"auto") == 0 ? Config::Frame::Auto
-        : readBool(ini, L"Display", L"Borderless", true)      ? Config::Frame::Never
-                                                               : Config::Frame::Always;
-    g_config.clipCursor = readInt(ini, L"Display", L"ClipCursor", g_config.clipCursor) != 0;
-    g_config.fpsLimit = readInt(ini, L"Display", L"FpsLimit", g_config.fpsLimit);
-    g_config.fpsLimitInactive = readInt(ini, L"Display", L"FpsLimitInactive", g_config.fpsLimitInactive);
-    g_config.vsync = readInt(ini, L"Display", L"VSync", g_config.vsync) != 0;
-    g_config.maxFrameLatency = readInt(ini, L"Display", L"MaxFrameLatency", g_config.maxFrameLatency);
-    g_config.uiScale = static_cast<float>(_wtof(readString(ini, L"UI", L"Scale", L"0").c_str()));
-    g_config.uiScaleMenus = _wcsicmp(readString(ini, L"UI", L"ScaleMode", L"InGame").c_str(), L"Full") == 0;
-    g_config.uiLinearFilter = readInt(ini, L"UI", L"LinearFilter", g_config.uiLinearFilter) != 0;
-    g_config.uiAnchor = readInt(ini, L"UI", L"Anchor", g_config.uiAnchor) != 0;
-    readPosition(ini, L"Taskbar", g_config.uiTaskbar);
-    readPosition(ini, L"Chat", g_config.uiChat);
-    readPosition(ini, L"Inventory", g_config.uiInventory);
-    readPosition(ini, L"Equipment", g_config.uiEquipment);
-    readPosition(ini, L"Stats", g_config.uiStats);
-    readPosition(ini, L"Minimap", g_config.uiMinimap);
-    readPosition(ini, L"Portraits", g_config.uiPortraits);
-    readPosition(ini, L"Shops", g_config.uiShops);
-    g_config.textureBudgetMB = readInt(ini, L"Render", L"TextureBudgetMB", g_config.textureBudgetMB);
-    g_config.batch = readInt(ini, L"Render", L"Batch", g_config.batch) != 0;
-    g_config.batchNoClip = readInt(ini, L"Render", L"BatchNoClip", g_config.batchNoClip) != 0;
-    g_config.batchVertexBuffer = readInt(ini, L"Render", L"BatchVertexBuffer", g_config.batchVertexBuffer) != 0;
-    g_config.batchModels = readInt(ini, L"Render", L"BatchModels", g_config.batchModels) != 0;
-    g_config.batchGround = readInt(ini, L"Render", L"BatchGround", g_config.batchGround) != 0;
-    g_config.groundMesh = readInt(ini, L"Render", L"GroundMesh", g_config.groundMesh) != 0;
-    g_config.gpuSkinning = readInt(ini, L"Render", L"GpuSkinning", g_config.gpuSkinning) != 0;
-    g_config.offscreenPoses = readInt(ini, L"Render", L"OffscreenPoses", g_config.offscreenPoses);
-    g_config.asyncAnimation = readInt(ini, L"Render", L"AsyncAnimation", g_config.asyncAnimation) != 0;
-    g_config.animationThreads = readInt(ini, L"Render", L"AnimationThreads", g_config.animationThreads);
-    g_config.recordIndex = readInt(ini, L"Render", L"RecordIndex", g_config.recordIndex) != 0;
-    g_config.atlas = readInt(ini, L"Render", L"Atlas", g_config.atlas) != 0;
-    g_config.atlasPageSize = readInt(ini, L"Render", L"AtlasPageSize", g_config.atlasPageSize);
-    g_config.atlasPages = readInt(ini, L"Render", L"AtlasPages", g_config.atlasPages);
-    g_config.atlasMaxTextureSize = readInt(ini, L"Render", L"AtlasMaxTextureSize", g_config.atlasMaxTextureSize);
-    g_config.screenshotJpeg = _wcsicmp(readString(ini, L"Screenshot", L"Format", L"png").c_str(), L"jpg") == 0;
-    g_config.netRelay = readInt(ini, L"Net", L"Relay", g_config.netRelay) != 0;
-    g_config.netPort = readInt(ini, L"Net", L"Port", g_config.netPort);
-    g_config.netHosts = ascii(readString(ini, L"Net", L"Hosts", L""));
-    g_config.netNoDelay = readInt(ini, L"Net", L"NoDelay", g_config.netNoDelay) != 0;
-    g_config.netJoinTimeout = readInt(ini, L"Net", L"JoinTimeout", g_config.netJoinTimeout);
-    g_config.netUdp = readInt(ini, L"Net", L"Udp", g_config.netUdp) != 0;
-    g_config.netMatchmaker = ascii(readString(ini, L"Net", L"Matchmaker", L""));
-    g_config.netPublish = readInt(ini, L"Net", L"Publish", g_config.netPublish) != 0;
-    g_config.netPreferIpv6 = _wcsicmp(readString(ini, L"Net", L"Prefer", L"IPv6").c_str(), L"IPv4") != 0;
-    g_config.controller = readBool(ini, L"Controller", L"Enabled", g_config.controller);
-    g_config.controllerDeadzone = std::clamp(readInt(ini, L"Controller", L"Deadzone", g_config.controllerDeadzone), 0, 90);
-    g_config.controllerCursorSpeed = std::clamp(readInt(ini, L"Controller", L"CursorSpeed", g_config.controllerCursorSpeed), 50, 5000);
-    g_config.controllerMoveRadius = std::clamp(readInt(ini, L"Controller", L"MoveRadius", g_config.controllerMoveRadius), 40, 1000);
-    g_config.controllerAimRange = std::clamp(readInt(ini, L"Controller", L"AimRange", g_config.controllerAimRange), 50, 3000);
-    g_config.controllerAimCone = std::clamp(readInt(ini, L"Controller", L"AimCone", g_config.controllerAimCone), 10, 360);
-    g_config.controllerArtClick = readBool(ini, L"Controller", L"ArtClick", g_config.controllerArtClick);
-    g_config.controllerWalk = readBool(ini, L"Controller", L"Walk", g_config.controllerWalk);
-    g_config.controllerPrompts = readBool(ini, L"Controller", L"Prompts", g_config.controllerPrompts);
-    g_config.d3dStats = readInt(ini, L"Debug", L"D3DStats", g_config.d3dStats) != 0;
-    g_config.profiler = readInt(ini, L"Debug", L"Profiler", g_config.profiler) != 0;
-    g_config.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", g_config.profilerIntervalUs);
-    g_config.uiTrace = readInt(ini, L"Debug", L"UiTrace", g_config.uiTrace) != 0;
-    g_config.crashDump = readInt(ini, L"Debug", L"CrashDump", g_config.crashDump);
-    g_config.movieFallback = readInt(ini, L"Debug", L"MovieFallback", g_config.movieFallback) != 0;
-    g_config.skinCheck = readInt(ini, L"Debug", L"SkinCheck", g_config.skinCheck) != 0;
-    g_config.animationCheck = readInt(ini, L"Debug", L"AnimationCheck", g_config.animationCheck) != 0;
+    Config::display.frame = _wcsicmp(borderless.c_str(), L"auto") == 0 ? Config::Display::Frame::Auto
+        : readBool(ini, L"Display", L"Borderless", true)      ? Config::Display::Frame::Never
+                                                               : Config::Display::Frame::Always;
+    Config::display.clipCursor = readInt(ini, L"Display", L"ClipCursor", Config::display.clipCursor) != 0;
+    Config::display.fpsLimit = readInt(ini, L"Display", L"FpsLimit", Config::display.fpsLimit);
+    Config::display.fpsLimitInactive = readInt(ini, L"Display", L"FpsLimitInactive", Config::display.fpsLimitInactive);
+    Config::display.vsync = readInt(ini, L"Display", L"VSync", Config::display.vsync) != 0;
+    Config::display.maxFrameLatency = readInt(ini, L"Display", L"MaxFrameLatency", Config::display.maxFrameLatency);
+    Config::ui.scale = static_cast<float>(_wtof(readString(ini, L"UI", L"Scale", L"0").c_str()));
+    Config::ui.scaleMenus = _wcsicmp(readString(ini, L"UI", L"ScaleMode", L"InGame").c_str(), L"Full") == 0;
+    Config::ui.linearFilter = readInt(ini, L"UI", L"LinearFilter", Config::ui.linearFilter) != 0;
+    Config::ui.anchor = readInt(ini, L"UI", L"Anchor", Config::ui.anchor) != 0;
+    readPosition(ini, L"Taskbar", Config::ui.taskbar);
+    readPosition(ini, L"Chat", Config::ui.chat);
+    readPosition(ini, L"Inventory", Config::ui.inventory);
+    readPosition(ini, L"Equipment", Config::ui.equipment);
+    readPosition(ini, L"Stats", Config::ui.stats);
+    readPosition(ini, L"Minimap", Config::ui.minimap);
+    readPosition(ini, L"Portraits", Config::ui.portraits);
+    readPosition(ini, L"Shops", Config::ui.shops);
+    Config::render.textureBudgetMB = readInt(ini, L"Render", L"TextureBudgetMB", Config::render.textureBudgetMB);
+    Config::render.batch = readInt(ini, L"Render", L"Batch", Config::render.batch) != 0;
+    Config::render.batchNoClip = readInt(ini, L"Render", L"BatchNoClip", Config::render.batchNoClip) != 0;
+    Config::render.batchVertexBuffer = readInt(ini, L"Render", L"BatchVertexBuffer", Config::render.batchVertexBuffer) != 0;
+    Config::render.batchModels = readInt(ini, L"Render", L"BatchModels", Config::render.batchModels) != 0;
+    Config::render.batchGround = readInt(ini, L"Render", L"BatchGround", Config::render.batchGround) != 0;
+    Config::render.groundMesh = readInt(ini, L"Render", L"GroundMesh", Config::render.groundMesh) != 0;
+    Config::render.gpuSkinning = readInt(ini, L"Render", L"GpuSkinning", Config::render.gpuSkinning) != 0;
+    Config::render.offscreenPoses = readInt(ini, L"Render", L"OffscreenPoses", Config::render.offscreenPoses);
+    Config::render.asyncAnimation = readInt(ini, L"Render", L"AsyncAnimation", Config::render.asyncAnimation) != 0;
+    Config::render.animationThreads = readInt(ini, L"Render", L"AnimationThreads", Config::render.animationThreads);
+    Config::render.recordIndex = readInt(ini, L"Render", L"RecordIndex", Config::render.recordIndex) != 0;
+    Config::render.atlas = readInt(ini, L"Render", L"Atlas", Config::render.atlas) != 0;
+    Config::render.atlasPageSize = readInt(ini, L"Render", L"AtlasPageSize", Config::render.atlasPageSize);
+    Config::render.atlasPages = readInt(ini, L"Render", L"AtlasPages", Config::render.atlasPages);
+    Config::render.atlasMaxTextureSize = readInt(ini, L"Render", L"AtlasMaxTextureSize", Config::render.atlasMaxTextureSize);
+    Config::screenshot.jpeg = _wcsicmp(readString(ini, L"Screenshot", L"Format", L"png").c_str(), L"jpg") == 0;
+    Config::net.relay = readInt(ini, L"Net", L"Relay", Config::net.relay) != 0;
+    Config::net.port = readInt(ini, L"Net", L"Port", Config::net.port);
+    Config::net.hosts = ascii(readString(ini, L"Net", L"Hosts", L""));
+    Config::net.noDelay = readInt(ini, L"Net", L"NoDelay", Config::net.noDelay) != 0;
+    Config::net.joinTimeout = readInt(ini, L"Net", L"JoinTimeout", Config::net.joinTimeout);
+    Config::net.udp = readInt(ini, L"Net", L"Udp", Config::net.udp) != 0;
+    Config::net.matchmaker = ascii(readString(ini, L"Net", L"Matchmaker", L""));
+    Config::net.publish = readInt(ini, L"Net", L"Publish", Config::net.publish) != 0;
+    Config::net.preferIpv6 = _wcsicmp(readString(ini, L"Net", L"Prefer", L"IPv6").c_str(), L"IPv4") != 0;
+    Config::controller.enabled = readBool(ini, L"Controller", L"Enabled", Config::controller.enabled);
+    Config::controller.deadzone = std::clamp(readInt(ini, L"Controller", L"Deadzone", Config::controller.deadzone), 0, 90);
+    Config::controller.cursorSpeed = std::clamp(readInt(ini, L"Controller", L"CursorSpeed", Config::controller.cursorSpeed), 50, 5000);
+    Config::controller.moveRadius = std::clamp(readInt(ini, L"Controller", L"MoveRadius", Config::controller.moveRadius), 40, 1000);
+    Config::controller.aimRange = std::clamp(readInt(ini, L"Controller", L"AimRange", Config::controller.aimRange), 50, 3000);
+    Config::controller.aimCone = std::clamp(readInt(ini, L"Controller", L"AimCone", Config::controller.aimCone), 10, 360);
+    Config::controller.artClick = readBool(ini, L"Controller", L"ArtClick", Config::controller.artClick);
+    Config::controller.walk = readBool(ini, L"Controller", L"Walk", Config::controller.walk);
+    Config::controller.prompts = readBool(ini, L"Controller", L"Prompts", Config::controller.prompts);
+    Config::debug.d3dStats = readInt(ini, L"Debug", L"D3DStats", Config::debug.d3dStats) != 0;
+    Config::debug.profiler = readInt(ini, L"Debug", L"Profiler", Config::debug.profiler) != 0;
+    Config::debug.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", Config::debug.profilerIntervalUs);
+    Config::debug.uiTrace = readInt(ini, L"Debug", L"UiTrace", Config::debug.uiTrace) != 0;
+    Config::debug.crashDump = readInt(ini, L"Debug", L"CrashDump", Config::debug.crashDump);
+    Config::debug.movieFallback = readInt(ini, L"Debug", L"MovieFallback", Config::debug.movieFallback) != 0;
+    Config::debug.skinCheck = readInt(ini, L"Debug", L"SkinCheck", Config::debug.skinCheck) != 0;
+    Config::debug.animationCheck = readInt(ini, L"Debug", L"AnimationCheck", Config::debug.animationCheck) != 0;
 
     LOG("Config: HideSettingsWindow={} Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} ClipCursor={} FpsLimit={} FpsLimitInactive={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} BatchGround={} GroundMesh={} GpuSkinning={} OffscreenPoses={} AsyncAnimation={} AnimationThreads={} RecordIndex={} Atlas={} ({} px, {} pages, textures <= {}) "
         "Screenshot.Format={} Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} Net.Udp={} Net.Matchmaker='{}' Net.Publish={} Net.Prefer={} D3DStats={} Profiler={} ({} us) UiTrace={} CrashDump={} MovieFallback={} SkinCheck={} AnimationCheck={}",
-        !g_config.settingsWindow, g_config.ddrawD3D9 ? "d3d9" : "chain", ascii(g_config.d3d9Path), g_config.mediaFoundation, g_config.width, g_config.height,
-        g_config.frame == Config::Frame::Auto ? "auto" : g_config.frame == Config::Frame::Never ? "1" : "0", g_config.clipCursor, g_config.fpsLimit, g_config.fpsLimitInactive,
-        g_config.vsync, g_config.maxFrameLatency, g_config.uiScale,
-        g_config.uiScaleMenus ? "Full" : "InGame", g_config.uiLinearFilter, g_config.uiAnchor,
-        g_config.textureBudgetMB, g_config.batch, g_config.batchNoClip, g_config.batchVertexBuffer,
-        g_config.batchModels, g_config.batchGround, g_config.groundMesh, g_config.gpuSkinning, g_config.offscreenPoses, g_config.asyncAnimation, g_config.animationThreads, g_config.recordIndex, g_config.atlas, g_config.atlasPageSize, g_config.atlasPages,
-        g_config.atlasMaxTextureSize, g_config.screenshotJpeg ? "jpg" : "png", g_config.netRelay, g_config.netPort, g_config.netHosts, g_config.netNoDelay, g_config.netJoinTimeout, g_config.netUdp, g_config.netMatchmaker, g_config.netPublish, g_config.netPreferIpv6 ? "IPv6" : "IPv4", g_config.d3dStats, g_config.profiler, g_config.profilerIntervalUs, g_config.uiTrace, g_config.crashDump, g_config.movieFallback, g_config.skinCheck, g_config.animationCheck);
+        !Config::launcher.settingsWindow, Config::ddraw.d3d9 ? "d3d9" : "chain", ascii(Config::ddraw.d3d9Path), Config::ddraw.mediaFoundation, Config::display.width, Config::display.height,
+        Config::display.frame == Config::Display::Frame::Auto ? "auto" : Config::display.frame == Config::Display::Frame::Never ? "1" : "0", Config::display.clipCursor, Config::display.fpsLimit, Config::display.fpsLimitInactive,
+        Config::display.vsync, Config::display.maxFrameLatency, Config::ui.scale,
+        Config::ui.scaleMenus ? "Full" : "InGame", Config::ui.linearFilter, Config::ui.anchor,
+        Config::render.textureBudgetMB, Config::render.batch, Config::render.batchNoClip, Config::render.batchVertexBuffer,
+        Config::render.batchModels, Config::render.batchGround, Config::render.groundMesh, Config::render.gpuSkinning, Config::render.offscreenPoses, Config::render.asyncAnimation, Config::render.animationThreads, Config::render.recordIndex, Config::render.atlas, Config::render.atlasPageSize, Config::render.atlasPages,
+        Config::render.atlasMaxTextureSize, Config::screenshot.jpeg ? "jpg" : "png", Config::net.relay, Config::net.port, Config::net.hosts, Config::net.noDelay, Config::net.joinTimeout, Config::net.udp, Config::net.matchmaker, Config::net.publish, Config::net.preferIpv6 ? "IPv6" : "IPv4", Config::debug.d3dStats, Config::debug.profiler, Config::debug.profilerIntervalUs, Config::debug.uiTrace, Config::debug.crashDump, Config::debug.movieFallback, Config::debug.skinCheck, Config::debug.animationCheck);
     LOG("Config: Controller Enabled={} Deadzone={} CursorSpeed={} MoveRadius={} AimRange={} AimCone={} ArtClick={} Walk={} Prompts={}",
-        g_config.controller, g_config.controllerDeadzone, g_config.controllerCursorSpeed, g_config.controllerMoveRadius,
-        g_config.controllerAimRange, g_config.controllerAimCone, g_config.controllerArtClick, g_config.controllerWalk,
-        g_config.controllerPrompts);
-    const auto pos = [](const Config::UiPosition& p) { return Fmt::format("{},{}", p.x, p.y); };
+        Config::controller.enabled, Config::controller.deadzone, Config::controller.cursorSpeed, Config::controller.moveRadius,
+        Config::controller.aimRange, Config::controller.aimCone, Config::controller.artClick, Config::controller.walk,
+        Config::controller.prompts);
+    const auto pos = [](const Config::Ui::Position& p) { return Fmt::format("{},{}", p.x, p.y); };
     LOG("Config: UI.Layout Taskbar={} Chat={} Inventory={} Equipment={} Stats={} Minimap={} Portraits={} Shops={}",
-        pos(g_config.uiTaskbar), pos(g_config.uiChat), pos(g_config.uiInventory), pos(g_config.uiEquipment),
-        pos(g_config.uiStats), pos(g_config.uiMinimap), pos(g_config.uiPortraits), pos(g_config.uiShops));
+        pos(Config::ui.taskbar), pos(Config::ui.chat), pos(Config::ui.inventory), pos(Config::ui.equipment),
+        pos(Config::ui.stats), pos(Config::ui.minimap), pos(Config::ui.portraits), pos(Config::ui.shops));
 }

@@ -3,7 +3,8 @@
 #include "game/gpu_skin.h"
 #include "game/ui_canvas.h"
 #include "render/fvf.h"
-#include "config.h"
+#include "config/render.h"
+#include "config/ui.h"
 #include "log.h"
 
 #include <algorithm>
@@ -72,16 +73,16 @@ DeviceProxy* DeviceProxy::wrap(IDirect3DDevice7* real, IDirectDraw7* ddraw)
         return nullptr;
     }
     g_instance = new DeviceProxy(real);
-    if (g_config.batch)
+    if (Config::render.batch)
     {
         Batcher::Options options;
-        options.noClip = g_config.batchNoClip;
-        options.models = g_config.batchModels;
-        options.vertexBuffers = g_config.batchVertexBuffer;
-        options.atlas = g_config.atlas;
-        options.atlasPageSize = g_config.atlasPageSize;
-        options.atlasPages = g_config.atlasPages;
-        options.atlasMaxTextureSize = g_config.atlasMaxTextureSize;
+        options.noClip = Config::render.batchNoClip;
+        options.models = Config::render.batchModels;
+        options.vertexBuffers = Config::render.batchVertexBuffer;
+        options.atlas = Config::render.atlas;
+        options.atlasPageSize = Config::render.atlasPageSize;
+        options.atlasPages = Config::render.atlasPages;
+        options.atlasMaxTextureSize = Config::render.atlasMaxTextureSize;
         g_instance->m_batcher = std::make_unique<Batcher>(real, ddraw, options);
     }
     return g_instance;
@@ -254,7 +255,7 @@ void DeviceProxy::endOverlay3D(const Overlay3D& restore)
 
 DWORD DeviceProxy::uiFilter(DWORD value) const
 {
-    return g_config.uiLinearFilter && value == D3DTFG_POINT ? D3DTFG_LINEAR : value;
+    return Config::ui.linearFilter && value == D3DTFG_POINT ? D3DTFG_LINEAR : value;
 }
 
 void DeviceProxy::beginUi()

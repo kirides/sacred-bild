@@ -8,7 +8,10 @@
 #include "input/input_mode.h"
 #include "overlay/overlay.h"
 #include "config.h"
+#include "config/controller.h"
+#include "config/ddraw.h"
 #include "log.h"
+#include "mem.h"
 #include "patch.h"
 
 #include <imgui.h>
@@ -49,11 +52,7 @@ namespace
     constexpr DWORD kCloseGraceMs = 750;
     constexpr DWORD kCaptureTimeoutMs = 8000;
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(static_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
     std::string utf8(const std::wstring& w)
     {
@@ -260,9 +259,8 @@ namespace
 
     ControllerOptions readController()
     {
-        ControllerOptions o{g_config.controllerDeadzone, g_config.controllerCursorSpeed, g_config.controllerMoveRadius,
-            g_config.controllerAimRange, g_config.controllerAimCone, g_config.controllerArtClick, g_config.controllerWalk,
-            g_config.controllerPrompts, {}};
+        const Config::Controller& c = Config::controller;
+        ControllerOptions o{c.deadzone, c.cursorSpeed, c.moveRadius, c.aimRange, c.aimCone, c.artClick, c.walk, c.prompts, {}};
         for (int i = 0; i < Bindings::actionCount; ++i)
         {
             o.bindings[i] = Bindings::get(static_cast<Action>(i));
@@ -272,9 +270,8 @@ namespace
 
     ControllerOptions defaultController()
     {
-        const Config d;
-        ControllerOptions o{d.controllerDeadzone, d.controllerCursorSpeed, d.controllerMoveRadius, d.controllerAimRange,
-            d.controllerAimCone, d.controllerArtClick, d.controllerWalk, d.controllerPrompts, {}};
+        const Config::Controller d;
+        ControllerOptions o{d.deadzone, d.cursorSpeed, d.moveRadius, d.aimRange, d.aimCone, d.artClick, d.walk, d.prompts, {}};
         for (int i = 0; i < Bindings::actionCount; ++i)
         {
             o.bindings[i] = Bindings::info(static_cast<Action>(i)).defaults;
@@ -285,26 +282,26 @@ namespace
     // Applies the controller settings and stores them in SacredBild.ini.
     void saveController(const ControllerOptions& o)
     {
-        g_config.controllerDeadzone = o.deadzone;
-        g_config.controllerCursorSpeed = o.cursorSpeed;
-        g_config.controllerMoveRadius = o.moveRadius;
-        g_config.controllerAimRange = o.aimRange;
-        g_config.controllerAimCone = o.aimCone;
-        g_config.controllerArtClick = o.artClick;
-        g_config.controllerWalk = o.walk;
-        g_config.controllerPrompts = o.prompts;
+        Config::controller.deadzone = o.deadzone;
+        Config::controller.cursorSpeed = o.cursorSpeed;
+        Config::controller.moveRadius = o.moveRadius;
+        Config::controller.aimRange = o.aimRange;
+        Config::controller.aimCone = o.aimCone;
+        Config::controller.artClick = o.artClick;
+        Config::controller.walk = o.walk;
+        Config::controller.prompts = o.prompts;
         for (int i = 0; i < Bindings::actionCount; ++i)
         {
             Bindings::set(static_cast<Action>(i), o.bindings[i]);
         }
-        const wchar_t* ini = g_config.iniPath.c_str();
+        const wchar_t* ini = ConfigFile::path().c_str();
         const auto put = [&](const wchar_t* key, int value) {
             return WritePrivateProfileStringW(L"Controller", key, std::to_wstring(value).c_str(), ini) != 0;
         };
         const bool ok = put(L"Deadzone", o.deadzone) & put(L"CursorSpeed", o.cursorSpeed) &
             put(L"MoveRadius", o.moveRadius) & put(L"AimRange", o.aimRange) & put(L"AimCone", o.aimCone) &
             put(L"ArtClick", o.artClick) & put(L"Walk", o.walk) & put(L"Prompts", o.prompts) &
-            Bindings::save(g_config.iniPath);
+            Bindings::save(ConfigFile::path());
         LOG("Controller: settings and bindings {} SacredBild.ini", ok ? "saved to" : "could not all be written to");
     }
 
@@ -741,7 +738,7 @@ namespace
 
 void OptionsScreen::install()
 {
-    if (!g_config.controller || !g_config.ddrawD3D9)
+    if (!Config::controller.enabled || !Config::ddraw.d3d9)
     {
         return;
     }

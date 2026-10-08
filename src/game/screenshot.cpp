@@ -1,8 +1,9 @@
 #include "game/screenshot.h"
 #include "game/frame_hooks.h"
 #include "game/sacred_addr.h"
-#include "config.h"
+#include "config/screenshot.h"
 #include "log.h"
+#include "mem.h"
 #include "patch.h"
 
 #include <windows.h>
@@ -34,11 +35,7 @@ namespace
     constexpr GUID kContainerFormatPng = {0x1b7cfaf4, 0x713f, 0x473c, {0xbb, 0xcd, 0x61, 0x37, 0x42, 0x5f, 0xae, 0xaf}};
     constexpr GUID kContainerFormatJpeg = {0x19e4a5aa, 0x5662, 0x4fc5, {0xa0, 0xc0, 0x17, 0x58, 0x02, 0x8e, 0x10, 0x57}};
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(reinterpret_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
     struct Image
     {
@@ -204,7 +201,7 @@ namespace
                 out[2] = in[red];
             }
         }
-        std::thread(save, std::move(image), number, g_config.screenshotJpeg).detach();
+        std::thread(save, std::move(image), number, Config::screenshot.jpeg).detach();
         return true;
     }
 

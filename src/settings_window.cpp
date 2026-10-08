@@ -1,5 +1,14 @@
 #include "settings_window.h"
 #include "config.h"
+#include "config/controller.h"
+#include "config/ddraw.h"
+#include "config/debug.h"
+#include "config/display.h"
+#include "config/launcher.h"
+#include "config/net.h"
+#include "config/render.h"
+#include "config/screenshot.h"
+#include "config/ui.h"
 #include "log.h"
 #include "ui/form.h"
 
@@ -27,7 +36,7 @@ namespace
         return {s.begin(), s.end()};
     }
 
-    // The ini's own MediaFoundation value: g_config has it forced on with Backend=d3d9.
+    // The ini's own MediaFoundation value: Config::ddraw has it forced on with Backend=d3d9.
     bool iniMediaFoundation(const std::wstring& ini)
     {
         wchar_t buf[16] = {};
@@ -76,7 +85,7 @@ namespace
 
     std::wstring resolution()
     {
-        return g_config.width > 0 && g_config.height > 0 ? Fmt::format(L"{},{}", g_config.width, g_config.height) : L"0,0";
+        return Config::display.width > 0 && Config::display.height > 0 ? Fmt::format(L"{},{}", Config::display.width, Config::display.height) : L"0,0";
     }
 
     // Percent in the list, the ini's factor as the value.
@@ -100,19 +109,19 @@ namespace
     {
         const wchar_t* key;
         const wchar_t* label;
-        Config::UiPosition Config::*position;
+        Config::Ui::Position Config::Ui::*position;
         const wchar_t* tip = L"";
     };
 
     constexpr HudWindow kHudWindows[] = {
-        {L"Taskbar", L"Taskbar", &Config::uiTaskbar},
-        {L"Chat", L"Chat", &Config::uiChat},
-        {L"Inventory", L"Inventory", &Config::uiInventory},
-        {L"Stats", L"Stats", &Config::uiStats},
-        {L"Equipment", L"Equipment", &Config::uiEquipment},
-        {L"Minimap", L"Minimap", &Config::uiMinimap},
-        {L"Portraits", L"Party portraits", &Config::uiPortraits, L"Party portraits (multiplayer)."},
-        {L"Shops", L"Shops and chests", &Config::uiShops, L"Blacksmith, merchant, combat art master, chest, cube and trade windows."},
+        {L"Taskbar", L"Taskbar", &Config::Ui::taskbar},
+        {L"Chat", L"Chat", &Config::Ui::chat},
+        {L"Inventory", L"Inventory", &Config::Ui::inventory},
+        {L"Stats", L"Stats", &Config::Ui::stats},
+        {L"Equipment", L"Equipment", &Config::Ui::equipment},
+        {L"Minimap", L"Minimap", &Config::Ui::minimap},
+        {L"Portraits", L"Party portraits", &Config::Ui::portraits, L"Party portraits (multiplayer)."},
+        {L"Shops", L"Shops and chests", &Config::Ui::shops, L"Blacksmith, merchant, combat art master, chest, cube and trade windows."},
     };
 
     bool d3d9(const Form& f)
@@ -135,7 +144,7 @@ namespace
                  L"window. 1024 x 768 runs the original game without patches.");
         ui.combo(L"Window frame:", {L"Display", L"Borderless"},
               {{L"Automatic", L"auto"}, {L"Borderless", L"1"}, {L"Window frame", L"0"}},
-              g_config.frame == Config::Frame::Auto ? L"auto" : g_config.frame == Config::Frame::Never ? L"1" : L"0")
+              Config::display.frame == Config::Display::Frame::Auto ? L"auto" : Config::display.frame == Config::Display::Frame::Never ? L"1" : L"0")
             .tip(L"Automatic: a frame with a title bar (to move the window) when the window is smaller than the screen, "
                  L"none when it fills the screen.\nBorderless: never a frame.\nWindow frame: always a frame.\n"
                  L"The area inside the frame has the chosen resolution either way.");
@@ -145,47 +154,47 @@ namespace
         {
             limits.push_back(refresh);
         }
-        ui.combo(L"Frame limit:", {L"Display", L"FpsLimit"}, limits, std::max(g_config.fpsLimit, 0),
+        ui.combo(L"Frame limit:", {L"Display", L"FpsLimit"}, limits, std::max(Config::display.fpsLimit, 0),
               [&](int n) {
                   return n == 60     ? Fmt::format(L"60 fps (original{})", n == refresh ? L", display refresh" : L"")
                       : n == refresh ? Fmt::format(L"{} fps (display refresh)", n)
                                      : fps(n);
               })
             .tip(L"The game's own frame limit in game (it uses 60), e.g. 144 for a 144 Hz display. The menus are unchanged.");
-        ui.check(L"Wait for the display's refresh (VSync)", {L"Display", L"VSync"}, g_config.vsync)
+        ui.check(L"Wait for the display's refresh (VSync)", {L"Display", L"VSync"}, Config::display.vsync)
             .enabledIf(d3d9)
             .tip(L"Show each frame on the display's refresh (no tearing). Off: show frames right away. "
                  L"Needs the SacredBild (Direct3D 9) renderer.");
-        ui.check(L"Keep the mouse inside the game window", {L"Display", L"ClipCursor"}, g_config.clipCursor)
+        ui.check(L"Keep the mouse inside the game window", {L"Display", L"ClipCursor"}, Config::display.clipCursor)
             .tip(L"Keep the mouse inside the game window while it is in the foreground (multiple monitors, a smaller "
                  L"window on a wide screen). Hold Alt to move the mouse out of the window.");
 
         ui.column();
         ui.group(L"Interface");
-        ui.combo(L"UI size:", {L"UI", L"Scale"}, uiScales(), g_config.uiScale > 0.0f ? Fmt::format(L"{}", g_config.uiScale) : L"0")
+        ui.combo(L"UI size:", {L"UI", L"Scale"}, uiScales(), Config::ui.scale > 0.0f ? Fmt::format(L"{}", Config::ui.scale) : L"0")
             .tip(L"The game's 1024 x 768 interface is drawn centered and scaled. Fit = as large as fits the screen "
                  L"height; a percentage = a fixed size (100 % = native pixels), capped at what fits.");
-        ui.check(L"Use the UI size in the menus too", {L"UI", L"ScaleMode"}, g_config.uiScaleMenus)
+        ui.check(L"Use the UI size in the menus too", {L"UI", L"ScaleMode"}, Config::ui.scaleMenus)
             .values(L"Full", L"InGame")
             .enabledIf([](const Form& f) { return f.value(L"UI", L"Scale") != L"0"; })
             .tip(L"Use the UI size for the menus, the full-screen windows in game (options, save/load, map) and the "
                  L"loading screen too. Off: those always fill the screen height.");
-        ui.check(L"Place the HUD windows at the screen edges", {L"UI", L"Anchor"}, g_config.uiAnchor)
+        ui.check(L"Place the HUD windows at the screen edges", {L"UI", L"Anchor"}, Config::ui.anchor)
             .tip(L"In game, place the taskbar, minimap, inventory and the other HUD windows at the screen edges "
                  L"(HUD layout tab). Off: the whole interface stays in the centered 1024 x 768 area.");
-        ui.check(L"Smooth UI scaling (bilinear filtering)", {L"UI", L"LinearFilter"}, g_config.uiLinearFilter)
+        ui.check(L"Smooth UI scaling (bilinear filtering)", {L"UI", L"LinearFilter"}, Config::ui.linearFilter)
             .tip(L"Bilinear filtering for the scaled interface. Off: the game's sharp point sampling.");
         ui.group(L"Renderer");
         ui.combo(L"DirectDraw:", {L"DDraw", L"Backend"},
-              {{L"SacredBild (Direct3D 9)", L"d3d9"}, {L"Chain-loaded ddraw", L"chain"}}, g_config.ddrawD3D9 ? L"d3d9" : L"chain")
+              {{L"SacredBild (Direct3D 9)", L"d3d9"}, {L"Chain-loaded ddraw", L"chain"}}, Config::ddraw.d3d9 ? L"d3d9" : L"chain")
             .tip(L"SacredBild (Direct3D 9): SacredBild runs the game's DirectDraw / Direct3D 7 on Direct3D 9 itself.\n"
                  L"Chain-loaded ddraw: the ddraw.dll set on the Advanced tab (DDrawCompat or another wrapper), else "
                  L"Windows' own.");
-        ui.check(L"Animate characters on the GPU", {L"Render", L"GpuSkinning"}, g_config.gpuSkinning)
+        ui.check(L"Animate characters on the GPU", {L"Render", L"GpuSkinning"}, Config::render.gpuSkinning)
             .enabledIf(d3d9)
             .tip(L"Animate (skin) characters and their shadows in a vertex shader instead of on the CPU. "
                  L"Needs the SacredBild (Direct3D 9) renderer.");
-        ui.check(L"Keep the ground on the GPU", {L"Render", L"GroundMesh"}, g_config.groundMesh)
+        ui.check(L"Keep the ground on the GPU", {L"Render", L"GroundMesh"}, Config::render.groundMesh)
             .enabledIf(d3d9)
             .tip(L"Keep the ground's tiles and their blend layers in vertex buffers, built once as they come into view, "
                  L"and draw them in a few calls per frame instead of rebuilding every tile each frame. "
@@ -194,70 +203,70 @@ namespace
         ui.page(L"Advanced");
         ui.group(L"Frame timing");
         ui.combo(L"In the background:", {L"Display", L"FpsLimitInactive"}, {0, 10, 15, 20, 30, 60},
-              std::max(g_config.fpsLimitInactive, 0), fps)
+              std::max(Config::display.fpsLimitInactive, 0), fps)
             .tip(L"Frame limit while the game is in the background (another window has the focus), in game and in the menus.");
-        ui.combo(L"Frames queued:", {L"Display", L"MaxFrameLatency"}, {1, 2, 3}, g_config.maxFrameLatency,
+        ui.combo(L"Frames queued:", {L"Display", L"MaxFrameLatency"}, {1, 2, 3}, Config::display.maxFrameLatency,
               [](int n) { return n <= 0 ? std::wstring(L"Driver default") : n == 1 ? std::wstring(L"1 (lowest latency)") : std::to_wstring(n); })
             .enabledIf(d3d9)
             .tip(L"Frames the CPU may prepare ahead of the GPU. 1 = lowest input latency. "
                  L"Needs the SacredBild (Direct3D 9) renderer.");
         ui.group(L"Rendering");
-        ui.combo(L"Texture memory:", {L"Render", L"TextureBudgetMB"}, {0, 256, 512, 1024, 2048}, g_config.textureBudgetMB,
+        ui.combo(L"Texture memory:", {L"Render", L"TextureBudgetMB"}, {0, 256, 512, 1024, 2048}, Config::render.textureBudgetMB,
               [](int mb) { return mb ? Fmt::format(L"{} MB", mb) : std::wstring(L"Automatic"); })
             .tip(L"Texture memory the game may keep loaded. A zoomed-out view at a high resolution shows far more "
                  L"different ground textures than the original 1024 x 768. Automatic = the game's own value, at least 256 MB.");
-        ui.combo(L"Off-screen poses:", {L"Render", L"OffscreenPoses"}, {1, 2, 4, 8}, g_config.offscreenPoses,
+        ui.combo(L"Off-screen poses:", {L"Render", L"OffscreenPoses"}, {1, 2, 4, 8}, Config::render.offscreenPoses,
               [](int n) { return n <= 1 ? std::wstring(L"Every frame") : n == 2 ? std::wstring(L"Every 2nd frame") : Fmt::format(L"Every {}th frame", n); })
             .enabledIf([](const Form& f) { return d3d9(f) && f.on(L"Render", L"GpuSkinning"); })
             .tip(L"Characters not drawn in the last frames get their skeleton posed this often instead of every frame "
                  L"(most animated characters are off screen). Every frame = as the game does. Needs GPU animation.");
-        ui.check(L"Merge draw calls", {L"Render", L"Batch"}, g_config.batch)
+        ui.check(L"Merge draw calls", {L"Render", L"Batch"}, Config::render.batch)
             .tip(L"Merge the world view's thousands of small draw calls into few large ones. Off = draw as the game does.");
         ui.indent();
         ui.beginEnabledIf(batching);
-        ui.check(L"Let the GPU clip merged draws", {L"Render", L"BatchNoClip"}, g_config.batchNoClip)
+        ui.check(L"Let the GPU clip merged draws", {L"Render", L"BatchNoClip"}, Config::render.batchNoClip)
             .tip(L"Let the GPU clip merged draws instead of Direct3D 7 on the CPU.");
-        ui.check(L"Vertex buffers for merged draws", {L"Render", L"BatchVertexBuffer"}, g_config.batchVertexBuffer)
+        ui.check(L"Vertex buffers for merged draws", {L"Render", L"BatchVertexBuffer"}, Config::render.batchVertexBuffer)
             .tip(L"Hand merged draws to Direct3D in vertex buffers instead of plain memory.");
-        ui.check(L"Merge 3D models too", {L"Render", L"BatchModels"}, g_config.batchModels)
+        ui.check(L"Merge 3D models too", {L"Render", L"BatchModels"}, Config::render.batchModels)
             .tip(L"Send 3D models (characters and their shadows) through the same vertex buffers, merged where they can be.");
-        ui.check(L"Merge the ground's quads directly", {L"Render", L"BatchGround"}, g_config.batchGround)
+        ui.check(L"Merge the ground's quads directly", {L"Render", L"BatchGround"}, Config::render.batchGround)
             .tip(L"Hand the ground's quads to the merging directly instead of through three device calls per quad.");
-        ui.check(L"Texture atlas:", {L"Render", L"Atlas"}, g_config.atlas)
+        ui.check(L"Texture atlas:", {L"Render", L"Atlas"}, Config::render.atlas)
             .tip(L"Copy small textures into large shared pages so draws with different textures can be merged too.");
         ui.indent();
         ui.beginEnabledIf([](const Form& f) { return f.on(L"Render", L"Atlas"); });
-        ui.combo(nullptr, {L"Render", L"AtlasPageSize"}, {2048, 4096, 8192, 16384}, g_config.atlasPageSize,
+        ui.combo(nullptr, {L"Render", L"AtlasPageSize"}, {2048, 4096, 8192, 16384}, Config::render.atlasPageSize,
               [](int px) { return Fmt::format(L"{} px", px); })
             .tip(L"Atlas page size in texels (clamped to what the GPU supports).");
         ui.sameLine();
-        ui.combo(nullptr, {L"Render", L"AtlasPages"}, {1, 2, 3, 4}, g_config.atlasPages,
+        ui.combo(nullptr, {L"Render", L"AtlasPages"}, {1, 2, 3, 4}, Config::render.atlasPages,
               [](int n) { return Fmt::format(L"{} page{}", n, n == 1 ? L"" : L"s"); })
             .tip(L"Atlas pages per texture format; the least recently used one is reused when full.");
         ui.sameLine();
-        ui.combo(nullptr, {L"Render", L"AtlasMaxTextureSize"}, {128, 256, 512, 1024}, g_config.atlasMaxTextureSize,
+        ui.combo(nullptr, {L"Render", L"AtlasMaxTextureSize"}, {128, 256, 512, 1024}, Config::render.atlasMaxTextureSize,
               [](int px) { return Fmt::format(L"up to {} px", px); })
             .tip(L"The largest texture copied into the atlas; larger ones are used directly.");
         ui.endEnabledIf();
         ui.endEnabledIf();
         ui.unindent();
         ui.unindent();
-        ui.check(L"Animate on a second thread", {L"Render", L"AsyncAnimation"}, g_config.asyncAnimation)
+        ui.check(L"Animate on a second thread", {L"Render", L"AsyncAnimation"}, Config::render.asyncAnimation)
             .tip(L"Advance the 3D animations on a second thread while the frame starts drawing (needs a second CPU core).");
-        ui.combo(L"Animation threads:", {L"Render", L"AnimationThreads"}, {0, 1, 2, 3, 4}, g_config.animationThreads,
+        ui.combo(L"Animation threads:", {L"Render", L"AnimationThreads"}, {0, 1, 2, 3, 4}, Config::render.animationThreads,
               [](int n) { return n == 1 ? std::wstring(L"1 (Granny's own)") : n == 0 ? std::wstring(L"Automatic") : std::to_wstring(n); })
             .tip(L"Threads that sample the characters' animations each frame, split by character. "
                  L"Automatic = CPU cores - 2, at most 4. 1 = as Granny does it, on one thread.");
-        ui.check(L"Hash index for the map records", {L"Render", L"RecordIndex"}, g_config.recordIndex)
+        ui.check(L"Hash index for the map records", {L"Render", L"RecordIndex"}, Config::render.recordIndex)
             .tip(L"Hash index in front of the game's record caches (looked up for every ground tile and object).");
 
         ui.column();
         ui.group(L"DirectDraw");
-        ui.edit(L"Chain ddraw:", {L"DDraw", L"Chain"}, g_config.ddrawChain)
+        ui.edit(L"Chain ddraw:", {L"DDraw", L"Chain"}, Config::ddraw.chain)
             .enabledIf([](const Form& f) { return !d3d9(f); })
             .tip(L"Chain-loaded ddraw renderer: the ddraw.dll to load behind SacredBild, relative to the game folder "
                  L"(DDrawCompat or another wrapper). Empty = Windows' own ddraw.dll.");
-        ui.edit(L"d3d9.dll:", {L"DDraw", L"D3D9"}, g_config.d3d9Path)
+        ui.edit(L"d3d9.dll:", {L"DDraw", L"D3D9"}, Config::ddraw.d3d9Path)
             .enabledIf(d3d9)
             .tip(L"SacredBild (Direct3D 9) renderer: the d3d9.dll to use, e.g. DXVK's (relative to the game folder or "
                  L"absolute). Empty: a d3d9.dll next to the game exe if there is one, else Windows' own.");
@@ -266,43 +275,43 @@ namespace
             .tip(L"Play the intro and cutscene movies through Media Foundation instead of the game's DirectShow path "
                  L"(the window stays responsive). Always on with the SacredBild (Direct3D 9) renderer.");
         ui.group(L"Controller");
-        ui.check(L"Play with a controller", {L"Controller", L"Enabled"}, g_config.controller)
+        ui.check(L"Play with a controller", {L"Controller", L"Enabled"}, Config::controller.enabled)
             .tip(L"Play with a controller (Xbox, PlayStation, Switch), as in Diablo 2 Resurrected: the left stick walks, the "
                  L"buttons attack the nearest enemy, cast combat arts, drink potions and open windows. Whatever you used "
                  L"last, controller or keyboard and mouse, is in charge. Its buttons and settings are in the game's "
                  L"Options when you open them with the controller (SacredBild (Direct3D 9) renderer).");
         ui.group(L"Screenshots and diagnostics");
         ui.combo(L"Screenshots:", {L"Screenshot", L"Format"}, {{L"PNG", L"png"}, {L"JPEG (smaller)", L"jpg"}},
-              g_config.screenshotJpeg ? L"jpg" : L"png")
+              Config::screenshot.jpeg ? L"jpg" : L"png")
             .tip(L"Print Screen saves the whole screen as Capture\\shotNNNN.png (or .jpg) in the game folder.");
         ui.combo(L"Crash dumps:", {L"Debug", L"CrashDump"}, {{L"Off", L"0"}, {L"Small", L"1"}, {L"All memory (large)", L"2"}},
-              std::to_wstring(g_config.crashDump))
+              std::to_wstring(Config::debug.crashDump))
             .tip(L"When the game crashes, write SacredBild-crash-<date>-<time>.dmp next to the game exe (please attach "
                  L"it to bug reports). Small = threads and the memory they point to; all memory = hundreds of MB.");
-        ui.check(L"Frame statistics", {L"Debug", L"D3DStats"}, g_config.d3dStats)
+        ui.check(L"Frame statistics", {L"Debug", L"D3DStats"}, Config::debug.d3dStats)
             .width(86)
             .tip(L"Log draw-call statistics and frame timings once per second to SacredBild.log.");
         ui.sameLine();
-        ui.check(L"UI trace", {L"Debug", L"UiTrace"}, g_config.uiTrace)
+        ui.check(L"UI trace", {L"Debug", L"UiTrace"}, Config::debug.uiTrace)
             .tip(L"Press Scroll Lock in game to log one frame of UI drawing (what is drawn where, and by which game "
                  L"code) and the tooltips shown during the next 5 seconds to SacredBild.log.");
-        ui.check(L"Movie fallback", {L"Debug", L"MovieFallback"}, g_config.movieFallback)
+        ui.check(L"Movie fallback", {L"Debug", L"MovieFallback"}, Config::debug.movieFallback)
             .width(86)
             .tip(L"Play the movies through the fallback (DirectShow into a system memory surface) even where Media "
                  L"Foundation works, as on systems without it (Windows 7, Windows N editions, Wine).");
         ui.sameLine();
-        ui.check(L"Skinning check", {L"Debug", L"SkinCheck"}, g_config.skinCheck)
+        ui.check(L"Skinning check", {L"Debug", L"SkinCheck"}, Config::debug.skinCheck)
             .tip(L"Compare Granny's character skinning with SacredBild's own, logged every 10 seconds.");
-        ui.check(L"Animation threads check", {L"Debug", L"AnimationCheck"}, g_config.animationCheck)
+        ui.check(L"Animation threads check", {L"Debug", L"AnimationCheck"}, Config::debug.animationCheck)
             .enabledIf([](const Form& f) { return f.value(L"Render", L"AnimationThreads") != L"1"; })
             .tip(L"Every 2 seconds, sample the characters' animations on one thread and on the animation threads from "
                  L"the same state and compare the results (logged). A difference keeps them on one thread.");
         constexpr const wchar_t* kProfilerTip =
             L"Sample the presenting thread at this interval and write SacredBild-profile.txt every 15 seconds.";
-        ui.check(L"Profiler, every", {L"Debug", L"Profiler"}, g_config.profiler).tip(kProfilerTip);
+        ui.check(L"Profiler, every", {L"Debug", L"Profiler"}, Config::debug.profiler).tip(kProfilerTip);
         ui.beginEnabledIf([](const Form& f) { return f.on(L"Debug", L"Profiler"); });
         ui.sameLine();
-        ui.edit(nullptr, {L"Debug", L"ProfilerIntervalUs"}, std::to_wstring(g_config.profilerIntervalUs))
+        ui.edit(nullptr, {L"Debug", L"ProfilerIntervalUs"}, std::to_wstring(Config::debug.profilerIntervalUs))
             .digits()
             .width(30)
             .tip(kProfilerTip);
@@ -312,45 +321,45 @@ namespace
 
         ui.page(L"Network");
         ui.group(L"LAN games");
-        ui.check(L"Announce hosted games on every adapter", {L"Net", L"Relay"}, g_config.netRelay)
+        ui.check(L"Announce hosted games on every adapter", {L"Net", L"Relay"}, Config::net.relay)
             .tip(L"Hosting: the gameserver Sacred starts for your game announces it on every network adapter (VPN "
                  L"adapters included) with that adapter's address, and to players who list your PC under Hosts.");
-        ui.check(L"Send game messages right away", {L"Net", L"NoDelay"}, g_config.netNoDelay)
+        ui.check(L"Send game messages right away", {L"Net", L"NoDelay"}, Config::net.noDelay)
             .tip(L"Send each message to the server right away in both data flow modes. With MODEM/ISDN the game holds "
                  L"small messages back until the previous one is acknowledged (Nagle's algorithm), adding latency. "
                  L"Off = as the game does.");
-        ui.edit(L"UDP port:", {L"Net", L"Port"}, std::to_wstring(g_config.netPort))
+        ui.edit(L"UDP port:", {L"Net", L"Port"}, std::to_wstring(Config::net.port))
             .digits()
             .width(32)
             .tip(L"Hosting: UDP port for players who list the host under Hosts, for the UDP game connection and for "
                  L"the matchmaker (allow it in the firewall on the host).");
         ui.sameLine();
-        ui.edit(L"Join timeout (s):", {L"Net", L"JoinTimeout"}, std::to_wstring(g_config.netJoinTimeout))
+        ui.edit(L"Join timeout (s):", {L"Net", L"JoinTimeout"}, std::to_wstring(Config::net.joinTimeout))
             .digits()
             .width(30)
             .tip(L"Hosting: seconds a joining player has to send its first message to the gameserver. The game allows "
                  L"5, which slow or distant connections can miss (\"connect timed out\"). Minimum 5.");
-        ui.edit(L"Hosts:", {L"Net", L"Hosts"}, widen(g_config.netHosts))
+        ui.edit(L"Hosts:", {L"Net", L"Hosts"}, widen(Config::net.hosts))
             .tip(L"Joining: PCs whose LAN games should show up although their broadcasts don't reach you (VPNs like "
                  L"WireGuard or Tailscale). Comma-separated IP addresses or names, e.g. 10.8.0.2, 10.8.0.3:2105");
         ui.column();
         ui.group(L"Online games");
-        ui.check(L"Game connection over UDP", {L"Net", L"Udp"}, g_config.netUdp)
+        ui.check(L"Game connection over UDP", {L"Net", L"Udp"}, Config::net.udp)
             .tip(L"Carry the game connection over UDP instead of TCP when the other side has this on too: lost "
                  L"packets are resent after about one round trip instead of after 300 ms and more, the connection "
                  L"recovers right away after an outage, and survives a change of your address (Wi-Fi to mobile). "
                  L"Joining a host without it connects over TCP as before. Hosting: allow the UDP port in the "
                  L"firewall.");
         ui.combo(L"Prefer:", {L"Net", L"Prefer"}, {{L"IPv6", L"IPv6"}, {L"IPv4", L"IPv4"}},
-              g_config.netPreferIpv6 ? L"IPv6" : L"IPv4")
+              Config::net.preferIpv6 ? L"IPv6" : L"IPv4")
             .enabledIf([](const Form& f) { return f.on(L"Net", L"Udp"); })
             .tip(L"Joining a host that has both IPv4 and IPv6 addresses: the UDP connection is tried over this one "
                  L"first, and over the other one as well if there is no answer within a second.");
-        ui.edit(L"Matchmaker:", {L"Net", L"Matchmaker"}, widen(g_config.netMatchmaker))
+        ui.edit(L"Matchmaker:", {L"Net", L"Matchmaker"}, widen(Config::net.matchmaker))
             .tip(L"A SacredBild matchmaking server (name or address, optionally :port, default 2107). Its games show "
                  L"up in the LAN list, and joining one gets you introduced to the host, so that hosts don't need "
                  L"port forwarding (needs the UDP game connection on both sides). Empty = none.");
-        ui.check(L"Publish hosted games at the matchmaker", {L"Net", L"Publish"}, g_config.netPublish)
+        ui.check(L"Publish hosted games at the matchmaker", {L"Net", L"Publish"}, Config::net.publish)
             .enabledIf([](const Form& f) { return !f.value(L"Net", L"Matchmaker").empty(); })
             .tip(L"Hosting: list your games at the matchmaker. Its web page shows their name and players, not your "
                  L"address; the SacredBild players it lists them for get the address, as they need it to connect.");
@@ -373,7 +382,7 @@ namespace
         };
         for (const HudWindow& window : kHudWindows)
         {
-            const Config::UiPosition& pos = g_config.*window.position;
+            const Config::Ui::Position& pos = Config::ui.*window.position;
             ui.label(window.label).tip(window.tip);
             ui.sameLine();
             ui.combo(nullptr, {L"UI.Layout", window.key, 0}, {0, 2048, 4096}, pos.x, position(L"Left", L"Right"))
@@ -387,10 +396,10 @@ namespace
                      L"the 1024 x 768 layout at the current UI size.");
         }
         ui.button(L"Defaults", [](Form& f) {
-              const Config defaults;
+              const Config::Ui defaults;
               for (const HudWindow& window : kHudWindows)
               {
-                  const Config::UiPosition& pos = defaults.*window.position;
+                  const Config::Ui::Position& pos = defaults.*window.position;
                   f.set(L"UI.Layout", window.key, Fmt::format(L"{},{}", pos.x, pos.y));
               }
           })
@@ -398,7 +407,7 @@ namespace
         ui.endEnabledIf();
 
         ui.footer();
-        ui.check(L"Don't show this window again", {L"Launcher", L"HideSettingsWindow"}, !g_config.settingsWindow)
+        ui.check(L"Don't show this window again", {L"Launcher", L"HideSettingsWindow"}, !Config::launcher.settingsWindow)
             .tip(L"Start the game right away from now on. To see this window again, hold Shift while the game starts "
                  L"or set HideSettingsWindow=0 in SacredBild.ini.");
         ui.buttons(L"Play", L"Exit");
@@ -476,7 +485,7 @@ namespace
 
 bool SettingsWindow::wanted()
 {
-    return g_config.settingsWindow || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    return Config::launcher.settingsWindow || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
 }
 
 bool SettingsWindow::show(HMODULE module, const std::wstring& gameDir)

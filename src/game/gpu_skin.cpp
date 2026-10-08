@@ -2,7 +2,9 @@
 #include "game/d3d_stats.h"
 #include "game/granny_mesh.h"
 #include "ddraw9/skin.h"
-#include "config.h"
+#include "config/ddraw.h"
+#include "config/debug.h"
+#include "config/render.h"
 #include "log.h"
 #include "patch.h"
 
@@ -163,7 +165,7 @@ namespace
                 skip = !recent && (s.frame + static_cast<uint32_t>(reinterpret_cast<uintptr_t>(skeleton) >> 6)) %
                     g_poseInterval != 0;
             }
-            if (g_config.d3dStats)
+            if (Config::debug.d3dStats)
             {
                 if (skip)
                 {
@@ -180,7 +182,7 @@ namespace
         {
             return;     // the stamp stays: the next advance comes back to it
         }
-        const int64_t start = g_config.d3dStats && t_poseDepth == 0 ? qpcNow() : 0;
+        const int64_t start = Config::debug.d3dStats && t_poseDepth == 0 ? qpcNow() : 0;
         ++t_poseDepth;
         g_origPose(skeleton, edx, a, b);
         --t_poseDepth;
@@ -203,7 +205,7 @@ namespace
         {
             std::scoped_lock lock(s.mutex);
             s.lastDrawn[skeleton] = s.frame;
-            if (g_config.d3dStats)
+            if (Config::debug.d3dStats)
             {
                 s.drawn.insert(skeleton);
             }
@@ -227,7 +229,7 @@ namespace
                 *reinterpret_cast<uint32_t*>(k + Skeleton::posedFrame) = posedNow;
             }
         }
-        if (g_config.d3dStats)
+        if (Config::debug.d3dStats)
         {
             std::scoped_lock lock(s.mutex);
             ++s.onDemand;
@@ -602,7 +604,7 @@ void GpuSkin::onFrame()
     {
         std::erase_if(s.lastDrawn, [&](const auto& e) { return e.second + 600 < s.frame; });
     }
-    if (!g_config.d3dStats || (s.posed.empty() && s.drawn.empty() && !s.skipped))
+    if (!Config::debug.d3dStats || (s.posed.empty() && s.drawn.empty() && !s.skipped))
     {
         return;
     }
@@ -677,11 +679,11 @@ bool GpuSkin::draw(IDirect3DDevice7* real, bool gpu, void (*prepare)(void*), voi
 
 void GpuSkin::install()
 {
-    if (!g_config.gpuSkinning)
+    if (!Config::render.gpuSkinning)
     {
         return;
     }
-    if (!g_config.ddrawD3D9)
+    if (!Config::ddraw.d3d9)
     {
         LOG("GPU skinning: off, it needs [DDraw] Backend=d3d9");
         return;
@@ -701,8 +703,8 @@ void GpuSkin::install()
         deform - reinterpret_cast<uintptr_t>(GetModuleHandleW(L"granny.dll")));
 
     // Skipped poses rely on the deform hook to pose a skeleton that is drawn after all.
-    g_poseInterval = static_cast<uint32_t>(std::max(g_config.offscreenPoses, 1));
-    if (g_config.d3dStats || g_poseInterval > 1)
+    g_poseInterval = static_cast<uint32_t>(std::max(Config::render.offscreenPoses, 1));
+    if (Config::debug.d3dStats || g_poseInterval > 1)
     {
         const uintptr_t pose = findPose("GPU skinning", g_poseFrame);
         if (pose && g_poseFrame && Patch::hook(g_origPose, pose, &hookPose, "granny pose"))

@@ -16,7 +16,7 @@
 #include "net/matchmaker.h"
 #include "net/udp_endpoint.h"
 #include "net/udp_transport.h"
-#include "config.h"
+#include "config/net.h"
 #include "log.h"
 
 #include <winsock2.h>
@@ -98,9 +98,9 @@ namespace
 
     int host(uint16_t port, const char* matchmaker)
     {
-        g_config.netUdp = true;
-        g_config.netPort = port;
-        g_config.netMatchmaker = matchmaker ? matchmaker : "";
+        Config::net.udp = true;
+        Config::net.port = port;
+        Config::net.matchmaker = matchmaker ? matchmaker : "";
         UdpTransport::install(true);
         Matchmaker::install(true);
         if (!UdpEndpoint::open(port, true))
@@ -262,8 +262,8 @@ namespace
 
     int client(uint16_t udpPort, int seconds, const char* matchmaker)
     {
-        g_config.netUdp = true;
-        g_config.netMatchmaker = matchmaker ? matchmaker : "";
+        Config::net.udp = true;
+        Config::net.matchmaker = matchmaker ? matchmaker : "";
         g_relayPort = udpPort;
         UdpTransport::install(false);
         Matchmaker::install(false);
@@ -456,7 +456,7 @@ int main(int argc, char** argv)
     // NETTEST_PREFER=4: [Net] Prefer=IPv4. NETTEST_DROP=4 or 6: the game connection over that family doesn't get through.
     if (const char* prefer = std::getenv("NETTEST_PREFER"))
     {
-        g_config.netPreferIpv6 = std::strcmp(prefer, "4") != 0;
+        Config::net.preferIpv6 = std::strcmp(prefer, "4") != 0;
     }
     if (const char* drop = std::getenv("NETTEST_DROP"))
     {

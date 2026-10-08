@@ -1,8 +1,9 @@
 #include "game/ui_anchor.h"
 #include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
-#include "config.h"
+#include "config/ui.h"
 #include "log.h"
+#include "mem.h"
 #include "patch.h"
 
 #include <windows.h>
@@ -17,16 +18,12 @@ namespace
     using namespace Sacred;
     using UiCanvas::Frame;
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(reinterpret_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
     struct Anchor
     {
         uintptr_t window;       // UiManager member
-        Config::UiPosition Config::*position;   // [UI.Layout]
+        Config::Ui::Position Config::Ui::*position;   // [UI.Layout]
         bool render2;           // draws through UiWindowSlot::render2 (device, ?, ?)
         bool confine = true;    // clip to the frame's 1024x768 rect
     };
@@ -35,19 +32,19 @@ namespace
     // stats and equipment form one column (656,0 .. 912,644) next to the minimap and share its corner.
     // The taskbar is not confined: its level-up button moves to the stats window's place (moveLevelUpButton).
     const Anchor kAnchors[] = {
-        {UiManager::taskbar, &Config::uiTaskbar, false, false},
-        {UiManager::console, &Config::uiChat, false},
-        {UiManager::inventory, &Config::uiInventory, false},
-        {UiManager::minimap, &Config::uiMinimap, false},
-        {UiManager::stats, &Config::uiStats, false},
-        {UiManager::equipment, &Config::uiEquipment, false},
-        {UiManager::netPortraits, &Config::uiPortraits, true},
-        {UiManager::blacksmith, &Config::uiShops, true},
-        {UiManager::merchant, &Config::uiShops, true},
-        {UiManager::master, &Config::uiShops, false},
-        {UiManager::chest, &Config::uiShops, false},
-        {UiManager::cube, &Config::uiShops, false},
-        {UiManager::trade, &Config::uiShops, false},
+        {UiManager::taskbar, &Config::Ui::taskbar, false, false},
+        {UiManager::console, &Config::Ui::chat, false},
+        {UiManager::inventory, &Config::Ui::inventory, false},
+        {UiManager::minimap, &Config::Ui::minimap, false},
+        {UiManager::stats, &Config::Ui::stats, false},
+        {UiManager::equipment, &Config::Ui::equipment, false},
+        {UiManager::netPortraits, &Config::Ui::portraits, true},
+        {UiManager::blacksmith, &Config::Ui::shops, true},
+        {UiManager::merchant, &Config::Ui::shops, true},
+        {UiManager::master, &Config::Ui::shops, false},
+        {UiManager::chest, &Config::Ui::shops, false},
+        {UiManager::cube, &Config::Ui::shops, false},
+        {UiManager::trade, &Config::Ui::shops, false},
     };
     Frame g_frames[std::size(kAnchors)];
 
@@ -523,7 +520,7 @@ namespace
 
 void UiAnchor::install()
 {
-    if (!g_config.uiAnchor || !UiCanvas::enabled())
+    if (!Config::ui.anchor || !UiCanvas::enabled())
     {
         return;
     }
@@ -535,7 +532,7 @@ void UiAnchor::install()
     }
     for (size_t i = 0; i < std::size(kAnchors); ++i)
     {
-        const Config::UiPosition& pos = g_config.*kAnchors[i].position;
+        const Config::Ui::Position& pos = Config::ui.*kAnchors[i].position;
         g_frames[i] = UiCanvas::placed(pos.x / 4096.0f, pos.y / 4096.0f);
         g_frames[i].confine = kAnchors[i].confine;
     }

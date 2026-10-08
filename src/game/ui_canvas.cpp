@@ -3,8 +3,10 @@
 #include "game/device_proxy.h"
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
-#include "config.h"
+#include "config/debug.h"
+#include "config/ui.h"
 #include "log.h"
+#include "mem.h"
 #include "patch.h"
 
 #include <windows.h>
@@ -53,11 +55,7 @@ namespace
     SavePortraitFn g_origSavePortrait = nullptr;
     CursorPosFn g_cursorPos = nullptr;
 
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(static_cast<uint8_t*>(obj) + offset);
-    }
+    using Mem::member;
 
     bool fullScreenWindowOpen(void* manager)
     {
@@ -338,7 +336,7 @@ UiCanvas::Bounds UiCanvas::screenBounds()
 }
 
 bool UiCanvas::tracing() { return t_trace; }
-bool UiCanvas::tracingPopups() { return g_config.uiTrace && GetTickCount64() < g_tracePopupsUntil.load(); }
+bool UiCanvas::tracingPopups() { return Config::debug.uiTrace && GetTickCount64() < g_tracePopupsUntil.load(); }
 
 void UiCanvas::trace(const std::string& line)
 {
@@ -373,7 +371,7 @@ void UiCanvas::enter(Mode mode)
         t_outerFrame = t_frame;
         t_frame = {0.0f, 0.0f, mode == Mode::Canvas};
         t_layout = &liveLayout();
-        if (g_config.uiTrace && mode == Mode::Canvas)
+        if (Config::debug.uiTrace && mode == Mode::Canvas)
         {
             const bool down = GetAsyncKeyState(VK_SCROLL) < 0;
             if (down && !g_traceKeyDown)
@@ -447,8 +445,8 @@ void UiCanvas::install()
         return Layout{scale, std::floor((Resolution::width() - 1024.0f * scale) / 2.0f),
                       std::floor((Resolution::height() - 768.0f * scale) / 2.0f)};
     };
-    g_game = centered(g_config.uiScale > 0.0f ? std::min(g_config.uiScale, fit) : fit);
-    g_menu = g_config.uiScaleMenus ? g_game : centered(fit);
+    g_game = centered(Config::ui.scale > 0.0f ? std::min(Config::ui.scale, fit) : fit);
+    g_menu = Config::ui.scaleMenus ? g_game : centered(fit);
     g_enabled = true;
     LOG("UI canvas: in game scale {:.3f} at {},{}, menus scale {:.3f} at {},{}", g_game.scale, g_game.left, g_game.top,
         g_menu.scale, g_menu.left, g_menu.top);
@@ -463,7 +461,7 @@ void UiCanvas::install()
     for (uintptr_t site : Addr::worldMouseReads) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&physicalMouseInstance));
     redirected += Patch::redirectCall(Addr::worldCursorUiTestCall, reinterpret_cast<void*>(&isCursorOverUiPhysical));
     LOG("UI canvas: {} world mouse reads redirected", redirected);
-    if (g_config.uiAnchor)
+    if (Config::ui.anchor)
     {
         // The UI's own reads of the cursor follow the frame they run in.
         g_cursorPos = reinterpret_cast<CursorPosFn>(Addr::cMouse_getCursorPos);

@@ -36,7 +36,7 @@ namespace
         return dir.substr(0, dir.find_last_of(L"\\/"));
     }
 
-    // From here on everything reads g_config.
+    // From here on everything reads the settings (config/).
     bool startGame(const std::wstring& gameDir)
     {
         if (!Proxy::init(gameDir))

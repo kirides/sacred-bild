@@ -5,7 +5,7 @@
 #include "net/udp_endpoint.h"
 #include "net/udp_protocol.h"
 #include "game/gameserver_addr.h"
-#include "config.h"
+#include "config/net.h"
 #include "log.h"
 #include "patch.h"
 
@@ -121,18 +121,18 @@ namespace
         }
         // The endpoint (relay subscriptions, UDP transport, matchmaker) on [Net] Port; the first announcement
         // comes after TinCat listens, which usually opened it already.
-        const bool endpoint = UdpEndpoint::open(static_cast<uint16_t>(g_config.netPort), true);
+        const bool endpoint = UdpEndpoint::open(static_cast<uint16_t>(Config::net.port), true);
         if (!g_loggedEndpoint)
         {
             g_loggedEndpoint = true;
             if (!endpoint)
             {
                 LOG("LAN relay: UDP port {} is not available; no announcements on other adapters, players who list "
-                    "this PC under [Net] Hosts won't see its games", g_config.netPort);
+                    "this PC under [Net] Hosts won't see its games", Config::net.port);
             }
         }
         Matchmaker::publish(plain);
-        if (!g_config.netRelay)
+        if (!Config::net.relay)
         {
             return g_send(s, buf, len, flags);
         }
@@ -206,7 +206,7 @@ namespace
 
 void LanServer::install()
 {
-    if (g_config.netRelay)
+    if (Config::net.relay)
     {
         UdpEndpoint::onPacket(UdpProto::kLanRelay, onSubscription);
     }
@@ -219,7 +219,7 @@ void LanServer::install()
         }
     }
     g_send = reinterpret_cast<SendFn>(Patch::iat("WS2_32.dll", "send", reinterpret_cast<void*>(&hookSend)));
-    if (g_send && g_config.netRelay)
+    if (g_send && Config::net.relay)
     {
         LOG("LAN relay: announcements go out on every adapter and to subscribers");
     }

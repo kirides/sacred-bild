@@ -1,4 +1,6 @@
 #pragma once
+#include "mem.h"
+
 #include <windows.h>
 
 #include <cstdint>
@@ -81,13 +83,7 @@ namespace GrannyMesh
         constexpr uintptr_t posedFrame = 0x78;
     }
 
-    template <class T>
-    T field(const uint8_t* p, uintptr_t offset)
-    {
-        T v;
-        std::memcpy(&v, p + offset, sizeof(T));
-        return v;
-    }
+    using Mem::field;
 
     // Counts and pointers within the sanity limits.
     bool plausible(const uint8_t* mesh);

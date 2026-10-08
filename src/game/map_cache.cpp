@@ -1,7 +1,7 @@
 #include "game/map_cache.h"
 #include "game/d3d_stats.h"
 #include "game/sacred_addr.h"
-#include "config.h"
+#include "config/render.h"
 #include "log.h"
 #include "patch.h"
 #include "spin_lock.h"
@@ -133,7 +133,7 @@ namespace
 
 void MapCache::install()
 {
-    if (!g_config.recordIndex)
+    if (!Config::render.recordIndex)
     {
         return;
     }

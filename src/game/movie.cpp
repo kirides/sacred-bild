@@ -3,7 +3,9 @@
 #include "game/frame_hooks.h"
 #include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
-#include "config.h"
+#include "config/ddraw.h"
+#include "config/debug.h"
+#include "config/display.h"
 #include "log.h"
 #include "patch.h"
 
@@ -678,7 +680,7 @@ namespace
                 const bool fresh = update();
                 outcome.frames += fresh ? 1 : 0;
                 draw();
-                if (!fresh && !(g_config.ddrawD3D9 && g_config.vsync))
+                if (!fresh && !(Config::ddraw.d3d9 && Config::display.vsync))
                 {
                     Sleep(1);   // presenting doesn't wait for the display here
                 }
@@ -862,7 +864,7 @@ namespace
         const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         Outcome outcome;
         bool done = false;
-        if (!g_config.movieFallback && mediaEngineAvailable() && SUCCEEDED(MFStartup(MF_VERSION, MFSTARTUP_LITE)))
+        if (!Config::debug.movieFallback && mediaEngineAvailable() && SUCCEEDED(MFStartup(MF_VERSION, MFSTARTUP_LITE)))
         {
             {
                 MediaEngineSource source;
@@ -911,11 +913,11 @@ namespace
 
     HRESULT __cdecl hookOpenStream(const char* path, IUnknown* ddraw, IUnknown** stream)
     {
-        if (!g_config.mediaFoundation || !path || !stream)
+        if (!Config::ddraw.mediaFoundation || !path || !stream)
         {
             return g_origOpenStream(path, ddraw, stream);
         }
-        if (!g_config.ddrawD3D9 && !g_config.movieFallback && !mediaEngineAvailable())
+        if (!Config::ddraw.d3d9 && !Config::debug.movieFallback && !mediaEngineAvailable())
         {
             return g_origOpenStream(path, ddraw, stream);   // the game's own amstream player works on the chained ddraw
         }
