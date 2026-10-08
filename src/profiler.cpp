@@ -52,6 +52,22 @@ namespace
     };
     std::unordered_map<DWORD, ThreadProfile> g_profiles;     // only touched by the sampler thread
 
+    // The last samples of every sampled thread, for logRecent. The lock also guards g_modules, which the sampler
+    // reloads when it meets a new module.
+    constexpr int kRingFrames = 6;
+    struct RingEntry
+    {
+        int64_t qpc = 0;
+        DWORD thread = 0;
+        uintptr_t eip = 0;
+        int frames = 0;
+        uintptr_t ra[kRingFrames] = {};
+    };
+    constexpr uint32_t kRingSize = 1024;
+    RingEntry g_ring[kRingSize];
+    uint32_t g_ringNext = 0;
+    SRWLOCK g_ringLock = SRWLOCK_INIT;
+
     void loadModules()
     {
         g_modules.clear();
@@ -228,12 +244,25 @@ namespace
                 Sleep(1);
             }
             Sample s;
+            const auto keep = [&](DWORD thread) {
+                LARGE_INTEGER now;
+                QueryPerformanceCounter(&now);
+                AcquireSRWLockExclusive(&g_ringLock);
+                record(g_profiles[thread], s);
+                RingEntry& e = g_ring[g_ringNext++ % kRingSize];
+                e.qpc = now.QuadPart;
+                e.thread = thread;
+                e.eip = s.eip;
+                e.frames = std::min(s.frames, kRingFrames);
+                std::copy(s.ra, s.ra + e.frames, e.ra);
+                ReleaseSRWLockExclusive(&g_ringLock);
+            };
             HANDLE target = g_target.load();
-            if (target && takeSample(target, s, stack)) record(g_profiles[g_targetId.load()], s);
+            if (target && takeSample(target, s, stack)) keep(g_targetId.load());
             HANDLE extra = g_extra.load();
             if (extra && g_extraId.load() != g_targetId.load() && takeSample(extra, s, stack))
             {
-                record(g_profiles[g_extraId.load()], s);
+                keep(g_extraId.load());
             }
         }
         if (timer) CloseHandle(timer);
@@ -334,6 +363,51 @@ void Profiler::addThread(unsigned long threadId)
     g_extraId = threadId;
     g_extra = handle;
     LOG("Profiler: also sampling thread {}", threadId);
+}
+
+void Profiler::logRecent(double ms)
+{
+    if (!g_running.load())
+    {
+        return;
+    }
+    LARGE_INTEGER now, freq;
+    QueryPerformanceCounter(&now);
+    QueryPerformanceFrequency(&freq);
+    const int64_t since = now.QuadPart - static_cast<int64_t>(ms * 1e-3 * static_cast<double>(freq.QuadPart));
+    // thread, location and callers -> samples
+    std::unordered_map<std::string, uint32_t> groups;
+    uint32_t total = 0;
+    AcquireSRWLockShared(&g_ringLock);
+    for (const RingEntry& e : g_ring)
+    {
+        if (!e.qpc || e.qpc < since)
+        {
+            continue;
+        }
+        std::string key = std::to_string(e.thread) + " ";
+        if (inExe(e.eip))
+        {
+            key += Fmt::format("{:08x}", e.eip);
+        }
+        else
+        {
+            const int mod = moduleIndex(e.eip);
+            key += mod >= 0 ? Fmt::format("{}+{:x}", g_modules[mod].name, e.eip - g_modules[mod].lo) : std::string("?");
+        }
+        for (int i = 0; i < e.frames; ++i)
+        {
+            key += Fmt::format(" <- {:08x}", e.ra[i]);
+        }
+        ++groups[key];
+        ++total;
+    }
+    ReleaseSRWLockShared(&g_ringLock);
+    LOG("Profiler: {} samples in the last {:.1f} ms (thread, location <- sacred.exe return addresses):", total, ms);
+    for (const auto& [key, n] : sorted(groups))
+    {
+        LOG("Profiler:   {}x {}", n, key);
+    }
 }
 
 void Profiler::stop()

@@ -1,5 +1,6 @@
 #include "game/d3d_stats.h"
 #include "log.h"
+#include "profiler.h"
 
 #include <windows.h>
 #include <objbase.h>
@@ -391,6 +392,7 @@ void D3DStats::onFrame()
                     dms[TAnimationWait], dms[TOwnAfterFlip], dms[TGameBeforeWorld], dms[TGameAfterWorld], dms[TGameAfterUi],
                     dms[TProxy] - dms[TWorldProxy], dc[CAtlasUpload], dc[CAtlasReset], dc[CRecordRead], dc[CTextureKB], dc[CDraw] + dc[CDrawIndexed] + dc[CDrawVB],
                     dc[CSubmit]);
+                Profiler::logRecent(frameMs);
             }
         }
         // Slow average: a single hitch barely moves it, a new steady frame rate takes over within a second.
