@@ -29,6 +29,8 @@ namespace Sacred
     struct cUI_Book;
     struct cUI_Control2;
     struct cUI_Manager;
+    struct cUI_NetworkInfo;
+    struct cNetPlayers;
     struct cUI_Popup;
     struct cUI_Savegame;
     struct cUI_Slider;
@@ -278,6 +280,11 @@ namespace Sacred::Addr
     inline Global<uint8_t> g_hasAddon{};                // ENG 0182EBEC
     // The portal message box's text ids, made on its first render: the 14 surface portals, then the 14 underworld ones.
     inline Global<uint32_t> g_portalTexts{};            // ENG 017EA420
+    // ENG 006F7130; (out rect, row, column)
+    inline Thiscall<void(cUI_NetworkInfo* self, UiRect* out, uint32_t row, int column)> cUI_NetworkInfo_cellRect{};
+    // The players of a network game (sacred/net.h).
+    inline Global<cNetPlayers*> g_pNetPlayers{};        // ENG 0182EBE8
+    inline Thiscall<uint32_t(cNetPlayers* self)> cNetPlayers_count{}; // ENG 007DB2C0
 
     // Move orders, as the world mouse handler (0x6172C0) and its hold-to-walk (0x60F130) give them: sendOrder is
     // thiscall on the cEngine (cCreature*, cOrder*), callee pops; it snaps a walk target to a walkable cell

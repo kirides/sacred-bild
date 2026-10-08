@@ -724,6 +724,18 @@
    "452F85C7": "017EA420",
    "451BBE74": "017E83A0"
   },
+  "cUI_NetworkInfo_cellRect": {
+   "452F85C7": "006F7130",
+   "451BBE74": "006F6DF0"
+  },
+  "g_pNetPlayers": {
+   "452F85C7": "0182EBE8",
+   "451BBE74": "0182CB68"
+  },
+  "cNetPlayers_count": {
+   "452F85C7": "007DB2C0",
+   "451BBE74": "007DA890"
+  },
   "cEngine_sendOrder": {
    "452F85C7": "00617030",
    "451BBE74": "006170D0"

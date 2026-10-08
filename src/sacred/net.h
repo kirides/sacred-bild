@@ -25,6 +25,17 @@ namespace Sacred
         static cGCclass* instance() { return *Addr::g_pGameClient; }
     };
     static_assert(offsetof(cGCclass, lanSocket) == 0x14 && offsetof(cGCclass, dataFlow) == 0x40414);
+
+    // The players of a network game (no RTTI; constructor ENG 007D7A70, made on first use by 007D84A0): up to 16
+    // slots.
+    struct cNetPlayers
+    {
+        // How many slots hold a player; 0 without a connected game client.
+        uint32_t count() { return Addr::cNetPlayers_count(this) & 0xFFFF; }
+
+        // nullptr before the game made it.
+        static cNetPlayers* instance() { return *Addr::g_pNetPlayers; }
+    };
 }
 
 namespace GameServer

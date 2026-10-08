@@ -56,6 +56,10 @@ namespace Sacred
 
         // In flags.
         static constexpr uint32_t visibleFlag = 0x01;
+        // Clicks count only while it is set (cUI_Control2 receiveEvent ENG 00731CE0 and the buttons', edit controls',
+        // cUI_Listbox's and the menu texts'; not cUI_Listbox2's or cUI_Combobox's); buttons draw their text grey
+        // without it (cUI_Button2 render 0072B700).
+        static constexpr uint32_t enabledFlag = 0x04;
         static constexpr uint32_t checkedFlag = 0x10;   // a check box's or radio button's checked state
 
         const Vtable* vtable;
@@ -64,9 +68,12 @@ namespace Sacred
         uint8_t _14[0x24 - 0x14];
         int32_t x, y;
         int16_t width, height;
-        uint8_t _30[0x78 - 0x30];
+        uint8_t _30[0x50 - 0x30];
+        cUI_Control2* parent;       // x/y are relative to it; nullptr: to the screen
+        uint8_t _54[0x78 - 0x54];
 
         bool visible() const { return flags & visibleFlag; }
+        bool enabled() const { return flags & enabledFlag; }
         bool checked() const { return flags & checkedFlag; }
         void setFlags(uint32_t mask) { Addr::cUI_Control2_setFlags(this, mask); }
         void clearFlags(uint32_t mask) { Addr::cUI_Control2_clearFlags(this, mask); }
@@ -82,7 +89,8 @@ namespace Sacred
     static_assert(offsetof(cUI_Control2::Vtable, receiveEvent) == 0x10);
     static_assert(offsetof(cUI_Control2::Vtable, render) == 0x14 && offsetof(cUI_Control2::Vtable, isInside) == 0x1C);
     static_assert(offsetof(cUI_Control2, flags) == 0x10 && offsetof(cUI_Control2, x) == 0x24);
-    static_assert(offsetof(cUI_Control2, width) == 0x2C && sizeof(cUI_Control2) == 0x78);
+    static_assert(offsetof(cUI_Control2, width) == 0x2C && offsetof(cUI_Control2, parent) == 0x50);
+    static_assert(sizeof(cUI_Control2) == 0x78);
 
     // A control embedded in its window (not a child), of `Size` bytes, whose class SacredBild doesn't need.
     template <size_t Size>
@@ -323,6 +331,102 @@ namespace Sacred
     static_assert(offsetof(cUI_BusyDlg, mode) == 0x154 && offsetof(cUI_BusyDlg, textRect) == 0x158);
     static_assert(offsetof(cUI_BusyDlg, portals) == 0x170 && sizeof(cUI_BusyDlg) == 0x644);
 
+    // The network screens (made by ENG 0070BF10 for cUI_Network): their controls are members, not children; each
+    // screen draws and feeds events to the ones its state shows, and sets the visible and enabled flags of most as
+    // that state changes (cUI_NetLan: 006FA490). cUI_CDKey's four fields are part of cUI_NetLogin and cUI_NetAccount.
+    struct cUI_NetLogin : cUI_Window2
+    {
+        uint8_t _84[0x384C - 0x84];
+    };
+    struct cUI_NetAccount : cUI_Window2
+    {
+        uint8_t _84[0x40B4 - 0x84];
+    };
+    struct cUI_NetLobby : cUI_Window2
+    {
+        uint8_t _84[0x88A4 - 0x84];
+    };
+    struct cUI_NetPassword : cUI_Window2
+    {
+        uint8_t _84[0x168C - 0x84];
+    };
+    struct cUI_NetLan : cUI_Window2
+    {
+        uint8_t _84[0x51B8 - 0x84];
+    };
+    struct cUI_NetTest : cUI_Window2
+    {
+        uint8_t _84[0xCF8 - 0x84];
+    };
+    // The character choice of a network game, also the character export in game (createGameWindows 00759AF0).
+    struct cUI_Character : cUI_Window2
+    {
+        uint8_t _84[0x460 - 0x84];
+    };
+    static_assert(sizeof(cUI_NetLogin) == 0x384C && sizeof(cUI_NetAccount) == 0x40B4);
+    static_assert(sizeof(cUI_NetLobby) == 0x88A4 && sizeof(cUI_NetPassword) == 0x168C);
+    static_assert(sizeof(cUI_NetLan) == 0x51B8 && sizeof(cUI_NetTest) == 0xCF8 && sizeof(cUI_Character) == 0x460);
+
+    // The network menu (a menu screen, ENG 0070B1D0): it shows one of its screens, drawing it (render 0070B500) and
+    // handing it the events (receiveEvent 0070B7D0) itself; they are not its children.
+    struct cUI_Network : cUI_Window2
+    {
+        enum Screen : uint32_t
+        {
+            none, login, account, lobby, password, character, test, lan,
+        };
+
+        uint8_t _84[0x158 - 0x84];
+        Screen screen;
+        cUI_NetLogin* loginScreen;
+        cUI_NetAccount* accountScreen;
+        cUI_NetLobby* lobbyScreen;
+        cUI_NetPassword* passwordScreen;
+        cUI_NetLan* lanScreen;
+        cUI_Character* characterScreen;
+        cUI_NetTest* testScreen;
+
+        // The screen shown, nullptr if none.
+        cUI_Window2* current() const
+        {
+            switch (screen)
+            {
+            case login: return loginScreen;
+            case account: return accountScreen;
+            case lobby: return lobbyScreen;
+            case password: return passwordScreen;
+            case character: return characterScreen;
+            case test: return testScreen;
+            case lan: return lanScreen;
+            default: return nullptr;
+            }
+        }
+    };
+    static_assert(offsetof(cUI_Network, screen) == 0x158 && offsetof(cUI_Network, loginScreen) == 0x15C);
+    static_assert(offsetof(cUI_Network, lanScreen) == 0x16C && offsetof(cUI_Network, testScreen) == 0x174);
+
+    // The player list of a network game (in game cUI_Manager::Window::networkInfo, ENG constructor 006F6CC0): opened,
+    // it shows four 16x16 icons per player (the cells at cellRect, which the render (006F7730) also gives its cell
+    // controls); a click on one (receiveEvent 006F8CA0, for the rows below cNetPlayers::count, while the list is
+    // enabled) acts on that player (006F82A0, by column).
+    struct cUI_NetworkInfo : cUI_Window2
+    {
+        static constexpr int columns = 4;
+
+        uint8_t _84[0x259C - 0x84];
+        uint8_t opened;             // the list is shown (an event 0x11 sets it)
+        uint8_t _259d[0x25A0 - 0x259D];
+
+        // A cell's rect in the 1024x768 layout (absolute, not relative to the window).
+        UiRect cellRect(int row, int column)
+        {
+            UiRect r{};
+            Addr::cUI_NetworkInfo_cellRect(this, &r, static_cast<uint32_t>(row), column);
+            return r;
+        }
+    };
+    static_assert(offsetof(cUI_NetworkInfo, opened) == 0x259C && sizeof(cUI_NetworkInfo) == 0x25A0);
+
     // The log book's books (0xA24 bytes): up to seven tabs down its left edge, a list on the left page and the selected
     // entry's text on the right, each page side with its previous / next buttons. Its receiveEvent (ENG 006B3940)
     // hit-tests the members below (whatever their visible bit says; the page functions 006AFFD0 / 006B0120 stop at the
@@ -448,7 +552,7 @@ namespace Sacred
             options,        // full screen
             chest,          // 0,0 640x320
             _c4,
-            _c8,
+            networkInfo,    // the player list of a network game (cUI_NetworkInfo)
             netPortraits,   // 0,0 896x64
             character,      // character export, full screen
             cube,           // 0,0 640x320
@@ -488,6 +592,7 @@ namespace Sacred
         cUI_Diary* questbook() { return static_cast<cUI_Diary*>(window(Window::questbook)); }
         cUI_Savegame* savegame() { return static_cast<cUI_Savegame*>(window(Window::savegame)); }
         cUI_EscMenu* escapeMenu() { return static_cast<cUI_EscMenu*>(window(Window::escapeMenu)); }
+        cUI_NetworkInfo* networkInfo() { return static_cast<cUI_NetworkInfo*>(window(Window::networkInfo)); }
 
         bool isCursorOverUi(int x, int y) { return Addr::cUI_Manager_isCursorOverUi(this, x, y); }
     };

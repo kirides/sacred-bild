@@ -1,17 +1,20 @@
 #include "game/ui_nav.h"
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
+#include "sacred/net.h"
 #include "sacred/text.h"
 #include "sacred/ui.h"
 
 #include <windows.h>
 #include <algorithm>
 #include <initializer_list>
+#include <iterator>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace
@@ -27,6 +30,15 @@ namespace
         GameMenu,   // the game menu: its entries are in a vector of their own (cUI_EscMenu)
         MainMenu,   // the start menu: a vector per screen (cUI_MainMenu)
         Savegames,  // the savegame window: a window whose list rows are hit rects (cUI_Savegame)
+        Network,    // the network menu: it shows one of its screens, not a child (cUI_Network)
+        PlayerList, // the player list of a network game: its cells are hit rects (cUI_NetworkInfo)
+    };
+
+    struct Info
+    {
+        Kind kind = Other;
+        bool needsEnabled = true;   // clicks count only while it is enabled
+        uint32_t size = 0;          // a window whose controls are (also) members: its size, to look for them
     };
 
     // RTTI class names (MSVC decorated) of the controls D-pad navigation stops at; their subclasses count too.
@@ -35,14 +47,37 @@ namespace
         ".?AVcUI_StaticText64FX@@", ".?AVcUI_Combobox@@", ".?AVcUI_EditControl@@", ".?AVcUI_DigitEdit@@",
         ".?AVcUI_Listbox@@", ".?AVcUI_Listbox2@@",
     };
+    // The controls that take clicks whether they are enabled or not.
+    constexpr const char* kAlwaysEnabled[] = {".?AVcUI_Combobox@@", ".?AVcUI_Listbox2@@"};
+    // The windows whose controls are members (drawn and fed events by the window itself), with their sizes.
+    struct Owner
+    {
+        const char* name;
+        uint32_t size;
+    };
+    constexpr Owner kOwners[] = {
+        {".?AVcUI_BusyDlg@@", sizeof(cUI_BusyDlg)},
+        {".?AVcUI_NetLogin@@", sizeof(cUI_NetLogin)},
+        {".?AVcUI_NetAccount@@", sizeof(cUI_NetAccount)},
+        {".?AVcUI_NetLobby@@", sizeof(cUI_NetLobby)},
+        {".?AVcUI_NetPassword@@", sizeof(cUI_NetPassword)},
+        {".?AVcUI_NetLan@@", sizeof(cUI_NetLan)},
+        {".?AVcUI_NetTest@@", sizeof(cUI_NetTest)},
+        {".?AVcUI_Character@@", sizeof(cUI_Character)},
+    };
     constexpr const char* kWindow = ".?AVcUI_Window2@@";
-    constexpr const char* kGameMenu = ".?AVcUI_EscMenu@@";
-    constexpr const char* kMainMenu = ".?AVcUI_MainMenu@@";
-    constexpr const char* kSavegames = ".?AVcUI_Savegame@@";
+    // Classes by themselves (not their subclasses).
+    constexpr std::pair<const char*, Kind> kClasses[] = {
+        {".?AVcUI_EscMenu@@", GameMenu},
+        {".?AVcUI_MainMenu@@", MainMenu},
+        {".?AVcUI_Savegame@@", Savegames},
+        {".?AVcUI_Network@@", Network},
+        {".?AVcUI_NetworkInfo@@", PlayerList},
+    };
     constexpr size_t kMaxControls = 512;
 
     // By vtable; only the presenting thread asks.
-    std::unordered_map<const void*, Kind> g_kinds;
+    std::unordered_map<const void*, Info> g_infos;
     uintptr_t g_imageBegin = 0, g_imageEnd = 0;
 
     bool inImage(uintptr_t address)
@@ -54,7 +89,8 @@ namespace
             g_imageBegin = base;
             g_imageEnd = base + nt->OptionalHeader.SizeOfImage;
         }
-        return address >= g_imageBegin && address + 16 <= g_imageEnd;
+        // Without overflow (the member scan hands it any value, -1 too); the vtable's locator lies 4 bytes before.
+        return address >= g_imageBegin + 4 && address < g_imageEnd && g_imageEnd - address >= 16;
     }
 
     uintptr_t read(uintptr_t address)
@@ -62,30 +98,38 @@ namespace
         return *reinterpret_cast<const uintptr_t*>(address);
     }
 
+    template <size_t N>
+    bool among(const char* name, const char* const (&names)[N])
+    {
+        return std::any_of(std::begin(names), std::end(names), [&](const char* n) { return std::strcmp(name, n) == 0; });
+    }
+
     // The object's class from its vtable's RTTI: complete object locator at vtable[-1] (+0x10 class hierarchy
     // descriptor: +8 number of base classes, +0xC base class array, each entry's +0 a type descriptor with the
-    // decorated name at +8; the class itself comes first).
-    Kind kindOf(const void* object)
+    // decorated name at +8; the class itself comes first). The class itself decides first, then a button, a control
+    // and a window base.
+    Info infoOf(const void* object)
     {
         const auto vtable = read(reinterpret_cast<uintptr_t>(object));
         if (!inImage(vtable))
         {
-            return Other;
+            return {};
         }
-        const auto cached = g_kinds.find(reinterpret_cast<const void*>(vtable));
-        if (cached != g_kinds.end())
+        const auto cached = g_infos.find(reinterpret_cast<const void*>(vtable));
+        if (cached != g_infos.end())
         {
             return cached->second;
         }
-        Kind kind = Other;
+        Info info;
+        bool button = false, control = false, window = false;
         const uintptr_t locator = read(vtable - 4);
-        const uintptr_t hierarchy = inImage(locator) ? read(locator + 0x10) : 0;
+        // A complete object locator starts with signature 0 (x86).
+        const uintptr_t hierarchy = inImage(locator) && read(locator) == 0 ? read(locator + 0x10) : 0;
         const uintptr_t bases = inImage(hierarchy) ? read(hierarchy + 0x0C) : 0;
         if (inImage(bases))
         {
             const uint32_t count = std::min<uint32_t>(*reinterpret_cast<const uint32_t*>(hierarchy + 8), 64);
-            for (uint32_t i = 0; i < count && kind != Button && kind != GameMenu && kind != MainMenu &&
-                kind != Savegames && inImage(bases + i * 4); ++i)
+            for (uint32_t i = 0; i < count && inImage(bases + i * 4); ++i)
             {
                 const uintptr_t base = read(bases + i * 4);
                 const uintptr_t type = inImage(base) ? read(base) : 0;
@@ -94,40 +138,50 @@ namespace
                     continue;
                 }
                 const char* name = reinterpret_cast<const char*>(type + 8);
-                if (i == 0 && std::strcmp(name, kGameMenu) == 0)
+                if (std::strncmp(name, ".?A", 3) != 0)
                 {
-                    kind = GameMenu;    // the class itself (the first entry)
+                    continue;   // not a type descriptor
                 }
-                if (i == 0 && std::strcmp(name, kMainMenu) == 0)
+                if (i == 0)
                 {
-                    kind = MainMenu;
-                }
-                if (i == 0 && std::strcmp(name, kSavegames) == 0)
-                {
-                    kind = Savegames;
-                }
-                for (const char* button : kButtons)
-                {
-                    if (std::strcmp(name, button) == 0)
+                    for (const auto& [className, kind] : kClasses)
                     {
-                        kind = Button;
+                        if (std::strcmp(name, className) == 0)
+                        {
+                            info.kind = kind;
+                        }
+                    }
+                    for (const Owner& owner : kOwners)
+                    {
+                        if (std::strcmp(name, owner.name) == 0)
+                        {
+                            info.size = owner.size;
+                        }
                     }
                 }
-                for (const char* control : kControls)
-                {
-                    if (kind == Other && std::strcmp(name, control) == 0)
-                    {
-                        kind = Control;
-                    }
-                }
-                if (kind == Other && std::strcmp(name, kWindow) == 0)
-                {
-                    kind = Window;
-                }
+                button = button || among(name, kButtons);
+                control = control || among(name, kControls);
+                window = window || std::strcmp(name, kWindow) == 0;
+                info.needsEnabled = info.needsEnabled && !among(name, kAlwaysEnabled);
             }
         }
-        g_kinds.emplace(reinterpret_cast<const void*>(vtable), kind);
-        return kind;
+        if (info.kind == Other)
+        {
+            info.kind = button ? Button : control ? Control : window ? Window : Other;
+        }
+        g_infos.emplace(reinterpret_cast<const void*>(vtable), info);
+        return info;
+    }
+
+    Kind kindOf(const void* object)
+    {
+        return infoOf(object).kind;
+    }
+
+    // Something D-pad navigation may stop at: shown, and enabled if it has to be to take a click.
+    bool usable(cUI_Control2* control)
+    {
+        return control && control->visible() && (control->enabled() || !infoOf(control).needsEnabled);
     }
 
     bool visible(const cUI_Control2* control)
@@ -195,10 +249,12 @@ namespace
         return {physicalX(left, frame), physicalY(top, frame), physicalX(left + w, frame), physicalY(top + h, frame)};
     }
 
+    // Once each (a member may be a child too).
     void addControl(cUI_Control2* control, bool button, const UiCanvas::Frame& frame, std::vector<Point>& out)
     {
         float left, top, w, h;
-        if (out.size() < kMaxControls && layoutRect(control, left, top, w, h))
+        const bool added = std::any_of(out.begin(), out.end(), [&](const Point& p) { return p.control == control; });
+        if (!added && out.size() < kMaxControls && layoutRect(control, left, top, w, h))
         {
             Point p = screen(left + w * 0.5f, top + h * 0.5f, frame, button);
             p.rect = screenRect(left, top, w, h, frame);
@@ -218,7 +274,7 @@ namespace
         }
         for (T* entry : entries)
         {
-            if (visible(entry))
+            if (usable(entry))
             {
                 addControl(entry, false, frame, out);
             }
@@ -275,17 +331,73 @@ namespace
         return screenRect(static_cast<float>(r.x), static_cast<float>(r.y), r.width, r.height, frame);
     }
 
-    // The visible controls under `control` (in the 1024x768 layout of a window shifted by `frame`), as screen points.
+    // Whether a member of `window` shows: its parents up to the window do (none: it is placed on the screen).
+    bool shownIn(const cUI_Control2* control, const cUI_Control2* window)
+    {
+        const cUI_Control2* parent = control->parent;
+        for (int depth = 0; parent && parent != window; ++depth, parent = parent->parent)
+        {
+            if (depth >= 8 || !parent->visible())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // The controls that are members of a window of `size` bytes (it draws them and feeds them events itself), as the
+    // game shows them: the window sets their visible and enabled flags with its state.
+    void collectMembers(cUI_Window2* window, uint32_t size, const UiCanvas::Frame& frame, std::vector<Point>& out)
+    {
+        auto* object = reinterpret_cast<uint8_t*>(window);
+        for (uint32_t offset = sizeof(cUI_Window2); offset + sizeof(cUI_Control2) <= size; offset += 4)
+        {
+            auto* member = reinterpret_cast<cUI_Control2*>(object + offset);
+            const Kind kind = kindOf(member);
+            if ((kind == Control || kind == Button) && usable(member) && shownIn(member, window))
+            {
+                addControl(member, kind == Button, frame, out);
+            }
+        }
+    }
+
+    // The opened player list's cells, for the players there are.
+    void addPlayerCells(cUI_NetworkInfo* list, const UiCanvas::Frame& frame, std::vector<Point>& out)
+    {
+        cNetPlayers* players = cNetPlayers::instance();
+        if (!list->opened || !list->enabled() || !players)
+        {
+            return;
+        }
+        const int rows = static_cast<int>(std::min<uint32_t>(players->count(), 16));
+        for (int row = 0; row < rows; ++row)
+        {
+            for (int column = 0; column < cUI_NetworkInfo::columns; ++column)
+            {
+                const UiRect r = list->cellRect(row, column);
+                const float x = static_cast<float>(r.x), y = static_cast<float>(r.y);
+                Point p = screen(x + r.width * 0.5f, y + r.height * 0.5f, frame);
+                p.rect = screenRect(x, y, r.width, r.height, frame);
+                out.push_back(p);
+            }
+        }
+    }
+
+    // The usable controls under `control` (in the 1024x768 layout of a window shifted by `frame`), as screen points.
     void collect(cUI_Control2* control, const UiCanvas::Frame& frame, std::vector<Point>& out, int depth)
     {
         if (depth > 8 || out.size() >= kMaxControls || !visible(control))
         {
             return;
         }
-        const Kind kind = kindOf(control);
+        const Info info = infoOf(control);
+        const Kind kind = info.kind;
         if (kind == Control || kind == Button)
         {
-            addControl(control, kind == Button, frame, out);
+            if (usable(control))
+            {
+                addControl(control, kind == Button, frame, out);
+            }
             return;
         }
         if (kind == Savegames && listMode(static_cast<cUI_Savegame*>(control)))
@@ -301,7 +413,7 @@ namespace
             }
             for (cUI_Button2& button : window->buttons)
             {
-                if (visible(&button) && kindOf(&button) == Button)
+                if (usable(&button) && kindOf(&button) == Button)
                 {
                     addControl(&button, true, frame, out);
                 }
@@ -321,15 +433,31 @@ namespace
             }
             return;
         }
-        if (kind == Window || kind == Savegames)
+        if (kind == Window || kind == Savegames || kind == Network || kind == PlayerList)
         {
-            const Vector<cUI_Control2*>& children = static_cast<cUI_Window2*>(control)->children;
+            auto* window = static_cast<cUI_Window2*>(control);
+            const Vector<cUI_Control2*>& children = window->children;
             if (children.size() <= kMaxControls)
             {
                 for (cUI_Control2* child : children)
                 {
                     collect(child, frame, out, depth + 1);
                 }
+            }
+            if (info.size)
+            {
+                collectMembers(window, info.size, frame, out);
+            }
+            if (kind == Network)
+            {
+                if (cUI_Window2* screen = static_cast<cUI_Network*>(window)->current())
+                {
+                    collect(screen, frame, out, depth + 1);
+                }
+            }
+            if (kind == PlayerList)
+            {
+                addPlayerCells(static_cast<cUI_NetworkInfo*>(window), frame, out);
             }
         }
     }
@@ -429,16 +557,7 @@ namespace
         collect(window, frame, out, 0);
         if (window == messageBox())
         {
-            // Its buttons are members (cUI_BusyDlg): every visible button object inside it.
-            for (uintptr_t offset = 4; offset + 0x30 <= sizeof(cUI_BusyDlg); offset += 4)
-            {
-                auto* inside = reinterpret_cast<cUI_Control2*>(reinterpret_cast<uint8_t*>(window) + offset);
-                if (visible(inside) && kindOf(inside) == Button)
-                {
-                    addControl(inside, true, frame, out);
-                }
-            }
-            addPortals(static_cast<cUI_BusyDlg*>(window), frame, out);
+            addPortals(static_cast<cUI_BusyDlg*>(window), frame, out);   // its buttons are members (kOwners)
         }
     }
 
