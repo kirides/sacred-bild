@@ -200,6 +200,7 @@ namespace Sacred::Addr
     // and then to the world mouse handler, which picks with the event position.
     // ENG 006172C0; returns a bool
     inline Thiscall<uint32_t(cEngine* self, cEvent* event, int flag)> cEngine_worldMouse{};
+    inline Thiscall<uint32_t(cEngine* self, cEvent* event)> cEngine_receiveEvent{}; // ENG 00618090; returns a bool
     inline uintptr_t cEventMouseDown_vtable{};          // ENG 0089704C; x at +8, y at +0xC
     inline uintptr_t cEventMouseUp_vtable{};            // ENG 00899248
     // World-side cursor reads, redirected to physical coordinates: calls to cMouse::getX (ENG 00655850),

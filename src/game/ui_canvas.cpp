@@ -41,6 +41,7 @@ namespace
     decltype(Addr::getClientCursorPos)::Ptr g_origGetClientCursorPos = nullptr;
     decltype(Addr::cMouse_renderCursor)::Ptr g_origRenderCursor = nullptr;
     decltype(Addr::cEngine_worldMouse)::Ptr g_origWorldMouse = nullptr;
+    decltype(Addr::cEngine_receiveEvent)::Ptr g_origReceiveEvent = nullptr;
     decltype(Addr::renderSavePortrait)::Ptr g_origSavePortrait = nullptr;
     decltype(Addr::cInventoryEntry_render)::Ptr g_origHeldItem = nullptr;
 
@@ -172,8 +173,33 @@ namespace
         mouse->x = UiCanvas::toPhysicalX(x);
         mouse->y = UiCanvas::toPhysicalY(y);
         const uint32_t result = g_origWorldMouse(engine, edx, event, flag);
+        if (Config::debug.uiTrace)
+        {
+            LOG("UI trace: world mouse {} at {},{} (screen {},{}) flag {} -> {}",
+                *reinterpret_cast<uintptr_t*>(event) == Addr::cEventMouseDown_vtable ? "down" : "up", x, y, mouse->x,
+                mouse->y, flag, result);
+        }
         mouse->x = x;
         mouse->y = y;
+        return result;
+    }
+
+    // [Debug] UiTrace: each mouse button event as the engine gets it, whether the UI claims its position, and what
+    // the engine returns (the world mouse handler logs whether it got the event).
+    uint32_t __fastcall hookReceiveEvent(cEngine* engine, void* edx, cEvent* event)
+    {
+        cEventMouse* mouse = cEventMouse::of(event);
+        if (!mouse)
+        {
+            return g_origReceiveEvent(engine, edx, event);
+        }
+        cUI_Manager* manager = cUI_Manager::instance();
+        const bool overUi = manager && manager->isCursorOverUi(mouse->x, mouse->y);
+        LOG("UI trace: mouse {} at {},{} (screen {},{}), over the UI: {}",
+            *reinterpret_cast<uintptr_t*>(event) == Addr::cEventMouseDown_vtable ? "down" : "up", mouse->x, mouse->y,
+            UiCanvas::toPhysicalX(mouse->x), UiCanvas::toPhysicalY(mouse->y), overUi);
+        const uint32_t result = g_origReceiveEvent(engine, edx, event);
+        LOG("UI trace: mouse event -> {}", result);
         return result;
     }
 
@@ -453,4 +479,8 @@ void UiCanvas::install()
     Patch::hook(g_origSavePortrait, Addr::renderSavePortrait, &hookSavePortrait, "renderSavePortrait");
     Patch::hook(g_origHeldItem, Addr::cInventoryEntry_render, &hookHeldItem, "cInventoryEntry::render");
     Patch::hook(g_origWorldMouse, Addr::cEngine_worldMouse, &hookWorldMouse, "cEngine::worldMouse");
+    if (Config::debug.uiTrace)
+    {
+        Patch::hook(g_origReceiveEvent, Addr::cEngine_receiveEvent, &hookReceiveEvent, "cEngine::receiveEvent");
+    }
 }
