@@ -274,6 +274,10 @@ namespace Sacred::Addr
     inline Cdecl<cTextResources*()> textResources_instance{}; // ENG 006725E0
     inline Thiscall<const wchar_t* const*(cTextResources* self, uint32_t id)> textResources_get{}; // ENG 00672C90
     inline Global<cFontManager*> g_pFontManager{};      // ENG 00CDCA70
+    // The Underworld add-on is there (the portal message box lists its 14th portal, the island).
+    inline Global<uint8_t> g_hasAddon{};                // ENG 0182EBEC
+    // The portal message box's text ids, made on its first render: the 14 surface portals, then the 14 underworld ones.
+    inline Global<uint32_t> g_portalTexts{};            // ENG 017EA420
 
     // Move orders, as the world mouse handler (0x6172C0) and its hold-to-walk (0x60F130) give them: sendOrder is
     // thiscall on the cEngine (cCreature*, cOrder*), callee pops; it snaps a walk target to a walkable cell

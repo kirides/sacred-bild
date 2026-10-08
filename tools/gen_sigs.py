@@ -147,6 +147,8 @@ SACRED = [
     ('textResources_instance', 0x006725E0, 'func'),
     ('textResources_get', 0x00672C90, 'func'),
     ('g_pFontManager', 0x00CDCA70, 'data'),
+    ('g_hasAddon', 0x0182EBEC, 'data'),
+    ('g_portalTexts', 0x017EA420, 'data'),
     # controller: walking by move orders (hero_move.cpp)
     ('cEngine_sendOrder', 0x00617030, 'func'),
     ('cOrder_vtable', 0x0089095C, 'data'),

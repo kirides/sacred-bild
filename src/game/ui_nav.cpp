@@ -351,6 +351,71 @@ namespace
         return frame;
     }
 
+    cFont* fontById(uint16_t id)
+    {
+        cFontManager* fonts = cFontManager::instance();
+        return fonts && id < fonts->fonts.size() ? fonts->fonts[id] : nullptr;
+    }
+
+    // A text's width in the 1024x768 layout, as `font` measures it: the text `id`, else begin .. end; 0 if there is
+    // none or the font does not measure.
+    float textWidth(cFont* font, uint32_t id, const wchar_t* begin = nullptr, const wchar_t* end = nullptr)
+    {
+        if (id)
+        {
+            begin = end = nullptr;
+            cTextResources* texts = cTextResources::instance();
+            if (const wchar_t* const* text = texts ? texts->text(id) : nullptr)
+            {
+                begin = text[0];
+                end = text[1];
+            }
+        }
+        if (!font || !begin || end <= begin || end - begin > 256)
+        {
+            return 0.0f;
+        }
+        const std::wstring text(begin, end);
+        return font->textWidth(text.c_str());
+    }
+
+    // The portal box's portals that can be picked (the dark ones can't), as stops at the middle of their text.
+    void addPortals(cUI_BusyDlg* box, const UiCanvas::Frame& frame, std::vector<Point>& out)
+    {
+        const bool underworld = box->mode == cUI_BusyDlg::underworldPortals;
+        cFont* font = fontById(cUI_BusyDlg::portalFont);
+        if ((!underworld && box->mode != cUI_BusyDlg::surfacePortals) || !font)
+        {
+            return;
+        }
+        const float h = font->lineHeight(L'A');
+        const UiRect& r = box->textRect;
+        if (h <= 0.0f || r.width <= 0)
+        {
+            return;
+        }
+        const int rows = cUI_BusyDlg::portalCount - (*Addr::g_hasAddon ? 0 : 1);
+        for (int row = 0; row < rows; ++row)
+        {
+            const int portal = underworld ? cUI_BusyDlg::portalCount + row : row;
+            if (!(box->portals & (1u << portal)) || (underworld && row >= 7 && row <= 12))
+            {
+                continue;   // dark, or a row the underworld list leaves empty
+            }
+            // Centered in the row; the text ids are there once the box has drawn.
+            const float top = static_cast<float>(r.y - 4) + (row + 1) * (h + 4.0f);
+            float left = static_cast<float>(r.x), width = r.width;
+            if (const float text = textWidth(font, Addr::g_portalTexts.get()[portal]); text > 0.0f && text < width)
+            {
+                left += (width - text) * 0.5f;
+                width = text;
+            }
+            Point p = screen(left + width * 0.5f, top + h * 0.5f, frame);
+            p.rect = screenRect(left, top, width, h, frame);
+            out.push_back(p);
+        }
+    }
+
     cUI_Window2* messageBox()
     {
         cUI_Manager* manager = ::manager();
@@ -373,6 +438,7 @@ namespace
                     addControl(inside, true, frame, out);
                 }
             }
+            addPortals(static_cast<cUI_BusyDlg*>(window), frame, out);
         }
     }
 
@@ -542,28 +608,7 @@ namespace
             begin = text->text;
             end = text->textEnd;
         }
-        if (id)
-        {
-            begin = end = nullptr;
-            cTextResources* texts = cTextResources::instance();
-            if (const wchar_t* const* text = texts ? texts->text(id) : nullptr)
-            {
-                begin = text[0];
-                end = text[1];
-            }
-        }
-        cFontManager* fonts = cFontManager::instance();
-        if (!begin || end <= begin || end - begin > 256 || !fonts)
-        {
-            return 0.0f;
-        }
-        cFont* font = fontId < fonts->fonts.size() ? fonts->fonts[fontId] : nullptr;
-        if (!font)
-        {
-            return 0.0f;
-        }
-        const std::wstring text(begin, end);
-        return font->textWidth(text.c_str());
+        return textWidth(fontById(fontId), id, begin, end);
     }
 }
 
@@ -644,6 +689,15 @@ bool UiNav::home(cUI_Window2* window, float& outX, float& outY)
     cUI_Manager* manager = ::manager();
     if (manager && window == manager->dialog)
     {
+        // The portal box: its first portal that can be picked.
+        std::vector<Point> portals;
+        addPortals(manager->dialog, frameOf(window), portals);
+        if (!portals.empty())
+        {
+            outX = portals.front().x;
+            outY = portals.front().y;
+            return true;
+        }
         return defaultButton(window, outX, outY);
     }
     std::vector<Point> controls;

@@ -716,6 +716,14 @@
    "452F85C7": "00CDCA70",
    "451BBE74": "00CDA9F0"
   },
+  "g_hasAddon": {
+   "452F85C7": "0182EBEC",
+   "451BBE74": "0182CB6C"
+  },
+  "g_portalTexts": {
+   "452F85C7": "017EA420",
+   "451BBE74": "017E83A0"
+  },
   "cEngine_sendOrder": {
    "452F85C7": "00617030",
    "451BBE74": "006170D0"

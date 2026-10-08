@@ -301,11 +301,27 @@ namespace Sacred
     // The message box ("Load savegame?", network waits; ENG 00756A90 allocates it): its buttons are members (OK left
     // of Cancel), laid out per kind of box (00722500). Esc cancels only two kinds, so the controller clicks the
     // buttons.
+    // The portal box (modes surfacePortals / underworldPortals) lists the portals below its title, centered in
+    // textRect (render 00721B10, receiveEvent 00721380 hit-tests the same rows): with portalFont's line height h
+    // (font vtable +0x28 of 'A'), row i spans textRect.x .. +width and textRect.y - 4 + (i + 1) * (h + 4) .. + h.
+    // Surface row i is portal i, underworld row i portal portalCount + i; one can be picked if its bit is set in
+    // `portals`, else it is drawn dark. The underworld list leaves rows 7..12 empty.
     struct cUI_BusyDlg : cUI_Window2
     {
-        uint8_t _84[0x644 - 0x84];
+        static constexpr uint32_t surfacePortals = 5;   // mode
+        static constexpr uint32_t underworldPortals = 6;
+        static constexpr uint16_t portalFont = 3;
+        static constexpr int portalCount = 14;          // 13 without the add-on (g_hasAddon)
+
+        uint8_t _84[0x154 - 0x84];
+        uint32_t mode;
+        UiRect textRect;
+        uint8_t _164[0x170 - 0x164];
+        uint32_t portals;           // bit per portal: it can be picked
+        uint8_t _174[0x644 - 0x174];
     };
-    static_assert(sizeof(cUI_BusyDlg) == 0x644);
+    static_assert(offsetof(cUI_BusyDlg, mode) == 0x154 && offsetof(cUI_BusyDlg, textRect) == 0x158);
+    static_assert(offsetof(cUI_BusyDlg, portals) == 0x170 && sizeof(cUI_BusyDlg) == 0x644);
 
     // The log book's books (0xA24 bytes): up to seven tabs down its left edge, a list on the left page and the selected
     // entry's text on the right, each page side with its previous / next buttons. Its receiveEvent (ENG 006B3940)
@@ -484,7 +500,9 @@ namespace Sacred
     {
         struct Vtable
         {
-            void* _00[11];
+            void* _00[10];
+            // The height of a character's line in pixels of the 1024x768 layout (in the low 16 bits).
+            uint32_t(__fastcall* lineHeight)(cFont* self, void* edx, uint32_t ch);
             // The text's width in pixels of the 1024x768 layout, the widest line's (cFontTTF2 ENG 00650F70); the other
             // fonts return 0.
             uint16_t(__fastcall* textWidth)(cFont* self, void* edx, const wchar_t* text);
@@ -493,8 +511,9 @@ namespace Sacred
         const Vtable* vtable;
 
         uint16_t textWidth(const wchar_t* text) { return vtable->textWidth(this, nullptr, text); }
+        int16_t lineHeight(wchar_t ch) { return static_cast<int16_t>(vtable->lineHeight(this, nullptr, ch)); }
     };
-    static_assert(offsetof(cFont::Vtable, textWidth) == 0x2C);
+    static_assert(offsetof(cFont::Vtable, lineHeight) == 0x28 && offsetof(cFont::Vtable, textWidth) == 0x2C);
 
     // The UI fonts (ENG 00649BE0 makes them).
     struct cFontManager

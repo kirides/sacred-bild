@@ -180,6 +180,8 @@ static const Sig::Entry kAddressSigs[] = {
     {"textResources_instance", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A1 ?? ?? ?? ?? 64 89 25 00 00 00 00 83 EC 0C", 0, Sig::Take::Match, &Sacred::Addr::textResources_instance}, // 006725E0, 006728C0
     {"textResources_get", "8B 44 24 04 56 83 F8 FF 8B F1 74 4A", 0, Sig::Take::Match, &Sacred::Addr::textResources_get}, // 00672C90, 00672F70
     {"g_pFontManager", "64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 24", 9, Sig::Take::Abs32, &Sacred::Addr::g_pFontManager}, // 00CDCA70, 00CDA9F0
+    {"g_hasAddon", "0F 94 44 24 13 EB 04 8B 74 24 14 A0 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::g_hasAddon}, // 0182EBEC, 0182CB6C
+    {"g_portalTexts", "C7 44 24 14 ?? ?? ?? ?? EB 04 8B 5C 24 18 8B 17", 4, Sig::Take::Abs32, &Sacred::Addr::g_portalTexts}, // 017EA420, 017E83A0
     {"cEngine_sendOrder", "83 EC 28 53 55 8B 6C 24 34 57 8B 7C 24 3C", 0, Sig::Take::Match, &Sacred::Addr::cEngine_sendOrder}, // 00617030, 006170D0
     {"cOrder_vtable", "C7 44 24 18 ?? ?? ?? ?? 89 7C 24 2C 89 7C 24 30", 4, Sig::Take::Abs32, &Sacred::Addr::cOrder_vtable}, // 0089095C, 0088E95C
     {"g_worldInputFlags", "8B 0D ?? ?? ?? ?? C1 E9 03 80 E1 01 80 C9 06 51", 2, Sig::Take::Abs32, &Sacred::Addr::g_worldInputFlags}, // 00AB73DC, 00AB535C
