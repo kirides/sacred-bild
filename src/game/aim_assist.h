@@ -24,7 +24,7 @@ namespace AimAssist
 
     // The hero on the screen (center of its rect, else the screen center); false outside the game world.
     bool hero(float& x, float& y);
-    // The hero's health and maximum (Sacred::Creature); false without a hero.
+    // The hero's health and maximum (Sacred::cCreature); false without a hero.
     bool heroHealth(int& health, int& maximum);
 
     // The best target of `kind` within `range` pixels of the hero. With a direction (screen, y down, not 0,0) those

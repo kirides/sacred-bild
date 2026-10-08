@@ -3,6 +3,7 @@
 namespace Sacred
 {
     struct cEngine;
+    struct dxDriver7;
 }
 
 namespace FrameHooks
@@ -15,7 +16,7 @@ namespace FrameHooks
     bool flip();
 
     // The game's dxDriver7 instance; nullptr before dxDriver7::init ran.
-    void* dxDriver();
+    Sacred::dxDriver7* dxDriver();
 
     // The cEngine running the in-game render loop; nullptr before the first game started.
     Sacred::cEngine* engine();

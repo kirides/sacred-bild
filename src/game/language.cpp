@@ -1,7 +1,7 @@
 #include "game/language.h"
-#include "game/sacred_addr.h"
 #include "log.h"
 #include "patch.h"
+#include "sacred/text.h"
 
 #include <windows.h>
 #include <algorithm>
@@ -17,12 +17,11 @@ namespace
     using namespace Sacred;
 
     // thiscall on the text table, hooked as fastcall.
-    using LoadTextFn = int(__fastcall*)(void* table, void* edx, const char* path);
     // thiscall (44100, 16, 1) on the new cMSS, hooked as fastcall.
     using SoundCtorFn = void*(__fastcall*)(void* self, void* edx, int rate, int bits, int channels);
     using OperatorNewFn = void*(__cdecl*)(size_t size);
 
-    LoadTextFn g_origLoadText = nullptr;
+    decltype(Addr::cTextTable_load)::Ptr g_origLoadText = nullptr;
     SoundCtorFn g_origSoundCtor = nullptr;
     // The game's own: the text table's buffer is freed by the game at exit.
     OperatorNewFn g_operatorNew = nullptr;
@@ -79,7 +78,7 @@ namespace
         return v;
     }
 
-    // global.res as the game reads it (Sacred::TextTable): every string inside the file, ids ascending.
+    // global.res as the game reads it (Sacred::cTextTable): every string inside the file, ids ascending.
     bool isTextTable(const std::vector<uint8_t>& data, uint32_t& count)
     {
         if (data.size() < 4)
@@ -120,14 +119,14 @@ namespace
 
     std::string_view code(int index)
     {
-        const char* c = reinterpret_cast<const char*>(Addr::g_languageCodes + index * 16);
+        const char* c = (*Addr::g_languageCodes)[index];
         return {c, strnlen(c, 16)};
     }
 
     // The game's language code, "" if g_language holds no valid index.
     std::string_view currentCode()
     {
-        const int index = *reinterpret_cast<const int*>(Addr::g_language);
+        const int index = *Addr::g_language;
         return index >= 0 && index < Addr::languageCount ? code(index) : std::string_view{};
     }
 
@@ -183,10 +182,10 @@ namespace
     }
 
     // The text table (g_textTable), once loaded.
-    std::atomic<void*> g_textTable{nullptr};
+    std::atomic<cTextTable*> g_textTable{nullptr};
 
     // `path` is ".\SCRIPTS\<code>\global.res", which the exe would ignore.
-    int __fastcall hookLoadText(void* table, void* edx, const char* path)
+    int __fastcall hookLoadText(cTextTable* table, void* edx, const char* path)
     {
         g_textTable = table;
         logLanguage();
@@ -198,9 +197,8 @@ namespace
             if (void* data = g_operatorNew(file.size()))
             {
                 std::memcpy(data, file.data(), file.size());
-                auto* t = static_cast<uint8_t*>(table);
-                *reinterpret_cast<void**>(t + TextTable::data) = data;
-                *reinterpret_cast<uint32_t*>(t + TextTable::size) = static_cast<uint32_t>(file.size());
+                table->data = static_cast<uint8_t*>(data);
+                table->size = static_cast<uint32_t>(file.size());
                 LOG("Language: text from {} ({} strings)", path, count);
                 return 1;
             }
@@ -225,7 +223,7 @@ namespace
     // is set by then: WinMain decides it before initApp.
     void* __fastcall hookSoundCtor(void* self, void* edx, int rate, int bits, int channels)
     {
-        char* path = reinterpret_cast<char*>(Addr::g_soundPakPath);
+        char* path = *Addr::g_soundPakPath;
         const std::string original(path, strnlen(path, kPakPathSize - 1));
         const size_t dot = original.find_last_of('.');
         const std::string_view language = currentCode();
@@ -288,13 +286,13 @@ void Language::install()
 
 std::wstring Language::text(const char* key)
 {
-    const auto* table = static_cast<const uint8_t*>(g_textTable.load());
+    const cTextTable* table = g_textTable.load();
     if (!table || !key)
     {
         return {};
     }
-    const auto* data = *reinterpret_cast<const uint8_t* const*>(table + TextTable::data);
-    const uint32_t size = *reinterpret_cast<const uint32_t*>(table + TextTable::size);
+    const uint8_t* data = table->data;
+    const uint32_t size = table->size;
     if (!data || size < 4)
     {
         return {};

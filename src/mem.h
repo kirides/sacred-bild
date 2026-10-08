@@ -2,16 +2,10 @@
 #include <cstdint>
 #include <cstring>
 
-// Fields of the game's (and granny.dll's) objects by byte offset, for the layouts in sacred_addr.h and granny_mesh.h.
+// Fields of granny.dll's objects by byte offset, for the layouts in game/granny_mesh.h (the game's own objects are
+// structs in sacred/).
 namespace Mem
 {
-    // The field itself, to read or write in place.
-    template <class T>
-    T& member(void* obj, uintptr_t offset)
-    {
-        return *reinterpret_cast<T*>(static_cast<uint8_t*>(obj) + offset);
-    }
-
     // A copy of the field, at any alignment.
     template <class T>
     T field(const void* p, uintptr_t offset)

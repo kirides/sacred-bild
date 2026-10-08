@@ -4,7 +4,6 @@
 #include "game/frame_hooks.h"
 #include "game/hero_move.h"
 #include "game/resolution.h"
-#include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
 #include "game/ui_nav.h"
 #include "input/bindings.h"
@@ -16,9 +15,9 @@
 #include "config.h"
 #include "config/controller.h"
 #include "log.h"
-#include "mem.h"
 #include "patch.h"
 #include "sacred/engine.h"
+#include "sacred/ui.h"
 
 #include <intrin.h>
 #include <algorithm>
@@ -34,8 +33,6 @@ namespace
 {
     using namespace Sacred;
     using Bindings::Action;
-
-    using Mem::member;
 
     // Read by the window's thread (getClientCursorPos) as well.
     std::atomic<bool> g_drive{false};           // the controller has the cursor
@@ -227,7 +224,7 @@ namespace
     }
 
     // The savegame window the controller saw open last (snapToNewestSavegame).
-    void* g_savegames = nullptr;
+    cUI_Savegame* g_savegames = nullptr;
 
     void start()
     {
@@ -253,18 +250,18 @@ namespace
         g_cursorMode = false;
     }
 
-    bool shown(void* window)
+    bool shown(const cUI_Control2* window)
     {
-        return window && (member<uint32_t>(window, UiControl::flags) & 1);
+        return window && window->visible();
     }
 
     // A modal window that just opened (message box, game menu) gets the cursor on its OK or first entry: A answers
     // it, B (Esc) cancels.
-    void* g_modal = nullptr;
+    cUI_Window2* g_modal = nullptr;
 
     void snapToModal()
     {
-        void* m = UiNav::modal();
+        cUI_Window2* m = UiNav::modal();
         if (m == g_modal)
         {
             return;
@@ -288,7 +285,7 @@ namespace
 
     void snapToNewestSavegame()
     {
-        void* window = UiNav::savegames();
+        cUI_Savegame* window = UiNav::savegames();
         if (window != g_savegames)
         {
             g_savegames = window;
@@ -306,16 +303,17 @@ namespace
     }
 
     // A window that takes the cursor is open (not the HUD: taskbar, minimap, overview map, chat, party portraits).
-    bool windowOpen(void* manager)
+    bool windowOpen(cUI_Manager* manager)
     {
-        for (uintptr_t offset = UiManager::firstGameWindow + 4; offset <= UiManager::lastGameWindow; offset += 4)
+        using W = cUI_Manager::Window;
+        for (int i = static_cast<int>(W::taskbar) + 1; i < static_cast<int>(W::count); ++i)
         {
-            if (offset == UiManager::overviewMap || offset == UiManager::minimap || offset == UiManager::console ||
-                offset == UiManager::netPortraits)
+            const auto w = static_cast<W>(i);
+            if (w == W::overviewMap || w == W::minimap || w == W::console || w == W::netPortraits)
             {
                 continue;
             }
-            if (shown(member<void*>(manager, offset)))
+            if (shown(manager->window(w)))
             {
                 return true;
             }
@@ -325,21 +323,21 @@ namespace
 
     Context detect()
     {
-        void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager);
+        cUI_Manager* manager = cUI_Manager::instance();
         if (!manager)
         {
             return Context::None;
         }
-        const uint32_t flags = member<uint32_t>(manager, UiManager::flags);
-        if (flags & 0x10)
+        const uint32_t flags = manager->flags;
+        if (flags & cUI_Manager::cinematic)
         {
-            return Context::None;   // cinematic
+            return Context::None;
         }
         if (cEngine* engine = FrameHooks::engine(); engine && (engine->flags & cEngine::loading))
         {
             return Context::None;   // loading
         }
-        const bool inGame = (flags & UiManager::inGame) && !(flags & 0x01);
+        const bool inGame = (flags & cUI_Manager::inGame) && !(flags & cUI_Manager::inMenus);
         if (inGame && UiNav::npcDialogOpen() && !UiNav::modal())
         {
             return Context::Dialog;
@@ -357,7 +355,7 @@ namespace
     }
 
     // Diagnostics, the first changes of a session: what the UI manager shows (windows by slot and class, popups).
-    void traceUi(void* manager)
+    void traceUi(cUI_Manager* manager)
     {
         static std::string last;
         static int lines = 0;
@@ -365,42 +363,45 @@ namespace
         {
             return;
         }
-        std::string shown;
-        const auto add = [&](uintptr_t offset) {
-            void* window = member<void*>(manager, offset);
-            if (window && (member<uint32_t>(window, UiControl::flags) & 1))
+        std::string seen;
+        // Windows by their place in the manager.
+        const auto add = [&](const cUI_Window2* window, const void* place) {
+            if (shown(window))
             {
-                shown += Fmt::format("{}@{:x} ", UiNav::className(window), offset);
+                seen += Fmt::format("{}@{:x} ", UiNav::className(window),
+                    static_cast<const uint8_t*>(place) - reinterpret_cast<const uint8_t*>(manager));
             }
         };
-        for (uintptr_t offset = UiManager::firstGameWindow; offset <= UiManager::lastGameWindow; offset += 4)
+        for (cUI_Window2*& window : manager->windows)
         {
-            add(offset);
+            add(window, &window);
         }
-        for (uintptr_t offset = UiManagerMenus::first; offset <= UiManagerMenus::dialog; offset += 4)
+        for (cUI_Window2*& menu : manager->menus)
         {
-            add(offset);
+            add(menu, &menu);
         }
-        add(0x14C);
-        if (void* box = member<void*>(manager, UiManagerMenus::dialog); box && (member<uint32_t>(box, UiControl::flags) & 1))
+        add(manager->dialog, &manager->dialog);
+        add(manager->other, &manager->other);
+        if (cUI_BusyDlg* box = manager->dialog; shown(box))
         {
-            shown += Fmt::format("[{} buttons] ", UiNav::buttonCount(box));
+            seen += Fmt::format("[{} buttons] ", UiNav::buttonCount(box));
         }
-        void** popup = member<void**>(manager, UiManager::popupsBegin);
-        void** end = member<void**>(manager, UiManager::popupsEnd);
-        for (; popup && popup < end && end - popup < 256; ++popup)
+        if (manager->popups.size() < 256)
         {
-            if (*popup && (member<uint32_t>(*popup, UiControl::flags) & 1))
+            for (cUI_Popup* popup : manager->popups)
             {
-                shown += "popup:" + UiNav::className(*popup) + "{" + UiNav::contents(*popup) + "} ";
+                if (shown(popup))
+                {
+                    seen += "popup:" + UiNav::className(popup) + "{" + UiNav::contents(popup) + "} ";
+                }
             }
         }
-        shown += Fmt::format("| flags {:x}", member<uint32_t>(manager, UiManager::flags));
-        if (shown != last)
+        seen += Fmt::format("| flags {:x}", manager->flags);
+        if (seen != last)
         {
-            last = shown;
+            last = seen;
             ++lines;
-            LOG("Controller: UI shows {}", shown);
+            LOG("Controller: UI shows {}", seen);
         }
     }
 
@@ -843,10 +844,8 @@ namespace
     }
 
     // At 1024x768 UiCanvas is off and leaves the cursor alone; then the controller hooks it itself.
-    using GetClientCursorPosFn = void(__cdecl*)(HWND window, POINT* pt);
-    using RenderCursorFn = void(__fastcall*)(void* self, void* edx, void* device, int flag);
-    GetClientCursorPosFn g_origGetClientCursorPos = nullptr;
-    RenderCursorFn g_origRenderCursor = nullptr;
+    decltype(Addr::getClientCursorPos)::Ptr g_origGetClientCursorPos = nullptr;
+    decltype(Addr::cMouse_renderCursor)::Ptr g_origRenderCursor = nullptr;
 
     void __cdecl hookGetClientCursorPos(HWND window, POINT* pt)
     {
@@ -859,7 +858,7 @@ namespace
         g_origGetClientCursorPos(window, pt);
     }
 
-    void __fastcall hookRenderCursor(void* self, void* edx, void* device, int flag)
+    void __fastcall hookRenderCursor(cMouse* self, void* edx, IDirect3DDevice7* device, int flag)
     {
         if (!Controller::hideGameCursor(reinterpret_cast<uintptr_t>(_ReturnAddress())))
         {
@@ -1046,14 +1045,14 @@ namespace
     // The bindings of the HUD's slots while Show names is held or the help screen is up.
     void hudPrompts(const Bindings::Set& held)
     {
-        void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager);
-        const bool help = manager && (member<uint32_t>(manager, UiManager::flags) & UiManager::helpScreen);
+        cUI_Manager* manager = cUI_Manager::instance();
+        const bool help = manager && (manager->flags & cUI_Manager::helpScreen);
         if (!help && !held[static_cast<int>(Action::ShowItems)])
         {
             return;
         }
-        void* taskbar = member<void*>(manager, UiManager::taskbar);
-        if (!taskbar || !(member<uint32_t>(taskbar, UiControl::flags) & 1))
+        cUI_Taskbar2* taskbar = manager ? manager->taskbar() : nullptr;
+        if (!shown(taskbar))
         {
             return;
         }
@@ -1061,13 +1060,14 @@ namespace
         const float size = kPromptSize * scale, gap = 3.0f * scale;
         UiNav::Rect r;
         // Weapon and combat art slots: above each, side by side.
-        for (int i = 0; i < Taskbar::slotCount; ++i)
+        for (int i = 0; i < cUI_Taskbar2::slotCount; ++i)
         {
             const auto weapon = static_cast<Action>(static_cast<int>(Action::Weapon1) + i);
             const auto art = static_cast<Action>(static_cast<int>(Action::Art1) + i);
-            for (const auto& [offset, action] : {std::pair{Taskbar::weaponSlots, weapon}, std::pair{Taskbar::artSlots, art}})
+            for (const auto& [slots, action] :
+                {std::pair{taskbar->weaponSlots, weapon}, std::pair{taskbar->artSlots, art}})
             {
-                void* slot = member<void*>(taskbar, offset + i * 4);
+                cUI_Control2* slot = slots[i];
                 if (slot && UiNav::controlRect(slot, taskbar, r))
                 {
                     Prompts::add(Bindings::get(action), (r.left + r.right) * 0.5f, r.top - gap, size, 0.5f, 1.0f);
@@ -1077,11 +1077,10 @@ namespace
         // Potions (Space Q W E R): the buttons stand close together, so their bindings stand upright.
         constexpr Action kPotions[] = {Action::Heal, Action::UndeadDeath, Action::Mentor, Action::Antidote,
             Action::Concentration};
-        for (int i = 0; i < Taskbar::slotCount; ++i)
+        for (int i = 0; i < cUI_Taskbar2::slotCount; ++i)
         {
-            auto* full = static_cast<uint8_t*>(taskbar) + Taskbar::potionButtons + i * Taskbar::potionButtonSize;
-            auto* empty = static_cast<uint8_t*>(taskbar) + Taskbar::potionButtonsEmpty + i * Taskbar::potionButtonSize;
-            if (UiNav::controlRect(full, taskbar, r) || UiNav::controlRect(empty, taskbar, r))
+            if (UiNav::controlRect(&taskbar->potionButtons[i], taskbar, r) ||
+                UiNav::controlRect(&taskbar->potionButtonsEmpty[i], taskbar, r))
             {
                 Prompts::addStacked(Bindings::get(kPotions[i]), (r.left + r.right) * 0.5f, r.top - gap, size * 0.8f);
             }
@@ -1209,7 +1208,7 @@ void Controller::onFrame()
     {
         g_cursorMode = !g_cursorMode;
     }
-    if (void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager))
+    if (cUI_Manager* manager = cUI_Manager::instance())
     {
         traceUi(manager);
     }

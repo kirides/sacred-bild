@@ -6,9 +6,9 @@
 #include "config/debug.h"
 #include "config/ui.h"
 #include "log.h"
-#include "mem.h"
 #include "patch.h"
 #include "sacred/mouse.h"
+#include "sacred/ui.h"
 
 #include <windows.h>
 #include <intrin.h>
@@ -38,31 +38,21 @@ namespace
     std::atomic<ULONGLONG> g_tracePopupsUntil{0};
     bool g_traceKeyDown = false;
 
-    using GetClientCursorPosFn = void(__cdecl*)(HWND, POINT*);
-    using RenderCursorFn = void(__fastcall*)(void* self, void* edx, void* device, int flag);
-    using WorldMouseFn = uint32_t(__fastcall*)(void* engine, void* edx, void* event, int flag);
-    WorldMouseFn g_origWorldMouse = nullptr;
-    using SavePortraitFn = uint32_t(__fastcall*)(void* self, void* edx, const char* path, int w, int h, float scale);
-    using HeldItemFn = void(__fastcall*)(void* self, void* edx, void* device, int flag);
-    HeldItemFn g_origHeldItem = nullptr;
+    decltype(Addr::getClientCursorPos)::Ptr g_origGetClientCursorPos = nullptr;
+    decltype(Addr::cMouse_renderCursor)::Ptr g_origRenderCursor = nullptr;
+    decltype(Addr::cEngine_worldMouse)::Ptr g_origWorldMouse = nullptr;
+    decltype(Addr::renderSavePortrait)::Ptr g_origSavePortrait = nullptr;
+    decltype(Addr::cInventoryEntry_render)::Ptr g_origHeldItem = nullptr;
 
-    GetClientCursorPosFn g_origGetClientCursorPos = nullptr;
-    RenderCursorFn g_origRenderCursor = nullptr;
-    SavePortraitFn g_origSavePortrait = nullptr;
-
-    using Mem::member;
-
-    bool fullScreenWindowOpen(void* manager)
+    bool fullScreenWindowOpen(const cUI_Manager* manager)
     {
-        for (uintptr_t slot = UiManager::firstGameWindow; slot <= UiManager::lastGameWindow; slot += 4)
+        for (const cUI_Window2* window : manager->windows)
         {
-            void* window = member<void*>(manager, slot);
-            if (!window || !(member<uint32_t>(window, UiControl::flags) & 1))
+            if (!window || !window->visible())
             {
                 continue;
             }
-            const int x = member<int>(window, UiControl::x), y = member<int>(window, UiControl::y);
-            const int w = member<int16_t>(window, UiControl::width), h = member<int16_t>(window, UiControl::height);
+            const int x = window->x, y = window->y, w = window->width, h = window->height;
             if (x <= 0 && y <= 0 && x + w >= 1023 && y + h >= 767)
             {
                 return true;
@@ -76,9 +66,8 @@ namespace
     // started with.
     const Layout& liveLayout()
     {
-        void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager);
-        const bool inGame = manager && (member<uint32_t>(manager, UiManager::flags) & UiManager::inGame) &&
-            !fullScreenWindowOpen(manager);
+        const cUI_Manager* manager = cUI_Manager::instance();
+        const bool inGame = manager && (manager->flags & cUI_Manager::inGame) && !fullScreenWindowOpen(manager);
         return inGame ? g_game : g_menu;
     }
 
@@ -145,7 +134,7 @@ namespace
         }
     }
 
-    void __fastcall hookRenderCursor(void* self, void* edx, void* device, int flag)
+    void __fastcall hookRenderCursor(cMouse* self, void* edx, IDirect3DDevice7* device, int flag)
     {
         if (Controller::hideGameCursor(reinterpret_cast<uintptr_t>(_ReturnAddress())))
         {
@@ -157,7 +146,7 @@ namespace
     }
 
     // The item held by the cursor follows it over the whole screen, out of the frame of the window that draws it.
-    void __fastcall hookHeldItem(void* self, void* edx, void* device, int flag)
+    void __fastcall hookHeldItem(void* self, void* edx, IDirect3DDevice7* device, int flag)
     {
         const UiCanvas::Frame current = UiCanvas::frame();
         UiCanvas::FrameScope unconfined{{current.x, current.y, false}};
@@ -172,27 +161,26 @@ namespace
 
     // Mouse events carry the cursor as the window procedure read it (UI coordinates). The UI gets them first;
     // the world mouse handler then picks with them, so it gets screen pixels for the duration of the call.
-    uint32_t __fastcall hookWorldMouse(void* engine, void* edx, void* event, int flag)
+    uint32_t __fastcall hookWorldMouse(cEngine* engine, void* edx, cEvent* event, int flag)
     {
-        const uintptr_t vtable = event ? *static_cast<uintptr_t*>(event) : 0;
-        if (vtable != Addr::cEventMouseDown_vtable && vtable != Addr::cEventMouseUp_vtable)
+        cEventMouse* mouse = cEventMouse::of(event);
+        if (!mouse)
         {
             return g_origWorldMouse(engine, edx, event, flag);
         }
-        auto* coords = reinterpret_cast<int*>(static_cast<uint8_t*>(event) + MouseEvent::x);
-        const int x = coords[0], y = coords[1];
-        coords[0] = UiCanvas::toPhysicalX(x);
-        coords[1] = UiCanvas::toPhysicalY(y);
+        const int x = mouse->x, y = mouse->y;
+        mouse->x = UiCanvas::toPhysicalX(x);
+        mouse->y = UiCanvas::toPhysicalY(y);
         const uint32_t result = g_origWorldMouse(engine, edx, event, flag);
-        coords[0] = x;
-        coords[1] = y;
+        mouse->x = x;
+        mouse->y = y;
         return result;
     }
 
     // The world cursor handler reads the mouse once (redirected to physical) and also asks the UI with it.
-    bool __fastcall isCursorOverUiPhysical(void* uiManager, void* /*edx*/, int x, int y)
+    bool __fastcall isCursorOverUiPhysical(cUI_Manager* manager, void* /*edx*/, int x, int y)
     {
-        return Addr::cUI_Manager_isCursorOverUi(uiManager, UiCanvas::toVirtualX(x), UiCanvas::toVirtualY(y));
+        return manager->isCursorOverUi(UiCanvas::toVirtualX(x), UiCanvas::toVirtualY(y));
     }
 
     int __fastcall physicalGetX(cMouse* mouse)
@@ -257,14 +245,14 @@ bool UiCanvas::enabled() { return g_enabled; }
 
 bool UiCanvas::fullScreenWindowOpen()
 {
-    void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager);
+    const cUI_Manager* manager = cUI_Manager::instance();
     return manager && ::fullScreenWindowOpen(manager);
 }
 
 bool UiCanvas::inGame()
 {
-    void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager);
-    return manager && (member<uint32_t>(manager, UiManager::flags) & UiManager::inGame);
+    const cUI_Manager* manager = cUI_Manager::instance();
+    return manager && (manager->flags & cUI_Manager::inGame);
 }
 
 UiCanvas::Bounds UiCanvas::menuCanvas()

@@ -2,10 +2,10 @@
 #include "net/adapters.h"
 #include "net/lan_protocol.h"
 #include "net/matchmaker.h"
-#include "game/sacred_addr.h"
 #include "config/net.h"
 #include "log.h"
 #include "patch.h"
+#include "sacred/net.h"
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -174,8 +174,8 @@ namespace
 
     SOCKET lanSocket()
     {
-        const auto* client = *reinterpret_cast<const uint8_t* const*>(Addr::g_pGameClient);
-        return client ? *reinterpret_cast<const SOCKET*>(client + Addr::gameClient_lanSocket) : INVALID_SOCKET;
+        const cGCclass* client = cGCclass::instance();
+        return client ? static_cast<SOCKET>(client->lanSocket) : INVALID_SOCKET;
     }
 
     void openSocket()

@@ -67,7 +67,8 @@ namespace Sacred
 
     inline cCreature* cObject::asCreature()
     {
-        return static_cast<cCreature*>(Addr::rtDynamicCast(this, 0, reinterpret_cast<void*>(Addr::cObject_typeDescriptor),
-            reinterpret_cast<void*>(Addr::cCreature_typeDescriptor), 0));
+        auto* source = reinterpret_cast<void*>(Addr::cObject_typeDescriptor);
+        auto* target = reinterpret_cast<void*>(Addr::cCreature_typeDescriptor);
+        return static_cast<cCreature*>(Addr::rtDynamicCast(this, 0, source, target, 0));
     }
 }

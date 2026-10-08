@@ -8,8 +8,9 @@ patches (`Sacred::installHooks` in `src/game/build.cpp`, which lists every modul
 the game in its `install()` with [Detours](https://github.com/microsoft/Detours) hooks or checked byte patches
 (`src/patch.*`: a write happens only if the bytes there are the expected ones).
 
-What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md) and in the comments of
-`src/game/sacred_addr.h`; the addresses refer to the English GOG build (Ghidra program `/Sacred.exe (GOG)`).
+What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md), in the comments of
+`src/game/sacred_addr.h` and in the game's classes in `src/sacred/`; the addresses refer to the English GOG build
+(Ghidra program `/Sacred.exe (GOG)`).
 
 ## Source files
 
@@ -24,12 +25,12 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md) 
 | `src/log.*`, `src/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
 | `src/patch.*`, `src/sig.*` | Code patches and hooks; byte signature search |
 | `src/spin_lock.h` | Locks for the render thread's hot paths |
-| `src/mem.h` | Fields of the game's objects by byte offset (`Mem::member`, `Mem::field`) |
+| `src/mem.h` | Fields of granny.dll's objects by byte offset (`Mem::field`) |
 | `src/profiler.*` | `[Debug] Profiler` |
 | `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
 | `src/game/build.*` | Which exe this is, address lookup, the list of game modules |
-| `src/game/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses SacredBild uses, functions with their signatures (`Sacred::Thiscall`, `Cdecl`; `tools/check_hooks.py` checks them), and the struct offsets not yet in `src/sacred/`; their signatures (generated) |
-| `src/sacred/` | The game's classes as structs: fields at their offsets and vtables as structs of function pointers, both checked by `static_assert`, member functions calling the game's code (`cEngine`, `cObject` / `cCreature`, `cObjectManager`, `cMouse`, `cWorldView`, ...); `address.h` the typed addresses |
+| `src/game/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses SacredBild uses, functions with their signatures (`Sacred::Thiscall`, `Cdecl`; `tools/check_hooks.py` checks them) and globals with their types (`Sacred::Global`); their signatures (generated) |
+| `src/sacred/` | The game's classes as structs (the Sacred Gold API): fields at their offsets and vtables as structs of function pointers, both checked by `static_assert`, member functions calling the game's code. `engine.h` (cEngine, orders), `object.h` (cObject / cCreature, cObjectManager), `world.h` (cWorldView, sectors, tiles, map data), `render.h` (dxDriver7, textures, cQuadBatcher), `ui.h` (cUI_Control2 / cUI_Window2 and their subclasses, cUI_Manager, events, fonts), `mouse.h`, `text.h`, `net.h` (cGCclass; gameserver.exe's cApp / cNetServer); `address.h` the typed addresses, `vector.h` the exe's std::vector |
 | `src/game/gameserver*` | The same for gameserver.exe, and its patches |
 | `src/game/resolution.*`, `resolution_sites.inc` | Any resolution: window, back buffer, world view; the 1024x768 constants patched (generated) |
 | `src/game/ui_canvas.*` | The 1024x768 UI in a scaled, centered canvas; cursor mapping |

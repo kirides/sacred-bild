@@ -1,8 +1,8 @@
 #include "game/world_passes.h"
 #include "game/d3d_stats.h"
-#include "game/sacred_addr.h"
 #include "log.h"
 #include "patch.h"
+#include "sacred/world.h"
 
 #include <cstdint>
 
@@ -12,28 +12,22 @@ namespace
     using D3DStats::Pass;
     using D3DStats::PassScope;
 
-    // thiscall targets are hooked as fastcall with an unused EDX parameter.
-    using DeviceFn = void(__fastcall*)(void* self, void* edx, void* device);
-    using TileRowFn = void(__fastcall*)(void* self, void* edx, void* device, void* rowPos, int detail);
-    using DrawModelFn = uint32_t(__fastcall*)(void* self, void* edx, void* device, void* model, void* instance,
-        uint32_t flagsLow, uint32_t flagsHigh);
+    decltype(Addr::cWorldView_renderTileRow)::Ptr g_origTileRow = nullptr;
+    decltype(Addr::cQuadBatcher_flush)::Ptr g_origFlush = nullptr;
+    decltype(Addr::cWorldView_drawTileLayers)::Ptr g_origLayers = nullptr;
+    decltype(Addr::cWorldView_drawWaterTiles)::Ptr g_origWater = nullptr;
+    decltype(Addr::cWorldView_drawObjects)::Ptr g_origObjects = nullptr;
+    decltype(Addr::cWorldView_drawObjects2)::Ptr g_origObjects2 = nullptr;
+    decltype(Addr::cObject3D_drawModel)::Ptr g_origDrawModel = nullptr;
 
-    TileRowFn g_origTileRow = nullptr;
-    DeviceFn g_origFlush = nullptr;
-    DeviceFn g_origLayers = nullptr;
-    DeviceFn g_origWater = nullptr;
-    DeviceFn g_origObjects = nullptr;
-    DeviceFn g_origObjects2 = nullptr;
-    DrawModelFn g_origDrawModel = nullptr;
-
-    void __fastcall hookTileRow(void* self, void* edx, void* device, void* rowPos, int detail)
+    void __fastcall hookTileRow(cWorldView* self, void* edx, IDirect3DDevice7* device, RowPos* rowPos, int detail)
     {
         PassScope s{D3DStats::PRows};
         g_origTileRow(self, edx, device, rowPos, detail);
     }
 
     // The layer and water passes flush through the same batcher: those draws stay theirs.
-    void __fastcall hookFlush(void* self, void* edx, void* device)
+    void __fastcall hookFlush(cQuadBatcher* self, void* edx, IDirect3DDevice7* device)
     {
         const Pass pass = D3DStats::currentPass();
         if (pass != D3DStats::PRows && pass != D3DStats::PWorld)
@@ -45,33 +39,33 @@ namespace
         g_origFlush(self, edx, device);
     }
 
-    void __fastcall hookLayers(void* self, void* edx, void* device)
+    void __fastcall hookLayers(cWorldView* self, void* edx, IDirect3DDevice7* device)
     {
         PassScope s{D3DStats::PLayers};
         g_origLayers(self, edx, device);
     }
 
-    void __fastcall hookWater(void* self, void* edx, void* device)
+    void __fastcall hookWater(cWorldView* self, void* edx, IDirect3DDevice7* device)
     {
         PassScope s{D3DStats::PWater};
         g_origWater(self, edx, device);
     }
 
-    void __fastcall hookObjects(void* self, void* edx, void* device)
+    void __fastcall hookObjects(cWorldView* self, void* edx, IDirect3DDevice7* device)
     {
         PassScope s{D3DStats::PObjects};
         g_origObjects(self, edx, device);
     }
 
-    void __fastcall hookObjects2(void* self, void* edx, void* device)
+    void __fastcall hookObjects2(cWorldView* self, void* edx, IDirect3DDevice7* device)
     {
         PassScope s{D3DStats::PObjects2};
         g_origObjects2(self, edx, device);
     }
 
     // Returns what the game's function left in EAX, in case a caller reads it.
-    uint32_t __fastcall hookDrawModel(void* self, void* edx, void* device, void* model, void* instance, uint32_t flagsLow,
-        uint32_t flagsHigh)
+    uint32_t __fastcall hookDrawModel(void* self, void* edx, IDirect3DDevice7* device, void* model, void* instance,
+        uint32_t flagsLow, uint32_t flagsHigh)
     {
         PassScope s{D3DStats::PModels};
         return g_origDrawModel(self, edx, device, model, instance, flagsLow, flagsHigh);

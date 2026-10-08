@@ -1,7 +1,6 @@
 #include "game/options_screen.h"
 #include "game/controller.h"
 #include "game/language.h"
-#include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
 #include "input/bindings.h"
 #include "input/gamepad.h"
@@ -11,8 +10,8 @@
 #include "config/controller.h"
 #include "config/ddraw.h"
 #include "log.h"
-#include "mem.h"
 #include "patch.h"
+#include "sacred/ui.h"
 
 #include <imgui.h>
 
@@ -29,26 +28,19 @@ namespace
     using Bindings::Action;
     using Bindings::Binding;
 
-    // thiscall targets, called and wrapped as fastcall with an unused EDX.
-    using ShowFn = void(__fastcall*)(void* self, void* edx, int show);
-    using RenderFn = void(__fastcall*)(void* self, void* edx, void* device);
-    using Render2Fn = void(__fastcall*)(void* self, void* edx, void* device, int a, int b);
-
-    ShowFn g_origShow = nullptr;
-    RenderFn g_origRender = nullptr;
-    Render2Fn g_origRender2 = nullptr;
+    decltype(cUI_Window2::Vtable::show) g_origShow = nullptr;
+    decltype(cUI_Window2::Vtable::render) g_origRender = nullptr;
+    decltype(cUI_Window2::Vtable::render2) g_origRender2 = nullptr;
 
     // The game's options window while the screen stands in for it, and until the game closes it after Accept /
     // Cancel (or a moment later, should the click not close it: then the game's own window shows).
-    std::atomic<void*> g_window{nullptr};
+    std::atomic<cUI_Options*> g_window{nullptr};
     std::atomic<DWORD> g_hideUntil{0};
     std::atomic<bool> g_screen{false};          // the screen is up (not yet accepted or cancelled)
     std::atomic<DWORD> g_openTick{0};
 
     constexpr DWORD kCloseGraceMs = 750;
     constexpr DWORD kCaptureTimeoutMs = 8000;
-
-    using Mem::member;
 
     std::string utf8(const std::wstring& w)
     {
@@ -71,46 +63,44 @@ namespace
 
     // ---- The game window's controls ----
 
-    void* control(void* window, uintptr_t offset)
+    bool checked(const cUI_Control2* c)
     {
-        return member<void*>(window, offset);
+        return c && c->checked();
     }
 
-    bool checked(void* c)
+    bool shown(const cUI_Control2* c)
     {
-        return c && (member<uint32_t>(c, UiControl::flags) & Options::checked);
+        return c && c->visible();
     }
 
-    bool shown(void* c)
-    {
-        return c && (member<uint32_t>(c, UiControl::flags) & 1);
-    }
-
-    void setChecked(void* c, bool on)
+    void setChecked(cUI_Control2* c, bool on)
     {
         if (c)
         {
-            (on ? Addr::cUI_Control2_setFlags : Addr::cUI_Control2_clearFlags)(c, Options::checked);
+            on ? c->setFlags(cUI_Control2::checkedFlag) : c->clearFlags(cUI_Control2::checkedFlag);
         }
     }
 
-    int radio(void* window, uintptr_t first, int count)
+    // A radio group: the buttons in the order of the setting's values.
+    template <size_t N>
+    int radio(cUI_Control2* const (&buttons)[N])
     {
-        for (int i = 0; i < count; ++i)
+        for (size_t i = 0; i < N; ++i)
         {
-            if (checked(control(window, first + 4 * i)))
+            if (checked(buttons[i]))
             {
-                return i;
+                return static_cast<int>(i);
             }
         }
         return 0;
     }
 
-    void setRadio(void* window, uintptr_t first, int count, int value)
+    template <size_t N>
+    void setRadio(cUI_Control2* const (&buttons)[N], int value)
     {
-        for (int i = 0; i < count; ++i)
+        for (size_t i = 0; i < N; ++i)
         {
-            setChecked(control(window, first + 4 * i), i == value);
+            setChecked(buttons[i], static_cast<int>(i) == value);
         }
     }
 
@@ -120,41 +110,37 @@ namespace
         int max = 0;    // 0: no slider
     };
 
-    Slider readSlider(void* window, uintptr_t offset)
+    Slider readSlider(cUI_Slider* s)
     {
-        void* s = control(window, offset);
         if (!s)
         {
             return {};
         }
-        const uint32_t count = member<uint32_t>(s, Sacred::Slider::count);
+        const uint32_t count = s->count;
         if (count == 0 || count > 100000)
         {
             return {};
         }
-        return {static_cast<int>(Addr::cUI_Slider_getValue(s)), static_cast<int>(count - 1)};
+        return {static_cast<int>(s->value()), static_cast<int>(count - 1)};
     }
 
-    void writeSlider(void* window, uintptr_t offset, const Slider& slider)
+    void writeSlider(cUI_Slider* s, const Slider& slider)
     {
-        if (void* s = control(window, offset); s && slider.max > 0)
+        if (s && slider.max > 0)
         {
-            Addr::cUI_Slider_setValue(s, static_cast<uint32_t>(slider.value));
+            s->setValue(static_cast<uint32_t>(slider.value));
         }
     }
 
     // A click at the center of one of the window's buttons, the way the player would.
-    void press(void* window, uintptr_t offset)
+    void press(cUI_Control2* button)
     {
-        void* button = control(window, offset);
         if (!button)
         {
             return;
         }
-        int32_t rect[3] = {};
-        Addr::cUI_Control2_getAbsoluteRect(button, rect);
-        const int w = static_cast<int16_t>(rect[2] & 0xFFFF), h = static_cast<int16_t>(rect[2] >> 16);
-        Controller::clickAt(UiCanvas::toPhysicalX(rect[0] + w / 2), UiCanvas::toPhysicalY(rect[1] + h / 2));
+        const UiRect r = button->absoluteRect();
+        Controller::clickAt(UiCanvas::toPhysicalX(r.x + r.width / 2), UiCanvas::toPhysicalY(r.y + r.height / 2));
     }
 
     // ---- What the screen edits ----
@@ -208,49 +194,49 @@ namespace
     bool g_navCooldown = false;     // gamepad navigation comes back once all buttons are up
     std::string g_note;             // e.g. what a new binding took over
 
-    GameOptions readGame(void* w)
+    GameOptions readGame(const cUI_Options* w)
     {
         GameOptions o;
-        o.sfx = readSlider(w, Options::sfxVolume);
-        o.voice = readSlider(w, Options::voiceVolume);
-        o.music = readSlider(w, Options::musicVolume);
-        o.mapAlpha = readSlider(w, Options::mapAlpha);
-        o.detail = radio(w, Options::detail, 3);
-        o.pickupAuto = radio(w, Options::pickupAuto, 3);
-        o.soundQuality = radio(w, Options::soundQuality, 3);
-        o.netSlow = checked(control(w, Options::netSlow));
-        o.pickupAnim = checked(control(w, Options::pickupAnim));
-        o.autoTrack = checked(control(w, Options::autoTrack));
-        o.violence = checked(control(w, Options::violence));
-        o.violenceShown = shown(control(w, Options::violence));
-        o.sound = checked(control(w, Options::sound));
-        o.exploreMap = checked(control(w, Options::exploreMap));
-        o.autosave = checked(control(w, Options::autosave));
-        o.fsaa = checked(control(w, Options::fsaa));
+        o.sfx = readSlider(w->sfxVolume);
+        o.voice = readSlider(w->voiceVolume);
+        o.music = readSlider(w->musicVolume);
+        o.mapAlpha = readSlider(w->mapAlpha);
+        o.detail = radio(w->detail);
+        o.pickupAuto = radio(w->pickupAuto);
+        o.soundQuality = radio(w->soundQuality);
+        o.netSlow = checked(w->netSlow);
+        o.pickupAnim = checked(w->pickupAnim);
+        o.autoTrack = checked(w->autoTrack);
+        o.violence = checked(w->violence);
+        o.violenceShown = shown(w->violence);
+        o.sound = checked(w->sound);
+        o.exploreMap = checked(w->exploreMap);
+        o.autosave = checked(w->autosave);
+        o.fsaa = checked(w->fsaa);
         return o;
     }
 
-    void writeGame(void* w, const GameOptions& o)
+    void writeGame(const cUI_Options* w, const GameOptions& o)
     {
-        writeSlider(w, Options::sfxVolume, o.sfx);
-        writeSlider(w, Options::voiceVolume, o.voice);
-        writeSlider(w, Options::musicVolume, o.music);
-        writeSlider(w, Options::mapAlpha, o.mapAlpha);
-        setRadio(w, Options::detail, 3, o.detail);
-        setRadio(w, Options::pickupAuto, 3, o.pickupAuto);
-        setRadio(w, Options::soundQuality, 3, o.soundQuality);
-        setChecked(control(w, Options::netFast), !o.netSlow);
-        setChecked(control(w, Options::netSlow), o.netSlow);
-        setChecked(control(w, Options::pickupAnim), o.pickupAnim);
-        setChecked(control(w, Options::autoTrack), o.autoTrack);
+        writeSlider(w->sfxVolume, o.sfx);
+        writeSlider(w->voiceVolume, o.voice);
+        writeSlider(w->musicVolume, o.music);
+        writeSlider(w->mapAlpha, o.mapAlpha);
+        setRadio(w->detail, o.detail);
+        setRadio(w->pickupAuto, o.pickupAuto);
+        setRadio(w->soundQuality, o.soundQuality);
+        setChecked(w->netFast, !o.netSlow);
+        setChecked(w->netSlow, o.netSlow);
+        setChecked(w->pickupAnim, o.pickupAnim);
+        setChecked(w->autoTrack, o.autoTrack);
         if (o.violenceShown)
         {
-            setChecked(control(w, Options::violence), o.violence);
+            setChecked(w->violence, o.violence);
         }
-        setChecked(control(w, Options::sound), o.sound);
-        setChecked(control(w, Options::exploreMap), o.exploreMap);
-        setChecked(control(w, Options::autosave), o.autosave);
-        setChecked(control(w, Options::fsaa), o.fsaa);
+        setChecked(w->sound, o.sound);
+        setChecked(w->exploreMap, o.exploreMap);
+        setChecked(w->autosave, o.autosave);
+        setChecked(w->fsaa, o.fsaa);
     }
 
     ControllerOptions readController()
@@ -560,7 +546,7 @@ namespace
 
     void close(bool accept)
     {
-        void* window = g_window.load();
+        cUI_Options* window = g_window.load();
         g_screen = false;
         g_capture = {};
         Overlay::setGamepadNavigation(true);
@@ -577,12 +563,12 @@ namespace
             }
         }
         g_hideUntil = GetTickCount() + kCloseGraceMs;
-        press(window, accept ? Options::ok : Options::cancel);
+        press(accept ? window->ok : window->cancel);
     }
 
     bool draw()
     {
-        void* window = g_window.load();
+        cUI_Options* window = g_window.load();
         if (!window || !g_screen.load())
         {
             return false;
@@ -657,7 +643,7 @@ namespace
         return true;
     }
 
-    void open(void* window)
+    void open(cUI_Options* window)
     {
         g_window = window;
         g_game = readGame(window);
@@ -676,7 +662,7 @@ namespace
         LOG("Controller: options as SacredBild's screen");
     }
 
-    bool hidden(void* self)
+    bool hidden(const cUI_Control2* self)
     {
         if (self != g_window.load())
         {
@@ -698,14 +684,15 @@ namespace
         return false;
     }
 
-    void __fastcall hookShow(void* self, void* edx, int show)
+    // Only the options window has this vtable.
+    uint32_t __fastcall hookShow(cUI_Window2* self, void* edx, uint32_t show)
     {
-        g_origShow(self, edx, show);
+        const uint32_t result = g_origShow(self, edx, show);
         if (show & 0xFF)
         {
             if (InputMode::controller() && Overlay::available() && !Overlay::isOpen())
             {
-                open(self);
+                open(static_cast<cUI_Options*>(self));
             }
         }
         else if (self == g_window.load())
@@ -713,22 +700,24 @@ namespace
             g_screen = false;
             g_window = nullptr;
         }
+        return result;
     }
 
-    void __fastcall hookRender(void* self, void* edx, void* device)
+    uint32_t __fastcall hookRender(cUI_Control2* self, void* edx, IDirect3DDevice7* device)
     {
-        if (!hidden(self))
-        {
-            g_origRender(self, edx, device);
-        }
+        return hidden(self) ? 0 : g_origRender(self, edx, device);
     }
 
-    void __fastcall hookRender2(void* self, void* edx, void* device, int a, int b)
+    uint32_t __fastcall hookRender2(cUI_Window2* self, void* edx, IDirect3DDevice7* device, uint32_t a, uint32_t b)
     {
-        if (!hidden(self))
-        {
-            g_origRender2(self, edx, device, a, b);
-        }
+        return hidden(self) ? 0 : g_origRender2(self, edx, device, a, b);
+    }
+
+    // Points a vtable slot at `hook`, which has the slot's type.
+    template <class F>
+    bool patchSlot(F& slot, F hook)
+    {
+        return Patch::value(reinterpret_cast<uintptr_t>(&slot), hook);
     }
 }
 
@@ -738,12 +727,11 @@ void OptionsScreen::install()
     {
         return;
     }
-    auto** table = reinterpret_cast<void**>(Addr::cUI_Options_vtable);
-    g_origShow = reinterpret_cast<ShowFn>(table[UiWindowSlot::show / 4]);
-    g_origRender = reinterpret_cast<RenderFn>(table[UiWindowSlot::render / 4]);
-    g_origRender2 = reinterpret_cast<Render2Fn>(table[UiWindowSlot::render2 / 4]);
-    const bool ok = Patch::value(reinterpret_cast<uintptr_t>(&table[UiWindowSlot::show / 4]), reinterpret_cast<void*>(&hookShow)) &&
-        Patch::value(reinterpret_cast<uintptr_t>(&table[UiWindowSlot::render / 4]), reinterpret_cast<void*>(&hookRender)) &&
-        Patch::value(reinterpret_cast<uintptr_t>(&table[UiWindowSlot::render2 / 4]), reinterpret_cast<void*>(&hookRender2));
+    auto* table = reinterpret_cast<cUI_Window2::Vtable*>(Addr::cUI_Options_vtable);
+    g_origShow = table->show;
+    g_origRender = table->render;
+    g_origRender2 = table->render2;
+    const bool ok = patchSlot(table->show, &hookShow) && patchSlot(table->render, &hookRender) &&
+        patchSlot(table->render2, &hookRender2);
     LOG("Controller: options window {}", ok ? "wrapped" : "could not be wrapped");
 }

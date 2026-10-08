@@ -1,10 +1,9 @@
 #include "game/screenshot.h"
 #include "game/frame_hooks.h"
-#include "game/sacred_addr.h"
 #include "config/screenshot.h"
 #include "log.h"
-#include "mem.h"
 #include "patch.h"
+#include "sacred/render.h"
 
 #include <windows.h>
 #include <ddraw.h>
@@ -25,17 +24,14 @@ namespace
 {
     using namespace Sacred;
 
-    // cdecl (bits, pitch, mode), called by dxDriver7_flip with the locked back buffer.
-    using CaptureFn = void(__cdecl*)(void* bits, int pitch, int mode);
-    CaptureFn g_origCapture = nullptr;
+    // Called by dxDriver7_flip with the locked back buffer.
+    decltype(Addr::captureScreenshot)::Ptr g_origCapture = nullptr;
 
     // Not exported by every SDK library this links against.
     constexpr GUID kClsidWicImagingFactory = {0xcacaf262, 0x9370, 0x4615, {0xa1, 0x3b, 0x9f, 0x55, 0x39, 0xda, 0x4c, 0x0a}};
     constexpr GUID kWicPixelFormat24bppBGR = {0x6fddc324, 0x4e03, 0x4bfe, {0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x0c}};
     constexpr GUID kContainerFormatPng = {0x1b7cfaf4, 0x713f, 0x473c, {0xbb, 0xcd, 0x61, 0x37, 0x42, 0x5f, 0xae, 0xaf}};
     constexpr GUID kContainerFormatJpeg = {0x19e4a5aa, 0x5662, 0x4fc5, {0xa0, 0xc0, 0x17, 0x58, 0x02, 0x8e, 0x10, 0x57}};
-
-    using Mem::member;
 
     struct Image
     {
@@ -162,8 +158,8 @@ namespace
     // (the game's own capture runs then).
     bool screenshot(const uint8_t* bits, int pitch)
     {
-        void* driver = FrameHooks::dxDriver();
-        auto* back = driver ? member<IDirectDrawSurface7*>(driver, DxDriver::back) : nullptr;
+        dxDriver7* driver = FrameHooks::dxDriver();
+        IDirectDrawSurface7* back = driver ? driver->back : nullptr;
         DDSURFACEDESC2 desc = {};
         desc.dwSize = sizeof(desc);
         if (!back || FAILED(back->GetSurfaceDesc(&desc)))

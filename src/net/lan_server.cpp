@@ -4,10 +4,10 @@
 #include "net/matchmaker.h"
 #include "net/udp_endpoint.h"
 #include "net/udp_protocol.h"
-#include "game/gameserver_addr.h"
 #include "config/net.h"
 #include "log.h"
 #include "patch.h"
+#include "sacred/net.h"
 
 #include <winsock2.h>
 
@@ -42,10 +42,10 @@ namespace
     uint32_t g_announcements = 0;
     bool g_loggedEndpoint = false;
 
-    const uint8_t* networkObject()
+    const cNetServer* networkObject()
     {
-        const auto* app = *reinterpret_cast<const uint8_t* const*>(Addr::g_pApp);
-        return app ? *reinterpret_cast<const uint8_t* const*>(app + Addr::app_net) : nullptr;
+        const cApp* app = cApp::instance();
+        return app ? app->net : nullptr;
     }
 
     std::string endpoint(const sockaddr_in& a)
@@ -195,10 +195,10 @@ namespace
 
     int WSAAPI hookSend(SOCKET s, const char* buf, int len, int flags)
     {
-        const uint8_t* net = networkObject();
-        if (net && s == *reinterpret_cast<const SOCKET*>(net + Addr::net_pingSocket))
+        const cNetServer* net = networkObject();
+        if (net && s == static_cast<SOCKET>(net->pingSocket))
         {
-            return announce(s, buf, len, flags, net + Addr::net_announcement);
+            return announce(s, buf, len, flags, net->announcement);
         }
         return g_send(s, buf, len, flags);
     }

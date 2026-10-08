@@ -1,15 +1,15 @@
 #include "game/ui_anchor.h"
-#include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
 #include "config/ui.h"
 #include "log.h"
-#include "mem.h"
 #include "patch.h"
+#include "sacred/ui.h"
 
 #include <windows.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstring>
 #include <iterator>
 #include <mutex>
 
@@ -17,14 +17,13 @@ namespace
 {
     using namespace Sacred;
     using UiCanvas::Frame;
-
-    using Mem::member;
+    using W = cUI_Manager::Window;
 
     struct Anchor
     {
-        uintptr_t window;       // UiManager member
+        W window;
         Config::Ui::Position Config::Ui::*position;   // [UI.Layout]
-        bool render2;           // draws through UiWindowSlot::render2 (device, ?, ?)
+        bool render2;           // draws through cUI_Window2::Vtable::render2 (device, ?, ?)
         bool confine = true;    // clip to the frame's 1024x768 rect
     };
 
@@ -32,29 +31,29 @@ namespace
     // stats and equipment form one column (656,0 .. 912,644) next to the minimap and share its corner.
     // The taskbar is not confined: its level-up button moves to the stats window's place (moveLevelUpButton).
     const Anchor kAnchors[] = {
-        {UiManager::taskbar, &Config::Ui::taskbar, false, false},
-        {UiManager::console, &Config::Ui::chat, false},
-        {UiManager::inventory, &Config::Ui::inventory, false},
-        {UiManager::minimap, &Config::Ui::minimap, false},
-        {UiManager::stats, &Config::Ui::stats, false},
-        {UiManager::equipment, &Config::Ui::equipment, false},
-        {UiManager::netPortraits, &Config::Ui::portraits, true},
-        {UiManager::blacksmith, &Config::Ui::shops, true},
-        {UiManager::merchant, &Config::Ui::shops, true},
-        {UiManager::master, &Config::Ui::shops, false},
-        {UiManager::chest, &Config::Ui::shops, false},
-        {UiManager::cube, &Config::Ui::shops, false},
-        {UiManager::trade, &Config::Ui::shops, false},
+        {W::taskbar, &Config::Ui::taskbar, false, false},
+        {W::console, &Config::Ui::chat, false},
+        {W::inventory, &Config::Ui::inventory, false},
+        {W::minimap, &Config::Ui::minimap, false},
+        {W::stats, &Config::Ui::stats, false},
+        {W::equipment, &Config::Ui::equipment, false},
+        {W::netPortraits, &Config::Ui::portraits, true},
+        {W::blacksmith, &Config::Ui::shops, true},
+        {W::merchant, &Config::Ui::shops, true},
+        {W::master, &Config::Ui::shops, false},
+        {W::chest, &Config::Ui::shops, false},
+        {W::cube, &Config::Ui::shops, false},
+        {W::trade, &Config::Ui::shops, false},
     };
     Frame g_frames[std::size(kAnchors)];
 
     // Wrapped vtables: the game's vtable slots point at the thunks below, which look up the original by the
     // object's vtable. A vtable is shared by all objects of its class; objects without a frame pass straight through.
-    constexpr size_t kSlotCount = UiWindowSlot::render2 / 4 + 1;
+    constexpr size_t kSlotCount = sizeof(cUI_Window2::Vtable) / sizeof(void*);
     struct Vtable
     {
-        void** table;
-        void* original[kSlotCount];
+        const cUI_Control2::Vtable* table;
+        cUI_Window2::Vtable original;   // the slots up to the table's last (the rest zero)
     };
     Vtable g_vtables[32];
     std::atomic<size_t> g_vtableCount{0};
@@ -63,79 +62,84 @@ namespace
 
     // Popups take the frame of the code that set their text (those set in the canvas are not listed) and are drawn
     // unconfined: their layout keeps them on the whole screen instead of the 1024x768 rect.
-    void* g_popupVtable = nullptr;
+    const cUI_Control2::Vtable* g_popupVtable = nullptr;
     struct PopupFrame
     {
-        void* popup;
+        const cUI_Control2* popup;
         Frame frame;
     };
     PopupFrame g_popups[64];
     size_t g_popupCount = 0;
     SRWLOCK g_popupLock = SRWLOCK_INIT;
 
-    // The help screen's entries (cUI_Manager_showHelp, per screen in the order of UiManager::helpPopups) take the
-    // frame of the window they explain; 0 leaves an entry in the canvas (hints about the game in general).
-    constexpr uintptr_t kScreenCorner = 1;      // the screen's top-left corner
-    const uintptr_t kHelpWindows[7][9] = {
+    // Where the help screen's entries (cUI_Manager_showHelp, per screen in the order of cUI_Manager::helpPopups) go:
+    // into the frame of the window they explain, or (the default) left in the canvas (hints about the game in
+    // general).
+    struct HelpPlace
+    {
+        int8_t value = 0;       // 0 the canvas, 1 the screen's top-left corner, 2 + a window
+    };
+    constexpr HelpPlace kScreenCorner{1};
+    constexpr HelpPlace in(W window) { return {static_cast<int8_t>(2 + static_cast<int>(window))}; }
+    const HelpPlace kHelpWindows[7][9] = {
         // 1: no window open
         {},
         // 2: inventory: the [H] hint at the top-left corner, stats (skills, active window, values), inventory
         // (tabs), stats, inventory (sort button), equipment, taskbar (weapon slot, combat art slot)
-        {kScreenCorner, UiManager::stats, UiManager::stats, UiManager::inventory, UiManager::stats,
-            UiManager::inventory, UiManager::equipment, UiManager::taskbar, UiManager::taskbar},
+        {kScreenCorner, in(W::stats), in(W::stats), in(W::inventory), in(W::stats), in(W::inventory),
+            in(W::equipment), in(W::taskbar), in(W::taskbar)},
         // 3: blacksmith
-        {0, UiManager::blacksmith, UiManager::blacksmith, UiManager::blacksmith},
+        {{}, in(W::blacksmith), in(W::blacksmith), in(W::blacksmith)},
         // 4: combo master: master, then the inventory's combo and combat art tabs
-        {0, UiManager::master, UiManager::master, UiManager::master, UiManager::inventory, UiManager::inventory},
+        {{}, in(W::master), in(W::master), in(W::master), in(W::inventory), in(W::inventory)},
         // 5: merchant: merchant, inventory, the gold in the stats window
-        {0, UiManager::merchant, UiManager::merchant, UiManager::inventory, UiManager::stats},
+        {{}, in(W::merchant), in(W::merchant), in(W::inventory), in(W::stats)},
         // 6: world map (full screen, in the canvas)
         {},
         // 7: rune exchange at the combat art master
-        {0, UiManager::master, UiManager::master, UiManager::master},
+        {{}, in(W::master), in(W::master), in(W::master)},
     };
     Frame g_cornerFrame;
 
-    using CreateGameWindowsFn = void(__fastcall*)(void* manager);
-    using ShowHelpFn = void(__fastcall*)(void* manager, void* edx, void* device, uint32_t screen);
-    using SetTextFn = uint32_t(__fastcall*)(void* self, void* edx, uint32_t a, uint32_t b, uint32_t c);
-    using LayoutFn = void(__fastcall*)(void* window);
+    // Plain fastcall (manager) in the exe: hooked without EDX.
+    using CreateGameWindowsFn = void(__fastcall*)(cUI_Manager* manager);
+    using LayoutFn = void(__fastcall*)(cUI_Popup* popup);
     CreateGameWindowsFn g_origCreateGameWindows = nullptr;
-    ShowHelpFn g_origShowHelp = nullptr;
-    SetTextFn g_origSetText = nullptr;
-    SetTextFn g_origSetTextId = nullptr;
+    decltype(Addr::cUI_Manager_showHelp)::Ptr g_origShowHelp = nullptr;
+    decltype(Addr::cUI_Popup_setText)::Ptr g_origSetText = nullptr;
+    decltype(Addr::cUI_Popup_setTextId)::Ptr g_origSetTextId = nullptr;
     LayoutFn g_origPopupLayout = nullptr;
 
-    void* original(void* self, uintptr_t slot)
+    const cUI_Window2::Vtable& original(const cUI_Control2* self)
     {
-        void** table = *static_cast<void***>(self);
         const size_t n = g_vtableCount.load(std::memory_order_acquire);
         for (size_t i = 0; i < n; ++i)
         {
-            if (g_vtables[i].table == table)
+            if (g_vtables[i].table == self->vtable)
             {
-                return g_vtables[i].original[slot / 4];
+                return g_vtables[i].original;
             }
         }
-        return nullptr;     // unreachable: only patched vtables lead here
+        static const cUI_Window2::Vtable none{};
+        return none;    // unreachable: only patched vtables lead here
     }
 
-    // The frame `self` runs in; `what` names it for UiTrace (the UiManager member, or 1 for a popup).
-    bool frameOf(void* self, Frame& out, uintptr_t* what = nullptr)
+    // The frame `self` runs in; `what` names it for UiTrace (the window, or -1 for a popup).
+    bool frameOf(const cUI_Control2* self, Frame& out, int* what = nullptr)
     {
-        if (void* manager = *reinterpret_cast<void**>(Addr::g_pUiManager))
+        if (cUI_Manager* manager = cUI_Manager::instance())
         {
             for (size_t i = 0; i < std::size(kAnchors); ++i)
             {
-                if (member<void*>(manager, kAnchors[i].window) == self)
+                if (manager->window(kAnchors[i].window) == self)
                 {
                     out = g_frames[i];
-                    if (what) *what = kAnchors[i].window;
+                    if (what) *what = static_cast<int>(kAnchors[i].window);
                     return true;
                 }
             }
         }
-        if (*static_cast<void**>(self) != g_popupVtable)
+        if (self->vtable != g_popupVtable)
         {
             return false;
         }
@@ -150,15 +154,16 @@ namespace
             }
         }
         ReleaseSRWLockShared(&g_popupLock);
-        if (what) *what = 1;
+        if (what) *what = -1;
         return true;
     }
 
-    void traceRender(uintptr_t what, const char* slot)
+    void traceRender(int what, const char* slot)
     {
         if (UiCanvas::tracing())
         {
-            UiCanvas::trace(what == 1 ? Fmt::format("popup {}", slot) : Fmt::format("window +{:x} {}", what, slot));
+            UiCanvas::trace(what < 0 ? Fmt::format("popup {}", slot)
+                                     : Fmt::format("window +{:x} {}", offsetof(cUI_Manager, windows) + 4 * what, slot));
         }
     }
 
@@ -166,59 +171,42 @@ namespace
     int shiftX(int x, const Frame& to) { return static_cast<int>(std::lround(x + UiCanvas::frame().x - to.x)); }
     int shiftY(int y, const Frame& to) { return static_cast<int>(std::lround(y + UiCanvas::frame().y - to.y)); }
 
-    int* mouseCoords(void* event)
+    uint32_t __fastcall thunkEvent(cUI_Control2* self, void* edx, cEvent* event)
     {
-        const uintptr_t vtable = event ? *static_cast<uintptr_t*>(event) : 0;
-        if (vtable != Addr::cEventMouseDown_vtable && vtable != Addr::cEventMouseUp_vtable)
-        {
-            return nullptr;
-        }
-        return &member<int>(event, MouseEvent::x);
-    }
-
-    // thiscall targets are wrapped as fastcall with an unused EDX parameter.
-    using EventFn = uint32_t(__fastcall*)(void* self, void* edx, void* event);
-    using RenderFn = uint32_t(__fastcall*)(void* self, void* edx, void* device);
-    using InsideFn = uint32_t(__fastcall*)(void* self, void* edx, int x, int y);
-    using ShowFn = uint32_t(__fastcall*)(void* self, void* edx, uint32_t show);
-    using Render2Fn = uint32_t(__fastcall*)(void* self, void* edx, void* device, uint32_t a, uint32_t b);
-
-    uint32_t __fastcall thunkEvent(void* self, void* edx, void* event)
-    {
-        const auto orig = reinterpret_cast<EventFn>(original(self, UiWindowSlot::receiveEvent));
+        const auto orig = original(self).receiveEvent;
         Frame frame;
         if (!frameOf(self, frame) || frame == UiCanvas::frame())
         {
             return orig(self, edx, event);
         }
         // The event travels on to other windows afterwards: shift its position for this one only.
-        int* coords = mouseCoords(event);
+        cEventMouse* mouse = cEventMouse::of(event);
         int saved[2] = {};
-        if (coords)
+        if (mouse)
         {
-            saved[0] = coords[0];
-            saved[1] = coords[1];
-            coords[0] = shiftX(saved[0], frame);
-            coords[1] = shiftY(saved[1], frame);
+            saved[0] = mouse->x;
+            saved[1] = mouse->y;
+            mouse->x = shiftX(saved[0], frame);
+            mouse->y = shiftY(saved[1], frame);
         }
         uint32_t result;
         {
             UiCanvas::FrameScope scope{frame};
             result = orig(self, edx, event);
         }
-        if (coords)
+        if (mouse)
         {
-            coords[0] = saved[0];
-            coords[1] = saved[1];
+            mouse->x = saved[0];
+            mouse->y = saved[1];
         }
         return result;
     }
 
-    uint32_t __fastcall thunkRender(void* self, void* edx, void* device)
+    uint32_t __fastcall thunkRender(cUI_Control2* self, void* edx, IDirect3DDevice7* device)
     {
-        const auto orig = reinterpret_cast<RenderFn>(original(self, UiWindowSlot::render));
+        const auto orig = original(self).render;
         Frame frame;
-        uintptr_t what = 0;
+        int what = 0;
         if (!frameOf(self, frame, &what))
         {
             return orig(self, edx, device);
@@ -228,9 +216,9 @@ namespace
         return orig(self, edx, device);
     }
 
-    uint32_t __fastcall thunkInside(void* self, void* edx, int x, int y)
+    uint32_t __fastcall thunkInside(cUI_Control2* self, void* edx, int x, int y)
     {
-        const auto orig = reinterpret_cast<InsideFn>(original(self, UiWindowSlot::isInside));
+        const auto orig = original(self).isInside;
         Frame frame;
         if (!frameOf(self, frame) || frame == UiCanvas::frame())
         {
@@ -241,9 +229,9 @@ namespace
         return orig(self, edx, fx, fy);
     }
 
-    uint32_t __fastcall thunkShow(void* self, void* edx, uint32_t show)
+    uint32_t __fastcall thunkShow(cUI_Window2* self, void* edx, uint32_t show)
     {
-        const auto orig = reinterpret_cast<ShowFn>(original(self, UiWindowSlot::show));
+        const auto orig = original(self).show;
         Frame frame;
         if (!frameOf(self, frame))
         {
@@ -253,11 +241,11 @@ namespace
         return orig(self, edx, show);
     }
 
-    uint32_t __fastcall thunkRender2(void* self, void* edx, void* device, uint32_t a, uint32_t b)
+    uint32_t __fastcall thunkRender2(cUI_Window2* self, void* edx, IDirect3DDevice7* device, uint32_t a, uint32_t b)
     {
-        const auto orig = reinterpret_cast<Render2Fn>(original(self, UiWindowSlot::render2));
+        const auto orig = original(self).render2;
         Frame frame;
-        uintptr_t what = 0;
+        int what = 0;
         if (!frameOf(self, frame, &what))
         {
             return orig(self, edx, device, a, b);
@@ -275,9 +263,9 @@ namespace
 
     // Points the object's vtable slots at the thunks (once per vtable). A slot is only touched if it and every slot
     // before it hold code addresses: the slot after a vtable's last one is the next vtable's RTTI pointer (data).
-    void wrap(void* object, bool render2)
+    void wrap(cUI_Window2* object, bool render2)
     {
-        void** table = *static_cast<void***>(object);
+        const cUI_Control2::Vtable* table = object->vtable;
         std::lock_guard lock(g_patchMutex);
         const size_t n = g_vtableCount.load(std::memory_order_relaxed);
         for (size_t i = 0; i < n; ++i)
@@ -289,39 +277,40 @@ namespace
         }
         if (n == std::size(g_vtables))
         {
-            LOG("UI anchor: no room to wrap vtable {}", static_cast<void*>(table));
+            LOG("UI anchor: no room to wrap vtable {}", static_cast<const void*>(table));
             return;
         }
         Vtable& v = g_vtables[n];
         v.table = table;
-        size_t slots = 0;
-        while (slots < kSlotCount && isCode(table[slots]))
+        const auto* slots = reinterpret_cast<void* const*>(table);
+        size_t count = 0;
+        while (count < kSlotCount && isCode(slots[count]))
         {
-            v.original[slots] = table[slots];
-            ++slots;
+            ++count;
         }
-        struct Wrapped { uintptr_t slot; void* thunk; };
-        const Wrapped wrapped[] = {
-            {UiWindowSlot::receiveEvent, reinterpret_cast<void*>(&thunkEvent)},
-            {UiWindowSlot::render, reinterpret_cast<void*>(&thunkRender)},
-            {UiWindowSlot::isInside, reinterpret_cast<void*>(&thunkInside)},
-            {UiWindowSlot::show, reinterpret_cast<void*>(&thunkShow)},
-            {UiWindowSlot::render2, render2 ? reinterpret_cast<void*>(&thunkRender2) : nullptr},
-        };
+        std::memcpy(&v.original, table, count * sizeof(void*));
         // Publish the originals before any slot leads to a thunk.
         g_vtableCount.store(n + 1, std::memory_order_release);
-        int count = 0;
-        for (const Wrapped& w : wrapped)
-        {
-            if (w.thunk && w.slot / 4 < slots)
+        auto* game = const_cast<cUI_Window2::Vtable*>(static_cast<const cUI_Window2::Vtable*>(table));
+        int wrapped = 0;
+        const auto patch = [&](auto& slot, decltype(+slot) thunk) {
+            if (reinterpret_cast<uintptr_t>(&slot) - reinterpret_cast<uintptr_t>(game) < count * sizeof(void*))
             {
-                count += Patch::value(reinterpret_cast<uintptr_t>(&table[w.slot / 4]), w.thunk) ? 1 : 0;
+                wrapped += Patch::value(reinterpret_cast<uintptr_t>(&slot), thunk) ? 1 : 0;
             }
+        };
+        patch(game->receiveEvent, &thunkEvent);
+        patch(game->render, &thunkRender);
+        patch(game->isInside, &thunkInside);
+        patch(game->show, &thunkShow);
+        if (render2)
+        {
+            patch(game->render2, &thunkRender2);
         }
-        LOG("UI anchor: vtable {} ({} slots) wrapped in {} places", static_cast<void*>(table), slots, count);
+        LOG("UI anchor: vtable {} ({} slots) wrapped in {} places", static_cast<const void*>(table), count, wrapped);
     }
 
-    const Frame* anchorFrame(uintptr_t window)
+    const Frame* anchorFrame(W window)
     {
         for (size_t i = 0; i < std::size(kAnchors); ++i)
         {
@@ -337,52 +326,50 @@ namespace
     // be covered by it. Moved within the taskbar's frame to where the stats frame puts that spot, the taskbar draws,
     // highlights and hit-tests it there. Only a button still at its original position is moved (createGameWindows
     // runs again for every game).
-    void moveLevelUpButton(void* manager)
+    void moveLevelUpButton(cUI_Manager* manager)
     {
-        void* taskbar = member<void*>(manager, UiManager::taskbar);
-        const Frame* from = anchorFrame(UiManager::taskbar);
-        const Frame* to = anchorFrame(UiManager::stats);
+        cUI_Taskbar2* taskbar = manager->taskbar();
+        const Frame* from = anchorFrame(W::taskbar);
+        const Frame* to = anchorFrame(W::stats);
         if (!taskbar || !from || !to)
         {
             return;
         }
-        void* button = static_cast<uint8_t*>(taskbar) + Taskbar::levelUpButton;
-        auto& x = member<int>(button, UiControl::x);
-        auto& y = member<int>(button, UiControl::y);
-        if (x != Taskbar::levelUpX || y != Taskbar::levelUpY)
+        cUI_Button2& button = taskbar->levelUpButton;
+        if (button.x != cUI_Taskbar2::levelUpX || button.y != cUI_Taskbar2::levelUpY)
         {
             return;
         }
-        x += static_cast<int>(std::lround(to->x - from->x));
-        y += static_cast<int>(std::lround(to->y - from->y));
-        LOG("UI anchor: taskbar level-up button moved to {},{} in the taskbar's frame", x, y);
+        button.x += static_cast<int>(std::lround(to->x - from->x));
+        button.y += static_cast<int>(std::lround(to->y - from->y));
+        LOG("UI anchor: taskbar level-up button moved to {},{} in the taskbar's frame", button.x, button.y);
     }
 
-    void __fastcall hookCreateGameWindows(void* manager)
+    void __fastcall hookCreateGameWindows(cUI_Manager* manager)
     {
         g_origCreateGameWindows(manager);
         for (const Anchor& a : kAnchors)
         {
-            if (void* window = member<void*>(manager, a.window))
+            if (cUI_Window2* window = manager->window(a.window))
             {
                 wrap(window, a.render2);
             }
         }
         moveLevelUpButton(manager);
         // The popups exist since the manager's constructor.
-        for (auto** p = member<void**>(manager, UiManager::popupsBegin); p != member<void**>(manager, UiManager::popupsEnd); ++p)
+        for (cUI_Popup* popup : manager->popups)
         {
-            if (*p)
+            if (popup)
             {
-                g_popupVtable = *static_cast<void**>(*p);
-                wrap(*p, false);
+                g_popupVtable = popup->vtable;
+                wrap(popup, false);
                 break;
             }
         }
     }
 
     // Popups may reach past their window's 1024x768 rect: the frame is kept unconfined.
-    void setPopupFrame(void* popup, const Frame& frame)
+    void setPopupFrame(const cUI_Popup* popup, const Frame& frame)
     {
         const bool canvas = frame.x == 0.0f && frame.y == 0.0f;
         AcquireSRWLockExclusive(&g_popupLock);
@@ -406,47 +393,47 @@ namespace
         ReleaseSRWLockExclusive(&g_popupLock);
     }
 
-    void notePopup(void* popup)
+    void notePopup(const cUI_Popup* popup)
     {
         if (UiCanvas::tracingPopups())
         {
-            UiCanvas::trace(Fmt::format("popup {} text set", popup));
+            UiCanvas::trace(Fmt::format("popup {} text set", static_cast<const void*>(popup)));
         }
         setPopupFrame(popup, UiCanvas::frame());
     }
 
     // Runs in the canvas (the manager's own drawing), so the texts it sets leave its popups there; the entries that
     // explain a window move to that window's frame.
-    void __fastcall hookShowHelp(void* manager, void* edx, void* device, uint32_t screen)
+    void __fastcall hookShowHelp(cUI_Manager* manager, void* edx, IDirect3DDevice7* device, uint32_t screen)
     {
-        const bool help = member<uint32_t>(manager, UiManager::flags) & UiManager::helpScreen;
+        const bool help = manager->flags & cUI_Manager::helpScreen;
         g_origShowHelp(manager, edx, device, screen);
         const size_t index = static_cast<size_t>(static_cast<int16_t>(screen) - 1);
         if (!help || index >= std::size(kHelpWindows))
         {
             return;
         }
-        void** popups = member<void**>(manager, UiManager::popupsBegin);
-        const size_t count = member<void**>(manager, UiManager::popupsEnd) - popups;
+        const Vector<cUI_Popup*>& popups = manager->popups;
         for (size_t i = 0; i < std::size(kHelpWindows[index]); ++i)
         {
-            const uintptr_t window = kHelpWindows[index][i];
-            const uint16_t slot = member<uint16_t>(manager, UiManager::helpPopups + 2 * i);
-            const Frame* frame = window == kScreenCorner ? &g_cornerFrame : anchorFrame(window);
-            if (window && frame && slot < count && popups[slot])
+            const HelpPlace place = kHelpWindows[index][i];
+            const uint16_t slot = manager->helpPopups[i];
+            const Frame* frame = place.value == kScreenCorner.value ? &g_cornerFrame
+                : place.value >= 2 ? anchorFrame(static_cast<W>(place.value - 2)) : nullptr;
+            if (frame && slot < popups.size() && popups[slot])
             {
                 setPopupFrame(popups[slot], *frame);
             }
         }
     }
 
-    uint32_t __fastcall hookSetText(void* self, void* edx, uint32_t a, uint32_t b, uint32_t c)
+    uint32_t __fastcall hookSetText(cUI_Popup* self, void* edx, uint32_t a, uint32_t b, uint32_t c)
     {
         notePopup(self);
         return g_origSetText(self, edx, a, b, c);
     }
 
-    uint32_t __fastcall hookSetTextId(void* self, void* edx, uint32_t a, uint32_t b, uint32_t c)
+    uint32_t __fastcall hookSetTextId(cUI_Popup* self, void* edx, uint32_t a, uint32_t b, uint32_t c)
     {
         notePopup(self);
         return g_origSetTextId(self, edx, a, b, c);
@@ -455,25 +442,25 @@ namespace
     // The game keeps popups inside the 1024x768 screen (or centers them on it); keep them inside the whole screen.
     // The layout runs in the popup's render, in the popup's (unconfined) frame; popups drawn before the game windows
     // exist (menus) are still confined to the canvas and keep the game's layout.
-    void __fastcall hookPopupLayout(void* popup)
+    void __fastcall hookPopupLayout(cUI_Popup* popup)
     {
         if (UiCanvas::frame().confine)
         {
             g_origPopupLayout(popup);
             return;
         }
-        auto& flags = member<uint32_t>(popup, Popup::flags);
-        const uint32_t own = Popup::clampToScreen | Popup::centerOnScreen | Popup::keepChildren;
+        uint32_t& flags = popup->popupFlags;
+        const uint32_t own = cUI_Popup::clampToScreen | cUI_Popup::centerOnScreen | cUI_Popup::keepChildren;
         const uint32_t saved = flags;
-        flags = (saved & ~(Popup::clampToScreen | Popup::centerOnScreen)) | Popup::keepChildren;
+        flags = (saved & ~(cUI_Popup::clampToScreen | cUI_Popup::centerOnScreen)) | cUI_Popup::keepChildren;
         g_origPopupLayout(popup);
-        auto& x = member<int>(popup, UiControl::x);
-        auto& y = member<int>(popup, UiControl::y);
-        const int w = member<int16_t>(popup, UiControl::width), h = member<int16_t>(popup, UiControl::height);
+        int& x = popup->x;
+        int& y = popup->y;
+        const int w = popup->width, h = popup->height;
         const UiCanvas::Bounds screen = UiCanvas::screenBounds();
         const int left = static_cast<int>(std::ceil(screen.left)), top = static_cast<int>(std::ceil(screen.top));
         const int right = static_cast<int>(std::floor(screen.right)), bottom = static_cast<int>(std::floor(screen.bottom));
-        if (saved & Popup::clampToScreen)
+        if (saved & cUI_Popup::clampToScreen)
         {
             // Where the game would push the popup against an edge of its 1024x768 screen (the effects list is
             // placed at 16,16 to sit in the top-left corner), it goes against that edge of the real screen.
@@ -484,7 +471,7 @@ namespace
             x = std::max(std::min(x, right - 32 - w), left + 16);
             y = std::max(std::min(y, bottom - 32 - h), top + 16);
         }
-        if (saved & Popup::centerOnScreen)
+        if (saved & cUI_Popup::centerOnScreen)
         {
             x = (left + right) / 2 - w / 2;
             y = (top + bottom) / 2 - h / 2;
@@ -492,11 +479,12 @@ namespace
         flags = (flags & ~own) | (saved & own);
         if (UiCanvas::tracingPopups())
         {
-            UiCanvas::trace(Fmt::format("popup {} laid out at {},{} size {}x{} flags {:x}", popup, x, y, w, h, saved));
+            UiCanvas::trace(Fmt::format("popup {} laid out at {},{} size {}x{} flags {:x}", static_cast<const void*>(popup),
+                x, y, w, h, saved));
         }
-        if (!(saved & Popup::keepChildren))
+        if (!(saved & cUI_Popup::keepChildren))
         {
-            Addr::cUI_Window2_layoutChildren(popup);
+            popup->layoutChildren();
         }
     }
 
@@ -546,7 +534,7 @@ void UiAnchor::install()
     Patch::hook(g_origPopupLayout, Addr::cUI_Popup_layout, &hookPopupLayout, "cUI_Popup::layout");
 }
 
-bool UiAnchor::frame(void* window, UiCanvas::Frame& out)
+bool UiAnchor::frame(cUI_Window2* window, UiCanvas::Frame& out)
 {
     return window && frameOf(window, out);
 }

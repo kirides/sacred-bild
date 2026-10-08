@@ -14,10 +14,11 @@
 #include "config/display.h"
 #include "config/render.h"
 #include "log.h"
-#include "mem.h"
 #include "patch.h"
 #include "profiler.h"
 #include "sacred/engine.h"
+#include "sacred/render.h"
+#include "sacred/ui.h"
 
 #include <windows.h>
 #include <intrin.h>
@@ -30,23 +31,17 @@ namespace
 {
     using namespace Sacred;
 
-    using Mem::member;
-
-    // thiscall targets are hooked as fastcall with an unused EDX parameter.
-    using InitFn = uint32_t(__fastcall*)(void* self, void* edx, void* devices, void* deviceDesc, void* mode);
-    using FlipFn = int(__fastcall*)(void* self, void* edx);
-    using LockBackFn = void*(__fastcall*)(void* self, void* edx, void* desc);
-    using RenderFn = void(__fastcall*)(void* self, void* edx, void* device);
+    // Hooked without EDX: it is a plain fastcall (engine) in the exe.
     using ThreadRunFn = void(__fastcall*)(cEngine* engine);
 
-    InitFn g_origInit = nullptr;
-    FlipFn g_origFlip = nullptr;
-    LockBackFn g_origLockBack = nullptr;
-    RenderFn g_origWorldRender = nullptr;
-    RenderFn g_origUiRender = nullptr;
+    decltype(Addr::dxDriver7_init)::Ptr g_origInit = nullptr;
+    decltype(Addr::dxDriver7_flip)::Ptr g_origFlip = nullptr;
+    decltype(Addr::dxDriver7_lockBack)::Ptr g_origLockBack = nullptr;
+    decltype(Addr::cWorldView0_render)::Ptr g_origWorldRender = nullptr;
+    decltype(Addr::cUI_Manager_render)::Ptr g_origUiRender = nullptr;
     ThreadRunFn g_origRenderThreadRun = nullptr;
     cEngine* volatile g_engine = nullptr;
-    void* volatile g_dxDriver = nullptr;
+    dxDriver7* volatile g_dxDriver = nullptr;
 
     // Logs changes of the engine's fade/loading flags and the UI manager's mode (once per frame, on change).
     void logGameState()
@@ -54,15 +49,16 @@ namespace
         static uint32_t lastEngine = ~0u, lastUi = ~0u;
         cEngine* engine = g_engine;
         const uint32_t engineFlags = engine ? engine->flags & 0xF0000 : 0;
-        void* ui = *reinterpret_cast<void**>(Addr::g_pUiManager);
-        const uint32_t uiFlags = ui ? member<uint32_t>(ui, UiManager::flags) & 0x7F : 0;
+        const cUI_Manager* ui = cUI_Manager::instance();
+        const uint32_t uiFlags = ui ? ui->flags & 0x7F : 0;
         if (engineFlags != lastEngine || uiFlags != lastUi)
         {
             lastEngine = engineFlags;
             lastUi = uiFlags;
             LOG("State: engine {}{}{}{} | ui flags {:02x}{}", engineFlags & cEngine::loading ? "loading " : "",
                 engineFlags & cEngine::fadeOut ? "fade-out " : "", engineFlags & cEngine::fadeIn ? "fade-in " : "",
-                engineFlags & cEngine::black ? "black " : "", uiFlags, uiFlags & 0x10 ? " cinematic" : "");
+                engineFlags & cEngine::black ? "black " : "", uiFlags,
+                uiFlags & cUI_Manager::cinematic ? " cinematic" : "");
         }
     }
 
@@ -155,22 +151,21 @@ namespace
         }
     }
 
-    uint32_t __fastcall hookInit(void* self, void* edx, void* devices, void* deviceDesc, void* mode)
+    uint32_t __fastcall hookInit(dxDriver7* self, void* edx, void* devices, void* deviceDesc, void* mode)
     {
         const uint32_t ok = g_origInit(self, edx, devices, deviceDesc, mode);
         g_dxDriver = self;
-        auto& device = member<IDirect3DDevice7*>(self, DxDriver::device);
-        LOG("dxDriver7::init -> {} ({}x{} {}bpp, {}, device {})", ok & 0xFF, member<uint16_t>(self, DxDriver::width),
-            member<uint16_t>(self, DxDriver::height), member<int>(self, DxDriver::bpp),
-            member<int>(self, DxDriver::windowed) == 1 ? "fullscreen" : "windowed", static_cast<void*>(device));
+        IDirect3DDevice7*& device = self->device;
+        LOG("dxDriver7::init -> {} ({}x{} {}bpp, {}, device {})", ok & 0xFF, self->width, self->height, self->bpp,
+            self->windowed == 1 ? "fullscreen" : "windowed", static_cast<void*>(device));
         if ((ok & 0xFF) && device && (Config::debug.d3dStats || Config::render.batch || UiCanvas::enabled()))
         {
-            device = DeviceProxy::wrap(device, member<IDirectDraw7*>(self, DxDriver::ddraw));
+            device = DeviceProxy::wrap(device, self->ddraw);
         }
         return ok;
     }
 
-    int __fastcall hookFlip(void* self, void* edx)
+    int __fastcall hookFlip(dxDriver7* self, void* edx)
     {
         // Menus flip from the UI thread, the game world from the engine render thread.
         static DWORD lastThread = 0;
@@ -192,10 +187,10 @@ namespace
             hr = g_origFlip(self, edx);
         }
         // Texture memory the texture manager loaded during this frame.
-        if (void* textures = *reinterpret_cast<void**>(Addr::g_pTextureManager))
+        if (cTextureManager* textures = cTextureManager::instance())
         {
             static uint32_t lastUsed = 0;
-            const uint32_t used = member<uint32_t>(textures, TextureManager::usedBytes);
+            const uint32_t used = textures->usedBytes;
             if (used > lastUsed)
             {
                 D3DStats::count(D3DStats::CTextureKB, (used - lastUsed) >> 10);
@@ -221,16 +216,16 @@ namespace
         if (Config::debug.d3dStats && static_cast<int>(GetTickCount() - nextTextureLog) >= 0)
         {
             nextTextureLog = GetTickCount() + 5000;
-            if (void* textures = *reinterpret_cast<void**>(Addr::g_pTextureManager))
+            if (cTextureManager* textures = cTextureManager::instance())
             {
-                LOG("Textures: {} / {} MB loaded | {}", member<uint32_t>(textures, TextureManager::usedBytes) >> 20,
-                    member<uint32_t>(textures, TextureManager::budgetBytes) >> 20, D3DStats::memorySummary());
+                LOG("Textures: {} / {} MB loaded | {}", textures->usedBytes >> 20, textures->budgetBytes >> 20,
+                    D3DStats::memorySummary());
             }
         }
         return hr;
     }
 
-    void* __fastcall hookLockBack(void* self, void* edx, void* desc)
+    void* __fastcall hookLockBack(dxDriver7* self, void* edx, void* desc)
     {
         D3DStats::count(D3DStats::CLockBack);
         D3DStats::Scope s{D3DStats::TLockBack};
@@ -253,7 +248,7 @@ namespace
         return bits;
     }
 
-    void __fastcall hookWorldRender(void* self, void* edx, void* device)
+    void __fastcall hookWorldRender(cWorldView* self, void* edx, IDirect3DDevice7* device)
     {
         D3DStats::Scope s{D3DStats::TWorld};
         D3DStats::PassScope pass{D3DStats::PWorld};
@@ -262,7 +257,7 @@ namespace
         if (Resolution::active() && device)
         {
             Resolution::refresh();
-            static_cast<IDirect3DDevice7*>(device)->Clear(0, nullptr, D3DCLEAR_TARGET, 0xFF000000, 1.0f, 0);
+            device->Clear(0, nullptr, D3DCLEAR_TARGET, 0xFF000000, 1.0f, 0);
         }
         DeviceProxy* proxy = DeviceProxy::instance();
         const int64_t proxyTime = D3DStats::total(D3DStats::TProxy);
@@ -279,7 +274,7 @@ namespace
         D3DStats::addTime(D3DStats::TWorldProxy, D3DStats::total(D3DStats::TProxy) - proxyTime);
     }
 
-    void __fastcall hookUiRender(void* self, void* edx, void* device)
+    void __fastcall hookUiRender(cUI_Manager* self, void* edx, IDirect3DDevice7* device)
     {
         D3DStats::Scope s{D3DStats::TUi};
         // The original screen showed nothing but a full-screen window; keep the world beside the canvas hidden.
@@ -300,7 +295,7 @@ namespace
             }
             if (count)
             {
-                static_cast<IDirect3DDevice7*>(device)->Clear(count, used, D3DCLEAR_TARGET, 0xFF000000, 1.0f, 0);
+                device->Clear(count, used, D3DCLEAR_TARGET, 0xFF000000, 1.0f, 0);
             }
         }
         UiCanvas::Scope ui;
@@ -310,7 +305,7 @@ namespace
 
 bool FrameHooks::flip()
 {
-    void* dxDriver = g_dxDriver;
+    dxDriver7* dxDriver = g_dxDriver;
     if (!dxDriver)
     {
         return false;
@@ -319,7 +314,7 @@ bool FrameHooks::flip()
     return true;
 }
 
-void* FrameHooks::dxDriver()
+dxDriver7* FrameHooks::dxDriver()
 {
     return g_dxDriver;
 }

@@ -1,12 +1,12 @@
 #include "game/resolution.h"
 #include "game/focus.h"
-#include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
 #include "config/ddraw.h"
 #include "config/display.h"
 #include "config/render.h"
 #include "log.h"
 #include "patch.h"
+#include "sacred/world.h"
 #include "sig.h"
 
 #include <windows.h>
@@ -62,8 +62,7 @@ namespace
     float g_halfHF = 384.0f;
     float g_cullHF = 818.0f;
     float g_cullH2F = 888.0f;
-    // g_unzoomedProjection (+0x00 = _11, +0x14 = _22) is built from +-267/+-200 and never patched.
-    constexpr uintptr_t kUnzoomed22 = 0x14;
+    // g_unzoomedProjection (its _11 and _22) is built from +-267/+-200 and never patched.
     float g_unzXF = 2.0f / 534.0f;
     float g_unzYF = 2.0f / 400.0f;
     double g_projNegW = -267.0;
@@ -166,8 +165,7 @@ namespace
     }
 
     // cDxDevices::findMode(w, h, bpp, flags) returns a 0x84-byte mode record (DDSURFACEDESC2 + extras).
-    using FindModeFn = void*(__fastcall*)(void* self, void* edx, int w, int h, int bpp, int flags);
-    FindModeFn g_origFindMode = nullptr;
+    decltype(Addr::cDxDevices_findMode)::Ptr g_origFindMode = nullptr;
     uint8_t g_syntheticMode[0x84];
 
     void* __fastcall hookFindMode(void* self, void* edx, int w, int h, int bpp, int flags)
@@ -336,7 +334,7 @@ namespace
 
     bool isUnzoomed(const float* proj)
     {
-        return proj == reinterpret_cast<const float*>(Addr::g_unzoomedProjection);
+        return proj == &(*Addr::g_unzoomedProjection)[0][0];
     }
 
     float* __cdecl hookPixelsToWorld(float* out, const float* p, const float* m, const float* proj)
@@ -374,21 +372,16 @@ namespace
     // each part sets is summed up into the one the whole list gives. (Drawing them early too drew the ground of
     // later rows over them and left the ambience to the last part.) A row adds at most one entry per tile column
     // (~92 at 3840 wide, zoomed out).
-    using TileRowFn = void(__fastcall*)(void* self, void* edx, void* device, void* rowPos, int detail);
-    using DeviceFn = void(__fastcall*)(void* self, void* edx, void* device);
     using AmbienceFn = void(__fastcall*)(void* sound, void* edx, uint32_t count, int32_t x, int32_t y);
-    TileRowFn g_origTileRow = nullptr;
-    DeviceFn g_flushBatcher = nullptr;
-    DeviceFn g_drawTileLayers = nullptr;
-    DeviceFn g_drawWaterTiles = nullptr;
-    DeviceFn g_origDrawWaterTiles = nullptr;
+    decltype(Addr::cWorldView_renderTileRow)::Ptr g_origTileRow = nullptr;
+    decltype(Addr::cWorldView_drawWaterTiles)::Ptr g_origDrawWaterTiles = nullptr;
     AmbienceFn g_origAmbience = nullptr;
     constexpr uint32_t kRowMargin = 256;
 
     struct WaterList
     {
-        void* view = nullptr;           // the view whose row walk started last (cleared there)
-        std::vector<uint8_t> entries;   // whole entries moved out of its array, in walk order
+        cWorldView* view = nullptr;     // the view whose row walk started last (cleared there)
+        std::vector<WaterTile> entries; // moved out of its array, in walk order
         uint32_t most = 0;              // most tiles in one frame so far
         uint32_t logged = 0;            // the most logged last
         uint32_t logs = 0;
@@ -424,19 +417,17 @@ namespace
         }
     }
 
-    void __fastcall hookDrawWaterTiles(void* self, void* edx, void* device)
+    void __fastcall hookDrawWaterTiles(cWorldView* self, void* edx, IDirect3DDevice7* device)
     {
         if (self != g_water.view || g_water.entries.empty())
         {
             g_origDrawWaterTiles(self, edx, device);
             return;
         }
-        auto* base = static_cast<uint8_t*>(self);
-        auto& count = *reinterpret_cast<uint32_t*>(base + WorldView::waterTileCount);
-        uint8_t* array = base + WorldView::waterTiles;
+        uint32_t& count = self->waterTileCount;
         auto& entries = g_water.entries;
-        entries.insert(entries.end(), array, array + count * WorldView::waterTileSize);
-        const auto total = static_cast<uint32_t>(entries.size() / WorldView::waterTileSize);
+        entries.insert(entries.end(), self->waterTiles, self->waterTiles + count);
+        const auto total = static_cast<uint32_t>(entries.size());
         if (total > g_water.most)
         {
             // Logged when the most grows by a quarter: walking along a coast it grows a few tiles at a time.
@@ -445,17 +436,17 @@ namespace
             if (log && g_water.logs < 10)
             {
                 ++g_water.logs;
-                LOG("Water tiles: {} in one frame (the game's list holds {})", total, WorldView::waterTileCapacity);
+                LOG("Water tiles: {} in one frame (the game's list holds {})", total, cWorldView::waterTileCapacity);
                 g_water.logged = total;
             }
         }
 
         g_ambience = {};
         g_ambience.capturing = true;
-        for (uint32_t first = 0; first < total; first += WorldView::waterTileCapacity)
+        for (uint32_t first = 0; first < total; first += cWorldView::waterTileCapacity)
         {
-            const uint32_t n = std::min(WorldView::waterTileCapacity, total - first);
-            std::memcpy(array, entries.data() + first * WorldView::waterTileSize, n * WorldView::waterTileSize);
+            const uint32_t n = std::min(cWorldView::waterTileCapacity, total - first);
+            std::copy_n(entries.data() + first, n, self->waterTiles);
             count = n;
             g_ambience.part = n;
             g_ambience.tiles += n;
@@ -497,7 +488,7 @@ namespace
             return 0;
         }
         uintptr_t target = 0;
-        for (uintptr_t offset : WorldView::drawWaterTilesAmbienceCalls)
+        for (uintptr_t offset : cWorldView::drawWaterTilesAmbienceCalls)
         {
             const uintptr_t t = callTarget(Addr::cWorldView_drawWaterTiles + offset);
             if (!t || (target && t != target))
@@ -517,20 +508,11 @@ namespace
     // negative tile index, and renderTileRow reads before the tile table (crash at 0x62B093). Rows that run out of
     // the loaded sectors on the other side step into wrong sectors. Instead, every row gets its position in the
     // 192x192 loaded tiles from one anchor per frame and is clipped to them.
-    struct RowPos
-    {
-        float x, y;
-        int16_t tile;       // row * 64 + column within the sector
-        int16_t sector;     // 3x3 grid: row * 3 + column
-        int16_t steps;      // rows until the walk leaves the sector (cWorldView0_render only)
-        int16_t pad;
-    };
-
     enum class Walk { Off, Clip, Skip };
 
     struct RowWalkState
     {
-        void* view = nullptr;
+        cWorldView* view = nullptr;
         Walk mode = Walk::Off;
         bool cornerInside = false;
         int row = 0, col = 0;   // loaded-tile position of the even start: +1/+1 per row down, -1/+1 per tile right
@@ -541,13 +523,7 @@ namespace
     uint32_t g_walkStateLogs = 0;       // logged changes into an outside corner
     uint32_t g_walkMismatchLogs = 0;    // logged disagreements with the game's walk (would be bugs here)
 
-    using InitRowWalkFn = void(__fastcall*)(void* self, void* edx, const int32_t* pos, void* map);
-    InitRowWalkFn g_origInitRowWalk = nullptr;
-
-    RowPos* rowPos(void* view, uintptr_t offset)
-    {
-        return reinterpret_cast<RowPos*>(static_cast<uint8_t*>(view) + offset);
-    }
+    decltype(Addr::cWorldView_initRowWalk)::Ptr g_origInitRowWalk = nullptr;
 
     bool loadedTile(const RowPos& p, int& row, int& col)
     {
@@ -565,11 +541,11 @@ namespace
         return a / b - ((a % b != 0) && ((a < 0) != (b < 0)) ? 1 : 0);
     }
 
-    void __fastcall hookInitRowWalk(void* self, void* edx, const int32_t* pos, void* map)
+    void __fastcall hookInitRowWalk(cWorldView* self, void* edx, const int32_t* pos, cMapData* map)
     {
         g_origInitRowWalk(self, edx, pos, map);
-        RowPos* even = rowPos(self, WorldView::rowEven);
-        RowPos* odd = rowPos(self, WorldView::rowOdd);
+        RowPos* even = &self->rowEven;
+        RowPos* odd = &self->rowOdd;
         g_walk.view = self;
         g_walk.rows[0] = 0;
         g_walk.rows[1] = 0;
@@ -583,8 +559,8 @@ namespace
         // Look up a point next to the camera (always in the middle sector) and step back to the corner in whole
         // tiles: (96, 0) on screen is one tile right (row - 1, column + 1), (0, 48) one row down (+1, +1); both keep
         // the tile snapping of initRowWalk. Done every frame so a disagreement with the game's own corner shows up.
-        const int a = floorDiv(*reinterpret_cast<const int32_t*>(Addr::g_viewCameraX) - pos[1], 96);
-        const int b = floorDiv(*reinterpret_cast<const int32_t*>(Addr::g_viewCameraY) - pos[2], 48);
+        const int a = floorDiv(*Addr::g_viewCameraX - pos[1], 96);
+        const int b = floorDiv(*Addr::g_viewCameraY - pos[2], 48);
         const RowPos saved[2] = {*even, *odd};
         const int32_t probe[3] = {pos[0], pos[1] + a * 96, pos[2] + b * 48};
         g_origInitRowWalk(self, edx, probe, map);
@@ -622,12 +598,12 @@ namespace
     }
 
     // Draws the part of walk row k that lies in the loaded sectors.
-    void renderRowClipped(void* self, void* edx, void* device, RowPos* pos, int detail, int odd, int k)
+    void renderRowClipped(cWorldView* self, void* edx, IDirect3DDevice7* device, RowPos* pos, int detail, int odd,
+        int k)
     {
-        auto* base = static_cast<uint8_t*>(self);
         const int row = g_walk.row + k;
         const int col = g_walk.col + k + odd;
-        auto& length = *reinterpret_cast<int32_t*>(base + WorldView::rowLength);
+        int32_t& length = self->rowLength;
         const int32_t n0 = length;
         // Tile j of the row is (row - j, col + j).
         const int first = std::max({0, row - 191, -col});
@@ -664,8 +640,8 @@ namespace
         }
         // Ground is drawn for columns edgeLeft - 1 .. length - edgeRight + 1 (the rest are off-screen margins);
         // keep those columns where they were in the full row.
-        auto& edgeLeft = *reinterpret_cast<int32_t*>(base + WorldView::rowEdgeLeft);
-        auto& edgeRight = *reinterpret_cast<int32_t*>(base + WorldView::rowEdgeRight);
+        int32_t& edgeLeft = self->rowEdgeLeft;
+        int32_t& edgeRight = self->rowEdgeRight;
         const int32_t left0 = edgeLeft;
         const int32_t right0 = edgeRight;
         const int32_t n = last - first + 1;
@@ -678,34 +654,30 @@ namespace
         edgeRight = right0;
     }
 
-    void __fastcall hookTileRow(void* self, void* edx, void* device, void* rowPosArg, int detail)
+    void __fastcall hookTileRow(cWorldView* self, void* edx, IDirect3DDevice7* device, RowPos* pos, int detail)
     {
-        auto* base = static_cast<uint8_t*>(self);
-        auto& layers = *reinterpret_cast<uint32_t*>(base + WorldView::layeredTileCount);
-        auto& water = *reinterpret_cast<uint32_t*>(base + WorldView::waterTileCount);
+        uint32_t& layers = self->layeredTileCount;
+        uint32_t& water = self->waterTileCount;
         const bool waterList = self == g_water.view;
-        if (waterList && water + kRowMargin > WorldView::waterTileCapacity)
+        if (waterList && water + kRowMargin > cWorldView::waterTileCapacity)
         {
-            const uint8_t* array = base + WorldView::waterTiles;
-            g_water.entries.insert(g_water.entries.end(), array, array + water * WorldView::waterTileSize);
+            g_water.entries.insert(g_water.entries.end(), self->waterTiles, self->waterTiles + water);
             water = 0;
         }
-        if (layers + kRowMargin > WorldView::layeredTileCapacity || water + kRowMargin > WorldView::waterTileCapacity)
+        if (layers + kRowMargin > cWorldView::layeredTileCapacity || water + kRowMargin > cWorldView::waterTileCapacity)
         {
-            g_flushBatcher(base + WorldView::quadBatcher, nullptr, device);
-            g_drawTileLayers(self, nullptr, device);
+            self->quadBatcher.flush(device);
+            self->drawTileLayers(device);
             layers = 0;
             if (water && !waterList)
             {
-                g_drawWaterTiles(self, nullptr, device);
+                self->drawWaterTiles(device);
                 water = 0;
             }
         }
-        auto* pos = static_cast<RowPos*>(rowPosArg);
-        if (self == g_walk.view && g_walk.mode != Walk::Off &&
-            (pos == rowPos(self, WorldView::rowEven) || pos == rowPos(self, WorldView::rowOdd)))
+        if (self == g_walk.view && g_walk.mode != Walk::Off && (pos == &self->rowEven || pos == &self->rowOdd))
         {
-            const int odd = pos == rowPos(self, WorldView::rowOdd) ? 1 : 0;
+            const int odd = pos == &self->rowOdd ? 1 : 0;
             const int k = g_walk.rows[odd]++;
             if (g_walk.mode == Walk::Clip)
             {
@@ -713,13 +685,12 @@ namespace
             }
             return;
         }
-        g_origTileRow(self, edx, device, rowPosArg, detail);
+        g_origTileRow(self, edx, device, pos, detail);
     }
 
-    using TextureInitFn = uint32_t(__fastcall*)(void* self, void* edx, uint32_t budget);
-    TextureInitFn g_origTextureInit = nullptr;
+    decltype(Addr::cTextureManager_init)::Ptr g_origTextureInit = nullptr;
 
-    uint32_t __fastcall hookTextureInit(void* self, void* edx, uint32_t budget)
+    uint32_t __fastcall hookTextureInit(cTextureManager* self, void* edx, uint32_t budget)
     {
         const uint32_t wanted = Config::render.textureBudgetMB > 0 ? static_cast<uint32_t>(Config::render.textureBudgetMB) << 20
                                                              : std::max<uint32_t>(budget, 256u << 20);
@@ -727,8 +698,7 @@ namespace
         return g_origTextureInit(self, edx, wanted);
     }
 
-    using LoadingScreenFn = void(__fastcall*)(void* self, void* edx, uint32_t progress, const char* text);
-    LoadingScreenFn g_origLoadingScreen = nullptr;
+    decltype(Addr::dxDriver7_drawLoadingScreen)::Ptr g_origLoadingScreen = nullptr;
 
     // The loading screen draws with GDI into the back buffer and flips (only when its progress bar moved). With the
     // UI canvas the game draws it into a 1024x768 surface in place of the back buffer; Resolution::beforeFlip scales
@@ -737,18 +707,13 @@ namespace
     bool g_loadingCanvasFailed = false;
     thread_local IDirectDrawSurface7* t_loadingBack = nullptr;     // the back buffer while the canvas stands in
 
-    IDirectDrawSurface7*& backBuffer(void* dxDriver)
-    {
-        return *reinterpret_cast<IDirectDrawSurface7**>(static_cast<uint8_t*>(dxDriver) + DxDriver::back);
-    }
-
-    IDirectDrawSurface7* loadingCanvas(void* dxDriver)
+    IDirectDrawSurface7* loadingCanvas(dxDriver7* dxDriver)
     {
         if (g_loadingCanvas || g_loadingCanvasFailed)
         {
             return g_loadingCanvas;
         }
-        auto* ddraw = *reinterpret_cast<IDirectDraw7**>(static_cast<uint8_t*>(dxDriver) + DxDriver::ddraw);
+        IDirectDraw7* ddraw = dxDriver->ddraw;
         DDSURFACEDESC2 desc = {};
         desc.dwSize = sizeof(desc);
         desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
@@ -765,9 +730,9 @@ namespace
         return g_loadingCanvas;
     }
 
-    void __fastcall hookLoadingScreen(void* self, void* edx, uint32_t progress, const char* text)
+    void __fastcall hookLoadingScreen(dxDriver7* self, void* edx, uint32_t progress, const char* text)
     {
-        IDirectDrawSurface7*& back = backBuffer(self);
+        IDirectDrawSurface7*& back = self->back;
         if (IDirectDrawSurface7* canvas = back && UiCanvas::enabled() ? loadingCanvas(self) : nullptr)
         {
             t_loadingBack = back;
@@ -839,15 +804,15 @@ bool Resolution::active() { return g_width != 1024 || g_height != 768; }
 
 void Resolution::refresh()
 {
-    const float m11 = *reinterpret_cast<const float*>(Addr::g_unzoomedProjection);
-    const float m22 = *reinterpret_cast<const float*>(Addr::g_unzoomedProjection + kUnzoomed22);
+    const float m11 = (*Addr::g_unzoomedProjection)[0][0];
+    const float m22 = (*Addr::g_unzoomedProjection)[1][1];
     if (m11 != 0.0f && m22 != 0.0f)
     {
         g_unzXF = m11 * 1024.0f / g_widthF;
         g_unzYF = m22 * 768.0f / g_heightF;
     }
 }
-void Resolution::beforeFlip(void* dxDriver)
+void Resolution::beforeFlip(dxDriver7* dxDriver)
 {
     IDirectDrawSurface7* back = t_loadingBack;
     if (!back)
@@ -855,7 +820,7 @@ void Resolution::beforeFlip(void* dxDriver)
         return;
     }
     t_loadingBack = nullptr;
-    IDirectDrawSurface7*& current = backBuffer(dxDriver);
+    IDirectDrawSurface7*& current = dxDriver->back;
     IDirectDrawSurface7* canvas = current;
     current = back;
     DDBLTFX fx = {};
@@ -914,9 +879,6 @@ void Resolution::install()
     g_origCreateWindowExA = static_cast<CreateWindowExAFn>(
         Patch::iat("USER32.dll", "CreateWindowExA", reinterpret_cast<void*>(&hookCreateWindowExA)));
 
-    g_flushBatcher = Addr::cQuadBatcher_flush.ptr();
-    g_drawTileLayers = Addr::cWorldView_drawTileLayers.ptr();
-    g_drawWaterTiles = Addr::cWorldView_drawWaterTiles.ptr();
     Patch::hook(g_origLoadingScreen, Addr::dxDriver7_drawLoadingScreen, &hookLoadingScreen, "dxDriver7::drawLoadingScreen");
     Patch::hook(g_origTextureInit, Addr::cTextureManager_init, &hookTextureInit, "cTextureManager::init");
     Patch::hook(g_origTileRow, Addr::cWorldView_renderTileRow, &hookTileRow, "cWorldView::renderTileRow");

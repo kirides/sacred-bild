@@ -1,5 +1,12 @@
 #pragma once
 
+struct IDirect3DDevice7;
+
+namespace Sacred
+{
+    struct cWorldView;
+}
+
 // [Render] GroundMesh: the ground's tiles and blend layers kept in vertex buffers instead of being rebuilt and drawn
 // tile by tile every frame.
 //
@@ -21,5 +28,5 @@ namespace GroundMesh
     void install();
     bool active();
     // From cWorldView0::render, before the original (the batching scope is open).
-    void beginFrame(void* view, void* device);
+    void beginFrame(Sacred::cWorldView* view, IDirect3DDevice7* device);
 }

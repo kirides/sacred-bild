@@ -2,14 +2,13 @@
 #include "game/d3d_stats.h"
 #include "game/device_proxy.h"
 #include "game/resolution.h"
-#include "game/sacred_addr.h"
 #include "ddraw9/ground.h"
 #include "config/ddraw.h"
 #include "config/debug.h"
 #include "config/render.h"
 #include "log.h"
-#include "mem.h"
 #include "patch.h"
+#include "sacred/world.h"
 
 #include <algorithm>
 #include <array>
@@ -24,38 +23,20 @@ namespace
     using namespace Sacred;
     namespace Ground = DDraw9::Ground;
 
-    // thiscall targets are hooked and called as fastcall with an unused EDX parameter.
-    using TileRowFn = void(__fastcall*)(void* self, void* edx, void* device, void* rowPos, int detail);
-    using DeviceFn = void(__fastcall*)(void* self, void* edx, void* device);
-    using AddFn = void(__fastcall*)(void* self, void* edx, void* device, const float* quad);
-    using SetTextureFn = void(__fastcall*)(void* self, void* edx, void* device, uint32_t handle);
+    decltype(Addr::cWorldView_renderTileRow)::Ptr g_origTileRow = nullptr;
+    decltype(Addr::cWorldView_drawTileLayers)::Ptr g_origLayers = nullptr;
+    decltype(Addr::cQuadBatcher_add)::Ptr g_origAdd = nullptr;
+    decltype(Addr::cQuadBatcher_setTexture)::Ptr g_origSetTexture = nullptr;
 
-    TileRowFn g_origTileRow = nullptr;
-    DeviceFn g_origLayers = nullptr;
-    AddFn g_origAdd = nullptr;
-    SetTextureFn g_origSetTexture = nullptr;
-
-    using Mem::member;
-
-    using Mem::field;
-
-    struct RowPos
-    {
-        float x, y;
-        int16_t tile;       // row * 64 + column within the sector
-        int16_t sector;     // 3x3 grid: row * 3 + column
-    };
-
-    constexpr int kTilesPerSector = 64 * 64;
+    constexpr int kTilesPerSector = Sector::size * Sector::size;
     constexpr int kLoaded = 192;            // loaded tiles per side (3x3 sectors)
-    constexpr uint32_t kRenderFlagLayers = 0x2000;
     constexpr float kGroundZ = 0.9f;        // the game's z for ground quads (renderTileRow)
     // Corners in the game's vertex order: left, top, bottom, right. Offsets around the tile position (renderTileRow,
     // set by cWorldView_updateViewMetrics divided by the zoom), and which of the tile's height/light bytes they take.
     constexpr float kCornerX[4] = {-48.2f, 0.0f, 0.0f, 48.2f};
     constexpr float kCornerY[4] = {0.0f, -24.2f, 24.2f, 0.0f};
     constexpr int kCornerByte[4] = {0, 1, 3, 2};
-    constexpr size_t kUvFloats = WorldView::tileUvCells * 8;
+    constexpr size_t kUvFloats = cWorldView::tileUvCells * 8;
 
     // Atlas pages of ground textures: 256x256 sheets with a one-texel gutter (wrap addressing), on a fixed grid.
     constexpr int kAtlasSize = 4096;
@@ -102,8 +83,8 @@ namespace
     // A loaded sector as the cache knows it: the sector objects are reused for other parts of the map.
     struct SectorId
     {
-        uint8_t* sector = nullptr;
-        uint8_t* tiles = nullptr;
+        Sector* sector = nullptr;
+        const Tile* tiles = nullptr;
         int32_t x = 0, y = 0;
         bool operator==(const SectorId&) const = default;
     };
@@ -135,14 +116,14 @@ namespace
         AtlasPage pages[kMaxPages];
         IDirectDraw7* ddraw = nullptr;
         // What every cached quad depends on besides its tile.
-        uint8_t* mapData = nullptr;
-        uint8_t* defs = nullptr;
+        cMapData* mapData = nullptr;
+        const TileDef* defs = nullptr;
         float uvs[kUvFloats] = {};
         bool uvsChecked = false;
         bool startOver = false;     // atlas full: empty everything at the next frame
 
         // This frame.
-        void* view = nullptr;
+        cWorldView* view = nullptr;
         bool active = false;        // the game's ground draws are skipped
         bool groundRows = false;    // a row with ground was walked
         bool haveOffset = false;
@@ -303,10 +284,9 @@ namespace
             return Build::Ok;
         }
         // As the game's flush looks it up: loads the texture if it isn't.
-        void* manager = *reinterpret_cast<void**>(Addr::g_pTextureManager);
-        uint8_t* texture = manager ? Addr::cTextureManager_get(manager, handle, 0)
-                                   : nullptr;
-        auto* surface = texture ? member<IDirectDrawSurface7*>(texture, 0x14) : nullptr;
+        cTextureManager* manager = cTextureManager::instance();
+        cTexture* texture = manager ? manager->get(handle) : nullptr;
+        IDirectDrawSurface7* surface = texture ? texture->surface : nullptr;
         TextureSlot slot;
         if (surface)
         {
@@ -356,10 +336,12 @@ namespace
         return Build::Ok;
     }
 
-    TileKey readKey(const uint8_t* tile)
+    TileKey readKey(const Tile& tile)
     {
-        return {field<int32_t>(tile, Tile::def), field<uint32_t>(tile, Tile::layers), field<uint32_t>(tile, Tile::heights),
-            field<uint32_t>(tile, Tile::light)};
+        TileKey key{tile.def, tile.layers};
+        std::memcpy(&key.heights, tile.heights, sizeof(key.heights));
+        std::memcpy(&key.light, tile.light, sizeof(key.light));
+        return key;
     }
 
     Group& group(SectorCache& c, uint16_t pass, int page0, int page1)
@@ -387,16 +369,15 @@ namespace
 
     Build corners(uint32_t defIndex, uint32_t cell, Corners& out)
     {
-        const uint8_t* def = g.defs + size_t(defIndex) * TileDef::size;
         const TextureSlot* slot = nullptr;
-        const Build b = textureSlot(field<uint32_t>(def, TileDef::texture), slot);
+        const Build b = textureSlot(g.defs[defIndex].texture, slot);
         if (b != Build::Ok)
         {
             return b;
         }
         out.page = slot->page;
         // Cells past the table read on into the view, as the game's do; the table holds 18.
-        cell = std::min<uint32_t>(cell, WorldView::tileUvCells - 1);
+        cell = std::min<uint32_t>(cell, cWorldView::tileUvCells - 1);
         for (int i = 0; i < 4; ++i)
         {
             out.u[i] = g.uvs[cell * 8 + i * 2] * slot->scaleU + slot->offsetU;
@@ -436,26 +417,25 @@ namespace
     }
 
     // The base quad and the blend layer quads of tile `t`, as renderTileRow and drawTileLayers make them.
-    Build buildTile(SectorCache& c, int t, const uint8_t* tile, const TileKey& key)
+    Build buildTile(SectorCache& c, int t, const Tile& tile, const TileKey& key)
     {
         const int row = t / 64, col = t % 64;
         const float px = 48.0f * static_cast<float>(col - row);
         const float py = 24.0f * static_cast<float>(col + row);
-        const auto* heights = tile + Tile::heights;
-        const auto* light = tile + Tile::light;
+        const int8_t* heights = tile.heights;
+        const uint8_t* light = tile.light;
         float x[4], y[4];
         DWORD diffuse[4];
         for (int i = 0; i < 4; ++i)
         {
             const int b = kCornerByte[i];
             x[i] = px + kCornerX[i];
-            y[i] = py + kCornerY[i] - static_cast<float>(static_cast<int8_t>(heights[b]));
+            y[i] = py + kCornerY[i] - static_cast<float>(heights[b]);
             diffuse[i] = 0xFF000000u | 0x010101u * light[b];
         }
 
-        const uint8_t* def = g.defs + size_t(static_cast<uint32_t>(key.def)) * TileDef::size;
         Corners base;
-        Build b = corners(static_cast<uint32_t>(key.def), field<uint16_t>(def, TileDef::uvCell), base);
+        Build b = corners(static_cast<uint32_t>(key.def), g.defs[static_cast<uint32_t>(key.def)].uvCell, base);
         if (b != Build::Ok)
         {
             return b;
@@ -465,18 +445,18 @@ namespace
         // Pass 0 (and every even one) draws two-texture records, the odd ones one-texture records; a chain moves on
         // to the next pass at each change of kind.
         auto record = Addr::layerRecordCache.ptr();
-        void* mapData = g.mapData;
+        cMapData* mapData = g.mapData;
         uint32_t id = key.layers;
         int pass = 0;
         for (int n = 0; id && n < 256; ++n)
         {
-            const uint8_t* r = record(mapData, nullptr, id);
+            const LayerRecord* r = record(mapData, nullptr, id);
             if (!r)
             {
                 break;
             }
-            const uint32_t defs = field<uint32_t>(r, LayerRecord::defs);
-            const uint32_t next = field<uint32_t>(r, LayerRecord::next);
+            const uint32_t defs = r->defs;
+            const uint32_t next = r->next;
             const uint32_t a = defs & 0x1FFFF, second = defs >> 17;
             const bool twoTextures = second != 0;
             if (twoTextures != (pass % 2 == 0))
@@ -484,10 +464,10 @@ namespace
                 ++pass;
             }
             Corners c0, c1;
-            b = corners(a, a % WorldView::tileUvCells, c0);
+            b = corners(a, a % cWorldView::tileUvCells, c0);
             if (b == Build::Ok && twoTextures)
             {
-                b = corners(second, second % WorldView::tileUvCells, c1);
+                b = corners(second, second % cWorldView::tileUvCells, c1);
             }
             if (b != Build::Ok)
             {
@@ -506,14 +486,14 @@ namespace
     // The loaded sector in `slot`; false if it has no tiles.
     bool sectorId(int slot, SectorId& id)
     {
-        id.sector = member<uint8_t*>(g.view, WorldView::sectors + slot * 4);
-        id.tiles = id.sector ? member<uint8_t*>(id.sector, Sacred::Sector::tiles) : nullptr;
+        id.sector = g.view->sectors[slot];
+        id.tiles = id.sector ? id.sector->tiles : nullptr;
         if (!id.tiles)
         {
             return false;
         }
-        id.x = member<int32_t>(id.sector, Sacred::Sector::originX);
-        id.y = member<int32_t>(id.sector, Sacred::Sector::originY);
+        id.x = id.sector->originX;
+        id.y = id.sector->originY;
         return true;
     }
 
@@ -577,7 +557,7 @@ namespace
             g.slots[slot] = c;
         }
         c->frame = g.frame;
-        const uint8_t* tile = id.tiles + size_t(t) * Tile::size;
+        const Tile& tile = id.tiles[t];
         const TileKey key = readKey(tile);
         if (c->built[t])
         {
@@ -606,7 +586,7 @@ namespace
     }
 
     // Builds what is new in the row the game is about to walk, and takes the view offset from it.
-    void visitRow(void* self, const RowPos& pos)
+    void visitRow(cWorldView* self, const RowPos& pos)
     {
         if (g.startOver || pos.sector < 0 || pos.sector > 8 || pos.tile < 0 || pos.tile > 0xFFF)
         {
@@ -627,7 +607,7 @@ namespace
             LOG("Ground mesh: row at ({}, {}) sector {} tile {} gives view offset ({}, {}), the frame's first row ({}, {})",
                 pos.x, pos.y, pos.sector, pos.tile, ox, oy, g.offsetX, g.offsetY);
         }
-        const int length = member<int32_t>(self, WorldView::rowLength);
+        const int length = self->rowLength;
         // Tile j of the row is (r0 - j, c0 + j) in the loaded tiles.
         for (int j = 0; j < length && g.active; ++j)
         {
@@ -679,14 +659,14 @@ namespace
     }
 
     // The ground as drawTileLayers would leave it: base tiles, then the layer passes with their render flag.
-    void drawGround(void* device)
+    void drawGround(IDirect3DDevice7* device)
     {
         DeviceProxy* proxy = DeviceProxy::instance();
         if (!proxy || device != proxy || !g.haveOffset || !g.groundRows)
         {
             return;
         }
-        const float zoom = member<float>(g.view, WorldView::zoom);
+        const float zoom = g.view->zoom;
         if (!(zoom > 0.0f))
         {
             return;
@@ -733,15 +713,14 @@ namespace
                 maxPass = std::max(maxPass, static_cast<int>(gr.pass));
             }
         }
-        auto setFlag = Addr::renderFlags_set.ptr();
-        void* flags = Addr::renderFlags_instance();
+        RenderFlags* flags = RenderFlags::instance();
         bool failed = false;
         for (int pass = 0; pass <= maxPass && !failed; ++pass)
         {
             const bool twoTextures = pass >= 1 && (pass - 1) % 2 == 0;
             if (pass >= 1)
             {
-                setFlag(flags, nullptr, kRenderFlagLayers, twoTextures ? 0 : 1);
+                flags->set(RenderFlags::oneTextureLayers, !twoTextures);
             }
             for (int s = 0; s < 9 && !failed; ++s)
             {
@@ -773,7 +752,7 @@ namespace
         }
         if (maxPass >= 1)
         {
-            setFlag(flags, nullptr, kRenderFlagLayers, 1);
+            flags->set(RenderFlags::oneTextureLayers, true);
         }
         if (failed)
         {
@@ -781,7 +760,7 @@ namespace
         }
     }
 
-    void __fastcall hookTileRow(void* self, void* edx, void* device, void* rowPos, int detail)
+    void __fastcall hookTileRow(cWorldView* self, void* edx, IDirect3DDevice7* device, RowPos* rowPos, int detail)
     {
         if (!g.active || self != g.view)
         {
@@ -791,17 +770,17 @@ namespace
         if (detail)
         {
             g.groundRows = true;
-            visitRow(self, *static_cast<const RowPos*>(rowPos));
+            visitRow(self, *rowPos);
         }
         g_inRow = g.active;
         g_origTileRow(self, edx, device, rowPos, detail);
         g_inRow = false;
         // The game's blend layer list (for drawTileLayers) is not used: keep it empty, so it never fills up and asks
         // for a flush in the middle of the walk.
-        member<uint32_t>(self, WorldView::layeredTileCount) = 0;
+        self->layeredTileCount = 0;
     }
 
-    void __fastcall hookAdd(void* self, void* edx, void* device, const float* quad)
+    void __fastcall hookAdd(cQuadBatcher* self, void* edx, IDirect3DDevice7* device, const float* quad)
     {
         if (!g_inRow)
         {
@@ -809,7 +788,7 @@ namespace
         }
     }
 
-    void __fastcall hookSetTexture(void* self, void* edx, void* device, uint32_t handle)
+    void __fastcall hookSetTexture(cQuadBatcher* self, void* edx, IDirect3DDevice7* device, uint32_t handle)
     {
         if (!g_inRow)
         {
@@ -819,7 +798,7 @@ namespace
 
     // After the rows (or in the middle of them, before water tiles the walk flushes early): the cached ground once per
     // frame instead of the game's layers.
-    void __fastcall hookLayers(void* self, void* edx, void* device)
+    void __fastcall hookLayers(cWorldView* self, void* edx, IDirect3DDevice7* device)
     {
         if (!g.active || self != g.view)
         {
@@ -835,8 +814,8 @@ namespace
 
     bool dynamicLight()
     {
-        const uint8_t* ws = Addr::worldState_instance();
-        return ws && ((ws[WorldState::flags] & 0x20) || ws[WorldState::tileRendererLight]);
+        const WorldState* ws = WorldState::instance();
+        return ws && ws->tileRendererLit();
     }
 
     void logStats()
@@ -911,7 +890,7 @@ bool GroundMesh::active()
     return g.active;
 }
 
-void GroundMesh::beginFrame(void* view, void* device)
+void GroundMesh::beginFrame(cWorldView* view, IDirect3DDevice7* device)
 {
     g.active = false;
     if (!g.enabled || !view)
@@ -942,14 +921,14 @@ void GroundMesh::beginFrame(void* view, void* device)
     std::fill(std::begin(g.slots), std::end(g.slots), nullptr);
 
     // Another map (tile definitions, cell coordinates) or full atlas pages: everything is built again.
-    auto* mapData = member<uint8_t*>(view, WorldView::mapData);
-    auto* defs = mapData ? member<uint8_t*>(mapData, MapData::tileDefs) : nullptr;
+    cMapData* mapData = view->mapData;
+    const TileDef* defs = mapData ? mapData->tileDefs : nullptr;
     if (!defs)
     {
         return;
     }
     float uvs[kUvFloats];
-    std::memcpy(uvs, static_cast<uint8_t*>(view) + WorldView::tileUvs, sizeof(uvs));
+    std::memcpy(uvs, view->tileUvs, sizeof(uvs));
     if (g.startOver || mapData != g.mapData || defs != g.defs || std::memcmp(uvs, g.uvs, sizeof(uvs)) != 0)
     {
         if (g.mapData || g.startOver)

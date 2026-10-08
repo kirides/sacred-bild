@@ -469,7 +469,7 @@ equipment -> (656,388), mercenaries -> (932,0), ...).
 windows into `+0x80..+0xD8` (taskbar, inventory, equipment, blacksmith, merchant, megamap, overview map,
 minimap ("UI_WND_MERC": minimap and party portraits, 932,0 92x676), stats, console, questbook, escape menu,
 purchase, master, savegame, options, chest, horse, net info, net portraits, character, cube, trade; rects and
-offsets in `Sacred::UiManager`). The shop windows (blacksmith, merchant, master, chest, cube, trade) are 640 wide
+fields in `Sacred::cUI_Manager`, `src/sacred/ui.h`). The shop windows (blacksmith, merchant, master, chest, cube, trade) are 640 wide
 at 0,0, next to the inventory at 0,388. `cUI_Manager_render` (`0x758ED0`, arg: device) draws the
 cinematic letterbox bars (float immediates 1024/768) and all windows. Full-screen menus are separate
 `cUI_Window2`s with rect (0,0,1024,768) or (0,0,1023,767). In game (mode bits `0x04` and `0x40`) a visible savegame (`+0xAC`),
@@ -736,7 +736,7 @@ second; SacredBild makes that `[Net] JoinTimeout`, 30 s by default); loading may
   `+0x158`) stores them under their settings.cfg keys and applies them (`0x717C20`). Check boxes and radio buttons
   are bit 0x10 of the control flags (`0x732550` sets, `0x7325C0` clears; both call show on visibility changes);
   sliders: `0x753430` fastcall get (0..count-1, count at `+0x88`), `0x7533B0` thiscall set. Controls: see
-  `Sacred::Options` in `src/game/sacred_addr.h` (the fourth slider is MINIMAP_ALPHA). The main menu uses the same
+  `Sacred::cUI_Options` in `src/sacred/ui.h` (the fourth slider is MINIMAP_ALPHA). The main menu uses the same
   class. Labels are text keys (`UI_CFG_*`) looked up by `0x672740`: id = hash of the key (`0x80EAA0`: upper case,
   `id = (c + id * 0x71) % 0x3B9AC9F7` in signed 32-bit arithmetic, then `& 0x7FFFFFFF`), searched in the text table.
 - UI manager windows: `createGameWindows` (`0x759AF0`) fills `+0x80` taskbar, `+0x84` inventory, `+0x88` equipment,

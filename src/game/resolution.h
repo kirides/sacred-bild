@@ -1,5 +1,10 @@
 #pragma once
 
+namespace Sacred
+{
+    struct dxDriver7;
+}
+
 // Runs the game at an arbitrary resolution instead of its hard-coded 1024x768.
 namespace Resolution
 {
@@ -15,7 +20,7 @@ namespace Resolution
 
     // Call in dxDriver7::flip before the original: shows the loading screen, drawn into a 1024x768 surface on this
     // thread, scaled to the menus' canvas.
-    void beforeFlip(void* dxDriver);
+    void beforeFlip(Sacred::dxDriver7* dxDriver);
 
     // Offset that centers a 1024x768 layout on the screen.
     int centerX();
