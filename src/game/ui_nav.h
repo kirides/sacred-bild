@@ -78,9 +78,17 @@ namespace UiNav
     // header, else its file's) shows and selects it; its row, -1 if nothing is listed.
     int selectNewestSavegame();
 
-    // (x, y) (screen pixels) lies on a hero of a character choice screen (not a class of the creation screen): A
-    // double-clicks it, which selects it and continues as "Weiter" does.
-    bool pickAndContinue(float x, float y);
+    // The buttons of a menu screen that the controller clicks itself (Start, B, X): the character screens'
+    // "Weiter" / "Spiel starten" and "Logout" / "Zurück", the LAN game list's "Beitreten", "Zurück" and "Erstellen".
+    enum class ScreenButton
+    {
+        Accept,
+        Back,
+        Secondary,
+    };
+    // The shown screen's button in screen pixels while it takes a click; false if it has none (or it is greyed out)
+    // or a message box is open.
+    bool screenButton(ScreenButton which, Rect& out);
 
     // An NPC dialog with answers is open (a popup whose answers are set); Enter picks the first.
     bool npcDialogOpen();

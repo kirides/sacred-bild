@@ -1,12 +1,14 @@
 #include "game/ui_nav.h"
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
+#include "patch.h"
 #include "sacred/net.h"
 #include "sacred/text.h"
 #include "sacred/ui.h"
 
 #include <windows.h>
 #include <algorithm>
+#include <atomic>
 #include <initializer_list>
 #include <iterator>
 #include <cmath>
@@ -33,12 +35,14 @@ namespace
         Network,    // the network menu: it shows one of its screens, not a child (cUI_Network)
         PlayerList, // the player list of a network game: its cells are hit rects (cUI_NetworkInfo)
         Characters, // the character screens: heroes on slots, controls as pointer members (cUI_Character)
+        NetLan,     // the LAN screen: its game list's rows that show a game (cUI_NetLan)
     };
 
     struct Info
     {
         Kind kind = Other;
         bool needsEnabled = true;   // clicks count only while it is enabled
+        bool edit = false;          // a text field (cUI_EditControl): read-only ones take no clicks
         uint32_t size = 0;          // a window whose controls are (also) members: its size, to look for them
     };
 
@@ -75,6 +79,7 @@ namespace
         {".?AVcUI_Network@@", Network},
         {".?AVcUI_NetworkInfo@@", PlayerList},
         {".?AVcUI_Character@@", Characters},
+        {".?AVcUI_NetLan@@", NetLan},
     };
     constexpr size_t kMaxControls = 512;
 
@@ -165,6 +170,7 @@ namespace
                 control = control || among(name, kControls);
                 window = window || std::strcmp(name, kWindow) == 0;
                 info.needsEnabled = info.needsEnabled && !among(name, kAlwaysEnabled);
+                info.edit = info.edit || std::strcmp(name, ".?AVcUI_EditControl@@") == 0;
             }
         }
         if (info.kind == Other)
@@ -183,7 +189,12 @@ namespace
     // Something D-pad navigation may stop at: shown, and enabled if it has to be to take a click.
     bool usable(cUI_Control2* control)
     {
-        return control && control->visible() && (control->enabled() || !infoOf(control).needsEnabled);
+        if (!control || !control->visible())
+        {
+            return false;
+        }
+        const Info info = infoOf(control);
+        return (control->enabled() || !info.needsEnabled) && !(info.edit && (control->flags & cUI_EditControl::readOnly));
     }
 
     bool visible(const cUI_Control2* control)
@@ -347,16 +358,105 @@ namespace
         return true;
     }
 
+    // ---- What the windows drew ----
+
+    // A window whose controls are members picks by its state which of them it draws, and leaves the others' flags
+    // as they were (the LAN screen keeps its game list visible under the form that creates a game). The members'
+    // classes get their render slot wrapped, which notes when each control was drawn; a member counts only if it
+    // was drawn lately. The game reaches these renders through the vtable only (but for a subclass calling its base).
+    constexpr DWORD kDrawnWithin = 250;         // ms
+    using RenderFn = decltype(cUI_Control2::Vtable::render);
+    struct RenderSlot
+    {
+        const cUI_Control2::Vtable* table;
+        RenderFn original;
+        DWORD since;                            // wrapped at: until kDrawnWithin later, every member counts
+    };
+    RenderSlot g_renderSlots[64];
+    std::atomic<size_t> g_renderSlotCount{0};   // written by the presenting thread only
+    SRWLOCK g_drawnLock = SRWLOCK_INIT;
+    std::unordered_map<const cUI_Control2*, DWORD> g_drawn;
+
+    const RenderSlot* renderSlot(const cUI_Control2::Vtable* table)
+    {
+        const size_t n = g_renderSlotCount.load(std::memory_order_acquire);
+        for (size_t i = 0; i < n; ++i)
+        {
+            if (g_renderSlots[i].table == table)
+            {
+                return &g_renderSlots[i];
+            }
+        }
+        return nullptr;
+    }
+
+    uint32_t __fastcall thunkRender(cUI_Control2* self, void* edx, IDirect3DDevice7* device)
+    {
+        const RenderSlot* slot = renderSlot(self->vtable);    // only patched vtables lead here
+        AcquireSRWLockExclusive(&g_drawnLock);
+        g_drawn[self] = GetTickCount();
+        ReleaseSRWLockExclusive(&g_drawnLock);
+        return slot->original(self, edx, device);
+    }
+
+    // Whether the control was drawn lately; starts watching its class (then counting it drawn for a while).
+    bool drawnLately(cUI_Control2* control)
+    {
+        const DWORD now = GetTickCount();
+        const RenderSlot* slot = renderSlot(control->vtable);
+        if (!slot)
+        {
+            const size_t n = g_renderSlotCount.load(std::memory_order_relaxed);
+            if (n == std::size(g_renderSlots))
+            {
+                return true;
+            }
+            auto* table = const_cast<cUI_Control2::Vtable*>(control->vtable);
+            g_renderSlots[n] = {table, table->render, now};
+            // Publish the original before the slot leads to the thunk.
+            g_renderSlotCount.store(n + 1, std::memory_order_release);
+            Patch::value(reinterpret_cast<uintptr_t>(&table->render), &thunkRender);
+            return true;
+        }
+        if (now - slot->since < kDrawnWithin)
+        {
+            return true;
+        }
+        AcquireSRWLockShared(&g_drawnLock);
+        const auto it = g_drawn.find(control);
+        const bool drawn = it != g_drawn.end() && now - it->second < kDrawnWithin;
+        ReleaseSRWLockShared(&g_drawnLock);
+        return drawn;
+    }
+
+    // Forgets the controls not drawn for a while (freed ones among them).
+    void pruneDrawn()
+    {
+        static DWORD last = 0;
+        const DWORD now = GetTickCount();
+        if (now - last < 5000)
+        {
+            return;
+        }
+        last = now;
+        AcquireSRWLockExclusive(&g_drawnLock);
+        std::erase_if(g_drawn, [&](const auto& entry) { return now - entry.second > 5000; });
+        ReleaseSRWLockExclusive(&g_drawnLock);
+    }
+
     // The controls that are members of a window of `size` bytes (it draws them and feeds them events itself), as the
-    // game shows them: the window sets their visible and enabled flags with its state.
+    // game shows them: the window sets their visible and enabled flags with its state, and draws those its state
+    // shows.
     void collectMembers(cUI_Window2* window, uint32_t size, const UiCanvas::Frame& frame, std::vector<Point>& out)
     {
+        pruneDrawn();
         auto* object = reinterpret_cast<uint8_t*>(window);
         for (uint32_t offset = sizeof(cUI_Window2); offset + sizeof(cUI_Control2) <= size; offset += 4)
         {
             auto* member = reinterpret_cast<cUI_Control2*>(object + offset);
             const Kind kind = kindOf(member);
-            if ((kind == Control || kind == Button) && usable(member) && shownIn(member, window))
+            if ((kind == Control || kind == Button) && usable(member) && shownIn(member, window) &&
+                drawnLately(member))
             {
                 addControl(member, kind == Button, frame, out);
             }
@@ -402,6 +502,31 @@ namespace
     }
 
     void collect(cUI_Control2* control, const UiCanvas::Frame& frame, std::vector<Point>& out, int depth);
+
+    // The game list's rows that show a game, in place of the list (its other rows select nothing).
+    void addGames(cUI_NetLan* lan, const UiCanvas::Frame& frame, std::vector<Point>& out)
+    {
+        cUI_Listbox2& list = lan->games;
+        if (lan->state != cUI_NetLan::gameList)
+        {
+            return;
+        }
+        std::erase_if(out, [&](const Point& p) { return p.control == &list; });
+        float left, top, w, h;
+        const float line = list.lineHeight;
+        if (!usable(&list) || line <= 0.0f || !layoutRect(&list, left, top, w, h))
+        {
+            return;
+        }
+        const size_t shown = std::min<size_t>(static_cast<size_t>(h / line), 64);
+        for (size_t row = 0; row < shown && list.firstLine + row < list.lines.size(); ++row)
+        {
+            const float y = top + static_cast<float>(row) * line;
+            Point p = screen(left + w * 0.5f, y + line * 0.5f, frame);
+            p.rect = screenRect(left, y, w, line, frame);
+            out.push_back(p);
+        }
+    }
 
     // Its heroes, then its controls (members it hit-tests and draws itself, children or not).
     void addCharacters(cUI_Character* screen, const UiCanvas::Frame& frame, std::vector<Point>& out, int depth)
@@ -469,7 +594,8 @@ namespace
             }
             return;
         }
-        if (kind == Window || kind == Savegames || kind == Network || kind == PlayerList || kind == Characters)
+        if (kind == Window || kind == Savegames || kind == Network || kind == PlayerList || kind == Characters ||
+            kind == NetLan)
         {
             auto* window = static_cast<cUI_Window2*>(control);
             const Vector<cUI_Control2*>& children = window->children;
@@ -498,6 +624,10 @@ namespace
             if (kind == Characters)
             {
                 addCharacters(static_cast<cUI_Character*>(window), frame, out, depth);
+            }
+            if (kind == NetLan)
+            {
+                addGames(static_cast<cUI_NetLan*>(window), frame, out);
             }
         }
     }
@@ -601,6 +731,54 @@ namespace
         }
     }
 
+    // The shown menu screen's button that Start (Accept), B (Back) or X (Secondary) clicks while it takes a click,
+    // and the menu it is drawn in; nullptr if there is none or a message box is open.
+    cUI_Control2* screenButtonControl(UiNav::ScreenButton which, cUI_Window2*& menuOut)
+    {
+        using UiNav::ScreenButton;
+        cUI_Manager* manager = ::manager();
+        if (!manager || !(manager->flags & cUI_Manager::inMenus) || UiNav::modal())
+        {
+            return nullptr;
+        }
+        for (cUI_Window2* menu : manager->menus)
+        {
+            if (!visible(menu))
+            {
+                continue;
+            }
+            cUI_Window2* window = menu;
+            if (kindOf(menu) == Network)
+            {
+                window = static_cast<cUI_Network*>(menu)->current();
+            }
+            if (!visible(window))
+            {
+                continue;
+            }
+            cUI_Control2* button = nullptr;
+            if (kindOf(window) == Characters)
+            {
+                auto* screen = static_cast<cUI_Character*>(window);
+                button = which == ScreenButton::Accept ? screen->next
+                    : which == ScreenButton::Back ? screen->back : nullptr;
+            }
+            else if (kindOf(window) == NetLan && static_cast<cUI_NetLan*>(window)->state == cUI_NetLan::gameList)
+            {
+                auto* screen = static_cast<cUI_NetLan*>(window);
+                button = which == ScreenButton::Accept ? &screen->join
+                    : which == ScreenButton::Back ? &screen->back : &screen->create;
+            }
+            else
+            {
+                continue;
+            }
+            menuOut = menu;
+            return usable(button) ? button : nullptr;
+        }
+        return nullptr;
+    }
+
     std::vector<Point> controls()
     {
         std::vector<Point> out;
@@ -626,6 +804,16 @@ namespace
             for (cUI_Window2* menu : manager->menus)
             {
                 add(menu);
+            }
+            // Buttons with a button of their own (Start, B, X) are no D-pad stops.
+            for (const auto which : {UiNav::ScreenButton::Accept, UiNav::ScreenButton::Back,
+                     UiNav::ScreenButton::Secondary})
+            {
+                cUI_Window2* menu = nullptr;
+                if (cUI_Control2* button = screenButtonControl(which, menu))
+                {
+                    std::erase_if(out, [&](const Point& p) { return p.control == button; });
+                }
             }
         }
         else if (flags & cUI_Manager::inGame)
@@ -1340,43 +1528,15 @@ int UiNav::selectNewestSavegame()
     return row;
 }
 
-bool UiNav::pickAndContinue(float x, float y)
+bool UiNav::screenButton(ScreenButton which, Rect& out)
 {
-    cUI_Manager* manager = ::manager();
-    if (!manager || !(manager->flags & cUI_Manager::inMenus) || modal())
+    cUI_Window2* menu = nullptr;
+    cUI_Control2* button = screenButtonControl(which, menu);
+    float left, top, w, h;
+    if (!button || !layoutRect(button, left, top, w, h))
     {
         return false;
     }
-    for (cUI_Window2* menu : manager->menus)
-    {
-        if (!visible(menu))
-        {
-            continue;
-        }
-        cUI_Window2* window = menu;
-        if (kindOf(menu) == Network)
-        {
-            window = static_cast<cUI_Network*>(menu)->current();
-        }
-        if (!visible(window) || kindOf(window) != Characters)
-        {
-            continue;
-        }
-        auto* screen = static_cast<cUI_Character*>(window);
-        if (screen->mode == cUI_Character::creation || screen->mode == cUI_Character::classPicked)
-        {
-            continue;   // a class: picked to read about it, the game starts with "Spiel starten"
-        }
-        const UiCanvas::Frame frame = frameOf(menu);
-        bool on = false;
-        forEachSlot(screen, [&](cUI_NetGranny*, float left, float top, float w, float h) {
-            const Rect r = screenRect(left, top, w, h, frame);
-            on = on || (x >= r.left && x < r.right && y >= r.top && y < r.bottom);
-        });
-        if (on)
-        {
-            return true;
-        }
-    }
-    return false;
+    out = screenRect(left, top, w, h, frameOf(menu));
+    return true;
 }

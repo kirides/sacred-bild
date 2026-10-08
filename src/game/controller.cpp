@@ -514,8 +514,7 @@ namespace
             const bool doubleClick = tick - g_clickTick <= GetDoubleClickTime() &&
                 std::fabs(g_x - g_clickX) * 2.0f <= GetSystemMetrics(SM_CXDOUBLECLK) &&
                 std::fabs(g_y - g_clickY) * 2.0f <= GetSystemMetrics(SM_CYDOUBLECLK);
-            // A hero on a character choice screen: selected and on ("Weiter") at once, as a double click does.
-            Inject::button(VK_LBUTTON, true, doubleClick || UiNav::pickAndContinue(g_x, g_y));
+            Inject::button(VK_LBUTTON, true, doubleClick);
             g_clickTick = doubleClick ? tick - GetDoubleClickTime() - 1 : tick;
             g_clickX = g_x;
             g_clickY = g_y;
@@ -524,7 +523,14 @@ namespace
         {
             Inject::button(VK_LBUTTON, false);
         }
-        Inject::button(VK_RBUTTON, (buttons & Gamepad::X) != 0);
+        // X: a menu screen's second button ("Erstellen") if it has one, else the right mouse button.
+        UiNav::Rect r;
+        const bool secondary = UiNav::screenButton(UiNav::ScreenButton::Secondary, r);
+        if (secondary && (Gamepad::pressed() & Gamepad::X))
+        {
+            click((r.left + r.right) * 0.5f, (r.top + r.bottom) * 0.5f);
+        }
+        Inject::button(VK_RBUTTON, !secondary && (buttons & Gamepad::X) != 0);
         // LB / RB: the inventory's previous / next page.
         if (const uint32_t shoulder = Gamepad::pressed() & (Gamepad::LB | Gamepad::RB); shoulder && !UiNav::modal())
         {
@@ -534,6 +540,14 @@ namespace
                 click(x, y);
             }
         }
+        // Start / B on a menu screen with such buttons: "Weiter" / "Logout", "Beitreten" / "Zurück" (Esc doesn't
+        // leave every one).
+        uint32_t taken = kUiButtons;
+        if ((Gamepad::pressed() & Gamepad::Start) && UiNav::screenButton(UiNav::ScreenButton::Accept, r))
+        {
+            click((r.left + r.right) * 0.5f, (r.top + r.bottom) * 0.5f);
+            taken |= Gamepad::Start;
+        }
         if (Gamepad::pressed() & Gamepad::B)
         {
             // A message box's Cancel (Esc cancels few of them), else Esc.
@@ -541,6 +555,10 @@ namespace
             if (UiNav::cancelButton(x, y))
             {
                 click(x, y);
+            }
+            else if (UiNav::screenButton(UiNav::ScreenButton::Back, r))
+            {
+                click((r.left + r.right) * 0.5f, (r.top + r.bottom) * 0.5f);
             }
             else
             {
@@ -561,7 +579,7 @@ namespace
         {
             Inject::wheel(-WHEEL_DELTA);
         }
-        windowKeys(pressed, kUiButtons);
+        windowKeys(pressed, taken);
     }
 
     // ---- The log book ----
@@ -964,20 +982,23 @@ namespace
         return {button, 0};
     }
 
-    // `binding` left of `r` (right of it if there is no room), vertically centered.
-    void promptBeside(Bindings::Binding binding, const UiNav::Rect& r)
+    // `binding` left of `r` (right of it if there is no room), vertically centered; `skip` screen pixels further out
+    // (past another prompt there). Returns the width it takes, margin included.
+    float promptBeside(Bindings::Binding binding, const UiNav::Rect& r, float skip = 0.0f)
     {
         const float scale = canvasScale();
         const float size = kPromptSize * scale, margin = kPromptMargin * scale;
         const float y = (r.top + r.bottom) * 0.5f;
-        if (r.left - margin - Prompts::width(binding, size) >= 0.0f)
+        const float width = Prompts::width(binding, size);
+        if (r.left - skip - margin - width >= 0.0f)
         {
-            Prompts::add(binding, r.left - margin, y, size, 1.0f, 0.5f);
+            Prompts::add(binding, r.left - skip - margin, y, size, 1.0f, 0.5f);
         }
         else
         {
-            Prompts::add(binding, r.right + margin, y, size, 0.0f, 0.5f);
+            Prompts::add(binding, r.right + skip + margin, y, size, 0.0f, 0.5f);
         }
+        return width + margin;
     }
 
     // `binding` centered above the point (a tab's center).
@@ -989,15 +1010,29 @@ namespace
 
     void uiPrompts()
     {
-        UiNav::Rect r;
-        if (UiNav::controlAt(g_x, g_y, r))
+        UiNav::Rect r, under{};
+        float skip = 0.0f;  // beside the control under the cursor: A's width
+        if (UiNav::controlAt(g_x, g_y, under))
         {
-            promptBeside(single(Gamepad::A), r);
+            skip = promptBeside(single(Gamepad::A), under);
         }
+        const auto same = [&](const UiNav::Rect& a) {
+            return std::fabs(a.left - under.left) <= 1.0f && std::fabs(a.top - under.top) <= 1.0f &&
+                std::fabs(a.right - under.right) <= 1.0f && std::fabs(a.bottom - under.bottom) <= 1.0f;
+        };
         float x, y;
         if (UiNav::cancelButton(x, y) && UiNav::controlAt(x, y, r))
         {
-            promptBeside(single(Gamepad::B), r);
+            promptBeside(single(Gamepad::B), r, same(r) ? skip : 0.0f);
+        }
+        // A menu screen's buttons that Start, B and X click (no D-pad stops, so A never shows beside them).
+        for (const auto& [which, button] : {std::pair{UiNav::ScreenButton::Accept, Gamepad::Start},
+                 std::pair{UiNav::ScreenButton::Back, Gamepad::B}, std::pair{UiNav::ScreenButton::Secondary, Gamepad::X}})
+        {
+            if (UiNav::screenButton(which, r))
+            {
+                promptBeside(single(button), r);
+            }
         }
         if (!UiNav::modal())
         {

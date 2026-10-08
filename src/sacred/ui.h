@@ -140,6 +140,36 @@ namespace Sacred
     static_assert(offsetof(cUI_StaticText64, textId) == 0x84 && offsetof(cUI_StaticText64, text) == 0x88);
     static_assert(offsetof(cUI_StaticText64, textEnd) == 0x8C && offsetof(cUI_StaticText64, font) == 0x94);
 
+    // A text field (vtable ENG 00897534, receiveEvent 00737AC0). Read-only ones take neither keys nor clicks: the LAN
+    // screen draws its game list's row frames with them.
+    struct cUI_EditControl : UiEmbedded<0x4F0>
+    {
+        static constexpr uint32_t readOnly = 0x800000;  // in flags
+    };
+    static_assert(sizeof(cUI_EditControl) == 0x4F0);
+
+    // A list of text lines (vtable ENG 00897620, receiveEvent 0074FBA0, render 0074FD70): it shows height /
+    // lineHeight lines from firstLine at its top. A click selects line firstLine + (y - top) / lineHeight, a row
+    // past the last line too (the network screens' game lists show their rows' frames whether they list games).
+    struct cUI_Listbox2 : cUI_Control2
+    {
+        struct Line
+        {
+            uint8_t _00[0x24];
+        };
+
+        cUI_Control2* scrollbar;    // nullptr: none
+        Vector<Line> lines;
+        uint32_t firstLine;
+        uint32_t selected;
+        uint16_t font;
+        uint8_t _92[0x94 - 0x92];
+        uint16_t lineHeight;
+        uint8_t _96[0xB0 - 0x96];
+    };
+    static_assert(offsetof(cUI_Listbox2, lines) == 0x7C && offsetof(cUI_Listbox2, firstLine) == 0x88);
+    static_assert(offsetof(cUI_Listbox2, lineHeight) == 0x94 && sizeof(cUI_Listbox2) == 0xB0);
+
     // A tab control: a vector of pages, the active one at `activePage` (setActivePage ENG 00729260). Its
     // receiveEvent (00728350) hit-tests the tabs 4 pixels below their rects and switches to the one clicked, hidden
     // or not.
@@ -350,10 +380,26 @@ namespace Sacred
     {
         uint8_t _84[0x168C - 0x84];
     };
+    // The LAN screen (constructor ENG 006F9010, receiveEvent 006FBC50, setState 006FA490).
     struct cUI_NetLan : cUI_Window2
     {
-        uint8_t _84[0x51B8 - 0x84];
+        enum State : uint32_t
+        {
+            gameList = 1,       // the games on the LAN: "Zurück", "Erstellen", "Beitreten" (once one is selected)
+        };
+
+        uint8_t _84[0x154 - 0x84];
+        State state;
+        uint8_t _158[0x3C9C - 0x158];
+        cUI_Listbox2 games;
+        uint8_t _3d4c[0x4638 - 0x3D4C];
+        cUI_Button2 create;         // "Erstellen"
+        cUI_Button2 join;           // "Beitreten"
+        cUI_Button2 back;           // "Zurück"
+        uint8_t _486c[0x51B8 - 0x486C];
     };
+    static_assert(offsetof(cUI_NetLan, state) == 0x154 && offsetof(cUI_NetLan, games) == 0x3C9C);
+    static_assert(offsetof(cUI_NetLan, create) == 0x4638 && offsetof(cUI_NetLan, back) == 0x47B0);
     struct cUI_NetTest : cUI_Window2
     {
         uint8_t _84[0xCF8 - 0x84];
