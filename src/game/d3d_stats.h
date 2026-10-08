@@ -71,6 +71,7 @@ namespace D3DStats
         TProxy,         // inside the device proxy's draw and state methods, D3D included
         TWorldProxy,    // the part of TProxy spent inside cWorldView0::render
         TSoundWait,     // the render thread waiting for the sound system's lock (SoundLock)
+        TAnimationWait, // the render thread waiting for the animation worker (AsyncAnimation)
         TimerCount
     };
 

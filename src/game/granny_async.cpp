@@ -1,4 +1,5 @@
 #include "game/granny_async.h"
+#include "game/d3d_stats.h"
 #include "config/debug.h"
 #include "config/render.h"
 #include "log.h"
@@ -53,8 +54,13 @@ namespace
             return;
         }
         const int64_t start = qpc();
+        const int64_t startTsc = D3DStats::now();
         WaitForSingleObject(g_idleEvent, INFINITE);
         g_waitTicks.fetch_add(qpc() - start, std::memory_order_relaxed);
+        if (D3DStats::isRenderThread())
+        {
+            D3DStats::addTime(D3DStats::TAnimationWait, D3DStats::now() - startTsc);
+        }
         g_waits.fetch_add(1, std::memory_order_relaxed);
         if (g_firstWaitPending.exchange(false))
         {
