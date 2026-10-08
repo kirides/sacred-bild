@@ -180,12 +180,14 @@ namespace
                 Profiler::retarget(thread);
             }
         }
+        D3DStats::mark(D3DStats::TimerCount);
         Resolution::beforeFlip(self);
         int hr;
         {
             D3DStats::Scope s{D3DStats::TFlip};
             hr = g_origFlip(self, edx);
         }
+        D3DStats::mark(D3DStats::TOwnAfterFlip);
         // Texture memory the texture manager loaded during this frame.
         if (cTextureManager* textures = cTextureManager::instance())
         {
@@ -222,6 +224,7 @@ namespace
                     D3DStats::memorySummary());
             }
         }
+        D3DStats::mark(D3DStats::TGameBeforeWorld);
         return hr;
     }
 
@@ -250,6 +253,7 @@ namespace
 
     void __fastcall hookWorldRender(cWorldView* self, void* edx, IDirect3DDevice7* device)
     {
+        D3DStats::mark(D3DStats::TimerCount);
         D3DStats::Scope s{D3DStats::TWorld};
         D3DStats::PassScope pass{D3DStats::PWorld};
         // In game only Z is cleared: the ground covers 1024x768, but anything it leaves uncovered at larger
@@ -272,10 +276,12 @@ namespace
             proxy->endBatch();
         }
         D3DStats::addTime(D3DStats::TWorldProxy, D3DStats::total(D3DStats::TProxy) - proxyTime);
+        D3DStats::mark(D3DStats::TGameAfterWorld);
     }
 
     void __fastcall hookUiRender(cUI_Manager* self, void* edx, IDirect3DDevice7* device)
     {
+        D3DStats::mark(D3DStats::TimerCount);
         D3DStats::Scope s{D3DStats::TUi};
         // The original screen showed nothing but a full-screen window; keep the world beside the canvas hidden.
         if (UiCanvas::enabled() && device && UiCanvas::fullScreenWindowOpen())
@@ -298,8 +304,11 @@ namespace
                 device->Clear(count, used, D3DCLEAR_TARGET, 0xFF000000, 1.0f, 0);
             }
         }
-        UiCanvas::Scope ui;
-        g_origUiRender(self, edx, device);
+        {
+            UiCanvas::Scope ui;
+            g_origUiRender(self, edx, device);
+        }
+        D3DStats::mark(D3DStats::TGameAfterUi);
     }
 }
 

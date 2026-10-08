@@ -133,6 +133,9 @@ namespace
     uint32_t g_frameCounters[D3DStats::CounterCount] = {};     // counters at the end of the previous frame
     int64_t g_frameTimes[D3DStats::TimerCount] = {};
     int64_t g_lastFrameTsc = 0;
+    uint64_t g_lastFrameCycles = 0;     // the render thread's CPU cycles at the previous frame
+    D3DStats::Timer g_markTimer = D3DStats::TimerCount;
+    int64_t g_markStart = 0;
     uint64_t g_lastThreadCpu = 0;
 
     // World view passes (render thread only): what the current pass has used since it was entered.
@@ -314,6 +317,21 @@ void D3DStats::setRenderThread(unsigned long threadId)
     g_lastThreadCpu = threadCpu100ns();
 }
 
+void D3DStats::mark(Timer next)
+{
+    if (!Detail::timing)
+    {
+        return;
+    }
+    const int64_t t = now();
+    if (g_markTimer != TimerCount)
+    {
+        addTime(g_markTimer, t - g_markStart);
+    }
+    g_markTimer = next;
+    g_markStart = t;
+}
+
 bool D3DStats::isRenderThread()
 {
     return GetCurrentThreadId() == g_renderThreadId;
@@ -339,6 +357,12 @@ void D3DStats::onFrame()
     {
         const double tscPerMs = static_cast<double>(t - g_tscStart) * g_qpcFreq / (1000.0 * static_cast<double>(q - g_qpcStart));
         const double frameMs = static_cast<double>(frameTicks) / tscPerMs;
+        // CPU time the thread got this frame (cycles at about the TSC rate): far below the frame time = it waited or
+        // was not scheduled.
+        ULONG64 cycles = 0;
+        QueryThreadCycleTime(GetCurrentThread(), &cycles);
+        const double ranMs = g_lastFrameCycles ? static_cast<double>(cycles - g_lastFrameCycles) / tscPerMs : 0.0;
+        g_lastFrameCycles = cycles;
         uint32_t dc[CounterCount];
         double dms[TimerCount];
         for (int i = 0; i < CounterCount; ++i)
@@ -359,10 +383,13 @@ void D3DStats::onFrame()
             ++g_hitches;
             if (g_hitchLogs++ < 5)
             {
-                LOG("Hitch: {:.1f} ms (average {:.1f}) world {:.1f} ui {:.1f} flip {:.1f} lockBack {:.1f} sound lock {:.1f} animation wait {:.1f} | "
-                    "atlas uploads {} page resets {} | record file reads {} | textures loaded {} KB | draws {} submitted {}",
-                    frameMs, g_avgFrameMs, dms[TWorld], dms[TUi], dms[TFlip], dms[TLockBack], dms[TSoundWait], dms[TAnimationWait], dc[CAtlasUpload],
-                    dc[CAtlasReset], dc[CRecordRead], dc[CTextureKB], dc[CDraw] + dc[CDrawIndexed] + dc[CDrawVB],
+                LOG("Hitch: {:.1f} ms (average {:.1f}), thread ran {:.1f} | world {:.1f} ui {:.1f} flip {:.1f} lockBack {:.1f} "
+                    "sound lock {:.1f} animation wait {:.1f} | outside: own {:.1f} game before world {:.1f} after world {:.1f} "
+                    "after ui {:.1f} | atlas uploads {} page resets {} | record file reads {} | textures loaded {} KB | draws {} "
+                    "submitted {}",
+                    frameMs, g_avgFrameMs, ranMs, dms[TWorld], dms[TUi], dms[TFlip], dms[TLockBack], dms[TSoundWait],
+                    dms[TAnimationWait], dms[TOwnAfterFlip], dms[TGameBeforeWorld], dms[TGameAfterWorld], dms[TGameAfterUi],
+                    dc[CAtlasUpload], dc[CAtlasReset], dc[CRecordRead], dc[CTextureKB], dc[CDraw] + dc[CDrawIndexed] + dc[CDrawVB],
                     dc[CSubmit]);
             }
         }
