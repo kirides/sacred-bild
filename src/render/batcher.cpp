@@ -571,7 +571,7 @@ HRESULT Batcher::getViewport(D3DVIEWPORT7* vp)
     return D3D_OK;
 }
 
-bool Batcher::stateChanged(Reason& reason)
+bool Batcher::stateChanged(Reason& reason, bool report)
 {
     for (size_t i = 0; i < m_rsDirty.size();)
     {
@@ -579,7 +579,10 @@ bool Batcher::stateChanged(Reason& reason)
         if (!(m_rsFlags[state] & Applied) || m_rsDevice[state] != m_rs[state])
         {
             reason = Reason::RenderState;
-            onFlushCause(state);
+            if (report)
+            {
+                onFlushCause(state);
+            }
             return true;
         }
         m_rsFlags[state] &= ~Dirty;     // changed and changed back: nothing to do
@@ -592,7 +595,10 @@ bool Batcher::stateChanged(Reason& reason)
         if (!(m_tssFlags[index] & Applied) || m_tssDevice[index] != m_tss[index])
         {
             reason = Reason::StageState;
-            onFlushCause(0x10000u | (uint32_t(index / kStageTypes) << 8) | (index % kStageTypes));
+            if (report)
+            {
+                onFlushCause(0x10000u | (uint32_t(index / kStageTypes) << 8) | (index % kStageTypes));
+            }
             return true;
         }
         m_tssFlags[index] &= ~Dirty;
@@ -947,10 +953,11 @@ HRESULT Batcher::drawQuads(DWORD fvf, const void* verts, DWORD vertCount, const 
         remaps[remapCount++] = {offset, b.scaleU, b.scaleV, b.offsetU, b.offsetV};
     }
 
-    // The pending batch, as it stands after the bindings (placing a copy may have drawn it).
-    if (m_indexCount == 0 || m_kind != Kind::Pretransformed || m_fvf != fvf || m_flags != 0 || !m_rsDirty.empty() ||
-        !m_tssDirty.empty() || (m_vpFlags & Dirty) || m_vertCount + vertCount > kMaxVerts ||
-        m_indexCount + indexCount > kMaxIndices)
+    // The pending batch, as it stands after the bindings (placing a copy may have drawn it). Render states set and
+    // set back since (sprites toggle alpha test and Z writes around each draw) don't count as changes.
+    Reason reason = Reason::Other;
+    if (m_indexCount == 0 || m_kind != Kind::Pretransformed || m_fvf != fvf || m_flags != 0 ||
+        m_vertCount + vertCount > kMaxVerts || m_indexCount + indexCount > kMaxIndices || stateChanged(reason, false))
     {
         return draw(D3DPT_TRIANGLELIST, fvf, verts, vertCount, indices, indexCount, 0);
     }

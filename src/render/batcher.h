@@ -178,7 +178,9 @@ private:
     void endModelBatch();   // draws a pending model batch: something it depends on is about to change
     const StageSetup& stageSetup(DWORD fvf, const Layout& layout);
     const AtlasBinding& atlasBinding(IDirectDrawSurface7* texture, bool clampEdges);
-    bool stateChanged(Reason& reason);
+    // True if a recorded state differs from the device; drops those changed and changed back. `report`: count the
+    // cause for D3DStats (the change ends the pending batch).
+    bool stateChanged(Reason& reason, bool report = true);
     void applyStates();
     void bindTexture(DWORD stage, IDirectDrawSurface7* texture);
     void submit(Reason reason);
