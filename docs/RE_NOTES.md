@@ -197,6 +197,12 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   set (`0x4F681A`); otherwise it ends after the next waypoint. Hold-to-walk re-sends the order only while the hero
   is still moving, so a walk something blocked never restarts while the button stays down. SacredBild's stick walk
   (`src/game/hero_move.*`) sends the follow order itself and sets that bit, without the click's path-finding start.
+- Path finding: `cPath` (vtable `0x890A0C`), `cPathAstar` (`0x890A18`), `cPathFloodfill` (`0x890A24`, search
+  `0x421B90`). The flood fill marks a 64x64 byte grid at `0xAA4554` (row 0x40, cells tested with `& 0xC0`, origin
+  `0xAA4550` = 0x20, 0x20: start - 32 .. start + 31 per tile axis); a target outside finds no path and the walker
+  stays. Tiles are 53.66563 world units (`0x6224E0` divides by `0x892044`). A large zoomed-out view reaches ~50 tiles
+  along one axis in its corners: SacredBild pulls the hero's path-finding walk orders (type 4, mode 2, not follow)
+  back to 30 tiles in `cEngine_sendOrder`.
 - Taskbar slots (`cUI_Manager +0x80`, setup `0x6E4DF0`, relayout `0x6E01F0`): weapon slots (keys 1-5) at `+0x164`
   and combat art slots (6-0) at `+0x178` (cUI_Static* each, 64x64, taskbar-relative, slots past the hero's slot count
   hidden; the weapon slots move with the count), potion buttons (Space Q W E R) embedded at `+0x258 + i * 0xBC`

@@ -56,6 +56,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 | `src/game/file_cache.*` | The pak files and music read once in the background into Windows' file cache (`[Render] WarmFileCache`) |
 | `src/game/file_io_stats.*` | `[Debug] D3DStats`: the game's and Miles' file opens and reads timed, slow ones logged |
 | `src/game/controller.*` | `[Controller]`: the pad driving the game through injected input and its own cursor (walking, attacks, windows) |
+| `src/game/click_walk.*` | Click-to-walk targets beyond the path finders' 64x64 tile grid pulled back into it (large views) |
 | `src/game/hero_move.*` | Controller walking: the game's follow-the-cursor move order sent directly, with the left button's held state it needs |
 | `src/game/aim_assist.*` | Controller targets from the game's list of what can be picked on the screen; the world pick hooked for walking and aiming |
 | `src/game/ui_nav.*` | D-pad navigation: the controls of the open windows, told apart by the exe's RTTI |
