@@ -265,6 +265,9 @@ namespace
         ui.check(L"Light-weight sound lock", {L"Render", L"SoundLock"}, Config::render.soundLock)
             .tip(L"Guard the sound system with a user-mode lock instead of a kernel mutex: the frame takes it several "
                  L"times per object.");
+        ui.check(L"Keep the game's files in memory", {L"Render", L"WarmFileCache"}, Config::render.warmFileCache)
+            .tip(L"Read the game's pak files and music once in the background, so that the game's reads while playing "
+                 L"come from Windows' file cache instead of the drive (each read from an idle drive was a hitch).");
         ui.check(L"Faster math helpers", {L"Render", L"FastMath"}, Config::render.fastMath)
             .tip(L"Replace the game's slow x87 math (float to integer conversion, the teleporter ripple's sine and "
                  L"cosine) with faster code that gives the same results.");

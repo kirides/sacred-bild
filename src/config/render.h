@@ -40,6 +40,9 @@ namespace Config
         bool soundLock = true;
         // Faster replacements for the game's x87 math (float -> integer conversion, the teleporter ripple's sin/cos).
         bool fastMath = true;
+        // Read the game's pak files and music once in the background so the game's reads during play come from
+        // Windows' file cache instead of the drive (~8 ms each from an idle SSD, on the render thread).
+        bool warmFileCache = true;
         // Copy small textures into shared pages so draws with different textures can be merged as well.
         bool atlas = true;
         int atlasPageSize = 8192;       // texels per side, clamped to the device limit

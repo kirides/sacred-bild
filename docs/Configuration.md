@@ -38,6 +38,7 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | BatchGround | 1 | The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls per quad. |
 | Render | BatchSprites | 1 | The sprite batcher (water tiles, objects) hands its texture and quads to the batcher in one call instead of two device calls per flush (nearly every sprite). |
 | Render | RecordIndex | 1 | Hash index (gtl::flat_hash_map) in front of the game's tile/object record caches. |
+| Render | WarmFileCache | 1 | Read `PAK`, `World` and `mp3` once at startup in the background (low I/O priority, at most a quarter of the free memory, sound paks first), so the game's synchronous reads while playing come from Windows' file cache; a read from the idle SSD took ~8 ms on the render thread. |
 | Render | FastMath | 1 | Faster replacements for the game's x87 math helpers with the same results: `__ftol` (float to integer) with SSE3's `fisttp`; the teleporter's ripple without x87 `fsin`/`fcos`. |
 | Render | SoundLock | 1 | The sound system's lock as a user-mode lock (SRW lock) instead of a kernel mutex; the render thread takes it for every sound command, several per object and frame. |
 | Render | AsyncAnimation | 1 | Advance Granny animations on a worker thread, overlapping the start of the frame. |

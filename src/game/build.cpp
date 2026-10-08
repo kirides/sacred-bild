@@ -2,6 +2,7 @@
 #include "game/controller.h"
 #include "game/d3d_stats.h"
 #include "game/fast_math.h"
+#include "game/file_cache.h"
 #include "game/file_io_stats.h"
 #include "game/sacred_addr.h"
 #include "game/focus.h"
@@ -86,6 +87,7 @@ bool Sacred::resolveAddresses()
 void Sacred::installHooks()
 {
     D3DStats::setTiming(Config::debug.d3dStats);
+    FileCache::install();
     GrannyAsync::install();
     GroundMesh::install();     // its own transaction first: its renderTileRow hook runs inside Resolution's
     FastMath::install();

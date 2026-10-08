@@ -53,6 +53,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 | `src/game/fast_math.*` | Faster replacements for the game's x87 math helpers (`[Render] FastMath`) |
 | `src/game/sound_lock.*` | The sound system's kernel mutex as a user-mode lock (`[Render] SoundLock`) |
 | `src/game/d3d_stats.*` | `[Debug] D3DStats` frame statistics |
+| `src/game/file_cache.*` | The pak files and music read once in the background into Windows' file cache (`[Render] WarmFileCache`) |
 | `src/game/file_io_stats.*` | `[Debug] D3DStats`: the game's and Miles' file opens and reads timed, slow ones logged |
 | `src/game/controller.*` | `[Controller]`: the pad driving the game through injected input and its own cursor (walking, attacks, windows) |
 | `src/game/hero_move.*` | Controller walking: the game's follow-the-cursor move order sent directly, with the left button's held state it needs |
