@@ -1,6 +1,7 @@
 #include "game/build.h"
 #include "game/controller.h"
 #include "game/d3d_stats.h"
+#include "game/fast_math.h"
 #include "game/sacred_addr.h"
 #include "game/focus.h"
 #include "game/frame_hooks.h"
@@ -85,6 +86,7 @@ void Sacred::installHooks()
     D3DStats::setTiming(Config::debug.d3dStats);
     GrannyAsync::install();
     GroundMesh::install();     // its own transaction first: its renderTileRow hook runs inside Resolution's
+    FastMath::install();
     Patch::begin();
     FrameHooks::install();
     Resolution::install();

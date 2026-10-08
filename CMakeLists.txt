@@ -60,6 +60,7 @@ set(DDRAW_SOURCES
   src/game/language.cpp
   src/game/map_cache.cpp
   src/game/sound_lock.cpp
+  src/game/fast_math.cpp
   src/game/ground_quads.cpp
   src/game/ground_mesh.cpp
   src/game/skin_check.cpp

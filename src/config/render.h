@@ -35,6 +35,8 @@ namespace Config
         bool recordIndex = true;
         // The sound system's lock as a user-mode lock instead of a kernel mutex (two system calls per sound command).
         bool soundLock = true;
+        // Faster replacements for the game's x87 math helpers (float -> integer conversion).
+        bool fastMath = true;
         // Copy small textures into shared pages so draws with different textures can be merged as well.
         bool atlas = true;
         int atlasPageSize = 8192;       // texels per side, clamped to the device limit

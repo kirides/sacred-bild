@@ -118,6 +118,8 @@ SACRED = [
     # the sound system's mutex
     ('cMutex_lock', 0x0066FA00, 'func'),
     ('cMutex_unlock', 0x0066FA10, 'func'),
+    # CRT
+    ('rtFtol', 0x0084A1F4, 'func'),
     # network
     ('g_pGameClient', 0x0182EBF0, 'data'),
     ('initNetworkNagleTest', 0x007D310E, 'code'),

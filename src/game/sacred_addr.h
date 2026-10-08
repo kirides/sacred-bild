@@ -209,6 +209,9 @@ namespace Sacred::Addr
     inline Thiscall<void(cMutex* self)> cMutex_lock{};      // ENG 0066FA00
     inline Thiscall<void(cMutex* self)> cMutex_unlock{};    // ENG 0066FA10
 
+    // MSVC's __ftol: ST0 -> EDX:EAX, truncated (sets the x87 control word to chop around a fistp and back).
+    inline uintptr_t rtFtol{};                          // ENG 0084A1F4
+
     // The game client (sacred/net.h).
     inline Global<cGCclass*> g_pGameClient{};           // ENG 0182EBF0
     // cGCclass_initNetwork sets TinCat's drv_disable_nagle (TCP_NODELAY on the game connection) to
