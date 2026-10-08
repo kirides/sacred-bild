@@ -612,7 +612,11 @@ ULONG DeviceProxy::Release()
 
 HRESULT DeviceProxy::GetCaps(LPD3DDEVICEDESC7 desc) { return m_real->GetCaps(desc); }
 HRESULT DeviceProxy::EnumTextureFormats(LPD3DENUMPIXELFORMATSCALLBACK cb, LPVOID ctx) { return m_real->EnumTextureFormats(cb, ctx); }
-HRESULT DeviceProxy::BeginScene() { return m_real->BeginScene(); }
+HRESULT DeviceProxy::BeginScene()
+{
+    Scope p{TProxy};
+    return m_real->BeginScene();
+}
 
 HRESULT DeviceProxy::EndScene()
 {

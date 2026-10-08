@@ -385,11 +385,11 @@ void D3DStats::onFrame()
             {
                 LOG("Hitch: {:.1f} ms (average {:.1f}), thread ran {:.1f} | world {:.1f} ui {:.1f} flip {:.1f} lockBack {:.1f} "
                     "sound lock {:.1f} animation wait {:.1f} | outside: own {:.1f} game before world {:.1f} after world {:.1f} "
-                    "after ui {:.1f} | atlas uploads {} page resets {} | record file reads {} | textures loaded {} KB | draws {} "
+                    "after ui {:.1f}, device calls outside the world view {:.1f} | atlas uploads {} page resets {} | record file reads {} | textures loaded {} KB | draws {} "
                     "submitted {}",
                     frameMs, g_avgFrameMs, ranMs, dms[TWorld], dms[TUi], dms[TFlip], dms[TLockBack], dms[TSoundWait],
                     dms[TAnimationWait], dms[TOwnAfterFlip], dms[TGameBeforeWorld], dms[TGameAfterWorld], dms[TGameAfterUi],
-                    dc[CAtlasUpload], dc[CAtlasReset], dc[CRecordRead], dc[CTextureKB], dc[CDraw] + dc[CDrawIndexed] + dc[CDrawVB],
+                    dms[TProxy] - dms[TWorldProxy], dc[CAtlasUpload], dc[CAtlasReset], dc[CRecordRead], dc[CTextureKB], dc[CDraw] + dc[CDrawIndexed] + dc[CDrawVB],
                     dc[CSubmit]);
             }
         }
