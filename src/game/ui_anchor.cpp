@@ -105,7 +105,6 @@ namespace
     SetTextFn g_origSetText = nullptr;
     SetTextFn g_origSetTextId = nullptr;
     LayoutFn g_origPopupLayout = nullptr;
-    LayoutFn g_layoutChildren = nullptr;
 
     void* original(void* self, uintptr_t slot)
     {
@@ -497,7 +496,7 @@ namespace
         }
         if (!(saved & Popup::keepChildren))
         {
-            g_layoutChildren(popup);
+            Addr::cUI_Window2_layoutChildren(popup);
         }
     }
 
@@ -544,7 +543,6 @@ void UiAnchor::install()
     Patch::hook(g_origShowHelp, Addr::cUI_Manager_showHelp, &hookShowHelp, "cUI_Manager::showHelp");
     Patch::hook(g_origSetText, Addr::cUI_Popup_setText, &hookSetText, "cUI_Popup::setText");
     Patch::hook(g_origSetTextId, Addr::cUI_Popup_setTextId, &hookSetTextId, "cUI_Popup::setTextId");
-    g_layoutChildren = reinterpret_cast<LayoutFn>(Addr::cUI_Window2_layoutChildren);
     Patch::hook(g_origPopupLayout, Addr::cUI_Popup_layout, &hookPopupLayout, "cUI_Popup::layout");
 }
 

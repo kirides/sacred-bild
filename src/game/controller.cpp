@@ -18,6 +18,7 @@
 #include "log.h"
 #include "mem.h"
 #include "patch.h"
+#include "sacred/engine.h"
 
 #include <intrin.h>
 #include <algorithm>
@@ -334,7 +335,7 @@ namespace
         {
             return Context::None;   // cinematic
         }
-        if (void* engine = FrameHooks::engine(); engine && (member<uint32_t>(engine, Engine::flags) & 0x10000))
+        if (cEngine* engine = FrameHooks::engine(); engine && (engine->flags & cEngine::loading))
         {
             return Context::None;   // loading
         }
@@ -646,12 +647,10 @@ namespace
     // point the game's own hold-to-walk measures the cursor from.
     void heroGround(float& x, float& y)
     {
-        using InstanceFn = void*(__cdecl*)(int);
-        using ViewOffsetFn = void(__fastcall*)(void* engine, void* edx, int* x, int* y);
         int ox = 0, oy = 0;
-        if (void* engine = reinterpret_cast<InstanceFn>(Addr::cEngine_instance)(-1))
+        if (cEngine* engine = cEngine::instance())
         {
-            reinterpret_cast<ViewOffsetFn>(Addr::cEngine_getViewOffset)(engine, nullptr, &ox, &oy);
+            engine->viewOffset(ox, oy);
         }
         x = Resolution::width() * 0.5f - 2.0f * ox;
         y = Resolution::height() * 0.5f - 2.0f * oy;

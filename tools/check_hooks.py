@@ -1,7 +1,7 @@
 # Verifies that every Detours hook declares as many stack arguments as the target pops (ret N), in the English build
 # and, for targets with a signature (tools/data/addresses.json), in the German one if it is there (SACRED_DE).
 # A mismatch corrupts the stack on the first call. Keep this table in sync with src/game/*.cpp.
-import sys, bisect, json, os
+import sys, bisect, json, os, re
 sys.path.insert(0, 'tools')
 from eng import *
 from funcs import _A
@@ -106,6 +106,53 @@ HOOKS = {
     0x006B3640: ('cUI_Book::lineAt (called)', 3),
 }
 
+# The typed functions in src/game/sacred_addr.h (Thiscall<R(Self, Args...)> / Cdecl<R(Args...)>, with "ENG address"
+# in the comment on their line or the line above): their stack arguments come from the signature, so every one is
+# checked whether or not the table above lists it, and a table entry that disagrees with it is an error.
+def declared():
+    path = os.path.join(os.path.dirname(__file__), '..', 'src', 'game', 'sacred_addr.h')
+    with open(path, encoding='utf-8') as f:
+        text = f.read()
+    out = {}
+    for m in re.finditer(r'inline (Thiscall|Cdecl)<', text):
+        depth, i = 1, m.end()
+        while depth:
+            depth += {'<': 1, '>': -1}.get(text[i], 0)
+            i += 1
+        signature = text[m.end():i - 1]
+        name = re.match(r'\s*(\w+)\{\};', text[i:]).group(1)
+        line_end = text.find('\n', i)
+        line_start = text.rfind('\n', 0, m.start()) + 1
+        above = text[text.rfind('\n', 0, line_start - 1) + 1:line_start]
+        eng = re.search(r'ENG ([0-9A-F]{8})', text[line_start:line_end]) or re.search(r'//.*ENG ([0-9A-F]{8})', above)
+        if not eng:
+            continue
+        args, depth, cur = [], 0, ''
+        for c in signature[signature.index('(') + 1:signature.rindex(')')]:
+            depth += {'<': 1, '(': 1, '>': -1, ')': -1}.get(c, 0)
+            if c == ',' and depth == 0:
+                args.append(cur.strip())
+                cur = ''
+            else:
+                cur += c
+        if cur.strip():
+            args.append(cur.strip())
+        slots = 0
+        if m.group(1) == 'Thiscall':
+            slots = sum(2 if re.match(r'(const )?(double|u?int64_t)\b', a) else 1 for a in args[1:])
+        out[int(eng.group(1), 16)] = (name, slots)
+    return out
+
+ok = True
+for addr, (name, args) in declared().items():
+    if addr in HOOKS:
+        if HOOKS[addr][1] != args:
+            print(f'BAD {addr:08x} {name:34} sacred_addr.h declares {args} args, the table {HOOKS[addr][1]}')
+            ok = False
+    else:
+        HOOKS[addr] = (f'{name} (declared)', args)
+
+
 def rets_of(read, addr, length):
     code = read(addr, length)
     rets = set()
@@ -130,7 +177,6 @@ if de is None:
 de_of = {int(v['452F85C7'], 16): int(v[f'{de.timestamp:08X}'], 16)
          for v in resolved.values() if de and f'{de.timestamp:08X}' in v}
 
-ok = True
 for addr, (name, args, *known_end) in sorted(HOOKS.items()):
     i = bisect.bisect_right(_A, addr)
     end = known_end[0] if known_end else _A[i] if i < len(_A) else addr + 0x4000

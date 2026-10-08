@@ -1,5 +1,10 @@
 #pragma once
 
+namespace Sacred
+{
+    struct cEngine;
+}
+
 namespace FrameHooks
 {
     // Hooks dxDriver7 init/flip and the world renderer; call inside a Patch transaction.
@@ -13,5 +18,5 @@ namespace FrameHooks
     void* dxDriver();
 
     // The cEngine running the in-game render loop; nullptr before the first game started.
-    void* engine();
+    Sacred::cEngine* engine();
 }

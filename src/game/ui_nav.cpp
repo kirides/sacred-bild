@@ -19,7 +19,6 @@ namespace
     using namespace Sacred;
 
     // thiscall (int32 out[3]) on a control, called as fastcall with an unused EDX.
-    using RectFn = void(__fastcall*)(void* control, void* edx, int32_t* out);
 
     enum Kind : uint8_t
     {
@@ -171,7 +170,7 @@ namespace
     bool layoutRect(void* control, float& left, float& top, float& width, float& height)
     {
         int32_t rect[3] = {};
-        reinterpret_cast<RectFn>(Addr::cUI_Control2_getAbsoluteRect)(control, nullptr, rect);
+        Addr::cUI_Control2_getAbsoluteRect(control, rect);
         const int w = static_cast<int16_t>(rect[2] & 0xFFFF), h = static_cast<int16_t>(rect[2] >> 16);
         if (w <= 0 || h <= 0 || w > 1024 || h > 768)
         {
@@ -217,8 +216,6 @@ namespace
 
     // ---- The savegame window's list (Sacred::Savegame) ----
 
-    using SliderGetFn = uint32_t(__fastcall*)(void* slider);
-    using SliderSetFn = void(__fastcall*)(void* slider, void* edx, uint32_t value);
 
     // Saving or loading, also while a message box asks about it; 0 if neither.
     uint32_t listMode(void* window)
@@ -242,7 +239,7 @@ namespace
     uint32_t firstListed(void* window)
     {
         void* slider = static_cast<uint8_t*>(window) + Savegame::slider;
-        const uint32_t value = reinterpret_cast<SliderGetFn>(Addr::cUI_Slider_getValue)(slider) & 0xFFFF;
+        const uint32_t value = Addr::cUI_Slider_getValue(slider) & 0xFFFF;
         const uint32_t last = member<uint32_t>(slider, Slider::count) - (listMode(window) == Savegame::saving ? 2 : 3);
         return last <= value ? last : value;
     }
@@ -262,8 +259,7 @@ namespace
     // Sets the first listed savegame (the slider; the window renders the rows anew when it changes).
     void scrollList(void* window, uint32_t first)
     {
-        reinterpret_cast<SliderSetFn>(Addr::cUI_Slider_setValue)(static_cast<uint8_t*>(window) + Savegame::slider,
-            nullptr, first);
+        Addr::cUI_Slider_setValue(static_cast<uint8_t*>(window) + Savegame::slider, first);
     }
 
     UiNav::Rect rowRect(void* window, int row, const UiCanvas::Frame& frame)
@@ -519,8 +515,6 @@ bool UiNav::cancelButton(float& outX, float& outY)
 
 namespace
 {
-    using TextResourcesFn = void*(__cdecl*)();
-    using TextFn = const wchar_t* const*(__fastcall*)(void* texts, void* edx, uint32_t id);
     using TextWidthFn = uint16_t(__fastcall*)(void* font, void* edx, const wchar_t* text);
 
     // A menu entry whose text is drawn centered in its rect (Sacred::StaticText): the text's width in the 1024x768
@@ -537,8 +531,8 @@ namespace
         const wchar_t* end = nullptr;
         if (const uint32_t id = member<uint32_t>(control, fx ? StaticText::fxTextId : StaticText::textId))
         {
-            void* texts = reinterpret_cast<TextResourcesFn>(Addr::textResources_instance)();
-            const wchar_t* const* text = texts ? reinterpret_cast<TextFn>(Addr::textResources_get)(texts, nullptr, id) : nullptr;
+            void* texts = Addr::textResources_instance();
+            const wchar_t* const* text = texts ? Addr::textResources_get(texts, id) : nullptr;
             if (text)
             {
                 begin = text[0];
@@ -726,7 +720,7 @@ bool UiNav::npcAnswerRect(int index, Rect& out)
     }
     // The layout places the answers relative to the popup.
     int32_t rect[3] = {};
-    reinterpret_cast<RectFn>(Addr::cUI_Control2_getAbsoluteRect)(popup, nullptr, rect);
+    Addr::cUI_Control2_getAbsoluteRect(popup, rect);
     UiCanvas::Frame frame;
     if (!UiAnchor::frame(popup, frame))
     {
@@ -838,7 +832,6 @@ bool UiNav::bookPage(bool right, int step, float& outX, float& outY)
 
 bool UiNav::bookEntry(int step, float& outX, float& outY)
 {
-    using LineAtFn = bool(__fastcall*)(void* book, void* edx, int x, int y, uint16_t* index);
     void* diary;
     void* book = currentBook(diary);
     if (!book)
@@ -858,7 +851,7 @@ bool UiNav::bookEntry(int step, float& outX, float& outY)
     const int selected = member<int32_t>(pages + page * Book::pageSize, Book::pageSelected);
     // Where the entries are: the game's own hit test down the left page, at a few points across it.
     int32_t rect[3] = {};
-    reinterpret_cast<RectFn>(Addr::cUI_Control2_getAbsoluteRect)(book, nullptr, rect);
+    Addr::cUI_Control2_getAbsoluteRect(book, rect);
     const int left = rect[0] + Book::listX, top = rect[1] + Book::listY;
     struct Entry
     {
@@ -871,7 +864,7 @@ bool UiNav::bookEntry(int step, float& outX, float& outY)
         for (int y = top; y < top + Book::listHeight; y += 3)
         {
             uint16_t index = 0;
-            if (!reinterpret_cast<LineAtFn>(Addr::cUI_Book_lineAt)(book, nullptr, x, y, &index))
+            if (!Addr::cUI_Book_lineAt(book, x, y, &index))
             {
                 continue;
             }
@@ -1053,7 +1046,6 @@ bool UiNav::savegameStep(float x, float y, int step, int& row, int& scrollTo)
 
 void UiNav::selectSavegame(int scrollTo, int row)
 {
-    using SelectFn = void(__fastcall*)(void* window, void* edx, uint16_t row);
     void* window = savegames();
     if (!window)
     {
@@ -1065,7 +1057,7 @@ void UiNav::selectSavegame(int scrollTo, int row)
     }
     if (rowShows(window, row))
     {
-        reinterpret_cast<SelectFn>(Addr::cUI_Savegame_selectRow)(window, nullptr, static_cast<uint16_t>(row));
+        Addr::cUI_Savegame_selectRow(window, static_cast<uint16_t>(row));
     }
 }
 

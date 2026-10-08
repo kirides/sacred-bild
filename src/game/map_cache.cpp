@@ -137,7 +137,7 @@ void MapCache::install()
     {
         return;
     }
-    g_find = reinterpret_cast<FindFn>(Addr::recordMapFind);
+    g_find = Addr::recordMapFind.ptr();
     Patch::hook(g_layers.original, Addr::layerRecordCache, &hookLayers, "layerRecordCache");
     Patch::hook(g_records.original, Addr::recordCache, &hookRecords, "recordCache");
     LOG("Record caches: hash index in front of the tree lookups");

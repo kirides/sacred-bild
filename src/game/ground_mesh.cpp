@@ -29,11 +29,6 @@ namespace
     using DeviceFn = void(__fastcall*)(void* self, void* edx, void* device);
     using AddFn = void(__fastcall*)(void* self, void* edx, void* device, const float* quad);
     using SetTextureFn = void(__fastcall*)(void* self, void* edx, void* device, uint32_t handle);
-    using RecordFn = uint8_t*(__fastcall*)(void* owner, void* edx, uint32_t id);
-    using TextureGetFn = uint8_t*(__fastcall*)(void* manager, void* edx, uint32_t handle, int flags);
-    using FlagsInstanceFn = void*(__cdecl*)();
-    using FlagsSetFn = uint32_t(__fastcall*)(void* flags, void* edx, uint32_t flag, uint32_t on);
-    using WorldStateFn = uint8_t*(__cdecl*)();
 
     TileRowFn g_origTileRow = nullptr;
     DeviceFn g_origLayers = nullptr;
@@ -309,7 +304,7 @@ namespace
         }
         // As the game's flush looks it up: loads the texture if it isn't.
         void* manager = *reinterpret_cast<void**>(Addr::g_pTextureManager);
-        uint8_t* texture = manager ? reinterpret_cast<TextureGetFn>(Addr::cTextureManager_get)(manager, nullptr, handle, 0)
+        uint8_t* texture = manager ? Addr::cTextureManager_get(manager, handle, 0)
                                    : nullptr;
         auto* surface = texture ? member<IDirectDrawSurface7*>(texture, 0x14) : nullptr;
         TextureSlot slot;
@@ -469,7 +464,7 @@ namespace
 
         // Pass 0 (and every even one) draws two-texture records, the odd ones one-texture records; a chain moves on
         // to the next pass at each change of kind.
-        auto record = reinterpret_cast<RecordFn>(Addr::layerRecordCache);
+        auto record = Addr::layerRecordCache.ptr();
         void* mapData = g.mapData;
         uint32_t id = key.layers;
         int pass = 0;
@@ -738,8 +733,8 @@ namespace
                 maxPass = std::max(maxPass, static_cast<int>(gr.pass));
             }
         }
-        auto setFlag = reinterpret_cast<FlagsSetFn>(Addr::renderFlags_set);
-        void* flags = reinterpret_cast<FlagsInstanceFn>(Addr::renderFlags_instance)();
+        auto setFlag = Addr::renderFlags_set.ptr();
+        void* flags = Addr::renderFlags_instance();
         bool failed = false;
         for (int pass = 0; pass <= maxPass && !failed; ++pass)
         {
@@ -840,7 +835,7 @@ namespace
 
     bool dynamicLight()
     {
-        const uint8_t* ws = reinterpret_cast<WorldStateFn>(Addr::worldState_instance)();
+        const uint8_t* ws = Addr::worldState_instance();
         return ws && ((ws[WorldState::flags] & 0x20) || ws[WorldState::tileRendererLight]);
     }
 

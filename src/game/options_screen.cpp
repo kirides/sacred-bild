@@ -33,10 +33,6 @@ namespace
     using ShowFn = void(__fastcall*)(void* self, void* edx, int show);
     using RenderFn = void(__fastcall*)(void* self, void* edx, void* device);
     using Render2Fn = void(__fastcall*)(void* self, void* edx, void* device, int a, int b);
-    using FlagsFn = void(__fastcall*)(void* control, void* edx, uint32_t mask);
-    using SliderGetFn = uint32_t(__fastcall*)(void* slider);
-    using SliderSetFn = void(__fastcall*)(void* slider, void* edx, uint32_t value);
-    using RectFn = void(__fastcall*)(void* control, void* edx, int32_t* out);
 
     ShowFn g_origShow = nullptr;
     RenderFn g_origRender = nullptr;
@@ -94,7 +90,7 @@ namespace
     {
         if (c)
         {
-            reinterpret_cast<FlagsFn>(on ? Addr::cUI_Control2_setFlags : Addr::cUI_Control2_clearFlags)(c, nullptr, Options::checked);
+            (on ? Addr::cUI_Control2_setFlags : Addr::cUI_Control2_clearFlags)(c, Options::checked);
         }
     }
 
@@ -136,14 +132,14 @@ namespace
         {
             return {};
         }
-        return {static_cast<int>(reinterpret_cast<SliderGetFn>(Addr::cUI_Slider_getValue)(s)), static_cast<int>(count - 1)};
+        return {static_cast<int>(Addr::cUI_Slider_getValue(s)), static_cast<int>(count - 1)};
     }
 
     void writeSlider(void* window, uintptr_t offset, const Slider& slider)
     {
         if (void* s = control(window, offset); s && slider.max > 0)
         {
-            reinterpret_cast<SliderSetFn>(Addr::cUI_Slider_setValue)(s, nullptr, static_cast<uint32_t>(slider.value));
+            Addr::cUI_Slider_setValue(s, static_cast<uint32_t>(slider.value));
         }
     }
 
@@ -156,7 +152,7 @@ namespace
             return;
         }
         int32_t rect[3] = {};
-        reinterpret_cast<RectFn>(Addr::cUI_Control2_getAbsoluteRect)(button, nullptr, rect);
+        Addr::cUI_Control2_getAbsoluteRect(button, rect);
         const int w = static_cast<int16_t>(rect[2] & 0xFFFF), h = static_cast<int16_t>(rect[2] >> 16);
         Controller::clickAt(UiCanvas::toPhysicalX(rect[0] + w / 2), UiCanvas::toPhysicalY(rect[1] + h / 2));
     }

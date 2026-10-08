@@ -126,7 +126,7 @@ size_t Sig::resolve(std::span<const Entry> entries, std::span<const uint8_t> cod
         if (p.hits != 1)
         {
             LOG("Signature {}: {} matches", e.name, p.hits);
-            *e.out = 0;
+            *e.out.address = 0;
             ++failed;
             continue;
         }
@@ -135,11 +135,11 @@ size_t Sig::resolve(std::span<const Entry> entries, std::span<const uint8_t> cod
         {
             uint32_t value;
             std::memcpy(&value, data + at, 4);
-            *e.out = value;
+            *e.out.address = value;
         }
         else
         {
-            *e.out = codeVa + at;
+            *e.out.address = codeVa + at;
         }
     }
     return failed;

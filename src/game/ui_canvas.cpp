@@ -8,6 +8,7 @@
 #include "log.h"
 #include "mem.h"
 #include "patch.h"
+#include "sacred/mouse.h"
 
 #include <windows.h>
 #include <intrin.h>
@@ -39,21 +40,15 @@ namespace
 
     using GetClientCursorPosFn = void(__cdecl*)(HWND, POINT*);
     using RenderCursorFn = void(__fastcall*)(void* self, void* edx, void* device, int flag);
-    using MouseInstanceFn = void*(__cdecl*)();
-    using IsCursorOverUiFn = bool(__fastcall*)(void* uiManager, void* edx, int x, int y);
     using WorldMouseFn = uint32_t(__fastcall*)(void* engine, void* edx, void* event, int flag);
     WorldMouseFn g_origWorldMouse = nullptr;
     using SavePortraitFn = uint32_t(__fastcall*)(void* self, void* edx, const char* path, int w, int h, float scale);
-    using CursorPosFn = void(__fastcall*)(void* mouse, void* edx, int* x, int* y);
     using HeldItemFn = void(__fastcall*)(void* self, void* edx, void* device, int flag);
     HeldItemFn g_origHeldItem = nullptr;
 
     GetClientCursorPosFn g_origGetClientCursorPos = nullptr;
     RenderCursorFn g_origRenderCursor = nullptr;
-    MouseInstanceFn g_mouseInstance = nullptr;
-    IsCursorOverUiFn g_isCursorOverUi = nullptr;
     SavePortraitFn g_origSavePortrait = nullptr;
-    CursorPosFn g_cursorPos = nullptr;
 
     using Mem::member;
 
@@ -88,11 +83,6 @@ namespace
     }
 
     const Layout& layout() { return t_layout ? *t_layout : liveLayout(); }
-
-    int mouseField(void* mouse, uintptr_t offset)
-    {
-        return *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(mouse) + offset);
-    }
 
     // The bytes before `ra` encode a call instruction.
     bool isCallSite(uintptr_t ra)
@@ -200,28 +190,28 @@ namespace
     }
 
     // The world cursor handler reads the mouse once (redirected to physical) and also asks the UI with it.
-    bool __fastcall isCursorOverUiPhysical(void* uiManager, void* edx, int x, int y)
+    bool __fastcall isCursorOverUiPhysical(void* uiManager, void* /*edx*/, int x, int y)
     {
-        return g_isCursorOverUi(uiManager, edx, UiCanvas::toVirtualX(x), UiCanvas::toVirtualY(y));
+        return Addr::cUI_Manager_isCursorOverUi(uiManager, UiCanvas::toVirtualX(x), UiCanvas::toVirtualY(y));
     }
 
-    int __fastcall physicalGetX(void* mouse)
+    int __fastcall physicalGetX(cMouse* mouse)
     {
-        return UiCanvas::toPhysicalX(mouseField(mouse, Mouse::x));
+        return UiCanvas::toPhysicalX(mouse->x);
     }
 
-    int __fastcall physicalGetY(void* mouse)
+    int __fastcall physicalGetY(cMouse* mouse)
     {
-        return UiCanvas::toPhysicalY(mouseField(mouse, Mouse::y));
+        return UiCanvas::toPhysicalY(mouse->y);
     }
 
     // Stand-in cMouse for call sites that only read +4/+8 afterwards.
     void* __cdecl physicalMouseInstance()
     {
         thread_local int shadow[4];
-        void* mouse = g_mouseInstance();
-        shadow[1] = UiCanvas::toPhysicalX(mouseField(mouse, Mouse::x));
-        shadow[2] = UiCanvas::toPhysicalY(mouseField(mouse, Mouse::y));
+        cMouse* mouse = cMouse::instance();
+        shadow[1] = UiCanvas::toPhysicalX(mouse->x);
+        shadow[2] = UiCanvas::toPhysicalY(mouse->y);
         return shadow;
     }
 
@@ -229,33 +219,33 @@ namespace
     int frameX(int canvas) { return static_cast<int>(std::lround(canvas - t_frame.x)); }
     int frameY(int canvas) { return static_cast<int>(std::lround(canvas - t_frame.y)); }
 
-    int __fastcall frameGetX(void* mouse)
+    int __fastcall frameGetX(cMouse* mouse)
     {
-        return frameX(mouseField(mouse, Mouse::x));
+        return frameX(mouse->x);
     }
 
-    int __fastcall frameGetY(void* mouse)
+    int __fastcall frameGetY(cMouse* mouse)
     {
-        return frameY(mouseField(mouse, Mouse::y));
+        return frameY(mouse->y);
     }
 
     void* __cdecl frameMouseInstance()
     {
-        void* mouse = g_mouseInstance();
+        cMouse* mouse = cMouse::instance();
         if (t_frame.x == 0.0f && t_frame.y == 0.0f)
         {
             return mouse;
         }
         thread_local int shadow[4];
-        shadow[1] = frameX(mouseField(mouse, Mouse::x));
-        shadow[2] = frameY(mouseField(mouse, Mouse::y));
+        shadow[1] = frameX(mouse->x);
+        shadow[2] = frameY(mouse->y);
         return shadow;
     }
 
-    void __fastcall frameCursorPos(void* mouse, void* edx, int* x, int* y)
+    void __fastcall frameCursorPos(cMouse* mouse, void* /*edx*/, int* x, int* y)
     {
-        g_cursorPos(mouse, edx, x, y);
-        if (*reinterpret_cast<void**>(static_cast<uint8_t*>(mouse) + Mouse::cursorImage))
+        Addr::cMouse_getCursorPos(mouse, x, y);
+        if (mouse->cursorImage)
         {
             *x = frameX(*x);
             *y = frameY(*y);
@@ -451,8 +441,6 @@ void UiCanvas::install()
     LOG("UI canvas: in game scale {:.3f} at {},{}, menus scale {:.3f} at {},{}", g_game.scale, g_game.left, g_game.top,
         g_menu.scale, g_menu.left, g_menu.top);
 
-    g_mouseInstance = reinterpret_cast<MouseInstanceFn>(Addr::cMouse_instance);
-    g_isCursorOverUi = reinterpret_cast<IsCursorOverUiFn>(Addr::cUI_Manager_isCursorOverUi);
     int redirected = 0;
     // World code that reads cMouse coordinates (getX / getY, or cMouse_instance() followed by reads of +4/+8) gets
     // physical-coordinate versions.
@@ -464,7 +452,6 @@ void UiCanvas::install()
     if (Config::ui.anchor)
     {
         // The UI's own reads of the cursor follow the frame they run in.
-        g_cursorPos = reinterpret_cast<CursorPosFn>(Addr::cMouse_getCursorPos);
         redirected = 0;
         for (uintptr_t site : Addr::uiMouseReads) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&frameMouseInstance));
         for (uintptr_t site : Addr::uiGetXCalls) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&frameGetX));

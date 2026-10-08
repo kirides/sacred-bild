@@ -914,9 +914,9 @@ void Resolution::install()
     g_origCreateWindowExA = static_cast<CreateWindowExAFn>(
         Patch::iat("USER32.dll", "CreateWindowExA", reinterpret_cast<void*>(&hookCreateWindowExA)));
 
-    g_flushBatcher = reinterpret_cast<DeviceFn>(Addr::cQuadBatcher_flush);
-    g_drawTileLayers = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawTileLayers);
-    g_drawWaterTiles = reinterpret_cast<DeviceFn>(Addr::cWorldView_drawWaterTiles);
+    g_flushBatcher = Addr::cQuadBatcher_flush.ptr();
+    g_drawTileLayers = Addr::cWorldView_drawTileLayers.ptr();
+    g_drawWaterTiles = Addr::cWorldView_drawWaterTiles.ptr();
     Patch::hook(g_origLoadingScreen, Addr::dxDriver7_drawLoadingScreen, &hookLoadingScreen, "dxDriver7::drawLoadingScreen");
     Patch::hook(g_origTextureInit, Addr::cTextureManager_init, &hookTextureInit, "cTextureManager::init");
     Patch::hook(g_origTileRow, Addr::cWorldView_renderTileRow, &hookTileRow, "cWorldView::renderTileRow");

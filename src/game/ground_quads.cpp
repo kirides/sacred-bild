@@ -55,7 +55,7 @@ void GroundQuads::install()
     {
         return;
     }
-    g_textureGet = reinterpret_cast<TextureGetFn>(Addr::cTextureManager_get);
+    g_textureGet = Addr::cTextureManager_get.ptr();
     if (Patch::hook(g_origFlush, Addr::cQuadBatcher_flush, &hookFlush, "cQuadBatcher::flush"))
     {
         LOG("Ground: quad batcher flushes go to the batcher directly");

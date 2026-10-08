@@ -17,6 +17,7 @@
 #include "mem.h"
 #include "patch.h"
 #include "profiler.h"
+#include "sacred/engine.h"
 
 #include <windows.h>
 #include <intrin.h>
@@ -36,7 +37,7 @@ namespace
     using FlipFn = int(__fastcall*)(void* self, void* edx);
     using LockBackFn = void*(__fastcall*)(void* self, void* edx, void* desc);
     using RenderFn = void(__fastcall*)(void* self, void* edx, void* device);
-    using ThreadRunFn = void(__fastcall*)(void* engine);
+    using ThreadRunFn = void(__fastcall*)(cEngine* engine);
 
     InitFn g_origInit = nullptr;
     FlipFn g_origFlip = nullptr;
@@ -44,27 +45,28 @@ namespace
     RenderFn g_origWorldRender = nullptr;
     RenderFn g_origUiRender = nullptr;
     ThreadRunFn g_origRenderThreadRun = nullptr;
-    void* volatile g_engine = nullptr;
+    cEngine* volatile g_engine = nullptr;
     void* volatile g_dxDriver = nullptr;
 
     // Logs changes of the engine's fade/loading flags and the UI manager's mode (once per frame, on change).
     void logGameState()
     {
         static uint32_t lastEngine = ~0u, lastUi = ~0u;
-        const uint32_t engineFlags = g_engine ? member<uint32_t>(g_engine, Engine::flags) & 0xF0000 : 0;
+        cEngine* engine = g_engine;
+        const uint32_t engineFlags = engine ? engine->flags & 0xF0000 : 0;
         void* ui = *reinterpret_cast<void**>(Addr::g_pUiManager);
         const uint32_t uiFlags = ui ? member<uint32_t>(ui, UiManager::flags) & 0x7F : 0;
         if (engineFlags != lastEngine || uiFlags != lastUi)
         {
             lastEngine = engineFlags;
             lastUi = uiFlags;
-            LOG("State: engine {}{}{}{} | ui flags {:02x}{}", engineFlags & 0x10000 ? "loading " : "",
-                engineFlags & 0x20000 ? "fade-out " : "", engineFlags & 0x40000 ? "fade-in " : "",
-                engineFlags & 0x80000 ? "black " : "", uiFlags, uiFlags & 0x10 ? " cinematic" : "");
+            LOG("State: engine {}{}{}{} | ui flags {:02x}{}", engineFlags & cEngine::loading ? "loading " : "",
+                engineFlags & cEngine::fadeOut ? "fade-out " : "", engineFlags & cEngine::fadeIn ? "fade-in " : "",
+                engineFlags & cEngine::black ? "black " : "", uiFlags, uiFlags & 0x10 ? " cinematic" : "");
         }
     }
 
-    void __fastcall hookRenderThreadRun(void* engine)
+    void __fastcall hookRenderThreadRun(cEngine* engine)
     {
         g_engine = engine;
         g_origRenderThreadRun(engine);
@@ -322,7 +324,7 @@ void* FrameHooks::dxDriver()
     return g_dxDriver;
 }
 
-void* FrameHooks::engine()
+cEngine* FrameHooks::engine()
 {
     return g_engine;
 }
