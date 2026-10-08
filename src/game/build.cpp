@@ -2,6 +2,7 @@
 #include "game/controller.h"
 #include "game/d3d_stats.h"
 #include "game/fast_math.h"
+#include "game/file_io_stats.h"
 #include "game/sacred_addr.h"
 #include "game/focus.h"
 #include "game/frame_hooks.h"
@@ -114,6 +115,7 @@ void Sacred::installHooks()
     if (Config::debug.d3dStats)
     {
         WorldPasses::install();
+        FileIoStats::install();
     }
     Connection::install(false);
     UdpTransport::install(false);

@@ -72,6 +72,7 @@ namespace D3DStats
         TWorldProxy,    // the part of TProxy spent inside cWorldView0::render
         TSoundWait,     // the render thread waiting for the sound system's lock (SoundLock)
         TAnimationWait, // the render thread waiting for the animation worker (AsyncAnimation)
+        TFileIo,        // the render thread in CreateFileA / ReadFile (FileIoStats)
         // The rest of the frame, between the marks below (render thread): SacredBild's work after the flip, the
         // game's before the world view, between world view and UI, and between UI and flip.
         TOwnAfterFlip,

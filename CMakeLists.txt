@@ -61,6 +61,7 @@ set(DDRAW_SOURCES
   src/game/map_cache.cpp
   src/game/sound_lock.cpp
   src/game/fast_math.cpp
+  src/game/file_io_stats.cpp
   src/game/ground_quads.cpp
   src/game/sprite_quads.cpp
   src/game/ground_mesh.cpp
