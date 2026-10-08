@@ -18,6 +18,7 @@
 #include "game/screenshot.h"
 #include "game/skin_check.h"
 #include "game/sound_lock.h"
+#include "game/sprite_quads.h"
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
 #include "game/world_passes.h"
@@ -101,6 +102,7 @@ void Sacred::installHooks()
     MapCache::install();
     SoundLock::install();
     GroundQuads::install();
+    SpriteQuads::install();
     GpuSkin::install();
     GrannyParallel::install();
     SkinCheck::install();

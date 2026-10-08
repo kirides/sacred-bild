@@ -232,6 +232,9 @@ namespace
             .tip(L"Send 3D models (characters and their shadows) through the same vertex buffers, merged where they can be.");
         ui.check(L"Merge the ground's quads directly", {L"Render", L"BatchGround"}, Config::render.batchGround)
             .tip(L"Hand the ground's quads to the merging directly instead of through three device calls per quad.");
+        ui.check(L"Merge the sprites' quads directly", {L"Render", L"BatchSprites"}, Config::render.batchSprites)
+            .tip(L"Hand the objects' and water's quads to the merging directly instead of through two device calls each time "
+                 L"the texture changes.");
         ui.check(L"Texture atlas:", {L"Render", L"Atlas"}, Config::render.atlas)
             .tip(L"Copy small textures into large shared pages so draws with different textures can be merged too.");
         ui.indent();

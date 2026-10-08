@@ -282,6 +282,13 @@ texture than the one before, so the game's own batching rarely gets past one qua
   page the batch already uses), without the generic per-draw work.
 - `cTileRenderer` (`0x61E800`/`0x61FAB0`, vertex buffer) is not used in game (no `DrawPrimitiveVB` calls).
 - Sprites: `dxDriver7_drawTexturedQuad` and the object passes draw FVF `0x1C4` strips and small indexed lists.
+- Sprite batcher at `cWorldView + 0x91AEC` (`cSpriteBatcher`): vertices `+0` (600 x 32 bytes), indices `+0x4B00`,
+  vertex count `+0x4FB0`, index count `+0x4FB4`, flush and triangle statistics `+0x4FB8`/`+0x4FBC`, texture handle
+  `+0x4FC0`. Add `0x628D50` (thiscall (device, 4 vertices): culls against 0..1024 / 0..768, flushes first above
+  0x252 indices), set texture `0x628F90` (thiscall (device, handle): flushes if the handle changes), flush
+  `0x629050` (thiscall (device)). A flush is `SetTexture(0, cTextureManager_get(handle)->surface)` and one
+  `DrawIndexedPrimitive` (triangle list). Used by `drawWaterTiles` and both object passes; `BatchSprites` replaces
+  the set-texture and end flushes like `BatchGround` does the ground's.
 - Render state cache: `0x643430` (thiscall (flag, on)) skips redundant changes of a flag word at device
   wrapper `+4`; `0x643470` applies them. Flags: `1` ZENABLE, `2` CULLMODE CCW/none, `4` ALPHABLENDENABLE,
   `8` SRCBLEND one/srcalpha, `0x10` DESTBLEND one/invsrcalpha, `0x20` LIGHTING, `0x40` ZFUNC greater/lessequal,

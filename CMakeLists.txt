@@ -62,6 +62,7 @@ set(DDRAW_SOURCES
   src/game/sound_lock.cpp
   src/game/fast_math.cpp
   src/game/ground_quads.cpp
+  src/game/sprite_quads.cpp
   src/game/ground_mesh.cpp
   src/game/skin_check.cpp
   src/game/granny_mesh.cpp

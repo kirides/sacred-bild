@@ -23,6 +23,7 @@ namespace Sacred
     struct cObjectManager;
     struct cOrder;
     struct cQuadBatcher;
+    struct cSpriteBatcher;
     struct cTextResources;
     struct cTextTable;
     struct cTexture;
@@ -165,6 +166,10 @@ namespace Sacred::Addr
     inline Thiscall<void(cQuadBatcher* self, IDirect3DDevice7* device, const float* quad)> cQuadBatcher_add{};
     // ENG 006292C0
     inline Thiscall<void(cQuadBatcher* self, IDirect3DDevice7* device, uint32_t handle)> cQuadBatcher_setTexture{};
+    // The sprite batcher (sacred/render.h): flush when the texture handle changes, flush at the end of a pass.
+    // ENG 00628F90
+    inline Thiscall<void(cSpriteBatcher* self, IDirect3DDevice7* device, uint32_t handle)> cSpriteBatcher_setTexture{};
+    inline Thiscall<void(cSpriteBatcher* self, IDirect3DDevice7* device)> cSpriteBatcher_flush{}; // ENG 00629050
     inline Cdecl<RenderFlags*()> renderFlags_instance{};  // ENG 00643110
     inline Thiscall<uint32_t(RenderFlags* self, uint32_t flag, uint32_t on)> renderFlags_set{}; // ENG 00643430
     inline Cdecl<WorldState*()> worldState_instance{};    // ENG 00417E70

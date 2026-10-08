@@ -87,6 +87,26 @@ namespace Sacred
     static_assert(offsetof(cQuadBatcher, triangles) == 0x591C && offsetof(cQuadBatcher, texture0) == 0x5920);
     static_assert(offsetof(cQuadBatcher, texture1) == 0x5924);
 
+    // The sprite batcher at cWorldView + 0x91AEC: the water tiles and both object passes add their pretransformed
+    // quads (FVF 0x1C4) to it. It flushes (SetTexture(0) + one DrawIndexedPrimitive) when the texture changes, at
+    // the end of a pass and when an add finds more than 0x252 indices; nearly every sprite has another texture.
+    struct cSpriteBatcher
+    {
+        static constexpr uint32_t fvf = 0x1C4;  // XYZRHW, diffuse, specular, one texture coordinate set: 32 bytes
+        static constexpr uint32_t vertexSize = 32;
+
+        uint8_t vertices[0x4B00];
+        uint16_t indices[(0x4FB0 - 0x4B00) / 2];
+        uint32_t vertCount;
+        uint32_t indexCount;
+        uint32_t flushes;           // statistics, counted by the flushes
+        uint32_t triangles;
+        uint32_t texture;           // texture manager handle
+    };
+    static_assert(offsetof(cSpriteBatcher, indices) == 0x4B00 && offsetof(cSpriteBatcher, vertCount) == 0x4FB0);
+    static_assert(offsetof(cSpriteBatcher, indexCount) == 0x4FB4 && offsetof(cSpriteBatcher, flushes) == 0x4FB8);
+    static_assert(offsetof(cSpriteBatcher, triangles) == 0x4FBC && offsetof(cSpriteBatcher, texture) == 0x4FC0);
+
     // The render flags (the 8-byte object at ENG 00CD7A7C, made on first use; see RE_NOTES "Draw calls and
     // batching"). drawTileLayers switches flag 0x2000 between its two-texture (off) and one-texture (on) blend layer
     // passes.

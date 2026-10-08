@@ -136,6 +136,8 @@ static const Sig::Entry kAddressSigs[] = {
     {"cQuadBatcher_flush", "56 8B F1 8B 86 10 59 00 00 85 C0 0F 84 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cQuadBatcher_flush}, // 00629340, 00629420
     {"cQuadBatcher_add", "53 8B D9 56 81 BB 14 59 00 00 52 02 00 00", 0, Sig::Take::Match, &Sacred::Addr::cQuadBatcher_add}, // 00629180, 00629260
     {"cQuadBatcher_setTexture", "56 8B F1 57 8B 7C 24 10 3B BE 20 59 00 00", 0, Sig::Take::Match, &Sacred::Addr::cQuadBatcher_setTexture}, // 006292C0, 006293A0
+    {"cSpriteBatcher_setTexture", "55 8B 6C 24 0C 56 8B F1 8B 86 C0 4F 00 00", 0, Sig::Take::Match, &Sacred::Addr::cSpriteBatcher_setTexture}, // 00628F90, 00629070
+    {"cSpriteBatcher_flush", "56 8B F1 8B 86 B0 4F 00 00 85 C0 0F 84 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cSpriteBatcher_flush}, // 00629050, 00629130
     {"renderFlags_instance", "A1 ?? ?? ?? ?? 85 C0 75 28 6A 08 E8 ?? ?? ?? ?? 83 C4 04 85 C0", 0, Sig::Take::Match, &Sacred::Addr::renderFlags_instance}, // 00643110, 00643240
     {"renderFlags_set", "8B 44 24 04 8B 54 24 08 56 8B 71 04", 0, Sig::Take::Match, &Sacred::Addr::renderFlags_set}, // 00643430, 00643560
     {"worldState_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3F 68 6C 2E 01 00", 0, Sig::Take::Match, &Sacred::Addr::worldState_instance}, // 00417E70, 00417E50

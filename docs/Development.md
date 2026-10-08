@@ -47,6 +47,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 | `src/game/gpu_skin.*` | `[Render] GpuSkinning`: Granny's deform reduced to the bone matrices, characters drawn by the backend's skinning shader |
 | `src/game/skin_check.*` | `[Debug] SkinCheck`: Granny's skinning data read back and checked |
 | `src/game/ground_quads.*` | The ground's quad batcher straight to the batcher (`[Render] BatchGround`) |
+| `src/game/sprite_quads.*` | The sprite batcher's flushes (water tiles, objects) straight to the batcher (`[Render] BatchSprites`) |
 | `src/game/ground_mesh.*` | `[Render] GroundMesh`: the ground's tiles and blend layers in vertex buffers per sector, drawn by the backend's ground shader |
 | `src/game/map_cache.*` | Hash index in front of the map record caches (`[Render] RecordIndex`) |
 | `src/game/fast_math.*` | Faster replacements for the game's x87 math helpers (`[Render] FastMath`) |

@@ -540,6 +540,14 @@
    "452F85C7": "006292C0",
    "451BBE74": "006293A0"
   },
+  "cSpriteBatcher_setTexture": {
+   "452F85C7": "00628F90",
+   "451BBE74": "00629070"
+  },
+  "cSpriteBatcher_flush": {
+   "452F85C7": "00629050",
+   "451BBE74": "00629130"
+  },
   "renderFlags_instance": {
    "452F85C7": "00643110",
    "451BBE74": "00643240"

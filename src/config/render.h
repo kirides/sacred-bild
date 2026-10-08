@@ -19,6 +19,9 @@ namespace Config
         bool batchModels = true;
         // The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls.
         bool batchGround = true;
+        // The sprite batcher (water tiles, objects) hands its texture and quads to the batcher in one call instead of
+        // two device calls per flush.
+        bool batchSprites = true;
         // The ground's tiles kept in vertex buffers per sector (built once as they come into view) and drawn by a vertex
         // shader in a few draws per frame, instead of the game rebuilding and drawing every tile and blend layer each
         // frame (Direct3D 9 backend only).

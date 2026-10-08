@@ -99,6 +99,8 @@ SACRED = [
     ('cQuadBatcher_flush', 0x00629340, 'func'),
     ('cQuadBatcher_add', 0x00629180, 'func'),
     ('cQuadBatcher_setTexture', 0x006292C0, 'func'),
+    ('cSpriteBatcher_setTexture', 0x00628F90, 'func'),
+    ('cSpriteBatcher_flush', 0x00629050, 'func'),
     ('renderFlags_instance', 0x00643110, 'func'),
     ('renderFlags_set', 0x00643430, 'func'),
     ('worldState_instance', 0x00417E70, 'func'),
