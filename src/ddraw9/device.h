@@ -228,6 +228,12 @@ namespace DDraw9
         UINT m_skinConstantCount = 0;
         BOOL m_skinFlags[5] = {};
         int m_skinLightCount = -1;
+        // The lights in camera space (7 registers per light, at most 8) and what they were made from: recomputed
+        // only when an enabled light or the view changes, not for every character.
+        float m_skinLightRegs[8 * 7][4] = {};
+        D3DLIGHT7 m_skinLightKeys[8] = {};
+        D3DMATRIX m_skinLightView = {};
+        int m_skinLightsCached = -1;            // lights in m_skinLightRegs; -1 = none computed
 
         // Ground (device_ground.cpp). Bound like the skinning shader: m_skinBound makes the next fixed-function draw
         // go back to the fixed-function pipeline.

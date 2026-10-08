@@ -349,11 +349,23 @@ namespace DDraw9
         set(c[15], fromVertex(m_rs[D3DRENDERSTATE_DIFFUSEMATERIALSOURCE]), fromVertex(m_rs[D3DRENDERSTATE_AMBIENTMATERIALSOURCE]),
             fromVertex(m_rs[D3DRENDERSTATE_SPECULARMATERIALSOURCE]), fromVertex(m_rs[D3DRENDERSTATE_EMISSIVEMATERIALSOURCE]));
 
-        // Lights in camera space.
-        for (UINT i = 0; i < lightCount; ++i)
+        // Lights in camera space, as computed for an earlier draw unless a light or the view changed.
+        bool lightsChanged = static_cast<int>(lightCount) != m_skinLightsCached ||
+            std::memcmp(&m_skinLightView, &m_transforms[D3DTRANSFORMSTATE_VIEW], sizeof(D3DMATRIX)) != 0;
+        for (UINT i = 0; i < lightCount && !lightsChanged; ++i)
+        {
+            lightsChanged = std::memcmp(&m_skinLightKeys[i], lights[i], sizeof(D3DLIGHT7)) != 0;
+        }
+        if (lightsChanged)
+        {
+            m_skinLightsCached = static_cast<int>(lightCount);
+            m_skinLightView = m_transforms[D3DTRANSFORMSTATE_VIEW];
+        }
+        for (UINT i = 0; i < lightCount && lightsChanged; ++i)
         {
             const D3DLIGHT7& l = *lights[i];
-            Float4* r = c + kLightRegister + i * kLightRegisters;
+            m_skinLightKeys[i] = l;
+            Float4* r = m_skinLightRegs + i * kLightRegisters;
             const D3DVECTOR& p = l.dvPosition;
             const D3DVECTOR& d = l.dvDirection;
             const float px = p.x * view[0][0] + p.y * view[1][0] + p.z * view[2][0] + view[3][0];
@@ -378,6 +390,7 @@ namespace DDraw9
             set(r[5], l.dvAttenuation0, l.dvAttenuation1, l.dvAttenuation2, positional ? 1.0f : 0.0f);
             set(r[6], std::cos(l.dvTheta * 0.5f), std::cos(l.dvPhi * 0.5f), l.dltType == D3DLIGHT_SPOT ? 1.0f : 0.0f, 0.0f);
         }
+        std::memcpy(c + kLightRegister, m_skinLightRegs, lightCount * kLightRegisters * sizeof(Float4));
 
         // Uploaded only where they changed, the camera (per character) apart from material and lights (rarely).
         const UINT count = kLightRegister + lightCount * kLightRegisters;
