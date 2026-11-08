@@ -98,6 +98,7 @@ namespace
         std::vector<uint8_t> built = std::vector<uint8_t>(kTilesPerSector);
         float minX = 0, minY = 0, maxX = 0, maxY = 0;
         bool any = false;
+        bool stale = false;     // a tile changed: the sector starts over with the next frame
     };
 
     enum class Build
@@ -612,10 +613,11 @@ namespace
             {
                 return true;
             }
-            // Quads can't be taken out of the buffers: the sector starts over (its tiles are built again as the walk
-            // visits them).
-            releaseCache(*c);
-            ++g.sectorResets;
+            // Quads can't be taken out of the buffers: the sector starts over, but not in the middle of the walk (the
+            // tiles it had already visited would be missing from this frame, black patches wherever the lights
+            // change every frame). This frame draws it as it is; the next builds it again.
+            c->stale = true;
+            return true;
         }
         switch (buildTile(*c, t, tile, key))
         {
@@ -967,6 +969,15 @@ void GroundMesh::beginFrame(cWorldView* view, IDirect3DDevice7* device)
     g.haveOffset = false;
     g.drawn = false;
     std::fill(std::begin(g.slots), std::end(g.slots), nullptr);
+    for (auto& c : g.caches)
+    {
+        if (c->stale)
+        {
+            c->stale = false;
+            releaseCache(*c);
+            ++g.sectorResets;
+        }
+    }
 
     // Another map (tile definitions, cell coordinates) or full atlas pages: everything is built again.
     cMapData* mapData = view->mapData;
