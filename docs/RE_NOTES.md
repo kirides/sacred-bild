@@ -594,7 +594,7 @@ current frame. The vtable slots `+0x10`, `+0x14`, `+0x1C`, `+0x24` (and `+0x44` 
 anchored windows' classes point at thunks that enter the window's frame and shift mouse button events and
 isInside arguments into it (all classes are single inheritance; the slot after a vtable's last entry is the
 next one's RTTI pointer, which bounds the patch). Popups take the frame in which their text was set and are
-drawn unconfined. The cursor itself, the manager's own drawing and every other window stay in the canvas.
+drawn unconfined. A popup that a window set the text of (its tooltips and hints, e.g. the blacksmith's "Place the weapon or armor here ...", which lies over its item grid) takes no mouse events and is never hit by `isInside`: the grid under it still gets the clicks and the drop highlight. The cursor itself, the manager's own drawing and every other window stay in the canvas.
 Window positions come from `[UI.Layout]` (X,Y in 0..4096 of the room around the 1024x768 layout). Stats (656,0
 256x420) and equipment (656,388 256x256) form one column; by default they share the top-right frame with the
 minimap. The taskbar's level-up button ("+", embedded control at taskbar `+0x18C`, absolute 898,10 without a

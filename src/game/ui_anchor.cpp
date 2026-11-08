@@ -1,8 +1,10 @@
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
+#include "config/debug.h"
 #include "config/ui.h"
 #include "log.h"
 #include "patch.h"
+#include "sacred/mouse.h"
 #include "sacred/ui.h"
 
 #include <windows.h>
@@ -158,6 +160,22 @@ namespace
         return true;
     }
 
+    // A popup whose text a window set (so it has a frame of its own): the tooltips and hints of that window.
+    bool isWindowPopup(const cUI_Control2* self)
+    {
+        bool found = false;
+        if (self->vtable == g_popupVtable)
+        {
+            AcquireSRWLockShared(&g_popupLock);
+            for (size_t i = 0; i < g_popupCount && !found; ++i)
+            {
+                found = g_popups[i].popup == self;
+            }
+            ReleaseSRWLockShared(&g_popupLock);
+        }
+        return found;
+    }
+
     void traceRender(int what, const char* slot)
     {
         if (UiCanvas::tracing())
@@ -175,12 +193,21 @@ namespace
     {
         const auto orig = original(self).receiveEvent;
         Frame frame;
-        if (!frameOf(self, frame) || frame == UiCanvas::frame())
+        int what = 0;
+        if (!frameOf(self, frame, &what) || frame == UiCanvas::frame())
         {
             return orig(self, edx, event);
         }
         // The event travels on to other windows afterwards: shift its position for this one only.
         cEventMouse* mouse = cEventMouse::of(event);
+        if (mouse && isWindowPopup(self))
+        {
+            // A window's tooltip or hint (the blacksmith's "Place the weapon or armor here ...") is drawn over the
+            // window's own controls: it must not take their clicks, or an item can't be dropped under its text.
+            return 0;
+        }
+        cMouse* cursor = cMouse::instance();
+        const bool heldBefore = mouse && cursor->heldItem != nullptr;
         int saved[2] = {};
         if (mouse)
         {
@@ -188,11 +215,35 @@ namespace
             saved[1] = mouse->y;
             mouse->x = shiftX(saved[0], frame);
             mouse->y = shiftY(saved[1], frame);
+            if (heldBefore && what == static_cast<int>(W::blacksmith) && cursor->cursorImage)
+            {
+                // The blacksmith drops the item into the grid cell under the click, while the grid highlights the
+                // cells under the held item's top-left corner (the drawn cursor, a cell above the click): a click at
+                // the highlighted spot missed. Drop where the highlight is.
+                int left = 0, top = 0;
+                cursor->cursorPos(left, top);
+                mouse->x = shiftX(left, frame);
+                mouse->y = shiftY(top, frame);
+            }
         }
         uint32_t result;
         {
             UiCanvas::FrameScope scope{frame};
             result = orig(self, edx, event);
+        }
+        if (mouse && Config::debug.uiTrace)
+        {
+            // What the window got, next to what the drawn cursor and the held item say (the drop highlight reads
+            // the cursor's top-left corner, the click the event's position).
+            int left = 0, top = 0;
+            if (cursor->cursorImage)
+            {
+                cursor->cursorPos(left, top);
+            }
+            LOG("UI trace: window +{:x} mouse {} event {},{} -> window {},{} cursor top-left {},{} (canvas) held before {}, after {} -> {}",
+                offsetof(cUI_Manager, windows) + 4 * static_cast<int>(what),
+                *reinterpret_cast<uintptr_t*>(event) == Addr::cEventMouseDown_vtable ? "down" : "up", saved[0], saved[1],
+                shiftX(saved[0], frame), shiftY(saved[1], frame), left, top, heldBefore, cursor->heldItem != nullptr, result);
         }
         if (mouse)
         {
@@ -223,6 +274,10 @@ namespace
         if (!frameOf(self, frame) || frame == UiCanvas::frame())
         {
             return orig(self, edx, x, y);
+        }
+        if (isWindowPopup(self))
+        {
+            return 0;       // see thunkEvent: the cursor over a window's hint is still over the window's controls
         }
         const int fx = shiftX(x, frame), fy = shiftY(y, frame);
         UiCanvas::FrameScope scope{frame};
