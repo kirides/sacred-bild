@@ -448,6 +448,7 @@ namespace DDraw9
     bool Device::drawSkinned(const Skin::Draw& draw)
     {
         std::scoped_lock lock(m_lock);
+        syncOverlay();
         if (!initSkin() || !draw.mesh || !draw.indices || !draw.palette || draw.bones == 0 ||
             draw.bones > Skin::kMaxBones || draw.paletteId == 0)
         {

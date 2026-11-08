@@ -294,6 +294,21 @@ namespace DDraw9::Gpu
         g_backBufferFrozen = true;
     }
 
+    namespace
+    {
+        std::atomic<uint32_t> g_overlayEpoch{0};
+    }
+
+    uint32_t overlayEpoch()
+    {
+        return g_overlayEpoch.load(std::memory_order_acquire);
+    }
+
+    void overlayDrew()
+    {
+        g_overlayEpoch.fetch_add(1, std::memory_order_release);
+    }
+
     RecursiveSpinLock& stateLock()
     {
         static RecursiveSpinLock lock;

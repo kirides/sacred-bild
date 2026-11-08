@@ -188,6 +188,7 @@ namespace DDraw9
         {
             return true;
         }
+        syncOverlay();
         // What the fixed-function pipeline would do with pretransformed vertices that the shader doesn't.
         if (m_rs[D3DRENDERSTATE_FOGENABLE])
         {

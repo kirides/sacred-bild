@@ -287,6 +287,7 @@ namespace
         device->SetRenderTarget(0, target);
         device->SetDepthStencilSurface(depth);
         device->SetViewport(&viewport);
+        DDraw9::Gpu::overlayDrew();
         if (target)
         {
             target->Release();

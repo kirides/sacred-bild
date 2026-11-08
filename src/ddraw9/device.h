@@ -151,6 +151,8 @@ namespace DDraw9
         void prepare(DWORD fvf);
         // The z-buffer and texture part of it (skinned draws set their own vertex format).
         void prepareTarget();
+        // The overlay drew since the last call: sets everything this device believes is set on Direct3D 9 again.
+        void syncOverlay();
         void bindVertexBuffer(d9::IDirect3DVertexBuffer9* vb, UINT stride);
         // Copies `indices` into the dynamic index buffer; returns the start index or -1.
         int uploadIndices(const WORD* indices, DWORD count);
@@ -204,6 +206,7 @@ namespace DDraw9
         d9::IDirect3DVertexBuffer9* m_vb9 = nullptr;
         UINT m_vbStride9 = 0;
         d9::IDirect3DIndexBuffer9* m_ib9Bound = nullptr;
+        uint32_t m_overlayEpoch = 0;
         DWORD m_maxStage = 0;                   // stages above have no texture
 
         // Index buffer ring for DrawIndexedPrimitiveVB (Direct3D 9 draws from vertex buffers need indices in one).

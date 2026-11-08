@@ -629,8 +629,91 @@ namespace DDraw9
         }
     }
 
+    void Device::syncOverlay()
+    {
+        const uint32_t epoch = Gpu::overlayEpoch();
+        if (epoch == m_overlayEpoch)
+        {
+            return;
+        }
+        m_overlayEpoch = epoch;
+        // What was set on Direct3D 9 (shadowed to skip repeats) is set again, whatever the overlay's state block
+        // did or did not bring back.
+        for (DWORD state = 1; state < kRenderStates; ++state)
+        {
+            if (m_rs9Known[state])
+            {
+                m_dev->SetRenderState(static_cast<d9::D3DRENDERSTATETYPE>(state), m_rs9[state]);
+            }
+        }
+        for (DWORD stage = 0; stage < kStages; ++stage)
+        {
+            for (DWORD type = 0; type < kStageStates + 4; ++type)
+            {
+                if (m_tss9Known[stage][type])
+                {
+                    m_dev->SetTextureStageState(stage, static_cast<d9::D3DTEXTURESTAGESTATETYPE>(type), m_tss9[stage][type]);
+                }
+            }
+            for (DWORD type = 0; type < kSamplerStates; ++type)
+            {
+                if (m_samp9Known[stage][type])
+                {
+                    m_dev->SetSamplerState(stage, static_cast<d9::D3DSAMPLERSTATETYPE>(type), m_samp9[stage][type]);
+                }
+            }
+            m_dev->SetTexture(stage, m_textures9[stage]);
+        }
+        if (m_viewport9.Width && m_viewport9.Height)
+        {
+            m_dev->SetViewport(&m_viewport9);
+        }
+        // Bindings: the vertex and index buffers, and the shader or the FVF the last draw used.
+        if (m_skinBound)
+        {
+            if (m_skinBoundVariant == -2)
+            {
+                m_dev->SetVertexDeclaration(m_groundDecl);
+                m_dev->SetVertexShader(m_groundShader);
+            }
+            else if (m_skinBoundVariant >= 0 && m_skinBoundVariant < 2)
+            {
+                m_dev->SetVertexDeclaration(m_skinDecls[m_skinBoundVariant]);
+                m_dev->SetVertexShader(m_skinShaders[m_skinBoundVariant]);
+            }
+            else
+            {
+                m_skinBound = false;
+            }
+        }
+        if (!m_skinBound)
+        {
+            m_dev->SetVertexShader(nullptr);
+            m_dev->SetFVF(m_fvf9);
+        }
+        m_dev->SetStreamSource(0, m_vb9, 0, m_vbStride9);
+        m_dev->SetIndices(m_ib9Bound);
+        // Shader constants and what is cached about them: uploaded again with the next draw.
+        m_groundConstantsSet = false;
+        m_skinConstantCount = 0;
+        std::memset(m_skinFlags, 0xFF, sizeof(m_skinFlags));
+        m_skinLightCount = -1;
+        m_skinPalette.clear();
+        m_skinPaletteId = 0;
+        // Fixed-function transforms, material and lights.
+        m_transformsDirty = ~0u;
+        m_materialDirty = true;
+        for (auto& slot : m_lights)
+        {
+            slot.lightDirty = slot.set;
+            slot.enableDirty = slot.set;
+        }
+        m_lightsDirty = true;
+    }
+
     void Device::prepareTarget()
     {
+        syncOverlay();
         syncDepth();
         for (DWORD stage = 0; stage <= m_maxStage; ++stage)
         {
