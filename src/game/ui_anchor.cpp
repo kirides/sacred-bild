@@ -1,8 +1,10 @@
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
+#include "config/debug.h"
 #include "config/ui.h"
 #include "log.h"
 #include "patch.h"
+#include "sacred/mouse.h"
 #include "sacred/ui.h"
 
 #include <windows.h>
@@ -191,7 +193,8 @@ namespace
     {
         const auto orig = original(self).receiveEvent;
         Frame frame;
-        if (!frameOf(self, frame) || frame == UiCanvas::frame())
+        int what = 0;
+        if (!frameOf(self, frame, &what) || frame == UiCanvas::frame())
         {
             return orig(self, edx, event);
         }
@@ -211,10 +214,26 @@ namespace
             mouse->x = shiftX(saved[0], frame);
             mouse->y = shiftY(saved[1], frame);
         }
+        const bool heldBefore = mouse && cMouse::instance()->heldItem != nullptr;
         uint32_t result;
         {
             UiCanvas::FrameScope scope{frame};
             result = orig(self, edx, event);
+        }
+        if (mouse && Config::debug.uiTrace)
+        {
+            // What the window got, next to what the drawn cursor and the held item say (the drop highlight reads
+            // the cursor's top-left corner, the click the event's position).
+            cMouse* cursor = cMouse::instance();
+            int left = 0, top = 0;
+            if (cursor->cursorImage)
+            {
+                cursor->cursorPos(left, top);
+            }
+            LOG("UI trace: window +{:x} mouse {} event {},{} -> window {},{} cursor top-left {},{} (canvas) held before {}, after {} -> {}",
+                offsetof(cUI_Manager, windows) + 4 * static_cast<int>(what),
+                *reinterpret_cast<uintptr_t*>(event) == Addr::cEventMouseDown_vtable ? "down" : "up", saved[0], saved[1],
+                shiftX(saved[0], frame), shiftY(saved[1], frame), left, top, heldBefore, cursor->heldItem != nullptr, result);
         }
         if (mouse)
         {
