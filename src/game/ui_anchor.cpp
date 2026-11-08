@@ -158,6 +158,22 @@ namespace
         return true;
     }
 
+    // A popup whose text a window set (so it has a frame of its own): the tooltips and hints of that window.
+    bool isWindowPopup(const cUI_Control2* self)
+    {
+        bool found = false;
+        if (self->vtable == g_popupVtable)
+        {
+            AcquireSRWLockShared(&g_popupLock);
+            for (size_t i = 0; i < g_popupCount && !found; ++i)
+            {
+                found = g_popups[i].popup == self;
+            }
+            ReleaseSRWLockShared(&g_popupLock);
+        }
+        return found;
+    }
+
     void traceRender(int what, const char* slot)
     {
         if (UiCanvas::tracing())
@@ -181,6 +197,12 @@ namespace
         }
         // The event travels on to other windows afterwards: shift its position for this one only.
         cEventMouse* mouse = cEventMouse::of(event);
+        if (mouse && isWindowPopup(self))
+        {
+            // A window's tooltip or hint (the blacksmith's "Place the weapon or armor here ...") is drawn over the
+            // window's own controls: it must not take their clicks, or an item can't be dropped under its text.
+            return 0;
+        }
         int saved[2] = {};
         if (mouse)
         {
@@ -223,6 +245,10 @@ namespace
         if (!frameOf(self, frame) || frame == UiCanvas::frame())
         {
             return orig(self, edx, x, y);
+        }
+        if (isWindowPopup(self))
+        {
+            return 0;       // see thunkEvent: the cursor over a window's hint is still over the window's controls
         }
         const int fx = shiftX(x, frame), fy = shiftY(y, frame);
         UiCanvas::FrameScope scope{frame};
