@@ -206,6 +206,8 @@ namespace
             // window's own controls: it must not take their clicks, or an item can't be dropped under its text.
             return 0;
         }
+        cMouse* cursor = cMouse::instance();
+        const bool heldBefore = mouse && cursor->heldItem != nullptr;
         int saved[2] = {};
         if (mouse)
         {
@@ -213,8 +215,17 @@ namespace
             saved[1] = mouse->y;
             mouse->x = shiftX(saved[0], frame);
             mouse->y = shiftY(saved[1], frame);
+            if (heldBefore && what == static_cast<int>(W::blacksmith) && cursor->cursorImage)
+            {
+                // The blacksmith drops the item into the grid cell under the click, while the grid highlights the
+                // cells under the held item's top-left corner (the drawn cursor, a cell above the click): a click at
+                // the highlighted spot missed. Drop where the highlight is.
+                int left = 0, top = 0;
+                cursor->cursorPos(left, top);
+                mouse->x = shiftX(left, frame);
+                mouse->y = shiftY(top, frame);
+            }
         }
-        const bool heldBefore = mouse && cMouse::instance()->heldItem != nullptr;
         uint32_t result;
         {
             UiCanvas::FrameScope scope{frame};
@@ -224,7 +235,6 @@ namespace
         {
             // What the window got, next to what the drawn cursor and the held item say (the drop highlight reads
             // the cursor's top-left corner, the click the event's position).
-            cMouse* cursor = cMouse::instance();
             int left = 0, top = 0;
             if (cursor->cursorImage)
             {
