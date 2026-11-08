@@ -1,5 +1,6 @@
 #pragma once
 #include "ddraw9/d3d9_api.h"
+#include "ddraw9/gpu.h"
 #include "ddraw9/ground.h"
 #include "ddraw9/skin.h"
 #include "spin_lock.h"
@@ -168,7 +169,7 @@ namespace DDraw9
         void apply(const StateBlock& block);
         StateBlock* stateBlock(DWORD handle);
 
-        RecursiveSpinLock m_lock;
+        RecursiveSpinLock& m_lock = Gpu::stateLock();   // shared with the overlay: one Direct3D 9 device
         LONG m_refs = 1;
         DirectDraw* m_ddraw;
         d9::IDirect3DDevice9Ex* m_dev;

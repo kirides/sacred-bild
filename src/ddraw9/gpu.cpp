@@ -294,6 +294,12 @@ namespace DDraw9::Gpu
         g_backBufferFrozen = true;
     }
 
+    RecursiveSpinLock& stateLock()
+    {
+        static RecursiveSpinLock lock;
+        return lock;
+    }
+
     HRESULT present(d9::IDirect3DSurface9* source, const RECT* sourceRect)
     {
         d9::IDirect3DDevice9Ex* dev = g_device;

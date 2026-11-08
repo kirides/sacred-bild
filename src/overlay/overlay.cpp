@@ -260,6 +260,8 @@ namespace
         }
         const bool keep = draw ? frame(draw, window) : true;
 
+        // The render target, depth buffer and states below are the game's device's too: keep its other thread out.
+        std::scoped_lock deviceLock(DDraw9::Gpu::stateLock());
         d9::IDirect3DSurface9* target = nullptr;
         d9::IDirect3DSurface9* depth = nullptr;
         d9::D3DVIEWPORT9 viewport = {};
