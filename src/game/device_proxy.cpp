@@ -361,7 +361,7 @@ bool DeviceProxy::mapToCanvas(DWORD fvf, const void* verts, DWORD count, const v
 bool DeviceProxy::drawScreenDim(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, DWORD flags, HRESULT& hr)
 {
     const UiWindows::Owner owner = UiWindows::current();
-    const bool dims = owner.is(UiState::Window::escapeMenu) ||
+    const bool dims = owner.is(UiState::Window::escapeMenu) || owner.kind == UiWindows::Kind::MessageBox ||
         (owner.object && (owner.object->flags & Sacred::cUI_Control2::dimsScreenFlag));
     if (!dims || m_texture0 || count != 4 || !(fvf & D3DFVF_DIFFUSE) ||
         m_virtMinX > 0.5f || m_virtMinY > 0.5f || m_virtMaxX < 1022.5f || m_virtMaxY < 766.5f)
