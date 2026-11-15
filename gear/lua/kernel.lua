@@ -1550,7 +1550,7 @@ end
 local ui_map            -- {ax, bx, ay, by}: layout = a * pixel + b, from two cursor probes
 
 local function make_auto()
-    local auto = {VK = VK}
+    local auto = {VK = VK, instance = native.auto_instance()}
     function auto.state() return native.auto_state() end
     function auto.ui() return native.auto_ui() end
     function auto.move(x, y)

@@ -1,6 +1,7 @@
 #include "automation.h"
 #include "gear.h"
 #include "hooks.h"
+#include "instance.h"
 #include "log.h"
 #include "lua_host.h"
 #include "sig.h"
@@ -43,7 +44,7 @@ namespace
     // One Sacred Gear per process: with an ASI loader and SacredBild both present, SacredGear.asi and
     // SacredGear.dll are two modules. The first one claims the process (a variable in its environment, tagged with
     // the process id because child processes inherit the environment); later ones stay loaded but do nothing.
-    constexpr const wchar_t* kInstanceVariable = L"SACREDGEAR_INSTANCE";
+    constexpr const wchar_t* kInstanceVariable = L"SACREDGEAR_CLAIM";
 
     bool claimProcess(HMODULE module)
     {
@@ -95,8 +96,9 @@ namespace
             return;
         }
         const std::wstring gameDir = directoryOf(exe);
-        Log::init((gameDir + L"\\SacredGear.log").c_str());
+        Log::init(Instance::logPath(gameDir, L"SacredGear.log").c_str());
         LOG("Sacred Gear {} " __DATE__ " " __TIME__, Gear::kVersion);
+        Automation::installInstance(gameDir);
         const size_t missing = Sig::resolve(kGearSigs);
         if (missing)
         {

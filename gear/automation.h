@@ -11,6 +11,8 @@
 // - `-gear-load=N` (SACREDGEAR_LOAD=N) loads savegame N (Save\GAMEnn.PAK, 0 the quicksave) as soon as the main menu
 //   is up, the way the menu's savegame window does;
 // - `-gear-mods=a,b` (SACREDGEAR_MODS) loads only those mods;
+// - `-gear-instance=NAME` (SACREDGEAR_INSTANCE) names the run for parallel runs: its own single-instance mutex, window
+//   title suffix, GearAutomation\NAME\ with run.json and the logs;
 // - mods whose mod.lua says `automation = true` get gear.auto: the UI state, simulated mouse and keys, savegame
 //   loading, screenshots and quitting (docs/Gear.md);
 // - the mods load and run in the menus too (the "idle" tick, every 50 ms while no in-game frame runs), not only
@@ -34,10 +36,18 @@ namespace Automation
         // timeout" in the log) after this long; 0 turns it off. It also ends it when the game window does not answer,
         // or an in-game run has no frame, for 60 s.
         int timeoutSeconds = 300;
+        // -gear-instance=NAME (SACREDGEAR_INSTANCE): this run's name, "pid<PID>" without it (see Instance in
+        // instance.h). It names the game's single-instance mutex, the window title suffix and the folder
+        // GearAutomation\<NAME> (run.json, logs, screenshots, write()), so runs in parallel do not meet.
+        std::string instance;
     };
 
     // From the command line and the environment; the same every call.
     const Options& options();
+
+    // At load, before the game's own start-up (only if enabled): the instance mutex name and run.json, which the
+    // game's exit updates. Needs no game address.
+    void installInstance(const std::wstring& gameDir);
 
     // After the addresses resolved: input hooks and the driver thread (only if enabled).
     void install(const std::wstring& gameDir);
@@ -91,6 +101,6 @@ namespace Automation
     // Saves the game window's client area as a BMP; false on failure.
     bool screenshot(const std::wstring& path, const char*& error);
 
-    // Ends the process with `code` (the log is flushed).
-    [[noreturn]] void quit(int code);
+    // Ends the process with `code` (the log is flushed); `reason` ("quit", "watchdog") goes into run.json.
+    [[noreturn]] void quit(int code, const char* reason = "quit");
 }

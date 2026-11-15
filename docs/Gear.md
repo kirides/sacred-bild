@@ -27,7 +27,7 @@ Sacred Gear needs something to load it into the game. Any of these works:
 
 Mods go into the **`mods`** folder in the game folder, one folder per mod. Without a `mods` folder, or with an empty
 one, Sacred Gear changes nothing. It logs to `SacredGear.log` in the game folder (the previous two runs are kept as
-`.prev.log` and `.prev2.log`).
+`.prev.log` and `.prev2.log`); an automation run logs into its own folder instead (see Automation).
 
 If two copies end up in the game (say `SacredGear.asi` through a loader and `SacredGear.dll` through SacredBild), the
 first one that loads is the active one and the other does nothing.
@@ -310,6 +310,7 @@ For self tests and scripted runs without a player. Off unless the game starts wi
 |---|---|
 | `-gear-load=N` (`SACREDGEAR_LOAD`) | Loads savegame N (`Save\GAMEnn.PAK`, 0 the quicksave) as soon as the main menu is up, the way the menu's savegame window does it. |
 | `-gear-mods=a,b` (`SACREDGEAR_MODS`) | Loads only these mods. |
+| `-gear-instance=NAME` (`SACREDGEAR_INSTANCE`) | Names the run, default `pid<PID>`. See "Parallel runs". |
 
 The mods load in the main menu and get the `idle` event there. Mods with `automation = true` get `gear.auto`:
 
@@ -322,7 +323,8 @@ The mods load in the main menu and get the `idle` event there. Mods with `automa
 | In a task: `ui_click(x, y)` or `ui_click(node)` | Clicks a point in UI layout coordinates (or a node's center); the mapping to pixels is measured once by moving the cursor, so it works with SacredBild's scaled UI too. |
 | `load_save(n)` | Loads savegame n from the menus. |
 | In a task: `wait_for_menu(timeout)`, `wait_for_game(timeout)` | Until the main menu is up / a hero exists. |
-| `screenshot(name)`, `write(name, text)` | Files in `<game>\GearAutomation` (name: letters, digits, `_ - .`). |
+| `instance` | The run's name (a string). |
+| `screenshot(name)`, `write(name, text)` | Files in `<game>\GearAutomation\<instance>` (name: letters, digits, `_ - .`). |
 | `quit(code)` | Ends the game at once with that exit code. |
 
 Automation is isolated by default, so a test can run while you keep using the PC: the game never comes to the front
@@ -342,8 +344,41 @@ In the menus the back buffer is empty between some frames (the Direct3D 9 backen
 
 A watchdog ends a run that takes too long: `-gear-timeout=SECONDS` (`SACREDGEAR_TIMEOUT`, default 300, 0 = off) quits with exit code 3 and logs `Automation: watchdog timeout`; the same if the game window does not answer, or an in-game run has no frame, for 60 s. Run tests with a timeout below the time you allow them.
 
-Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest`, then read
-`GearAutomation\selftest.json` and the exit code.
+Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest -gear-instance=a`, then read
+`GearAutomation\a\selftest.json` and the exit code.
+
+### Parallel runs
+
+Every automation run is an *instance* with a name: `-gear-instance=NAME` (`SACREDGEAR_INSTANCE`; letters, digits,
+`_ - .`, at most 48 characters, anything else becomes `_`; default `pid<PID>`, so even runs without a name never meet).
+A normal launch (without `-gear-auto`) has no instance and keeps every vanilla behaviour, the single-instance check
+included. What a name changes:
+
+- **The single-instance check.** The game's start-up (`0x817B30`) creates the mutex `SACRED_INSTANCE`, and a second
+  `sacred.exe` that finds it exists shows "ERROR: Sacred is already running" and exits. In an automation run Sacred Gear
+  hooks the import of `CreateMutexA` (and `OpenMutexA`) in `sacred.exe` and names it `SACRED_INSTANCE-gear-NAME`: runs
+  with different names never collide, nor with a player's game. The same name twice still does ("already running").
+  There is no window-class or title check for the main window; the game finds only its gameserver's window class
+  (`SACREDGAMESERVERCLASS`, LAN games), which is why automation runs should not host LAN games in parallel.
+- **The window title** gets the suffix ` [gear:NAME]`.
+- **The folder `<game>\GearAutomation\NAME\`** holds everything the run writes: `screenshot()` and `write()` files (`selftest.json`,
+  `types.txt`, ...), `SacredGear.log` (with `.prev` rotation as usual), `SacredBild.log` and
+  `SacredBild-crash-*.dmp` when SacredBild is loaded (both modules read the same name from the command line, so
+  neither needs the other), and `run.json`.
+- **`run.json`** is written when the run starts and rewritten when it ends:
+  `{"instance": "a", "pid": 1234, "command_line": "...", "started": "2026-11-15T17:00:00.000Z"}` plus, at the end,
+  `"exit_code": 0, "ended": "...", "reason": "quit"`. The reason is `quit` (a mod called `gear.auto.quit`),
+  `watchdog` (exit code 3) or `exit` (the game ended itself, through `ExitProcess`). A `run.json` without `ended` is a
+  run that is still going, or that was killed or crashed. The `pid` is the real process of that run (the one whose
+  command line carries the name), so a runner can tell which process belongs to which step, and match
+  `Win32_Process.ProcessId` or the window title.
+
+Still shared between parallel runs, because the game or the game folder owns it: `Save` (a run that saves
+overwrites the slot other runs load: load only, or use a copy of the folder), the game's own `Settings.cfg`,
+`DEBUG.LOG`/`ExpLog.LOG` and `bin\sg*.bin` writes, `SacredBild.ini`, `SacredBild-profile.txt`, the mods'
+own files (`mods\gear_layout.json`, a mod's `settings.json`), and the game folder itself (copy `ddraw.dll` and
+`SacredGear.dll` once, before starting the runs; they are only read). Many runs also share one CPU and GPU: frame
+times in a self test mean little, results do.
 
 ## Compatibility
 
