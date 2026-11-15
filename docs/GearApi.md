@@ -103,6 +103,8 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'frame'` | Every in-game frame. |
 | `'draw'` | After the frame handlers, to draw the UI. |
 | `'idle'` | Automation only: every 50 ms in the menus. |
+| `'unload'` | The player switched this mod off in the mod manager: clean up (handlers, timers and the rest are dropped after it). |
+| `'settings.changed'` | A setting of this mod changed: `(id, value)`. |
 | `'session.start'` | A game with a hero runs. |
 | `'session.stop'` | That hero is gone. |
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
@@ -151,6 +153,9 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
 | `game` | `GearGame` | The game itself: saving. |
+| `settings` | `GearSettings` | This mod's settings (declared in `mod.lua`, changed by the player in the mod manager). |
+| `keys` | `GearKeys` | This mod's declared key binds. |
+| `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
 | `ui` | `GearUi` | Drawing on top of the game, widgets, panels and the layout. |
 | `auto` | `GearAuto` | Automation (only with `-gear-auto` and `automation = true` in `mod.lua`). (optional) |
 
@@ -164,6 +169,8 @@ Forms:
 - `fun(event: 'frame', fn: fun(dt: number)): GearHandler`
 - `fun(event: 'draw', fn: fun(state: GearUiState)): GearHandler`
 - `fun(event: 'idle', fn: fun()): GearHandler`
+- `fun(event: 'unload', fn: fun()): GearHandler`
+- `fun(event: 'settings.changed', fn: fun(id: string, value: boolean|number|string)): GearHandler`
 - `fun(event: 'session.start', fn: fun(hero: Creature)): GearHandler`
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
@@ -181,7 +188,7 @@ Removes a handler.
 
 #### `gear.emit(event, ...)`
 
-Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.` and `game.` are reserved. Handlers may emit events too, up to 8 levels deep.
+Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.`, `game.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep.
 
 - `event`: `string`
 - `...`: `any`
@@ -266,11 +273,15 @@ The table `mod.lua` returns. It runs without any globals, so it can only hold va
 | Field | Type | |
 |---|---|---|
 | `id` | `string` | Required: letters, digits, `_` and `-`; unique among the installed mods. |
-| `name` | `string` | Shown in the log (default: the id). (optional) |
+| `name` | `string` | Shown in the mod manager and the log (default: the id). (optional) |
+| `description` | `string` | One or two lines for the mod manager. (optional) |
+| `author` | `string` | Shown in the mod manager. (optional) |
 | `version` | `string` | Part of the mod set (default `'0'`). (optional) |
 | `priority` | `number` | Lower loads first (default 0); ties load by id. (optional) |
 | `requires` | `string[]` | Ids that must load first; the mod is skipped if one is missing. (optional) |
-| `enabled` | `boolean` | `false`: keep the folder, skip the mod. (optional) |
+| `enabled` | `boolean` | `false`: off until the player switches it on in the mod manager (the default, not a lock). (optional) |
+| `settings` | `GearSettingDef[]` | Declared settings: the mod manager builds their page; read them with `gear.settings`. (optional) |
+| `keys` | `GearKeyDef[]` | Declared key binds: the player rebinds them in the mod manager; use them with `gear.keys`. (optional) |
 | `config` | `table<string, any>` | Default settings: `gear.config` starts as a copy and `config.lua` overrides them. (optional) |
 | `pipes` | `string[]` | Names of the named pipes the mod may open (`gear.pipe.open`). (optional) |
 | `automation` | `boolean` | `true`: the mod gets `gear.auto` when the game runs with `-gear-auto`. (optional) |
@@ -924,6 +935,195 @@ The savegame file of `slot`: nil for a slot outside 0..509, else a table whose `
 
 - `slot`: `integer`
 - returns `GearSaveInfo?`
+
+## Settings, key binds and the mod manager
+
+A mod declares its settings and key binds in `mod.lua` (`settings`, `keys`); the player changes them, switches the mod on and off and rebinds keys in the **Mods** screen (F11, or the "Mods" button beside the escape menu), and Sacred Gear keeps everything in `mods\gear_mods.json`. The mod reads its values with `gear.settings`, hears changes as `settings.changed`, and gets declared keys through `gear.keys`. A mod switched off in the screen is unloaded at once: it gets `unload`, then its handlers, timers, tasks, pipes, key binds, pickup rules and open widgets are dropped (what it did to the world stays). Switching it on loads it again with a fresh environment (`load`, and `session.start` when a game runs); mods it requires are switched on with it, and mods that require it are off while it is.
+
+### GearSettingType
+
+| Value | |
+|---|---|
+| `'bool'` | A checkbox: `true` or `false`. |
+| `'number'` | A slider from `min` to `max` in steps of `step` (defaults 0, 100, 1). |
+| `'choice'` | A dropdown: one of `choices` (a string or number each, or `{value, label}`). |
+| `'text'` | A line of text of at most `max_length` characters (default 120). |
+| `'color'` | A color: 0xAARRGGBB (set it from a number, `{r, g, b, a}` or `'#AARRGGBB'`). |
+
+### GearSettingChoice
+
+One entry of a `choice` setting's `choices`.
+
+| Field | Type | |
+|---|---|---|
+| `value` | `string\|number` | What the setting holds when this entry is picked. |
+| `label` | `string` | What the screen shows (default: the value). (optional) |
+
+### GearSettingDef
+
+An entry of `settings` in `mod.lua`. The screen builds its page from these; `gear.settings.get(id)` returns the player's value, else the mod's `config` or `config.lua` value for that id, else `default`.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | Letters, digits, `_`, `-` and `.`; unique in the mod. |
+| `type` | `GearSettingType` |  |
+| `label` | `string` | Shown in the screen (default: the id). (optional) |
+| `default` | `any` | The default value, of the setting's type (default: false, `min`, the first choice, `''`, opaque white). (optional) |
+| `min` | `number` | For `number` (default 0). (optional) |
+| `max` | `number` | For `number` (default 100). (optional) |
+| `step` | `number` | For `number` (default 1). (optional) |
+| `choices` | `(string\|number\|GearSettingChoice)[]` | For `choice`. (optional) |
+| `max_length` | `integer` | For `text`. (optional) |
+| `section` | `string` | A heading: settings in a row with the same section are shown under it. (optional) |
+| `tooltip` | `string` | Shown when the cursor rests on the label. (optional) |
+| `restart` | `boolean` | The mod only reads it at start: the screen says "after restart" (the mod still gets `settings.changed`). (optional) |
+
+### GearKeyDef
+
+An entry of `keys` in `mod.lua`: a key bind the player can change.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | Letters, digits, `_`, `-` and `.`; unique in the mod. |
+| `label` | `string` | Shown in the screen (default: the id). (optional) |
+| `default` | `string` | A key with optional modifiers: `'f8'`, `'ctrl+m'`, `'ctrl+shift+k'`; `''` or nil: unbound. (optional) |
+
+### GearSettings
+
+Reached as `gear.settings`.
+
+This mod's declared settings (`settings` in `mod.lua`) with the player's values. Values are checked against the declaration: a number is clamped and put on the step grid, a choice must be one of the choices.
+
+#### `gear.settings.get(id) -> boolean|number|string`
+
+The value of a setting.
+
+- `id`: `string`
+- returns `boolean|number|string`
+
+#### `gear.settings.set(id, value) -> boolean?, string?`
+
+Sets a value (kept in `gear_mods.json`); the mod's `settings.changed` handlers run if it changed. Returns true, or nil and a message if the value does not fit the setting.
+
+- `id`: `string`
+- `value`: `any`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.settings.is_set(id) -> boolean`
+
+Whether the player has set this setting (else `get` returns the default).
+
+- `id`: `string`
+- returns `boolean`
+
+#### `gear.settings.all() -> table<string, boolean|number|string>`
+
+Every setting's value, by id.
+
+- returns `table<string, boolean|number|string>`
+
+#### `gear.settings.reset(id)`
+
+Back to the default: one setting, or all of them.
+
+- `id`: `string` (optional)
+
+#### `gear.settings.migrate(name, fn) -> boolean`
+
+Once per mod and file: reads `name`, an old settings file of the mod's folder (JSON), and calls `fn` with the decoded table, so the mod copies the values into its settings. Returns true if it ran, false if the migration was done before or the file does not exist.
+
+- `name`: `string`
+- `fn`: `fun(old: table)`
+- returns `ran` `boolean`
+
+### GearKeyHandle
+
+A registered key handler; pass it to `gear.keys.off`. Opaque.
+
+### GearKeys
+
+Reached as `gear.keys`.
+
+This mod's declared key binds (`keys` in `mod.lua`). A bind fires when its key is pressed with exactly its modifiers held, once per press, in game and in automation; not while the Mods screen is open.
+
+#### `gear.keys.on(id, fn) -> GearKeyHandle`
+
+Calls `fn` when the declared key `id` is pressed.
+
+- `id`: `string`
+- `fn`: `fun()`
+- returns `GearKeyHandle`
+
+#### `gear.keys.off(handle)`
+
+Removes a handler.
+
+- `handle`: `GearKeyHandle`
+
+#### `gear.keys.binding(id) -> string`
+
+The key bound to `id` now: the player's choice or the default, like `'ctrl+m'` (`''`: unbound).
+
+- `id`: `string`
+- returns `string`
+
+#### `gear.keys.set(id, binding) -> boolean?, string?`
+
+Rebinds a key from the mod itself (`''` unbinds, nil restores the default). Returns true, or nil and a message for a text that is not a key.
+
+- `id`: `string`
+- `binding`: `string` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+### GearModListing
+
+What `gear.mods` tells about an installed mod.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` |  |
+| `name` | `string` |  |
+| `version` | `string` |  |
+| `author` | `string` |  |
+| `description` | `string` |  |
+| `state` | `'on'\|'off'\|'blocked'\|'pending'\|'error'\|'invalid'` | `blocked`: switched on but a mod it requires is off; `pending`: loads with the next tick; `error`: switched off after 10 errors or its `main.lua` failed. |
+| `enabled` | `boolean` | Whether the player has it switched on. |
+| `loaded` | `boolean` |  |
+| `builtin` | `boolean` | The mod manager itself. |
+| `reason` | `string` | Why it is blocked, failed or invalid. (optional) |
+| `errors` | `integer` |  |
+| `requires` | `string[]` |  |
+| `has_settings` | `boolean` |  |
+| `has_keys` | `boolean` |  |
+| `has_page` | `boolean` |  |
+| `dir` | `string` | The folder under `mods`. |
+
+### GearMods
+
+Reached as `gear.mods`.
+
+The installed mods and the mod manager.
+
+#### `gear.mods.page(fn)`
+
+Adds a page of this mod's own to its screen in the mod manager (a "More" tab after the generated settings): `fn(x, y, w, h)` draws in that rectangle with the mod's own `gear.ui` and returns the height it used. nil removes it.
+
+- `fn`: `fun(x: number, y: number, w: number, h: number): number` (optional)
+
+#### `gear.mods.list() -> GearModListing[]`
+
+Every installed mod, sorted by name.
+
+- returns `GearModListing[]`
+
+#### `gear.mods.get(id) -> GearModListing?`
+
+One installed mod, or nil.
+
+- `id`: `string`
+- returns `GearModListing?`
 
 ## Inventories (gear.inv)
 

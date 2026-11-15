@@ -1071,7 +1071,12 @@ local UI_VK = {
     escape = 0x1B, enter = 0x0D, space = 0x20, tab = 0x09, shift = 0x10, control = 0x11, alt = 0x12,
     left = 0x25, up = 0x26, right = 0x27, down = 0x28, insert = 0x2D, delete = 0x2E, home = 0x24, ['end'] = 0x23,
     pageup = 0x21, pagedown = 0x22,
+    ctrl = 0x11, backspace = 0x08, pause = 0x13, capslock = 0x14,
+    semicolon = 0xBA, equals = 0xBB, comma = 0xBC, minus = 0xBD, period = 0xBE, slash = 0xBF, backquote = 0xC0,
+    lbracket = 0xDB, backslash = 0xDC, rbracket = 0xDD, quote = 0xDE,
+    multiply = 0x6A, add = 0x6B, subtract = 0x6D, decimal = 0x6E, divide = 0x6F,
 }
+for i = 0, 9 do UI_VK['num' .. i] = 0x60 + i end
 for i = 1, 12 do UI_VK['f' .. i] = 0x6F + i end
 for c = string.byte('a'), string.byte('z') do UI_VK[string.char(c)] = c - 32 end
 for c = string.byte('0'), string.byte('9') do UI_VK[string.char(c)] = c end
@@ -1548,8 +1553,8 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
-local BUILTIN = {load = true, frame = true, idle = true, draw = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.'}
+local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'settings.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -1803,6 +1808,500 @@ local function make_auto()
     return auto
 end
 
+---------------------------------------------------------------------------------------------------------------
+-- The mod manager's data. The catalog lists every installed mod (loaded or not); mods\gear_mods.json keeps what the
+-- player chose: enabled flags, setting values and key binds, for all mods in one file. Mods declare settings and
+-- keys in mod.lua; the screen that shows them is modmanager.lua (a mod of its own, built into the DLL).
+---------------------------------------------------------------------------------------------------------------
+local catalog = {}          -- mod id -> entry {id, dir, m, builtin, invalid, loaded, want, reason, fail, excluded}
+local catalog_list = {}     -- the entries by id
+local mod_state = nil       -- gear_mods.json decoded: {mods = {id = {enabled, settings, keys, migrated}}}
+local state_dirty = false
+local key_handlers = {}     -- array of {mod, id, def, fn, entry, was}
+local keys_blocked = false  -- the mod manager's screen is open: other mods' hotkeys do not fire
+local apply_pending = false -- a mod was switched on or off: kernel.tick loads and unloads before it runs the handlers
+local admin = {}            -- what only the mod manager sees (filled in below the loader)
+
+local function is_table(v) return type(v) == 'table' and v ~= json.null end
+
+local function state_load()
+    if mod_state then return mod_state end
+    mod_state = {mods = {}}
+    local text = native.state_read()
+    if text then
+        local v, err = json.decode(text)
+        if is_table(v) and (v.mods == nil or is_table(v.mods)) then
+            for id, e in pairs(v.mods or {}) do
+                if is_table(e) then mod_state.mods[id] = e end
+            end
+        else
+            log('gear_mods.json cannot be read (%s): it is kept as gear_mods.json.bak, the defaults apply',
+                tostring(err or 'not an object'))
+            native.state_write(text, true)
+        end
+    end
+    return mod_state
+end
+
+-- The saved record of a mod (nil unless `create`).
+local function state_of(id, create)
+    local all = state_load().mods
+    local e = all[id]
+    if not e and create then e = {}; all[id] = e end
+    return e
+end
+
+-- A table of that record: 'settings', 'keys' or 'migrated' (nil unless `create`).
+local function state_sub(id, name, create)
+    local e = state_of(id, create)
+    if not e then return nil end
+    if not is_table(e[name]) then
+        if not create then return nil end
+        e[name] = {}
+    end
+    return e[name]
+end
+
+local function state_flush()
+    if not state_dirty then return end
+    state_dirty = false
+    local out = {}
+    for id, e in pairs(state_load().mods) do
+        local c = {}
+        if type(e.enabled) == 'boolean' then c.enabled = e.enabled end
+        for _, name in ipairs({'settings', 'keys', 'migrated'}) do
+            if is_table(e[name]) and next(e[name]) ~= nil then c[name] = e[name] end
+        end
+        if next(c) ~= nil then out[id] = c end
+    end
+    if not native.state_write(json.encode({version = 1, mods = out})) then
+        log('gear_mods.json: the file cannot be written')
+    end
+end
+
+-- Settings ------------------------------------------------------------------------------------------------------
+local SETTING_TYPES = {bool = true, number = true, choice = true, text = true, color = true}
+
+-- A color as the number 0xAARRGGBB from a number, {r, g, b, a} or '#AARRGGBB' / '#RRGGBB'.
+local function parse_color(v)
+    if type(v) == 'number' and v == v then return math.floor(v) % 4294967296 end
+    if type(v) == 'table' then
+        local ok, c = pcall(ui_color, v)
+        return ok and c or nil
+    end
+    if type(v) == 'string' then
+        local a, rgb = v:match('^#?(%x%x)(%x%x%x%x%x%x)$')
+        if a then return tonumber(a .. rgb, 16) end
+        rgb = v:match('^#?(%x%x%x%x%x%x)$')
+        if rgb then return tonumber('FF' .. rgb, 16) end
+    end
+    return nil
+end
+
+-- `v` made to fit the setting's type (clamped, on the step's grid, one of the choices), or nil if it cannot be.
+local function coerce(def, v)
+    local t = def.type
+    if t == 'bool' then
+        if type(v) == 'boolean' then return v end
+    elseif t == 'number' then
+        if type(v) ~= 'number' or v ~= v then return nil end
+        v = math.max(def.min, math.min(def.max, v))
+        if def.step then
+            v = def.min + math.floor((v - def.min) / def.step + 0.5) * def.step
+            v = math.max(def.min, math.min(def.max, v))
+        end
+        return tonumber(string.format('%.10g', v))
+    elseif t == 'choice' then
+        for _, c in ipairs(def.choices) do
+            if c.value == v then return v end
+        end
+    elseif t == 'text' then
+        if type(v) == 'string' and #v <= def.max_length then return v end
+    elseif t == 'color' then
+        return parse_color(v)
+    end
+    return nil
+end
+
+-- The declared settings of a manifest: the list of normalized definitions and the same by id, or nil and a message.
+local function parse_settings(list)
+    if list == nil then return {}, {} end
+    if type(list) ~= 'table' then return nil, 'mod.lua: settings must be a list' end
+    local defs, by_id = {}, {}
+    for i, s in ipairs(list) do
+        if type(s) ~= 'table' then return nil, 'mod.lua: settings[' .. i .. '] must be a table' end
+        if type(s.id) ~= 'string' or not s.id:match('^[%w_%.%-]+$') then
+            return nil, 'mod.lua: settings[' .. i .. ']: id must be letters, digits, _ - and .'
+        end
+        if by_id[s.id] then return nil, 'mod.lua: settings: two settings with the id ' .. s.id end
+        if not SETTING_TYPES[s.type] then
+            return nil, 'mod.lua: setting ' .. s.id .. ': type must be bool, number, choice, text or color'
+        end
+        local d = {id = s.id, type = s.type, label = type(s.label) == 'string' and s.label or s.id,
+                   section = type(s.section) == 'string' and s.section or nil,
+                   tooltip = type(s.tooltip) == 'string' and s.tooltip or nil, restart = s.restart == true}
+        local fallback
+        if d.type == 'number' then
+            d.min = type(s.min) == 'number' and s.min or 0
+            d.max = type(s.max) == 'number' and s.max or 100
+            if d.max < d.min then return nil, 'mod.lua: setting ' .. s.id .. ': max is below min' end
+            d.step = (type(s.step) == 'number' and s.step > 0) and s.step or 1
+            fallback = d.min
+        elseif d.type == 'choice' then
+            d.choices = {}
+            if type(s.choices) ~= 'table' or #s.choices == 0 then
+                return nil, 'mod.lua: setting ' .. s.id .. ': choices must be a list'
+            end
+            for _, c in ipairs(s.choices) do
+                local value, label = c, c
+                if type(c) == 'table' then value, label = c.value, c.label or c.value end
+                if type(value) ~= 'string' and type(value) ~= 'number' then
+                    return nil, 'mod.lua: setting ' .. s.id .. ': a choice is a string, a number or {value, label}'
+                end
+                d.choices[#d.choices + 1] = {value = value, label = tostring(label)}
+            end
+            fallback = d.choices[1].value
+        elseif d.type == 'text' then
+            d.max_length = (type(s.max_length) == 'number' and s.max_length >= 1) and math.floor(s.max_length) or 120
+            fallback = ''
+        elseif d.type == 'color' then
+            fallback = 0xFFFFFFFF
+        else
+            fallback = false
+        end
+        local dv = coerce(d, s.default)
+        if dv == nil then dv = fallback end
+        d.default = dv
+        defs[#defs + 1] = d
+        by_id[d.id] = d
+    end
+    return defs, by_id
+end
+
+-- Key binds ------------------------------------------------------------------------------------------------------
+local MOD_ORDER = {'ctrl', 'shift', 'alt'}
+local MOD_ALIAS = {ctrl = 'ctrl', control = 'ctrl', shift = 'shift', alt = 'alt'}
+
+-- 'ctrl+shift+m' -> {ctrl, shift, alt, key, vk}, or nil.
+local function parse_binding(text)
+    if type(text) ~= 'string' then return nil end
+    local parts = {}
+    for p in text:lower():gmatch('[^%+]+') do parts[#parts + 1] = (p:gsub('^%s+', ''):gsub('%s+$', '')) end
+    if #parts == 0 then return nil end
+    local key = parts[#parts]
+    local vk = UI_VK[key]
+    if not vk or MOD_ALIAS[key] or key == 'escape' then return nil end
+    local b = {key = key, vk = vk}
+    for i = 1, #parts - 1 do
+        local m = MOD_ALIAS[parts[i]]
+        if not m then return nil end
+        b[m] = true
+    end
+    return b
+end
+
+-- The canonical text of a binding ('Ctrl+M' -> 'ctrl+m'; '' unbound), or nil if it is not one.
+local function normalize_binding(text)
+    if text == '' then return '' end
+    local b = parse_binding(text)
+    if not b then return nil end
+    local out = {}
+    for _, m in ipairs(MOD_ORDER) do
+        if b[m] then out[#out + 1] = m end
+    end
+    out[#out + 1] = b.key
+    return table.concat(out, '+')
+end
+
+local function parse_keys(list)
+    if list == nil then return {}, {} end
+    if type(list) ~= 'table' then return nil, 'mod.lua: keys must be a list' end
+    local defs, by_id = {}, {}
+    for i, k in ipairs(list) do
+        if type(k) ~= 'table' then return nil, 'mod.lua: keys[' .. i .. '] must be a table' end
+        if type(k.id) ~= 'string' or not k.id:match('^[%w_%.%-]+$') then
+            return nil, 'mod.lua: keys[' .. i .. ']: id must be letters, digits, _ - and .'
+        end
+        if by_id[k.id] then return nil, 'mod.lua: keys: two keys with the id ' .. k.id end
+        local default = normalize_binding(k.default == nil and '' or k.default)
+        if not default then
+            return nil, 'mod.lua: key ' .. k.id .. ': "' .. tostring(k.default) .. '" is not a key like ctrl+m or f8'
+        end
+        local d = {id = k.id, label = type(k.label) == 'string' and k.label or k.id, default = default}
+        defs[#defs + 1] = d
+        by_id[d.id] = d
+    end
+    return defs, by_id
+end
+
+-- Whether the mod is switched on in the manager: the player's flag, else mod.lua's `enabled` (false if -gear-mods
+-- left it out).
+local function desired(e)
+    local st = state_of(e.id, false)
+    if st and type(st.enabled) == 'boolean' then return st.enabled end
+    return e.default_enabled
+end
+
+-- Which mods run: switched on, and every mod they require runs too. Sets entry.want and entry.reason.
+local function compute_want()
+    local memo = {}
+    local function want(e)
+        if e.builtin then return true end
+        if memo[e] ~= nil then return memo[e] end
+        memo[e] = false
+        e.reason = nil
+        if e.invalid or not desired(e) then return false end
+        for _, dep in ipairs(e.m.requires) do
+            local d = catalog[dep]
+            if not d or d.invalid then
+                e.reason = 'requires ' .. tostring(dep) .. ', which is not installed'
+                return false
+            end
+            if not want(d) then
+                e.reason = 'requires ' .. dep .. ', which is off'
+                return false
+            end
+        end
+        memo[e] = true
+        return true
+    end
+    for _, e in ipairs(catalog_list) do e.want = want(e) end
+end
+
+local function setting_default(e, def)
+    local c = e.m.config[def.id]
+    if c ~= nil then
+        local v = coerce(def, c)
+        if v ~= nil then return v end
+    end
+    return def.default
+end
+
+local function setting_value(e, def)
+    local saved = state_sub(e.id, 'settings', false)
+    local sv = saved and saved[def.id]
+    if sv ~= nil then
+        local v = coerce(def, sv)
+        if v ~= nil then return v end
+    end
+    return setting_default(e, def)
+end
+
+local function settings_set(e, def, value)
+    local v = coerce(def, value)
+    if v == nil then return nil, 'not a valid value for ' .. def.id end
+    local old = setting_value(e, def)
+    state_sub(e.id, 'settings', true)[def.id] = v
+    state_dirty = true
+    if v ~= old and e.loaded then kernel.dispatch_to(e.m, 'settings.changed', def.id, v) end
+    return true
+end
+
+-- Forgets the saved value of one setting (or of all): the default applies again.
+local function settings_reset(e, def)
+    local saved = state_sub(e.id, 'settings', false)
+    if not saved then return end
+    for _, d in ipairs(e.m.settings) do
+        if (def == nil or def == d) and saved[d.id] ~= nil then
+            local old = setting_value(e, d)
+            saved[d.id] = nil
+            state_dirty = true
+            local v = setting_value(e, d)
+            if v ~= old and e.loaded then kernel.dispatch_to(e.m, 'settings.changed', d.id, v) end
+        end
+    end
+end
+
+local function key_binding(e, def)
+    local saved = state_sub(e.id, 'keys', false)
+    local s = saved and saved[def.id]
+    if type(s) == 'string' then
+        local n = normalize_binding(s)
+        if n then return n end
+    end
+    return def.default
+end
+
+-- text nil: back to the default; '' unbound.
+local function key_set(e, def, text)
+    if text ~= nil then
+        local n = normalize_binding(text)
+        if not n then return nil, 'not a key like ctrl+m or f8' end
+        state_sub(e.id, 'keys', true)[def.id] = n
+    else
+        local saved = state_sub(e.id, 'keys', false)
+        if saved then saved[def.id] = nil end
+    end
+    state_dirty = true
+    return true
+end
+
+-- The other keys (of mods that run or are switched on) with the same binding: {{mod, name, key, label}}.
+local function key_conflicts(e, def)
+    local out = {}
+    local mine = key_binding(e, def)
+    if mine == '' then return out end
+    for _, o in ipairs(catalog_list) do
+        if o.want ~= false and not o.invalid then
+            for _, k in ipairs(o.m.keys) do
+                if not (o == e and k == def) and key_binding(o, k) == mine then
+                    out[#out + 1] = {mod = o.id, name = o.m.name, key = k.id, label = k.label}
+                end
+            end
+        end
+    end
+    return out
+end
+
+local parsed_bindings = {}
+local function binding_down(b)
+    if not native.key_down(b.vk) then return false end
+    for _, m in ipairs(MOD_ORDER) do
+        if (native.key_down(UI_VK[m]) == true) ~= (b[m] == true) then return false end
+    end
+    return true
+end
+
+-- The declared keys' handlers: fired once per press, with exactly the bound modifiers held.
+local function poll_keys()
+    if #key_handlers == 0 then return end
+    for _, h in ipairs({unpack(key_handlers)}) do
+        if not h.mod.disabled then
+            local text = key_binding(h.entry, h.def)
+            local down = false
+            if text ~= '' then
+                local b = parsed_bindings[text]
+                if b == nil then b = parse_binding(text) or false; parsed_bindings[text] = b end
+                down = b and binding_down(b) or false
+            end
+            local fire = down and not h.was
+            h.was = down
+            if fire and (not keys_blocked or h.mod.builtin) then
+                call(h.mod, 'key ' .. h.def.id, h.fn)
+            end
+        end
+    end
+end
+
+-- What the mod manager and gear.mods tell about a mod.
+local function mod_info(e)
+    local m = e.m
+    local state
+    if e.invalid then state = 'invalid'
+    elseif e.loaded and e.want == false then state = desired(e) and 'blocked' or 'off'     -- going down next tick
+    elseif e.loaded and m.disabled then state = 'error'
+    elseif e.loaded then state = 'on'
+    elseif e.fail then state = 'error'
+    elseif desired(e) and not e.want then state = 'blocked'
+    elseif desired(e) then state = 'pending'
+    else state = 'off' end
+    local requires = {}
+    for i, r in ipairs(m.requires or {}) do requires[i] = r end
+    return {id = e.id, name = m.name, version = m.version or '', author = m.author or '', description = m.description or '',
+        state = state, enabled = e.builtin or desired(e), loaded = e.loaded == true, builtin = e.builtin == true,
+        reason = e.fail or e.reason or e.problem, errors = e.loaded and m.errors or 0, requires = requires,
+        has_settings = #m.settings > 0, has_keys = #m.keys > 0, has_page = e.loaded == true and m.page ~= nil,
+        dir = e.dir}
+end
+
+local function make_settings_api(mod)
+    local api = {}
+    local function def_of(id)
+        local d = mod.settings_by_id[id]
+        if not d then error('this mod declares no setting "' .. tostring(id) .. '"', 3) end
+        return d
+    end
+    function api.get(id)
+        return setting_value(mod.entry, def_of(id))
+    end
+    function api.set(id, value)
+        return settings_set(mod.entry, def_of(id), value)
+    end
+    -- Whether the player has set this one (else its value is the default).
+    function api.is_set(id)
+        local d = def_of(id)
+        local saved = state_sub(mod.id, 'settings', false)
+        return saved ~= nil and saved[d.id] ~= nil
+    end
+    function api.all()
+        local out = {}
+        for _, d in ipairs(mod.settings) do out[d.id] = setting_value(mod.entry, d) end
+        return out
+    end
+    function api.reset(id)
+        settings_reset(mod.entry, id ~= nil and def_of(id) or nil)
+    end
+    -- Once per mod: reads the old settings file `name` of the mod's folder (JSON) and hands the decoded table to `fn`,
+    -- which copies what it wants into gear.settings.
+    function api.migrate(name, fn)
+        assert(type(name) == 'string' and type(fn) == 'function', 'migrate(name, fn)')
+        local done = state_sub(mod.id, 'migrated', false)
+        if done and done[name] then return false end
+        local text = native.read_file(mod.dir, name)
+        if not text then return false end
+        local v, err = json.decode(text)
+        if is_table(v) then
+            fn(v)
+        else
+            log('[%s] %s cannot be migrated: %s', mod.id, name, tostring(err))
+        end
+        state_sub(mod.id, 'migrated', true)[name] = true
+        state_dirty = true
+        return true
+    end
+    return api
+end
+
+local function make_keys_api(mod)
+    local api = {}
+    local function def_of(id)
+        local d = mod.keys_by_id[id]
+        if not d then error('this mod declares no key "' .. tostring(id) .. '"', 3) end
+        return d
+    end
+    function api.on(id, fn)
+        assert(type(fn) == 'function', 'handler must be a function')
+        local h = {mod = mod, id = id, def = def_of(id), fn = fn, entry = mod.entry}
+        key_handlers[#key_handlers + 1] = h
+        return h
+    end
+    function api.off(h)
+        for i = #key_handlers, 1, -1 do
+            if key_handlers[i] == h then table.remove(key_handlers, i) end
+        end
+    end
+    function api.binding(id)
+        return key_binding(mod.entry, def_of(id))
+    end
+    function api.set(id, binding)
+        return key_set(mod.entry, def_of(id), binding)
+    end
+    return api
+end
+
+local function make_mods_api(mod)
+    local api = {}
+    -- A page of this mod's own in its settings screen (after the generated settings): fn(x, y, w, h) draws in that
+    -- rectangle with this mod's gear.ui and returns the height it used.
+    function api.page(fn)
+        assert(fn == nil or type(fn) == 'function', 'page must be a function')
+        mod.page = fn
+    end
+    function api.list()
+        local out = {}
+        for _, e in ipairs(catalog_list) do
+            if not e.invalid then out[#out + 1] = mod_info(e) end
+        end
+        table.sort(out, function(a, b) return a.name:lower() < b.name:lower() end)
+        return out
+    end
+    function api.get(id)
+        local e = catalog[id]
+        return e and not e.invalid and mod_info(e) or nil
+    end
+    return api
+end
+
 -- What a mod's code sees as its globals.
 local function make_env(mod)
     local env = {
@@ -1913,6 +2412,10 @@ local function make_env(mod)
         end,
     }
     gear.inv = inv
+    gear.settings = make_settings_api(mod)
+    gear.keys = make_keys_api(mod)
+    gear.mods = make_mods_api(mod)
+    if mod.builtin then env.admin = admin end
     gear.ui = make_ui(mod)
     -- gear.on(event, fn) -> handle; gear.off(handle). Events: "load" (all mods loaded), "frame" (dt in seconds,
     -- every in-game frame on the engine thread), "session.start" (hero), "session.stop", and the custom events
@@ -1937,14 +2440,8 @@ local function make_env(mod)
     return env
 end
 
--- mod.lua: a table literal (or a chunk that returns one) evaluated with no globals at all.
-local function read_manifest(dir)
-    local text, err = native.read_file(dir, 'mod.lua')
-    if not text then return nil, err end
-    local chunk, lerr = native.load(text, '@' .. dir .. '\\mod.lua', {})
-    if not chunk then return nil, lerr end
-    local ok, m = pcall(chunk)
-    if not ok then return nil, tostring(m) end
+-- mod.lua's table, checked: the mod's record, or nil and a message.
+local function check_manifest(m, dir)
     if type(m) ~= 'table' then return nil, 'mod.lua must return a table' end
     if type(m.id) ~= 'string' or not m.id:match('^[%w_%-]+$') then
         return nil, 'mod.lua: id must be letters, digits, _ or -'
@@ -1954,6 +2451,8 @@ local function read_manifest(dir)
     if m.requires ~= nil and type(m.requires) ~= 'table' then return nil, 'mod.lua: requires must be a list' end
     if m.pipes ~= nil and type(m.pipes) ~= 'table' then return nil, 'mod.lua: pipes must be a list' end
     if m.config ~= nil and type(m.config) ~= 'table' then return nil, 'mod.lua: config must be a table' end
+    if m.description ~= nil and type(m.description) ~= 'string' then return nil, 'mod.lua: description must be a string' end
+    if m.author ~= nil and type(m.author) ~= 'string' then return nil, 'mod.lua: author must be a string' end
     local allowed = {}
     for _, name in ipairs(m.pipes or {}) do
         if type(name) ~= 'string' or not name:match('^[%w_%-%.]+$') then
@@ -1964,6 +2463,10 @@ local function read_manifest(dir)
     local config = {}
     for k, v in pairs(m.config or {}) do config[k] = v end
     if m.automation ~= nil and type(m.automation) ~= 'boolean' then return nil, 'mod.lua: automation must be true or false' end
+    local settings, settings_by_id = parse_settings(m.settings)
+    if not settings then return nil, settings_by_id end
+    local keys, keys_by_id = parse_keys(m.keys)
+    if not keys then return nil, keys_by_id end
     return {
         automation = m.automation == true,
         pipes = allowed,
@@ -1971,16 +2474,33 @@ local function read_manifest(dir)
         id = m.id,
         name = type(m.name) == 'string' and m.name or m.id,
         version = m.version or '0',
+        description = m.description or '',
+        author = m.author or '',
         priority = m.priority or 0,
         requires = m.requires or {},
         enabled = m.enabled ~= false,
+        settings = settings,
+        settings_by_id = settings_by_id,
+        keys = keys,
+        keys_by_id = keys_by_id,
         dir = dir,
     }
 end
 
+-- mod.lua: a table literal (or a chunk that returns one) evaluated with no globals at all.
+local function read_manifest(dir)
+    local text, err = native.read_file(dir, 'mod.lua')
+    if not text then return nil, err end
+    local chunk, lerr = native.load(text, '@' .. dir .. '\\mod.lua', {})
+    if not chunk then return nil, lerr end
+    local ok, m = pcall(chunk)
+    if not ok then return nil, tostring(m) end
+    return check_manifest(m, dir)
+end
+
 -- Mods in load order: by priority (lower first), then id; a mod after the mods it requires. Mods whose
 -- requirements are missing are left out.
-local function order(found)
+local function order(found, have)
     table.sort(found, function(a, b)
         if a.priority ~= b.priority then return a.priority < b.priority end
         return a.id < b.id
@@ -1997,12 +2517,13 @@ local function order(found)
         state[m] = 'visiting'
         for _, dep in ipairs(m.requires) do
             local d = by_id[dep]
-            if not d then
+            if not d and have and have[dep] then
+                -- already running
+            elseif not d then
                 log('mod %s requires %s, which is not installed: skipped', m.id, tostring(dep))
                 state[m] = 'failed'
                 return false
-            end
-            if not visit(d, chain .. ' -> ' .. dep) then
+            elseif not visit(d, chain .. ' -> ' .. dep) then
                 log('mod %s: requirement %s failed: skipped', m.id, dep)
                 state[m] = 'failed'
                 return false
@@ -2024,82 +2545,342 @@ local function mod_set_hash()
     local M = 4294967296
     local h = 0x811C9DC5
     for _, m in ipairs(mods) do
+      if not m.builtin then
         local s = m.id .. '@' .. m.version .. ';'
         for i = 1, #s do
             h = bit.bxor(h, s:byte(i)) % M
             -- h * 0x01000193 mod 2^32, exactly: the prime is 2^24 + 0x193.
             h = (bit.lshift(h, 24) % M + h * 0x193) % M
         end
+      end
     end
     return bit.tohex(h)
 end
 
-function kernel.load()
-    local found, seen = {}, {}
-    for _, dir in ipairs(native.mod_dirs()) do
-        local m, err = read_manifest(dir)
-        if not m then
-            log('mods\\%s: %s', dir, err)
-        elseif not m.enabled then
-            log('mod %s (mods\\%s) is disabled', m.id, dir)
-        elseif seen[m.id] then
-            log('mod %s in mods\\%s: the same id as mods\\%s: skipped', m.id, dir, seen[m.id].dir)
+---------------------------------------------------------------------------------------------------------------
+-- The catalog and the loader: every installed mod has an entry; mods are loaded and unloaded live as the player
+-- switches them on and off (mods\gear_mods.json keeps the choice).
+---------------------------------------------------------------------------------------------------------------
+
+-- The mod manager screen is a mod of its own, written in Lua and shipped in the DLL (native.builtin).
+local BUILTIN_MANIFEST = {
+    id = 'gear-mods', name = 'Mod manager', version = native.version, author = 'Sacred Gear',
+    description = 'Lists the installed mods: switch them on and off, change their settings and key binds.',
+    priority = 1000,
+    keys = {{id = 'open', label = 'Open the mod manager', default = 'f11'}},
+}
+
+local function new_entry(m, dir, extra)
+    local e = {id = m.id, dir = dir, m = m, default_enabled = m.enabled}
+    for k, v in pairs(extra or {}) do e[k] = v end
+    catalog[e.id] = e
+    catalog_list[#catalog_list + 1] = e
+    return e
+end
+
+-- Reads mods\<dir>: the manifest, with config.lua (optional, values only like mod.lua) laid over `config`, the file a
+-- player edits.
+local function read_installed(dir)
+    local m, err = read_manifest(dir)
+    if not m then return nil, err end
+    local ctext = native.read_file(m.dir, 'config.lua')
+    if ctext then
+        local chunk, cerr = native.load(ctext, '@' .. m.dir .. '\\config.lua', {})
+        local ok, c = false, cerr
+        if chunk then ok, c = pcall(chunk) end
+        if ok and type(c) == 'table' then
+            for k, v in pairs(c) do m.config[k] = v end
         else
-            seen[m.id] = m
-            found[#found + 1] = m
+            log('mod %s: config.lua ignored: %s', m.id, ok and 'it must return a table' or tostring(c))
         end
     end
+    return m
+end
+
+local function discover()
+    for _, dir in ipairs(native.mod_dirs()) do
+        local m, err = read_installed(dir)
+        if not m then
+            log('mods\\%s: %s', dir, err)
+            local id = '?' .. dir
+            local stub = {id = id, name = dir, version = '', requires = {}, keys = {}, settings = {}, config = {},
+                          enabled = false, dir = dir, settings_by_id = {}, keys_by_id = {}}
+            new_entry(stub, dir, {invalid = true, problem = err})
+        elseif catalog[m.id] then
+            log('mod %s in mods\\%s: the same id as mods\\%s: skipped', m.id, dir, catalog[m.id].dir)
+        else
+            if not m.enabled then log('mod %s (mods\\%s) is disabled', m.id, dir) end
+            new_entry(m, dir)
+        end
+    end
+    local source = native.builtin and native.builtin('modmanager')
+    if source then
+        local m, err = check_manifest(BUILTIN_MANIFEST, '(built in)')
+        if m then
+            m.builtin = true
+            new_entry(m, m.dir, {builtin = true, source = source})
+        else
+            log('mod manager: %s', err)
+        end
+    end
+    table.sort(catalog_list, function(a, b) return a.id < b.id end)
+end
+
+local function load_mod(e, initial)
+    local m = e.m
+    m.errors, m.disabled, m.unloaded, m.timer_count = 0, nil, nil, 0
+    m.entry = e
+    e.fail = nil
+    m.env = make_env(m)
+    local text, err
+    if e.builtin then text = e.source else text, err = native.read_file(m.dir, 'main.lua') end
+    if not text then
+        e.fail = err or 'no source'
+        log('mod %s: %s', m.id, e.fail)
+        return false
+    end
+    local chunk, lerr = native.load(text, '@' .. m.dir .. '\\main.lua', m.env)
+    if not chunk then
+        e.fail = lerr
+        log('mod %s: %s', m.id, lerr)
+        return false
+    end
+    mods[#mods + 1] = m
+    e.loaded = true
+    local ok = call(m, 'main.lua', chunk)
+    if ok then
+        log('mod %s %s loaded (mods\\%s)', m.id, m.version, m.dir)
+    else
+        m.disabled = true
+        log('mod %s: main.lua failed: the mod is switched off', m.id)
+    end
+    if not initial then
+        kernel.dispatch_to(m, 'load')
+        if session_hero then kernel.dispatch_to(m, 'session.start', wrap(session_hero)) end
+    end
+    return true
+end
+
+-- Takes a mod out of the running game: it gets 'unload', then its handlers, timers, tasks, pipes, key binds, pickup
+-- rules and open widgets are dropped. (What it changed in the world stays.)
+local function unload_mod(e)
+    local m = e.m
+    kernel.dispatch_to(m, 'unload')
+    for _, list in pairs(handlers) do
+        for i = #list, 1, -1 do
+            if list[i].mod == m then table.remove(list, i) end
+        end
+    end
+    for i = #key_handlers, 1, -1 do
+        if key_handlers[i].mod == m then table.remove(key_handlers, i) end
+    end
+    for i = #mods, 1, -1 do
+        if mods[i] == m then table.remove(mods, i) end
+    end
+    if pickup_rules[m] then pickup_rules[m] = nil; pickup_dirty = true end
+    ui_keys[m] = nil
+    if ui_dropdown and (ui_handle_key[ui_dropdown] or ''):sub(1, #m.id + 1) == m.id .. '\0' then ui_dropdown = nil end
+    m.disabled, m.unloaded = true, true     -- timers, tasks and pipes of the mod notice and go
+    e.loaded = false
+    log('mod %s unloaded', m.id)
+end
+
+-- Brings the running mods in line with the player's choices: unloads the ones that are off (or whose requirements
+-- are), loads the ones that are on.
+local function apply(initial)
+    apply_pending = false
+    compute_want()
+    for i = #mods, 1, -1 do
+        local e = mods[i].entry
+        if e and not e.want then unload_mod(e) end
+    end
+    local todo, have = {}, {}
+    for _, m in ipairs(mods) do have[m.id] = true end
+    for _, e in ipairs(catalog_list) do
+        if e.want and not e.loaded then
+            local m = e.m
+            if not e.builtin then
+                local err
+                m, err = read_installed(e.dir)
+                if m then
+                    e.m = m
+                else
+                    e.fail = err
+                    log('mods\\%s: %s', e.dir, err)
+                end
+            end
+            if m then todo[#todo + 1] = m; m.entry = e end
+        elseif initial and not e.invalid and e.reason and desired(e) then
+            log('mod %s %s: skipped', e.id, e.reason)
+        end
+    end
+    for _, m in ipairs(order(todo, have)) do load_mod(m.entry, initial) end
+end
+
+-- The mod manager's own view of everything (gear.mods.admin does not exist: the manager gets the global `admin`).
+function admin.entries()
+    local out = {}
+    for _, e in ipairs(catalog_list) do out[#out + 1] = mod_info(e) end
+    table.sort(out, function(a, b)
+        if a.builtin ~= b.builtin then return not a.builtin end
+        return a.name:lower() < b.name:lower()
+    end)
+    return out
+end
+
+function admin.set_enabled(id, on)
+    local e = catalog[id]
+    if not e or e.builtin or e.invalid then return nil, 'this mod cannot be switched' end
+    if on then
+        -- Its requirements are switched on with it.
+        local chain, seen = {}, {}
+        local function walk(x)
+            if seen[x] then return true end
+            seen[x] = true
+            chain[#chain + 1] = x
+            for _, dep in ipairs(x.m.requires) do
+                local d = catalog[dep]
+                if not d or d.invalid then return nil, x.id .. ' requires ' .. tostring(dep) .. ', which is not installed' end
+                local ok, why = walk(d)
+                if not ok then return nil, why end
+            end
+            return true
+        end
+        local ok, why = walk(e)
+        if not ok then return nil, why end
+        for _, x in ipairs(chain) do state_of(x.id, true).enabled = true end
+    else
+        state_of(id, true).enabled = false
+    end
+    state_dirty = true
+    apply_pending = true
+    compute_want()
+    return true
+end
+
+function admin.settings(id) local e = catalog[id]; return e and e.m.settings or {} end
+function admin.keys(id) local e = catalog[id]; return e and e.m.keys or {} end
+function admin.get(id, key)
+    local e = catalog[id]
+    local d = e and e.m.settings_by_id[key]
+    if d then return setting_value(e, d) end
+end
+function admin.default(id, key)
+    local e = catalog[id]
+    local d = e and e.m.settings_by_id[key]
+    if d then return setting_default(e, d) end
+end
+function admin.set(id, key, value)
+    local e = catalog[id]
+    local d = e and e.m.settings_by_id[key]
+    if not d then return nil, 'no such setting' end
+    return settings_set(e, d, value)
+end
+function admin.reset(id)
+    local e = catalog[id]
+    if e then settings_reset(e) end
+end
+function admin.binding(id, key)
+    local e = catalog[id]
+    local d = e and e.m.keys_by_id[key]
+    if d then return key_binding(e, d) end
+end
+function admin.default_binding(id, key)
+    local e = catalog[id]
+    local d = e and e.m.keys_by_id[key]
+    return d and d.default
+end
+function admin.set_binding(id, key, text)
+    local e = catalog[id]
+    local d = e and e.m.keys_by_id[key]
+    if not d then return nil, 'no such key' end
+    return key_set(e, d, text)
+end
+function admin.conflicts(id, key)
+    local e = catalog[id]
+    local d = e and e.m.keys_by_id[key]
+    return d and key_conflicts(e, d) or {}
+end
+-- Draws a mod's own page (gear.mods.page) in the rectangle, as that mod; returns the height used.
+function admin.draw_page(id, x, y, w, h)
+    local e = catalog[id]
+    if not (e and e.loaded and e.m.page) or e.m.disabled then return 0 end
+    local ok, used = call(e.m, 'page', e.m.page, x, y, w, h)
+    return ok and tonumber(used) or 0
+end
+-- While the mod manager's screen is open the other mods' hotkeys stay quiet.
+function admin.modal(on) keys_blocked = on == true end
+
+-- Rebinding: capture_start() remembers which keys are down; capture() then returns the binding ('ctrl+m') of the first
+-- key pressed since, or nil.
+local capture_keys, capture_prev = nil, {}
+function admin.capture_start()
+    if not capture_keys then
+        capture_keys = {}
+        local names = {}
+        for name in pairs(UI_VK) do names[#names + 1] = name end
+        table.sort(names)
+        local seen = {}
+        for _, name in ipairs(names) do
+            local vk = UI_VK[name]
+            if not MOD_ALIAS[name] and name ~= 'escape' and not seen[vk] then
+                seen[vk] = true
+                capture_keys[#capture_keys + 1] = {name = name, vk = vk}
+            end
+        end
+    end
+    for _, k in ipairs(capture_keys) do capture_prev[k.vk] = native.key_down(k.vk) end
+end
+function admin.capture()
+    if not capture_keys then admin.capture_start() end
+    local hit
+    for _, k in ipairs(capture_keys) do
+        local down = native.key_down(k.vk)
+        if down and not capture_prev[k.vk] and not hit then hit = k end
+        capture_prev[k.vk] = down
+    end
+    if not hit then return nil end
+    local parts = {}
+    for _, m in ipairs(MOD_ORDER) do
+        if native.key_down(UI_VK[m]) then parts[#parts + 1] = m end
+    end
+    parts[#parts + 1] = hit.name
+    return table.concat(parts, '+')
+end
+function admin.valid_binding(text) return normalize_binding(text) end
+
+function kernel.load()
+    state_load()
+    discover()
     -- Automation can name the mods to load (-gear-mods=a,b); their requirements are not added.
     if automation_on then
         local only = native.auto_mods()
         if #only > 0 then
             local wanted = {}
             for _, id in ipairs(only) do wanted[id] = true end
-            local kept = {}
-            for _, m in ipairs(found) do
-                if wanted[m.id] then kept[#kept + 1] = m else log('mod %s: not in -gear-mods: skipped', m.id) end
-            end
-            found = kept
-        end
-    end
-    for _, m in ipairs(order(found)) do
-        m.errors = 0
-        -- config.lua (optional, values only like mod.lua) overrides the defaults of mod.lua's `config`: the file a
-        -- player edits.
-        local ctext = native.read_file(m.dir, 'config.lua')
-        if ctext then
-            local chunk, cerr = native.load(ctext, '@' .. m.dir .. '\\config.lua', {})
-            local ok, c = false, cerr
-            if chunk then ok, c = pcall(chunk) end
-            if ok and type(c) == 'table' then
-                for k, v in pairs(c) do m.config[k] = v end
-            else
-                log('mod %s: config.lua ignored: %s', m.id, ok and 'it must return a table' or tostring(c))
-            end
-        end
-        m.env = make_env(m)
-        local text, err = native.read_file(m.dir, 'main.lua')
-        if not text then
-            log('mod %s: %s', m.id, err)
-        else
-            local chunk, lerr = native.load(text, '@' .. m.dir .. '\\main.lua', m.env)
-            if not chunk then
-                log('mod %s: %s', m.id, lerr)
-            else
-                mods[#mods + 1] = m
-                local ok = call(m, 'main.lua', chunk)
-                if ok then
-                    log('mod %s %s loaded (mods\\%s)', m.id, m.version, m.dir)
-                else
-                    m.disabled = true
-                    log('mod %s: main.lua failed: the mod is switched off', m.id)
+            for _, e in ipairs(catalog_list) do
+                if not e.builtin and not wanted[e.id] then
+                    e.default_enabled = false
+                    log('mod %s: not in -gear-mods: skipped', e.id)
                 end
             end
         end
     end
+    apply(true)
     log('%d mod(s) loaded, mod set %s', #mods, mod_set_hash())
     kernel.dispatch('load')
     return #mods
+end
+
+-- Calls the handlers of one mod for `event` (its 'load' when it is switched on live, 'unload', 'settings.changed').
+function kernel.dispatch_to(mod, event, ...)
+    local list = handlers[event]
+    if not list then return end
+    for _, h in ipairs({unpack(list)}) do
+        if h.mod == mod and not mod.disabled then
+            call(mod, event, h.fn, ...)
+        end
+    end
 end
 
 -- Calls every handler of `event` in load order. A handler that errors is logged; others still run.
@@ -2137,7 +2918,9 @@ end
 -- One in-game frame: sessions, pipes, timers, the frame handlers, then the draw handlers; the frame's drawing is
 -- published at the end.
 function kernel.tick(dt)
+    if apply_pending then apply(false) end
     check_session()
+    poll_keys()
     poll_saves()
     poll_pipes()
     run_timers()
@@ -2150,11 +2933,14 @@ function kernel.tick(dt)
     native.ui_commit()
     save_layout()
     publish_pickup_rules()
+    state_flush()
 end
 
 -- Automation only: a tick in the menus (every 50 ms while no in-game frame runs), on the automation thread.
 function kernel.idle()
+    if apply_pending then apply(false) end
     check_session()
+    poll_keys()
     poll_pipes()
     run_timers()
     ui_begin_tick()
@@ -2166,9 +2952,15 @@ function kernel.idle()
     native.ui_commit()
     save_layout()
     publish_pickup_rules()
+    state_flush()
 end
 
 -- The mod whose code was running when the host had to stop it (time budget), for the log.
+-- Writes gear_mods.json if something changed (the tick does it too).
+function kernel.flush()
+    state_flush()
+end
+
 function kernel.current()
     return current and current.id or nil
 end

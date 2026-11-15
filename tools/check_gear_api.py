@@ -153,7 +153,7 @@ def main():
     compare('pipe', pipe, members('GearPipe'))
 
     # --- events
-    events = set(re.findall(r"kernel\.dispatch\('([\w.]+)'", kernel))
+    events = set(re.findall(r"kernel\.dispatch(?:_to)?\((?:[\w.]+, )?'([\w.]+)'", kernel))
     meta_events = set()
     for fn in model.globals + [f for c in model.classes.values() for f in c.funcs]:
         if fn.name == 'on':
@@ -166,8 +166,16 @@ def main():
     compare('events (GearEventName)', events, alias_events)
 
     # --- mod.lua
-    manifest = between(kernel, r'^local function read_manifest\(dir\)', r'^-- Mods in load order', 'read_manifest')
+    manifest = between(kernel, r'^local function check_manifest\(', r'^-- Mods in load order', 'check_manifest')
     compare('mod.lua', set(re.findall(r'\bm\.(\w+)', manifest)), fields('GearModManifest'))
+
+    # --- the mod manager's API: settings, keys, mods
+    for cls, fn in (('GearSettings', 'make_settings_api'), ('GearKeys', 'make_keys_api'), ('GearMods', 'make_mods_api')):
+        src = between(kernel, r'^local function %s\(mod\)' % fn, r'^end', fn)
+        compare(cls, set(re.findall(r'^\s*function api\.(\w+)\(', src, re.M)), {f.name for f in model.classes[cls].funcs})
+    info = between(kernel, r'^local function mod_info\(e\)', r'^end', 'mod_info')
+    info = info[info.index('return {id = e.id'):]
+    compare('mod listing', set(re.findall(r'(\w+) = ', info)) - {'e'}, fields('GearModListing'))
 
     # --- options: every opts.X the kernel reads must be a field of some options class
     opt_fields = set()

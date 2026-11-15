@@ -942,6 +942,64 @@ namespace
         return 1;
     }
 
+    // mods\gear_mods.json: the mod manager's file (enabled flags, settings, key binds of all mods). An automation run
+    // with an instance name keeps its own copy in GearAutomation\<instance>, so tests never touch the player's file.
+    std::wstring statePath()
+    {
+        if (Automation::options().enabled)
+        {
+            const std::wstring dir = Instance::directory(g_modsDir.substr(0, g_modsDir.size() - 5));
+            if (!dir.empty())
+            {
+                return dir + L"\\gear_mods.json";
+            }
+        }
+        return g_modsDir + L"\\gear_mods.json";
+    }
+
+    // native.state_read() -> text | nil
+    int nativeStateRead(lua_State* L)
+    {
+        std::string text;
+        if (!readFile(statePath(), text))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushlstring(L, text.data(), text.size());
+        return 1;
+    }
+
+    // native.state_write(text, backup) -> bool. Atomic (a temporary file moved over the old one); `backup` true
+    // writes gear_mods.json.bak instead (the copy of a file the kernel could not read).
+    int nativeStateWrite(lua_State* L)
+    {
+        size_t n = 0;
+        const char* text = luaL_checklstring(L, 1, &n);
+        const bool backup = lua_toboolean(L, 2) != 0;
+        bool ok = false;
+        if (n <= 1024 * 1024)
+        {
+            const std::wstring path = statePath() + (backup ? L".bak" : L"");
+            const std::wstring temp = path + L".tmp";
+            HANDLE f = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            DWORD written = 0;
+            ok = f != INVALID_HANDLE_VALUE && WriteFile(f, text, static_cast<DWORD>(n), &written, nullptr) &&
+                 written == n && FlushFileBuffers(f);
+            if (f != INVALID_HANDLE_VALUE)
+            {
+                CloseHandle(f);
+            }
+            ok = ok && MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+            if (!ok)
+            {
+                DeleteFileW(temp.c_str());
+            }
+        }
+        lua_pushboolean(L, ok);
+        return 1;
+    }
+
     // native.ui_region(layer, x, y, w, h, handle) -> bool
     int nativeUiRegion(lua_State* L)
     {
@@ -1504,13 +1562,35 @@ namespace
     }
 
     // The kernel chunk, embedded with gear.rc.
-    bool kernelSource(const char*& text, size_t& size)
+    bool resourceSource(int id, const char*& text, size_t& size)
     {
-        HRSRC res = FindResourceW(g_module, MAKEINTRESOURCEW(IDR_GEAR_KERNEL), MAKEINTRESOURCEW(10));
+        HRSRC res = FindResourceW(g_module, MAKEINTRESOURCEW(id), MAKEINTRESOURCEW(10));
         HGLOBAL data = res ? LoadResource(g_module, res) : nullptr;
         text = data ? static_cast<const char*>(LockResource(data)) : nullptr;
         size = res ? SizeofResource(g_module, res) : 0;
         return text && size;
+    }
+
+    bool kernelSource(const char*& text, size_t& size)
+    {
+        return resourceSource(IDR_GEAR_KERNEL, text, size);
+    }
+
+    // native.builtin(name) -> the Lua source of a part of Sacred Gear that is shipped inside the DLL ("modmanager"), or nil.
+    int nativeBuiltin(lua_State* L)
+    {
+        const char* name = luaL_checkstring(L, 1);
+        const char* text = nullptr;
+        size_t size = 0;
+        if (std::strcmp(name, "modmanager") == 0 && resourceSource(IDR_GEAR_MODMANAGER, text, size))
+        {
+            lua_pushlstring(L, text, size);
+        }
+        else
+        {
+            lua_pushnil(L);
+        }
+        return 1;
     }
 
     // Calls kernel[name](args on the stack) under the time budget; logs an error. Pops the arguments.
@@ -1605,6 +1685,9 @@ namespace
             {"ui_can_move_windows", nativeUiCanMoveWindows},
             {"layout_read", nativeLayoutRead},
             {"layout_write", nativeLayoutWrite},
+            {"state_read", nativeStateRead},
+            {"state_write", nativeStateWrite},
+            {"builtin", nativeBuiltin},
             {"ui_events", nativeUiEvents},
             {"key_down", nativeKeyDown},
             {"write_file", nativeWriteFile},
