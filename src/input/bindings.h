@@ -23,6 +23,7 @@ namespace Bindings
         Inventory, CombatArts, Combos, LogBook, WorldMap, Minimap, Options, SaveMenu, Escape, Help, Network,
         QuickSave, QuickLoad, Pause, ZoomIn, ZoomOut,
         Cursor,         // switches the sticks to moving the cursor in game (and back)
+        ModMenu,        // Sacred Gear's mod menu: the mods' hotkeys and tools as buttons the pad can press
         Count
     };
     constexpr int actionCount = static_cast<int>(Action::Count);

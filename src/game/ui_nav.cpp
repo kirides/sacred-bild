@@ -1,5 +1,6 @@
 #include "game/ui_nav.h"
 #include "game/ui_anchor.h"
+#include "game/gear_nav.h"
 #include "game/ui_canvas.h"
 #include "game/ui_state.h"
 #include "patch.h"
@@ -778,6 +779,16 @@ namespace
         return nullptr;
     }
 
+    // Sacred Gear's widgets (GearNav): stops of their own, drawn over everything the game shows.
+    void addGear(std::vector<Point>& out)
+    {
+        for (const GearNav::Stop& s : GearNav::stops())
+        {
+            Point p{s.x, s.y, true, {s.left, s.top, s.right, s.bottom}};
+            out.push_back(p);
+        }
+    }
+
     std::vector<Point> controls()
     {
         std::vector<Point> out;
@@ -786,9 +797,15 @@ namespace
         {
             return out;
         }
+        if (GearNav::modal())
+        {
+            addGear(out);   // a mod screen takes the pad alone
+            return out;
+        }
         if (cUI_Window2* window = UiNav::modal())
         {
             collectWindow(window, out);
+            addGear(out);
             return out;
         }
         const auto add = [&](cUI_Window2* window) {
@@ -828,6 +845,7 @@ namespace
                 }
             }
         }
+        addGear(out);
         return out;
     }
 }

@@ -1110,6 +1110,13 @@ local ui_keys = {}          -- mod -> vk -> held at the last query
 local key_capture = {}      -- mod -> true: the mod keeps the keyboard from the game (ui.capture_keys)
 local ui_panel_list = {}    -- the panels of all mods drawn this tick, in order: {key, title, x, y, w, h, ...}
 local ui_panel_prev = {}    -- the last tick's
+-- The controller (SacredBild's D-pad): the widgets' rectangles are reported as stops each tick; the pad's events
+-- (slider nudges, B, the mod menu button) come back.
+local ui_nav = {}           -- this tick's stops: {mod, x, y, w, h, layer, kind, ax, ay, drop}
+local ui_nav_modal = nil    -- the mod whose screen takes the pad alone (ui.nav_modal)
+local ui_window_open = false    -- a closable panel is up this tick
+local ui_pad = {nudge = 0, back = 0, menu = 0}
+local ui_menu_items = {}    -- mod -> {{id, label, fn}} (ui.menu_item)
 
 local function ui_handle(mod, id)
     local key = mod.id .. '\0' .. tostring(id)
@@ -1129,6 +1136,16 @@ local function ui_begin_tick()
     ui_prev_regions, ui_regions = ui_regions, {}
     ui_panel_prev, ui_panel_list = ui_panel_list, {}
     ui_tooltip = nil
+    ui_nav, ui_window_open = {}, false
+    do
+        local nudge, back, menu = native.ui_pad()
+        ui_pad = {nudge = nudge or 0, back = back or 0, menu = menu or 0}
+        -- B closes an open dropdown first.
+        if ui_pad.back > 0 and ui_dropdown then
+            ui_dropdown = nil
+            ui_pad.back = ui_pad.back - 1
+        end
+    end
     ui_tick_state = native.ui_state()
     ui_mouse.x, ui_mouse.y = ui_tick_state.mouse_x or 0, ui_tick_state.mouse_y or 0
     -- The topmost region of the last frame under the cursor (layers in draw order, then the order registered).
@@ -1228,7 +1245,41 @@ local function tooltip_place(w, h, mx, my, bounds, cw, ch, gap)
     end
     return x, y
 end
+-- Tells SacredBild which widgets the pad can point at. An open dropdown's list, or the screen of a mod that asked
+-- (ui.nav_modal), is all there is; else every widget, only those of the top layer while the game's menu or a
+-- message box is up.
+local function ui_push_nav()
+    local s = ui_tick_state or {}
+    local list, flags = {}, 0
+    local drop = {}
+    for _, n in ipairs(ui_nav) do
+        if n.drop then drop[#drop + 1] = n end
+    end
+    if #drop > 0 then
+        list, flags = drop, 1
+    elseif ui_nav_modal then
+        for _, n in ipairs(ui_nav) do
+            if n.mod == ui_nav_modal then list[#list + 1] = n end
+        end
+        flags = 1
+    else
+        local top_only = s.escape_menu or s.message_box
+        for _, n in ipairs(ui_nav) do
+            if not top_only or n.layer == 2 then list[#list + 1] = n end
+        end
+        if ui_window_open then flags = 2 end
+    end
+    local out = {}
+    for i, n in ipairs(list) do
+        if i > 400 then break end
+        out[i] = {x = n.ax or (n.x + n.w / 2), y = n.ay or (n.y + n.h / 2), left = n.x, top = n.y, width = n.w,
+            height = n.h, kind = n.kind or 0}
+    end
+    native.ui_nav(out, flags)
+end
+
 local function ui_end_tick()
+    ui_push_nav()
     local t = ui_tooltip
     if not t then return end
     local w = (ui_measure(t.text, {}) or (#t.text * 6)) + 12
@@ -1453,6 +1504,10 @@ local function make_ui(mod)
         ui_count(mod)
         native.ui_region(layer, x, y, w, h, handle)
         ui_regions[#ui_regions + 1] = {handle = handle, layer = layer, x = x, y = y, w = w, h = h}
+        if opts.nav ~= false and opts.enabled ~= false then
+            ui_nav[#ui_nav + 1] = {mod = mod, x = x, y = y, w = w, h = h, layer = layer, kind = opts._nav_kind,
+                ax = opts._nav_x, ay = opts._nav_y, drop = opts._nav_drop}
+        end
         local s = ui_input[handle] or {}
         local enabled = opts.enabled ~= false
         local r = {
@@ -1494,7 +1549,7 @@ local function make_ui(mod)
     function ui.label(id, text, x, y, opts)
         opts = opts or {}
         local w, h = ui_measure(tostring(text), opts)
-        if opts.tooltip then region(id, x, y, w or 60, h or 14, opts) end
+        if opts.tooltip then region(id, x, y, w or 60, h or 14, {tooltip = opts.tooltip, layer = opts.layer, nav = false}) end
         return ui.text(text, x, y, {font = opts.font, size = opts.size, face = opts.face, bold = opts.bold,
             italic = opts.italic, height = opts.height, valign = opts.valign, color = label_color(opts),
             layer = opts.layer})
@@ -1589,11 +1644,12 @@ local function make_ui(mod)
             local top = {layer = 'top'}
             -- Behind the list: the whole screen, so a click beside it closes it (and goes nowhere else).
             local away = region(tostring(id) .. '#away', s.screen_left or 0, s.screen_top or 0,
-                (s.screen_right or 1024) - (s.screen_left or 0), (s.screen_bottom or 768) - (s.screen_top or 0), top)
+                (s.screen_right or 1024) - (s.screen_left or 0), (s.screen_bottom or 768) - (s.screen_top or 0),
+                {layer = 'top', nav = false})
             local ly = y + h
             box(x, ly, w, #options * 18 + 2, 0xF0141420, C.edge, top)
             for i, text in ipairs(options) do
-                local ir = region(tostring(id) .. '#' .. i, x + 1, ly + 1 + (i - 1) * 18, w - 2, 18, top)
+                local ir = region(tostring(id) .. '#' .. i, x + 1, ly + 1 + (i - 1) * 18, w - 2, 18, {layer = 'top', _nav_drop = true})
                 if ir.hover or i == index then
                     ui.rect(x + 1, ly + 1 + (i - 1) * 18, w - 2, 18, ir.hover and 0xFF4A3C28 or 0xFF2A2418, top)
                 end
@@ -1613,10 +1669,20 @@ local function make_ui(mod)
     -- ui.slider(id, x, y, w, min, max, value, opts{step, format}) -> changed, value
     function ui.slider(id, x, y, w, min, max, value, opts)
         opts = opts or {}
-        local r = region(id, x, y, w, 16, opts)
-        ui.rect(x, y + 7, w, 2, C.edge_dim, opts)
         local function at(v) return x + (w - 10) * ((v - min) / math.max(max - min, 1e-9)) end
+        local r = region(id, x, y, w, 16, {layer = opts.layer, tooltip = opts.tooltip, enabled = opts.enabled,
+            _nav_kind = 1, _nav_x = at(value) + 5, _nav_y = y + 8})
+        ui.rect(x, y + 7, w, 2, C.edge_dim, opts)
         local changed = false
+        if ui_hot == ui_handle(mod, id) and ui_pad.nudge ~= 0 and opts.enabled ~= false then
+            -- The pad: D-pad left / right on the slider, a fiftieth of its range (at least one step) at a time.
+            local step = opts.step or 1
+            local jump = math.max(step, math.floor((max - min) / 50 / step + 0.5) * step)
+            local v = math.max(min, math.min(max, value + ui_pad.nudge * jump))
+            v = math.floor(v / step + 0.5) * step
+            if v ~= value then value, changed = v, true end
+            ui_pad.nudge = 0
+        end
         if r.held or r.pressed then
             local t = math.max(0, math.min(1, (ui_mouse.x - x - 5) / math.max(w - 10, 1)))
             local v = min + t * (max - min)
@@ -1667,7 +1733,7 @@ local function make_ui(mod)
         ui.frame(x, y, w, h, ui_edit and C.accent or C.edge, ui_edit and 2 or 1, o)
         ui.rect(x + 1, y + 1, w - 2, 20, C.title, o)
         ui.text(title, x + 8, y + 1, {height = 20, valign = 'middle', color = C.accent, layer = opts.layer})
-        region(tostring(id) .. '#body', x, y, w, h, o)
+        region(tostring(id) .. '#body', x, y, w, h, {layer = opts.layer, nav = false})
         local function store()
             local vx, vy = to_virtual(x, y)
             local e = {x = vx, y = vy}
@@ -1675,7 +1741,7 @@ local function make_ui(mod)
             layout_set(key, e)
         end
         if opts.draggable ~= false then
-            local bar = region(tostring(id) .. '#bar', x, y, w - 24, 21, {layer = opts.layer, tooltip = opts.tooltip})
+            local bar = region(tostring(id) .. '#bar', x, y, w - 24, 21, {layer = opts.layer, tooltip = opts.tooltip, nav = false})
             if bar.pressed then p.grab_x, p.grab_y = ui_mouse.x - x, ui_mouse.y - y end
             if bar.held and p.grab_x then
                 p.x, p.y = ui_mouse.x - p.grab_x, ui_mouse.y - p.grab_y
@@ -1686,7 +1752,7 @@ local function make_ui(mod)
             end
         end
         if opts.resizable then
-            local grip = region(tostring(id) .. '#grip', x + w - 14, y + h - 14, 14, 14, {layer = opts.layer, tooltip = 'Resize'})
+            local grip = region(tostring(id) .. '#grip', x + w - 14, y + h - 14, 14, 14, {layer = opts.layer, tooltip = 'Resize', nav = ui_edit})
             for i = 0, 2 do
                 ui.rect(x + w - 4 - i * 4, y + h - 4, 2, 2, grip.hover and C.accent or C.edge, o)
                 ui.rect(x + w - 4, y + h - 4 - i * 4, 2, 2, grip.hover and C.accent or C.edge, o)
@@ -1705,9 +1771,24 @@ local function make_ui(mod)
             ui.text('x', x + w - 21, y + 2, {width = 18, height = 18, align = 'center', valign = 'middle',
                 color = cr.hover and 0xFFFF8080 or C.text, layer = opts.layer})
             if cr.clicked then p.closed = true end
+            -- The pad's B closes the topmost closable panel (opts.back == false: the mod handles B itself).
+            if opts.back ~= false and not opts.passive then
+                ui_window_open = true
+                if ui_pad.back > 0 then
+                    local top = nil
+                    for _, q in ipairs(ui_panel_prev) do
+                        if q.closable and q.back then top = q.key end
+                    end
+                    if top == key or (top == nil) then
+                        p.closed = true
+                        ui_pad.back = ui_pad.back - 1
+                    end
+                end
+            end
         end
         ui_panel_list[#ui_panel_list + 1] = {key = key, mod = mod.id, id = id, title = tostring(title), x = x, y = y,
-            w = w, h = h, resizable = opts.resizable and true or false, min_width = min_w, min_height = min_h,
+            w = w, h = h, closable = opts.closable ~= false, back = opts.back ~= false and not opts.passive,
+            resizable = opts.resizable and true or false, min_width = min_w, min_height = min_h,
             layer = opts.layer or 'hud'}
         return {open = true, key = key, x = x, y = y, w = w, h = h, content_x = x + 8, content_y = y + 28,
             content_w = w - 16, content_h = h - 36}
@@ -1715,6 +1796,31 @@ local function make_ui(mod)
 
     -- Layout editing (like an "edit mode" in other games): the panels of every mod show their ids and their resize
     -- grips while it is on; a layout editor (gear/examples/layout) moves the game's windows too.
+    -- ui.nav_modal(on): the mod's screen takes the controller alone while on: the pad's D-pad only reaches its
+    -- widgets (and nothing else), B is ui.back_pressed(), and the mod menu button is not offered.
+    function ui.nav_modal(on)
+        if on then ui_nav_modal = mod elseif ui_nav_modal == mod then ui_nav_modal = nil end
+    end
+    -- ui.back_pressed() -> bool: the controller's B was pressed (consumed: true once per press). Mods with a
+    -- nav_modal screen or a panel with `back = false` close or step back with it.
+    function ui.back_pressed()
+        if ui_pad.back > 0 then
+            ui_pad.back = ui_pad.back - 1
+            return true
+        end
+        return false
+    end
+    -- ui.menu_item(id, label, fn): an entry of the controller's mod menu (the pad button reaches it where a mod's
+    -- tool needs a hotkey, ALT or a click on a tiny button). Declared keys (mod.lua) are listed there on their own.
+    function ui.menu_item(id, label, fn)
+        assert(type(fn) == 'function', 'menu_item wants a function')
+        local items = ui_menu_items[mod] or {}
+        ui_menu_items[mod] = items
+        for _, it in ipairs(items) do
+            if it.id == id then it.label, it.fn = tostring(label), fn return end
+        end
+        items[#items + 1] = {id = id, label = tostring(label), fn = fn}
+    end
     function ui.edit_mode() return ui_edit end
     function ui.set_edit_mode(on) ui_edit = on and true or false end
     function ui.can_move_windows() return native.ui_can_move_windows() end
@@ -2027,6 +2133,10 @@ local function make_auto()
     function auto.key_down(key) native.auto_key(vk_of(key), true) end
     function auto.key_up(key) native.auto_key(vk_of(key), false) end
     function auto.release() native.auto_release() end
+    -- The controller, without one: pad events as SacredBild posts them (slider steps, B, the mod menu button), and
+    -- the stops SacredBild holds (count, flags; count -1 stale, -2 no SacredBild).
+    function auto.pad(nudge, back, menu) native.auto_pad(nudge or 0, back or 0, menu or 0) end
+    function auto.nav() return native.auto_nav() end
     -- In a task: press and release with a short pause, as a player would.
     function auto.click(x, y, button)
         auto.move(x, y)
@@ -3237,6 +3347,35 @@ function admin.capture()
     return table.concat(parts, '+')
 end
 function admin.valid_binding(text) return normalize_binding(text) end
+
+-- The controller's mod menu: the pad button was pressed since the last call.
+function admin.menu_pressed()
+    if ui_pad.menu > 0 then
+        ui_pad.menu = 0
+        return true
+    end
+    return false
+end
+-- Its entries: {{label, mod, run = fn}}: the declared keys of the mods that run (with their binding in the label),
+-- then the mods' menu items.
+function admin.menu_entries()
+    local out = {}
+    for _, e in ipairs(catalog_list) do
+        if e.loaded and not e.m.disabled then
+            for _, h in ipairs(key_handlers) do
+                if h.mod == e.m and not (e.builtin and h.id == 'open') then
+                    local b = key_binding(e, h.def)
+                    local label = h.def.label .. (b ~= '' and ('  [' .. b .. ']') or '')
+                    out[#out + 1] = {label = label, mod = e.m.name, run = function() call(h.mod, 'key ' .. h.def.id, h.fn) end}
+                end
+            end
+            for _, it in ipairs(ui_menu_items[e.m] or {}) do
+                out[#out + 1] = {label = it.label, mod = e.m.name, run = function() call(e.m, 'menu ' .. it.id, it.fn) end}
+            end
+        end
+    end
+    return out
+end
 
 function kernel.load()
     state_load()

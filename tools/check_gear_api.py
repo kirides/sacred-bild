@@ -197,7 +197,7 @@ def main():
     for name, c in model.classes.items():
         if name.endswith('Opts'):
             opt_fields |= {f.name for f in c.fields}
-    for n in sorted(set(re.findall(r'\bopts\.(\w+)', kernel)) - opt_fields):
+    for n in sorted({n for n in re.findall(r'\bopts\.(\w+)', kernel) if not n.startswith('_')} - opt_fields):
         problems.append(f'opts: "{n}" is read by kernel.lua but is a field of no *Opts class')
     rules = set(re.findall(r'\brules\.(\w+)', kernel))
     compare('pickup rules', rules, fields('GearPickupRules'))

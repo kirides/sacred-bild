@@ -68,6 +68,19 @@ function GearAuto.key_up(key) end
 --- Releases everything held.
 function GearAuto.release() end
 
+--- The controller without one: posts pad events as SacredBild's controller does (D-pad steps on a slider, B presses,
+--- mod menu button presses).
+---@param nudge? integer
+---@param back? integer
+---@param menu? integer
+function GearAuto.pad(nudge, back, menu) end
+
+--- The stops SacredBild holds for the controller: their count (-1 stale, -2 no SacredBild) and flags (1 modal, 2 a
+--- mod window is open).
+---@return integer count
+---@return integer flags
+function GearAuto.nav() end
+
 --- In a task: moves, presses and releases with short pauses, as a player would. Client pixels.
 ---@param x number
 ---@param y number

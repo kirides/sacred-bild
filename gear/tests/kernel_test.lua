@@ -22,6 +22,8 @@ local ability_store = {}
 local ability_active, damage_active
 local level_active, constant_active
 local ui_recording, ui_published = {}, {}
+local nav_published
+local pad_queue = {0, 0, 0}
 local pickup_published
 save_block, save_calls, save_results = nil, {}, {}
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
@@ -133,6 +135,8 @@ local native = {
     pickup_refused = function() return 0 end,
     ui_region = function(...) ui_recording[#ui_recording + 1] = {'region', ...}; return true end,
     ui_events = function() local e = ui_events_queue; ui_events_queue = {}; return e end,
+    ui_nav = function(stops, flags) nav_published = {stops = stops, flags = flags}; return true end,
+    ui_pad = function() local p = pad_queue; pad_queue = {0, 0, 0}; return p[1], p[2], p[3] end,
     key_down = function(vk) return keys_held[vk] == true end,
     state_read = function() return state_file end,
     state_write = function(text, backup)
@@ -551,6 +555,16 @@ click(20, 40 + 18 + 18 + 5) -- the list's second entry
 ok(widgets.index == 2, 'dropdown picks the second entry (' .. tostring(widgets.index) .. ')')
 click(15, 15)
 ok(widgets.checked == false and widgets.changes == 2, 'checkbox toggles back')
+-- The controller: widgets are reported as stops; an open dropdown's list is all there is; B closes it.
+kernel.tick(0.016)
+ok(nav_published and #nav_published.stops >= 2 and nav_published.flags % 2 == 0, 'widgets are reported as pad stops')
+click(15, 45)               -- opens the dropdown
+kernel.tick(0.016)
+ok(nav_published.flags % 2 == 1 and #nav_published.stops == 3, 'an open dropdown has only its entries as stops (' .. #nav_published.stops .. ')')
+pad_queue = {0, 1, 0}
+kernel.tick(0.016)
+kernel.tick(0.016)
+ok(nav_published.flags % 2 == 0 and #nav_published.stops >= 2, 'B closes the dropdown')
 ok(moved_windows[1] and moved_windows[1][1] == 512 and moved_windows[1][2] == 192 - 388, 'stored game window placed (' .. tostring(moved_windows[1] and moved_windows[1][1]) .. ')')
 local listed = false
 for _, p in ipairs(widgets.panels or {}) do

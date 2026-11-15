@@ -341,11 +341,18 @@ local sample_panel = gear.auto ~= nil
 
 gear.keys.on('edit', function() ui.set_edit_mode(not ui.edit_mode()) end)
 
+-- The controller reaches the edit mode through the mod menu; there the pad drives the editor alone (D-pad between
+-- the frames and buttons, A held and the stick to drag, B is Done).
+ui.menu_item('edit', 'Edit layout', function() ui.set_edit_mode(not ui.edit_mode()) end)
+
 gear.on('draw', function(state)
     if not state or state.mode ~= 'game' or state.exclusive then
         drag = nil
+        ui.nav_modal(false)
         return
     end
+    ui.nav_modal(ui.edit_mode() and not (state.escape_menu or state.message_box))
+    if ui.edit_mode() and ui.back_pressed() then ui.set_edit_mode(false) end
     if sample_panel then
         local p = ui.panel('sample', 'Sample panel', 60, 120, 200, 110, {resizable = true, min_width = 140,
             min_height = 80, closable = false})

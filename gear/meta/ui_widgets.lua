@@ -12,6 +12,7 @@
 ---@field tooltip? string Shown after the cursor rests on the widget for 0.4 s.
 ---@field layer? GearLayer Default `'hud'`.
 ---@field enabled? boolean `false`: greyed out, no clicks.
+---@field nav? boolean Default true (regions and every widget): a stop of the controller's D-pad. `false` for rectangles that only take the mouse (backgrounds, blockers).
 
 ---@class GearLabelOpts : GearWidgetOpts
 ---@field font? 'ui'|'game1'|'game2'|'game3'|'game4'|'game5'|'game6'|'game7'|integer
@@ -42,6 +43,8 @@
 ---@field min_width? number Default 120.
 ---@field min_height? number Default 60.
 ---@field background? GearColor
+---@field back? boolean Default true: the controller's B closes the panel while it is the topmost closable one; `false`: the mod handles B itself (`ui.back_pressed`).
+---@field passive? boolean A closable panel that should not take the controller (no cursor, B not caught): a HUD-like panel.
 
 --- What `gear.ui.region` reports.
 ---@class GearRegionState
@@ -183,6 +186,25 @@ function GearUi.slider(id, x, y, w, min, max, value, opts) end
 ---@param opts? GearPanelOpts
 ---@return GearPanel
 function GearUi.panel(id, title, x, y, w, h, opts) end
+
+--- The controller: while on, the mod's screen has the pad alone. Only its widgets are D-pad stops (the game's controls
+--- and other mods' are not), the cursor starts on its first widget, and B is `back_pressed()`. Switch it off when the
+--- screen closes (it is also dropped when the mod unloads).
+---@param on boolean
+function GearUi.nav_modal(on) end
+
+--- The controller's B was pressed: true once per press (consumed). B closes an open dropdown and the topmost closable
+--- panel by itself; a `nav_modal` screen or a panel with `back = false` asks here.
+---@return boolean
+function GearUi.back_pressed() end
+
+--- An entry of the controller's mod menu (Sacred Gear's mod menu button, LT + LB by default): for a tool a player
+--- would otherwise reach with a hotkey, Alt or a small button. The keys a mod declares in mod.lua are listed there
+--- by themselves; calling it again with the same id changes the entry.
+---@param id string
+---@param label string
+---@param fn fun()
+function GearUi.menu_item(id, label, fn) end
 
 --- Opens or closes a panel.
 ---@param id string|integer

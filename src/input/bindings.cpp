@@ -58,6 +58,7 @@ namespace
         {"ZoomIn", "Zoom in", "Game", VK_ADD, Press::Hold, layer(Right)},
         {"ZoomOut", "Zoom out", "Game", VK_SUBTRACT, Press::Hold, layer(Left)},
         {"Cursor", "Cursor mode on / off", "Game", 0, Press::Tap, layer(R3)},
+        {"ModMenu", "Mod menu (Sacred Gear)", "Game", 0, Press::Tap, layer(LB)},
     };
     static_assert(std::size(kInfo) == Bindings::actionCount);
 

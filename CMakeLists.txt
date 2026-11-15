@@ -94,6 +94,7 @@ set(DDRAW_SOURCES
   src/game/click_walk.cpp
   src/game/options_screen.cpp
   src/game/ui_nav.cpp
+  src/game/gear_nav.cpp
   src/game/ui_state.cpp
   src/game/ui_windows.cpp
   src/game/movie.cpp
@@ -174,6 +175,7 @@ if(SACREDGEAR)
     gear/pipe.cpp
     gear/automation.cpp
     gear/ui.cpp
+    gear/padnav.cpp
     gear/text.cpp
     gear/pickup.cpp
     gear/inventory.cpp

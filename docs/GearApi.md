@@ -1807,6 +1807,7 @@ Options every widget takes.
 | `tooltip` | `string` | Shown after the cursor rests on the widget for 0.4 s. (optional) |
 | `layer` | `GearLayer` | Default `'hud'`. (optional) |
 | `enabled` | `boolean` | `false`: greyed out, no clicks. (optional) |
+| `nav` | `boolean` | Default true (regions and every widget): a stop of the controller's D-pad. `false` for rectangles that only take the mouse (backgrounds, blockers). (optional) |
 
 ### GearLabelOpts
 
@@ -1862,6 +1863,8 @@ Includes everything of `GearWidgetOpts`.
 | `min_width` | `number` | Default 120. (optional) |
 | `min_height` | `number` | Default 60. (optional) |
 | `background` | `GearColor` |  (optional) |
+| `back` | `boolean` | Default true: the controller's B closes the panel while it is the topmost closable one; `false`: the mod handles B itself (`ui.back_pressed`). (optional) |
+| `passive` | `boolean` | A closable panel that should not take the controller (no cursor, B not caught): a HUD-like panel. (optional) |
 
 ### GearRegionState
 
@@ -2022,6 +2025,26 @@ A window: its title bar drags it (the position is kept in the layout), its X clo
 - `h`: `number`
 - `opts`: `GearPanelOpts` (optional)
 - returns `GearPanel`
+
+#### `gear.ui.nav_modal(on)`
+
+The controller: while on, the mod's screen has the pad alone. Only its widgets are D-pad stops (the game's controls and other mods' are not), the cursor starts on its first widget, and B is `back_pressed()`. Switch it off when the screen closes (it is also dropped when the mod unloads).
+
+- `on`: `boolean`
+
+#### `gear.ui.back_pressed() -> boolean`
+
+The controller's B was pressed: true once per press (consumed). B closes an open dropdown and the topmost closable panel by itself; a `nav_modal` screen or a panel with `back = false` asks here.
+
+- returns `boolean`
+
+#### `gear.ui.menu_item(id, label, fn)`
+
+An entry of the controller's mod menu (Sacred Gear's mod menu button, LT + LB by default): for a tool a player would otherwise reach with a hotkey, Alt or a small button. The keys a mod declares in mod.lua are listed there by themselves; calling it again with the same id changes the entry.
+
+- `id`: `string`
+- `label`: `string`
+- `fn`: `fun()`
 
 #### `gear.ui.show_panel(id, open)`
 
@@ -2242,6 +2265,21 @@ Moves the game's cursor; client pixels.
 #### `gear.auto.release()`
 
 Releases everything held.
+
+#### `gear.auto.pad(nudge, back, menu)`
+
+The controller without one: posts pad events as SacredBild's controller does (D-pad steps on a slider, B presses, mod menu button presses).
+
+- `nudge`: `integer` (optional)
+- `back`: `integer` (optional)
+- `menu`: `integer` (optional)
+
+#### `gear.auto.nav() -> integer, integer`
+
+The stops SacredBild holds for the controller: their count (-1 stale, -2 no SacredBild) and flags (1 modal, 2 a mod window is open).
+
+- returns `count` `integer`
+- returns `flags` `integer`
 
 #### `gear.auto.click(x, y, button)`
 

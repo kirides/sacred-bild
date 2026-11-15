@@ -9,6 +9,7 @@
 #include "log.h"
 #include "pickup.h"
 #include "overlay.h"
+#include "padnav.h"
 #include "pipe.h"
 #include "save.h"
 #include "sitehook.h"
@@ -1296,6 +1297,64 @@ namespace
         return 1;
     }
 
+    // native.ui_nav(stops, flags) -> bool: tells SacredBild the widgets the controller can point at. `stops`: a list of
+    // {x, y, left, top, width, height, kind}; flags: 1 a modal screen (only these are stops), 2 a window is open.
+    int nativeUiNav(lua_State* L)
+    {
+        luaL_checktype(L, 1, LUA_TTABLE);
+        const int flags = static_cast<int>(luaL_checknumber(L, 2));
+        std::vector<PadNav::Stop> stops;
+        const int n = static_cast<int>(lua_objlen(L, 1));
+        stops.reserve(static_cast<size_t>(n));
+        const auto field = [&](const char* name) {
+            lua_getfield(L, -1, name);
+            const float v = static_cast<float>(lua_tonumber(L, -1));
+            lua_pop(L, 1);
+            return v;
+        };
+        for (int i = 1; i <= n; ++i)
+        {
+            lua_rawgeti(L, 1, i);
+            if (lua_istable(L, -1))
+            {
+                stops.push_back({field("x"), field("y"), field("left"), field("top"), field("width"),
+                                 field("height"), static_cast<int>(field("kind"))});
+            }
+            lua_pop(L, 1);
+        }
+        lua_pushboolean(L, PadNav::setStops(stops, flags));
+        return 1;
+    }
+
+    // native.ui_pad() -> nudge, back, menu: what the controller did since the last call (slider steps, B presses,
+    // mod menu button presses).
+    int nativeUiPad(lua_State* L)
+    {
+        const PadNav::Events e = PadNav::take();
+        lua_pushnumber(L, e.nudge);
+        lua_pushnumber(L, e.back);
+        lua_pushnumber(L, e.menu);
+        return 3;
+    }
+
+    // native.auto_pad(nudge, back, menu): automation posts pad events; native.auto_nav() -> stops, flags as SacredBild
+    // holds them (stops -1: stale, -2: no SacredBild).
+    int nativeAutoPad(lua_State* L)
+    {
+        PadNav::post(static_cast<int>(luaL_optnumber(L, 1, 0)), static_cast<int>(luaL_optnumber(L, 2, 0)),
+                     static_cast<int>(luaL_optnumber(L, 3, 0)));
+        return 0;
+    }
+
+    int nativeAutoNav(lua_State* L)
+    {
+        int flags = 0;
+        const int count = PadNav::navState(flags);
+        lua_pushnumber(L, count);
+        lua_pushnumber(L, flags);
+        return 2;
+    }
+
     // native.ui_events() -> {{down, button, x, y, region}, ...}
     int nativeUiEvents(lua_State* L)
     {
@@ -2044,6 +2103,8 @@ namespace
             {"state_write", nativeStateWrite},
             {"builtin", nativeBuiltin},
             {"ui_events", nativeUiEvents},
+            {"ui_nav", nativeUiNav},
+            {"ui_pad", nativeUiPad},
             {"key_down", nativeKeyDown},
             {"ui_block_keys", nativeUiBlockKeys},
             {"write_file", nativeWriteFile},
@@ -2080,6 +2141,8 @@ namespace
                 {"auto_move", nativeAutoMove},
                 {"auto_button", nativeAutoButton},
                 {"auto_key", nativeAutoKey},
+                {"auto_pad", nativeAutoPad},
+                {"auto_nav", nativeAutoNav},
                 {"auto_char", nativeAutoChar},
                 {"auto_release", nativeAutoRelease},
                 {"auto_load", nativeAutoLoad},

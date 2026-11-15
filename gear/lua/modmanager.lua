@@ -70,6 +70,7 @@ end
 local function stop_input()
     screen.edit = nil
     screen.capture = nil
+    screen.osk = nil
 end
 
 local function open_screen()
@@ -78,6 +79,7 @@ local function open_screen()
     screen.view, screen.message = 'list', nil
     stop_input()
     ui.show_panel('main', true)
+    ui.nav_modal(true)
     admin.modal(true)
 end
 
@@ -87,6 +89,7 @@ local function close_screen(by_escape)
     screen.open = false
     stop_input()
     ui.show_panel('main', false)
+    ui.nav_modal(false)
     if by_escape then
         screen.holding, screen.up_at = true, nil
     else
@@ -279,16 +282,21 @@ local function setting_row(m, d, x, y, w)
         if ch then changed, nv = true, d.choices[i].value end
     elseif d.type == 'text' then
         local focused = screen.edit == id
-        local r = ui.region(id, cx, y + 2, 250, 20, LAYER)
-        ui.rect(cx, y + 2, 250, 20, focused and 0xF0202030 or C.bg, LAYER)
-        ui.frame(cx, y + 2, 250, 20, (focused or r.hover) and C.edge or C.edge_dim, 1, LAYER)
+        local r = ui.region(id, cx, y + 2, 200, 20, LAYER)
+        ui.rect(cx, y + 2, 200, 20, focused and 0xF0202030 or C.bg, LAYER)
+        ui.frame(cx, y + 2, 200, 20, (focused or r.hover) and C.edge or C.edge_dim, 1, LAYER)
+        if ui.button(id .. '#kbd', cx + 204, y + 2, 40, 20, 'Kbd', {layer = 'top',
+            tooltip = 'Type with an on-screen keyboard (for a controller)'}) then
+            screen.osk = {mode = 'text', mod = m, def = d, label = d.label, text = value, max = d.max_length or 64}
+            screen.edit, screen.capture = nil, nil
+        end
         if r.clicked and not focused then
             screen.edit, screen.edit_text, screen.capture = id, value, nil
             focused = true
         end
         local shown = focused and screen.edit_text or value
         local blink = focused and math.floor(gear.time() * 2) % 2 == 0 and '|' or ''
-        ui.text(fit(shown, 238) .. blink, cx + 5, y + 2, {height = 20, valign = 'middle', layer = 'top'})
+        ui.text(fit(shown, 188) .. blink, cx + 5, y + 2, {height = 20, valign = 'middle', layer = 'top'})
         if focused then
             if ui.key_pressed('enter') or ui.key_pressed('tab') then
                 screen.edit = nil
@@ -417,6 +425,11 @@ local function draw_keys(p, e)
             screen.edit = nil
             admin.capture_start()
         end
+        if ui.button(id .. '#pick', x + 512, ry + 1, 50, 22, 'Pick', {layer = 'top',
+            tooltip = 'Choose the key from an on-screen list (for a controller)'}) then
+            screen.osk = {mode = 'key', mod = e.id, key = k.id, label = k.label, ctrl = false, shift = false, alt = false}
+            screen.capture, screen.edit = nil, nil
+        end
         if binding ~= admin.default_binding(e.id, k.id) then
             if ui.button(id .. '#reset', x + 448, ry + 1, 60, 22, 'Default', {layer = 'top', tooltip = 'Back to the default key'}) then
                 admin.set_binding(e.id, k.id, nil)
@@ -477,6 +490,149 @@ local function draw_mod(p)
 end
 
 ---------------------------------------------------------------------------------------------------------------
+-- An on-screen keyboard (for the controller): types into a text setting, or picks a key for a bind.
+---------------------------------------------------------------------------------------------------------------
+local OSK_TEXT = {
+    {'1', '2', '3', '4', '5', '6', '7', '8', '9', '0'},
+    {'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'},
+    {'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '-'},
+    {'z', 'x', 'c', 'v', 'b', 'n', 'm', '.', '_', ':'},
+}
+local OSK_F = {'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12'}
+local OSK_SPECIAL = {'space', 'tab', 'enter', 'insert', 'delete', 'home', 'end', 'pageup', 'pagedown', 'up', 'down',
+                     'left', 'right'}
+local OSK_SHORT = {space = 'Spc', pageup = 'PgUp', pagedown = 'PgDn', insert = 'Ins', delete = 'Del'}
+
+-- A row of buttons centered in the panel's content; returns the key clicked.
+local function osk_row(p, id, y, list, kw, label)
+    local gap = 3
+    local total = #list * kw + (#list - 1) * gap
+    local x = p.content_x + (p.content_w - total) / 2
+    local hit
+    for i, k in ipairs(list) do
+        if ui.button('osk:' .. id .. k, x + (i - 1) * (kw + gap), y, kw, 26, label and label(k) or k, LAYER) then hit = k end
+    end
+    return hit
+end
+
+local function draw_osk(p)
+    local o = screen.osk
+    local x, y, w = p.content_x, p.content_y, p.content_w
+    local what = o.mode == 'text' and ('Typing: ' .. o.label) or ('Pick a key for: ' .. o.label)
+    ui.text(fit(what, w), x, y, {size = 14, bold = true, color = C.accent, height = 22, valign = 'middle', layer = 'top'})
+    y = y + 28
+    if o.mode == 'text' then
+        ui.rect(x, y, w, 24, C.bg, LAYER)
+        ui.frame(x, y, w, 24, C.edge, 1, LAYER)
+        ui.text(fit(o.text, w - 12) .. '|', x + 6, y, {height = 24, valign = 'middle', layer = 'top'})
+        y = y + 32
+        for i, row in ipairs(OSK_TEXT) do
+            local hit = osk_row(p, 'r' .. i, y, row, 40, function(k)
+                return (o.shift and k:match('%a')) and k:upper() or k
+            end)
+            if hit and #o.text < o.max then
+                o.text = o.text .. ((o.shift and hit:match('%a')) and hit:upper() or hit)
+                o.shift = false
+                admin.set(o.mod, o.def.id, o.text)
+            end
+            y = y + 30
+        end
+        if ui.button('osk:shift', x + 40, y, 90, 26, o.shift and 'SHIFT' or 'Shift', {layer = 'top',
+            color = o.shift and C.accent or nil}) then o.shift = not o.shift end
+        if ui.button('osk:space', x + 138, y, 180, 26, 'Space', LAYER) and #o.text < o.max then
+            o.text = o.text .. ' '
+            admin.set(o.mod, o.def.id, o.text)
+        end
+        if ui.button('osk:back', x + 326, y, 110, 26, 'Backspace', LAYER) then
+            o.text = o.text:sub(1, -2)
+            admin.set(o.mod, o.def.id, o.text)
+        end
+        if ui.button('osk:done', x + 444, y, 110, 26, 'Done', LAYER) then screen.osk = nil end
+    else
+        local names = {ctrl = 'Ctrl', shift = 'Shift', alt = 'Alt'}
+        local bx = x + 40
+        for _, m in ipairs({'ctrl', 'shift', 'alt'}) do
+            if ui.button('osk:mod' .. m, bx, y, 80, 26, names[m], {layer = 'top', color = o[m] and C.accent or nil}) then
+                o[m] = not o[m]
+            end
+            bx = bx + 88
+        end
+        if ui.button('osk:none', bx + 20, y, 110, 26, 'Unbind', LAYER) then
+            admin.set_binding(o.mod, o.key, '')
+            screen.osk = nil
+            return
+        end
+        if ui.button('osk:cancel', bx + 138, y, 110, 26, 'Cancel', LAYER) then
+            screen.osk = nil
+            return
+        end
+        y = y + 34
+        local hit
+        for i, row in ipairs(OSK_TEXT) do
+            hit = osk_row(p, 'r' .. i, y, row, 40) or hit
+            y = y + 30
+        end
+        hit = osk_row(p, 'f', y, OSK_F, 42, function(k) return k:upper() end) or hit
+        y = y + 30
+        hit = osk_row(p, 's', y, OSK_SPECIAL, 42, function(k)
+            return OSK_SHORT[k] or (k:sub(1, 1):upper() .. k:sub(2, 3))
+        end) or hit
+        if hit then
+            local b = (o.ctrl and 'ctrl+' or '') .. (o.shift and 'shift+' or '') .. (o.alt and 'alt+' or '') .. hit
+            admin.set_binding(o.mod, o.key, b)
+            screen.osk = nil
+            return
+        end
+        ui.text('Pick the modifiers first, then the key.', x, y + 34, {size = 11, color = DIM, layer = 'top'})
+    end
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- The mod menu (the controller's button): every mod's hotkey actions and tools as buttons
+---------------------------------------------------------------------------------------------------------------
+local menu = {open = false, page = 1}
+local MENU_ROWS = 8
+
+local function draw_menu()
+    local entries = {{label = 'Mod manager', run = function() menu.open = false; open_screen() end}}
+    for _, e in ipairs(admin.menu_entries()) do entries[#entries + 1] = e end
+    local pages = math.max(1, math.ceil(#entries / MENU_ROWS))
+    menu.page = math.max(1, math.min(pages, menu.page))
+    local l, t, r, b = ui.screen()
+    local shown = math.min(MENU_ROWS, #entries)
+    local mw, mh = 400, 36 + shown * 30 + (pages > 1 and 34 or 0)
+    local p = ui.panel('padmenu', 'Mods', (l + r - mw) / 2, (t + b - mh) / 2, mw, mh,
+        {layer = 'top', closable = true, back = false, draggable = false})
+    if not p.open then
+        menu.open = false
+        return
+    end
+    local first = (menu.page - 1) * MENU_ROWS
+    for i = 1, MENU_ROWS do
+        local en = entries[first + i]
+        if not en then break end
+        local tip = en.mod and ('From ' .. en.mod) or nil
+        if ui.button('menu:' .. (first + i), p.content_x, p.content_y + (i - 1) * 30, p.content_w, 26,
+            fit(en.label, p.content_w - 12), {layer = 'top', tooltip = tip}) then
+            menu.open = false
+            en.run()
+            return
+        end
+    end
+    if pages > 1 then
+        local fy = p.y + p.h - 34
+        if ui.button('menu:<', p.x + p.w / 2 - 70, fy, 30, 24, '<', {layer = 'top', enabled = menu.page > 1}) then
+            menu.page = menu.page - 1
+        end
+        ui.text(menu.page .. ' / ' .. pages, p.x + p.w / 2 - 36, fy, {width = 72, height = 24, align = 'center',
+            valign = 'middle', layer = 'top'})
+        if ui.button('menu:>', p.x + p.w / 2 + 40, fy, 30, 24, '>', {layer = 'top', enabled = menu.page < pages}) then
+            menu.page = menu.page + 1
+        end
+    end
+end
+
+---------------------------------------------------------------------------------------------------------------
 -- Each frame
 ---------------------------------------------------------------------------------------------------------------
 local function escape_menu_button(state)
@@ -501,25 +657,47 @@ gear.on('draw', function(state)
             end
         end
     end
+    if admin.menu_pressed() and not screen.open then
+        menu.open, menu.page = not menu.open, 1
+        ui.show_panel('padmenu', true)
+    end
+    if menu.open and not screen.open then
+        ui.nav_modal(true)
+        if ui.back_pressed() then menu.open = false end
+        if menu.open then
+            draw_menu()
+            return
+        end
+    end
     if not screen.open then
+        ui.nav_modal(false)
         escape_menu_button(state)
         return
     end
+    local back = ui.back_pressed()
     local escape = ui.key_pressed('escape')
     local l, t, r, b = ui.screen()
-    local blocker = ui.region('blocker', l, t, r - l, b - t, LAYER)
+    local blocker = ui.region('blocker', l, t, r - l, b - t, {layer = 'top', nav = false})
     if blocker.pressed then stop_input() end
     local H = math.max(300, math.min(H_MAX, b - t - 16))
     local px, py = (l + r - W) / 2, math.max(t + 8, (t + b - H) / 2)
-    local p = ui.panel('main', 'Mods', px, py, W, H, {layer = 'top', closable = true})
+    local p = ui.panel('main', 'Mods', px, py, W, H, {layer = 'top', closable = true, back = false})
     if not p.open then
         close_screen()
         return
     end
-    if escape then
-        if screen.capture or screen.edit then stop_input() else close_screen(true) return end
+    if back then
+        -- The controller's B: out of the keyboard, out of a mod's screen, then out of the manager.
+        if screen.osk then screen.osk = nil
+        elseif screen.capture or screen.edit then stop_input()
+        elseif screen.view ~= 'list' then screen.view = 'list'
+        else close_screen() return end
+    elseif escape then
+        if screen.osk or screen.capture or screen.edit then stop_input() else close_screen(true) return end
     end
-    if screen.view == 'list' then
+    if screen.osk then
+        draw_osk(p)
+    elseif screen.view == 'list' then
         draw_list(p)
     else
         draw_mod(p)
@@ -528,4 +706,4 @@ end)
 
 gear.keys.on('open', toggle_screen)
 
-gear.on('unload', function() admin.modal(false) end)
+gear.on('unload', function() ui.nav_modal(false); admin.modal(false) end)
