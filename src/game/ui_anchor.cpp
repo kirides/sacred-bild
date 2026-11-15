@@ -15,6 +15,7 @@
 #include <cstring>
 #include <iterator>
 #include <mutex>
+#include <vector>
 
 namespace
 {
@@ -420,4 +421,53 @@ void UiAnchor::install()
 bool UiAnchor::frame(cUI_Window2* window, UiCanvas::Frame& out)
 {
     return window && frameOf(UiWindows::identify(window), out);
+}
+
+// For Sacred Gear (gear/ui.cpp), which looks these up with GetProcAddress and works without them: mod overlays drawn
+// in a window's frame move with the window. Push enters `window`'s frame (a UI manager window; nullptr or a window
+// that is not anchored: the canvas) on the calling thread, unconfined unless `confine`; returns 0 and pushes nothing
+// while SacredBild's UI canvas is off. Pop leaves the innermost pushed frame. Bounds: the screen in the current
+// frame's coordinates (left, top, right, bottom).
+namespace
+{
+    thread_local std::vector<UiCanvas::FrameScope*> t_gearFrames;
+}
+
+extern "C" int __cdecl SacredBild_UiPushFrame(void* window, int confine)
+{
+    if (!UiCanvas::enabled())
+    {
+        return 0;
+    }
+    Frame frame;
+    if (!UiAnchor::frame(static_cast<cUI_Window2*>(window), frame))
+    {
+        frame = {};
+    }
+    frame.confine = confine != 0;
+    t_gearFrames.push_back(new UiCanvas::FrameScope(frame));
+    return 1;
+}
+
+extern "C" void __cdecl SacredBild_UiPopFrame()
+{
+    if (!t_gearFrames.empty())
+    {
+        delete t_gearFrames.back();
+        t_gearFrames.pop_back();
+    }
+}
+
+extern "C" int __cdecl SacredBild_UiScreenBounds(float* bounds)
+{
+    if (!UiCanvas::enabled() || !bounds)
+    {
+        return 0;
+    }
+    const UiCanvas::Bounds b = UiCanvas::screenBounds();
+    bounds[0] = b.left;
+    bounds[1] = b.top;
+    bounds[2] = b.right;
+    bounds[3] = b.bottom;
+    return 1;
 }

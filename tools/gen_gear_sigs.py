@@ -32,6 +32,20 @@ GEAR = [
     ('g_pUiManager', 0x017EEBBC, 'data'),
     ('g_pNetPlayers', 0x0182EBE8, 'data'),
     ('cMouse_instance', 0x00654F60, 'func'),
+    # Mod drawing (gear/ui.cpp), all inside cUI_Manager_render (0x758ED0, which SacredBild hooks): the popup pass
+    # (thiscall (manager, device, flag), ret 8) for the "hud" layer; the in-game branch's call of the party arrows
+    # (0x6D01F0, cdecl (device)) right after the world, before any window, for the "world" layer; and, after the
+    # escape menu and the message box in every mode, `call 0x649BE0` (the font manager, for the menus' version
+    # text) for the "top" layer. EBX holds the device throughout the render.
+    ('cUI_Manager_renderPopups', 0x00758DC0, 'func'),
+    ('uiRenderWorldCall', 0x0075934F, 'code'),
+    ('uiRenderTopCall', 0x00759585, 'code'),
+    ('g_pFontManager', 0x00CDCA70, 'data'),
+    ('g_pTextureManager', 0x013E7838, 'data'),
+    ('cTextureManager_get', 0x0065ED90, 'func'),
+    # The UI images: 0x54-byte records from 0x9ECEB0 (this is their +0x28, the texture handle, as the loader
+    # 0x75CC70 walks them).
+    ('uiImageTextures', 0x009ECED8, 'data'),
 ]
 
 

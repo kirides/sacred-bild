@@ -4,6 +4,7 @@
 #include "log.h"
 #include "pipe.h"
 #include "tables.h"
+#include "ui.h"
 #include "world.h"
 
 #include <windows.h>
@@ -528,6 +529,219 @@ namespace
         return 1;
     }
 
+    // UI drawing (ui.h). Arguments are checked by the kernel; here only ranges.
+    uint32_t toColor(lua_Number v)
+    {
+        return v >= 0 && v < 4294967296.0 ? static_cast<uint32_t>(static_cast<int64_t>(v)) : 0xFFFFFFFFu;
+    }
+
+    bool uiCommon(lua_State* L, Ui::Command& c, int layerArg)
+    {
+        const lua_Number layer = luaL_checknumber(L, layerArg);
+        const lua_Number slot = luaL_checknumber(L, layerArg + 1);
+        if (!(layer >= 0 && layer < static_cast<int>(Ui::Layer::Count)) || !(slot >= -1 && slot < 23))
+        {
+            return false;
+        }
+        c.layer = static_cast<Ui::Layer>(static_cast<int>(layer));
+        c.window = static_cast<int8_t>(slot);
+        return true;
+    }
+
+    bool uiBox(lua_State* L, Ui::Command& c, int arg)
+    {
+        const lua_Number v[4] = {luaL_checknumber(L, arg), luaL_checknumber(L, arg + 1), luaL_optnumber(L, arg + 2, 0),
+                                 luaL_optnumber(L, arg + 3, 0)};
+        for (lua_Number n : v)
+        {
+            if (!(n > -100000 && n < 100000))
+            {
+                return false;
+            }
+        }
+        c.x = static_cast<float>(v[0]);
+        c.y = static_cast<float>(v[1]);
+        c.w = static_cast<float>(v[2]);
+        c.h = static_cast<float>(v[3]);
+        return true;
+    }
+
+    // native.ui_rect(layer, slot, x, y, w, h, color) -> bool
+    int nativeUiRect(lua_State* L)
+    {
+        Ui::Command c;
+        c.kind = Ui::Kind::Rect;
+        const bool ok = uiCommon(L, c, 1) && uiBox(L, c, 3);
+        c.color = toColor(luaL_checknumber(L, 7));
+        lua_pushboolean(L, ok && Ui::add(std::move(c)));
+        return 1;
+    }
+
+    // native.ui_text(layer, slot, text, x, y, w, h, color, font, flags, background, padding) -> bool
+    int nativeUiText(lua_State* L)
+    {
+        size_t n = 0;
+        const char* text = luaL_checklstring(L, 3, &n);
+        const lua_Number font = luaL_checknumber(L, 9), flags = luaL_checknumber(L, 10);
+        const lua_Number color = luaL_checknumber(L, 8), background = luaL_checknumber(L, 11);
+        const lua_Number padding = luaL_checknumber(L, 12);
+        bool ok = false;
+        {
+            Ui::Command c;
+            c.kind = Ui::Kind::Text;
+            ok = n <= 4096 && uiCommon(L, c, 1) && uiBox(L, c, 4) && font >= 0 && font < 256 && flags >= 0 &&
+                 flags < 4294967296.0 && padding >= 0 && padding < 1000;
+            if (ok)
+            {
+                c.text = widen(text, n);
+                c.color = toColor(color);
+                c.font = static_cast<uint16_t>(font);
+                c.flags = static_cast<uint32_t>(static_cast<int64_t>(flags));
+                c.background = toColor(background);
+                c.padding = static_cast<float>(padding);
+                ok = Ui::add(std::move(c));
+            }
+        }
+        lua_pushboolean(L, ok);
+        return 1;
+    }
+
+    // native.ui_image(layer, slot, id, x, y, w, h, color, fit) -> bool; fit 0 stretch, 1 contain, 2 cover
+    int nativeUiImage(lua_State* L)
+    {
+        Ui::Command c;
+        c.kind = Ui::Kind::Image;
+        const uint32_t id = checkId(L, 3);
+        const lua_Number fit = luaL_checknumber(L, 9);
+        bool ok = uiCommon(L, c, 1) && uiBox(L, c, 4) && id && fit >= 0 && fit <= 2;
+        c.image = id;
+        c.color = toColor(luaL_checknumber(L, 8));
+        c.fit = static_cast<Ui::Fit>(static_cast<int>(fit));
+        lua_pushboolean(L, ok && Ui::add(std::move(c)));
+        return 1;
+    }
+
+    int nativeUiCommit(lua_State*)
+    {
+        Ui::commit();
+        return 0;
+    }
+
+    // native.ui_image_count() -> n (ids 1..n-1); native.ui_image_info(id) -> {sheet, width, height, loaded} | nil
+    int nativeUiImageCount(lua_State* L)
+    {
+        lua_pushnumber(L, Ui::imageCount());
+        return 1;
+    }
+
+    int nativeUiImageInfo(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        Ui::ImageInfo info;
+        if (!id || !Ui::imageInfo(id, info))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 4);
+        lua_pushlstring(L, info.sheet.data(), info.sheet.size());
+        lua_setfield(L, -2, "sheet");
+        lua_pushnumber(L, info.width);
+        lua_setfield(L, -2, "width");
+        lua_pushnumber(L, info.height);
+        lua_setfield(L, -2, "height");
+        lua_pushboolean(L, info.loaded);
+        lua_setfield(L, -2, "loaded");
+        return 1;
+    }
+
+    int nativeUiFontCount(lua_State* L)
+    {
+        lua_pushnumber(L, Ui::fontCount());
+        return 1;
+    }
+
+    // native.ui_text_size(text, font) -> width, height | nil
+    int nativeUiTextSize(lua_State* L)
+    {
+        size_t n = 0;
+        const char* text = luaL_checklstring(L, 1, &n);
+        const lua_Number font = luaL_checknumber(L, 2);
+        int w = 0, h = 0;
+        bool ok = false;
+        if (n <= 4096 && font >= 0 && font < 256)
+        {
+            const std::wstring t = widen(text, n);
+            ok = Ui::textSize(static_cast<uint16_t>(font), t, w, h);
+        }
+        if (!ok)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, w);
+        lua_pushnumber(L, h);
+        return 2;
+    }
+
+    void pushWindow(lua_State* L, const Ui::WindowInfo& w)
+    {
+        lua_createtable(L, 0, 8);
+        lua_pushlstring(L, w.name.data(), w.name.size());
+        lua_setfield(L, -2, "name");
+        auto num = [L](const char* k, lua_Number v) { lua_pushnumber(L, v); lua_setfield(L, -2, k); };
+        num("slot", w.slot);
+        num("x", w.x);
+        num("y", w.y);
+        num("width", w.width);
+        num("height", w.height);
+        lua_pushboolean(L, w.visible);
+        lua_setfield(L, -2, "visible");
+        lua_pushboolean(L, w.drawn);
+        lua_setfield(L, -2, "drawn");
+    }
+
+    // native.ui_windows() -> {window, ...}
+    int nativeUiWindows(lua_State* L)
+    {
+        const std::vector<Ui::WindowInfo> list = Ui::windows();
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        for (size_t i = 0; i < list.size(); ++i)
+        {
+            pushWindow(L, list[i]);
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.ui_state() -> {available, mode, exclusive, escape_menu, message_box, help, mouse_x, mouse_y,
+    // screen_left, screen_top, screen_right, screen_bottom}
+    int nativeUiState(lua_State* L)
+    {
+        const Ui::State s = Ui::state();
+        lua_createtable(L, 0, 12);
+        auto flag = [L](const char* k, bool v) { lua_pushboolean(L, v); lua_setfield(L, -2, k); };
+        auto num = [L](const char* k, lua_Number v) { lua_pushnumber(L, v); lua_setfield(L, -2, k); };
+        flag("available", s.available);
+        lua_pushstring(L, s.mode);
+        lua_setfield(L, -2, "mode");
+        if (!s.exclusive.empty())
+        {
+            lua_pushlstring(L, s.exclusive.data(), s.exclusive.size());
+            lua_setfield(L, -2, "exclusive");
+        }
+        flag("escape_menu", s.escapeMenu);
+        flag("message_box", s.messageBox);
+        flag("help", s.help);
+        num("mouse_x", s.mouseX);
+        num("mouse_y", s.mouseY);
+        num("screen_left", s.screenLeft);
+        num("screen_top", s.screenTop);
+        num("screen_right", s.screenRight);
+        num("screen_bottom", s.screenBottom);
+        return 1;
+    }
+
     // Automation (only registered when it is on, see start()).
     int nativeAutoMods(lua_State* L)
     {
@@ -801,6 +1015,16 @@ namespace
             {"pipe_send", nativePipeSend},
             {"pipe_poll", nativePipePoll},
             {"pipe_connected", nativePipeConnected},
+            {"ui_rect", nativeUiRect},
+            {"ui_text", nativeUiText},
+            {"ui_image", nativeUiImage},
+            {"ui_commit", nativeUiCommit},
+            {"ui_image_count", nativeUiImageCount},
+            {"ui_image_info", nativeUiImageInfo},
+            {"ui_font_count", nativeUiFontCount},
+            {"ui_text_size", nativeUiTextSize},
+            {"ui_windows", nativeUiWindows},
+            {"ui_state", nativeUiState},
             {nullptr, nullptr},
         };
         lua_newtable(L);

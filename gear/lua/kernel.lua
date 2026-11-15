@@ -591,9 +591,146 @@ local function spawn(mod, kind, x, y, opts)
 end
 
 ---------------------------------------------------------------------------------------------------------------
+-- UI drawing (gear.ui). Immediate mode: what a mod draws during a tick (its 'frame' and 'draw' handlers, timers,
+-- tasks) is shown until the next tick, then replaced; the native side draws it inside the game's UI pass. Positions
+-- are the UI's 1024x768 layout. Colors are 0xAARRGGBB numbers (gear.ui.rgba).
+---------------------------------------------------------------------------------------------------------------
+local UI_LAYERS = {world = 0, hud = 1, top = 2}
+local UI_FITS = {stretch = 0, contain = 1, fit = 1, cover = 2, fill = 2}
+local UI_ALIGN = {left = 0, center = 1, right = 4}   -- the fonts' flags
+local UI_MAX_PER_MOD = 2000     -- draw commands per mod and tick
+local ui_counts = {}            -- mod -> commands this tick
+local ui_slots = nil            -- window name (upper case) -> slot, this tick
+
+local function ui_color(c, default)
+    if c == nil then return default end
+    if type(c) == 'number' then return c % 4294967296 end
+    if type(c) == 'table' then
+        local function b(v, d) v = v or d; return math.max(0, math.min(255, math.floor(v + 0.5))) end
+        return ((b(c[4] or c.a, 255) * 256 + b(c[1] or c.r, 0)) * 256 + b(c[2] or c.g, 0)) * 256 + b(c[3] or c.b, 0)
+    end
+    error('a color is 0xAARRGGBB or {r, g, b, a}', 3)
+end
+
+local function ui_window_slot(name)
+    if not ui_slots then
+        ui_slots = {}
+        for _, w in ipairs(native.ui_windows()) do ui_slots[w.name:upper()] = w.slot end
+    end
+    return ui_slots[name:upper()]
+end
+
+-- The layer and window slot of opts; nil if the window does not exist (then nothing is drawn).
+local function ui_target(opts)
+    local layer = UI_LAYERS[opts.layer or 'hud']
+    if not layer then error('layer is "world", "hud" or "top"', 3) end
+    local slot = -1
+    if opts.window ~= nil then
+        if type(opts.window) ~= 'string' then error('window is a control name ("UI_WND_INVENTORY")', 3) end
+        slot = ui_window_slot(opts.window)
+        if not slot then return nil end
+    end
+    return layer, slot
+end
+
+local function ui_count(mod)
+    local n = (ui_counts[mod] or 0) + 1
+    if n > UI_MAX_PER_MOD then error('too many draw commands this frame (' .. UI_MAX_PER_MOD .. ')', 3) end
+    ui_counts[mod] = n
+end
+
+local function ui_begin_tick()
+    ui_counts = {}
+    ui_slots = nil
+end
+
+local function make_ui(mod)
+    local ui = {WIDTH = 1024, HEIGHT = 768}
+    function ui.rgba(r, g, b, a)
+        return ui_color({r, g, b, a == nil and 255 or a})
+    end
+    -- ui.rect(x, y, w, h, color, {layer, window})
+    function ui.rect(x, y, w, h, color, opts)
+        opts = opts or {}
+        local layer, slot = ui_target(opts)
+        if not layer then return false end
+        ui_count(mod)
+        return native.ui_rect(layer, slot, x, y, w, h, ui_color(color, 0xC0000000))
+    end
+    -- ui.frame(x, y, w, h, color, thickness, opts): an outline, `thickness` (default 1) inside the box.
+    function ui.frame(x, y, w, h, color, thickness, opts)
+        local t = thickness or 1
+        ui.rect(x, y, w, t, color, opts)
+        ui.rect(x, y + h - t, w, t, color, opts)
+        ui.rect(x, y + t, t, h - 2 * t, color, opts)
+        return ui.rect(x + w - t, y + t, t, h - 2 * t, color, opts)
+    end
+    -- ui.text(text, x, y, {color, font, width, height, align, background, padding, markup, flags, layer, window})
+    function ui.text(text, x, y, opts)
+        opts = opts or {}
+        text = tostring(text)
+        -- Backslashes start the fonts' markup (\c colors, \g images ...); plain text keeps them out.
+        if not opts.markup then text = text:gsub('\\', '/') end
+        local layer, slot = ui_target(opts)
+        if not layer then return false end
+        local align = UI_ALIGN[opts.align or 'left']
+        if not align then error('align is "left", "center" or "right"', 2) end
+        ui_count(mod)
+        return native.ui_text(layer, slot, text, x, y, opts.width or 0, opts.height or 0,
+            ui_color(opts.color, 0xFFFFFFFF), opts.font or 1, bit.bor(align, opts.flags or 0) % 4294967296,
+            ui_color(opts.background, 0), opts.padding or 0)
+    end
+    -- ui.image(id, x, y, w, h, {fit = 'stretch' | 'contain' | 'cover', color, layer, window}); w, h default to the
+    -- image's own size.
+    function ui.image(id, x, y, w, h, opts)
+        opts = opts or {}
+        local layer, slot = ui_target(opts)
+        if not layer then return false end
+        local fit = UI_FITS[opts.fit or 'stretch']
+        if not fit then error('fit is "stretch", "contain" or "cover"', 2) end
+        ui_count(mod)
+        return native.ui_image(layer, slot, id, x, y, w or 0, h or 0, ui_color(opts.color, 0xFFFFFFFF), fit)
+    end
+    function ui.image_info(id)
+        local info = type(id) == 'number' and native.ui_image_info(id)
+        if info then info.id = id end
+        return info or nil
+    end
+    -- ui.images(filter): the UI images whose sheet name contains `filter` (any case), {id, sheet, width, height}.
+    function ui.images(filter)
+        local out, f = {}, filter and filter:lower()
+        for id = 1, native.ui_image_count() - 1 do
+            local info = native.ui_image_info(id)
+            if info and (not f or info.sheet:lower():find(f, 1, true)) then
+                info.id = id
+                out[#out + 1] = info
+            end
+        end
+        return out
+    end
+    function ui.fonts() return native.ui_font_count() end
+    function ui.text_size(text, font)
+        return native.ui_text_size(tostring(text), font or 1)
+    end
+    function ui.windows() return native.ui_windows() end
+    function ui.window(name)
+        for _, w in ipairs(native.ui_windows()) do
+            if w.name:upper() == tostring(name):upper() then return w end
+        end
+        return nil
+    end
+    function ui.state() return native.ui_state() end
+    function ui.screen()
+        local s = native.ui_state()
+        return s.screen_left, s.screen_top, s.screen_right, s.screen_bottom
+    end
+    return ui
+end
+
+---------------------------------------------------------------------------------------------------------------
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
-local BUILTIN = {load = true, frame = true, idle = true}
+local BUILTIN = {load = true, frame = true, idle = true, draw = true}
 local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.'}
 local emit_depth = 0
 
@@ -912,6 +1049,7 @@ local function make_env(mod)
     for k, v in pairs(world) do w[k] = v end
     w.spawn = function(kind, x, y, opts) return spawn(mod, kind, x, y, opts) end
     gear.world = w
+    gear.ui = make_ui(mod)
     -- gear.on(event, fn) -> handle; gear.off(handle). Events: "load" (all mods loaded), "frame" (dt in seconds,
     -- every in-game frame on the engine thread), "session.start" (hero), "session.stop", and the custom events
     -- mods emit.
@@ -1114,13 +1252,23 @@ function kernel.dispatch(event, ...)
     end
 end
 
--- One in-game frame: sessions, pipes, timers, then the frame handlers.
+-- The 'draw' handlers get the UI state (gear.ui.state()); read only when someone draws.
+local function gear_ui_state()
+    local list = handlers.draw
+    if list and #list > 0 then return native.ui_state() end
+end
+
+-- One in-game frame: sessions, pipes, timers, the frame handlers, then the draw handlers; the frame's drawing is
+-- published at the end.
 function kernel.tick(dt)
     check_session()
     poll_pipes()
     run_timers()
+    ui_begin_tick()
     run_tasks()
     kernel.dispatch('frame', dt)
+    kernel.dispatch('draw', gear_ui_state())
+    native.ui_commit()
 end
 
 -- Automation only: a tick in the menus (every 50 ms while no in-game frame runs), on the automation thread.
@@ -1128,8 +1276,11 @@ function kernel.idle()
     check_session()
     poll_pipes()
     run_timers()
+    ui_begin_tick()
     run_tasks()
     kernel.dispatch('idle')
+    kernel.dispatch('draw', gear_ui_state())
+    native.ui_commit()
 end
 
 -- The mod whose code was running when the host had to stop it (time budget), for the log.

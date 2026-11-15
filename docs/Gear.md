@@ -106,7 +106,7 @@ so handlers see the frame's state, never a half-updated one, and need no locks.
 | `gear.version`, `gear.mod` | Sacred Gear's version; this mod's `id`, `name`, `version`, `dir`. |
 | `require(name)` | Runs `name.lua` of this mod's folder once (`a.b` is `a\b.lua`) and returns its result. |
 
-Events: `'load'` (all mods loaded), `'frame'` (`dt`, every in-game frame), `'session.start'` (`hero`, a creature
+Events: `'load'` (all mods loaded), `'frame'` (`dt`, every in-game frame), `'draw'` (`state`, after the frame handlers: see [UI drawing](#ui-drawing)), `'session.start'` (`hero`, a creature
 object: a game with a hero runs), `'session.stop'` (that hero is gone: noticed with the next game's first frame when
 the player left to the menu), `'idle'` (automation only: every 50 ms in the menus), and the custom events mods emit.
 
@@ -140,6 +140,58 @@ A creature object `c` (`c.id`) reads the game each time; after the object is gon
 changes: `c:set_hp(hp)` (1..max: mods do not kill through it), `c:set_gold(n)`, `c:add_gold(n)` (heroes),
 `c:teleport(x, y, layer)`.
 
+#### UI drawing
+
+`gear.ui` draws on top of the game: translucent rectangles, text in the game's own fonts and the game's own UI
+images (combat art icons, portraits, window parts), read-only for now. It is immediate mode: what a mod draws during
+a tick (its `draw` and `frame` handlers, timers, tasks) is shown until the next tick replaces it, so a mod draws its
+overlay every frame, usually in `gear.on('draw', function(state) ... end)` (`state` is `gear.ui.state()`). Without a
+tick (a loading screen, the menus without [automation](#automation)) nothing is drawn after half a second.
+
+Positions and sizes are the UI's **1024x768 layout**, the space the game lays its windows out in (and that
+`gear.auto.ui()` reports); the game and SacredBild scale it to the screen. Colors are `0xAARRGGBB` numbers or
+`{r, g, b, a}` tables (0..255, `a` defaults to 255); `gear.ui.rgba(r, g, b, a)` makes the number.
+
+| | |
+|---|---|
+| `rect(x, y, w, h, color, opts)` | A filled rectangle (default color: black, 75 % opaque). |
+| `frame(x, y, w, h, color, thickness, opts)` | An outline (default thickness 1) inside the box. |
+| `text(text, x, y, opts)` | Text in one of the game's fonts. `opts`: `color` (default white), `font` (an id: 1..7 are the UI's fonts, 1 the default; 0 is a debug font), `width` / `height` (the box; `align = 'left' \| 'center' \| 'right'` aligns inside its width), `background` (a color: a rectangle behind the text, sized to it) and `padding` around it, `markup = true` (pass the fonts' backslash codes through; otherwise a `\` shows as `/`). UTF-8. |
+| `image(id, x, y, w, h, opts)` | A UI image; `w`, `h` default to its own size. `opts.fit`: `'stretch'` (default: fills the box), `'contain'` (the whole image, aspect kept, centered in the box), `'cover'` (fills the box, aspect kept, the overhang cut off); `opts.color` tints it (white: as is; the alpha makes it translucent). |
+| `images(filter)` | The UI images whose sheet name contains `filter` (any case): `{id, sheet, width, height, loaded}`. Ids are the game's image indices (stable for a build). |
+| `image_info(id)` | One of those, or nil. |
+| `fonts()` | The number of UI fonts. |
+| `text_size(text, font)` | Width and height of the text in the layout, or nil if the font does not measure. In game only (it may add glyphs to the font). |
+| `window(name)`, `windows()` | The game's in-game windows by control name (`UI_WND_INVENTORY`, `UI_WND_TASKBAR`, ...; see `docs/UI_SYSTEM.md`): `{name, slot, x, y, width, height, visible, drawn}` in the window's own layout coordinates; `drawn`: open and drawn this frame (not hidden behind a window the game draws alone). |
+| `state()` | `{available, mode, exclusive, escape_menu, message_box, help, mouse_x, mouse_y, screen_left, screen_top, screen_right, screen_bottom}`: `mode` is `'game'`, `'menus'`, `'cinematic'` or `'none'`; `exclusive` the control name of the window the game draws alone (options, save, character, world map), if any; the cursor in layout coordinates; the screen's edges in layout coordinates (beyond 0..1024 x 0..768 when SacredBild's canvas leaves room around it). |
+| `screen()` | Those four edges. |
+| `WIDTH`, `HEIGHT` | 1024, 768. |
+
+`opts` of every draw function also take:
+
+- `layer`: where in the game's draw order. `'world'`: in game, over the world and under every window. `'hud'`
+  (default): over the game's windows, under tooltips, the escape menu and message boxes. `'top'`: over everything
+  but the cursor and its tooltip.
+- `window`: a control name. The command is drawn in that window's coordinates and frame, so it moves with the
+  window when SacredBild lays out the HUD (`[UI] Anchor`), and it is clipped to that window's 1024x768 frame like
+  the window itself; nothing is drawn while the window does not exist (in the menus). Without it the command uses
+  the canvas and may reach beyond it to the screen's edges (see `screen()`).
+
+A mod may issue 2000 draw commands per tick. Drawing changes nothing in the game: the overlay takes no mouse
+clicks (a later version adds input), and the game's own UI keeps working under it.
+
+```lua
+gear.on('draw', function(state)
+    if state.mode ~= 'game' or state.exclusive then return end
+    local ui = gear.ui
+    ui.rect(16, 16, 200, 40, ui.rgba(0, 0, 0, 150))
+    ui.text('Hello', 24, 24, {color = 0xFFFFD080})
+    ui.image(ui.images('GUI_spell01')[1].id, 170, 20, 32, 32, {fit = 'contain'})
+end)
+```
+
+`gear/examples/uidemo` shows all of it.
+
 The standard libraries a mod gets: `string`, `table`, `math`, `bit`, `coroutine`, and from `os` only `clock`, `time`,
 `date` and `difftime`. There is no `io`, `os.execute`, `debug`, `load`/`loadstring`/`dofile`, `jit` or `ffi`: a mod
 reads only its own files (through `require`) and cannot reach the rest of the computer. Each mod has its own globals.
@@ -161,6 +213,7 @@ faults returns nil and a message instead of crashing the game.
 | `hello` | The smallest mod: events and the creature types. |
 | `twitch_integration` | The Twitch connector's pipe, mapped by `custom.lua` to actions, offered one at a time inside a game as `twitch.command`. |
 | `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
+| `uidemo` | `gear.ui`: a translucent hero panel, UI images in the three fit modes, a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test with screenshots. |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 
 ## Automation
@@ -205,7 +258,8 @@ Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest`,
 
 ## Compatibility
 
-- No mods: Sacred Gear installs one hook (the engine's per-frame zoom update, which it calls unchanged) and does
+- No mods: Sacred Gear installs its hooks (the engine's per-frame zoom update; for mod drawing the UI manager's popup
+  pass and two calls inside its render, see Engine notes), calls the game's code unchanged through them and does
   nothing else. Savegames, multiplayer and the game's behavior are the vanilla ones. Automation adds import hooks on
   `sacred.exe`'s input and window functions (see Automation) and a message hook on the game window, only when it
   is on.
@@ -239,6 +293,7 @@ search) from the `sacred_core` library (`src/fmt.*`, `log.*`, `patch.*`, `sig.*`
 | `gear/world.*` | Objects through the game's object manager: hero, creatures, spawn, teleport, health, gold |
 | `gear/pipe.*` | Named pipe clients, each on a thread of its own |
 | `gear/automation.*` | Automation: options, input, UI state, savegame loading, screenshots |
+| `gear/ui.*` | Mod drawing: the draw commands, the hooks in the UI pass, Direct3D 7 quads with the game's states saved and restored, the game's fonts and UI images, window and UI state queries |
 | `gear/tests/kernel_test.lua` | Tests of the kernel with the native side mocked: `luajit gear/tests/kernel_test.lua` |
 | `gear/lua_host.*` | The LuaJIT state on the engine thread, native functions for the kernel, time budget |
 | `gear/lua/kernel.lua` | The trusted Lua side (embedded as a resource): manifests, load order, sandboxes, events, table views |
@@ -268,3 +323,7 @@ What Sacred Gear relies on, English GOG addresses:
 | Object types | `*0x00AAB5E4` + id * 0x80 (0 < id < 0x7E60): +0x2E kind, +0x37 name. |
 | Loading a savegame | The menu (0x0071CC90 action 6) sets the players object's (`*0x0182EBE8`) +0x14 to 1 and posts message 0x8002 (wParam 1, lParam the savegame number) to the game window (`*0x00CDCA1C` +0xB0) (0x007561E0). |
 | UI manager | `*0x017EEBBC`: +0x08 flags (1 menus, 4 in game, 0x10 cinematic, 0x200 help), +0x80 the in-game windows, +0x130 the five menu screens, +0x144 the message box. |
+| UI pass (mod drawing) | `cUI_Manager_render` (0x00758ED0, arg: the IDirect3DDevice7 the UI draws with; SacredBild hooks it) draws pretransformed FVF 0x1C4 quads in the 1024x768 layout. Gear draws from: the popup pass 0x00758DC0 (thiscall (device, flag), "hud", before the original), the call at 0x0075934F (the party arrows 0x006D01F0, cdecl (device), "world", before the original; reached in game only) and the call at 0x00759585 (`call 0x649BE0`, after the escape menu and the message box in every mode, EBX = device; "top"). Every render state, texture stage state and the stage 0 texture it changes are read before and set back after, so the game's state cache (0x00643430) and SacredBild's state shadow stay right; text runs through the game's font with the game's states. |
+| Fonts | `*0x00CDCA70`: a vector of `cFont*` by id. Vtable +0x18 `draw(device, cRect*, const wchar_t*, ARGB, flags)` (cRect: i32 x, y, i16 w, h; flags 1 centered and 4 right-aligned in the rect's width, 0x20 curved, 0x200 measure only), +0x28 `lineHeight(ch)`, +0x2C `textWidth(text)` (cFontTTF2 only). Backslash codes in the text: `\c` color, `\g` an inline UI image, `\r` reset, `\w`. |
+| UI images | 0x54-byte records from 0x009ECEB0 (ids = indices, 1..1885; 1886 is "INVALID_MAX"): +0x08 the sheet's TGA name, +0x28 texture handle (`cTextureManager_get` 0x0065ED90 on `*0x013E7838`, +0x14 the surface), +0x2C..+0x38 u0, v0, u1, v1 (pixels until 0x761580 normalizes them), +0x4C / +0x50 width / height. |
+| SacredBild (optional) | `ddraw.dll` exports `SacredBild_UiPushFrame(window, confine)`, `SacredBild_UiPopFrame()` and `SacredBild_UiScreenBounds(float[4])`; Gear draws a command with `window` in that window's UI frame and the others in the unconfined canvas. Without them (no SacredBild) the layout is drawn as the game draws it. |

@@ -46,4 +46,20 @@ namespace Gear::Addr
     inline Sacred::Global<uint8_t*> g_pNetPlayers{};
     // ENG 00654F60: the mouse (made on first use); +4 / +8 the cursor in UI layout coordinates.
     inline Sacred::Cdecl<uint8_t*()> cMouse_instance{};
+
+    // Mod drawing (gear/ui.cpp), inside cUI_Manager_render (ENG 00758ED0). ENG 00758DC0: the popup pass,
+    // thiscall (manager, device, flag), after the windows and before the escape menu and the message box.
+    inline Sacred::Thiscall<void(void* manager, void* device, int flag)> cUI_Manager_renderPopups{};
+    // ENG 0075934F: `call 006D01F0` (the party arrows, cdecl (device)), the in-game branch's first draw, before any
+    // window. ENG 00759585: `call 00649BE0` (the font manager), after the message box in every mode; EBX is the device.
+    inline uintptr_t uiRenderWorldCall{};
+    inline uintptr_t uiRenderTopCall{};
+    // ENG 00CDCA70: the UI fonts, a vector of cFont* by id at +0 / +4 (made by 00649BE0).
+    inline Sacred::Global<uint8_t*> g_pFontManager{};
+    // ENG 013E7838 / 0065ED90: the texture manager and its get(handle, 0) -> cTexture* (+0x14 the surface): stamps
+    // the texture as used and loads it if it isn't.
+    inline Sacred::Global<void*> g_pTextureManager{};
+    inline Sacred::Thiscall<uint8_t*(void* manager, uint32_t handle, int flags)> cTextureManager_get{};
+    // ENG 009ECED8: +0x28 of the first UI image record (0x54 bytes from 009ECEB0; the last is named "INVALID_MAX").
+    inline Sacred::Global<uint32_t> uiImageTextures{};
 }

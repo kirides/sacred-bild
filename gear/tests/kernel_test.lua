@@ -18,6 +18,7 @@ local hero_id = nil
 local objects = {}
 local pipe_events = {}
 local sent = {}
+local ui_recording, ui_published = {}, {}
 
 local native = {
     version = 'test',
@@ -75,7 +76,17 @@ local native = {
         return e
     end,
     pipe_connected = function() return true end,
-    -- automation
+    -- UI drawing: the commands of the frame being recorded, then the published ones
+    ui_rect = function(...) ui_recording[#ui_recording + 1] = {'rect', ...}; return true end,
+    ui_text = function(...) ui_recording[#ui_recording + 1] = {'text', ...}; return true end,
+    ui_image = function(...) ui_recording[#ui_recording + 1] = {'image', ...}; return true end,
+    ui_commit = function() ui_published = ui_recording; ui_recording = {} end,
+    ui_image_count = function() return 3 end,
+    ui_image_info = function(id) if id > 0 and id < 3 then return {sheet = 'GUI_spell0' .. id .. '.TGA', width = 64, height = 64, loaded = true} end end,
+    ui_font_count = function() return 8 end,
+    ui_text_size = function(text) return #text * 7, 14 end,
+    ui_windows = function() return {{name = 'UI_WND_INVENTORY', slot = 1, x = 0, y = 388, width = 640, height = 256, visible = true, drawn = true}} end,
+    ui_state = function() return {available = true, mode = 'game', screen_left = 0, screen_top = 0, screen_right = 1024, screen_bottom = 768} end,    -- automation
     auto_mods = function() return {} end,
     auto_state = function() return {menus = true, in_game = false, dialog = false, cinematic = false, width = 800, height = 600, mouse_x = 0, mouse_y = 0} end,
     auto_ui = function() return {} end,
@@ -125,7 +136,15 @@ files.a = {
         end)
         record.goblin = gear.data.object_types:find('goblin')
         record.search = #gear.data.object_types:search('o')
-    ]],
+        gear.on('draw', function(state)
+            record.draw_mode = state and state.mode
+            gear.ui.rect(10, 20, 100, 50, gear.ui.rgba(0, 0, 0, 128))
+            gear.ui.text('a\\b', 12, 22, {color = {255, 0, 0}, align = 'center', width = 96, layer = 'top'})
+            gear.ui.image(1, 0, 0, 32, 32, {fit = 'contain', window = 'ui_wnd_inventory'})
+            record.no_window = gear.ui.image(1, 0, 0, 32, 32, {window = 'UI_WND_NOPE'})
+            record.bad_layer = not pcall(gear.ui.rect, 0, 0, 1, 1, 0, {layer = 'nope'})
+        end)
+        record.images = #gear.ui.images('spell01')    ]],
 }
 files.b = {
     ['mod.lua'] = "return {id = 'b', requires = {'a'}}",
@@ -195,7 +214,14 @@ kernel.tick(0.016)
 ok(rec.hero == 1, 'session.start with the hero')
 ok(rec.connected and rec.msg == 'hello', 'pipe connect and message')
 ok(rec.task == 'started', 'task runs until its first wait')
-clock = 0.6
+ok(rec.draw_mode == 'game', 'draw handlers get the UI state')
+ok(#ui_published == 3, 'a frame publishes its draws (' .. #ui_published .. ')')
+ok(ui_published[1][1] == 'rect' and ui_published[1][8] == 0x80000000, 'rect with rgba color')
+ok(ui_published[2][1] == 'text' and ui_published[2][2] == 2 and ui_published[2][4] == 'a/b' and
+   ui_published[2][9] == 0xFFFF0000 and ui_published[2][10] == 1 and ui_published[2][11] == 1, 'text: layer, plain text, color table, align')
+ok(ui_published[3][1] == 'image' and ui_published[3][3] == 1 and ui_published[3][10] == 1, 'image in a window, contain')
+ok(rec.no_window == false and rec.bad_layer, 'unknown window draws nothing, bad layer errors')
+ok(rec.images == 1, 'images by sheet')clock = 0.6
 kernel.tick(0.016)
 ok(rec.every == 1, 'every fires')
 clock = 1.1

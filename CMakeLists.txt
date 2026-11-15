@@ -170,6 +170,7 @@ if(SACREDGEAR)
     gear/world.cpp
     gear/pipe.cpp
     gear/automation.cpp
+    gear/ui.cpp
     gear/gear.rc
   )
   target_include_directories(SacredGear PRIVATE gear ${LUAJIT_INCLUDE_DIRS}/luajit)

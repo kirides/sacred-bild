@@ -14,4 +14,11 @@ static const Sig::Entry kGearSigs[] = {
     {"g_pUiManager", "6A 01 C7 05 ?? ?? ?? ?? 00 00 00 00 FF 50 04 C3", 4, Sig::Take::Abs32, &Gear::Addr::g_pUiManager}, // 017EEBBC, 017ECB3C
     {"g_pNetPlayers", "A1 ?? ?? ?? ?? 55 3B C3 56 75 47 68 D0 3A 00 00", 1, Sig::Take::Abs32, &Gear::Addr::g_pNetPlayers}, // 0182EBE8, 0182CB68
     {"cMouse_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 70", 0, Sig::Take::Match, &Gear::Addr::cMouse_instance}, // 00654F60, 006550F0
+    {"cUI_Manager_renderPopups", "53 55 56 8B F1 57 8B 46 08 F6 C4 01", 0, Sig::Take::Match, &Gear::Addr::cUI_Manager_renderPopups}, // 00758DC0, 007586A0
+    {"uiRenderWorldCall", "E8 ?? ?? ?? ?? 8B 8D AC 00 00 00 83 C4 04 F6 41 10 01", 0, Sig::Take::Match, &Gear::Addr::uiRenderWorldCall}, // 0075934F, 00758C2F
+    {"uiRenderTopCall", "E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? 8B F0 3B F7 0F 84 ?? ?? ?? ?? 8D 4C 24 58", 0, Sig::Take::Match, &Gear::Addr::uiRenderTopCall}, // 00759585, 00758E65
+    {"g_pFontManager", "64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 24", 9, Sig::Take::Abs32, &Gear::Addr::g_pFontManager}, // 00CDCA70, 00CDA9F0
+    {"g_pTextureManager", "74 1C 85 C0 75 02 8B C5 8B 0D ?? ?? ?? ?? 6A 00", 10, Sig::Take::Abs32, &Gear::Addr::g_pTextureManager}, // 013E7838, 013E57B8
+    {"cTextureManager_get", "55 8B 6C 24 08 56 81 FD 00 00 01 00", 0, Sig::Take::Match, &Gear::Addr::cTextureManager_get}, // 0065ED90, 0065F010
+    {"uiImageTextures", "8B 04 95 ?? ?? ?? ?? 89 86 4C 02 00 00 B8 00 01 00 00", 3, Sig::Take::Abs32, &Gear::Addr::uiImageTextures}, // 009ECED8, 009EAEE0
 };

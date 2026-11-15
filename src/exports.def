@@ -22,3 +22,6 @@ EXPORTS
     RegisterSpecialCase         = Stub_RegisterSpecialCase
     ReleaseDDThreadLock         = Stub_ReleaseDDThreadLock
     SetAppCompatData            = Stub_SetAppCompatData
+    SacredBild_UiPushFrame
+    SacredBild_UiPopFrame
+    SacredBild_UiScreenBounds
