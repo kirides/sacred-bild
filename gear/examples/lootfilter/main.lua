@@ -1,4 +1,4 @@
--- A loot filter: the hero picks up only the items the rules allow (config.lua, or the in-game settings panel: F8 or
+-- A loot filter: the hero picks up only the items the rules allow (config.lua, or the in-game settings panel: F5 or
 -- the overlay's button, kept in the mod manager's gear_mods.json); the labels of the others are dimmed on the ground, and a small overlay
 -- shows the rules in force. Gold is always picked up.
 --
@@ -155,7 +155,7 @@ local function overlay(state)
     line(('Set items: %s, quest: %s'):format(cfg.keep_set and 'always' or 'by rule', cfg.keep_quest and 'always' or 'by rule'), x + 6, ty); ty = ty + 13
     line(('Nearby: %d items, %d filtered'):format(stats.near, stats.blocked), x + 6, ty); ty = ty + 13
     line(('Refused pickups: %d'):format(W.pickup_refused()), x + 6, ty, 0xFFB0B0B0)
-    if ui.button('open-settings', x + 6, y + h + 4, 184, 20, 'Settings (F8)', {tooltip = 'Change the rules in game'}) then
+    if ui.button('open-settings', x + 6, y + h + 4, 184, 20, 'Settings (F5)', {tooltip = 'Change the rules in game'}) then
         ui.show_panel('settings', not ui.panel_open('settings'))
     end
 end

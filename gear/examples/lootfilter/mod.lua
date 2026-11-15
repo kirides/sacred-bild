@@ -7,7 +7,7 @@ return {
     automation = true,      -- only for its self test (-gear-auto)
     -- Defaults of what the Mods screen does not list; config.lua in this folder overrides them (see config.lua and
     -- docs/Gear.md). The rules themselves are the settings below, changed in the Mods screen or in the filter's own
-    -- panel (F8 or the overlay's button); they used to be saved to settings.json, which is migrated once.
+    -- panel (F5 or the overlay's button); they used to be saved to settings.json, which is migrated once.
     config = {
         -- Pick up only items the hero can use: 'own' (the hero's class), or a list of classes:
         -- {'seraphim', 'gladiator', 'battlemage', 'darkelf', 'woodelf', 'vampiress', 'dwarf', 'daemon'}.
@@ -85,6 +85,6 @@ return {
             choices = {{value = 'default', label = 'As their kind'}, {value = 'take', label = 'Pick up'}, {value = 'leave', label = 'Leave'}}},
     },
     keys = {
-        {id = 'panel', label = 'Open the filter panel', default = 'f8'},
+        {id = 'panel', label = 'Open the filter panel', default = 'f5'},
     },
 }

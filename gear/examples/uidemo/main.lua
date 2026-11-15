@@ -1,6 +1,6 @@
 -- Shows what gear.ui can do: a translucent panel with the hero's values, a widget gallery (buttons, checkboxes, radio
 -- buttons, a dropdown, sliders, the game's images in the three fit modes and its fonts, tooltips) in a panel that can
--- be dragged and closed (F9 toggles it), a note that follows the inventory window, and the world and top layers.
+-- be dragged and closed (F4 toggles it), a note that follows the inventory window, and the world and top layers.
 --
 -- As a self test (no player needed):
 --
@@ -40,13 +40,13 @@ local function panel(hero)
     ui.text(gear.version, x, y + 6, {width = w - 8, align = 'right', color = ui.rgba(255, 255, 255, 140)})
 end
 
--- The widget gallery: every widget gear.ui has, in a panel that can be dragged by its title and closed (F9 or the
+-- The widget gallery: every widget gear.ui has, in a panel that can be dragged by its title and closed (F4 or the
 -- 'Widgets' button brings it back).
 local G = {clicks = 0, sound = true, music = false, difficulty = 2, fit = 2, alpha = 255, size = 96, font = 1}
 local FITS = {'stretch', 'contain', 'cover'}
 
 local function gallery()
-    local p = ui.panel('gallery', 'Gear widgets (F9)', 300, 16, 440, 372, {tooltip = 'Drag me by the title'})
+    local p = ui.panel('gallery', 'Gear widgets (F4)', 300, 16, 440, 372, {tooltip = 'Drag me by the title'})
     if not p.open then
         if ui.button('reopen', 300, 16, 90, 22, 'Widgets', {tooltip = 'Open the widget gallery'}) then
             ui.show_panel('gallery', true)

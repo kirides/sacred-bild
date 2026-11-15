@@ -1555,6 +1555,12 @@ True once per press of the key, read while the game's window has the focus. Also
 - `name`: `GearKey` - A name or a virtual key code.
 - returns `boolean`
 
+#### `gear.ui.capture_keys(on)`
+
+While `on`, the keyboard does not reach the game: its key and character messages are dropped (with the release of every key whose press was dropped) and its key state queries see nothing held, so hotkeys and typing stay out of the game. The mod's own `key_pressed` and `key_down` still work, the mouse is not affected. For a screen that types or binds keys; it ends when the mod unloads. Not tied to `gear.keys`: declared keys of other mods stay quiet only for the Mods screen.
+
+- `on`: `boolean`
+
 #### `gear.ui.key_down(name) -> boolean`
 
 Whether the key is held.

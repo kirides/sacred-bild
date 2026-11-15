@@ -213,6 +213,14 @@ function GearUi.mouse() end
 ---@return boolean
 function GearUi.key_pressed(name) end
 
+--- While `on`, the keyboard does not reach the game: its key and character messages are dropped (with the release of
+--- every key whose press was dropped) and its key state queries see nothing held, so hotkeys and typing stay out of the
+--- game. The mod's own `key_pressed` and `key_down` still work, the mouse is not affected. For a screen that types or
+--- binds keys; it ends when the mod unloads. Not tied to `gear.keys`: declared keys of other mods stay quiet only for the
+--- Mods screen.
+---@param on boolean
+function GearUi.capture_keys(on) end
+
 --- Whether the key is held.
 ---@param name GearKey
 ---@return boolean

@@ -63,6 +63,7 @@ local function stop_input()
 end
 
 local function open_screen()
+    screen.holding, screen.up_at = false, nil
     screen.open = true
     screen.view, screen.message = 'list', nil
     stop_input()
@@ -70,11 +71,17 @@ local function open_screen()
     admin.modal(true)
 end
 
-local function close_screen()
+-- `by_escape`: the keyboard stays kept from the game until the key is up (and a moment longer): the game's message
+-- loop may still hold the Esc that closed the screen, and would open its escape menu with it.
+local function close_screen(by_escape)
     screen.open = false
     stop_input()
     ui.show_panel('main', false)
-    admin.modal(false)
+    if by_escape then
+        screen.holding, screen.up_at = true, nil
+    else
+        admin.modal(false)
+    end
 end
 
 local function toggle_screen()
@@ -155,7 +162,7 @@ local function draw_row(e, x, y, w)
     if not status then
         local conflicts = key_conflicts_of(e)
         if conflicts > 0 then
-            status, color = 'Key conflict: another mod uses the same key (see Keys)', AMBER
+            status, color = 'Key conflict: another mod or the game uses the same key (see Keys)', AMBER
         elseif #e.requires > 0 then
             status, color = 'Requires ' .. table.concat(e.requires, ', '), DIM
         end
@@ -472,6 +479,17 @@ local function escape_menu_button(state)
 end
 
 gear.on('draw', function(state)
+    if screen.holding then
+        if ui.key_down('escape') then
+            screen.up_at = nil
+        else
+            screen.up_at = screen.up_at or gear.time()
+            if gear.time() - screen.up_at > 0.3 then
+                screen.holding, screen.up_at = false, nil
+                admin.modal(false)
+            end
+        end
+    end
     if not screen.open then
         escape_menu_button(state)
         return
@@ -487,7 +505,7 @@ gear.on('draw', function(state)
         return
     end
     if escape then
-        if screen.capture or screen.edit then stop_input() else close_screen() return end
+        if screen.capture or screen.edit then stop_input() else close_screen(true) return end
     end
     if screen.view == 'list' then
         draw_list(p)

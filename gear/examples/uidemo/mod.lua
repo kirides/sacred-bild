@@ -12,7 +12,7 @@ return {
         {id = 'fonts', type = 'bool', label = 'Font samples', default = false, tooltip = 'A sample line of every UI font (to pick one)'},
     },
     keys = {
-        {id = 'gallery', label = 'Open the widget gallery', default = 'f9'},
+        {id = 'gallery', label = 'Open the widget gallery', default = 'f4'},
     },
     config = {
         -- self test only

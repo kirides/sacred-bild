@@ -110,6 +110,7 @@ local native = {
     end,
     layout_read = function() return layout_file end,
     layout_write = function(text) layout_file = text; return true end,
+    ui_block_keys = function(on) keys_blocked_by_native = on end,
     ui_can_move_windows = function() return true end,
     ui_move_window = function(slot, x, y, set) moved_windows[slot] = set and {x, y} or nil; return true end,
     save_blocked = function() return save_block end,
@@ -637,6 +638,25 @@ ok(adm.capture() == nil, 'capture: nothing pressed')
 press({CTRL, 0x4C}, true)
 ok(adm.capture() == 'ctrl+l', 'capture builds the binding')
 press({CTRL, 0x4C}, false)
+-- the game's own hotkeys count as conflicts
+ok(adm.set_binding('s', 'open', 'ctrl+l') == true, 'bind a key the game uses')
+do
+    local c = adm.conflicts('s', 'open')
+    ok(#c == 1 and c[1].game == true and c[1].label == 'Log book', "the game's own key is a conflict (" .. #c .. ")")
+end
+ok(adm.set_binding('s', 'open', 'f9') and adm.conflicts('s', 'open')[1].label == 'Quick save', "F9 is the game's quick save")
+adm.set_binding('s', 'open', nil)
+-- the keyboard is kept from the game while the screen is open (or a mod captures it)
+ok(keys_blocked_by_native == false, 'no capture at rest')
+adm.modal(true); kernel.tick(0.016)
+ok(keys_blocked_by_native == true, 'the screen keeps the keyboard from the game')
+adm.modal(false); kernel.tick(0.016)
+ok(keys_blocked_by_native == false, 'and gives it back')
+srec2.gear.ui.capture_keys(true); kernel.tick(0.016)
+ok(keys_blocked_by_native == true, 'a mod can capture the keyboard')
+adm.set_enabled('s', false); kernel.tick(0.016)
+ok(keys_blocked_by_native == false, 'unloading the mod releases it')
+adm.set_enabled('s', true); kernel.tick(0.016)
 
 
 ---------------------------------------------------------------------------------------------------------------
@@ -723,11 +743,11 @@ do
     ok(has_text('Ctrl+K') and has_text('Ctrl+K') and has_text('Open'), 'keys tab shows the binding')
     ok(has_prefix('Conflicts with: Dependent'), 'the conflict is marked')
     ok(click_text('Ctrl+K') and has_text('Press a key...'), 'click a binding to rebind')
-    keys_held[0x11] = true; keys_held[0x4C] = true
+    keys_held[0x11] = true; keys_held[0x55] = true
     tick()
-    keys_held[0x11] = nil; keys_held[0x4C] = nil
+    keys_held[0x11] = nil; keys_held[0x55] = nil
     tick()
-    ok(s_env.gear.keys.binding('open') == 'ctrl+l' and has_text('Ctrl+L') and not has_prefix('Conflicts'), 'the new key is taken, no conflict')
+    ok(s_env.gear.keys.binding('open') == 'ctrl+u' and has_text('Ctrl+U') and not has_prefix('Conflicts'), 'the new key is taken, no conflict')
     ok(has_text('Default'), 'a changed binding offers Default')
     ok(click_text('Default') and s_env.gear.keys.binding('open') == 'ctrl+k', 'Default restores it')
     -- back to the list, switch the mod off

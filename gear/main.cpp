@@ -1,6 +1,7 @@
 #include "automation.h"
 #include "gear.h"
 #include "hooks.h"
+#include "keyblock.h"
 #include "instance.h"
 #include "log.h"
 #include "lua_host.h"
@@ -123,6 +124,7 @@ namespace
         }
         LOG("Hooks installed; mods load with the first in-game frame");
         Automation::install(gameDir);
+        KeyBlock::install();
     }
 }
 

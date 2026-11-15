@@ -3,6 +3,7 @@
 #include "gear.h"
 #include "instance.h"
 #include "inventory.h"
+#include "keyblock.h"
 #include "log.h"
 #include "pickup.h"
 #include "pipe.h"
@@ -1039,6 +1040,14 @@ namespace
         return 1;
     }
 
+    // native.ui_block_keys(blocked): the keyboard stays from the game while true (called every tick by the kernel).
+    int nativeUiBlockKeys(lua_State* L)
+    {
+        KeyBlock::set(lua_toboolean(L, 1) != 0);
+        KeyBlock::tick();
+        return 0;
+    }
+
     // native.key_down(vk) -> bool
     int nativeKeyDown(lua_State* L)
     {
@@ -1690,6 +1699,7 @@ namespace
             {"builtin", nativeBuiltin},
             {"ui_events", nativeUiEvents},
             {"key_down", nativeKeyDown},
+            {"ui_block_keys", nativeUiBlockKeys},
             {"write_file", nativeWriteFile},
             {"items_near", nativeItemsNear},
             {"hero_class", nativeHeroClass},

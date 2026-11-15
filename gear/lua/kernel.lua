@@ -893,6 +893,7 @@ local ui_tooltip = nil      -- {text, mod} to draw at the end of the tick
 local ui_hover_since = {}   -- handle -> time the cursor came over it
 local ui_dropdown = nil     -- the open dropdown's handle
 local ui_keys = {}          -- mod -> vk -> held at the last query
+local key_capture = {}      -- mod -> true: the mod keeps the keyboard from the game (ui.capture_keys)
 local ui_panel_list = {}    -- the panels of all mods drawn this tick, in order: {key, title, x, y, w, h, ...}
 local ui_panel_prev = {}    -- the last tick's
 
@@ -1483,6 +1484,11 @@ local function make_ui(mod)
     function ui.reset_panel(key)
         if layout_get()[key] then layout_set(key, nil) end
         return find_panel(key) ~= nil
+    end
+    -- ui.capture_keys(on): while on, the keyboard does not reach the game (key messages are dropped, the game's key
+    -- queries see nothing held); this mod's own key_pressed / key_down still work. Released when the mod unloads.
+    function ui.capture_keys(on)
+        key_capture[mod] = on and true or nil
     end
     -- ui.key_down(name): whether the key is held (while the game has the focus).
     function ui.key_down(name)
@@ -2136,11 +2142,26 @@ local function key_set(e, def, text)
     return true
 end
 
--- The other keys (of mods that run or are switched on) with the same binding: {{mod, name, key, label}}.
+-- The game's own hotkeys (SacredBild's bindings table: the keyboard defaults of the game), by key name. The game
+-- reacts to these keys whatever modifiers are held, so a mod bind on one of them clashes with the game.
+local GAME_KEYS = {
+    ['1'] = 'Weapon slot 1', ['2'] = 'Weapon slot 2', ['3'] = 'Weapon slot 3', ['4'] = 'Weapon slot 4',
+    ['5'] = 'Weapon slot 5', ['6'] = 'Combat art 1', ['7'] = 'Combat art 2', ['8'] = 'Combat art 3',
+    ['9'] = 'Combat art 4', ['0'] = 'Combat art 5', space = 'Healing potion', q = 'Potion of Undead Death',
+    w = 'Potion of the Mentor', e = "Viper's Antidote", r = 'Potion of Concentration', b = 'Heal hirelings',
+    a = 'Collect all visible objects', i = 'Inventory', f = 'Combat arts', c = 'Combo menu', l = 'Log book',
+    m = 'World map', tab = 'Overview map', o = 'Options', s = 'Save menu', h = 'Help screen', n = 'Party information',
+    f9 = 'Quick save', f8 = 'Quick load', p = 'Pause', add = 'Zoom in', subtract = 'Zoom out', escape = 'Game menu',
+}
+
+-- The other keys (of mods that run or are switched on) with the same binding: {{mod, name, key, label}}; the game's
+-- own hotkeys too, as {mod = '', name = 'The game', key = '', label = <what it does>, game = true}.
 local function key_conflicts(e, def)
     local out = {}
     local mine = key_binding(e, def)
     if mine == '' then return out end
+    local game = GAME_KEYS[mine:match('[^%+]+$')]
+    if game then out[#out + 1] = {mod = '', name = 'The game', key = '', label = game, game = true} end
     for _, o in ipairs(catalog_list) do
         if o.want ~= false and not o.invalid then
             for _, k in ipairs(o.m.keys) do
@@ -2679,6 +2700,7 @@ local function unload_mod(e)
     end
     if pickup_rules[m] then pickup_rules[m] = nil; pickup_dirty = true end
     ui_keys[m] = nil
+    key_capture[m] = nil
     if ui_dropdown and (ui_handle_key[ui_dropdown] or ''):sub(1, #m.id + 1) == m.id .. '\0' then ui_dropdown = nil end
     m.disabled, m.unloaded = true, true     -- timers, tasks and pipes of the mod notice and go
     e.loaded = false
@@ -2809,7 +2831,11 @@ function admin.draw_page(id, x, y, w, h)
     return ok and tonumber(used) or 0
 end
 -- While the mod manager's screen is open the other mods' hotkeys stay quiet.
-function admin.modal(on) keys_blocked = on == true end
+function admin.modal(on)
+    keys_blocked = on == true
+    local e = catalog['gear-mods']
+    if e then key_capture[e.m] = keys_blocked and true or nil end
+end
 
 -- Rebinding: capture_start() remembers which keys are down; capture() then returns the binding ('ctrl+m') of the first
 -- key pressed since, or nil.
@@ -2934,6 +2960,7 @@ function kernel.tick(dt)
     save_layout()
     publish_pickup_rules()
     state_flush()
+    native.ui_block_keys(next(key_capture) ~= nil)
 end
 
 -- Automation only: a tick in the menus (every 50 ms while no in-game frame runs), on the automation thread.
@@ -2953,6 +2980,7 @@ function kernel.idle()
     save_layout()
     publish_pickup_rules()
     state_flush()
+    native.ui_block_keys(next(key_capture) ~= nil)
 end
 
 -- The mod whose code was running when the host had to stop it (time budget), for the log.
