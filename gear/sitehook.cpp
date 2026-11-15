@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <thread>
+#include <string>
 #include <vector>
 
 namespace
@@ -37,11 +38,16 @@ namespace
 
     std::atomic<bool> g_levelActive{false};
     std::atomic<unsigned> g_calls{0}, g_answered{0}, g_busy{0};
+    std::atomic<unsigned> g_levelSiteCalls[std::size(kSites)];
 
     // Called by the stubs: the level as a double and the site's index. Any thread the game calls from.
     extern "C" int __cdecl levelFactorHandler(double level, int site)
     {
         g_calls.fetch_add(1, std::memory_order_relaxed);
+        if (site >= 0 && site < static_cast<int>(std::size(kSites)))
+        {
+            g_levelSiteCalls[site].fetch_add(1, std::memory_order_relaxed);
+        }
         if (!g_levelActive.load(std::memory_order_relaxed))
         {
             return kNoAnswer;
@@ -103,6 +109,7 @@ namespace
     float g_testConstant = 0.2f;            // the pooled constant they load
     std::atomic<bool> g_constantActive{false};
     std::atomic<unsigned> g_constCalls{0}, g_constAnswered{0}, g_constBusy{0};
+    std::atomic<unsigned> g_constSiteCalls[std::size(kConstSites)];
 
     // Called by the stubs: the float the instruction should load, in st0 (cdecl float result). Any thread the game calls from.
     extern "C" float __cdecl constantHandler(int site)
@@ -110,6 +117,10 @@ namespace
         const ConstSiteSpec& spec = site < static_cast<int>(std::size(kConstSites)) ? kConstSites[site] : g_testSpecs[site - std::size(kConstSites)];
         const float vanilla = *reinterpret_cast<const float*>(static_cast<uintptr_t>(spec.constant));
         g_constCalls.fetch_add(1, std::memory_order_relaxed);
+        if (site >= 0 && site < static_cast<int>(std::size(kConstSites)))
+        {
+            g_constSiteCalls[site].fetch_add(1, std::memory_order_relaxed);
+        }
         if (!g_constantActive.load(std::memory_order_relaxed))
         {
             return vanilla;
@@ -427,6 +438,22 @@ bool SiteHook::selfTestResult(SelfTest& out)
     out = g_selfResult;
     g_selfState = 0;
     return true;
+}
+
+std::vector<SiteHook::SiteInfo> SiteHook::sites()
+{
+    std::vector<SiteInfo> out;
+    for (size_t i = 0; i < std::size(kSites); ++i)
+    {
+        const uintptr_t fn = *kSites[i].function;
+        out.push_back({kSites[i].hook, static_cast<int>(i), fn ? fn + kSites[i].offset : 0, g_levelSiteCalls[i].load()});
+    }
+    for (size_t i = 0; i < std::size(kConstSites); ++i)
+    {
+        const uintptr_t fn = *kConstSites[i].function;
+        out.push_back({kConstSites[i].name, kConstSites[i].index, fn ? fn + kConstSites[i].offset : 0, g_constSiteCalls[i].load()});
+    }
+    return out;
 }
 
 SiteHook::Stats SiteHook::levelFactorStats()

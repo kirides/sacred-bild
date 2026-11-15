@@ -76,6 +76,7 @@ local native = {
     combat_constant_active = function(v) constant_active = v end,
     difficulty = function() return 2 end,
     site_hooks = function() return 7, 5, 1 end,
+    site_hook_sites = function() return {{hook = 'level.factor', index = 0, address = 5, calls = 2}} end,
     overlay_served = function(path) return path == 'bin/balance.bin' and 3 or 0 end,
     text_get = function(id) if id == 8193 then return 'Ability name' end end,
     setting = function(key) if key == 'SR_HD_WIDTH' then return '2560' end end,
@@ -256,6 +257,7 @@ files.ab = {
             return 1 + (level > 12 and 1 or 0) + (level > 24 and 1 or 0) + (level > 36 and 1 or 0)
         end)
         abil.stats = gear.hooks.stats('level.factor')
+        abil.sites = gear.hooks.sites()
         gear.on('combat.constant', function(name, vanilla, index)
             if name == 'hit.effect_scale' then return 1.0 end
             if name == 'difficulty.factor' then return vanilla * 0.5 end
@@ -381,6 +383,7 @@ ok(abil.difficulty == 2, 'gear.game.difficulty')
 ok(constant_active == true, 'registering combat.constant tells the host')
 ok(kernel.combat_constant('hit.effect_scale', 0.2, 2) == 1.0 and kernel.combat_constant('difficulty.factor', 2.0, 3) == 1.0
    and kernel.combat_constant('hit.chance_scale', 0.01, 0) == nil, 'combat.constant answers with the handler')
+ok(abil.sites[1].hook == 'level.factor' and abil.sites[1].calls == 2, 'gear.hooks.sites')
 ok(abil.stats.calls == 7 and abil.stats.answered == 5 and abil.stats.busy == 1, 'gear.hooks.stats')
 ok(abil.setting == '2560' and abil.no_setting == nil, 'gear.settings.get')
 

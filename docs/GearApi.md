@@ -630,6 +630,21 @@ The counters of a hook since the game started: how often the engine asked, how o
 - `name`: `'level.factor'|'combat.constant'`
 - returns `GearHookStats`
 
+#### `gear.hooks.sites() -> GearHookSite[]`
+
+Every hook site and how often the engine ran it (a site whose function was not found or whose code did not match is listed with address 0).
+
+- returns `GearHookSite[]`
+
+### GearHookSite
+
+| Field | Type | |
+|---|---|---|
+| `hook` | `string` | The hook's name (`level.factor`, or the name of a `combat.constant`). |
+| `index` | `integer` | The place among those of that name. |
+| `address` | `integer` | Where the site is in the game. |
+| `calls` | `integer` | How many times the engine ran the site. |
+
 ### GearHookStats
 
 | Field | Type | |

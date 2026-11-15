@@ -1981,6 +1981,7 @@ local function make_env(mod)
                 local calls, answered, busy = native.site_hooks(name)
                 return {calls = calls, answered = answered, busy = busy}
             end,
+            sites = function() return native.site_hook_sites() end,
         },
         -- Values of the game's Settings.cfg ("KEY : value" lines), as text.
         settings = {

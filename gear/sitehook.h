@@ -1,5 +1,7 @@
 #pragma once
 #include <cstddef>
+#include <cstdint>
+#include <vector>
 
 // Site hooks: a block of instructions inside a function of sacred.exe that Gear replaces by a jump to a stub, so that
 // Lua can supply a value the engine computes inline (no function to detour). The stub runs the block's first instruction
@@ -24,6 +26,17 @@ namespace SiteHook
         unsigned calls = 0, answered = 0, busy = 0;
     };
     Stats levelFactorStats();
+
+    // Every site with the number of times the engine ran it (the hook's name, the index among the sites of that name, the
+    // address, the calls).
+    struct SiteInfo
+    {
+        const char* hook;
+        int index;
+        uintptr_t address;
+        unsigned calls;
+    };
+    std::vector<SiteInfo> sites();
 
     // combat.constant: the engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); the mods
     // may answer with another number (event `combat.constant`: name, vanilla value, index).

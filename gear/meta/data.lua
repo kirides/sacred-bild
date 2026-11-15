@@ -221,6 +221,17 @@ local GearHooks = {}
 ---@return GearHookStats
 function GearHooks.stats(name) end
 
+--- Every hook site and how often the engine ran it (a site whose function was not found or whose code did not match is listed
+--- with address 0).
+---@return GearHookSite[]
+function GearHooks.sites() end
+
+---@class GearHookSite
+---@field hook string The hook's name (`level.factor`, or the name of a `combat.constant`).
+---@field index integer The place among those of that name.
+---@field address integer Where the site is in the game.
+---@field calls integer How many times the engine ran the site.
+
 ---@class GearHookStats
 ---@field calls integer
 ---@field answered integer

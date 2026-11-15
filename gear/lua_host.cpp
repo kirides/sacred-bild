@@ -444,6 +444,28 @@ namespace
         return 0;
     }
 
+    // native.site_hook_sites() -> {{hook, index, address, calls}, ...}: every site hook and how often the engine ran it
+    int nativeSiteHookSites(lua_State* L)
+    {
+        const auto sites = SiteHook::sites();
+        lua_createtable(L, static_cast<int>(sites.size()), 0);
+        int n = 0;
+        for (const auto& s : sites)
+        {
+            lua_createtable(L, 0, 4);
+            lua_pushstring(L, s.hook);
+            lua_setfield(L, -2, "hook");
+            lua_pushnumber(L, s.index);
+            lua_setfield(L, -2, "index");
+            lua_pushnumber(L, static_cast<lua_Number>(s.address));
+            lua_setfield(L, -2, "address");
+            lua_pushnumber(L, s.calls);
+            lua_setfield(L, -2, "calls");
+            lua_rawseti(L, -2, ++n);
+        }
+        return 1;
+    }
+
     // native.site_selftest_start() -> started; native.site_selftest_result() -> fmul, fld, registers kept | nil
     int nativeSiteSelfTestStart(lua_State* L)
     {
@@ -1559,6 +1581,7 @@ namespace
             {"site_hooks", nativeSiteHooks},
             {"combat_constant_active", nativeCombatConstantActive},
             {"difficulty", nativeDifficulty},
+            {"site_hook_sites", nativeSiteHookSites},
             {"site_selftest_start", nativeSiteSelfTestStart},
             {"site_selftest_result", nativeSiteSelfTestResult},
             {"engine_level_factor_start", nativeEngineLevelFactorStart},
