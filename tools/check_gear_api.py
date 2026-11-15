@@ -109,6 +109,14 @@ def main():
     creature = set(re.findall(r'^\s*function creature_mt:(\w+)\(', kernel, re.M))
     compare('creature', creature, {f.name for f in model.classes['Creature'].funcs})
 
+    # --- gear.inv
+    inv_src = between(kernel, r'^local inv = \{', r'^-- Pickup rules per mod', 'inv')
+    inv = set(re.findall(r'^\s*function inv\.(\w+)\(', inv_src, re.M))
+    inv |= keys_of_table_line(re.search(r'^local inv = (\{[^\n]*\})', inv_src, re.M).group(1))
+    compare('gear.inv', inv, members('GearInv'))
+    cont = set(re.findall(r'^\s*function Container:(\w+)\(', inv_src, re.M))
+    compare('container', cont, {f.name for f in model.classes['GearContainer'].funcs})
+
     # --- gear.ui
     ui_src = between(kernel, r'^local function make_ui\(mod\)', r'^-- Custom events', 'make_ui')
     ui = set(re.findall(r'^\s*function ui\.(\w+)\(', ui_src, re.M))
@@ -135,13 +143,10 @@ def main():
     files_src = re.search(r'^\s{8}files = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.files', set(re.findall(r'^\s{12}(\w+) = function', files_src.group(1), re.M)) if files_src else set(),
             members('GearFiles'))
-    game_src = re.search(r'^\s{8}game = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
-    compare('gear.game', set(re.findall(r'^\s{12}(\w+) = function', game_src.group(1), re.M)) if game_src else set(), members('GearGame'))
+    game_src = re.search(r'^    gear\.game = \{(.*?)^    \}', kernel, re.M | re.S)
+    compare('gear.game', set(re.findall(r'^\s{8}(\w+) = function', game_src.group(1), re.M)) if game_src else set(), members('GearGame'))
     hooks_src = re.search(r'^\s{8}hooks = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.hooks', set(re.findall(r'^\s{12}(\w+) = function', hooks_src.group(1), re.M)) if hooks_src else set(), members('GearHooks'))
-    settings_src = re.search(r'^\s{8}settings = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
-    compare('gear.settings', set(re.findall(r'^\s{12}(\w+) = function', settings_src.group(1), re.M)) if settings_src else set(),
-            members('GearSettings'))
     view = set(re.findall(r'^\s*function view:(\w+)\(', kernel, re.M))
     compare('data table', view, {f.name for f in model.classes['GearTable'].funcs})
     otypes = set(re.findall(r'^function data\.object_types:(\w+)\(', kernel, re.M))
@@ -162,7 +167,7 @@ def main():
     compare('pipe', pipe, members('GearPipe'))
 
     # --- events
-    events = set(re.findall(r"kernel\.dispatch\('([\w.]+)'", kernel))
+    events = set(re.findall(r"kernel\.dispatch(?:_to)?\((?:[\w.]+, )?'([\w.]+)'", kernel))
     events |= set(re.findall(r"handlers\['([\w.]+)'\]", kernel))      # events the host asks for (site hooks)
     meta_events = set()
     for fn in model.globals + [f for c in model.classes.values() for f in c.funcs]:
@@ -176,8 +181,16 @@ def main():
     compare('events (GearEventName)', events, alias_events)
 
     # --- mod.lua
-    manifest = between(kernel, r'^local function read_manifest\(dir\)', r'^-- Mods in load order', 'read_manifest')
+    manifest = between(kernel, r'^local function check_manifest\(', r'^-- Mods in load order', 'check_manifest')
     compare('mod.lua', set(re.findall(r'\bm\.(\w+)', manifest)), fields('GearModManifest'))
+
+    # --- the mod manager's API: settings, keys, mods
+    for cls, fn in (('GearSettings', 'make_settings_api'), ('GearKeys', 'make_keys_api'), ('GearMods', 'make_mods_api')):
+        src = between(kernel, r'^local function %s\(mod\)' % fn, r'^end', fn)
+        compare(cls, set(re.findall(r'^\s*function api\.(\w+)\(', src, re.M)), {f.name for f in model.classes[cls].funcs})
+    info = between(kernel, r'^local function mod_info\(e\)', r'^end', 'mod_info')
+    info = info[info.index('return {id = e.id'):]
+    compare('mod listing', set(re.findall(r'(\w+) = ', info)) - {'e'}, fields('GearModListing'))
 
     # --- options: every opts.X the kernel reads must be a field of some options class
     opt_fields = set()

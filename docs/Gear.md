@@ -50,6 +50,8 @@ return {
     id = 'hello',              -- required: letters, digits, _ and -; unique among the installed mods
     name = 'Hello, Sacred Gear',
     version = '1.0',
+    author = 'You',
+    description = 'Says hello in the log.',
     priority = 0,              -- lower loads first (default 0); ties load by id
     requires = {'other-mod'},  -- ids that must load first; the mod is skipped if one is missing
     enabled = true,            -- false: keep the folder, skip the mod
@@ -81,11 +83,13 @@ so handlers see the frame's state, never a half-updated one, and need no locks.
 | Field | |
 |---|---|
 | `id` | Required: letters, digits, `_` and `-`; unique among the installed mods |
-| `name`, `version` | Shown in the log; `version` is part of the mod set |
+| `name`, `version` | Shown in the Mods screen and the log; `version` is part of the mod set |
+| `description`, `author` | Shown in the Mods screen |
 | `priority` | Lower loads first (default 0); ties load by id |
-| `requires` | Ids that must load first; the mod is skipped if one is missing |
-| `enabled` | `false`: keep the folder, skip the mod |
-| `config` | Default settings: `gear.config` starts as a copy, and `config.lua` in the mod's folder (a table, values only) overrides them. Players edit `config.lua`. |
+| `requires` | Ids that must load first; the mod is skipped if one is missing (and off while one of them is off) |
+| `enabled` | `false`: off until the player switches it on in the Mods screen (a default, not a lock) |
+| `settings`, `keys` | Declared settings and key binds: the [Mod manager](#mod-manager) builds their pages |
+| `config` | Default settings: `gear.config` starts as a copy, and `config.lua` in the mod's folder (a table, values only) overrides them. Players edit `config.lua`. A declared setting with the same id takes its default from there. |
 | `pipes` | Names of the named pipes the mod may open (`gear.pipe.open`) |
 | `automation` | `true`: the mod gets `gear.auto` when the game runs with `-gear-auto` |
 
@@ -103,6 +107,7 @@ The complete reference, with every parameter, option and return value, is [GearA
 | `gear.config` | This mod's settings (`mod.lua` `config`, overridden by `config.lua`). |
 | `gear.json` | `encode(value)`, `decode(text)` (value, or nil and a message); `json.null` for null. |
 | `gear.pipe.open(name)` | A client of `\\.\pipe\<name>` (listed in `pipes`), reconnecting by itself. `p:send(text)`, `p:connected()`, `p:close()`; set `p.on_message(text)`, `p.on_connect()`, `p.on_disconnect()`. Messages are framed with a 16-bit little-endian length (the risen-twitch / Gothic Twitch connector's format). |
+| `gear.settings`, `gear.keys`, `gear.mods` | The mod manager's side: this mod's declared settings, its key binds, the list of mods and a page of its own in the Mods screen. See [Mod manager](#mod-manager). |
 | `gear.log(...)`, `print(...)` | A line in `SacredGear.log`, prefixed with the mod's id. |
 | `gear.time()` | Seconds, high resolution, from an arbitrary start. |
 | `gear.version`, `gear.mod` | Sacred Gear's version; this mod's `id`, `name`, `version`, `dir`. |
@@ -110,7 +115,7 @@ The complete reference, with every parameter, option and return value, is [GearA
 
 Events: `'load'` (all mods loaded), `'frame'` (`dt`, every in-game frame), `'draw'` (`state`, after the frame handlers: see [UI drawing](#ui-drawing)), `'session.start'` (`hero`, a creature
 object: a game with a hero runs), `'session.stop'` (that hero is gone: noticed with the next game's first frame when
-the player left to the menu), `'idle'` (automation only: every 50 ms in the menus), and the custom events mods emit.
+the player left to the menu), `'game.saved'` (`slot`, `info`) and `'game.save_failed'` (`slot`, `message`: the outcome of a `gear.game.save`), `'unload'` (the player switched this mod off in the Mods screen), `'settings.changed'` (`id`, `value`: one of this mod's settings changed), `'idle'` (automation only: every 50 ms in the menus), and the custom events mods emit.
 
 #### Data
 
@@ -171,6 +176,35 @@ Pickup rules hold in single player and for the host's own hero; a network client
 (its own message) and are not filtered. Item ids are only valid while the item exists: a mod that filters loot looks
 at the items around the hero every fraction of a second and hands over the current list (`gear/examples/lootfilter`).
 
+#### Saving
+
+| | |
+|---|---|
+| `gear.game.can_save()` | `true`, or `false` and why not: a living hero in a single player game, the game shown (no cinematic, window drawn alone, escape menu or message box), no save or load pending. |
+| `gear.game.save(slot, name, {thumbnail})` | Asks the engine to save into `Save\GAME<slot>.PAK` (slot 0 the quicksave, up to 509), as the savegame window does; `true` when accepted, else nil and a message (the engine refuses while a trade, chest or similar window is open). `name` is the display name (60 ASCII characters). The result comes as the events `'game.saved'` / `'game.save_failed'`. |
+| `gear.game.save_pending()` | Whether a save or a load is queued or being written. |
+| `gear.game.save_info(slot)` | `{exists, size, mtime}` of the slot's file (`mtime` in unix seconds), so a mod can rotate slots oldest first. |
+
+The engine writes the file a moment later on its render thread; Sacred Gear sees the write end (the engine's flags)
+and compares the file before and after. See `autosave` in the sacred-gear-mods repository for a periodic autosave.
+
+#### Inventories
+
+| | |
+|---|---|
+| `gear.inv.container(which)` | A container (an inventory grid): `'chest'`, `'backpack'` (the local hero's) or its number (0..31; the backpack of the hero with object id n is n, the chest is 17), or nil. `.index`, `.columns`, `.rows`. |
+| `c:items()` | The items in it in cell order: `gear.world.item` tables plus `col`, `row` (top-left cell, from 0), `w`, `h` (cells). |
+| `c:free_spot(w, h)`, `c:put(id, col, row)`, `c:take(id)` | Room for a w x h item; puts an item at a cell; takes one out (the object stays). |
+| `gear.inv.export(id)` | The item's type and own data (its random properties) as a binary string. `gear.inv.hex(bytes)` and `gear.inv.unhex(text)` make it text for JSON. |
+| `gear.inv.create(bytes)`, `gear.inv.add(c, bytes)` | A new item from those bytes, at the hero's feet, or straight into the container's first free spot (nothing changes if it fails). |
+| `gear.inv.remove(c, id)`, `gear.inv.destroy(id)` | Takes an item out of the container, destroys it and returns its export; deletes an item that is in no container. |
+
+All of it works in single player only (`gear.world.can_change()`) and goes through the engine's own inventory and
+object code, under the fault guard. An exported item made again is byte for byte the same (type, entries, data):
+the self test of `shared-stash` and the probe that found the format moved 55 backpack items through the chest and
+back with equal exports. What is not copied is where an item was: the engine owns that. Gear exposes no
+inventory events yet, so a mod looks at the containers when it needs them (the stash panel refreshes 4 times a second).
+
 #### UI drawing
 
 `gear.ui` draws on top of the game: translucent rectangles, text in the game's own fonts and the game's own UI
@@ -189,6 +223,7 @@ Positions and sizes are the UI's **1024x768 layout**, the space the game lays it
 | `frame(x, y, w, h, color, thickness, opts)` | An outline (default thickness 1) inside the box. |
 | `text(text, x, y, opts)` | Text. By default in a vector UI font (Segoe UI) rasterized for the screen's pixels, so it stays sharp however far the UI is scaled: `size` (the em height in layout units, default 13), `face` (a Windows font name), `bold`, `italic`, `shadow` / `outline` (1 pixel, dark). `font = 'game1'` .. `'game7'` (or a number: 1..7 the UI's fonts, 0 a debug font) draws in the game's own bitmap font instead, scaled with the UI like the game's text. `color` (default white), `width` / `height` (the box: `align = 'left' \| 'center' \| 'right'` aligns in its width, `valign = 'top' \| 'middle' \| 'bottom'` in its height; `'middle'` puts the capitals' middle on the box's, on whole pixels; `'baseline'`: y is the first line's baseline), `background` (a color: a rectangle behind the text, sized to it) and `padding` around it, `markup = true` (game fonts: pass their backslash codes through; otherwise a `\` shows as `/`). Lines break at `\n`. UTF-8. |
 | `image(id, x, y, w, h, opts)` | A UI image; `w`, `h` default to its own size. `opts.fit`: `'stretch'` (default: fills the box), `'contain'` (the whole image, aspect kept, centered in the box), `'cover'` (fills the box, aspect kept, the overhang cut off); `opts.color` tints it (white: as is; the alpha makes it translucent). |
+| `item_icon(item_or_type, x, y, w, h, opts)` | What the inventory shows for an item: its own 3D model, drawn by the game's model renderer as large as fits the box (x, y, w, h), centered in it, with the same `layer` / `window` options as the other draws. `item_or_type`: an item table (from `gear.world.item` or a container's `items()`: the live object is drawn with its own state and rarity tint), or a type id or type name (what a stored item such as the shared stash's has left): then an item of that type is made for the frame and destroyed after it. See [Item icons](#item-icons). |
 | `images(filter)` | The UI images whose sheet name contains `filter` (any case): `{id, sheet, width, height, loaded}`. Ids are the game's image indices (stable for a build). |
 | `image_info(id)` | One of those, or nil. |
 | `fonts()` | The number of the game's UI fonts. |
@@ -215,6 +250,31 @@ the layout is the screen and the same holds at scale 1.
 
 A mod may issue 2000 draw commands per tick (widgets count their rectangles and texts).
 
+#### Item icons
+
+`gear.ui.item_icon` draws an item the way the inventory windows do: the game's `cInventoryEntry_render` (0x5DC430) hands the
+item's Granny model to the model renderer (singleton 0x401660, draw 0x40E9C0: `device, model0, model1, x, y, type, scale,
+0, flags, 0, 0`, centered at (x, y) of the 1024x768 layout, scale 1 for the inventory's 32 units a cell). Gear calls the same
+code inside its UI pass with the game's states, so it works with the vanilla ddraw and with SacredBild's backend, layers
+and `window` anchoring included; the device states, transforms, viewport and the render flags are read before and put
+back after.
+
+- **A live item** (`item.id` is an item object, in the world or in a container): its own model state is used (made on
+  first use, as the inventory does) and its flags (`+0xB0 & 0xF00000`: the rarity tint). Cheap.
+- **A type id or name**: no object exists, and the model renderer needs one (the model instance lives in the item at
+  `+0x40`). Gear makes one for the frame: `cObjectManager::create` at the hero's feet, at once `cInventory::put` into
+  container 31 (an inventory container the game does not use: so the item is never in the world for the world pass and
+  the sector lists forget it), draws, takes it out and destroys it after the layer's commands. Single player only
+  (`gear.world.can_change()`), at most 48 types a frame, a few tenths of a millisecond per type and frame: draw a stash
+  list's visible part only, and prefer live items where there are some. The item is created like any new item (random
+  properties may use the game's random numbers); nothing is broadcast and nothing stays behind (the self test draws
+  thousands of frames and checks that no item is left in the container or the world). Destroying such an item while it
+  is still in the world crashes the game a moment later, which is why it goes through the container.
+- Nothing is drawn when the type is no item or has no model, in a network game (for types), without a hero, or when the
+  addresses were not found (the log says so at start).
+
+Self test: `gear/examples/itemicontest` draws a row by type id and a row from live items.
+
 #### Widgets and input
 
 Widgets are immediate mode too: call them every frame with the current values; each draws itself, takes the mouse
@@ -234,6 +294,7 @@ Every widget takes `opts.tooltip` (shown after the cursor rests on it for 0.4 s)
 | `panel(id, title, x, y, w, h, opts)` | A window: `{open, x, y, w, h, content_x, content_y}`. Its title bar drags it (the position is kept for the session), its X closes it (`open` false); `show_panel(id, open)` and `panel_open(id)`. `opts.closable`, `opts.draggable` (default true). |
 | `region(id, x, y, w, h, opts)` | A rectangle that takes the mouse, for widgets of a mod's own: `{hover, pressed, released, clicked, held}`. |
 | `mouse()` | The cursor in layout coordinates. |
+| `capture_keys(on)` | While on, the keyboard does not reach the game (its key and character messages are dropped, its key state queries see nothing held); the mod's own `key_pressed` / `key_down` still work. For a screen that types or binds keys (the mod manager uses it while it is open); ends when the mod unloads. |
 | `key_pressed(name)` | True once per press of a key (`'f9'`, `'a'`, `'escape'` ...), read while the game's window has the focus. |
 | `key_down(name)` | Whether the key is held. Both see the keys [automation](#automation) holds; isolated automation sees only those. |
 | `COLORS` | The widgets' colours. |
@@ -282,7 +343,7 @@ panels move either way.
 
 Files: `gear.read(name)` reads a file of the mod's folder, `gear.save(name, text)` writes one (directly in the mod's
 folder, `*.json`, `*.txt` or `*.lua` other than `mod.lua` and `main.lua`, at most 1 MB): for settings a mod's own UI
-changes.
+changes. A write is atomic (a temporary file moved over the old one), so a crash leaves the old file or the new one.
 
 ```lua
 gear.on('draw', function(state)
@@ -299,6 +360,108 @@ end)
 The standard libraries a mod gets: `string`, `table`, `math`, `bit`, `coroutine`, and from `os` only `clock`, `time`,
 `date` and `difftime`. There is no `io`, `os.execute`, `debug`, `load`/`loadstring`/`dofile`, `jit` or `ffi`: a mod
 reads only its own files (through `require`) and cannot reach the rest of the computer. Each mod has its own globals.
+
+### Mod manager
+
+Sacred Gear has a **Mods** screen, a built-in part of it (`gear/lua/modmanager.lua`, shipped inside `SacredGear.dll` and
+loaded by the kernel as a mod of its own, `gear-mods`). It lists every installed mod, a page of six at a time, with
+its name, version, author, a short description, an On/Off switch and the mod's state: switched off after ten errors,
+off because a mod it requires is off, a key shared with another mod. Each mod has a **Settings** page (made from the
+settings it declares, plus a page of its own if it registered one) and a **Keys** page. The screen takes the mouse
+while it is open, like the other mod panels, and so does the keyboard: no key reaches the game (see `gear.ui.capture_keys`),
+so typing into a text setting does not fire its hotkeys.
+
+**Players.** Press **F11** in game, or click the **Mods** button under the game's escape menu (in the main menu the
+button is at the bottom left, but only a run with `-gear-auto` ticks there). **Esc** closes the screen (the game does not
+see that key, so its escape menu stays as it was); so does the Close button, the X, or F11 again.
+Every choice is saved at once in `mods\gear_mods.json`: the On/Off flags, the settings and the key binds of all mods in one
+file, written atomically (a temporary file moved over the old one); if the file cannot be read it is kept as
+`gear_mods.json.bak` and the defaults apply. A mod switched off in the screen is unloaded at once (it gets `unload`;
+its handlers, timers, tasks, pipes, key binds, pickup rules and open widgets are dropped; what it did to the world
+stays) and is not loaded at the next start. Switching it on loads it again, fresh, as if the game had started with it
+(`load`, and `session.start` when a game runs). A mod switched on brings the mods it requires with it; mods that
+require a switched-off mod are off while it is, and come back when it does. A mod that raised ten errors shows as
+failed: switch it off and on to try again. `enabled = false` in a mod's `mod.lua` only means "off until the player
+switches it on". To reset one mod's settings use the **Reset to defaults** button of its page (or **Reset** beside one
+setting); **Default** beside a key restores its default. A key that two mods use shows a conflict on both mods' rows
+and in the Keys page (both still fire; rebind one).
+
+Default hotkeys of the mods in this repository and the examples: F11 the Mods screen, F7 the layout editor, F5 the loot
+filter's panel, F4 the widget gallery of `uidemo`; in `sacred-gear-mods`: F6 the autosave panel, F10 the shared stash.
+None is a key of the game: the screen marks a bind that is also one of the game's own hotkeys (digits, Q W E R B, A, I, F,
+C, L, M, Tab, O, S, H, N, P, Space, Esc, + and -, F8 quick load, F9 quick save; the game reacts to them with any modifiers held) as
+a conflict with "The game", like a clash between two mods.
+
+**Mod authors.** Declare settings and keys in `mod.lua`:
+
+```lua
+return {
+    id = 'mymod', name = 'My mod', version = '1.0', author = 'Me',
+    description = 'Does something useful.',
+    settings = {
+        {id = 'enabled', type = 'bool',   label = 'Active', default = true, tooltip = 'Turns the effect off'},
+        {id = 'radius',  type = 'number', label = 'Radius (tiles)', min = 5, max = 100, step = 5, default = 40,
+         section = 'Range'},
+        {id = 'mode',    type = 'choice', label = 'Mode', default = 'near',
+         choices = {'near', 'far', {value = 'both', label = 'Both of them'}}},
+        {id = 'tag',     type = 'text',   label = 'Label', default = 'x', max_length = 20, restart = true},
+        {id = 'tint',    type = 'color',  label = 'Color', default = 0xFF3080C0},
+    },
+    keys = {
+        {id = 'panel', label = 'Open the panel', default = 'f5'},       -- 'ctrl+shift+k' works too
+    },
+}
+```
+
+```lua
+local S = gear.settings
+local radius = S.get('radius')                         -- the player's value, else config / config.lua, else default
+gear.on('settings.changed', function(id, value)        -- from the Mods screen or from gear.settings.set
+    if id == 'radius' then radius = value end
+end)
+gear.keys.on('panel', function() gear.ui.show_panel('p', true) end)   -- once per press, exact modifiers
+gear.on('unload', function() end)                      -- the player switched the mod off: clean up
+gear.mods.page(function(x, y, w, h)                    -- an extra "More" tab with widgets of the mod's own
+    gear.ui.label('hint', 'Anything gear.ui can draw', x, y, {})
+    return 24
+end)
+```
+
+| Setting type | Widget | Value |
+|---|---|---|
+| `bool` | checkbox | `true`, `false` |
+| `number` | slider | a number from `min` to `max` (default 0..100) on the grid of `step` (default 1) |
+| `choice` | dropdown | one of `choices` (strings, numbers or `{value, label}`) |
+| `text` | text field | a string of at most `max_length` (default 120) characters |
+| `color` | swatch and four sliders | `0xAARRGGBB` (set it from a number, `{r, g, b, a}` or `'#AARRGGBB'`) |
+
+`gear.settings.get(id)` returns the player's value if there is one, else the value of `config`/`config.lua` under the
+same id, else the declared `default`; a value that no longer fits (a choice that was removed, a number out of range) falls
+back one by one. `set(id, value)` coerces the value like the screen does and answers `nil, message` if it does not fit;
+the `settings.changed` handlers of the mod run when the value changed. `is_set(id)`, `all()`, `reset(id)` and `migrate`
+are in the [reference](GearApi.md#gearsettings). `migrate(name, fn)` reads an old settings file of the mod's folder once
+(JSON) and hands the table to `fn`, which copies what it wants into the settings: the migration is remembered in
+`gear_mods.json`, so a leftover file is not read twice (the loot filter's old `settings.json` works this way).
+`restart = true` marks a setting the mod only reads at start (the screen says "after restart"; the mod still gets
+`settings.changed`). Keep `gear.config` for what has no screen (lists, positions, self test switches).
+
+A declared key is bound to its `default` until the player changes it; `''` means unbound. `gear.keys.binding(id)` tells the
+current binding. Two mods with the same binding both fire; pick a default that is free (the table above) and the player
+can rebind. Hotkeys of other mods stay quiet while the Mods screen is open. The text of a binding is lower case,
+modifiers first: `ctrl+shift+m`, `alt+f5`; keys are named as in `gear.ui.key_pressed`.
+
+`gear.mods.list()` and `gear.mods.get(id)` describe the installed mods (state, enabled, errors ...) for a mod that
+wants to know about another one, e.g. to offer a feature only when a companion mod runs. Switching mods is the
+player's choice; mods cannot do it.
+
+What does not unload: a mod that hooks the game itself would have to; Gear's own hooks (pickup rules, drawing) are
+dropped with the mod. If a mod keeps state in the engine (spawned creatures, items), that stays until the game
+restarts. Settings that need a restart should say so (`restart = true`). An unload does not run in the middle of a
+frame: switching a mod on or off takes effect at the start of the next tick.
+
+Self test of the screen: `gear/examples/modmanagertest` (see its header) clicks through the real screen in a game and
+checks the results; `gear/tests/kernel_test.lua` covers the kernel side (persistence, broken files, switching mods live,
+dependencies, key binds and conflicts) and drives the screen against a mocked UI.
 
 ### Errors
 
@@ -317,10 +480,13 @@ faults returns nil and a message instead of crashing the game.
 | `hello` | The smallest mod: events and the creature types. |
 | `twitch_integration` | The Twitch connector's pipe, mapped by `custom.lua` to actions, offered one at a time inside a game as `twitch.command`. |
 | `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
-| `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F9) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
-| `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices from `config.lua`; filtered items' labels are dimmed; an overlay shows the rules; a settings panel (F8 or the overlay's button: class checkboxes, quality dropdowns, potion checkboxes, label dimming) saves to `settings.json`. Self test with `-gear-auto`. |
+| `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F4) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
+| `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices; filtered items' labels are dimmed; an overlay shows the rules; the rules are declared settings (the Mods screen shows them) and a panel of its own (F5 or the overlay's button) changes the same values. An old `settings.json` is migrated once. Self test with `-gear-auto`. |
 | `layout` | A layout editor in the manner of an MMO's edit mode (F7 or its button): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
+| `itemicontest` | `gear.ui.item_icon`: a row of weapon and armour models by type id and a row from live items; checks that nothing is left behind. |
+| `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
+| `shared-stash` (in the sacred-gear-mods repository) | A stash shared by all heroes of the player, in a panel beside the chest window, built on `gear.inv`: items are copied to `stash.json` in the mod's folder and back, the file written first on a deposit and last on a withdrawal. |
 
 ## Automation
 
@@ -393,6 +559,8 @@ included. What a name changes:
   `types.txt`, ...), `SacredGear.log` (with `.prev` rotation as usual), `SacredBild.log` and
   `SacredBild-crash-*.dmp` when SacredBild is loaded (both modules read the same name from the command line, so
   neither needs the other), and `run.json`.
+- **`gear_mods.json`** of the mod manager (On/Off flags, settings, key binds) is the run's own copy there, starting empty:
+  a test that switches mods or changes settings never touches the player's `mods\gear_mods.json`.
 - **`run.json`** is written when the run starts and rewritten when it ends:
   `{"instance": "a", "pid": 1234, "command_line": "...", "started": "2026-11-15T17:00:00.000Z"}` plus, at the end,
   `"exit_code": 0, "ended": "...", "reason": "quit"`. The reason is `quit` (a mod called `gear.auto.quit`),
@@ -432,7 +600,7 @@ times in a self test mean little, results do.
 | M2b: data | Item, weapon and balance tables with named fields (a schema per table, checked against the record size); changing records; a file overlay so mods ship replacement data files; mod text; mods loading before the game's data |
 | M3: events | Creature spawn and death, damage (with hooks that can change or veto it), item pickup and drop, save and load; per-savegame mod data |
 | M4: content | New records (items, creature types); a bridge to the game's quest and trigger scripts |
-| M5: tools | More examples, a reference of every table field, an in-game mod list; the multiplayer handshake |
+| M5: tools | More examples, a reference of every table field; the multiplayer handshake. (The in-game mod list is done: the Mods screen.) |
 
 ## Development
 
@@ -447,10 +615,13 @@ search) from the `sacred_core` library (`src/fmt.*`, `log.*`, `patch.*`, `sig.*`
 | `gear/pipe.*` | Named pipe clients, each on a thread of its own |
 | `gear/automation.*` | Automation: options, input, UI state, savegame loading, screenshots |
 | `gear/pickup.*` | Pickup rules: the hooks on the game's pickup, the collect filter and the item label colour |
+| `gear/itemicon.*` | Item icons: the model renderer call for a live item or a temporary item of a type, with the device state saved and restored |
+| `gear/keyblock.*` | The keyboard kept from the game while a screen captures it (`gear.ui.capture_keys`) |
 | `gear/ui.*` | Mod drawing: the draw commands, the hooks in the UI pass, Direct3D 7 quads with the game's states saved and restored, the game's fonts and UI images, window and UI state queries |
 | `gear/tests/kernel_test.lua` | Tests of the kernel with the native side mocked: `luajit gear/tests/kernel_test.lua` |
 | `gear/lua_host.*` | The LuaJIT state on the engine thread, native functions for the kernel, time budget |
-| `gear/lua/kernel.lua` | The trusted Lua side (embedded as a resource): manifests, load order, sandboxes, events, table views |
+| `gear/lua/kernel.lua` | The trusted Lua side (embedded as a resource): manifests, load order, sandboxes, events, table views, the mod catalog (settings, key binds, live load and unload, `gear_mods.json`) |
+| `gear/lua/modmanager.lua` | The Mods screen, embedded as a second resource and loaded as the mod `gear-mods`; it is the only mod that gets the kernel's `admin` table |
 | `gear/tables.*` | The engine's data tables, read in place with bounds and fault checks |
 | `gear/game/gear_addr.h`, `gear_sigs.inc` | The sacred.exe addresses Sacred Gear uses; their signatures (generated) |
 | `gear/examples/` | Example mods |
@@ -477,6 +648,8 @@ What Sacred Gear relies on, English GOG addresses:
 | `cObjectManager::create` 0x005FBA40 | thiscall (type, position*, 0, broadcast, x) -> id; the hero is created with (type, pos, 0, 1, 0), the script command CreateNPC with (type, pos, 0, 0, x). |
 | `cObjectManager::pop` 0x005FCCB0 | thiscall (id, position*): places an object (teleport); ParkCreature (0x006073D0) moves one far away with it. |
 | Object types | `*0x00AAB5E4` + id * 0x80 (0 < id < 0x7E60): +0x2E kind, +0x37 name. |
+| Saving | The savegame window (0x0071CC90 action 2) sends a 0x24-byte event (vtable 0x00890B38, +4 code 0xF, +8 sub 2, +0xC slot, +0x10 stored in the header, +0x14 capture the picture first, +0x18 check that no trade or chest window blocks (the engine logs AUTOSAVE and refuses otherwise), +0x20 the display name, copied into the engine's 64 bytes at +0x6A) to `cEngine::receiveEvent` (0x00618090, thiscall (event)). It stores the slot at engine +0x68 and sets 0x40 in the engine's flags (+0x54), unless that bit is already set. The render thread loop (0x0060E350) writes `SAVE\GAME%02d.PAK` (0x00619BF0) when `flags & 0xC0` and clears them; 0x200 is a queued load. Byte `*0x0182EBE8` +4 is 0 in single player. |
+| Inventories | `*0x00AD4448`: the inventory manager (made by 0x005DEBC0), 32 containers of 0x1180 bytes (0x005DEC90 (index) returns one). Container: +0x18 + cell * 12 the cells, +0x115C columns, +0x115E rows, +0x1160 its number; cell = row * columns + column: dword item id on an item's top-left cell (0 on its other cells), byte +4 flags (bit 0 taken), +5 / +6 the item's width / height there, on its other cells the column / row of its top-left cell. Container n (1..16) is the backpack of the hero with object id n; 17 the chest (`UI_WND_CHEST`, 20 x 10, made by 0x006ACB40); 18, 25..27 are small grids (3 x 5, 3 x 5, 7 x 5, 7 x 5) whose use is not examined; 20..22 hold the shops' stock in the test savegame. `0x005DABA0` (thiscall (w, h, slot*, byRow) -> bool) finds room, `0x005D9F00` (slot, id, w, h, notify) puts an item in (takes it out of the world: flag 2 at +0x14; tells the item its owner), `0x005DA630` (id, notify) takes it out of the container (the object stays), `0x00428D60` (stdcall (type, w*, h*)) is a type's size in cells, `0x005FBDB0` (id, 1, 0, 0) destroys an object (the engine does this after taking an item out, e.g. on using a potion, 0x005BFF60). An item (cItemBase) keeps its own state in a vector of 0x82-byte entries (+0x100 begin, +0x104 end, +0x108 capacity), 0x82 bytes at +0x118 (the record copy: class mask and rarity at +0x11C) and a number made from them at +0x120 (0x0042BF20 (record) -> hash, set after reading an item, 0x005C7690); the network read of an item (vtable slot 8, 0x005C7A50) restores exactly the entries and the record. Gear copies those to bytes (type, count, entries, record) and rebuilds an item by creating one of the type (0x005FBA40) and overwriting them (growing the vector with 0x005C9230). |
 | Loading a savegame | The menu (0x0071CC90 action 6) sets the players object's (`*0x0182EBE8`) +0x14 to 1 and posts message 0x8002 (wParam 1, lParam the savegame number) to the game window (`*0x00CDCA1C` +0xB0) (0x007561E0). |
 | UI manager | `*0x017EEBBC`: +0x08 flags (1 menus, 4 in game, 0x10 cinematic, 0x200 help), +0x80 the in-game windows, +0x130 the five menu screens, +0x144 the message box. |
 | UI pass (mod drawing) | `cUI_Manager_render` (0x00758ED0, arg: the IDirect3DDevice7 the UI draws with; SacredBild hooks it) draws pretransformed FVF 0x1C4 quads in the 1024x768 layout. Gear draws from: the popup pass 0x00758DC0 (thiscall (device, flag), "hud", before the original), the call at 0x0075934F (the party arrows 0x006D01F0, cdecl (device), "world", before the original; reached in game only) and the call at 0x00759585 (`call 0x649BE0`, after the escape menu and the message box in every mode, EBX = device; "top"). Every render state, texture stage state and the stage 0 texture it changes are read before and set back after, so the game's state cache (0x00643430) and SacredBild's state shadow stay right; text runs through the game's font with the game's states. |

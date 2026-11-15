@@ -1,6 +1,6 @@
 -- Shows what gear.ui can do: a translucent panel with the hero's values, a widget gallery (buttons, checkboxes, radio
 -- buttons, a dropdown, sliders, the game's images in the three fit modes and its fonts, tooltips) in a panel that can
--- be dragged and closed (F9 toggles it), a note that follows the inventory window, and the world and top layers.
+-- be dragged and closed (F4 toggles it), a note that follows the inventory window, and the world and top layers.
 --
 -- As a self test (no player needed):
 --
@@ -40,13 +40,13 @@ local function panel(hero)
     ui.text(gear.version, x, y + 6, {width = w - 8, align = 'right', color = ui.rgba(255, 255, 255, 140)})
 end
 
--- The widget gallery: every widget gear.ui has, in a panel that can be dragged by its title and closed (F9 or the
+-- The widget gallery: every widget gear.ui has, in a panel that can be dragged by its title and closed (F4 or the
 -- 'Widgets' button brings it back).
 local G = {clicks = 0, sound = true, music = false, difficulty = 2, fit = 2, alpha = 255, size = 96, font = 1}
 local FITS = {'stretch', 'contain', 'cover'}
 
 local function gallery()
-    local p = ui.panel('gallery', 'Gear widgets (F9)', 300, 16, 440, 372, {tooltip = 'Drag me by the title'})
+    local p = ui.panel('gallery', 'Gear widgets (F4)', 300, 16, 440, 372, {tooltip = 'Drag me by the title'})
     if not p.open then
         if ui.button('reopen', 300, 16, 90, 22, 'Widgets', {tooltip = 'Open the widget gallery'}) then
             ui.show_panel('gallery', true)
@@ -116,14 +116,15 @@ local function fonts()
     end
 end
 
+gear.keys.on('gallery', function() ui.show_panel('gallery', not ui.panel_open('gallery')) end)
+
 gear.on('draw', function(state)
     if not state or state.mode ~= 'game' or state.exclusive then return end
     local hero = gear.world.hero()
-    if cfg.panel then panel(hero) end
-    if cfg.images then gallery() end
-    if ui.key_pressed(cfg.key or 'f9') then ui.show_panel('gallery', not ui.panel_open('gallery')) end
-    if cfg.inventory then inventory_note(state) end
-    if cfg.fonts then fonts() end
+    if gear.settings.get('panel') then panel(hero) end
+    if gear.settings.get('images') then gallery() end
+    if gear.settings.get('inventory') then inventory_note(state) end
+    if gear.settings.get('fonts') then fonts() end
     -- The top layer lies over the escape menu and message boxes too.
     ui.text('uidemo: top layer', 0, 748, {width = 1024, align = 'center', layer = 'top',
         color = ui.rgba(255, 255, 255, 200), background = ui.rgba(0, 0, 0, 120), padding = 2})

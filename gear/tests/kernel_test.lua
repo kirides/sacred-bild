@@ -23,7 +23,9 @@ local ability_active
 local level_active, constant_active
 local ui_recording, ui_published = {}, {}
 local pickup_published
+save_block, save_calls, save_results = nil, {}, {}
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
+state_file, state_bak, state_writes = nil, nil, 0
 layout_file, moved_windows = '{"game:UI_WND_INVENTORY":{"x":2048,"y":1024}}', {}
 
 local native = {
@@ -112,6 +114,7 @@ local native = {
     ui_rect = function(...) ui_recording[#ui_recording + 1] = {'rect', ...}; return true end,
     ui_text = function(...) ui_recording[#ui_recording + 1] = {'text', ...}; return true end,
     ui_image = function(...) ui_recording[#ui_recording + 1] = {'image', ...}; return true end,
+    ui_item_icon = function(...) ui_recording[#ui_recording + 1] = {'item_icon', ...}; return true end,
     ui_commit = function() ui_published = ui_recording; ui_recording = {} end,
     ui_image_count = function() return 3 end,
     ui_image_info = function(id) if id > 0 and id < 3 then return {sheet = 'GUI_spell0' .. id .. '.TGA', width = 64, height = 64, loaded = true} end end,
@@ -130,10 +133,26 @@ local native = {
     ui_region = function(...) ui_recording[#ui_recording + 1] = {'region', ...}; return true end,
     ui_events = function() local e = ui_events_queue; ui_events_queue = {}; return e end,
     key_down = function(vk) return keys_held[vk] == true end,
+    state_read = function() return state_file end,
+    state_write = function(text, backup)
+        if backup then state_bak = text else state_file = text; state_writes = state_writes + 1 end
+        return true
+    end,
     layout_read = function() return layout_file end,
     layout_write = function(text) layout_file = text; return true end,
+    ui_block_keys = function(on) keys_blocked_by_native = on end,
     ui_can_move_windows = function() return true end,
     ui_move_window = function(slot, x, y, set) moved_windows[slot] = set and {x, y} or nil; return true end,
+    save_blocked = function() return save_block end,
+    save_request = function(slot, name, thumb)
+        if save_block then return nil, save_block end
+        save_calls[#save_calls + 1] = {slot, name, thumb}
+        return true
+    end,
+    save_pending = function() return false end,
+    save_info = function(slot) if slot <= 509 then return {exists = slot == 97, size = 5, mtime = 100} end end,
+    save_poll = function() return table.remove(save_results, 1) end,
+    builtin = function(name) if name == 'modmanager' then return "adm = admin; gear.on('frame', function() end)" end end,
     write_file = function(dir, rel, text) files[dir] = files[dir] or {}; files[dir][rel] = text; return true end,
     -- automation
     auto_instance = function() return 'test' end,
@@ -161,6 +180,9 @@ files.a = {
         gear.on('session.start', function(h) record.hero = h.id end)
         gear.on('session.stop', function() record.stopped = true end)
         gear.on('test.ping', function(v) record.ping = v end)
+        record.game = gear.game
+        gear.on('game.saved', function(slot, info) record.saved = {slot, info.size} end)
+        gear.on('game.save_failed', function(slot, message) record.save_failed = {slot, message} end)
         record.cfg = gear.config
         record.json = gear.json.encode({a = {1, 2, 3}, b = 'x"y', c = true})
         local v, err = gear.json.decode('{"type":"chat","data":{"text":"#hi \\u00e9","n":[1,2.5,-3e2]},"z":null}')
@@ -294,13 +316,59 @@ files.c = {    ['mod.lua'] = "return {id = 'c', requires = {'missing'}}",
     ['main.lua'] = "error('must not run')",
 }
 
+files.s = {
+    ['mod.lua'] = [[return {
+        id = 's', name = 'Settings mod', author = 'Me', description = 'Has settings', version = '2',
+        config = {speed = 7},
+        settings = {
+            {id = 'flag', type = 'bool', label = 'Flag', default = true},
+            {id = 'count', type = 'number', min = 0, max = 10, step = 2, default = 4, section = 'Numbers'},
+            {id = 'mode', type = 'choice', choices = {'a', 'b', {value = 'c', label = 'See'}}, default = 'b'},
+            {id = 'name', type = 'text', default = 'x', max_length = 5},
+            {id = 'tint', type = 'color', default = 0xFF112233},
+            {id = 'speed', type = 'number', min = 0, max = 100, default = 1},
+            {id = 'limit', type = 'number', min = 0, max = 100, default = 1},
+        },
+        keys = {{id = 'open', label = 'Open', default = 'ctrl+k'}},
+    }]],
+    ['config.lua'] = 'return {limit = 3}',
+    ['main.lua'] = [[
+        srec = {changes = {}, gear = gear}
+        gear.on('settings.changed', function(id, v) srec.changes[#srec.changes + 1] = id .. '=' .. tostring(v) end)
+        gear.on('unload', function() srec.unloaded = (srec.unloaded or 0) + 1 end)
+        gear.on('load', function() srec.loaded = true end)
+        gear.on('frame', function() srec.frames = (srec.frames or 0) + 1 end)
+        gear.every(0.1, function() srec.ticks = (srec.ticks or 0) + 1 end)
+        gear.keys.on('open', function() srec.opened = (srec.opened or 0) + 1 end)
+    ]],
+}
+files.t = {
+    ['mod.lua'] = "return {id = 't', name = 'Dependent', requires = {'s'}, keys = {{id = 'open', label = 'Open', default = 'ctrl+k'}}}",
+    ['main.lua'] = [[
+        trec = {}
+        gear.on('frame', function() trec.frames = (trec.frames or 0) + 1 end)
+        gear.keys.on('open', function() trec.opened = (trec.opened or 0) + 1 end)
+    ]],
+}
+files.m = {
+    ['mod.lua'] = "return {id = 'm', settings = {{id = 'n', type = 'number', min = 0, max = 100, default = 1}}}",
+    ['old.json'] = '{"n": 8}',
+    ['main.lua'] = [[
+        mrec = {gear = gear}
+        mrec.migrated = gear.settings.migrate('old.json', function(t) gear.settings.set('n', t.n) end)
+        gear.on('settings.changed', function() end)
+    ]],
+}
+files.d = {['mod.lua'] = "return {id = 'd', enabled = false}", ['main.lua'] = 'drec = true'}
+files.u = {['mod.lua'] = "return {id = 'u', settings = {{id = 'x', type = 'weird'}}}", ['main.lua'] = ''}
+
 local f = assert(io.open(kernel_path, 'rb'))
 local source = f:read('*a')
 f:close()
 local chunk = assert(loadstring(source, '=kernel'))
 local kernel = chunk(native)
 
-ok(kernel.load() == 4, 'four mods load (c is skipped)')
+ok(kernel.load() == 8, 'eight mods load: a, b, w, s, t, m, ab and the manager (c, d and u are not)')
 
 -- Reach mod a's globals through a handler's environment.
 local env_a
@@ -499,6 +567,357 @@ ok(widgets.ui.key_down('left') and not widgets.ui.key_down('right'), 'key_down')
 keys_held[0x25] = nil
 -- mod ab raised errors in every frame and was switched off: the write it made last is undone
 ok(math.abs(ability_store['ability_t1:1:80'] - 0.8) < 1e-9, 'switching a mod off undoes its ability writes')
+
+-- gear.game: saving
+do
+    local game = rec.game
+    ok(game and game.can_save() == true, 'can_save when nothing blocks')
+    save_block = 'a window is open'
+    local can, why = game.can_save()
+    ok(can == false and why == 'a window is open', 'can_save gives the reason')
+    local r, err = game.save(97, 'x')
+    ok(r == nil and err == 'a window is open', 'save refused while blocked')
+    save_block = nil
+    ok(game.save(98, 'Autosave', {thumbnail = true}) == true and save_calls[1][1] == 98 and save_calls[1][2] == 'Autosave'
+        and save_calls[1][3] == true, 'save passes slot, name and thumbnail')
+    ok(game.save(5) == true and save_calls[2][2] == '' and save_calls[2][3] == false, 'save defaults')
+    ok(game.save_info(97).exists and game.save_info(5000) == nil, 'save_info')
+    save_results[1] = {slot = 98, ok = true, message = '', info = {exists = true, size = 77, mtime = 1}}
+    save_results[2] = {slot = 99, ok = false, message = 'disk full', info = {exists = false, size = 0, mtime = 0}}
+    kernel.tick(0.016)
+    ok(rec.saved and rec.saved[1] == 98 and rec.saved[2] == 77, 'game.saved event')
+    ok(rec.save_failed and rec.save_failed[1] == 99 and rec.save_failed[2] == 'disk full', 'game.save_failed event')
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- Mod manager: settings, saved state, key binds, switching mods on and off live.
+---------------------------------------------------------------------------------------------------------------
+local function handler_global(k, event, name)
+    for i = 1, 200 do
+        local up, value = debug.getupvalue(k.dispatch, i)
+        if not up then return nil end
+        if up == 'handlers' then
+            for _, h in ipairs(value[event] or {}) do
+                local env = getfenv(h.fn)
+                if rawget(env, name) ~= nil then return env[name] end
+            end
+        end
+    end
+end
+-- Another kernel (a restart): the kernel locks the string metatable, so unlock it for the new instance.
+local function new_kernel()
+    debug.getmetatable('').__metatable = nil
+    return chunk(native)
+end
+local function entry_of(adm, id)
+    for _, e in ipairs(adm.entries()) do if e.id == id then return e end end
+end
+kernel.flush()
+local srec = handler_global(kernel, 'settings.changed', 'srec')
+local adm = handler_global(kernel, 'frame', 'adm')
+ok(srec ~= nil and adm ~= nil, 'found the settings mod and the manager stub')
+local S = srec.gear.settings
+ok(S.get('flag') == true and S.get('count') == 4 and S.get('mode') == 'b' and S.get('name') == 'x', 'setting defaults')
+ok(S.get('speed') == 7, 'config overrides the default of a setting')
+ok(S.get('tint') == 0xFF112233, 'color default')
+ok(S.get('limit') == 3 and srec.gear.settings.all().limit == 3, 'config.lua overrides the default too')
+
+-- set: coerced to the step, changed event only on change
+ok(S.set('count', 5) == true and S.get('count') == 6, 'number is put on the step grid')
+ok(srec.changes[#srec.changes] == 'count=6', 'settings.changed(id, value)')
+local n = #srec.changes
+S.set('count', 6)
+ok(#srec.changes == n, 'no event when the value stays')
+ok(S.set('count', 99) and S.get('count') == 10, 'number clamped to max')
+ok(select(1, S.set('mode', 'zz')) == nil and S.get('mode') == 'b', 'unknown choice refused')
+ok(S.set('mode', 'c') and S.get('mode') == 'c', 'choice')
+ok(select(1, S.set('name', 'toolongtext')) == nil, 'text longer than max_length refused')
+ok(S.set('tint', {255, 0, 0}) and S.get('tint') == 0xFFFF0000, 'color from {r,g,b}')
+ok(S.set('tint', '#8000FF00') and S.get('tint') == 0x8000FF00, 'color from text')
+ok(not pcall(S.get, 'nope'), 'unknown setting errors')
+ok(not pcall(S.set, 'nope', 1), 'unknown setting errors on set')
+S.reset('count')
+ok(S.get('count') == 4 and srec.changes[#srec.changes] == 'count=4', 'reset(id) restores the default and tells the mod')
+ok(adm.get('s', 'mode') == 'c' and adm.default('s', 'mode') == 'b', 'the manager reads value and default')
+
+-- migration happens once
+local mrec = handler_global(kernel, 'settings.changed', 'mrec')
+ok(mrec and mrec.migrated == true and mrec.gear.settings.get('n') == 8, 'old settings file migrated on first start')
+
+-- saved state
+kernel.flush()
+local saved = state_file
+ok(saved and saved:find('"count"', 1, true) == nil, 'a reset setting is not saved')
+ok(saved:find('"mode":"c"', 1, true) and saved:find('"migrated"', 1, true), 'settings and the migration flag are saved')
+ok(adm.set_binding('s', 'open', 'Ctrl+J') == true and adm.binding('s', 'open') == 'ctrl+j', 'rebind (normalized)')
+ok(select(1, adm.set_binding('s', 'open', 'foo+bar')) == nil, 'bad binding refused')
+ok(adm.default_binding('s', 'open') == 'ctrl+k', 'default binding stays')
+
+-- a new kernel reads the file back
+do
+    kernel.flush()
+    local k2 = new_kernel()
+    k2.load()
+    local s2 = handler_global(k2, 'settings.changed', 'srec')
+    ok(s2 and s2.gear.settings.get('mode') == 'c' and s2.gear.settings.get('speed') == 7, 'settings persist across a restart')
+    ok(s2.gear.keys.binding('open') == 'ctrl+j', 'binding persists')
+    -- the migrated file is not read again
+    local m2 = handler_global(k2, 'settings.changed', 'mrec')
+    ok(m2 and m2.migrated == false, 'migration does not run twice')
+end
+
+-- a broken file: kept as .bak, defaults apply, no crash
+do
+    local good = state_file
+    state_file = '{"mods": {"s": {"settings": [1,'
+    state_bak = nil
+    local k3 = new_kernel()
+    k3.load()
+    local s3 = handler_global(k3, 'settings.changed', 'srec')
+    ok(state_bak == '{"mods": {"s": {"settings": [1,', 'the unreadable file is kept as .bak')
+    ok(s3 and s3.gear.settings.get('mode') == 'b', 'defaults after a broken file')
+    -- wrong types inside a readable file are ignored value by value
+    state_file = '{"mods":{"s":{"enabled":"yes","settings":{"count":"many","mode":"c","flag":null},"keys":{"open":"nonsense"}}}}'
+    local k4 = new_kernel()
+    k4.load()
+    local s4 = handler_global(k4, 'settings.changed', 'srec')
+    ok(s4 and s4.gear.settings.get('count') == 4 and s4.gear.settings.get('mode') == 'c' and s4.gear.settings.get('flag') == true,
+       'invalid saved values fall back one by one')
+    ok(s4.gear.keys.binding('open') == 'ctrl+k', 'invalid saved binding falls back')
+    state_file = good
+end
+
+-- key binds
+local function press(vks, down)
+    for _, vk in ipairs(vks) do keys_held[vk] = down or nil end
+end
+local CTRL, SHIFT, J, K = 0x11, 0x10, 0x4A, 0x4B
+local trec = handler_global(kernel, 'frame', 'trec')
+ok(trec ~= nil, 'found mod t')
+adm.set_binding('s', 'open', nil)          -- back to ctrl+k, which mod t binds too
+local conflicts = adm.conflicts('s', 'open')
+ok(#conflicts == 1 and conflicts[1].mod == 't', 'a key bound by two mods is a conflict')
+ok(#adm.conflicts('gear-mods', 'open') == 0, 'no conflict for a unique key')
+press({CTRL, K}, true)
+kernel.tick(0.016)
+ok(srec.opened == 1 and trec.opened == 1, 'both mods get a conflicting key')
+kernel.tick(0.016)
+ok(srec.opened == 1, 'a held key fires once')
+press({K}, false); kernel.tick(0.016); press({K}, true); kernel.tick(0.016)
+ok(srec.opened == 2, 'fires again after release')
+press({SHIFT}, true); press({K}, false); kernel.tick(0.016); press({K}, true); kernel.tick(0.016)
+ok(srec.opened == 2, 'extra modifier: no fire')
+press({SHIFT, CTRL, K}, false)
+adm.modal(true)
+press({CTRL, K}, true); kernel.tick(0.016)
+ok(srec.opened == 2, 'hotkeys stay quiet while the manager screen is open')
+adm.modal(false)
+press({CTRL, K}, false)
+kernel.tick(0.016)
+ok(adm.set_binding('s', 'open', 'ctrl+j') and #adm.conflicts('s', 'open') == 0, 'conflict gone after a rebind')
+press({CTRL, J}, true); kernel.tick(0.016)
+ok(srec.opened == 3 and trec.opened == 2, 'the new binding fires (and only that mod)')
+press({CTRL, J}, false)
+ok(adm.set_binding('s', 'open', '') and srec.gear.keys.binding('open') == '', 'unbound')
+
+-- switching mods off and on, live
+clock = clock + 1
+kernel.tick(0.016)
+local frames, ticks = srec.frames, srec.ticks
+ok(frames and frames > 0 and ticks and ticks > 0, 'mod s runs frame handlers and timers')
+ok(entry_of(adm, 's').state == 'on' and entry_of(adm, 't').state == 'on', 's and t are on')
+ok(adm.set_enabled('s', false) == true, 'switch s off')
+ok(entry_of(adm, 't').state == 'blocked' and entry_of(adm, 't').reason:find('requires s', 1, true), 'dependent t is blocked at once')
+kernel.tick(0.016)
+ok(srec.unloaded == 1, 'unload event reached the mod')
+ok(entry_of(adm, 's').state == 'off' and entry_of(adm, 't').state == 'blocked' and not entry_of(adm, 't').loaded, 's and t are unloaded')
+clock = clock + 5
+kernel.tick(0.016); kernel.tick(0.016)
+ok(srec.frames == frames and srec.ticks == ticks, 'no handler or timer of s runs any more')
+ok(handler_global(kernel, 'settings.changed', 'srec') == nil, 'handlers are dropped')
+press({CTRL, K}, true); kernel.tick(0.016); press({CTRL, K}, false)
+ok(trec.opened == 2, 'key binds of an unloaded mod are gone')
+kernel.flush()
+ok(state_file:find('"enabled":false', 1, true), 'the off switch is saved')
+-- settings of an off mod can still be read and changed
+ok(adm.set('s', 'mode', 'a') and adm.get('s', 'mode') == 'a', 'settings of a mod that is off')
+ok(adm.set_enabled('t', true) == true, 'switching t on switches s on too')
+kernel.tick(0.016)
+local srec2 = handler_global(kernel, 'settings.changed', 'srec')
+ok(srec2 and srec2 ~= srec and srec2.loaded, 's loaded again, with a fresh environment, and got load')
+ok(srec2.gear.settings.get('mode') == 'a', 'settings survive a reload')
+ok(entry_of(adm, 's').state == 'on' and entry_of(adm, 't').state == 'on', 'both on again')
+-- mod.lua enabled = false is only the default
+ok(entry_of(adm, 'd').state == 'off', 'enabled = false in mod.lua: off by default')
+ok(adm.set_enabled('d', true) and (kernel.tick(0.016) or true) and entry_of(adm, 'd').state == 'on', 'the player can switch it on')
+-- a mod with errors: switched off, the toggle reloads it
+ok(entry_of(adm, 'b').state == 'error' and entry_of(adm, 'b').errors >= 10, 'a mod switched off after errors shows as error')
+adm.set_enabled('b', false); kernel.tick(0.016)
+adm.set_enabled('b', true); kernel.tick(0.016)
+ok(entry_of(adm, 'b').state == 'on' and entry_of(adm, 'b').errors < 10, 'switching it off and on starts it fresh')
+-- missing requirement, invalid manifest
+ok(entry_of(adm, 'c').state == 'off' or entry_of(adm, 'c').state == 'pending' or entry_of(adm, 'c').state == 'blocked', 'c is listed')
+ok(select(1, adm.set_enabled('c', true)) == nil, 'cannot switch on a mod whose requirement is missing')
+local invalid
+for _, e in ipairs(adm.entries()) do if e.state == 'invalid' then invalid = e end end
+ok(invalid and invalid.reason:find('type must be', 1, true), 'a bad manifest is listed with its message')
+ok(select(1, adm.set_enabled('gear-mods', false)) == nil, 'the manager itself cannot be switched off')
+-- public gear.mods
+local list = srec2.gear.mods.list()
+local found_t
+for _, e in ipairs(list) do if e.id == 't' then found_t = e end end
+ok(found_t and found_t.name == 'Dependent' and found_t.has_keys and not found_t.has_settings, 'gear.mods.list')
+ok(srec2.gear.mods.get('s').author == 'Me' and srec2.gear.mods.get('nope') == nil, 'gear.mods.get')
+-- custom page
+srec2.gear.mods.page(function(x, y, w, h) srec2.page_args = {x, y, w, h}; return 40 end)
+ok(adm.draw_page('s', 1, 2, 3, 4) == 40 and srec2.page_args[4] == 4, 'a mod page is drawn by the manager')
+-- capture of a new binding
+adm.capture_start()
+ok(adm.capture() == nil, 'capture: nothing pressed')
+press({CTRL, 0x4C}, true)
+ok(adm.capture() == 'ctrl+l', 'capture builds the binding')
+press({CTRL, 0x4C}, false)
+-- item icons: an item table, a type id and a type name queue a native draw
+do
+    local ui2 = srec2.gear.ui
+    ok(ui2.item_icon({id = 50, type = 2}, 4, 5, 64, 32) == true, 'item_icon with an item table')
+    ok(ui2.item_icon(2, 0, 0, 32, 32, {layer = 'top'}) == true, 'item_icon with a type id')
+    ok(ui2.item_icon('goblin', 0, 0, 32, 32) == true, 'item_icon with a type name')
+    ok(not pcall(ui2.item_icon, 'no such type', 0, 0, 1, 1), 'item_icon with an unknown name errors')
+    ok(not pcall(ui2.item_icon, nil, 0, 0, 1, 1), 'item_icon with nothing errors')
+    kernel.tick(0.016)
+    local icons = {}
+    for _, c in ipairs(ui_published) do if c[1] == 'item_icon' then icons[#icons + 1] = c end end
+    ok(#icons == 3 and icons[1][8] == 50 and icons[1][9] == 2 and icons[2][9] == 2 and icons[2][8] == 0 and icons[3][9] == 2,
+       'the item icons reach the native side with item id and type (' .. #icons .. ')')
+end
+-- the game's own hotkeys count as conflicts
+ok(adm.set_binding('s', 'open', 'ctrl+l') == true, 'bind a key the game uses')
+do
+    local c = adm.conflicts('s', 'open')
+    ok(#c == 1 and c[1].game == true and c[1].label == 'Log book', "the game's own key is a conflict (" .. #c .. ")")
+end
+ok(adm.set_binding('s', 'open', 'f9') and adm.conflicts('s', 'open')[1].label == 'Quick save', "F9 is the game's quick save")
+adm.set_binding('s', 'open', nil)
+-- the keyboard is kept from the game while the screen is open (or a mod captures it)
+ok(keys_blocked_by_native == false, 'no capture at rest')
+adm.modal(true); kernel.tick(0.016)
+ok(keys_blocked_by_native == true, 'the screen keeps the keyboard from the game')
+adm.modal(false); kernel.tick(0.016)
+ok(keys_blocked_by_native == false, 'and gives it back')
+srec2.gear.ui.capture_keys(true); kernel.tick(0.016)
+ok(keys_blocked_by_native == true, 'a mod can capture the keyboard')
+adm.set_enabled('s', false); kernel.tick(0.016)
+ok(keys_blocked_by_native == false, 'unloading the mod releases it')
+adm.set_enabled('s', true); kernel.tick(0.016)
+
+
+---------------------------------------------------------------------------------------------------------------
+-- The real mod manager screen (gear/lua/modmanager.lua) driven through the mocked UI: open it with its hotkey,
+-- page, open a mod's settings and keys, toggle, rebind, close.
+---------------------------------------------------------------------------------------------------------------
+do
+    local rf = assert(io.open('gear/lua/modmanager.lua', 'rb'))
+    local real = rf:read('*a')
+    rf:close()
+    local saved_builtin = native.builtin
+    native.builtin = function(name) if name == 'modmanager' then return real end end
+    state_file = nil
+    local k = new_kernel()
+    k.load()
+    local log_start = #logs
+    local function tick() k.tick(0.016) end
+    local function texts()
+        local out = {}
+        for _, c in ipairs(ui_published) do
+            if c[1] == 'text' then out[#out + 1] = c end
+        end
+        return out
+    end
+    local function find_texts(text)
+        local out = {}
+        for _, c in ipairs(texts()) do if c[4] == text then out[#out + 1] = c end end
+        return out
+    end
+    local function has_text(text) return #find_texts(text) > 0 end
+    local function has_prefix(prefix)
+        for _, c in ipairs(texts()) do if c[4]:sub(1, #prefix) == prefix then return true end end
+        return false
+    end
+    local function click_at(x, y)
+        ui_mouse_at = {x, y}
+        tick()
+        local h
+        for _, c in ipairs(ui_published) do
+            if c[1] == 'region' and x >= c[3] and y >= c[4] and x < c[3] + c[5] and y < c[4] + c[6] then h = c[7] end
+        end
+        ui_events_queue = {{down = true, button = 0, x = x, y = y, region = h}, {down = false, button = 0, x = x, y = y, region = h}}
+        tick()
+        tick()
+    end
+    local function click_text(text, n)
+        local c = find_texts(text)[n or 1]
+        if not c then return false end
+        click_at(c[5] + (c[7] > 0 and c[7] / 2 or 4), c[6] + (c[8] > 0 and c[8] / 2 or 6))
+        return true
+    end
+    local function dump(label)
+        if not os.getenv('GEAR_TEST_DUMP') then return end
+        local t = {}
+        for _, c in ipairs(texts()) do t[#t + 1] = c[4] end
+        print(label .. ': ' .. table.concat(t, ' | '))
+    end
+    local function key(vk) keys_held[vk] = true; tick(); keys_held[vk] = nil; tick() end
+
+    tick()
+    key(0x7A)     -- F11
+    ok(has_text('Mods') and has_text('Page 1 / 2'), 'F11 opens the screen with page 1 of 2')
+    dump('page 1')
+    ok(has_text('Dependent') and has_text('Mod manager') == false and has_text('10 installed'), 'rows of the first page')
+    ok(has_prefix('Off: requires missing'), 'a mod whose requirement is missing says so')
+    ok(has_prefix('Cannot be loaded') == false, 'invalid mods are on a later page')
+    ok(click_text('>') and has_text('Page 2 / 2') and has_text('Mod manager'), 'next page shows the manager itself')
+    dump('page 2')
+    ok(has_prefix('Cannot be loaded'), 'an invalid manifest is listed with its message')
+    ok(click_text('<') and has_text('Page 1 / 2'), 'previous page')
+    click_text('>')
+    ok(click_text('Settings', 2), 'click Settings of "Settings mod" (second on page 2)')
+    dump('settings')
+    ok(has_text('Reset to defaults') and has_text('Flag') and has_text('Numbers'), 'settings page: rows and section header')
+    -- the bool checkbox: its text is 'On'
+    local s_env = handler_global(k, 'settings.changed', 'srec')
+    local before = s_env.gear.settings.get('flag')
+    ok(click_text('On') and s_env.gear.settings.get('flag') == (not before), 'a checkbox changes the setting')
+    ok(has_text('Reset'), 'a changed setting offers Reset')
+    ok(click_text('Reset') and s_env.gear.settings.get('flag') == before, 'Reset restores the default')
+    -- keys tab
+    click_text('Keys', 1)
+    dump('keys')
+    ok(has_text('Ctrl+K') and has_text('Ctrl+K') and has_text('Open'), 'keys tab shows the binding')
+    ok(has_prefix('Conflicts with: Dependent'), 'the conflict is marked')
+    ok(click_text('Ctrl+K') and has_text('Press a key...'), 'click a binding to rebind')
+    keys_held[0x11] = true; keys_held[0x55] = true
+    tick()
+    keys_held[0x11] = nil; keys_held[0x55] = nil
+    tick()
+    ok(s_env.gear.keys.binding('open') == 'ctrl+u' and has_text('Ctrl+U') and not has_prefix('Conflicts'), 'the new key is taken, no conflict')
+    ok(has_text('Default'), 'a changed binding offers Default')
+    ok(click_text('Default') and s_env.gear.keys.binding('open') == 'ctrl+k', 'Default restores it')
+    -- back to the list, switch the mod off
+    ok(click_text('< Back') and has_text('Page 2 / 2'), 'back to the list (same page)')
+    ok(click_text('On', 2), 'switch "Settings mod" off')
+    tick()
+    ok(handler_global(k, 'settings.changed', 'srec') == nil and has_text('Off'), 'the mod is unloaded and its switch says Off')
+    click_text('<')
+    ok(has_prefix('Off: requires s'), 'the dependent shows why it is off')
+    key(0x1B)    -- Escape closes the screen
+    ok(has_text('Mods') == false, 'Escape closes the screen')
+    for i = log_start + 1, #logs do
+        if logs[i]:find('%[gear%-mods%] error') or logs[i]:find('error in key') then ok(false, 'manager error: ' .. logs[i]:sub(1, 300)) end
+    end
+    native.builtin = saved_builtin
+end
+
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

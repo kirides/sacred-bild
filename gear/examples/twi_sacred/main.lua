@@ -35,7 +35,7 @@ local function spawn_around(hero, kind, name, n)
     local x, y, layer = hero:position()
     local made = 0
     for _ = 1, n do
-        local sx, sy = W.around(x, y, cfg.spawn_min, cfg.spawn_max)
+        local sx, sy = W.around(x, y, gear.settings.get('spawn_min'), gear.settings.get('spawn_max'))
         local label = current_user ~= '' and (current_user .. "'s " .. name) or nil
         local c, why = W.spawn(kind, sx, sy, {layer = layer, label = label})
         if c then made = made + 1 else print('spawn failed: ' .. tostring(why)) end

@@ -22,7 +22,9 @@ namespace Ui
 {
     enum class Layer : uint8_t { World, Hud, Top, Count };
     // Region: draws nothing; a rectangle that takes the mouse (see input below).
-    enum class Kind : uint8_t { Rect, Text, Image, Region };
+    // ItemIcon: an item's model drawn by the game's model renderer (gear/itemicon.*); `image` is the item type, `region` the
+    // item object's id (0: make a temporary item of the type).
+    enum class Kind : uint8_t { Rect, Text, Image, Region, ItemIcon };
     enum class Fit : uint8_t { Stretch, Contain, Cover };
 
     struct Command

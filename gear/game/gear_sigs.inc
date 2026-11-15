@@ -25,9 +25,23 @@ static const Sig::Entry kGearSigs[] = {
     {"cCreature_pickupItem", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 58 53 8B 5C 24 6C", 0, Sig::Take::Match, &Gear::Addr::cCreature_pickupItem}, // 00558080, 00557EC0
     {"cCreature_collectFilter", "53 8B 5C 24 08 55 56 85 DB 57 8B E9", 0, Sig::Take::Match, &Gear::Addr::cCreature_collectFilter}, // 004EC330, 004EC170
     {"cItem_labelColor", "53 55 8B 6C 24 0C 56 57 8B F9 85 ED", 0, Sig::Take::Match, &Gear::Addr::cItem_labelColor}, // 005C13C0, 005C1330
+    {"cItem_loadResources", "83 EC 2C 55 56 8B F1 57 F6 46 08 80", 0, Sig::Take::Match, &Gear::Addr::cItem_loadResources}, // 00640640, 00640730
+    {"modelRenderer_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3F 68 FC 00 00 00", 0, Sig::Take::Match, &Gear::Addr::modelRenderer_instance}, // 00401660, 00401660
+    {"modelRenderer_drawItem", "81 EC 64 03 00 00 56 8B F1 57 8D 8C 24 2C 03 00 00", 0, Sig::Take::Match, &Gear::Addr::modelRenderer_drawItem}, // 0040E9C0, 0040EA00
+    {"renderFlags_instance", "A1 ?? ?? ?? ?? 85 C0 75 28 6A 08 E8 ?? ?? ?? ?? 83 C4 04 85 C0", 0, Sig::Take::Match, &Gear::Addr::renderFlags_instance}, // 00643110, 00643240
+    {"renderFlags_set", "8B 44 24 04 8B 54 24 08 56 8B 71 04", 0, Sig::Take::Match, &Gear::Addr::renderFlags_set}, // 00643430, 00643560
     {"cUI_Manager_receiveEvent", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC D8 03 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Manager_receiveEvent}, // 00757840, 00757120
     {"cEventMouseDown_vtable", "C6 44 24 3A 00 8B 0C A8 C7 44 24 28 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::cEventMouseDown_vtable}, // 0089704C, 008950A8
     {"cEventMouseUp_vtable", "C7 00 ?? ?? ?? ?? 5E C3 33 C0 5E C3 90 90 90 56", 2, Sig::Take::Abs32, &Gear::Addr::cEventMouseUp_vtable}, // 00899248, 00897248
+    {"g_pInventory", "64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 65", 9, Sig::Take::Abs32, &Gear::Addr::g_pInventory}, // 00AD4448, 00AD23C8
+    {"cInventory_findSpace", "8A 44 24 10 53 55 56 57 8B F9 84 C0", 0, Sig::Take::Match, &Gear::Addr::cInventory_findSpace}, // 005DABA0, 005DAB60
+    {"cInventory_put", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 83 EC 78 53 8B 9C 24 94 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cInventory_put}, // 005D9F00, 005D9EC0
+    {"cInventory_remove", "83 EC 08 53 55 56 57 8B F9 33 D2 33 C0", 0, Sig::Take::Match, &Gear::Addr::cInventory_remove}, // 005DA630, 005DA5F0
+    {"cItemType_size", "8B 44 24 04 53 56 3D 60 7E 00 00 57 7D 36", 0, Sig::Take::Match, &Gear::Addr::cItemType_size}, // 00428D60, 00428C30
+    {"cObjectManager_destroy", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A0 ?? ?? ?? ?? 64 89 25 00 00 00 00 81 EC 88 00 00 00 53 33 DB 55", 0, Sig::Take::Match, &Gear::Addr::cObjectManager_destroy}, // 005FBDB0, 005FBE10
+    {"cItem_dataHash", "8B 44 24 04 6A 00 6A 00 50 E8 ?? ?? ?? ?? 83 C4 0C", 0, Sig::Take::Match, &Gear::Addr::cItem_dataHash}, // 0042BF20, 0042BDF0
+    {"cItem_entriesInsert", "81 EC 8C 00 00 00 53 55 56 8B B4 24 A0 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_entriesInsert}, // 005C9230, 005C91A0
+    {"cSaveEvent_vtable", "8B F1 8B 46 20 C7 06 ?? ?? ?? ?? 85 C0 74 09 50", 7, Sig::Take::Abs32, &Gear::Addr::cSaveEvent_vtable}, // 00890B38, 0088EB38
     {"abilityTable1First", "B8 ?? ?? ?? ?? 66 39 10 74 0E 83 C0 78 41 3D ?? ?? ?? ?? 72 F0", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1First}, // 0094FE28, 0094DE28
     {"abilityTable1End", "3D ?? ?? ?? ?? 72 F0 33 C0 C3 8D 04 49 8D 04 80", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1End}, // 00952A38, 00950A38
     {"abilityTable2First", "B8 ?? ?? ?? ?? 66 39 10 74 10 05 94 00 00 00 41", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable2First}, // 00952ACC, 00950ACC

@@ -443,6 +443,13 @@ bool World::item(uint32_t id, Item& out)
     return true;
 }
 
+uintptr_t World::itemObject(uint32_t id)
+{
+    void* m = available() ? manager() : nullptr;
+    const uintptr_t o = live(m, id);
+    return o && callIsItem(o) ? o : 0;
+}
+
 std::vector<uint32_t> World::itemsNear(const Position& at, double radius, size_t limit)
 {
     std::vector<std::pair<double, uint32_t>> found;

@@ -103,8 +103,12 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'frame'` | Every in-game frame. |
 | `'draw'` | After the frame handlers, to draw the UI. |
 | `'idle'` | Automation only: every 50 ms in the menus. |
+| `'unload'` | The player switched this mod off in the mod manager: clean up (handlers, timers and the rest are dropped after it). |
+| `'settings.changed'` | A setting of this mod changed: `(id, value)`. |
 | `'session.start'` | A game with a hero runs. |
 | `'session.stop'` | That hero is gone. |
+| `'game.saved'` | A save `gear.game.save` asked for is written. |
+| `'game.save_failed'` | It could not be written. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
 | `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
@@ -148,13 +152,16 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `config` | `table<string, any>` | This mod's settings: the manifest's `config`, overridden by `config.lua`. |
 | `data` | `GearData` | The engine's data tables (read only, except the abilities). |
 | `text` | `GearText` | The game's texts by id. |
-| `settings` | `GearSettings` | The game's Settings.cfg. |
 | `files` | `GearFiles` | The mod's file overlay. |
-| `game` | `GearGame` | Facts about the running game. |
 | `hooks` | `GearHooks` | The engine hooks that ask mods for values. |
 | `json` | `GearJson` | JSON encoding and decoding. |
 | `pipe` | `GearPipeModule` | Named pipe clients. |
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
+| `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
+| `game` | `GearGame` | The game itself: difficulty and saving. |
+| `settings` | `GearSettings` | This mod's settings (declared in `mod.lua`, changed by the player in the mod manager). |
+| `keys` | `GearKeys` | This mod's declared key binds. |
+| `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
 | `ui` | `GearUi` | Drawing on top of the game, widgets, panels and the layout. |
 | `auto` | `GearAuto` | Automation (only with `-gear-auto` and `automation = true` in `mod.lua`). (optional) |
 
@@ -168,8 +175,12 @@ Forms:
 - `fun(event: 'frame', fn: fun(dt: number)): GearHandler`
 - `fun(event: 'draw', fn: fun(state: GearUiState)): GearHandler`
 - `fun(event: 'idle', fn: fun()): GearHandler`
+- `fun(event: 'unload', fn: fun()): GearHandler`
+- `fun(event: 'settings.changed', fn: fun(id: string, value: boolean|number|string)): GearHandler`
 - `fun(event: 'session.start', fn: fun(hero: Creature)): GearHandler`
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
+- `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
+- `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
 - `fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler`
@@ -186,7 +197,7 @@ Removes a handler.
 
 #### `gear.emit(event, ...)`
 
-Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.` and `pipe.` are reserved. Handlers may emit events too, up to 8 levels deep.
+Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.`, `game.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep.
 
 - `event`: `string`
 - `...`: `any`
@@ -271,11 +282,15 @@ The table `mod.lua` returns. It runs without any globals, so it can only hold va
 | Field | Type | |
 |---|---|---|
 | `id` | `string` | Required: letters, digits, `_` and `-`; unique among the installed mods. |
-| `name` | `string` | Shown in the log (default: the id). (optional) |
+| `name` | `string` | Shown in the mod manager and the log (default: the id). (optional) |
+| `description` | `string` | One or two lines for the mod manager. (optional) |
+| `author` | `string` | Shown in the mod manager. (optional) |
 | `version` | `string` | Part of the mod set (default `'0'`). (optional) |
 | `priority` | `number` | Lower loads first (default 0); ties load by id. (optional) |
 | `requires` | `string[]` | Ids that must load first; the mod is skipped if one is missing. (optional) |
-| `enabled` | `boolean` | `false`: keep the folder, skip the mod. (optional) |
+| `enabled` | `boolean` | `false`: off until the player switches it on in the mod manager (the default, not a lock). (optional) |
+| `settings` | `GearSettingDef[]` | Declared settings: the mod manager builds their page; read them with `gear.settings`. (optional) |
+| `keys` | `GearKeyDef[]` | Declared key binds: the player rebinds them in the mod manager; use them with `gear.keys`. (optional) |
 | `config` | `table<string, any>` | Default settings: `gear.config` starts as a copy and `config.lua` overrides them. (optional) |
 | `pipes` | `string[]` | Names of the named pipes the mod may open (`gear.pipe.open`). (optional) |
 | `automation` | `boolean` | `true`: the mod gets `gear.auto` when the game runs with `-gear-auto`. (optional) |
@@ -567,21 +582,6 @@ The text for `id` (UTF-8), nil if the game has none.
 - `id`: `integer`
 - returns `string?`
 
-## Settings (gear.settings)
-
-### GearSettings
-
-Reached as `gear.settings`.
-
-The game's `Settings.cfg` (`KEY : value` lines).
-
-#### `gear.settings.get(key) -> string?`
-
-The value of `key` as text (nil if the file has no such key). Read each time, so it is what the file says now.
-
-- `key`: `string`
-- returns `string?`
-
 ## Files (gear.files)
 
 ### GearFiles
@@ -654,20 +654,6 @@ Every hook site and how often the engine ran it (a site whose function was not f
 | `calls` | `integer` |  |
 | `answered` | `integer` |  |
 | `busy` | `integer` |  |
-
-## The running game (gear.game)
-
-### GearGame
-
-Reached as `gear.game`.
-
-Facts about the running game.
-
-#### `gear.game.difficulty() -> integer?`
-
-The difficulty level of the running game: 0 (bronze) to 4 (niobium); nil if the game is not running.
-
-- returns `integer?`
 
 ## JSON (gear.json)
 
@@ -1063,6 +1049,408 @@ Moves the creature. Single player only.
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+## Saving (gear.game)
+
+### GearGame
+
+Reached as `gear.game`.
+
+Saving the game through the engine's own save request, the one the savegame window sends: the file is `Save\GAME<slot>.PAK` (slot 0 is the quicksave; the game lists the savegames sorted by file name). Single player only. A save is a request: the engine writes the file a moment later on its render thread, and the result comes as the events `game.saved` and `game.save_failed`. Slots 1 to 99 show as `GAME01` to `GAME99`; a mod that saves on its own should keep to slots the player does not use (the game's savegame window picks the first free number for manual saves).
+
+#### `gear.game.difficulty() -> integer?`
+
+The difficulty level of the running game: 0 (bronze) to 4 (niobium); nil if the game is not running.
+
+- returns `integer?`
+
+#### `gear.game.can_save() -> boolean, string?`
+
+Whether a save may start now: a living hero in a single player game, the game itself shown (no cinematic, no window drawn alone, no escape menu or message box), no save or load pending.
+
+- returns `ok` `boolean`
+- returns `reason` `string?` - Why not.
+
+### GearSaveOpts
+
+What `save` can be told.
+
+| Field | Type | |
+|---|---|---|
+| `thumbnail` | `boolean` | Let the engine capture the savegame's picture first (default false: the savegame keeps no new picture). (optional) |
+
+#### `gear.game.save(slot, name, opts) -> boolean?, string?`
+
+Asks the engine to save into slot `slot` (0 to 509). The engine refuses while a trading, chest or similar window is open. Returns true when the request is accepted; the outcome is the event `game.saved` or `game.save_failed`.
+
+- `slot`: `integer`
+- `name`: `string` (optional) - The savegame's display name, at most 60 ASCII characters.
+- `opts`: `GearSaveOpts` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.game.save_pending() -> boolean`
+
+Whether a save (or a load) is queued or being written.
+
+- returns `boolean`
+
+### GearSaveInfo
+
+The file of a slot.
+
+| Field | Type | |
+|---|---|---|
+| `exists` | `boolean` |  |
+| `size` | `number` | Bytes. |
+| `mtime` | `number` | Last write, unix seconds. |
+
+#### `gear.game.save_info(slot) -> GearSaveInfo?`
+
+The savegame file of `slot`: nil for a slot outside 0..509, else a table whose `exists` says if the file is there.
+
+- `slot`: `integer`
+- returns `GearSaveInfo?`
+
+## Settings, key binds and the mod manager
+
+A mod declares its settings and key binds in `mod.lua` (`settings`, `keys`); the player changes them, switches the mod on and off and rebinds keys in the **Mods** screen (F11, or the "Mods" button beside the escape menu), and Sacred Gear keeps everything in `mods\gear_mods.json`. The mod reads its values with `gear.settings`, hears changes as `settings.changed`, and gets declared keys through `gear.keys`. A mod switched off in the screen is unloaded at once: it gets `unload`, then its handlers, timers, tasks, pipes, key binds, pickup rules and open widgets are dropped (what it did to the world stays). Switching it on loads it again with a fresh environment (`load`, and `session.start` when a game runs); mods it requires are switched on with it, and mods that require it are off while it is.
+
+### GearSettingType
+
+| Value | |
+|---|---|
+| `'bool'` | A checkbox: `true` or `false`. |
+| `'number'` | A slider from `min` to `max` in steps of `step` (defaults 0, 100, 1). |
+| `'choice'` | A dropdown: one of `choices` (a string or number each, or `{value, label}`). |
+| `'text'` | A line of text of at most `max_length` characters (default 120). |
+| `'color'` | A color: 0xAARRGGBB (set it from a number, `{r, g, b, a}` or `'#AARRGGBB'`). |
+
+### GearSettingChoice
+
+One entry of a `choice` setting's `choices`.
+
+| Field | Type | |
+|---|---|---|
+| `value` | `string\|number` | What the setting holds when this entry is picked. |
+| `label` | `string` | What the screen shows (default: the value). (optional) |
+
+### GearSettingDef
+
+An entry of `settings` in `mod.lua`. The screen builds its page from these; `gear.settings.get(id)` returns the player's value, else the mod's `config` or `config.lua` value for that id, else `default`.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | Letters, digits, `_`, `-` and `.`; unique in the mod. |
+| `type` | `GearSettingType` |  |
+| `label` | `string` | Shown in the screen (default: the id). (optional) |
+| `default` | `any` | The default value, of the setting's type (default: false, `min`, the first choice, `''`, opaque white). (optional) |
+| `min` | `number` | For `number` (default 0). (optional) |
+| `max` | `number` | For `number` (default 100). (optional) |
+| `step` | `number` | For `number` (default 1). (optional) |
+| `choices` | `(string\|number\|GearSettingChoice)[]` | For `choice`. (optional) |
+| `max_length` | `integer` | For `text`. (optional) |
+| `section` | `string` | A heading: settings in a row with the same section are shown under it. (optional) |
+| `tooltip` | `string` | Shown when the cursor rests on the label. (optional) |
+| `restart` | `boolean` | The mod only reads it at start: the screen says "after restart" (the mod still gets `settings.changed`). (optional) |
+
+### GearKeyDef
+
+An entry of `keys` in `mod.lua`: a key bind the player can change.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | Letters, digits, `_`, `-` and `.`; unique in the mod. |
+| `label` | `string` | Shown in the screen (default: the id). (optional) |
+| `default` | `string` | A key with optional modifiers: `'f8'`, `'ctrl+m'`, `'ctrl+shift+k'`; `''` or nil: unbound. (optional) |
+
+### GearSettings
+
+Reached as `gear.settings`.
+
+This mod's declared settings (`settings` in `mod.lua`) with the player's values. Values are checked against the declaration: a number is clamped and put on the step grid, a choice must be one of the choices.
+
+#### `gear.settings.get(id) -> boolean|number|string`
+
+The value of a setting. An undeclared UPPER_CASE name is a key of the game's `Settings.cfg` and gives that file's text (see `game`), nil if it has no such key; any other undeclared name is an error.
+
+- `id`: `string`
+- returns `boolean|number|string`
+
+#### `gear.settings.game(key) -> string?`
+
+The value of `key` in the game's `Settings.cfg` (`KEY : value` lines) as text, nil if the file has no such key. Read each time, so it is what the file says now.
+
+- `key`: `string`
+- returns `string?`
+
+#### `gear.settings.set(id, value) -> boolean?, string?`
+
+Sets a value (kept in `gear_mods.json`); the mod's `settings.changed` handlers run if it changed. Returns true, or nil and a message if the value does not fit the setting.
+
+- `id`: `string`
+- `value`: `any`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.settings.is_set(id) -> boolean`
+
+Whether the player has set this setting (else `get` returns the default).
+
+- `id`: `string`
+- returns `boolean`
+
+#### `gear.settings.all() -> table<string, boolean|number|string>`
+
+Every setting's value, by id.
+
+- returns `table<string, boolean|number|string>`
+
+#### `gear.settings.reset(id)`
+
+Back to the default: one setting, or all of them.
+
+- `id`: `string` (optional)
+
+#### `gear.settings.migrate(name, fn) -> boolean`
+
+Once per mod and file: reads `name`, an old settings file of the mod's folder (JSON), and calls `fn` with the decoded table, so the mod copies the values into its settings. Returns true if it ran, false if the migration was done before or the file does not exist.
+
+- `name`: `string`
+- `fn`: `fun(old: table)`
+- returns `ran` `boolean`
+
+### GearKeyHandle
+
+A registered key handler; pass it to `gear.keys.off`. Opaque.
+
+### GearKeys
+
+Reached as `gear.keys`.
+
+This mod's declared key binds (`keys` in `mod.lua`). A bind fires when its key is pressed with exactly its modifiers held, once per press, in game and in automation; not while the Mods screen is open.
+
+#### `gear.keys.on(id, fn) -> GearKeyHandle`
+
+Calls `fn` when the declared key `id` is pressed.
+
+- `id`: `string`
+- `fn`: `fun()`
+- returns `GearKeyHandle`
+
+#### `gear.keys.off(handle)`
+
+Removes a handler.
+
+- `handle`: `GearKeyHandle`
+
+#### `gear.keys.binding(id) -> string`
+
+The key bound to `id` now: the player's choice or the default, like `'ctrl+m'` (`''`: unbound).
+
+- `id`: `string`
+- returns `string`
+
+#### `gear.keys.set(id, binding) -> boolean?, string?`
+
+Rebinds a key from the mod itself (`''` unbinds, nil restores the default). Returns true, or nil and a message for a text that is not a key.
+
+- `id`: `string`
+- `binding`: `string` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+### GearModListing
+
+What `gear.mods` tells about an installed mod.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` |  |
+| `name` | `string` |  |
+| `version` | `string` |  |
+| `author` | `string` |  |
+| `description` | `string` |  |
+| `state` | `'on'\|'off'\|'blocked'\|'pending'\|'error'\|'invalid'` | `blocked`: switched on but a mod it requires is off; `pending`: loads with the next tick; `error`: switched off after 10 errors or its `main.lua` failed. |
+| `enabled` | `boolean` | Whether the player has it switched on. |
+| `loaded` | `boolean` |  |
+| `builtin` | `boolean` | The mod manager itself. |
+| `reason` | `string` | Why it is blocked, failed or invalid. (optional) |
+| `errors` | `integer` |  |
+| `requires` | `string[]` |  |
+| `has_settings` | `boolean` |  |
+| `has_keys` | `boolean` |  |
+| `has_page` | `boolean` |  |
+| `dir` | `string` | The folder under `mods`. |
+
+### GearMods
+
+Reached as `gear.mods`.
+
+The installed mods and the mod manager.
+
+#### `gear.mods.page(fn)`
+
+Adds a page of this mod's own to its screen in the mod manager (a "More" tab after the generated settings): `fn(x, y, w, h)` draws in that rectangle with the mod's own `gear.ui` and returns the height it used. nil removes it.
+
+- `fn`: `fun(x: number, y: number, w: number, h: number): number` (optional)
+
+#### `gear.mods.list() -> GearModListing[]`
+
+Every installed mod, sorted by name.
+
+- returns `GearModListing[]`
+
+#### `gear.mods.get(id) -> GearModListing?`
+
+One installed mod, or nil.
+
+- `id`: `string`
+- returns `GearModListing?`
+
+## Inventories (gear.inv)
+
+The game keeps the hero's backpack, the chest and the shops' stock as grids of cells, "containers" (32 of them). The backpack of the hero with object id n is container n (the local hero in single player: 1), the chest is container 17. An item takes w x h cells; `col` and `row` are its top-left cell, counted from 0. Everything that changes an inventory works in single player only (`gear.world.can_change()`); the calls go through the game's own inventory and object code, so the cells, the items' owners and the object lists stay as when the player moves an item. `export` copies an item to bytes (its type and own data: the random properties), `add` makes it again, so that an item can leave the game and come back unchanged (see the `shared-stash` mod).
+
+### GearContainer
+
+Written `container` in the signatures.
+
+One inventory grid, from `gear.inv.container`.
+
+| Field | Type | |
+|---|---|---|
+| `index` | `integer` | The container's number (0..31). |
+| `columns` | `integer` | Cells across. |
+| `rows` | `integer` | Cells down. |
+
+#### `container:items() -> GearInvItem[]`
+
+The items in the container, in cell order: `gear.world.item` tables plus the cell and size.
+
+- returns `GearInvItem[]`
+
+#### `container:free_spot(w, h) -> integer?, integer?`
+
+Room for a `w` x `h` item: its top-left cell, or nil.
+
+- `w`: `integer`
+- `h`: `integer`
+- returns `col` `integer?`
+- returns `row` `integer?`
+
+#### `container:put(item_id, col, row) -> boolean?, string?`
+
+Puts an item that lies in the world or was taken out of a container at the cell (the cells must be free).
+
+- `item_id`: `integer`
+- `col`: `integer`
+- `row`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `container:take(item_id) -> boolean?, string?`
+
+Takes the item out; the item object stays (put it somewhere or `gear.inv.destroy` it).
+
+- `item_id`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+### GearInvItem
+
+Includes everything of `GearItem`.
+
+An item in a container: a `GearItem` with its place in the grid.
+
+| Field | Type | |
+|---|---|---|
+| `col` | `integer` | Top-left cell (from 0). |
+| `row` | `integer` |  |
+| `w` | `integer` | Width in cells. |
+| `h` | `integer` | Height in cells. |
+
+### GearInv
+
+Reached as `gear.inv`.
+
+Inventories: containers, the items in them, and items copied to bytes and made again.
+
+| Field | Type | |
+|---|---|---|
+| `CHEST` | `integer` | The chest's container number (17). |
+
+#### `gear.inv.container(which) -> GearContainer?`
+
+A container: `'chest'`, `'backpack'` (the local hero's) or its number (0..31). Nil if there is none.
+
+- `which`: `'chest'|'backpack'|integer`
+- returns `GearContainer?`
+
+#### `gear.inv.size(item_id) -> integer?, integer?`
+
+The size of an item in cells, or nil.
+
+- `item_id`: `integer`
+- returns `w` `integer?`
+- returns `h` `integer?`
+
+#### `gear.inv.export(item_id) -> string?, string?`
+
+Copies an item to a binary string: its type and its own data, not where it is. `hex` makes it text for JSON.
+
+- `item_id`: `integer`
+- returns `bytes` `string?`
+- returns `error` `string?`
+
+#### `gear.inv.create(bytes) -> integer?, string?`
+
+Makes a new item from `export`'s bytes, lying at the hero's feet (single player only). Put it into a container or `destroy` it.
+
+- `bytes`: `string`
+- returns `item_id` `integer?`
+- returns `error` `string?`
+
+#### `gear.inv.destroy(item_id) -> boolean?, string?`
+
+Deletes an item that is in no container.
+
+- `item_id`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.inv.add(container, bytes) -> integer?, integer|string?, integer?`
+
+Makes a new item from `export`'s bytes straight into the container (the first spot with room). Nothing changes when it fails.
+
+- `container`: `GearContainer`
+- `bytes`: `string`
+- returns `item_id` `integer?`
+- returns `col` `integer|string?` - The cell, or the error message when `item_id` is nil.
+- returns `row` `integer?`
+
+#### `gear.inv.remove(container, item_id) -> string?, string?`
+
+Takes the item out of the container, destroys it and returns its export. If that fails the item is where it was.
+
+- `container`: `GearContainer`
+- `item_id`: `integer`
+- returns `bytes` `string?`
+- returns `error` `string?`
+
+#### `gear.inv.hex(bytes) -> string`
+
+Bytes as lowercase hex text.
+
+- `bytes`: `string`
+- returns `string`
+
+#### `gear.inv.unhex(text) -> string?`
+
+Hex text back to bytes, or nil if it is not hex.
+
+- `text`: `string`
+- returns `string?`
+
 ## Drawing (gear.ui)
 
 ### GearColor
@@ -1227,6 +1615,18 @@ A UI image; `w`, `h` default to its own size. Images are filtered linearly.
 - `opts`: `GearImageOpts` (optional)
 - returns `drawn` `boolean`
 
+#### `gear.ui.item_icon(item, x, y, w, h, opts) -> boolean`
+
+What the game's inventory windows show for an item, its own 3D model, drawn by the game's model renderer as large as fits the box (x, y, w, h) and centered in it (the inventory's own size is 32 units a cell). Give an item (a table from `gear.world.item` or a container's `items()`: the live object is drawn, with its own state), or a type id or name: then a temporary item of that type is made at the hero's feet for the frame and destroyed after the layer's drawing (single player only; nothing is drawn in a network game or without a hero; at most 48 different types a frame). Same `layer` and `window` options as the other draws.
+
+- `item`: `GearItem|integer|string` - An item, a type id or a type name.
+- `x`: `number`
+- `y`: `number`
+- `w`: `number`
+- `h`: `number`
+- `opts`: `GearDrawOpts` (optional)
+- returns `drawn` `boolean` - False when it could not be queued (a bad window or layer); whether the model really draws is known to the game's renderer only.
+
 #### `gear.ui.images(filter) -> GearImageInfo[]`
 
 The UI images whose sheet name contains `filter` (any case), all of them without a filter.
@@ -1348,6 +1748,12 @@ True once per press of the key, read while the game's window has the focus. Also
 
 - `name`: `GearKey` - A name or a virtual key code.
 - returns `boolean`
+
+#### `gear.ui.capture_keys(on)`
+
+While `on`, the keyboard does not reach the game: its key and character messages are dropped (with the release of every key whose press was dropped) and its key state queries see nothing held, so hotkeys and typing stay out of the game. The mod's own `key_pressed` and `key_down` still work, the mouse is not affected. For a screen that types or binds keys; it ends when the mod unloads. Not tied to `gear.keys`: declared keys of other mods stay quiet only for the Mods screen.
+
+- `on`: `boolean`
 
 #### `gear.ui.key_down(name) -> boolean`
 

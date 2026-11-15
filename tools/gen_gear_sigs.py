@@ -56,12 +56,37 @@ GEAR = [
     ('cCreature_pickupItem', 0x00558080, 'func'),
     ('cCreature_collectFilter', 0x004EC330, 'func'),
     ('cItem_labelColor', 0x005C13C0, 'func'),
+    # Item icons (gear/itemicon.cpp): what the inventory windows do to draw an item (cInventoryEntry_render 0x5DC430,
+    # per item): load the item's model resources (0x640640, thiscall (item)), take the model state pointer
+    # (0x44FC30) and draw the item's Granny model through the model renderer: its singleton (0x401660, cdecl ()) and
+    # 0x40E9C0 (thiscall (renderer, device, model0, model1, x, y, type, scale, 0, flags, 0, 0), ret 0x2C).
+    ('cItem_loadResources', 0x00640640, 'func'),
+    ('modelRenderer_instance', 0x00401660, 'func'),
+    ('modelRenderer_drawItem', 0x0040E9C0, 'func'),
+    ('renderFlags_instance', 0x00643110, 'func'),
+    ('renderFlags_set', 0x00643430, 'func'),
     # Mod UI input (gear/ui.cpp): cUI_Manager::receiveEvent (vtable slot 0, thiscall (manager, cEvent*) -> bool,
     # ret 4; cEngine_receiveEvent hands it every mouse and key event before the world) and the two mouse button
     # event classes (button at +4, x / y at +8 / +0xC in UI layout coordinates).
     ('cUI_Manager_receiveEvent', 0x00757840, 'func'),
     ('cEventMouseDown_vtable', 0x0089704C, 'data'),
     ('cEventMouseUp_vtable', 0x00899248, 'data'),
+    # Inventories (gear/inventory.cpp): the manager of the 32 containers (backpacks, the chest ...) and the calls
+    # the engine's own inventory code uses to find room for an item, put it in, take it out, and to create and
+    # destroy items.
+    ('g_pInventory', 0x00AD4448, 'data'),
+    ('cInventory_findSpace', 0x005DABA0, 'func'),
+    ('cInventory_put', 0x005D9F00, 'func'),
+    ('cInventory_remove', 0x005DA630, 'func'),
+    ('cItemType_size', 0x00428D60, 'func'),
+    ('cObjectManager_destroy', 0x005FBDB0, 'func'),
+    ('cItem_dataHash', 0x0042BF20, 'func'),
+    ('cItem_entriesInsert', 0x005C9230, 'func'),
+    # Saving (gear/save.cpp). The savegame window's event (code 0xF, sub 2; its class is made by the factory 0x8080A0
+    # as `*p = &vtable`, 0x24 bytes) goes to cEngine::receiveEvent (0x618090, vtable slot 0 of the engine): it records
+    # the slot and sets bit 0x40 of the engine's flags (+0x54), which the render thread loop turns into the write of
+    # Save\GAMEnn.PAK. The engine is called through its vtable: SacredBild hooks the function's first bytes.
+    ('cSaveEvent_vtable', 0x00890B38, 'data'),
     # The ability tables (gear/tables.cpp): T1 (ids from 1000, 0x78-byte records) and T2 (ids from 1, 0x94-byte
     # records) are static arrays that 0x4D1AF0 / 0x4D2310 scan by id; the lookups load the first record and compare
     # against the end (0x952A38 and 0x955344 are the end of T1 and of T2). The text lookup (the text table's instance

@@ -168,18 +168,6 @@ local GearText = {}
 ---@return string?
 function GearText.get(id) end
 
--- ## Settings (gear.settings)
-
--- path gear.settings
---- The game's `Settings.cfg` (`KEY : value` lines).
----@class GearSettings
-local GearSettings = {}
-
---- The value of `key` as text (nil if the file has no such key). Read each time, so it is what the file says now.
----@param key string
----@return string?
-function GearSettings.get(key) end
-
 -- ## Files (gear.files)
 
 -- path gear.files
@@ -236,17 +224,6 @@ function GearHooks.sites() end
 ---@field calls integer
 ---@field answered integer
 ---@field busy integer
-
--- ## The running game (gear.game)
-
--- path gear.game
---- Facts about the running game.
----@class GearGame
-local GearGame = {}
-
---- The difficulty level of the running game: 0 (bronze) to 4 (niobium); nil if the game is not running.
----@return integer?
-function GearGame.difficulty() end
 
 -- ## JSON (gear.json)
 

@@ -10,8 +10,12 @@
 ---| 'frame' # Every in-game frame.
 ---| 'draw' # After the frame handlers, to draw the UI.
 ---| 'idle' # Automation only: every 50 ms in the menus.
+---| 'unload' # The player switched this mod off in the mod manager: clean up (handlers, timers and the rest are dropped after it).
+---| 'settings.changed' # A setting of this mod changed: `(id, value)`.
 ---| 'session.start' # A game with a hero runs.
 ---| 'session.stop' # That hero is gone.
+---| 'game.saved' # A save `gear.game.save` asked for is written.
+---| 'game.save_failed' # It could not be written.
 ---| 'combat.constant' # The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it.
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
 ---| 'level.factor' # The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers).
@@ -42,13 +46,16 @@
 ---@field config table<string, any> This mod's settings: the manifest's `config`, overridden by `config.lua`.
 ---@field data GearData The engine's data tables (read only, except the abilities).
 ---@field text GearText The game's texts by id.
----@field settings GearSettings The game's Settings.cfg.
 ---@field files GearFiles The mod's file overlay.
----@field game GearGame Facts about the running game.
 ---@field hooks GearHooks The engine hooks that ask mods for values.
 ---@field json GearJson JSON encoding and decoding.
 ---@field pipe GearPipeModule Named pipe clients.
 ---@field world GearWorld The world: hero, creatures, items, spawning, pickup rules.
+---@field inv GearInv Inventories: containers, items, export and import of items.
+---@field game GearGame The game itself: difficulty and saving.
+---@field settings GearSettings This mod's settings (declared in `mod.lua`, changed by the player in the mod manager).
+---@field keys GearKeys This mod's declared key binds.
+---@field mods GearMods The installed mods; a page of this mod's own in the mod manager.
 ---@field ui GearUi Drawing on top of the game, widgets, panels and the layout.
 ---@field auto? GearAuto Automation (only with `-gear-auto` and `automation = true` in `mod.lua`).
 gear = {}
@@ -59,8 +66,12 @@ gear = {}
 ---@overload fun(event: 'frame', fn: fun(dt: number)): GearHandler
 ---@overload fun(event: 'draw', fn: fun(state: GearUiState)): GearHandler
 ---@overload fun(event: 'idle', fn: fun()): GearHandler
+---@overload fun(event: 'unload', fn: fun()): GearHandler
+---@overload fun(event: 'settings.changed', fn: fun(id: string, value: boolean|number|string)): GearHandler
 ---@overload fun(event: 'session.start', fn: fun(hero: Creature)): GearHandler
 ---@overload fun(event: 'session.stop', fn: fun()): GearHandler
+---@overload fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler
+---@overload fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler
 ---@overload fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler
 ---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler
 ---@overload fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler
@@ -74,7 +85,7 @@ function gear.on(event, fn) end
 function gear.off(handle) end
 
 --- Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the
---- prefixes `session.`, `gear.` and `pipe.` are reserved. Handlers may emit events too, up to 8 levels deep.
+--- prefixes `session.`, `gear.`, `pipe.`, `game.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep.
 ---@param event string
 ---@param ... any
 function gear.emit(event, ...) end
@@ -138,11 +149,15 @@ function gear.save(name, text) end
 --- `---@type GearModManifest` above the `return`.
 ---@class GearModManifest
 ---@field id string Required: letters, digits, `_` and `-`; unique among the installed mods.
----@field name? string Shown in the log (default: the id).
+---@field name? string Shown in the mod manager and the log (default: the id).
+---@field description? string One or two lines for the mod manager.
+---@field author? string Shown in the mod manager.
 ---@field version? string Part of the mod set (default `'0'`).
 ---@field priority? number Lower loads first (default 0); ties load by id.
 ---@field requires? string[] Ids that must load first; the mod is skipped if one is missing.
----@field enabled? boolean `false`: keep the folder, skip the mod.
+---@field enabled? boolean `false`: off until the player switches it on in the mod manager (the default, not a lock).
+---@field settings? GearSettingDef[] Declared settings: the mod manager builds their page; read them with `gear.settings`.
+---@field keys? GearKeyDef[] Declared key binds: the player rebinds them in the mod manager; use them with `gear.keys`.
 ---@field config? table<string, any> Default settings: `gear.config` starts as a copy and `config.lua` overrides them.
 ---@field pipes? string[] Names of the named pipes the mod may open (`gear.pipe.open`).
 ---@field automation? boolean `true`: the mod gets `gear.auto` when the game runs with `-gear-auto`.

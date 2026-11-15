@@ -2,10 +2,14 @@
 #include "automation.h"
 #include "gear.h"
 #include "instance.h"
+#include "inventory.h"
+#include "itemicon.h"
+#include "keyblock.h"
 #include "log.h"
 #include "pickup.h"
 #include "overlay.h"
 #include "pipe.h"
+#include "save.h"
 #include "sitehook.h"
 #include "tables.h"
 #include "game/gear_addr.h"
@@ -612,6 +616,98 @@ namespace
         return 1;
     }
 
+    // Saving (gear/save.cpp).
+    // native.save_blocked() -> nil | why not
+    int nativeSaveBlocked(lua_State* L)
+    {
+        const char* why = Save::blocked();
+        if (why)
+        {
+            lua_pushstring(L, why);
+        }
+        else
+        {
+            lua_pushnil(L);
+        }
+        return 1;
+    }
+
+    // native.save_request(slot, name, thumbnail) -> true | nil, message
+    int nativeSaveRequest(lua_State* L)
+    {
+        const lua_Number slot = luaL_checknumber(L, 1);
+        size_t length = 0;
+        const char* name = luaL_optlstring(L, 2, "", &length);
+        const bool thumbnail = lua_toboolean(L, 3) != 0;
+        if (slot < 0 || slot > Save::kMaxSlot || slot != static_cast<uint32_t>(slot))
+        {
+            lua_pushnil(L);
+            lua_pushstring(L, "the slot is a whole number 0..509");
+            return 2;
+        }
+        const char* error = "";
+        const bool ok = Save::request(static_cast<uint32_t>(slot), std::string(name, length), thumbnail, error);
+        if (ok)
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        lua_pushnil(L);
+        lua_pushstring(L, error);
+        return 2;
+    }
+
+    int nativeSavePending(lua_State* L)
+    {
+        lua_pushboolean(L, Save::pending());
+        return 1;
+    }
+
+    void pushFileInfo(lua_State* L, const Save::FileInfo& info)
+    {
+        lua_createtable(L, 0, 3);
+        lua_pushboolean(L, info.exists);
+        lua_setfield(L, -2, "exists");
+        lua_pushnumber(L, static_cast<lua_Number>(info.size));
+        lua_setfield(L, -2, "size");
+        lua_pushnumber(L, static_cast<lua_Number>(info.mtime));
+        lua_setfield(L, -2, "mtime");
+    }
+
+    // native.save_info(slot) -> {exists, size, mtime}
+    int nativeSaveInfo(lua_State* L)
+    {
+        const lua_Number slot = luaL_checknumber(L, 1);
+        if (slot < 0 || slot > Save::kMaxSlot || slot != static_cast<uint32_t>(slot))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        pushFileInfo(L, Save::fileInfo(static_cast<uint32_t>(slot)));
+        return 1;
+    }
+
+    // native.save_poll() -> nil | {slot, ok, message, info}
+    int nativeSavePoll(lua_State* L)
+    {
+        Save::Result r;
+        if (!Save::takeResult(r))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 4);
+        lua_pushnumber(L, r.slot);
+        lua_setfield(L, -2, "slot");
+        lua_pushboolean(L, r.ok);
+        lua_setfield(L, -2, "ok");
+        lua_pushlstring(L, r.message.data(), r.message.size());
+        lua_setfield(L, -2, "message");
+        pushFileInfo(L, r.info);
+        lua_setfield(L, -2, "info");
+        return 1;
+    }
+
     // native.object(id) -> {id, type, flags, x, y, layer, creature, hp, max_hp, gold, exp, level} | nil
     int nativeObject(lua_State* L)
     {
@@ -900,6 +996,20 @@ namespace
         return 1;
     }
 
+    // native.ui_item_icon(layer, slot, x, y, w, h, item id (0: none), type) -> bool
+    int nativeUiItemIcon(lua_State* L)
+    {
+        Ui::Command c;
+        c.kind = Ui::Kind::ItemIcon;
+        const lua_Number item = luaL_checknumber(L, 7), type = luaL_checknumber(L, 8);
+        bool ok = uiCommon(L, c, 1) && uiBox(L, c, 3) && item >= 0 && item < 4294967296.0 && type >= 0 && type < 65536 &&
+                  (item > 0 || type > 0);
+        c.region = ok ? static_cast<uint32_t>(item) : 0;
+        c.image = ok ? static_cast<uint32_t>(type) : 0;
+        lua_pushboolean(L, ok && Ui::add(std::move(c)));
+        return 1;
+    }
+
     int nativeUiCommit(lua_State*)
     {
         Ui::commit();
@@ -1103,6 +1213,64 @@ namespace
         return 1;
     }
 
+    // mods\gear_mods.json: the mod manager's file (enabled flags, settings, key binds of all mods). An automation run
+    // with an instance name keeps its own copy in GearAutomation\<instance>, so tests never touch the player's file.
+    std::wstring statePath()
+    {
+        if (Automation::options().enabled)
+        {
+            const std::wstring dir = Instance::directory(g_modsDir.substr(0, g_modsDir.size() - 5));
+            if (!dir.empty())
+            {
+                return dir + L"\\gear_mods.json";
+            }
+        }
+        return g_modsDir + L"\\gear_mods.json";
+    }
+
+    // native.state_read() -> text | nil
+    int nativeStateRead(lua_State* L)
+    {
+        std::string text;
+        if (!readFile(statePath(), text))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushlstring(L, text.data(), text.size());
+        return 1;
+    }
+
+    // native.state_write(text, backup) -> bool. Atomic (a temporary file moved over the old one); `backup` true
+    // writes gear_mods.json.bak instead (the copy of a file the kernel could not read).
+    int nativeStateWrite(lua_State* L)
+    {
+        size_t n = 0;
+        const char* text = luaL_checklstring(L, 1, &n);
+        const bool backup = lua_toboolean(L, 2) != 0;
+        bool ok = false;
+        if (n <= 1024 * 1024)
+        {
+            const std::wstring path = statePath() + (backup ? L".bak" : L"");
+            const std::wstring temp = path + L".tmp";
+            HANDLE f = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            DWORD written = 0;
+            ok = f != INVALID_HANDLE_VALUE && WriteFile(f, text, static_cast<DWORD>(n), &written, nullptr) &&
+                 written == n && FlushFileBuffers(f);
+            if (f != INVALID_HANDLE_VALUE)
+            {
+                CloseHandle(f);
+            }
+            ok = ok && MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+            if (!ok)
+            {
+                DeleteFileW(temp.c_str());
+            }
+        }
+        lua_pushboolean(L, ok);
+        return 1;
+    }
+
     // native.ui_region(layer, x, y, w, h, handle) -> bool
     int nativeUiRegion(lua_State* L)
     {
@@ -1140,6 +1308,14 @@ namespace
             lua_rawseti(L, -2, static_cast<int>(i + 1));
         }
         return 1;
+    }
+
+    // native.ui_block_keys(blocked): the keyboard stays from the game while true (called every tick by the kernel).
+    int nativeUiBlockKeys(lua_State* L)
+    {
+        KeyBlock::set(lua_toboolean(L, 1) != 0);
+        KeyBlock::tick();
+        return 0;
     }
 
     // native.key_down(vk) -> bool
@@ -1185,12 +1361,21 @@ namespace
             }
             else
             {
-                HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                // Atomic: written to <name>.tmp, flushed, then moved over the file, so a crash leaves the old file or
+                // the new one, never half of one.
+                const std::wstring temp = path + L".tmp";
+                HANDLE f = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
                 DWORD written = 0;
-                const bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, text, static_cast<DWORD>(n), &written, nullptr) && written == n;
+                bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, text, static_cast<DWORD>(n), &written, nullptr) &&
+                          written == n && FlushFileBuffers(f);
                 if (f != INVALID_HANDLE_VALUE)
                 {
                     CloseHandle(f);
+                }
+                ok = ok && MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+                if (!ok)
+                {
+                    DeleteFileW(temp.c_str());
                 }
                 if (!ok)
                 {
@@ -1268,6 +1453,151 @@ namespace
         lua_pushnumber(L, cls);
         lua_pushnumber(L, World::classBit(cls));
         return 2;
+    }
+
+    // native.inv_container(index) -> {columns, rows} | nil
+    int nativeInvContainer(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 1);
+        Inventory::Container c;
+        if (!(index >= 0 && index < Inventory::kContainers) || !Inventory::container(static_cast<uint32_t>(index), c))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 2);
+        lua_pushnumber(L, c.columns);
+        lua_setfield(L, -2, "columns");
+        lua_pushnumber(L, c.rows);
+        lua_setfield(L, -2, "rows");
+        return 1;
+    }
+
+    // native.inv_items(index) -> { {id, x, y, w, h}, ... }
+    int nativeInvItems(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 1);
+        std::vector<Inventory::Entry> list;
+        if (index >= 0 && index < Inventory::kContainers)
+        {
+            list = Inventory::items(static_cast<uint32_t>(index));
+        }
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        for (size_t i = 0; i < list.size(); ++i)
+        {
+            lua_createtable(L, 0, 5);
+            auto num = [L](const char* k, lua_Number v) { lua_pushnumber(L, v); lua_setfield(L, -2, k); };
+            num("id", list[i].id);
+            num("x", list[i].x);
+            num("y", list[i].y);
+            num("w", list[i].width);
+            num("h", list[i].height);
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.inv_size(item id) -> w, h | nil
+    int nativeInvSize(lua_State* L)
+    {
+        uint32_t w = 0, h = 0;
+        const uint32_t id = checkId(L, 1);
+        if (!id || !Inventory::itemSize(id, w, h))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, w);
+        lua_pushnumber(L, h);
+        return 2;
+    }
+
+    // native.inv_find_space(index, w, h) -> x, y | nil
+    int nativeInvFindSpace(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 1), w = luaL_checknumber(L, 2), h = luaL_checknumber(L, 3);
+        uint32_t x = 0, y = 0;
+        if (!(index >= 0 && index < Inventory::kContainers && w >= 1 && w <= 16 && h >= 1 && h <= 16) ||
+            !Inventory::findSpace(static_cast<uint32_t>(index), static_cast<uint32_t>(w), static_cast<uint32_t>(h), x, y))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, x);
+        lua_pushnumber(L, y);
+        return 2;
+    }
+
+    // native.inv_put(index, item id, x, y) -> true | nil, message
+    int nativeInvPut(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 1), x = luaL_checknumber(L, 3), y = luaL_checknumber(L, 4);
+        const uint32_t id = checkId(L, 2);
+        const char* error = "bad arguments";
+        if (id && index >= 0 && index < Inventory::kContainers && x >= 0 && x < 256 && y >= 0 && y < 256 &&
+            Inventory::put(static_cast<uint32_t>(index), id, static_cast<uint32_t>(x), static_cast<uint32_t>(y), error))
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.inv_remove(index, item id) -> true | nil, message
+    int nativeInvRemove(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 1);
+        const uint32_t id = checkId(L, 2);
+        const char* error = "bad arguments";
+        if (id && index >= 0 && index < Inventory::kContainers &&
+            Inventory::remove(static_cast<uint32_t>(index), id, error))
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.inv_destroy(item id) -> true | nil, message
+    int nativeInvDestroy(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const char* error = "bad arguments";
+        if (id && Inventory::destroy(id, error))
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.inv_export(item id) -> bytes | nil, message
+    int nativeInvExport(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const char* error = "bad arguments";
+        std::string bytes;
+        if (id && Inventory::exportItem(id, bytes, error))
+        {
+            lua_pushlstring(L, bytes.data(), bytes.size());
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.inv_import(bytes) -> item id | nil, message
+    int nativeInvImport(lua_State* L)
+    {
+        size_t n = 0;
+        const char* data = luaL_checklstring(L, 1, &n);
+        const char* error = "bad arguments";
+        const uint32_t id = n <= 65536 ? Inventory::importItem(std::string(data, n), error) : 0;
+        if (id)
+        {
+            lua_pushnumber(L, id);
+            return 1;
+        }
+        return pushFailure(L, error);
     }
 
     // native.pickup_rules({blocked ids}, {dimmed ids}, dim_alpha)
@@ -1511,13 +1841,35 @@ namespace
     }
 
     // The kernel chunk, embedded with gear.rc.
-    bool kernelSource(const char*& text, size_t& size)
+    bool resourceSource(int id, const char*& text, size_t& size)
     {
-        HRSRC res = FindResourceW(g_module, MAKEINTRESOURCEW(IDR_GEAR_KERNEL), MAKEINTRESOURCEW(10));
+        HRSRC res = FindResourceW(g_module, MAKEINTRESOURCEW(id), MAKEINTRESOURCEW(10));
         HGLOBAL data = res ? LoadResource(g_module, res) : nullptr;
         text = data ? static_cast<const char*>(LockResource(data)) : nullptr;
         size = res ? SizeofResource(g_module, res) : 0;
         return text && size;
+    }
+
+    bool kernelSource(const char*& text, size_t& size)
+    {
+        return resourceSource(IDR_GEAR_KERNEL, text, size);
+    }
+
+    // native.builtin(name) -> the Lua source of a part of Sacred Gear that is shipped inside the DLL ("modmanager"), or nil.
+    int nativeBuiltin(lua_State* L)
+    {
+        const char* name = luaL_checkstring(L, 1);
+        const char* text = nullptr;
+        size_t size = 0;
+        if (std::strcmp(name, "modmanager") == 0 && resourceSource(IDR_GEAR_MODMANAGER, text, size))
+        {
+            lua_pushlstring(L, text, size);
+        }
+        else
+        {
+            lua_pushnil(L);
+        }
+        return 1;
     }
 
     // Calls kernel[name](args on the stack) under the time budget; logs an error. Pops the arguments.
@@ -1600,6 +1952,11 @@ namespace
             {"engine_level_factor_result", nativeEngineLevelFactorResult},
             {"hero", nativeHero},
             {"world_changes", nativeWorldChanges},
+            {"save_blocked", nativeSaveBlocked},
+            {"save_request", nativeSaveRequest},
+            {"save_pending", nativeSavePending},
+            {"save_info", nativeSaveInfo},
+            {"save_poll", nativeSavePoll},
             {"object", nativeObject},
             {"creatures_near", nativeCreaturesNear},
             {"spawn", nativeSpawn},
@@ -1614,6 +1971,7 @@ namespace
             {"ui_rect", nativeUiRect},
             {"ui_text", nativeUiText},
             {"ui_image", nativeUiImage},
+            {"ui_item_icon", nativeUiItemIcon},
             {"ui_commit", nativeUiCommit},
             {"ui_image_count", nativeUiImageCount},
             {"ui_image_info", nativeUiImageInfo},
@@ -1627,13 +1985,26 @@ namespace
             {"ui_can_move_windows", nativeUiCanMoveWindows},
             {"layout_read", nativeLayoutRead},
             {"layout_write", nativeLayoutWrite},
+            {"state_read", nativeStateRead},
+            {"state_write", nativeStateWrite},
+            {"builtin", nativeBuiltin},
             {"ui_events", nativeUiEvents},
             {"key_down", nativeKeyDown},
+            {"ui_block_keys", nativeUiBlockKeys},
             {"write_file", nativeWriteFile},
             {"items_near", nativeItemsNear},
             {"hero_class", nativeHeroClass},
             {"pickup_rules", nativePickupRules},
             {"pickup_refused", nativePickupRefused},
+            {"inv_container", nativeInvContainer},
+            {"inv_items", nativeInvItems},
+            {"inv_size", nativeInvSize},
+            {"inv_find_space", nativeInvFindSpace},
+            {"inv_put", nativeInvPut},
+            {"inv_remove", nativeInvRemove},
+            {"inv_destroy", nativeInvDestroy},
+            {"inv_export", nativeInvExport},
+            {"inv_import", nativeInvImport},
             {nullptr, nullptr},
         };
         lua_newtable(L);

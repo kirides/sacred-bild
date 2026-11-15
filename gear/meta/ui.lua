@@ -123,6 +123,21 @@ function GearUi.text(text, x, y, opts) end
 ---@return boolean drawn
 function GearUi.image(id, x, y, w, h, opts) end
 
+--- What the game's inventory windows show for an item, its own 3D model, drawn by the game's model renderer as large as
+--- fits the box (x, y, w, h) and centered in it (the inventory's own size is 32 units a cell). Give an item (a table from
+--- `gear.world.item` or a container's `items()`: the live object is drawn, with its own state), or a type id or name:
+--- then a temporary item of that type is made at the hero's feet for the frame and destroyed after the layer's drawing
+--- (single player only; nothing is drawn in a network game or without a hero; at most 48 different types a frame).
+--- Same `layer` and `window` options as the other draws.
+---@param item GearItem|integer|string An item, a type id or a type name.
+---@param x number
+---@param y number
+---@param w number
+---@param h number
+---@param opts? GearDrawOpts
+---@return boolean drawn False when it could not be queued (a bad window or layer); whether the model really draws is known to the game's renderer only.
+function GearUi.item_icon(item, x, y, w, h, opts) end
+
 --- The UI images whose sheet name contains `filter` (any case), all of them without a filter.
 ---@param filter? string
 ---@return GearImageInfo[]
@@ -212,6 +227,14 @@ function GearUi.mouse() end
 ---@param name GearKey A name or a virtual key code.
 ---@return boolean
 function GearUi.key_pressed(name) end
+
+--- While `on`, the keyboard does not reach the game: its key and character messages are dropped (with the release of
+--- every key whose press was dropped) and its key state queries see nothing held, so hotkeys and typing stay out of the
+--- game. The mod's own `key_pressed` and `key_down` still work, the mouse is not affected. For a screen that types or
+--- binds keys; it ends when the mod unloads. Not tied to `gear.keys`: declared keys of other mods stay quiet only for the
+--- Mods screen.
+---@param on boolean
+function GearUi.capture_keys(on) end
 
 --- Whether the key is held.
 ---@param name GearKey
