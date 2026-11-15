@@ -51,6 +51,10 @@ namespace SiteHook
 
     // effect.add: the engine adds a value to a creature's effect entry (event `effect.add`).
     void setEffectActive(bool active);
+
+    // bonus.constant: the numbers pushed as arguments of the item bonus rolls (event `bonus.constant`: index, vanilla value, address).
+    void setBonusActive(bool active);
+    Stats bonusStats();
     Stats effectStats();
     Stats damageStats();
 
@@ -71,6 +75,9 @@ namespace SiteHook
         // effect.add stub on a function built in memory (the sum 3.5 for entry 0): the exit taken (1 engine path, 2 next entry, 3 leave),
         // the two entries' values times 100 and the creature's effect counter (4 before).
         int effectExit = 0, effectEntry0 = 0, effectEntry1 = 0, effectCounter = 0;
+        // bonus.constant stubs on functions built in memory: `push 5` (vanilla 5) and `push 3.5f`
+        int bonusInt = 0;
+        float bonusFloat = 0;
     };
     bool selfTestStart();
     bool selfTestResult(SelfTest& out);

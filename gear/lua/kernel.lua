@@ -1790,7 +1790,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true, ['effect.add'] = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'settings.', 'level.', 'combat.', 'creature.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -2037,10 +2037,10 @@ local function make_auto()
     -- the handlers of `combat.constant` may answer for `selftest.fmul` / `selftest.fld`.
     function auto.site_hook_selftest_start() return native.site_selftest_start() end
     function auto.site_hook_selftest_result()
-        local fmul, fld, regs, store, add, edx, kept, damage, exit_, e0, e1, counter = native.site_selftest_result()
+        local fmul, fld, regs, store, add, edx, kept, damage, exit_, e0, e1, counter, bonus_int, bonus_float = native.site_selftest_result()
         if fmul == nil then return nil end
         return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept, damage = damage,
-                effect_exit = exit_, effect_entry0 = e0, effect_entry1 = e1, effect_counter = counter}
+                effect_exit = exit_, effect_entry0 = e0, effect_entry1 = e1, effect_counter = counter, bonus_int = bonus_int, bonus_float = bonus_float}
     end
     function auto.quit(code)
         native.auto_release()
@@ -2647,7 +2647,7 @@ local function make_env(mod)
         -- Counters of the engine hooks that ask the mods for a value (gear/sitehook.cpp).
         hooks = {
             stats = function(name)
-                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage' or name == 'effect.add', "the hook must be 'level.factor', 'combat.constant', 'creature.ability', 'damage' or 'effect.add'")
+                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage' or name == 'effect.add' or name == 'bonus.constant', "the hook must be 'level.factor', 'combat.constant', 'creature.ability', 'damage', 'effect.add' or 'bonus.constant'")
                 local calls, answered, busy = native.site_hooks(name)
                 return {calls = calls, answered = answered, busy = busy}
             end,
@@ -2741,6 +2741,7 @@ local function make_env(mod)
         if event == 'creature.ability' then native.creature_ability_active(true) end
         if event == 'damage' then native.damage_active(true) end
         if event == 'effect.add' then native.effect_active(true) end
+        if event == 'bonus.constant' then native.bonus_active(true) end
         return h
     end
     function gear.off(h)
@@ -2754,6 +2755,7 @@ local function make_env(mod)
         if h.event == 'creature.ability' and #list == 0 then native.creature_ability_active(false) end
         if h.event == 'damage' and #list == 0 then native.damage_active(false) end
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
+        if h.event == 'bonus.constant' and #list == 0 then native.bonus_active(false) end
     end
     env.gear = gear
     return env
@@ -3265,6 +3267,22 @@ function kernel.creature_ability(type_id, vanilla, index, address)
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, 'creature.ability', h.fn, type_id, vanilla, index, address)
             if ok and type(result) == 'number' then return math.floor(result) end
+        end
+    end
+    return nil
+end
+
+-- `bonus.constant`: a number the item bonus code (`FUN_00571710`) pushes as the argument of a random roll or a text lookup, `index` the
+-- place among the sites, `vanilla` the engine's own value, `address` where it is. A handler returns the number to use (an integer, or for the
+-- amplitude sites a float) or nil.
+function kernel.bonus_constant(index, vanilla, address)
+    local list = handlers['bonus.constant']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'bonus.constant', h.fn, index, vanilla, address)
+            if ok and type(result) == 'number' then return result end
         end
     end
     return nil

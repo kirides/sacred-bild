@@ -101,6 +101,24 @@ EFFECT_SITES = [
 EFFECT_AI_CALLERS = (0x004DA04B, 0x004DA23C)
 
 
+# Bonus sites (ENG 00571710, the function that rolls and applies item bonuses): `push imm` of the arguments of its random rolls (the upper limit
+# of a `rand(n)` or of a random float) and of a text id. Gear answers them with the event `bonus.constant` (index, vanilla value, address): kind
+# 'int8' is `push imm8` (2 bytes), 'int32' `push imm32` (5), 'float' `push imm32` that holds a float (5).
+BONUS_FUNCTION = ('bonusFn', 0x00571710)
+BONUS_SITES = [
+    ('int8', 0x00578BF0, 5),
+    ('int8', 0x00578C7A, 0xF),
+    ('int32', 0x00578C87, 0x482),
+    ('int8', 0x00578CC4, 0xF),
+    ('int8', 0x00578D07, 5),
+    ('float', 0x00578D31, 0x3E19999A),
+    ('float', 0x00578D41, 0x3E19999A),
+    ('float', 0x00578D57, 0x3E19999A),
+    ('float', 0x00578D6D, 0x3E19999A),
+    ('float', 0x00578D96, 0x3E19999A),
+]
+
+
 def functions():
     seen = {}
     for _, name, va, _, _, _ in SITES:
@@ -109,4 +127,5 @@ def functions():
         seen[name] = va
     seen[ABILITY_FUNCTION[0]] = ABILITY_FUNCTION[1]
     seen[EFFECT_FUNCTION[0]] = EFFECT_FUNCTION[1]
+    seen[BONUS_FUNCTION[0]] = BONUS_FUNCTION[1]
     return seen

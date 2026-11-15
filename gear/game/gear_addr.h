@@ -146,6 +146,8 @@ namespace Gear::Addr
     inline uintptr_t abilityAiFn{};
     // The effect-entry function (ENG 00562470): add a value to a creature's effect entries, clamp to their maximum.
     inline uintptr_t effectAddFn{};
+    // The item bonus roller (ENG 00571710).
+    inline uintptr_t bonusFn{};
     inline uintptr_t siteFn5038F0{};
     inline uintptr_t siteFn506770{};
     inline uintptr_t siteFn50AC00{};

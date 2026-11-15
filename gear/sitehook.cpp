@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <thread>
 #include <string>
@@ -45,6 +46,14 @@ namespace
         int index;
         const uintptr_t* function;
         uint32_t offset;
+    };
+    struct PushSiteSpec
+    {
+        int index;
+        const uintptr_t* function;
+        uint32_t offset;
+        uint8_t kind;               // 0 push imm8, 1 push imm32 (int), 2 push imm32 (float)
+        uint32_t vanilla;           // the immediate the site is expected to push (its bits)
     };
 #include "game/gear_sites.inc"
 
@@ -616,6 +625,98 @@ namespace
         return base;
     }
 
+    // --- bonus.constant sites -------------------------------------------------------------------------------------------
+
+    PushSiteSpec g_bonusTestSpecs[2] = {};      // the self test's two sites (an int8 and a float push) after the generated ones
+    std::atomic<bool> g_bonusActive{false};
+    std::atomic<unsigned> g_bonusCalls{0}, g_bonusAnswered{0}, g_bonusBusy{0};
+    std::atomic<unsigned> g_bonusSiteCalls[std::size(kBonusSites)];
+
+    // The value the pushed argument takes: the bits of an int or a float (the stub pushes them).
+    extern "C" uint32_t __cdecl bonusHandler(int site, uint32_t vanillaBits)
+    {
+        g_bonusCalls.fetch_add(1, std::memory_order_relaxed);
+        if (site >= 0 && site < static_cast<int>(std::size(kBonusSites)))
+        {
+            g_bonusSiteCalls[site].fetch_add(1, std::memory_order_relaxed);
+        }
+        if (!g_bonusActive.load(std::memory_order_relaxed) || site < 0 || site >= static_cast<int>(std::size(kBonusSites) + 2))
+        {
+            return vanillaBits;
+        }
+        const bool test = site >= static_cast<int>(std::size(kBonusSites));
+        const PushSiteSpec& spec = test ? g_bonusTestSpecs[site - std::size(kBonusSites)] : kBonusSites[site];
+        double vanilla;
+        if (spec.kind == 2)
+        {
+            float f;
+            std::memcpy(&f, &vanillaBits, 4);
+            vanilla = f;
+        }
+        else
+        {
+            vanilla = static_cast<int32_t>(vanillaBits);
+        }
+        double result = 0;
+        switch (LuaHost::bonusConstant(site, vanilla, test ? 0 : static_cast<int>(*spec.function + spec.offset), result))
+        {
+        case LuaHost::Answer::Value:
+            g_bonusAnswered.fetch_add(1, std::memory_order_relaxed);
+            if (spec.kind == 2)
+            {
+                const float f = static_cast<float>(result);
+                uint32_t bits;
+                std::memcpy(&bits, &f, 4);
+                return bits;
+            }
+            return static_cast<uint32_t>(static_cast<int32_t>(std::lround(result)));
+        case LuaHost::Answer::Busy:
+            g_bonusBusy.fetch_add(1, std::memory_order_relaxed);
+            break;
+        default:
+            break;
+        }
+        return vanillaBits;
+    }
+
+    // The stub of a push site: registers and flags kept, the handler gives the bits that are pushed instead of the immediate.
+    uintptr_t buildBonusStub(uintptr_t site, int index, uint32_t vanillaBits, size_t length, uintptr_t callTarget)
+    {
+        std::vector<uint8_t> code;
+        void* memory = VirtualAlloc(nullptr, 96, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!memory)
+        {
+            return 0;
+        }
+        const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
+        const uintptr_t temp = base + 80;
+        emit(code, {0x9C, 0x50, 0x51, 0x52});                       // pushfd; push eax; push ecx; push edx
+        emit(code, {0x68});                                         // push vanilla bits
+        emit32(code, vanillaBits);
+        emit(code, {0x68});                                         // push site index
+        emit32(code, static_cast<uint32_t>(index));
+        emit(code, {0xB8});                                         // mov eax, handler
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&bonusHandler)));
+        emit(code, {0xFF, 0xD0});                                   // call eax
+        emit(code, {0x83, 0xC4, 0x08});                             // add esp, 8
+        emit(code, {0xA3});                                         // mov [temp], eax
+        emit32(code, static_cast<uint32_t>(temp));
+        emit(code, {0x5A, 0x59, 0x58, 0x9D});                       // pop edx; pop ecx; pop eax; popfd
+        emit(code, {0xFF, 0x35});                                   // push dword [temp]
+        emit32(code, static_cast<uint32_t>(temp));
+        if (callTarget)
+        {
+            // the displaced `call rel32` that follows a push imm8
+            emit(code, {0xE8});
+            emit32(code, static_cast<uint32_t>(callTarget - (base + code.size() + 4)));
+        }
+        emit(code, {0xE9});                                         // jmp after the displaced instructions
+        emit32(code, static_cast<uint32_t>((site + length) - (base + code.size() + 4)));
+        std::memcpy(memory, code.data(), code.size());
+        FlushInstructionCache(GetCurrentProcess(), memory, code.size());
+        return base;
+    }
+
     // The stub for one site (see the header). Returns its address, 0 if no memory could be had.
     uintptr_t buildStub(uintptr_t site, const SiteSpec& spec, int index)
     {
@@ -877,10 +978,59 @@ size_t SiteHook::install()
             ++effects;
         }
     }
-    LOG("Site hooks: {} of {} level sites, {} of {} constant sites, {} of {} creature.ability sites, {} of {} damage sites, {} of {} effect.add sites "
-        "installed", installed, std::size(kSites), constants, std::size(kConstSites), abilities, std::size(kAbilitySites), damages,
-        std::size(kDamageSites), effects, std::size(kEffectSites));
-    return installed + constants + abilities + damages + effects;
+    size_t bonuses = 0;
+    for (const PushSiteSpec& spec : kBonusSites)
+    {
+        if (!*spec.function)
+        {
+            continue;
+        }
+        const uintptr_t address = *spec.function + spec.offset;
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(address);
+        // a push imm8 is two bytes: the `call rel32` after it is displaced with it (7 bytes), the stub runs both
+        const size_t length = spec.kind == 0 ? 7 : 5;
+        uint32_t current = 0;
+        bool ok = false;
+        if (spec.kind == 0)
+        {
+            ok = b[0] == 0x6A && b[2] == 0xE8;
+            current = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int8_t>(b[1])));
+        }
+        else
+        {
+            ok = b[0] == 0x68;
+            std::memcpy(&current, b + 1, 4);
+        }
+        if (!ok || current != spec.vanilla)
+        {
+            LOG("Site hook bonus.constant[{}] at {:08x}: the code is not the expected push: not installed", spec.index, address);
+            continue;
+        }
+        uintptr_t callTarget = 0;
+        if (spec.kind == 0)
+        {
+            int32_t rel = 0;
+            std::memcpy(&rel, b + 3, 4);
+            callTarget = address + 7 + rel;
+        }
+        const uintptr_t stub = buildBonusStub(address, spec.index, current, length, callTarget);
+        if (!stub)
+        {
+            continue;
+        }
+        std::vector<uint8_t> bytes(length, 0x90);
+        bytes[0] = 0xE9;
+        const uint32_t jump = static_cast<uint32_t>(stub - (address + 5));
+        std::memcpy(&bytes[1], &jump, 4);
+        if (Patch::write(address, bytes.data(), bytes.size()))
+        {
+            ++bonuses;
+        }
+    }
+    LOG("Site hooks: {} of {} level sites, {} of {} constant sites, {} of {} creature.ability sites, {} of {} damage sites, {} of {} effect.add sites, "
+        "{} of {} bonus.constant sites installed", installed, std::size(kSites), constants, std::size(kConstSites), abilities,
+        std::size(kAbilitySites), damages, std::size(kDamageSites), effects, std::size(kEffectSites), bonuses, std::size(kBonusSites));
+    return installed + constants + abilities + damages + effects + bonuses;
 }
 
 void SiteHook::setLevelFactorActive(bool active)
@@ -1165,6 +1315,79 @@ namespace
         r.effectCounter = counter;
     }
 
+    uintptr_t g_bonusBlob[2] = {};
+    size_t g_bonusCallFixup = 0;
+
+    // push imm8 5 / push imm32 3.5f; pop eax; mov [r0], eax; ret  -- the site is the push
+    void runBonusTest(SiteHook::SelfTest& r)
+    {
+        if (!g_bonusBlob[0])
+        {
+            for (int k = 0; k < 2; ++k)
+            {
+                std::vector<uint8_t> code;
+                size_t length;
+                uint32_t vanilla;
+                uintptr_t callTarget = 0;
+                if (k == 0)
+                {
+                    static uint8_t* thunk = nullptr;
+                    if (!thunk)
+                    {
+                        thunk = static_cast<uint8_t*>(VirtualAlloc(nullptr, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+                        thunk[0] = 0xC3;
+                    }
+                    callTarget = reinterpret_cast<uintptr_t>(thunk);
+                    emit(code, {0x6A, 0x05, 0xE8});
+                    const size_t relAt = code.size();
+                    emit32(code, 0);
+                    length = 7;
+                    vanilla = 5;
+                    g_bonusCallFixup = relAt;
+                }
+                else
+                {
+                    const float f = 3.5f;
+                    std::memcpy(&vanilla, &f, 4);
+                    emit(code, {0x68});
+                    emit32(code, vanilla);
+                    length = 5;
+                }
+                if (k == 0)
+                {
+                    const uintptr_t at = 0;     // patched below once the blob has an address
+                    (void)at;
+                }
+                emit(code, {0x58, 0xA3});                           // pop eax; mov [r0], eax
+                emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[0])));
+                emit(code, {0xC3});
+                void* memory = VirtualAlloc(nullptr, code.size() + 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+                std::memcpy(memory, code.data(), code.size());
+                g_bonusBlob[k] = reinterpret_cast<uintptr_t>(memory);
+                if (k == 0)
+                {
+                    const uint32_t rel = static_cast<uint32_t>(callTarget - (g_bonusBlob[k] + g_bonusCallFixup + 4));
+                    std::memcpy(reinterpret_cast<uint8_t*>(memory) + g_bonusCallFixup, &rel, 4);
+                }
+                static uintptr_t holders[2];
+                holders[k] = g_bonusBlob[k];
+                g_bonusTestSpecs[k] = {static_cast<int>(std::size(kBonusSites)) + k, &holders[k], 0, static_cast<uint8_t>(k == 0 ? 0 : 2), vanilla};
+                const uintptr_t stub = buildBonusStub(g_bonusBlob[k], g_bonusTestSpecs[k].index, vanilla, length, callTarget);
+                std::vector<uint8_t> bytes(length, 0x90);
+                bytes[0] = 0xE9;
+                const uint32_t jump = static_cast<uint32_t>(stub - (g_bonusBlob[k] + 5));
+                std::memcpy(&bytes[1], &jump, 4);
+                std::memcpy(reinterpret_cast<void*>(g_bonusBlob[k]), bytes.data(), length);
+            }
+        }
+        runBlob(g_bonusBlob[0]);
+        r.bonusInt = static_cast<int>(g_regs[0]);
+        runBlob(g_bonusBlob[1]);
+        float f;
+        std::memcpy(&f, &g_regs[0], 4);
+        r.bonusFloat = f;
+    }
+
     void selfTestThread()
     {
         Sleep(150);     // Lua is not running now
@@ -1195,6 +1418,7 @@ namespace
         runAbilityTests(r);
         runDamageTest(r);
         runEffectTest(r);
+        runBonusTest(r);
         g_selfResult = r;
         g_selfState = 2;
     }
@@ -1234,6 +1458,11 @@ std::vector<SiteHook::SiteInfo> SiteHook::sites()
     {
         const uintptr_t fn = *kConstSites[i].function;
         out.push_back({kConstSites[i].name, kConstSites[i].index, fn ? fn + kConstSites[i].offset : 0, g_constSiteCalls[i].load()});
+    }
+    for (size_t i = 0; i < std::size(kBonusSites); ++i)
+    {
+        const uintptr_t fn = *kBonusSites[i].function;
+        out.push_back({"bonus.constant", kBonusSites[i].index, fn ? fn + kBonusSites[i].offset : 0, g_bonusSiteCalls[i].load()});
     }
     for (size_t i = 0; i < std::size(kEffectSites); ++i)
     {
@@ -1276,6 +1505,16 @@ void SiteHook::setEffectActive(bool active)
 SiteHook::Stats SiteHook::effectStats()
 {
     return {g_effectCalls.load(), g_effectAnswered.load(), g_effectBusy.load()};
+}
+
+void SiteHook::setBonusActive(bool active)
+{
+    g_bonusActive.store(active);
+}
+
+SiteHook::Stats SiteHook::bonusStats()
+{
+    return {g_bonusCalls.load(), g_bonusAnswered.load(), g_bonusBusy.load()};
 }
 
 SiteHook::Stats SiteHook::abilityStats()

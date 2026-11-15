@@ -19,7 +19,7 @@ local objects = {}
 local pipe_events = {}
 local sent = {}
 local ability_store = {}
-local ability_active, damage_active, effect_active
+local ability_active, damage_active, effect_active, bonus_active
 local level_active, constant_active
 local ui_recording, ui_published = {}, {}
 local pickup_published
@@ -80,6 +80,7 @@ local native = {
     creature_ability_active = function(v) ability_active = v end,
     damage_active = function(v) damage_active = v end,
     effect_active = function(v) effect_active = v end,
+    bonus_active = function(v) bonus_active = v end,
     difficulty = function() return 2 end,
     site_hooks = function() return 7, 5, 1 end,
     site_hook_sites = function() return {{hook = 'level.factor', index = 0, address = 5, calls = 2}} end,
@@ -279,6 +280,7 @@ files.ab = {
         abil.no_setting = gear.settings.get('NOPE')
         -- the level.factor site hook: tiers of 12 levels, and no answer above 40
         gear.on('creature.ability', function(t, vanilla, index) if t == 7 then return vanilla + 1 end end)
+        gear.on('bonus.constant', function(index, vanilla) if index == 2 then return vanilla + 1 end end)
         gear.on('effect.add', function(e) if e.ability == 7 then return {value = e.value, finish = true} end end)
         gear.on('damage', function(hit) if hit.victim_type == 3 then return hit.damage * 2 end end)
         gear.on('level.factor', function(level, site)
@@ -453,6 +455,8 @@ ok(level_active == true, 'registering level.factor tells the host')
 ok(kernel.level_factor(5, 0) == 1 and kernel.level_factor(13, 1) == 2 and kernel.level_factor(30, 2) == 3
    and kernel.level_factor(37, 3) == 4, 'level.factor answers with the handler')
 ok(kernel.level_factor(50, 4) == nil, 'level.factor: no number, no answer')
+ok(bonus_active == true, 'registering bonus.constant tells the host')
+ok(kernel.bonus_constant(2, 5, 0) == 6 and kernel.bonus_constant(3, 5, 0) == nil, 'bonus.constant answers with the handler')
 ok(effect_active == true, 'registering effect.add tells the host')
 ok(kernel.effect_add({ability = 7, value = 2}).finish == true and kernel.effect_add({ability = 8}) == nil, 'effect.add answers with the handler table')
 ok(damage_active == true, 'registering damage tells the host')

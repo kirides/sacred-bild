@@ -48,6 +48,9 @@ namespace LuaHost
     };
     Answer effectAdd(const EffectInfo& info, EffectAnswer& answer);
 
+    // event `bonus.constant`: the number the item bonus code pushes at site `index` (`vanilla` the engine's own).
+    Answer bonusConstant(int index, double vanilla, int address, double& out);
+
     // event `damage`: the final damage of a hit; `victimType` / `attackerType` -1 for none. The answer is not yet clamped.
     Answer damage(int damage, int victimType, int attackerType, int index, int& out);
 

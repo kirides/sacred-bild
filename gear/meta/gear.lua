@@ -17,6 +17,7 @@
 ---| 'game.saved' # A save `gear.game.save` asked for is written.
 ---| 'game.save_failed' # It could not be written.
 ---| 'combat.constant' # The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it.
+---| 'bonus.constant' # A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another.
 ---| 'effect.add' # The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`).
 ---| 'damage' # The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534).
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
@@ -101,6 +102,7 @@ gear = {}
 ---@overload fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler
 ---@overload fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler
 ---@overload fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler
+---@overload fun(event: 'bonus.constant', fn: fun(index: integer, vanilla: number, address: integer): number?): GearHandler
 ---@overload fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler
 ---@overload fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler
 ---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler

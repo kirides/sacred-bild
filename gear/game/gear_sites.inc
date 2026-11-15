@@ -61,3 +61,15 @@ static const DamageSiteSpec kEffectSites[] = {
     {0, &Gear::Addr::effectAddFn, 0xFD}, // 0056256D
 };
 static const uintptr_t kEffectAiLow = 0x4DA04B, kEffectAiHigh = 0x4DA23C;
+static const PushSiteSpec kBonusSites[] = {
+    {0, &Gear::Addr::bonusFn, 0x74E0, 0, 0x5u}, // 00578BF0 int8
+    {1, &Gear::Addr::bonusFn, 0x756A, 0, 0xFu}, // 00578C7A int8
+    {2, &Gear::Addr::bonusFn, 0x7577, 1, 0x482u}, // 00578C87 int32
+    {3, &Gear::Addr::bonusFn, 0x75B4, 0, 0xFu}, // 00578CC4 int8
+    {4, &Gear::Addr::bonusFn, 0x75F7, 0, 0x5u}, // 00578D07 int8
+    {5, &Gear::Addr::bonusFn, 0x7621, 2, 0x3E19999Au}, // 00578D31 float
+    {6, &Gear::Addr::bonusFn, 0x7631, 2, 0x3E19999Au}, // 00578D41 float
+    {7, &Gear::Addr::bonusFn, 0x7647, 2, 0x3E19999Au}, // 00578D57 float
+    {8, &Gear::Addr::bonusFn, 0x765D, 2, 0x3E19999Au}, // 00578D6D float
+    {9, &Gear::Addr::bonusFn, 0x7686, 2, 0x3E19999Au}, // 00578D96 float
+};

@@ -497,7 +497,9 @@ namespace
         lua_pushnumber(L, r.effectEntry0);
         lua_pushnumber(L, r.effectEntry1);
         lua_pushnumber(L, r.effectCounter);
-        return 12;
+        lua_pushnumber(L, r.bonusInt);
+        lua_pushnumber(L, r.bonusFloat);
+        return 14;
     }
 
     // native.difficulty() -> the running game's difficulty level (0 .. 4) | nil
@@ -510,6 +512,13 @@ namespace
         }
         lua_pushnumber(L, *Gear::Addr::g_difficulty);
         return 1;
+    }
+
+    // native.bonus_active(bool): whether some mod handles `bonus.constant`
+    int nativeBonusActive(lua_State* L)
+    {
+        SiteHook::setBonusActive(lua_toboolean(L, 1) != 0);
+        return 0;
     }
 
     // native.effect_active(bool): whether some mod handles `effect.add`
@@ -544,7 +553,7 @@ namespace
     int nativeSiteHooks(lua_State* L)
     {
         const char* which = luaL_optstring(L, 1, "level.factor");
-        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : std::strcmp(which, "effect.add") == 0 ? SiteHook::effectStats() : SiteHook::levelFactorStats();
+        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : std::strcmp(which, "effect.add") == 0 ? SiteHook::effectStats() : std::strcmp(which, "bonus.constant") == 0 ? SiteHook::bonusStats() : SiteHook::levelFactorStats();
         lua_pushnumber(L, s.calls);
         lua_pushnumber(L, s.answered);
         lua_pushnumber(L, s.busy);
@@ -1966,6 +1975,7 @@ namespace
             {"creature_ability_active", nativeCreatureAbilityActive},
             {"damage_active", nativeDamageActive},
             {"effect_active", nativeEffectActive},
+            {"bonus_active", nativeBonusActive},
             {"site_hook_sites", nativeSiteHookSites},
             {"site_selftest_start", nativeSiteSelfTestStart},
             {"site_selftest_result", nativeSiteSelfTestResult},
@@ -2378,6 +2388,52 @@ LuaHost::Answer LuaHost::effectAdd(const EffectInfo& info, EffectAnswer& answer)
     }
     lua_pop(L, 1);
     return result;
+}
+
+LuaHost::Answer LuaHost::bonusConstant(int index, double vanilla, int address, double& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "bonus_constant");
+    lua_remove(L, -2);
+    lua_pushnumber(L, index);
+    lua_pushnumber(L, vanilla);
+    lua_pushnumber(L, address);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 3, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.bonus_constant failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        const lua_Number v = lua_tonumber(L, -1);
+        if (v > -1e9 && v < 1e9)
+        {
+            out = v;
+            answer = Answer::Value;
+        }
+    }
+    lua_pop(L, 1);
+    return answer;
 }
 
 unsigned long long LuaHost::lastFrameTime()

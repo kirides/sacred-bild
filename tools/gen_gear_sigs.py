@@ -140,6 +140,12 @@ def main():
         lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}}}, // {site:08X}')
     lines.append('};')
     lines.append(f'static const uintptr_t kEffectAiLow = 0x{gear_sites.EFFECT_AI_CALLERS[0]:X}, kEffectAiHigh = 0x{gear_sites.EFFECT_AI_CALLERS[1]:X};')
+    lines.append('static const PushSiteSpec kBonusSites[] = {')
+    for i, (kind, site, vanilla) in enumerate(gear_sites.BONUS_SITES):
+        fnname, fn = gear_sites.BONUS_FUNCTION
+        code = {'int8': 0, 'int32': 1, 'float': 2}[kind]
+        lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {code}, 0x{vanilla:X}u}}, // {site:08X} {kind}')
+    lines.append('};')
     with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sites.inc'), 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     if failed:

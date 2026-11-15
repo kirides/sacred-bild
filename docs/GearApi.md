@@ -110,6 +110,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'game.save_failed'` | It could not be written. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
+| `'bonus.constant'` | A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another. |
 | `'effect.add'` | The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`). |
 | `'damage'` | The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534). |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
@@ -220,6 +221,7 @@ Forms:
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
+- `fun(event: 'bonus.constant', fn: fun(index: integer, vanilla: number, address: integer): number?): GearHandler`
 - `fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler`
 - `fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
@@ -669,7 +671,7 @@ The engine hooks that ask mods for a value inside the game's own code (see the e
 
 The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
 
-- `name`: `'level.factor'|'combat.constant'|'creature.ability'|'damage'|'effect.add'`
+- `name`: `'level.factor'|'combat.constant'|'creature.ability'|'damage'|'effect.add'|'bonus.constant'`
 - returns `GearHookStats`
 
 #### `gear.hooks.sites() -> GearHookSite[]`
@@ -2302,11 +2304,11 @@ Tests the stubs of the constant site hooks on two functions built in memory (`fm
 
 - returns `started` `boolean` - false if a test is running.
 
-#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer}?`
+#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer, bonus_int: integer, bonus_float: number}?`
 
-The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. The `ability_*` fields test the `creature.ability` stubs on three functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived. `damage` is the result of the `damage` stub on a function built in memory (12.4 rounds to 12 without an answer). The `effect_*` fields test the `effect.add` stub on a function built in memory with a fake effect list (the sum 3.5 for entry 0, the creature's counter 4): the exit taken (1 engine path, 2 next entry, 3 leave), both entries' values times 100 and the counter. nil until it is done.
+The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. The `ability_*` fields test the `creature.ability` stubs on three functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived. `damage` is the result of the `damage` stub on a function built in memory (12.4 rounds to 12 without an answer). The `effect_*` fields test the `effect.add` stub on a function built in memory with a fake effect list (the sum 3.5 for entry 0, the creature's counter 4): the exit taken (1 engine path, 2 next entry, 3 leave), both entries' values times 100 and the counter. `bonus_int` / `bonus_float` are what the `bonus.constant` stubs push on functions built in memory (`push 5` and `push 3.5`). nil until it is done.
 
-- returns `{fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer}?`
+- returns `{fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer, bonus_int: integer, bonus_float: number}?`
 
 #### `gear.auto.write(name, text) -> boolean?`
 
