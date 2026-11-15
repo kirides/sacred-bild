@@ -15,6 +15,7 @@ namespace
     void __fastcall hookUpdateZoom(void* engine, void* edx, float dt)
     {
         g_updateZoom(engine, edx, dt);
+        Ui::setEngine(engine);
         Save::frame(engine);
         LuaHost::frame(dt);
     }

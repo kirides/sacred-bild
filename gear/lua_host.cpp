@@ -1138,7 +1138,7 @@ namespace
         return 1;
     }
 
-    // native.ui_state() -> {available, mode, exclusive, escape_menu, message_box, help, mouse_x, mouse_y,
+    // native.ui_state() -> {available, mode, exclusive, escape_menu, message_box, help, show_text, mouse_x, mouse_y,
     // screen_left, screen_top, screen_right, screen_bottom}
     int nativeUiState(lua_State* L)
     {
@@ -1157,6 +1157,7 @@ namespace
         flag("escape_menu", s.escapeMenu);
         flag("message_box", s.messageBox);
         flag("help", s.help);
+        flag("show_text", s.showText);
         num("mouse_x", s.mouseX);
         num("mouse_y", s.mouseY);
         num("screen_left", s.screenLeft);

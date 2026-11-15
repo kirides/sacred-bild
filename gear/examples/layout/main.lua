@@ -31,7 +31,8 @@ local snapping = gear.settings.get('snap')
 gear.on('settings.changed', function(id, v) if id == 'snap' then snapping = v end end)
 local toolbar_rect = nil    -- the toolbar's place this frame (for the self test)
 local popup_rect = nil      -- the settings popup's
-local popup_pin = nil       -- where the popup was put for the selected frame's place
+local popup_pin = nil
+local edit_button_shown = false     -- the "Edit layout" button was drawn this frame       -- where the popup was put for the selected frame's place
 
 local NAMES = {
     UI_WND_STATS_CHAR = 'Character', UI_WND_TASKBAR = 'Action bar', UI_WND_QUESTBOOK = 'Quest log',
@@ -362,7 +363,9 @@ gear.on('draw', function(state)
         if f then popup(f, state.screen_left, state.screen_top, state.screen_right, state.screen_bottom) end
     else
         selected, drag, toolbar_rect, popup_rect = nil, nil, nil, nil
-        if ui.button('edit', state.screen_left + 4, state.screen_top + 4, 80, 20, 'Edit layout',
+        -- The button only with the game's labels (Alt held), like the game's own text; F7 works without it.
+        edit_button_shown = state.show_text
+        if state.show_text and ui.button('edit', state.screen_left + 4, state.screen_top + 4, 80, 20, 'Edit layout',
             {tooltip = 'Move windows and panels (F7)'}) then
             ui.set_edit_mode(true)
         end
@@ -427,6 +430,18 @@ gear.task(function()
     end
     gear.wait(3)
     check('game windows can move (SacredBild)', ui.can_move_windows())
+    -- The "Edit layout" button shows only while the game shows its labels (Alt held).
+    gear.wait(0.5)
+    check('no edit button without Alt', not ui.state().show_text and not edit_button_shown)
+    A.screenshot('showtext-off')
+    A.key_down('alt')
+    gear.wait(0.6)
+    check('Alt: show_text', ui.state().show_text)
+    check('Alt: edit button shown', edit_button_shown)
+    A.screenshot('showtext-on')
+    A.key_up('alt')
+    gear.wait(0.4)
+    check('Alt released: button gone', not edit_button_shown)
     A.press('i')
     gear.wait(1.5)
     local lay = ui.layout()
