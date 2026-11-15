@@ -8,6 +8,7 @@
 #include "config/render.h"
 #include "config/screenshot.h"
 #include "config/ui.h"
+#include "instance.h"
 #include "log.h"
 
 #include <windows.h>
@@ -73,6 +74,78 @@ namespace
     }
 }
 
+namespace
+{
+    std::wstring commandLineValue(const wchar_t* prefix)
+    {
+        const size_t n = wcslen(prefix);
+        const wchar_t* p = GetCommandLineW();
+        std::wstring found;
+        while (p && *p)
+        {
+            while (*p == L' ' || *p == L'	')
+            {
+                ++p;
+            }
+            std::wstring arg;
+            for (bool quoted = false; *p && (quoted || (*p != L' ' && *p != L'	')); ++p)
+            {
+                if (*p == L'"')
+                {
+                    quoted = !quoted;
+                }
+                else
+                {
+                    arg.push_back(*p);
+                }
+            }
+            if (_wcsnicmp(arg.c_str(), prefix, n) == 0)
+            {
+                found = arg.substr(n);
+            }
+        }
+        return found;
+    }
+
+    // Automation runs (-gear-auto) open a normal 1600x900 window whatever SacredBild.ini says, so they neither look
+    // like fullscreen nor cover the player's screen: -gear-window=WxH[+X+Y] (SACREDGEAR_WINDOW) changes it
+    // (at least 1024x768, the smallest canvas the UI layout works with).
+    void applyAutomationWindow()
+    {
+        if (!Instance::automation())
+        {
+            return;
+        }
+        std::wstring spec = commandLineValue(L"-gear-window=");
+        if (spec.empty())
+        {
+            wchar_t env[128] = {};
+            const DWORD n = GetEnvironmentVariableW(L"SACREDGEAR_WINDOW", env, static_cast<DWORD>(std::size(env)));
+            if (n && n < std::size(env))
+            {
+                spec.assign(env, n);
+            }
+        }
+        int w = 1600;
+        int h = 900;
+        int x = 0;
+        int y = 0;
+        const int fields = swscanf_s(spec.c_str(), L"%dx%d%d%d", &w, &h, &x, &y);
+        if (fields < 2 || w < 1 || h < 1)
+        {
+            w = 1600;
+            h = 900;
+        }
+        Config::display.width = std::min(w, 16384);
+        Config::display.height = std::min(h, 16384);
+        Config::display.frame = Config::Display::Frame::Always;
+        Config::display.automationWindow = true;
+        Config::display.hasPosition = fields >= 4;
+        Config::display.x = x;
+        Config::display.y = y;
+    }
+}
+
 const std::wstring& ConfigFile::path()
 {
     return g_iniPath;
@@ -93,6 +166,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     Config::display.frame = _wcsicmp(borderless.c_str(), L"auto") == 0 ? Config::Display::Frame::Auto
         : readBool(ini, L"Display", L"Borderless", true)      ? Config::Display::Frame::Never
                                                                : Config::Display::Frame::Always;
+    applyAutomationWindow();
     Config::display.clipCursor = readInt(ini, L"Display", L"ClipCursor", Config::display.clipCursor) != 0;
     Config::display.fpsLimit = readInt(ini, L"Display", L"FpsLimit", Config::display.fpsLimit);
     Config::display.fpsLimitInactive = readInt(ini, L"Display", L"FpsLimitInactive", Config::display.fpsLimitInactive);

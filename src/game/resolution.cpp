@@ -290,10 +290,30 @@ namespace
                 // Keep the caption on the screen.
                 MONITORINFO monitor = {};
                 monitor.cbSize = sizeof(monitor);
-                if (GetMonitorInfoW(MonitorFromRect(&rect, MONITOR_DEFAULTTOPRIMARY), &monitor))
+                if (Config::display.automationWindow)
+                {
+                    // -gear-window=WxH+X+Y puts the client area there, else the work area's bottom-right corner.
+                    const POINT origin = {0, 0};
+                    if (GetMonitorInfoW(MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY), &monitor))
+                    {
+                        const int width = rect.right - rect.left;
+                        const int height = rect.bottom - rect.top;
+                        RECT client = {0, 0, 0, 0};
+                        addFrame(window, client);
+                        const int left = Config::display.hasPosition ? Config::display.x + client.left : monitor.rcWork.right - width;
+                        const int top = Config::display.hasPosition ? Config::display.y + client.top : monitor.rcWork.bottom - height;
+                        rect = {left, top, left + width, top + height};
+                        OffsetRect(&rect, std::max(0L, monitor.rcWork.left - rect.left), std::max(0L, monitor.rcWork.top - rect.top));
+                    }
+                }
+                else if (GetMonitorInfoW(MonitorFromRect(&rect, MONITOR_DEFAULTTOPRIMARY), &monitor))
                 {
                     OffsetRect(&rect, std::max(0L, monitor.rcWork.left - rect.left), std::max(0L, monitor.rcWork.top - rect.top));
                 }
+            }
+            if (Config::display.automationWindow)
+            {
+                flags |= SWP_NOACTIVATE;
             }
             x = rect.left;
             y = rect.top;
@@ -306,7 +326,17 @@ namespace
     HWND WINAPI hookCreateWindowExA(DWORD exStyle, LPCSTR cls, LPCSTR name, DWORD style, int x, int y, int w, int h,
         HWND parent, HMENU menu, HINSTANCE inst, LPVOID param)
     {
-        const bool mainWindow = reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::mainWindowCreateReturn;
+        bool mainWindow = reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::mainWindowCreateReturn;
+        if (!mainWindow && Config::display.automationWindow)
+        {
+            // Sacred Gear's CreateWindowExA hook sits between the game and this one in an automation run, so the
+            // return address is Gear's: look for the game's return address a few slots up the stack.
+            const uintptr_t* slot = static_cast<const uintptr_t*>(_AddressOfReturnAddress());
+            for (int i = 1; i <= 128 && !mainWindow; ++i)
+            {
+                mainWindow = slot[i] == Addr::mainWindowCreateReturn;
+            }
+        }
         if (mainWindow)
         {
             g_framed = wantFrame();

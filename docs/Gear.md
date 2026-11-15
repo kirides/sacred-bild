@@ -316,6 +316,7 @@ For self tests and scripted runs without a player. Off unless the game starts wi
 | `-gear-load=N` (`SACREDGEAR_LOAD`) | Loads savegame N (`Save\GAMEnn.PAK`, 0 the quicksave) as soon as the main menu is up, the way the menu's savegame window does it. |
 | `-gear-mods=a,b` (`SACREDGEAR_MODS`) | Loads only these mods. |
 | `-gear-instance=NAME` (`SACREDGEAR_INSTANCE`) | Names the run, default `pid<PID>`. See "Parallel runs". |
+| `-gear-window=WxH[+X+Y]` (`SACREDGEAR_WINDOW`) | SacredBild only: the size of the game window, default 1600x900, at least 1024x768 (smaller values are raised to it). See below. |
 
 The mods load in the main menu and get the `idle` event there. Mods with `automation = true` get `gear.auto`:
 
@@ -348,6 +349,12 @@ only. The foreground it believes in is a virtual one: the window it asked to act
 In the menus the back buffer is empty between some frames (the Direct3D 9 backend does not keep it), so the screenshot asks again until it holds a picture (up to 40 tries), and falls back to the primary surface. Characters (`WM_CHAR`) are not dropped as real input while isolated: the game takes its hotkeys from the ones `TranslateMessage` makes out of the injected key messages. The virtual cursor starts in the middle of the window.
 
 A watchdog ends a run that takes too long: `-gear-timeout=SECONDS` (`SACREDGEAR_TIMEOUT`, default 300, 0 = off) quits with exit code 3 and logs `Automation: watchdog timeout`; the same if the game window does not answer, or an in-game run has no frame, for 60 s. Run tests with a timeout below the time you allow them.
+
+**Window.** An automation run with SacredBild never goes fullscreen or desktop-sized and ignores `[Display] Width`,
+`Height` and `Borderless` in `SacredBild.ini` (which stays untouched): it opens a normal framed window with a
+1600x900 client area, in the bottom-right corner of the primary monitor's work area, without activating it.
+`-gear-window=WxH` changes the size, `-gear-window=WxH+X+Y` also puts the client area's top-left at screen pixel X,Y.
+SacredBild reads this from the command line itself; Gear does not know about it.
 
 Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest -gear-instance=a`, then read
 `GearAutomation\a\selftest.json` and the exit code.
