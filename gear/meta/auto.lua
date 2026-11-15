@@ -123,8 +123,11 @@ function GearAuto.engine_level_factor_result() end
 function GearAuto.site_hook_selftest_start() end
 
 --- The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times
---- 1.0), `registers_kept` whether eax, ecx and edx survived the stub. nil until it is done.
----@return {fmul: number, fld: number, registers_kept: boolean}?
+--- 1.0), `registers_kept` whether eax, ecx and edx survived the stub. The `ability_*` fields test the `creature.ability` stubs on three
+--- functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the
+--- amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived.
+--- nil until it is done.
+---@return {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean}?
 function GearAuto.site_hook_selftest_result() end
 
 --- Writes a file into `GearAutomation\<instance>`.

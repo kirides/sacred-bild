@@ -484,7 +484,11 @@ namespace
         lua_pushnumber(L, r.fmul);
         lua_pushnumber(L, r.fld);
         lua_pushboolean(L, r.registersKept);
-        return 3;
+        lua_pushnumber(L, r.abilityStore);
+        lua_pushnumber(L, r.abilityAdd);
+        lua_pushnumber(L, r.abilityEdx);
+        lua_pushboolean(L, r.abilityKept);
+        return 7;
     }
 
     // native.difficulty() -> the running game's difficulty level (0 .. 4) | nil

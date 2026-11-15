@@ -1856,11 +1856,11 @@ Tests the stubs of the constant site hooks on two functions built in memory (`fm
 
 - returns `started` `boolean` - false if a test is running.
 
-#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean}?`
+#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean}?`
 
-The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. nil until it is done.
+The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. The `ability_*` fields test the `creature.ability` stubs on three functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived. nil until it is done.
 
-- returns `{fmul: number, fld: number, registers_kept: boolean}?`
+- returns `{fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean}?`
 
 #### `gear.auto.write(name, text) -> boolean?`
 

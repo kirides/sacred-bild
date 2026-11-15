@@ -187,6 +187,7 @@ namespace
 
     // --- creature.ability sites -----------------------------------------------------------------------------------------
 
+    AbilitySiteSpec g_abilityTestSpecs[3] = {};     // the self test's three sites (after the generated ones)
     std::atomic<bool> g_abilityActive{false};
     std::atomic<unsigned> g_abilityCalls{0}, g_abilityAnswered{0}, g_abilityBusy{0};
     std::atomic<unsigned> g_abilitySiteCalls[std::size(kAbilitySites)];
@@ -212,13 +213,14 @@ namespace
         {
             g_abilitySiteCalls[site].fetch_add(1, std::memory_order_relaxed);
         }
-        const bool unknownVanilla = kAbilitySites[site].kind == 2;
+        const AbilitySiteSpec& spec = site < static_cast<int>(std::size(kAbilitySites)) ? kAbilitySites[site] : g_abilityTestSpecs[site - std::size(kAbilitySites)];
+        const bool unknownVanilla = spec.kind == 2;
         if (!g_abilityActive.load(std::memory_order_relaxed))
         {
             return unknownVanilla ? kNoAnswer : vanilla;
         }
         int result = 0;
-        const uintptr_t address = *kAbilitySites[site].function + kAbilitySites[site].offset;
+        const uintptr_t address = *spec.function + spec.offset;
         switch (LuaHost::creatureAbility(creatureType(creature), unknownVanilla ? -1 : vanilla, site, static_cast<int>(address), result))
         {
         case LuaHost::Answer::Value:
@@ -581,6 +583,88 @@ namespace
         return reinterpret_cast<double(__cdecl*)()>(blob)();
     }
 
+    uint32_t g_fakeCreature[0x80];          // what the ability self test functions treat as the creature (type at +0x10, ability at +0x120)
+    uintptr_t g_abilityBlob[3] = {};
+    uintptr_t g_abilityHolders[3] = {};
+
+    // kind 0 store: mov dword [esi+0x120], 100;  kind 1 add: add eax, 1000;  kind 2: the 9 byte computed block.
+    // Each: push esi; mov esi, fake; mov eax/ecx/edx, 11111111/22222222/33333333; <site>; store eax, ecx, edx; pop esi; ret.
+    uintptr_t buildAbilityBlob(int kind, uint32_t& siteOffset)
+    {
+        std::vector<uint8_t> code;
+        emit(code, {0x56, 0xBE});
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_fakeCreature[0])));
+        emit(code, {0xB8});
+        emit32(code, 0x11111111);
+        emit(code, {0xB9});
+        emit32(code, 0x22222222);
+        emit(code, {0xBA});
+        emit32(code, 0x33333333);
+        siteOffset = static_cast<uint32_t>(code.size());
+        if (kind == 0)
+        {
+            emit(code, {0xC7, 0x86, 0x20, 0x01, 0x00, 0x00});
+            emit32(code, 100);
+        }
+        else if (kind == 1)
+        {
+            emit(code, {0x05});
+            emit32(code, 1000);
+        }
+        else
+        {
+            emit(code, {0xF7, 0xDA, 0x1B, 0xD2, 0x33, 0xC9, 0x83, 0xC2, 0x32});
+        }
+        emit(code, {0xA3});
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[0])));
+        emit(code, {0x89, 0x0D});
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[1])));
+        emit(code, {0x89, 0x15});
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[2])));
+        emit(code, {0x5E, 0xC3});
+        void* memory = VirtualAlloc(nullptr, code.size() + 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (memory)
+        {
+            std::memcpy(memory, code.data(), code.size());
+        }
+        return reinterpret_cast<uintptr_t>(memory);
+    }
+
+    void runAbilityTests(SiteHook::SelfTest& r)
+    {
+        if (!g_abilityBlob[0])
+        {
+            const size_t base = std::size(kAbilitySites);
+            const size_t lengths[3] = {10, 5, 9};
+            for (int k = 0; k < 3; ++k)
+            {
+                uint32_t offset = 0;
+                g_abilityBlob[k] = buildAbilityBlob(k, offset);
+                g_abilityHolders[k] = g_abilityBlob[k];
+                g_abilityTestSpecs[k] = {static_cast<int>(base + k), &g_abilityHolders[k], offset, static_cast<uint8_t>(k)};
+                const int vanilla = k == 0 ? 100 : k == 1 ? 1000 : 0;
+                const uintptr_t stub = buildAbilityStub(g_abilityBlob[k] + offset, g_abilityTestSpecs[k], vanilla, lengths[k]);
+                std::vector<uint8_t> bytes(lengths[k], 0x90);
+                bytes[0] = 0xE9;
+                const uint32_t rel = static_cast<uint32_t>(stub - (g_abilityBlob[k] + offset + 5));
+                std::memcpy(&bytes[1], &rel, 4);
+                std::memcpy(reinterpret_cast<void*>(g_abilityBlob[k] + offset), bytes.data(), bytes.size());
+            }
+        }
+        std::memset(g_fakeCreature, 0, sizeof(g_fakeCreature));
+        g_fakeCreature[4] = 77;                     // the type
+        runBlob(g_abilityBlob[0]);
+        r.abilityStore = static_cast<int>(g_fakeCreature[0x120 / 4]);
+        bool kept = g_regs[1] == 0x22222222 && g_regs[2] == 0x33333333;
+        runBlob(g_abilityBlob[1]);
+        r.abilityAdd = static_cast<int>(g_regs[0] - 0x11111111);
+        kept = kept && g_regs[1] == 0x22222222 && g_regs[2] == 0x33333333;
+        runBlob(g_abilityBlob[2]);
+        r.abilityEdx = static_cast<int>(g_regs[2]);
+        kept = kept && g_regs[1] == 0;               // the block ends with xor ecx, ecx
+        r.abilityKept = kept;
+    }
+
     void selfTestThread()
     {
         Sleep(150);     // Lua is not running now
@@ -608,6 +692,7 @@ namespace
         r.fld = runBlob(g_testBlob[1]);
         const bool regsB = g_regs[0] == 0x11111111 && g_regs[1] == 0x22222222 && g_regs[2] == 0x33333333;
         r.registersKept = regsA && regsB;
+        runAbilityTests(r);
         g_selfResult = r;
         g_selfState = 2;
     }

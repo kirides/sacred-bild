@@ -1881,9 +1881,9 @@ local function make_auto()
     -- the handlers of `combat.constant` may answer for `selftest.fmul` / `selftest.fld`.
     function auto.site_hook_selftest_start() return native.site_selftest_start() end
     function auto.site_hook_selftest_result()
-        local fmul, fld, regs = native.site_selftest_result()
+        local fmul, fld, regs, store, add, edx, kept = native.site_selftest_result()
         if fmul == nil then return nil end
-        return {fmul = fmul, fld = fld, registers_kept = regs}
+        return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept}
     end
     function auto.quit(code)
         native.auto_release()

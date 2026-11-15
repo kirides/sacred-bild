@@ -54,6 +54,10 @@ namespace SiteHook
     {
         double fmul = 0, fld = 0;
         bool registersKept = false;
+        // creature.ability stubs on three functions built in memory (a store of 100, an add of 1000, the computed block): what they
+        // left (vanilla 100, 1000 and 0x32 when no mod answers), and whether the registers survived.
+        int abilityStore = 0, abilityAdd = 0, abilityEdx = 0;
+        bool abilityKept = false;
     };
     bool selfTestStart();
     bool selfTestResult(SelfTest& out);
