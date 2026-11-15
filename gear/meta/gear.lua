@@ -17,10 +17,18 @@
 ---| 'game.saved' # A save `gear.game.save` asked for is written.
 ---| 'game.save_failed' # It could not be written.
 ---| 'combat.constant' # The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it.
+---| 'damage' # The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534).
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
 ---| 'level.factor' # The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers).
 
 --- A handler registered with `gear.on`; pass it to `gear.off` to remove it.
+--- What the `damage` event gets.
+---@class GearHit
+---@field damage integer The damage the engine computed (after the resistances, before it is applied).
+---@field victim_type integer Creature type of the one that is hit (-1: unknown).
+---@field attacker_type integer Creature type of the attacker (-1: none, e.g. a trap or an effect).
+---@field site integer Which damage hook site (0: the damage resolution of the hit handlers).
+
 ---@class GearHandler
 ---@field event string The event the handler listens to.
 ---@field fn function The handler.
@@ -73,6 +81,7 @@ gear = {}
 ---@overload fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler
 ---@overload fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler
 ---@overload fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler
+---@overload fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler
 ---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler
 ---@overload fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler
 ---@param event string

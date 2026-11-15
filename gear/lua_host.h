@@ -32,6 +32,9 @@ namespace LuaHost
     // event `creature.ability`: the ability id for a creature of `type` (the AI's vanilla id, -1 where the site has none), at site `index` / `address`.
     Answer creatureAbility(int type, int vanilla, int index, int address, int& out);
 
+    // event `damage`: the final damage of a hit; `victimType` / `attackerType` -1 for none. The answer is not yet clamped.
+    Answer damage(int damage, int victimType, int attackerType, int index, int& out);
+
     // GetTickCount64() of the last in-game frame, 0 before the first.
     unsigned long long lastFrameTime();
 }

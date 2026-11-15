@@ -54,3 +54,6 @@ static const AbilitySiteSpec kAbilitySites[] = {
     {24, &Gear::Addr::abilityAiFn, 0x328D, 1}, // 004D80DD add
     {25, &Gear::Addr::abilityAiFn, 0x1018, 2}, // 004D5E68 edx
 };
+static const DamageSiteSpec kDamageSites[] = {
+    {0, &Gear::Addr::siteFn56B130, 0x297B}, // 0056DAAB
+};

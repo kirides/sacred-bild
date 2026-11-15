@@ -488,7 +488,12 @@ namespace
         lua_pushnumber(L, r.fmul);
         lua_pushnumber(L, r.fld);
         lua_pushboolean(L, r.registersKept);
-        return 3;
+        lua_pushnumber(L, r.abilityStore);
+        lua_pushnumber(L, r.abilityAdd);
+        lua_pushnumber(L, r.abilityEdx);
+        lua_pushboolean(L, r.abilityKept);
+        lua_pushnumber(L, r.damage);
+        return 8;
     }
 
     // native.difficulty() -> the running game's difficulty level (0 .. 4) | nil
@@ -501,6 +506,13 @@ namespace
         }
         lua_pushnumber(L, *Gear::Addr::g_difficulty);
         return 1;
+    }
+
+    // native.damage_active(bool): whether some mod handles `damage`
+    int nativeDamageActive(lua_State* L)
+    {
+        SiteHook::setDamageActive(lua_toboolean(L, 1) != 0);
+        return 0;
     }
 
     // native.creature_ability_active(bool): whether some mod handles `creature.ability`
@@ -521,7 +533,7 @@ namespace
     int nativeSiteHooks(lua_State* L)
     {
         const char* which = luaL_optstring(L, 1, "level.factor");
-        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : SiteHook::levelFactorStats();
+        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : SiteHook::levelFactorStats();
         lua_pushnumber(L, s.calls);
         lua_pushnumber(L, s.answered);
         lua_pushnumber(L, s.busy);
@@ -1941,6 +1953,7 @@ namespace
             {"combat_constant_active", nativeCombatConstantActive},
             {"difficulty", nativeDifficulty},
             {"creature_ability_active", nativeCreatureAbilityActive},
+            {"damage_active", nativeDamageActive},
             {"site_hook_sites", nativeSiteHookSites},
             {"site_selftest_start", nativeSiteSelfTestStart},
             {"site_selftest_result", nativeSiteSelfTestResult},
@@ -2219,6 +2232,53 @@ LuaHost::Answer LuaHost::creatureAbility(int type, int vanilla, int index, int a
     {
         const lua_Number v = lua_tonumber(L, -1);
         if (v >= 0 && v < 65536)
+        {
+            out = static_cast<int>(v);
+            answer = Answer::Value;
+        }
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::damage(int damage, int victimType, int attackerType, int index, int& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "damage");
+    lua_remove(L, -2);
+    lua_pushnumber(L, damage);
+    lua_pushnumber(L, victimType);
+    lua_pushnumber(L, attackerType);
+    lua_pushnumber(L, index);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 4, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.damage failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        const lua_Number v = lua_tonumber(L, -1);
+        if (v > -1e9 && v < 1e9)
         {
             out = static_cast<int>(v);
             answer = Answer::Value;

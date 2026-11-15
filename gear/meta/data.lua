@@ -205,7 +205,7 @@ local GearHooks = {}
 
 --- The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often
 --- Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
----@param name 'level.factor'|'combat.constant'|'creature.ability'
+---@param name 'level.factor'|'combat.constant'|'creature.ability'|'damage'
 ---@return GearHookStats
 function GearHooks.stats(name) end
 
