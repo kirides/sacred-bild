@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "text.h"
 #include "automation.h"
 #include "log.h"
 #include "patch.h"
@@ -162,6 +163,8 @@ namespace
     using WindowBoundsFn = int(__cdecl*)(int slot, float* rect);
     using CursorFilterFn = int(__cdecl*)(int x, int y);
     using SetCursorFilterFn = int(__cdecl*)(CursorFilterFn filter);
+    using PlacementFn = int(__cdecl*)(float* out);
+    PlacementFn g_placement = nullptr;
     SetWindowFrameFn g_setWindowFrame = nullptr;
     WindowBoundsFn g_windowBounds = nullptr;
     SetCursorFilterFn g_setCursorFilter = nullptr;
@@ -192,7 +195,20 @@ namespace
             g_getWindowFrame = reinterpret_cast<GetWindowFrameFn>(GetProcAddress(bild, "SacredBild_UiGetWindowFrame"));
             g_windowBounds = reinterpret_cast<WindowBoundsFn>(GetProcAddress(bild, "SacredBild_UiGetWindowBounds"));
             g_setCursorFilter = reinterpret_cast<SetCursorFilterFn>(GetProcAddress(bild, "SacredBild_UiSetCursorFilter"));
+            g_placement = reinterpret_cast<PlacementFn>(GetProcAddress(bild, "SacredBild_UiPlacement"));
         });
+    }
+
+    // Where the calling thread's frame lands on the screen (SacredBild's canvas); 1, 0, 0 without it.
+    Text::Placement placement()
+    {
+        findBild();
+        float p[3];
+        if (g_placement && g_placement(p) && p[0] > 0.0f)
+        {
+            return {p[0], p[1], p[2]};
+        }
+        return {};
     }
 
     // ---- Fonts (cFontManager, ENG 00CDCA70: a vector of cFont* by id) ----
@@ -487,7 +503,67 @@ namespace
         }
         state.enter();
         state.texture(nullptr);
-        quad(device, c.x, c.y, c.x + c.w, c.y + c.h, c.color);
+        // Edges on the screen's pixel grid: a 1-unit line is as wide everywhere, never smeared over two pixels.
+        const Text::Placement p = placement();
+        float x0 = Text::snapX(p, c.x), y0 = Text::snapY(p, c.y);
+        float x1 = Text::snapX(p, c.x + c.w), y1 = Text::snapY(p, c.y + c.h);
+        if (x1 <= x0)
+        {
+            x1 = x0 + 1.0f / p.scale;
+        }
+        if (y1 <= y0)
+        {
+            y1 = y0 + 1.0f / p.scale;
+        }
+        quad(device, x0, y0, x1, y1, c.color);
+    }
+
+    void setTextureThunk(void* ctx, void* surface)
+    {
+        static_cast<StateGuard*>(ctx)->texture(static_cast<IDirectDrawSurface7*>(surface));
+    }
+
+    void drawVectorText(IDirect3DDevice7* device, StateGuard& state, const Command& c)
+    {
+        const Text::Placement p = placement();
+        const int align = (c.flags & 1) ? 1 : (c.flags & 4) ? 2 : 0;
+        if (c.background >> 24)
+        {
+            float tw = 0, th = 0;
+            if (Text::measure(c.style, c.text, p.scale, tw, th))
+            {
+                float bx = c.x;
+                if (c.w > 0 && align)
+                {
+                    bx += align == 1 ? (c.w - tw) * 0.5f : c.w - tw;
+                }
+                Command r;
+                r.x = bx - c.padding;
+                r.y = c.y - c.padding;
+                r.w = tw + 2 * c.padding;
+                r.h = (c.h > 0 ? c.h : th) + 2 * c.padding;
+                r.color = c.background;
+                drawRect(device, state, r);
+            }
+        }
+        state.enter();
+        const float dark = static_cast<float>(c.color >> 24) * 0.85f;
+        const uint32_t shade = static_cast<uint32_t>(dark) << 24;
+        const float px = 1.0f / p.scale;
+        if (c.style.flags & Text::Outline)
+        {
+            for (const auto& o : {std::pair{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}})
+            {
+                Text::draw(device, p, c.style, c.text, c.x + o.first * px, c.y + o.second * px, c.w, c.h, align,
+                           c.valign, shade, setTextureThunk, &state);
+            }
+        }
+        else if (c.style.flags & Text::Shadow)
+        {
+            Text::draw(device, p, c.style, c.text, c.x + px, c.y + px, c.w, c.h, align, c.valign, shade, setTextureThunk,
+                       &state);
+        }
+        Text::draw(device, p, c.style, c.text, c.x, c.y, c.w, c.h, align, c.valign, c.color, setTextureThunk, &state);
     }
 
     void drawImage(IDirect3DDevice7* device, StateGuard& state, const Command& c)
@@ -536,7 +612,9 @@ namespace
         }
         state.enter();
         state.texture(surface);
-        quad(device, x, y, x + w, y + h, c.color, u0, v0, u1, v1);
+        const Text::Placement p = placement();
+        quad(device, Text::snapX(p, x), Text::snapY(p, y), Text::snapX(p, x + w), Text::snapY(p, y + h), c.color, u0, v0,
+             u1, v1);
     }
 
     void drawText(IDirect3DDevice7* device, StateGuard& state, const Command& c)
@@ -584,7 +662,17 @@ namespace
         }
         // The font sets its own states through the game's state cache: give it the game's.
         state.restore();
-        cRect rect{static_cast<int32_t>(std::lround(tx)), static_cast<int32_t>(std::lround(c.y)),
+        float ty = c.y;
+        if (c.h > 0 && (c.valign == 1 || c.valign == 2))
+        {
+            int tw = 0, th = 0;
+            if (measure(font, c.text.c_str(), tw, th) && th > 0)
+            {
+                ty += c.valign == 1 ? (c.h - th) * 0.5f : c.h - th;
+                h = static_cast<float>(th);
+            }
+        }
+        cRect rect{static_cast<int32_t>(std::lround(tx)), static_cast<int32_t>(std::lround(ty)),
                    static_cast<int16_t>(std::clamp(w > 0 ? w : 1024.0f, 1.0f, 4096.0f)),
                    static_cast<int16_t>(std::clamp(h > 0 ? h : 32.0f, 1.0f, 4096.0f))};
         draw(font, nullptr, device, &rect, c.text.c_str(), c.color, c.flags);
@@ -599,7 +687,7 @@ namespace
             {
             case Kind::Rect: drawRect(device, state, c); break;
             case Kind::Image: drawImage(device, state, c); break;
-            case Kind::Text: drawText(device, state, c); break;
+            case Kind::Text: c.vector ? drawVectorText(device, state, c) : drawText(device, state, c); break;
             case Kind::Region: break;
             }
             return true;
@@ -933,6 +1021,11 @@ uint32_t Ui::fontCount()
     const uintptr_t fm = Gear::Addr::g_pFontManager ? reinterpret_cast<uintptr_t>(*Gear::Addr::g_pFontManager) : 0;
     const uintptr_t begin = fm ? readOr<uintptr_t>(fm, 0) : 0, end = fm ? readOr<uintptr_t>(fm + 4, 0) : 0;
     return begin && end > begin ? static_cast<uint32_t>((end - begin) / 4) : 0;
+}
+
+bool Ui::textSize(const Text::Style& style, const std::wstring& text, float& width, float& height)
+{
+    return Text::measure(style, text, placement().scale, width, height);
 }
 
 bool Ui::textSize(uint16_t font, const std::wstring& text, int& width, int& height)

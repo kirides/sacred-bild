@@ -115,7 +115,7 @@ gear.on('session.start', refresh)
 
 -- The overlay: the rules in force, read only.
 local function line(text, x, y, color)
-    ui.text(text, x, y, {color = color or 0xFFE0E0E0, font = 7})
+    ui.text(text, x, y, {color = color or 0xFFE0E0E0, size = 11})
 end
 
 local function overlay(state)
@@ -125,8 +125,8 @@ local function overlay(state)
     local h = 18 + rows * 13
     ui.rect(x, y, 196, h, ui.rgba(0, 0, 0, 140))
     ui.frame(x, y, 196, h, ui.rgba(200, 170, 90, 200))
-    ui.text('Loot filter', x + 6, y + 3, {color = cfg.enabled and 0xFFFFD780 or 0xFF909090, font = 1})
-    ui.text(cfg.enabled and 'on' or 'off', x + 6, y + 3, {width = 184, align = 'right', font = 7,
+    ui.text('Loot filter', x + 6, y + 3, {color = cfg.enabled and 0xFFFFD780 or 0xFF909090, size = 15, bold = true})
+    ui.text(cfg.enabled and 'on' or 'off', x + 6, y + 3, {width = 184, align = 'right',
         color = cfg.enabled and 0xFF80FF80 or 0xFFFF8080})
     local ty = y + 24
     local classes = wanted_classes(W.hero())
@@ -245,12 +245,12 @@ local function settings_panel()
 
     -- Qualities (dropdowns last in each row so their lists cover what follows)
     y = y + 90
-    ui.label('l-quality', 'Lowest quality', x, y + 2, {color = ui.COLORS.accent,
+    ui.label('l-quality', 'Lowest quality', x, y, {height = 18, valign = 'middle', color = ui.COLORS.accent,
         tooltip = 'Items below it are left on the ground'})
     local rows = {}
     for i, cat in ipairs(CATEGORIES) do
         rows[i] = {cat = cat, x = x + ((i - 1) % 2) * 260, y = y + 30 + math.floor((i - 1) / 2) * 24}
-        ui.text(cat, rows[i].x, rows[i].y + 2, {font = 7})
+        ui.text(cat, rows[i].x, rows[i].y, {height = 18, valign = 'middle'})
     end
 
     -- Potions and the rest
@@ -266,7 +266,7 @@ local function settings_panel()
     changed = changed or c
     c, cfg.keep_quest = ui.checkbox('keep_quest', x + 180, py, 'Quest items always', cfg.keep_quest ~= false)
     changed = changed or c
-    ui.text('Dim filtered labels', x, py + 26, {font = 7})
+    ui.text('Dim filtered labels', x, py + 26, {height = 16, valign = 'middle'})
     c, cfg.dim_alpha = ui.slider('dim', x + 140, py + 26, 200, 0, 255, cfg.dim_alpha, {step = 5,
         tooltip = 'Alpha of the labels of filtered items (255: not dimmed)'})
     changed = changed or c
@@ -275,7 +275,7 @@ local function settings_panel()
         save_settings()
     end
     if ui.button('close', x + 130, py + 56, 120, 22, 'Close') then ui.show_panel('settings', false) end
-    if gear.time() < saved_note then ui.text('saved', x + 262, py + 59, {font = 7, color = 0xFF80FF80}) end
+    if gear.time() < saved_note then ui.text('saved', x + 262, py + 56, {height = 22, valign = 'middle', color = 0xFF80FF80}) end
 
     -- The quality dropdowns, drawn last so an open list lies over the rows below it.
     c, cfg.min_quality = (function()

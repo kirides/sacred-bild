@@ -1,4 +1,6 @@
 #pragma once
+#include "text.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -35,6 +37,9 @@ namespace Ui
         std::wstring text;
         uint16_t font = 0;
         uint32_t flags = 0;         // the font's: 1 centered, 4 right, 0x20 curved (see docs/Gear.md)
+        uint8_t valign = 0;         // in the height: 0 top, 1 middle, 2 bottom, 3 y is the baseline (vector fonts)
+        bool vector = false;        // a vector font (style), drawn for the screen's pixels, instead of game font `font`
+        Text::Style style;
         uint32_t background = 0;    // ARGB, 0: none; a rect behind the measured text
         float padding = 0;
         // Image
@@ -84,6 +89,8 @@ namespace Ui
     // The text's size in the font (the widest line, the lines' height); false if the font cannot measure. Call it on
     // the engine thread only (in game): measuring may add glyphs to the font.
     bool textSize(uint16_t font, const std::wstring& text, int& width, int& height);
+    // The same for a vector font, at the canvas's present scale (layout units).
+    bool textSize(const Text::Style& style, const std::wstring& text, float& width, float& height);
 
     // An in-game window by its control name (UI_WND_INVENTORY ...), any case.
     struct WindowInfo

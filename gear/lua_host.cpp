@@ -579,6 +579,22 @@ namespace
         return 1;
     }
 
+    // A vector font's arguments at `index`: face (string or nil: the default), size (layout units), style flags.
+    bool textStyle(lua_State* L, int index, Text::Style& out)
+    {
+        size_t n = 0;
+        const char* face = lua_isstring(L, index) ? lua_tolstring(L, index, &n) : nullptr;
+        const lua_Number size = luaL_optnumber(L, index + 1, 13), flags = luaL_optnumber(L, index + 2, 0);
+        if (n > 64 || !(size >= 2 && size <= 200) || flags < 0 || flags > 255)
+        {
+            return false;
+        }
+        out.face = face ? widen(face, n) : std::wstring();
+        out.size = static_cast<float>(size);
+        out.flags = static_cast<uint32_t>(flags);
+        return true;
+    }
+
     // native.ui_text(layer, slot, text, x, y, w, h, color, font, flags, background, padding) -> bool
     int nativeUiText(lua_State* L)
     {
@@ -591,13 +607,19 @@ namespace
         {
             Ui::Command c;
             c.kind = Ui::Kind::Text;
-            ok = n <= 4096 && uiCommon(L, c, 1) && uiBox(L, c, 4) && font >= 0 && font < 256 && flags >= 0 &&
-                 flags < 4294967296.0 && padding >= 0 && padding < 1000;
+            // font -1: a vector font (13 face or nil, 14 size, 15 style flags); 16 valign (0 top, 1 middle, 2 bottom,
+            // 3 baseline)
+            c.vector = font == -1;
+            const lua_Number valign = luaL_optnumber(L, 16, 0);
+            c.valign = valign >= 0 && valign <= 3 ? static_cast<uint8_t>(valign) : 0;
+            ok = n <= 4096 && uiCommon(L, c, 1) && uiBox(L, c, 4) && (c.vector || (font >= 0 && font < 256)) &&
+                 flags >= 0 && flags < 4294967296.0 && padding >= 0 && padding < 1000 &&
+                 (!c.vector || textStyle(L, 13, c.style));
             if (ok)
             {
                 c.text = widen(text, n);
                 c.color = toColor(color);
-                c.font = static_cast<uint16_t>(font);
+                c.font = c.vector ? 0 : static_cast<uint16_t>(font);
                 c.flags = static_cast<uint32_t>(static_cast<int64_t>(flags));
                 c.background = toColor(background);
                 c.padding = static_cast<float>(padding);
@@ -669,6 +691,20 @@ namespace
         size_t n = 0;
         const char* text = luaL_checklstring(L, 1, &n);
         const lua_Number font = luaL_checknumber(L, 2);
+        if (font == -1)
+        {
+            // A vector font (3 face, 4 size, 5 style flags): layout units at the canvas's scale.
+            Text::Style style;
+            float fw = 0, fh = 0;
+            if (n > 4096 || !textStyle(L, 3, style) || !Ui::textSize(style, widen(text, n), fw, fh))
+            {
+                lua_pushnil(L);
+                return 1;
+            }
+            lua_pushnumber(L, fw);
+            lua_pushnumber(L, fh);
+            return 2;
+        }
         int w = 0, h = 0;
         bool ok = false;
         if (n <= 4096 && font >= 0 && font < 256)

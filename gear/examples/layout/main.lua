@@ -139,8 +139,9 @@ end
 -- The largest of a few fonts in which the name fits the frame (cached per name and font).
 local sizes = {}
 local function name_font(name, max_w, max_h)
-    for _, font in ipairs({3, 1, 7}) do
-        local k = name .. '\0' .. font
+    for _, size in ipairs({30, 22, 16, 12}) do
+        local font = {size = size, bold = true}
+        local k = name .. '\0' .. size
         local s = sizes[k]
         if not s then
             local w, h = ui.text_size(name, font)
@@ -159,8 +160,8 @@ local function overlay(f, sel, hot)
     local font, tw, th = name_font(f.name, f.w - 12, f.h - 4)
     if font then
         local tx, ty = math.floor(f.x + (f.w - tw) / 2), math.floor(f.y + (f.h - th) / 2)
-        ui.text(f.name, tx + 2, ty + 2, {font = font, color = COLOR.shadow, layer = 'top'})
-        ui.text(f.name, tx, ty, {font = font, color = sel and COLOR.sel_name or COLOR.name, layer = 'top'})
+        ui.text(f.name, tx, ty, {size = font.size, bold = true, outline = true,
+            color = sel and COLOR.sel_name or COLOR.name, layer = 'top'})
     end
     if f.resizable then
         local c = sel and COLOR.sel_edge or COLOR.edge
@@ -199,7 +200,8 @@ local function popup(f, sl, st, sr, sb)
     px, py = math.floor(px), math.floor(py)
     -- It stays put while only the frame's size changes (its own sliders would move away under the cursor).
     local pin = popup_pin
-    if pin and pin.key == f.key and pin.fx == f.x and pin.fy == f.y and pin.h == ph then
+    -- (Places come back through the virtual screen: compare within a unit.)
+    if pin and pin.key == f.key and math.abs(pin.fx - f.x) < 1 and math.abs(pin.fy - f.y) < 1 and pin.h == ph then
         px, py = pin.x, pin.y
     else
         popup_pin = {key = f.key, fx = f.x, fy = f.y, h = ph, x = px, y = py}
@@ -209,22 +211,22 @@ local function popup(f, sl, st, sr, sb)
     ui.rect(px, py, pw, ph, 0xEC101018, top)
     ui.frame(px, py, pw, ph, COLOR.sel_edge, 1, top)
     ui.rect(px + 1, py + 1, pw - 2, 20, C.title, top)
-    ui.text(f.name, px + 8, py + 3, {font = 7, color = C.accent, layer = 'top'})
+    ui.text(f.name, px + 8, py + 3, {color = C.accent, layer = 'top'})
     if ui.button('popup-close', px + pw - 21, py + 2, 18, 18, 'x', {layer = 'top', tooltip = 'Deselect'}) then
         selected = nil
     end
     local y = py + 28
     local vx, vy = ui.to_virtual(f.x + (f.ox or 0), f.y + (f.oy or 0))
     ui.text(('Position %d, %d  (of 4096)'):format(math.floor(vx + 0.5), math.floor(vy + 0.5)), px + 8, y,
-        {font = 7, color = C.text, layer = 'top'})
-    ui.text(f.key, px + 8, y + 16, {font = 7, color = C.text_dim, layer = 'top'})
+        {color = C.text, layer = 'top'})
+    ui.text(f.key, px + 8, y + 16, {color = C.text_dim, layer = 'top'})
     y = y + 38
     if f.resizable then
         local l, t, r, b = sl, st, sr, sb
-        ui.text('Width', px + 8, y, {font = 7, layer = 'top'})
+        ui.text('Width', px + 8, y, {layer = 'top'})
         local cw, nw = ui.slider('popup-w', px + 58, y, 120, f.min_w, math.floor(r - l), math.floor(f.w + 0.5),
             {layer = 'top'})
-        ui.text('Height', px + 8, y + 22, {font = 7, layer = 'top'})
+        ui.text('Height', px + 8, y + 22, {layer = 'top'})
         local ch, nh = ui.slider('popup-h', px + 58, y + 22, 120, f.min_h, math.floor(b - t), math.floor(f.h + 0.5),
             {layer = 'top'})
         if cw or ch then move(f, f.x, f.y, nw, nh) end
@@ -234,7 +236,7 @@ local function popup(f, sl, st, sr, sb)
         tooltip = f.resizable and 'Its own place and size again' or 'Its own place again'}) then
         reset(f)
     end
-    ui.text('Arrows: nudge', px + 136, y + 4, {font = 7, color = C.text_dim, layer = 'top'})
+    ui.text('Arrows: nudge', px + 136, y + 4, {color = C.text_dim, layer = 'top'})
 end
 
 local function editor(state)
@@ -313,11 +315,11 @@ local function toolbar(state)
     if not p.open then return end
     local x, y = p.content_x, p.content_y
     if ui.can_move_windows() then
-        ui.text('Click a frame, drag it anywhere.', x, y, {font = 7, layer = 'top'})
+        ui.text('Click a frame, drag it anywhere.', x, y, {layer = 'top'})
     else
-        ui.text('Game windows need SacredBild.', x, y, {font = 7, color = 0xFFFF8080, layer = 'top'})
+        ui.text('Game windows need SacredBild.', x, y, {color = 0xFFFF8080, layer = 'top'})
     end
-    ui.text('Arrows nudge it (Shift: 10).', x, y + 15, {font = 7, color = C.text_dim, layer = 'top'})
+    ui.text('Arrows nudge it (Shift: 10).', x, y + 15, {color = C.text_dim, layer = 'top'})
     if ui.button('done', x, y + 36, 112, 22, 'Done (F7)', {layer = 'top'}) then ui.set_edit_mode(false) end
     if ui.button('reset-game', x + 122, y + 36, 112, 22, 'Reset windows', {layer = 'top',
         tooltip = 'The game windows back to their places'}) then
@@ -343,7 +345,7 @@ gear.on('draw', function(state)
     if sample_panel then
         local p = ui.panel('sample', 'Sample panel', 60, 120, 200, 110, {resizable = true, min_width = 140,
             min_height = 80, closable = false})
-        if p.open then ui.text('A mod panel', p.content_x, p.content_y, {font = 7}) end
+        if p.open then ui.text('A mod panel', p.content_x, p.content_y, {}) end
     end
     if ui.key_pressed(cfg.key) then ui.set_edit_mode(not ui.edit_mode()) end
     if ui.edit_mode() then

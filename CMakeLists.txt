@@ -172,6 +172,7 @@ if(SACREDGEAR)
     gear/pipe.cpp
     gear/automation.cpp
     gear/ui.cpp
+    gear/text.cpp
     gear/pickup.cpp
     gear/gear.rc
   )

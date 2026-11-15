@@ -29,3 +29,4 @@ EXPORTS
     SacredBild_UiGetWindowFrame
     SacredBild_UiSetCursorFilter
     SacredBild_UiGetWindowBounds
+    SacredBild_UiPlacement

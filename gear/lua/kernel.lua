@@ -711,6 +711,7 @@ end
 local UI_LAYERS = {world = 0, hud = 1, top = 2}
 local UI_FITS = {stretch = 0, contain = 1, fit = 1, cover = 2, fill = 2}
 local UI_ALIGN = {left = 0, center = 1, right = 4}   -- the fonts' flags
+local UI_VALIGN = {top = 0, middle = 1, bottom = 2, baseline = 3}
 local UI_MAX_PER_MOD = 2000     -- draw commands per mod and tick
 local ui_counts = {}            -- mod -> commands this tick
 local ui_slots = nil            -- window name (upper case) -> slot, this tick
@@ -832,13 +833,36 @@ local function ui_begin_tick()
     end
 end
 
+-- Fonts. nil or 'ui': the vector UI font (drawn for the screen's pixels; opts.size in layout units, opts.face, bold,
+-- italic, shadow, outline); a number or 'game1'..'game7': the game's own bitmap font of that id (scaled with the UI).
+local UI_TEXT_SIZE = 13
+local function ui_font(opts, level)
+    local f = opts.font
+    if f == nil or f == 'ui' then return -1 end
+    if type(f) == 'number' then return f end
+    local n = type(f) == 'string' and f:match('^game(%d+)$')
+    if n then return tonumber(n) end
+    error('font is "ui", "game1".."game7" or a game font id', (level or 2) + 1)
+end
+local function ui_font_style(opts)
+    return bit.bor(opts.bold and 1 or 0, opts.italic and 2 or 0, opts.shadow and 4 or 0, opts.outline and 8 or 0)
+end
+-- Width and height of text in layout units, or nil.
+local function ui_measure(text, opts)
+    local font = ui_font(opts, 2)
+    if font == -1 then
+        return native.ui_text_size(text, -1, opts.face, opts.size or UI_TEXT_SIZE, ui_font_style(opts))
+    end
+    return native.ui_text_size(text, font)
+end
+
 -- The tooltip of the widget hovered long enough, drawn last on the top layer beside the cursor.
 local UI_TOOLTIP_DELAY = 0.4
 local function ui_end_tick()
     local t = ui_tooltip
     if not t then return end
     local x, y = ui_mouse.x + 18, ui_mouse.y + 20
-    local w = (native.ui_text_size(t.text, 7) or (#t.text * 6)) + 12
+    local w = (ui_measure(t.text, {}) or (#t.text * 6)) + 12
     local s = ui_tick_state or {}
     if s.screen_right and x + w > s.screen_right then x = ui_mouse.x - w - 4 end
     native.ui_rect(2, -1, x, y, w, 20, 0xE0101018)
@@ -846,7 +870,7 @@ local function ui_end_tick()
     native.ui_rect(2, -1, x, y + 19, w, 1, 0xFFC8AA5A)
     native.ui_rect(2, -1, x, y, 1, 20, 0xFFC8AA5A)
     native.ui_rect(2, -1, x + w - 1, y, 1, 20, 0xFFC8AA5A)
-    native.ui_text(2, -1, t.text, x + 6, y + 3, 0, 0, 0xFFF0F0F0, 7, 0, 0, 0)
+    native.ui_text(2, -1, t.text, x + 6, y, 0, 20, 0xFFF0F0F0, -1, 0, 0, 0, nil, UI_TEXT_SIZE, 0, 1)
 end
 
 -- The layout (mods\gear_layout.json): where the player put the mods' panels ("mod_id:panel_id") and the game's
@@ -950,20 +974,25 @@ local function make_ui(mod)
         ui.rect(x, y + t, t, h - 2 * t, color, opts)
         return ui.rect(x + w - t, y + t, t, h - 2 * t, color, opts)
     end
-    -- ui.text(text, x, y, {color, font, width, height, align, background, padding, markup, flags, layer, window})
+    -- ui.text(text, x, y, {color, font, size, face, bold, italic, shadow, outline, width, height, align, background,
+    -- padding, markup, flags, layer, window})
     function ui.text(text, x, y, opts)
         opts = opts or {}
         text = tostring(text)
-        -- Backslashes start the fonts' markup (\c colors, \g images ...); plain text keeps them out.
-        if not opts.markup then text = text:gsub('\\', '/') end
+        local font = ui_font(opts)
+        -- Backslashes start the game fonts' markup (\c colors, \g images ...); plain text keeps them out.
+        if font ~= -1 and not opts.markup then text = text:gsub('\\', '/') end
         local layer, slot = ui_target(opts)
         if not layer then return false end
         local align = UI_ALIGN[opts.align or 'left']
         if not align then error('align is "left", "center" or "right"', 2) end
+        local valign = UI_VALIGN[opts.valign or 'top']
+        if not valign then error('valign is "top", "middle", "bottom" or "baseline"', 2) end
         ui_count(mod)
         return native.ui_text(layer, slot, text, x, y, opts.width or 0, opts.height or 0,
-            ui_color(opts.color, 0xFFFFFFFF), opts.font or 1, bit.bor(align, opts.flags or 0) % 4294967296,
-            ui_color(opts.background, 0), opts.padding or 0)
+            ui_color(opts.color, 0xFFFFFFFF), font, bit.bor(align, opts.flags or 0) % 4294967296,
+            ui_color(opts.background, 0), opts.padding or 0, opts.face, opts.size or UI_TEXT_SIZE, ui_font_style(opts),
+            valign)
     end
     -- ui.image(id, x, y, w, h, {fit = 'stretch' | 'contain' | 'cover', color, layer, window}); w, h default to the
     -- image's own size.
@@ -1054,13 +1083,13 @@ local function make_ui(mod)
     end
     local function label_color(opts) return opts.enabled == false and C.text_dim or (opts.color or C.text) end
 
-    -- ui.label(text, x, y, opts): text with the widgets' look (font 7 unless opts.font), a tooltip if opts.tooltip.
+    -- ui.label(text, x, y, opts): text with the widgets' look (the UI font unless opts.font), a tooltip if opts.tooltip.
     function ui.label(id, text, x, y, opts)
         opts = opts or {}
-        local font = opts.font or 7
-        local w, h = native.ui_text_size(tostring(text), font)
+        local w, h = ui_measure(tostring(text), opts)
         if opts.tooltip then region(id, x, y, w or 60, h or 14, opts) end
-        return ui.text(text, x, y, {font = font, color = label_color(opts), layer = opts.layer})
+        return ui.text(text, x, y, {font = opts.font, size = opts.size, face = opts.face, bold = opts.bold,
+            height = opts.height, valign = opts.valign, color = label_color(opts), layer = opts.layer})
     end
 
     -- ui.button(id, x, y, w, h, text, opts) -> clicked
@@ -1072,7 +1101,7 @@ local function make_ui(mod)
         if opts.image then
             ui.image(opts.image, x + 2, y + 2, h - 4, h - 4, {fit = 'contain', layer = opts.layer})
         end
-        ui.text(text, x, y + math.floor((h - 14) / 2), {width = w, align = 'center', font = 7,
+        ui.text(text, x, y, {width = w, height = h, align = 'center', valign = 'middle',
             color = label_color(opts), layer = opts.layer})
         return r.clicked
     end
@@ -1080,11 +1109,11 @@ local function make_ui(mod)
     -- ui.checkbox(id, x, y, text, checked, opts) -> changed, checked
     function ui.checkbox(id, x, y, text, checked, opts)
         opts = opts or {}
-        local tw = native.ui_text_size(tostring(text), 7) or 60
+        local tw = ui_measure(tostring(text), {}) or 60
         local r = region(id, x, y, 18 + tw, 16, opts)
         box(x, y + 1, 14, 14, r.hover and C.bg_hover or C.bg, r.hover and C.edge or C.edge_dim, opts)
         if checked then ui.rect(x + 3, y + 4, 8, 8, opts.enabled == false and C.text_dim or C.accent, opts) end
-        ui.text(text, x + 20, y, {font = 7, color = label_color(opts), layer = opts.layer})
+        ui.text(text, x + 20, y, {height = 16, valign = 'middle', color = label_color(opts), layer = opts.layer})
         if r.clicked then return true, not checked end
         return false, checked
     end
@@ -1101,12 +1130,12 @@ local function make_ui(mod)
     -- ui.radio(id, x, y, text, selected, opts) -> clicked
     function ui.radio(id, x, y, text, selected, opts)
         opts = opts or {}
-        local tw = native.ui_text_size(tostring(text), 7) or 60
+        local tw = ui_measure(tostring(text), {}) or 60
         local r = region(id, x, y, 18 + tw, 16, opts)
         disc(x + 7, y + 8, 7, r.hover and C.edge or C.edge_dim, opts)
         disc(x + 7, y + 8, 6, r.hover and C.bg_hover or 0xF0141420, opts)
         if selected then disc(x + 7, y + 8, 3, opts.enabled == false and C.text_dim or C.accent, opts) end
-        ui.text(text, x + 20, y, {font = 7, color = label_color(opts), layer = opts.layer})
+        ui.text(text, x + 20, y, {height = 16, valign = 'middle', color = label_color(opts), layer = opts.layer})
         return r.clicked
     end
 
@@ -1121,7 +1150,7 @@ local function make_ui(mod)
                 index, changed = i, true
             end
             if opts.horizontal then
-                px = px + 26 + (native.ui_text_size(tostring(text), 7) or 60) + (opts.spacing or 8)
+                px = px + 26 + (ui_measure(tostring(text), {}) or 60) + (opts.spacing or 8)
             else
                 py = py + (opts.spacing or 18)
             end
@@ -1138,7 +1167,8 @@ local function make_ui(mod)
         local open = ui_dropdown == handle
         local r = region(id, x, y, w, h, opts)
         box(x, y, w, h, (r.hover or open) and C.bg_hover or C.bg, (r.hover or open) and C.edge or C.edge_dim, opts)
-        ui.text(tostring(options[index] or ''), x + 6, y + 2, {font = 7, color = label_color(opts), layer = opts.layer})
+        ui.text(tostring(options[index] or ''), x + 6, y, {height = h, valign = 'middle', color = label_color(opts),
+            layer = opts.layer})
         -- the arrow
         for i = 0, 3 do ui.rect(x + w - 14 + i, y + 7 + i, 8 - 2 * i, 1, C.accent, opts) end
         if r.clicked then
@@ -1159,7 +1189,7 @@ local function make_ui(mod)
                 if ir.hover or i == index then
                     ui.rect(x + 1, ly + 1 + (i - 1) * 18, w - 2, 18, ir.hover and 0xFF4A3C28 or 0xFF2A2418, top)
                 end
-                ui.text(tostring(text), x + 6, ly + 3 + (i - 1) * 18, {font = 7, layer = 'top',
+                ui.text(tostring(text), x + 6, ly + 1 + (i - 1) * 18, {height = 18, valign = 'middle', layer = 'top',
                     color = i == index and C.accent or C.text})
                 if ir.clicked then
                     changed = i ~= index
@@ -1189,7 +1219,8 @@ local function make_ui(mod)
         ui.rect(x, y + 7, at(value) - x + 5, 2, C.accent, opts)
         box(at(value), y + 2, 10, 12, (r.hover or r.held) and C.bg_down or C.bg_hover, C.edge, opts)
         if opts.format ~= false then
-            ui.text((opts.format or '%g'):format(value), x + w + 6, y, {font = 7, color = label_color(opts), layer = opts.layer})
+            ui.text((opts.format or '%g'):format(value), x + w + 6, y, {height = 16, valign = 'middle',
+                color = label_color(opts), layer = opts.layer})
         end
         return changed, value
     end
@@ -1227,7 +1258,7 @@ local function make_ui(mod)
         ui.rect(x, y, w, h, opts.background or 0xD80E0E14, o)
         ui.frame(x, y, w, h, ui_edit and C.accent or C.edge, ui_edit and 2 or 1, o)
         ui.rect(x + 1, y + 1, w - 2, 20, C.title, o)
-        ui.text(title, x + 8, y + 3, {font = 7, color = C.accent, layer = opts.layer})
+        ui.text(title, x + 8, y + 1, {height = 20, valign = 'middle', color = C.accent, layer = opts.layer})
         region(tostring(id) .. '#body', x, y, w, h, o)
         local function store()
             local vx, vy = to_virtual(x, y)
@@ -1263,7 +1294,7 @@ local function make_ui(mod)
         end
         if opts.closable ~= false then
             local cr = region(tostring(id) .. '#close', x + w - 21, y + 2, 18, 18, {layer = opts.layer, tooltip = 'Close'})
-            ui.text('x', x + w - 21, y + 2, {width = 18, align = 'center', font = 7,
+            ui.text('x', x + w - 21, y + 2, {width = 18, height = 18, align = 'center', valign = 'middle',
                 color = cr.hover and 0xFFFF8080 or C.text, layer = opts.layer})
             if cr.clicked then p.closed = true end
         end
@@ -1371,8 +1402,9 @@ local function make_ui(mod)
     function ui.to_virtual(x, y) return to_virtual(x, y) end
     function ui.from_virtual(vx, vy) return from_virtual(vx, vy) end
 
+    -- ui.text_size(text, font_or_opts): a font (see ui.text) or a table of ui.text's font options.
     function ui.text_size(text, font)
-        return native.ui_text_size(tostring(text), font or 1)
+        return ui_measure(tostring(text), type(font) == 'table' and font or {font = font})
     end
     function ui.windows() return native.ui_windows() end
     function ui.window(name)

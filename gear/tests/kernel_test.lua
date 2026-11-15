@@ -161,7 +161,7 @@ files.a = {
         gear.on('draw', function(state)
             record.draw_mode = state and state.mode
             gear.ui.rect(10, 20, 100, 50, gear.ui.rgba(0, 0, 0, 128))
-            gear.ui.text('a\\b', 12, 22, {color = {255, 0, 0}, align = 'center', width = 96, layer = 'top'})
+            gear.ui.text('a\\b', 12, 22, {color = {255, 0, 0}, align = 'center', width = 96, layer = 'top', font = 'game1'})
             gear.ui.image(1, 0, 0, 32, 32, {fit = 'contain', window = 'ui_wnd_inventory'})
             record.no_window = gear.ui.image(1, 0, 0, 32, 32, {window = 'UI_WND_NOPE'})
             record.bad_layer = not pcall(gear.ui.rect, 0, 0, 1, 1, 0, {layer = 'nope'})

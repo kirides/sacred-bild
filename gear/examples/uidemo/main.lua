@@ -60,7 +60,7 @@ local function gallery()
     if ui.button('btn-icon', x + 118, y + 18, 130, 22, 'With an icon', {image = icon, tooltip = 'A button with a game image'}) then
         G.clicks = G.clicks + 10
     end
-    ui.text(('clicked %d'):format(G.clicks), x + 258, y + 22, {font = 7})
+    ui.text(('clicked %d'):format(G.clicks), x + 258, y + 18, {height = 22, valign = 'middle'})
     -- Checkboxes
     y = y + 50
     ui.label('l-checks', 'Checkboxes', x, y, {color = ui.COLORS.accent})
@@ -76,16 +76,16 @@ local function gallery()
     -- Dropdown, slider
     y = y + 46
     ui.label('l-drop', 'Dropdown and sliders', x, y, {color = ui.COLORS.accent})
-    ui.text('Image fit', x, y + 20, {font = 7})
+    ui.text('Image fit', x, y + 18, {height = 18, valign = 'middle'})
     -- Image (drawn before the dropdown: the open list covers it)
     local px, py = x + 290, y + 18
     ui.rect(px, py, G.size, G.size * 0.6, ui.rgba(40, 40, 60, 160))
     if portrait then
         ui.image(portrait, px, py, G.size, G.size * 0.6, {fit = FITS[G.fit], color = ui.rgba(255, 255, 255, G.alpha)})
     end
-    ui.text('Opacity', x, y + 46, {font = 7})
+    ui.text('Opacity', x, y + 46, {height = 16, valign = 'middle'})
     _, G.alpha = ui.slider('alpha', x + 70, y + 46, 150, 0, 255, G.alpha, {step = 5, tooltip = 'Drag the knob'})
-    ui.text('Size', x, y + 70, {font = 7})
+    ui.text('Size', x, y + 70, {height = 16, valign = 'middle'})
     _, G.size = ui.slider('size', x + 70, y + 70, 150, 48, 128, G.size, {step = 4})
     _, G.fit = ui.dropdown('fit', x + 70, y + 18, 150, FITS, G.fit, {tooltip = 'How the image fills its box'})
     -- Text and fonts
