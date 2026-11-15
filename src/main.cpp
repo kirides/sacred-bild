@@ -1,5 +1,6 @@
 #include "config.h"
 #include "crash_dump.h"
+#include "instance.h"
 #include "log.h"
 #include "patch.h"
 #include "profiler.h"
@@ -179,10 +180,10 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
             GameServer::installHooks();
             return TRUE;
         }
-        Log::init((gameDir + L"\\SacredBild.log").c_str());
+        Log::init(Instance::logPath(gameDir, L"SacredBild.log").c_str());
         LOG("SacredBild " __DATE__ " " __TIME__);
         ConfigFile::load(gameDir);
-        CrashDump::install(gameDir, L"SacredBild-crash");
+        CrashDump::install(Instance::automation() ? Instance::directory(gameDir) : gameDir, L"SacredBild-crash");
         enableDpiAwareness();
 
         // `reserved` is null when the game loads ddraw.dll with LoadLibrary, after its entry point.

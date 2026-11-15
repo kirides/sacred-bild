@@ -101,6 +101,21 @@ namespace
         return *chosen;
     }
 
+    // Sacred Gear's cursor filter (SacredBild_UiSetCursorFilter) and its answer for the current UI frame.
+    using CursorFilterFn = int(__cdecl*)(int x, int y);
+    std::atomic<CursorFilterFn> g_cursorFilter{nullptr};
+    std::atomic<bool> g_cursorHidden{false};
+    thread_local bool t_realCursor = false;    // the held item follows the real cursor
+    constexpr int kHiddenCursor = -30000;      // far off every window, still a short
+
+    bool cursorHidden() { return !t_realCursor && g_cursorHidden.load(std::memory_order_relaxed); }
+
+    bool modUiAt(int x, int y)
+    {
+        const CursorFilterFn filter = g_cursorFilter.load(std::memory_order_acquire);
+        return filter && filter(x, y) != 0;
+    }
+
     // The UI manager's state picks the layout: in game, unless a window the manager draws alone (savegame, options,
     // character, world map) replaces the game's screen. A UI scope keeps the layout it started with.
     const Layout& liveLayout()
@@ -227,7 +242,10 @@ namespace
     {
         const UiCanvas::Frame current = UiCanvas::frame();
         UiCanvas::FrameScope unconfined{{current.x, current.y, false}};
+        const bool real = t_realCursor;
+        t_realCursor = true;
         g_origHeldItem(self, edx, device, flag);
+        t_realCursor = real;
     }
 
     uint32_t __fastcall hookSavePortrait(void* self, void* edx, const char* path, int w, int h, float scale)
@@ -293,9 +311,11 @@ namespace
     }
 
     // The world cursor handler reads the mouse once (redirected to physical) and also asks the UI with it.
+    // Mod UI (Sacred Gear) counts as UI there: the world picks nothing under it.
     bool __fastcall isCursorOverUiPhysical(cUI_Manager* manager, void* /*edx*/, int x, int y)
     {
-        return manager->isCursorOverUi(UiCanvas::toVirtualX(x), UiCanvas::toVirtualY(y));
+        const int vx = UiCanvas::toVirtualX(x), vy = UiCanvas::toVirtualY(y);
+        return modUiAt(vx, vy) || manager->isCursorOverUi(vx, vy);
     }
 
     int __fastcall physicalGetX(cMouse* mouse)
@@ -319,8 +339,9 @@ namespace
     }
 
     // UI reads of the cursor: canvas coordinates moved into the calling thread's frame.
-    int frameX(int canvas) { return static_cast<int>(std::lround(canvas - t_frame.x)); }
-    int frameY(int canvas) { return static_cast<int>(std::lround(canvas - t_frame.y)); }
+    // Under mod UI they see it far off the screen: no window hovers or shows a tooltip under a mod's panel.
+    int frameX(int canvas) { return cursorHidden() ? kHiddenCursor : static_cast<int>(std::lround(canvas - t_frame.x)); }
+    int frameY(int canvas) { return cursorHidden() ? kHiddenCursor : static_cast<int>(std::lround(canvas - t_frame.y)); }
 
     int __fastcall frameGetX(cMouse* mouse)
     {
@@ -335,7 +356,7 @@ namespace
     void* __cdecl frameMouseInstance()
     {
         cMouse* mouse = cMouse::instance();
-        if (t_frame.x == 0.0f && t_frame.y == 0.0f)
+        if (t_frame.x == 0.0f && t_frame.y == 0.0f && !cursorHidden())
         {
             return mouse;
         }
@@ -348,7 +369,11 @@ namespace
     void __fastcall frameCursorPos(cMouse* mouse, void* /*edx*/, int* x, int* y)
     {
         Addr::cMouse_getCursorPos(mouse, x, y);
-        if (mouse->cursorImage)
+        if (mouse->cursorImage && cursorHidden())
+        {
+            *x = *y = kHiddenCursor;
+        }
+        else if (mouse->cursorImage)
         {
             *x = frameX(*x);
             *y = frameY(*y);
@@ -362,6 +387,28 @@ bool UiCanvas::inGame()
 {
     const cUI_Manager* manager = cUI_Manager::instance();
     return manager && (manager->flags & cUI_Manager::inGame);
+}
+
+void UiCanvas::updateCursorFilter()
+{
+    const cMouse* mouse = g_cursorFilter.load(std::memory_order_acquire) ? cMouse::instance() : nullptr;
+    g_cursorHidden.store(mouse && modUiAt(mouse->x, mouse->y), std::memory_order_relaxed);
+}
+
+// Sacred Gear: `filter(x, y)` (canvas coordinates) tells whether mod UI lies there; nullptr: none. Returns 0 while
+// the canvas is off (the UI's cursor reads are not SacredBild's then).
+extern "C" int __cdecl SacredBild_UiSetCursorFilter(int(__cdecl* filter)(int x, int y))
+{
+    if (!g_enabled)
+    {
+        return 0;
+    }
+    g_cursorFilter.store(filter, std::memory_order_release);
+    if (!filter)
+    {
+        g_cursorHidden = false;
+    }
+    return 1;
 }
 
 UiCanvas::Bounds UiCanvas::menuCanvas()
@@ -567,9 +614,9 @@ void UiCanvas::install()
     for (uintptr_t site : Addr::worldMouseReads) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&physicalMouseInstance));
     redirected += Patch::redirectCall(Addr::worldCursorUiTestCall, reinterpret_cast<void*>(&isCursorOverUiPhysical));
     LOG("UI canvas: {} world mouse reads redirected", redirected);
-    if (Config::ui.anchor)
     {
-        // The UI's own reads of the cursor follow the frame they run in.
+        // The UI's own reads of the cursor follow the frame they run in (anchored windows, windows Sacred Gear moves)
+        // and hide it under mod UI.
         redirected = 0;
         for (uintptr_t site : Addr::uiMouseReads) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&frameMouseInstance));
         for (uintptr_t site : Addr::uiGetXCalls) redirected += Patch::redirectCall(site, reinterpret_cast<void*>(&frameGetX));

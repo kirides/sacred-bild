@@ -107,6 +107,7 @@ local native = {
     ui_move_window = function(slot, x, y, set) moved_windows[slot] = set and {x, y} or nil; return true end,
     write_file = function(dir, rel, text) files[dir] = files[dir] or {}; files[dir][rel] = text; return true end,
     -- automation
+    auto_instance = function() return 'test' end,
     auto_mods = function() return {} end,
     auto_state = function() return {menus = true, in_game = false, dialog = false, cinematic = false, width = 800, height = 600, mouse_x = 0, mouse_y = 0} end,
     auto_ui = function() return {} end,
@@ -147,6 +148,7 @@ files.a = {
         record.ro = not pcall(function() gear.data.object_types.find = nil end)
         record.emit_reserved = not pcall(gear.emit, 'session.start')
         record.auto = gear.auto ~= nil
+    record.auto_instance = gear.auto and gear.auto.instance
         gear.task(function()
             record.task = 'started'
             gear.wait(1)
@@ -251,6 +253,7 @@ ok(rec.pipe_denied, 'pipe not listed in mod.lua is refused')
 ok(rec.ro, 'data is read only')
 ok(rec.emit_reserved, 'reserved events cannot be emitted')
 ok(rec.auto, 'automation for a mod that asks for it')
+ok(rec.auto_instance == 'test', 'gear.auto.instance')
 ok(rec.goblin == 2, 'type by name')
 ok(rec.search == 2, 'type search')
 

@@ -123,11 +123,25 @@ namespace
         return name;
     }
 
+    // The control names by slot (docs/UI_SYSTEM.md): what a window's name field holds is not reliable (the
+    // statistics window's read empty in some runs, the net portraits' holds junk).
+    static const char* const kSlotNames[kWindowSlots] = {
+        "UI_WND_TASKBAR", "UI_WND_INVENTORY", "UI_WND_EQUIPMENT", "UI_WND_BLACKSMITH", "UI_WND_MERCHANT",
+        "UI_WND_MEGAMAP", "UI_WND_OVERVIEWMAP", "UI_WND_MERC", "UI_WND_STATS_CHAR", "UI_WND_CONSOLE",
+        "UI_WND_QUESTBOOK", "UI_WND_SAVEGAME", "UI_WND_ESCMENU", "UI_WND_PURCHASE", "UI_WND_MASTER",
+        "UI_WND_OPTIONS", "UI_WND_CHEST", "UI_WND_HORSE", "UI_WND_NETINFO", "UI_WND_NETPORTRAIT", "UI_CHARACTER",
+        "UI_WND_CUBE", "UI_WND_TRADE"};
+
+    std::string windowName(int slot, uintptr_t w)
+    {
+        return slot >= 0 && slot < kWindowSlots ? kSlotNames[slot] : controlName(w);
+    }
+
     Ui::WindowInfo windowInfo(uintptr_t m, int slot, uintptr_t w, int exclusive)
     {
         Ui::WindowInfo info;
         info.slot = slot;
-        info.name = controlName(w);
+        info.name = windowName(slot, w);
         info.x = readOr<int32_t>(w + 0x24, 0);
         info.y = readOr<int32_t>(w + 0x28, 0);
         info.width = readOr<int16_t>(w + 0x2C, 0);
@@ -145,7 +159,12 @@ namespace
     using BoundsFn = int(__cdecl*)(float* bounds);
     using SetWindowFrameFn = int(__cdecl*)(int slot, float x, float y, int set);
     using GetWindowFrameFn = int(__cdecl*)(int slot, float* x, float* y);
+    using WindowBoundsFn = int(__cdecl*)(int slot, float* rect);
+    using CursorFilterFn = int(__cdecl*)(int x, int y);
+    using SetCursorFilterFn = int(__cdecl*)(CursorFilterFn filter);
     SetWindowFrameFn g_setWindowFrame = nullptr;
+    WindowBoundsFn g_windowBounds = nullptr;
+    SetCursorFilterFn g_setCursorFilter = nullptr;
     GetWindowFrameFn g_getWindowFrame = nullptr;
     PushFrameFn g_pushFrame = nullptr;
     PopFrameFn g_popFrame = nullptr;
@@ -171,6 +190,8 @@ namespace
             g_screenBounds = reinterpret_cast<BoundsFn>(GetProcAddress(bild, "SacredBild_UiScreenBounds"));
             g_setWindowFrame = reinterpret_cast<SetWindowFrameFn>(GetProcAddress(bild, "SacredBild_UiSetWindowFrame"));
             g_getWindowFrame = reinterpret_cast<GetWindowFrameFn>(GetProcAddress(bild, "SacredBild_UiGetWindowFrame"));
+            g_windowBounds = reinterpret_cast<WindowBoundsFn>(GetProcAddress(bild, "SacredBild_UiGetWindowBounds"));
+            g_setCursorFilter = reinterpret_cast<SetCursorFilterFn>(GetProcAddress(bild, "SacredBild_UiSetCursorFilter"));
         });
     }
 
@@ -768,6 +789,15 @@ namespace
         return g_origReceiveEvent(manager, edx, event);
     }
 
+    // SacredBild asks it once per UI frame and for the world's pick: while the cursor is over a mod's region, the game's
+    // windows see the cursor off the screen (no hover, no tooltips under mod UI) and the world picks nothing there.
+    int __cdecl cursorOverModUi(int x, int y)
+    {
+        const uintptr_t m = manager();
+        std::scoped_lock lock(g_lock);
+        return regionAt(m, x, y) != 0;
+    }
+
     // Whether the foreground window belongs to the game.
     bool gameHasFocus()
     {
@@ -872,6 +902,11 @@ bool Ui::install()
     {
         LOG("UI: the UI's event handler was not found: mod UI takes no mouse input");
     }
+    findBild();
+    if (g_setCursorFilter && g_setCursorFilter(&cursorOverModUi))
+    {
+        LOG("UI: the game's windows and the world do not see the cursor over mod UI");
+    }
     return ok;
 }
 
@@ -925,6 +960,15 @@ std::vector<Ui::WindowInfo> Ui::windows()
                 // Not the windows the game draws alone (world map, savegame, options, character export).
                 info.movable = g_setWindowFrame && slot != 5 && slot != 11 && slot != 15 && slot != 20;
             }
+            float rect[4];
+            if (g_windowBounds && g_windowBounds(slot, rect))
+            {
+                info.hasBounds = true;
+                info.boundsX = rect[0] + info.frameX;   // its own layout -> the canvas, where it is now
+                info.boundsY = rect[1] + info.frameY;
+                info.boundsW = rect[2];
+                info.boundsH = rect[3];
+            }
             out.push_back(std::move(info));
         }
     }
@@ -968,7 +1012,7 @@ Ui::State Ui::state()
     const int exclusive = std::strcmp(s.mode, "game") == 0 ? exclusiveSlot(m) : -1;
     if (exclusive >= 0)
     {
-        s.exclusive = controlName(windowAt(m, exclusive));
+        s.exclusive = windowName(exclusive, windowAt(m, exclusive));
     }
     s.escapeMenu = visible(windowAt(m, kEscapeMenuSlot));
     s.messageBox = visible(readOr<uintptr_t>(m + 0x144, 0));

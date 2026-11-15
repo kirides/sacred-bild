@@ -361,6 +361,7 @@ bool DeviceProxy::mapToCanvas(DWORD fvf, const void* verts, DWORD count, const v
         std::memcpy(m_scratch.data(), verts, bytes);
         return true;
     }
+    UiWindows::noteDraw(m_virtMinX, m_virtMinY, m_virtMaxX, m_virtMaxY);
     const bool onScreen = m_virtMaxX > 0 && m_virtMinX < 1024 && m_virtMaxY > 0 && m_virtMinY < 768;
     if (confine && onScreen && (m_virtMaxX > 1100 || m_virtMaxY > 830 || m_virtMinX < -76 || m_virtMinY < -62))
     {

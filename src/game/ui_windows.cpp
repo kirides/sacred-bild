@@ -5,6 +5,7 @@
 #include "patch.h"
 
 #include <windows.h>
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 #include <iterator>
@@ -360,6 +361,94 @@ void UiWindows::sync()
             }
         }
     }
+}
+
+namespace
+{
+    // The windows' drawn rects (canvas coordinates): being drawn (render thread) and of the last frame (g_drawnLock).
+    struct Drawn
+    {
+        float left = 0, top = 0, right = 0, bottom = 0;
+        bool any = false;
+    };
+    constexpr size_t kWindows = static_cast<size_t>(W::count);
+    Drawn g_drawing[kWindows];
+    Drawn g_drawn[kWindows];
+    ULONGLONG g_drawnAt[kWindows]{};
+    SRWLOCK g_drawnLock = SRWLOCK_INIT;
+}
+
+void UiWindows::noteDraw(float minX, float minY, float maxX, float maxY)
+{
+    const Owner& owner = t_current;
+    const UiCanvas::Frame frame = UiCanvas::frame();
+    if (owner.kind != Kind::Window || owner.index < 0 || owner.index >= static_cast<int>(kWindows) || !frame.confine)
+    {
+        return;
+    }
+    minX = std::max(minX, 0.0f);
+    minY = std::max(minY, 0.0f);
+    maxX = std::min(maxX, 1024.0f);
+    maxY = std::min(maxY, 768.0f);
+    if (maxX <= minX || maxY <= minY)
+    {
+        return;
+    }
+    Drawn& d = g_drawing[owner.index];
+    if (!d.any)
+    {
+        d = {minX, minY, maxX, maxY, true};
+        return;
+    }
+    d.left = std::min(d.left, minX);
+    d.top = std::min(d.top, minY);
+    d.right = std::max(d.right, maxX);
+    d.bottom = std::max(d.bottom, maxY);
+}
+
+void UiWindows::publishDrawn()
+{
+    // A window that did not draw in this pass keeps its last rect for a moment: the manager skips frames while the
+    // engine is paused, and Sacred Gear lists only the windows the manager draws.
+    const ULONGLONG now = GetTickCount64();
+    AcquireSRWLockExclusive(&g_drawnLock);
+    for (size_t i = 0; i < kWindows; ++i)
+    {
+        if (g_drawing[i].any)
+        {
+            g_drawn[i] = g_drawing[i];
+            g_drawnAt[i] = now;
+        }
+        else if (now - g_drawnAt[i] > 250)
+        {
+            g_drawn[i] = {};
+        }
+    }
+    ReleaseSRWLockExclusive(&g_drawnLock);
+    std::fill(std::begin(g_drawing), std::end(g_drawing), Drawn{});
+}
+
+// Sacred Gear: where window `slot` (cUI_Manager::Window) drew in the last UI frame, as x, y, width, height in the
+// window's own layout (add its frame for the canvas): its visual bounds. 0 if it drew nothing (closed, hidden, the
+// canvas off).
+extern "C" int __cdecl SacredBild_UiGetWindowBounds(int slot, float* rect)
+{
+    if (slot < 0 || slot >= static_cast<int>(kWindows) || !rect)
+    {
+        return 0;
+    }
+    AcquireSRWLockShared(&g_drawnLock);
+    const Drawn d = g_drawn[slot];
+    ReleaseSRWLockShared(&g_drawnLock);
+    if (!d.any)
+    {
+        return 0;
+    }
+    rect[0] = d.left;
+    rect[1] = d.top;
+    rect[2] = d.right - d.left;
+    rect[3] = d.bottom - d.top;
+    return 1;
 }
 
 void UiWindows::install()

@@ -33,6 +33,7 @@ set(COMMON_OPTIONS /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
 # its own copy (its own log file, its own Detours transactions).
 add_library(sacred_core STATIC
   src/fmt.cpp
+  src/instance.cpp
   src/log.cpp
   src/patch.cpp
   src/sig.cpp

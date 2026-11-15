@@ -105,6 +105,21 @@ Reverse engineering helpers (how addresses and offsets were found):
 | `tools/check_rets.py <address>...` | `ret` sizes, i.e. stack argument counts |
 | `tools/profile_report.py <SacredBild-profile.txt>` | Names the hot spots of a `[Debug] Profiler` profile |
 
+## Game-launch lock
+
+Several agents share the game folders. Launches of `Sacred.exe` / `SacredReborn.exe` run in parallel: each gets a unique `-gear-instance=NAME`, and Gear writes its outputs to `GearAutomation\NAME\`. What still collides is copying DLLs and mods into the game folder (a running game holds them, and one agent would overwrite another's build), so that step goes through the machine-wide lock `tools/game-lock.ps1`. The lock is one file, `%ProgramData%\sacred-bild\game.lock` (override: `-LockPath` or `SACRED_GAME_LOCK`), holding the owner's `-Id` (unique text per agent, e.g. `agent-uitest-1`), PID and start time. It is created atomically, waiters log the wait every 5 s.
+
+Hold the lock only for the copy, then release it before launching:
+
+    powershell -NoProfile -File tools\game-lock.ps1 acquire -Id <agent-id>
+    ... copy ddraw.dll / SacredGear.dll / mods ...
+    powershell -NoProfile -File tools\game-lock.ps1 release -Id <agent-id>
+    Sacred.exe -gear-instance=<agent-id> ...
+
+Or in one step: `powershell -NoProfile -File tools\game-lock.ps1 run -Id <agent-id> -- <copy command> [args]` (acquires, runs, releases, exits with the command's exit code).
+
+`status` shows the holder. `release` refuses (exit 3) if another id holds it; `-Force` overrides. Acquire exits 2 on timeout (`-TimeoutSeconds`, default 3600). A lock is stale and taken over after `-MaxAgeMinutes` (default 30), or when its owner PID is gone (`run` records the wrapper's PID; with `acquire` pass `-OwnerPid` of a long-lived process, otherwise only the age applies). Always release.
+
 ## Build
 
 Requires Visual Studio 2026 (MSVC, Win32 toolset), CMake 3.25+ and vcpkg with `VCPKG_ROOT` set

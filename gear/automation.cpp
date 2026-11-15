@@ -1,5 +1,6 @@
 #include "automation.h"
 #include "game/gear_addr.h"
+#include "instance.h"
 #include "log.h"
 #include "lua_host.h"
 #include "patch.h"
@@ -11,6 +12,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <cwchar>
 #include <map>
@@ -485,6 +487,13 @@ namespace
         {
             exStyle = (exStyle | WS_EX_NOACTIVATE) & ~static_cast<DWORD>(WS_EX_TOPMOST);
         }
+        // The title tells the runs apart in the task bar and the window list.
+        std::string titled;
+        if (!(style & WS_CHILD) && name && *name && !g_options.instance.empty())
+        {
+            titled = std::string(name) + " [gear:" + g_options.instance + "]";
+            name = titled.c_str();
+        }
         const HWND created =
             g_origCreateWindowExA(exStyle, cls, name, style, x, y, w, h, parent, menu, instance, param);
         if (created && isolated() && !(style & WS_CHILD))
@@ -705,6 +714,7 @@ namespace
             modsText = envVar("SACREDGEAR_MODS");
         }
         g_options.enabled = enabled;
+        g_options.instance = Instance::name();
         {
             std::string t;
             for (const wchar_t c : timeoutText)
@@ -750,7 +760,7 @@ namespace
         if (g_options.timeoutSeconds > 0 && now - started > static_cast<ULONGLONG>(g_options.timeoutSeconds) * 1000)
         {
             LOG("Automation: watchdog timeout ({} s)", g_options.timeoutSeconds);
-            Automation::quit(3);
+            Automation::quit(3, "watchdog");
         }
         bool stuck = false;
         if (HWND w = Automation::window())
@@ -773,7 +783,7 @@ namespace
         else if (now - stuckSince > 60000)
         {
             LOG("Automation: watchdog timeout (the game stopped responding for 60 s)");
-            Automation::quit(3);
+            Automation::quit(3, "watchdog");
         }
     }
 
@@ -852,13 +862,169 @@ const Automation::Options& Automation::options()
     return g_options;
 }
 
+namespace
+{
+    // The game's single-instance check is CreateMutexA("SACRED_INSTANCE") in its start-up (0x817B30; "already
+    // running" when the name exists). The name gets this run's suffix, so parallel runs, and a player's own game,
+    // never meet. Every named mutex gets it: that is the only one the game makes. The mutexes that the engine
+    // creates without a name stay as they are.
+    using CreateMutexAFn = HANDLE(WINAPI*)(LPSECURITY_ATTRIBUTES, BOOL, LPCSTR);
+    using OpenMutexAFn = HANDLE(WINAPI*)(DWORD, BOOL, LPCSTR);
+    using ExitProcessFn = void(WINAPI*)(UINT);
+    CreateMutexAFn g_origCreateMutexA = nullptr;
+    OpenMutexAFn g_origOpenMutexA = nullptr;
+    ExitProcessFn g_origExitProcess = nullptr;
+
+    std::string instanceMutexName(LPCSTR name)
+    {
+        return std::string(name) + "-gear-" + g_options.instance;
+    }
+
+    HANDLE WINAPI hookCreateMutexA(LPSECURITY_ATTRIBUTES attributes, BOOL owner, LPCSTR name)
+    {
+        if (!name)
+        {
+            return g_origCreateMutexA(attributes, owner, name);
+        }
+        const std::string renamed = instanceMutexName(name);
+        LOG("Automation: mutex {} is {}", name, renamed);
+        return g_origCreateMutexA(attributes, owner, renamed.c_str());
+    }
+
+    HANDLE WINAPI hookOpenMutexA(DWORD access, BOOL inherit, LPCSTR name)
+    {
+        if (!name)
+        {
+            return g_origOpenMutexA(access, inherit, name);
+        }
+        const std::string renamed = instanceMutexName(name);
+        return g_origOpenMutexA(access, inherit, renamed.c_str());
+    }
+
+    // run.json: written at the start, rewritten when the process ends.
+    std::wstring g_runFile;
+    std::string g_runStarted, g_runCommandLine;
+    std::atomic<bool> g_runEnded{false};
+
+    std::string utf8(const wchar_t* s)
+    {
+        const int n = WideCharToMultiByte(CP_UTF8, 0, s, -1, nullptr, 0, nullptr, nullptr);
+        std::string out(n > 1 ? n - 1 : 0, '\0');
+        if (n > 1)
+        {
+            WideCharToMultiByte(CP_UTF8, 0, s, -1, out.data(), n, nullptr, nullptr);
+        }
+        return out;
+    }
+
+    std::string jsonString(const std::string& s)
+    {
+        std::string out = "\"";
+        for (const char c : s)
+        {
+            switch (c)
+            {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20)
+                {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                }
+                else
+                {
+                    out += c;
+                }
+            }
+        }
+        return out + "\"";
+    }
+
+    std::string utcNow()
+    {
+        SYSTEMTIME t;
+        GetSystemTime(&t);
+        char buf[40];
+        std::snprintf(buf, sizeof(buf), "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ", t.wYear, t.wMonth, t.wDay, t.wHour,
+                      t.wMinute, t.wSecond, t.wMilliseconds);
+        return buf;
+    }
+
+    void writeRun(bool ended, int exitCode, const char* reason)
+    {
+        if (g_runFile.empty())
+        {
+            return;
+        }
+        std::string json = "{\n  \"instance\": " + jsonString(g_options.instance) +
+                           ",\n  \"pid\": " + std::to_string(GetCurrentProcessId()) +
+                           ",\n  \"command_line\": " + jsonString(g_runCommandLine) +
+                           ",\n  \"started\": " + jsonString(g_runStarted);
+        if (ended)
+        {
+            json += ",\n  \"exit_code\": " + std::to_string(exitCode) + ",\n  \"ended\": " + jsonString(utcNow()) +
+                    ",\n  \"reason\": " + jsonString(reason);
+        }
+        json += "\n}\n";
+        HANDLE f = CreateFileW(g_runFile.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (f != INVALID_HANDLE_VALUE)
+        {
+            DWORD written = 0;
+            WriteFile(f, json.data(), static_cast<DWORD>(json.size()), &written, nullptr);
+            CloseHandle(f);
+        }
+    }
+
+    // The first end wins (a quit() then ExitProcess is one end, with quit's reason).
+    void endRun(int code, const char* reason)
+    {
+        if (!g_runEnded.exchange(true))
+        {
+            writeRun(true, code, reason);
+        }
+    }
+
+    void WINAPI hookExitProcess(UINT code)
+    {
+        LOG("Automation: the game exits with code {}", code);
+        endRun(static_cast<int>(code), "exit");
+        g_origExitProcess(code);
+    }
+}
+
+void Automation::installInstance(const std::wstring& gameDir)
+{
+    if (!options().enabled)
+    {
+        return;
+    }
+    g_runFile = Instance::directory(gameDir) + L"\\run.json";
+    g_runStarted = utcNow();
+    g_runCommandLine = utf8(GetCommandLineW());
+    writeRun(false, 0, nullptr);
+    g_origCreateMutexA = reinterpret_cast<CreateMutexAFn>(
+        Patch::iat("KERNEL32.dll", "CreateMutexA", reinterpret_cast<void*>(&hookCreateMutexA)));
+    g_origOpenMutexA = reinterpret_cast<OpenMutexAFn>(
+        Patch::iat("KERNEL32.dll", "OpenMutexA", reinterpret_cast<void*>(&hookOpenMutexA)));
+    g_origExitProcess = reinterpret_cast<ExitProcessFn>(
+        Patch::iat("KERNEL32.dll", "ExitProcess", reinterpret_cast<void*>(&hookExitProcess)));
+    LOG("Automation instance {} (pid {}): {}", g_options.instance, GetCurrentProcessId(),
+        g_origCreateMutexA ? "the game's mutex is named after it" : "the game does not import CreateMutexA");
+}
+
 void Automation::install(const std::wstring&)
 {
     if (!options().enabled)
     {
         return;
     }
-    LOG("Automation on ({} input){}{}", isolated() ? "isolated" : "shared", g_options.loadSlot >= 0 ? ", loading savegame " + std::to_string(g_options.loadSlot) : "",
+    LOG("Automation on, instance {} ({} input){}{}", g_options.instance, isolated() ? "isolated" : "shared", g_options.loadSlot >= 0 ? ", loading savegame " + std::to_string(g_options.loadSlot) : "",
         g_options.mods.empty() ? "" : ", only some mods");
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        reinterpret_cast<LPCWSTR>(&messageHook), &g_module);
@@ -871,6 +1037,7 @@ void Automation::install(const std::wstring&)
     // The rest only where the game imports them.
     hookImport(g_origGetKeyState, "GetKeyState", &hookGetKeyState);
     hookImport(g_origGetKeyboardState, "GetKeyboardState", &hookGetKeyboardState);
+    hookImport(g_origCreateWindowExA, "CreateWindowExA", &hookCreateWindowExA);
     if (isolated())
     {
         hookImport(g_origSetCursorPos, "SetCursorPos", &hookSetCursorPos);
@@ -885,7 +1052,6 @@ void Automation::install(const std::wstring&)
         hookImport(g_origSetActiveWindow, "SetActiveWindow", &hookSetActiveWindow);
         hookImport(g_origShowWindow, "ShowWindow", &hookShowWindow);
         hookImport(g_origSetWindowPos, "SetWindowPos", &hookSetWindowPos);
-        hookImport(g_origCreateWindowExA, "CreateWindowExA", &hookCreateWindowExA);
         hookImport(g_origSetWindowsHookExA, "SetWindowsHookExA", &hookSetWindowsHookExA);
         hookImport(g_origUnhookWindowsHookEx, "UnhookWindowsHookEx", &hookUnhookWindowsHookEx);
         // A hook the game already installed (Gear injected late): cannot be taken back, only noted.
@@ -1390,9 +1556,10 @@ extern "C" __declspec(dllexport) HWND __cdecl SacredGear_IsolatedForeground()
     return isolated() ? virtualForeground() : nullptr;
 }
 
-void Automation::quit(int code)
+void Automation::quit(int code, const char* reason)
 {
-    LOG("Automation: quitting with exit code {}", code);
+    LOG("Automation: quitting with exit code {} ({})", code, reason);
+    endRun(code, reason);
     // TerminateProcess: the game's own shutdown waits for its threads and windows, which a test run does not need.
     TerminateProcess(GetCurrentProcess(), static_cast<UINT>(code));
     for (;;)

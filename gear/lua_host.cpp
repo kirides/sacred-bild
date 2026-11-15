@@ -1,6 +1,7 @@
 #include "lua_host.h"
 #include "automation.h"
 #include "gear.h"
+#include "instance.h"
 #include "log.h"
 #include "pickup.h"
 #include "pipe.h"
@@ -704,6 +705,15 @@ namespace
         num("frame_y", w.frameY);
         lua_pushboolean(L, w.movable);
         lua_setfield(L, -2, "movable");
+        if (w.hasBounds)
+        {
+            lua_createtable(L, 0, 4);
+            num("x", w.boundsX);
+            num("y", w.boundsY);
+            num("w", w.boundsW);
+            num("h", w.boundsH);
+            lua_setfield(L, -2, "bounds");
+        }
     }
 
     // native.ui_windows() -> {window, ...}
@@ -1007,6 +1017,13 @@ namespace
     }
 
     // Automation (only registered when it is on, see start()).
+    int nativeAutoInstance(lua_State* L)
+    {
+        const std::string& name = Automation::options().instance;
+        lua_pushlstring(L, name.data(), name.size());
+        return 1;
+    }
+
     int nativeAutoMods(lua_State* L)
     {
         const auto& mods = Automation::options().mods;
@@ -1121,7 +1138,7 @@ namespace
         return 1;
     }
 
-    // Files automation writes go into <game>\GearAutomation, named by the mod: letters, digits, _ - and one dot.
+    // Files automation writes go into <game>\GearAutomation\<instance>, named by the mod: letters, digits, _ - and one dot.
     std::wstring automationFile(const char* name, size_t n)
     {
         const std::string s(name, n);
@@ -1136,8 +1153,12 @@ namespace
                 return {};
             }
         }
-        const std::wstring dir = g_modsDir.substr(0, g_modsDir.size() - 5) + L"\\GearAutomation";
-        CreateDirectoryW(dir.c_str(), nullptr);
+        // The run's own folder: parallel runs never write the same file.
+        const std::wstring dir = Instance::directory(g_modsDir.substr(0, g_modsDir.size() - 5));
+        if (dir.empty())
+        {
+            return {};
+        }
         return dir + L"\\" + widen(s.data(), s.size());
     }
 
@@ -1313,6 +1334,7 @@ namespace
         if (Automation::options().enabled)
         {
             static constexpr luaL_Reg kAutomation[] = {
+                {"auto_instance", nativeAutoInstance},
                 {"auto_mods", nativeAutoMods},
                 {"auto_state", nativeAutoState},
                 {"auto_ui", nativeAutoUi},
