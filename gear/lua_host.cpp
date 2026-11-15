@@ -700,6 +700,10 @@ namespace
         lua_setfield(L, -2, "visible");
         lua_pushboolean(L, w.drawn);
         lua_setfield(L, -2, "drawn");
+        num("frame_x", w.frameX);
+        num("frame_y", w.frameY);
+        lua_pushboolean(L, w.movable);
+        lua_setfield(L, -2, "movable");
     }
 
     // native.ui_windows() -> {window, ...}
@@ -740,6 +744,61 @@ namespace
         num("screen_top", s.screenTop);
         num("screen_right", s.screenRight);
         num("screen_bottom", s.screenBottom);
+        return 1;
+    }
+
+    // native.ui_move_window(slot, x, y, set) -> bool; native.ui_can_move_windows() -> bool
+    int nativeUiMoveWindow(lua_State* L)
+    {
+        const lua_Number slot = luaL_checknumber(L, 1), x = luaL_checknumber(L, 2), y = luaL_checknumber(L, 3);
+        const bool set = lua_toboolean(L, 4) != 0;
+        lua_pushboolean(L, slot >= 0 && slot < 23 && x > -100000 && x < 100000 && y > -100000 && y < 100000 &&
+                               Ui::moveWindow(static_cast<int>(slot), static_cast<float>(x), static_cast<float>(y), set));
+        return 1;
+    }
+
+    int nativeUiCanMoveWindows(lua_State* L)
+    {
+        lua_pushboolean(L, Ui::canMoveWindows());
+        return 1;
+    }
+
+    // The layout file: <game>\mods\gear_layout.json, the positions of the mods' panels and the game's windows.
+    std::wstring layoutPath() { return g_modsDir + L"\\gear_layout.json"; }
+
+    int nativeLayoutRead(lua_State* L)
+    {
+        std::string text;
+        bool ok = false;
+        {
+            ok = readFile(layoutPath(), text);
+        }
+        if (!ok)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushlstring(L, text.data(), text.size());
+        return 1;
+    }
+
+    int nativeLayoutWrite(lua_State* L)
+    {
+        size_t n = 0;
+        const char* text = luaL_checklstring(L, 1, &n);
+        bool ok = false;
+        if (n <= 1024 * 1024)
+        {
+            const std::wstring path = layoutPath();
+            HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            DWORD written = 0;
+            ok = f != INVALID_HANDLE_VALUE && WriteFile(f, text, static_cast<DWORD>(n), &written, nullptr) && written == n;
+            if (f != INVALID_HANDLE_VALUE)
+            {
+                CloseHandle(f);
+            }
+        }
+        lua_pushboolean(L, ok);
         return 1;
     }
 
@@ -1232,6 +1291,10 @@ namespace
             {"ui_state", nativeUiState},
             {"item", nativeItem},
             {"ui_region", nativeUiRegion},
+            {"ui_move_window", nativeUiMoveWindow},
+            {"ui_can_move_windows", nativeUiCanMoveWindows},
+            {"layout_read", nativeLayoutRead},
+            {"layout_write", nativeLayoutWrite},
             {"ui_events", nativeUiEvents},
             {"key_down", nativeKeyDown},
             {"write_file", nativeWriteFile},

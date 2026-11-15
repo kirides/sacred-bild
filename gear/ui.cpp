@@ -142,6 +142,10 @@ namespace
     using PushFrameFn = int(__cdecl*)(void* window, int confine);
     using PopFrameFn = void(__cdecl*)();
     using BoundsFn = int(__cdecl*)(float* bounds);
+    using SetWindowFrameFn = int(__cdecl*)(int slot, float x, float y, int set);
+    using GetWindowFrameFn = int(__cdecl*)(int slot, float* x, float* y);
+    SetWindowFrameFn g_setWindowFrame = nullptr;
+    GetWindowFrameFn g_getWindowFrame = nullptr;
     PushFrameFn g_pushFrame = nullptr;
     PopFrameFn g_popFrame = nullptr;
     BoundsFn g_screenBounds = nullptr;
@@ -164,6 +168,8 @@ namespace
                 LOG("UI: SacredBild's UI frames found: overlays follow its HUD layout");
             }
             g_screenBounds = reinterpret_cast<BoundsFn>(GetProcAddress(bild, "SacredBild_UiScreenBounds"));
+            g_setWindowFrame = reinterpret_cast<SetWindowFrameFn>(GetProcAddress(bild, "SacredBild_UiSetWindowFrame"));
+            g_getWindowFrame = reinterpret_cast<GetWindowFrameFn>(GetProcAddress(bild, "SacredBild_UiGetWindowFrame"));
         });
     }
 
@@ -899,7 +905,17 @@ std::vector<Ui::WindowInfo> Ui::windows()
     {
         if (const uintptr_t w = windowAt(m, slot))
         {
-            out.push_back(windowInfo(m, slot, w, exclusive));
+            WindowInfo info = windowInfo(m, slot, w, exclusive);
+            findBild();
+            float fx = 0, fy = 0;
+            if (g_getWindowFrame && g_getWindowFrame(slot, &fx, &fy))
+            {
+                info.frameX = fx;
+                info.frameY = fy;
+                // Not the windows the game draws alone (world map, savegame, options, character export).
+                info.movable = g_setWindowFrame && slot != 5 && slot != 11 && slot != 15 && slot != 20;
+            }
+            out.push_back(std::move(info));
         }
     }
     return out;
@@ -955,4 +971,17 @@ Ui::State Ui::state()
         }
     }
     return s;
+}
+
+bool Ui::canMoveWindows()
+{
+    findBild();
+    float x = 0, y = 0;
+    return g_setWindowFrame && g_getWindowFrame && g_getWindowFrame(0, &x, &y) != 0;
+}
+
+bool Ui::moveWindow(int slot, float x, float y, bool set)
+{
+    findBild();
+    return g_setWindowFrame && slot >= 0 && slot < kWindowSlots && g_setWindowFrame(slot, x, y, set ? 1 : 0) != 0;
 }

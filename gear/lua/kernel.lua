@@ -844,6 +844,76 @@ local function ui_end_tick()
     native.ui_text(2, -1, t.text, x + 6, y + 3, 0, 0, 0xFFF0F0F0, 7, 0, 0, 0)
 end
 
+-- The layout (mods\gear_layout.json): where the player put the mods' panels ("mod_id:panel_id") and the game's
+-- windows ("game:UI_WND_INVENTORY"). Stored in a virtual 4096 x 4096 screen (the whole screen, whatever its
+-- resolution and aspect), so a layout keeps its places when the resolution changes.
+local layout = nil          -- key -> {x, y, w, h} in virtual units
+local layout_dirty = false
+local ui_edit = false       -- the layout edit mode: panels show their ids and resize grips
+
+local function layout_get()
+    if not layout then
+        local text = native.layout_read and native.layout_read()
+        local v = text and json.decode(text)
+        layout = type(v) == 'table' and v or {}
+    end
+    return layout
+end
+
+local function layout_set(key, entry)
+    layout_get()[key] = entry
+    layout_dirty = true
+end
+
+local function screen_rect()
+    local s = ui_tick_state or {}
+    local l, t = s.screen_left or 0, s.screen_top or 0
+    local r, b = s.screen_right or 1024, s.screen_bottom or 768
+    if r - l < 1 then r = l + 1024 end
+    if b - t < 1 then b = t + 768 end
+    return l, t, r, b
+end
+
+local function to_virtual(x, y)
+    local l, t, r, b = screen_rect()
+    return (x - l) / (r - l) * 4096, (y - t) / (b - t) * 4096
+end
+
+local function from_virtual(vx, vy)
+    local l, t, r, b = screen_rect()
+    return l + vx / 4096 * (r - l), t + vy / 4096 * (b - t)
+end
+
+local function size_to_virtual(w, h)
+    local l, t, r, b = screen_rect()
+    return w / (r - l) * 4096, h / (b - t) * 4096
+end
+
+local function size_from_virtual(vw, vh)
+    local l, t, r, b = screen_rect()
+    return vw / 4096 * (r - l), vh / 4096 * (b - t)
+end
+
+-- The game's windows the layout moved: placed every tick (cheap), so they follow resolution changes and new games.
+local function apply_game_layout()
+    local lay = layout_get()
+    if not next(lay) or not native.ui_can_move_windows() then return end
+    for _, w in ipairs(native.ui_windows()) do
+        local e = w.movable and lay['game:' .. w.name]
+        if e then
+            local sx, sy = from_virtual(e.x, e.y)
+            native.ui_move_window(w.slot, sx - w.x, sy - w.y, true)
+        end
+    end
+end
+
+local function save_layout()
+    if layout_dirty and not ui_active then
+        layout_dirty = false
+        native.layout_write(json.encode(layout_get()))
+    end
+end
+
 -- Key names for gear.ui.key_pressed.
 local UI_VK = {
     escape = 0x1B, enter = 0x0D, space = 0x20, tab = 0x09, shift = 0x10, control = 0x11, alt = 0x12,
@@ -1123,6 +1193,7 @@ local function make_ui(mod)
     -- content_y}. A window of the mod's: the title bar drags it (it keeps the position for the session), its X
     -- closes it (panel.open false; ui.show_panel(id) opens it again). Its body takes the mouse, so clicks on it do
     -- not reach the game.
+    -- Panels: a mod's windows. The layout keeps each one's place (and size, if resizable) under "mod_id:id".
     local panels = {}
     function ui.show_panel(id, open)
         local p = panels[id] or {}
@@ -1137,18 +1208,55 @@ local function make_ui(mod)
         local p = panels[id] or {}
         panels[id] = p
         if p.closed then return {open = false} end
-        x, y = x + (p.dx or 0), y + (p.dy or 0)
+        local key = mod.id .. ':' .. tostring(id)
+        local saved = layout_get()[key]
+        if saved then
+            x, y = from_virtual(saved.x, saved.y)
+            if opts.resizable and saved.w then w, h = size_from_virtual(saved.w, saved.h) end
+        end
+        if p.x then x, y = p.x, p.y end         -- being dragged
+        if p.w then w, h = p.w, p.h end         -- being resized
+        local min_w, min_h = opts.min_width or 120, opts.min_height or 60
+        w, h = math.max(w, min_w), math.max(h, min_h)
         local o = {layer = opts.layer}
         ui.rect(x, y, w, h, opts.background or 0xD80E0E14, o)
-        ui.frame(x, y, w, h, C.edge, 1, o)
+        ui.frame(x, y, w, h, ui_edit and C.accent or C.edge, ui_edit and 2 or 1, o)
         ui.rect(x + 1, y + 1, w - 2, 20, C.title, o)
         ui.text(title, x + 8, y + 3, {font = 7, color = C.accent, layer = opts.layer})
+        if ui_edit then
+            ui.text(key, x, y - 16, {font = 7, color = C.accent, background = 0xC0000000, padding = 2, layer = opts.layer})
+        end
         region(tostring(id) .. '#body', x, y, w, h, o)
+        local function store()
+            local vx, vy = to_virtual(x, y)
+            local e = {x = vx, y = vy}
+            if opts.resizable then e.w, e.h = size_to_virtual(w, h) end
+            layout_set(key, e)
+        end
         if opts.draggable ~= false then
             local bar = region(tostring(id) .. '#bar', x, y, w - 24, 21, {layer = opts.layer, tooltip = opts.tooltip})
-            if bar.pressed then p.grab_x, p.grab_y = ui_mouse.x - (p.dx or 0), ui_mouse.y - (p.dy or 0) end
+            if bar.pressed then p.grab_x, p.grab_y = ui_mouse.x - x, ui_mouse.y - y end
             if bar.held and p.grab_x then
-                p.dx, p.dy = ui_mouse.x - p.grab_x, ui_mouse.y - p.grab_y
+                p.x, p.y = ui_mouse.x - p.grab_x, ui_mouse.y - p.grab_y
+                x, y = p.x, p.y
+            elseif p.x then
+                store()
+                p.x, p.y, p.grab_x = nil, nil, nil
+            end
+        end
+        if opts.resizable then
+            local grip = region(tostring(id) .. '#grip', x + w - 14, y + h - 14, 14, 14, {layer = opts.layer, tooltip = 'Resize'})
+            for i = 0, 2 do
+                ui.rect(x + w - 4 - i * 4, y + h - 4, 2, 2, grip.hover and C.accent or C.edge, o)
+                ui.rect(x + w - 4, y + h - 4 - i * 4, 2, 2, grip.hover and C.accent or C.edge, o)
+            end
+            if grip.pressed then p.grab_w, p.grab_h = ui_mouse.x - w, ui_mouse.y - h end
+            if grip.held and p.grab_w then
+                p.w, p.h = math.max(min_w, ui_mouse.x - p.grab_w), math.max(min_h, ui_mouse.y - p.grab_h)
+            elseif p.w then
+                w, h = p.w, p.h
+                store()
+                p.w, p.h, p.grab_w = nil, nil, nil
             end
         end
         if opts.closable ~= false then
@@ -1157,8 +1265,55 @@ local function make_ui(mod)
                 color = cr.hover and 0xFFFF8080 or C.text, layer = opts.layer})
             if cr.clicked then p.closed = true end
         end
-        return {open = true, x = x, y = y, w = w, h = h, content_x = x + 8, content_y = y + 28}
+        return {open = true, key = key, x = x, y = y, w = w, h = h, content_x = x + 8, content_y = y + 28,
+            content_w = w - 16, content_h = h - 36}
     end
+
+    -- Layout editing (like an "edit mode" in other games): the panels of every mod show their ids and their resize
+    -- grips while it is on; a layout editor (gear/examples/layout) moves the game's windows too.
+    function ui.edit_mode() return ui_edit end
+    function ui.set_edit_mode(on) ui_edit = on and true or false end
+    function ui.can_move_windows() return native.ui_can_move_windows() end
+    -- The game window `name` (a control name) with its top-left corner at (x, y) of the canvas; kept in the layout.
+    function ui.set_window_position(name, x, y)
+        for _, w in ipairs(native.ui_windows()) do
+            if w.name:upper() == tostring(name):upper() and w.movable then
+                if not native.ui_move_window(w.slot, x - w.x, y - w.y, true) then return false end
+                local vx, vy = to_virtual(x, y)
+                layout_set('game:' .. w.name, {x = vx, y = vy})
+                return true
+            end
+        end
+        return false
+    end
+    -- Back to its own place (and out of the layout).
+    function ui.reset_window(name)
+        for _, w in ipairs(native.ui_windows()) do
+            if w.name:upper() == tostring(name):upper() then
+                native.ui_move_window(w.slot, 0, 0, false)
+                if layout_get()['game:' .. w.name] then layout_set('game:' .. w.name, nil) end
+                return true
+            end
+        end
+        return false
+    end
+    -- Forgets the places of all panels and game windows (or the ones whose key starts with `prefix`).
+    function ui.reset_layout(prefix)
+        for key in pairs(layout_get()) do
+            if not prefix or key:sub(1, #prefix) == prefix then
+                if key:sub(1, 5) == 'game:' then ui.reset_window(key:sub(6)) else layout_set(key, nil) end
+            end
+        end
+        for _, p in pairs(panels) do p.x, p.y, p.w, p.h = nil, nil, nil, nil end
+    end
+    -- The stored layout: {key = {x, y, w, h}} in the virtual 4096 x 4096 screen.
+    function ui.layout()
+        local out = {}
+        for k, v in pairs(layout_get()) do out[k] = {x = v.x, y = v.y, w = v.w, h = v.h} end
+        return out
+    end
+    function ui.to_virtual(x, y) return to_virtual(x, y) end
+    function ui.from_virtual(vx, vy) return from_virtual(vx, vy) end
 
     function ui.text_size(text, font)
         return native.ui_text_size(tostring(text), font or 1)
@@ -1739,11 +1894,13 @@ function kernel.tick(dt)
     poll_pipes()
     run_timers()
     ui_begin_tick()
+    apply_game_layout()
     run_tasks()
     kernel.dispatch('frame', dt)
     kernel.dispatch('draw', gear_ui_state())
     ui_end_tick()
     native.ui_commit()
+    save_layout()
     publish_pickup_rules()
 end
 
@@ -1753,11 +1910,13 @@ function kernel.idle()
     poll_pipes()
     run_timers()
     ui_begin_tick()
+    apply_game_layout()
     run_tasks()
     kernel.dispatch('idle')
     kernel.dispatch('draw', gear_ui_state())
     ui_end_tick()
     native.ui_commit()
+    save_layout()
     publish_pickup_rules()
 end
 

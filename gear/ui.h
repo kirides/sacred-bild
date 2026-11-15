@@ -93,8 +93,16 @@ namespace Ui
         int x = 0, y = 0, width = 0, height = 0;    // in its own frame (the 1024x768 layout)
         bool visible = false;       // open (flag bit 0)
         bool drawn = false;         // open and drawn this frame (not behind a window the manager draws alone)
+        float frameX = 0, frameY = 0;   // where its frame puts its layout (SacredBild), 0, 0: the canvas
+        bool movable = false;       // moveWindow can place it
     };
     bool window(const std::string& name, WindowInfo& out);
+
+    // Moves in-game window slot into a frame of its own at (x, y) against the canvas (layout units); set false:
+    // back to its own place. Through SacredBild's UI frames: false without them (no SacredBild, its canvas off) and
+    // for the windows the game draws alone.
+    bool moveWindow(int slot, float x, float y, bool set);
+    bool canMoveWindows();
     std::vector<WindowInfo> windows();
 
     struct State

@@ -222,6 +222,31 @@ goes to the same region. Regions on the world and hud layers take nothing while 
 up. Hover is decided against the previous frame's regions (the topmost under the cursor), so an open dropdown hides
 what lies below it. Keyboard input is only `key_pressed` for now (no text fields).
 
+#### Layout: persistent panels, movable game windows
+
+Every panel has an id, `mod_id:panel_id` (`panel().key`). Where the player drags it (and how large they make it, with
+`opts.resizable`, `opts.min_width`, `opts.min_height`) is kept in `mods\gear_layout.json` and restored at the next
+start. Places are stored in a virtual 4096 x 4096 screen (the whole screen, whatever its resolution and aspect), so a
+layout keeps its places when the resolution changes. The game's own windows are kept there too, as
+`game:UI_WND_INVENTORY` and so on, and placed every frame.
+
+| | |
+|---|---|
+| `edit_mode()`, `set_edit_mode(on)` | The edit mode: panels show their ids (and resize grips). A layout editor turns it on (`gear/examples/layout`, F7). |
+| `can_move_windows()` | Whether the game's windows can be moved (needs SacredBild's UI frames). |
+| `set_window_position(name, x, y)` | Puts game window `name` with its top-left corner at (x, y) of the canvas and keeps it in the layout. Any in-game window but those the game draws alone (world map, savegame, options, character export). |
+| `reset_window(name)`, `reset_layout(prefix)` | Back to its own place; forget all places (or those whose key starts with `prefix`, e.g. `'game:'`). |
+| `layout()` | The stored places `{key = {x, y, w, h}}` (virtual units). |
+| `to_virtual(x, y)`, `from_virtual(vx, vy)` | Between the canvas and the virtual screen. |
+
+`windows()` entries have `frame_x`, `frame_y` (where the window's frame puts its layout: its place on the canvas is
+`x + frame_x, y + frame_y`) and `movable`.
+
+A game window is moved by giving it a UI frame of its own in SacredBild (exports `SacredBild_UiSetWindowFrame`,
+`SacredBild_UiGetWindowFrame`): its drawing, its 3D items, the cursor it reads, the clicks it gets and its hit tests
+all move with it, as with SacredBild's HUD anchoring. Without SacredBild the game's windows stay where they are; mod
+panels move either way.
+
 Files: `gear.read(name)` reads a file of the mod's folder, `gear.save(name, text)` writes one (directly in the mod's
 folder, `*.json`, `*.txt` or `*.lua` other than `mod.lua` and `main.lua`, at most 1 MB): for settings a mod's own UI
 changes.
@@ -261,6 +286,7 @@ faults returns nil and a message instead of crashing the game.
 | `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
 | `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F9) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
 | `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices from `config.lua`; filtered items' labels are dimmed; an overlay shows the rules; a settings panel (F8 or the overlay's button: class checkboxes, quality dropdowns, potion checkboxes, label dimming) saves to `settings.json`. Self test with `-gear-auto`. |
+| `layout` | A layout editor (F7 or its button): drag the game's open windows anywhere and the mods' panels, resize resizable ones, reset; kept in `mods\gear_layout.json`. Self test (run it twice: move, then check the restore and reset). |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 
 ## Automation
@@ -379,6 +405,6 @@ What Sacred Gear relies on, English GOG addresses:
 | UI pass (mod drawing) | `cUI_Manager_render` (0x00758ED0, arg: the IDirect3DDevice7 the UI draws with; SacredBild hooks it) draws pretransformed FVF 0x1C4 quads in the 1024x768 layout. Gear draws from: the popup pass 0x00758DC0 (thiscall (device, flag), "hud", before the original), the call at 0x0075934F (the party arrows 0x006D01F0, cdecl (device), "world", before the original; reached in game only) and the call at 0x00759585 (`call 0x649BE0`, after the escape menu and the message box in every mode, EBX = device; "top"). Every render state, texture stage state and the stage 0 texture it changes are read before and set back after, so the game's state cache (0x00643430) and SacredBild's state shadow stay right; text runs through the game's font with the game's states. |
 | Fonts | `*0x00CDCA70`: a vector of `cFont*` by id. Vtable +0x18 `draw(device, cRect*, const wchar_t*, ARGB, flags)` (cRect: i32 x, y, i16 w, h; flags 1 centered and 4 right-aligned in the rect's width, 0x20 curved, 0x200 measure only), +0x28 `lineHeight(ch)`, +0x2C `textWidth(text)` (cFontTTF2 only). Backslash codes in the text: `\c` color, `\g` an inline UI image, `\r` reset, `\w`. |
 | UI images | 0x54-byte records from 0x009ECEB0 (ids = indices, 1..1885; 1886 is "INVALID_MAX"): +0x08 the sheet's TGA name, +0x28 texture handle (`cTextureManager_get` 0x0065ED90 on `*0x013E7838`, +0x14 the surface), +0x2C..+0x38 u0, v0, u1, v1 (pixels until 0x761580 normalizes them), +0x4C / +0x50 width / height. |
-| SacredBild (optional) | `ddraw.dll` exports `SacredBild_UiPushFrame(window, confine)`, `SacredBild_UiPopFrame()` and `SacredBild_UiScreenBounds(float[4])`; Gear draws a command with `window` in that window's UI frame and the others in the unconfined canvas. Without them (no SacredBild) the layout is drawn as the game draws it. |
+| SacredBild (optional) | `ddraw.dll` exports `SacredBild_UiPushFrame(window, confine)`, `SacredBild_UiPopFrame()`, `SacredBild_UiScreenBounds(float[4])`, `SacredBild_UiSetWindowFrame(slot, x, y, set)` and `SacredBild_UiGetWindowFrame(slot, float*, float*)` (a window's own frame, any offset; SacredBild's window handlers now run whenever its canvas is on, [UI] Anchor or not); Gear draws a command with `window` in that window's UI frame and the others in the unconfined canvas. Without them (no SacredBild) the layout is drawn as the game draws it. |
 | Items | An item is a `cItemBase` (RTTI type descriptor 0x0094EBC0). Its +0x118 holds a copy of its item record's data; the dword +0x11C: class mask (bits 0-5 Seraphim, Gladiator, Battle Mage, Dark Elf, Wood Elf, Vampiress; 0x400000 Dwarf; 0x800000 Daemon; 0 or 0xC0003F every class) and rarity (bits 16-19). Item records: `*(typeManager + 0x563004) + index * 0x102` (index: the type record's +0x18; count at +0x563000), +0x23 nonzero: set item. Object flags +0x14: 0x02 not in the world (inventory, being picked up), 0x10 freed. Type record +0x00 bit 24: quest item. Gold: types 0x140C-0x140F. Potions: 0x13C0-0x13C8 health / mana / stamina bottles (three sizes each); 0x1411, 0x1416, 0x1430: large, medium, small coloured potions (black, blue, green, red, yellow); which colour does what is not checked. The hero's class is its type (1..9, 7 unused). |
 | Pickup | `cCreature::pickupItem` 0x00558080 (thiscall (creature, item id) -> 1 / 0, ret 4) is the only code that moves a world item to a creature: the click pickup (0x0053CEB0), the collect behaviour (0x004ECF69, 0x004ED095) and the host's message 0x20C call it and ignore the result. Gear returns 0 there for a blocked item and the local hero. The collect behaviour's filter 0x004EC330 (thiscall (creature, cObject*) -> bool; settings.cfg PICKUPAUTO) returns false for them. A network client sends message 0x141 instead (0x0053A170). Item label colour: 0x005C13C0 (thiscall (item, record or 0) -> ARGB): set green 0xFF15FF25; rarity 0-4 0xFFEFEFEF, 5-11 0xFFA0A0FF, 12-14 0xFFF0E040, 15 0xFFC19A33; class-restricted items take their class's colour unless UNIQUE_COLOR is on. |

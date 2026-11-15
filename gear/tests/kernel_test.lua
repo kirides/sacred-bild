@@ -21,6 +21,7 @@ local sent = {}
 local ui_recording, ui_published = {}, {}
 local pickup_published
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
+layout_file, moved_windows = '{"game:UI_WND_INVENTORY":{"x":2048,"y":1024}}', {}
 
 local native = {
     version = 'test',
@@ -87,7 +88,7 @@ local native = {
     ui_image_info = function(id) if id > 0 and id < 3 then return {sheet = 'GUI_spell0' .. id .. '.TGA', width = 64, height = 64, loaded = true} end end,
     ui_font_count = function() return 8 end,
     ui_text_size = function(text) return #text * 7, 14 end,
-    ui_windows = function() return {{name = 'UI_WND_INVENTORY', slot = 1, x = 0, y = 388, width = 640, height = 256, visible = true, drawn = true}} end,
+    ui_windows = function() return {{name = 'UI_WND_INVENTORY', slot = 1, x = 0, y = 388, width = 640, height = 256, visible = true, drawn = true, movable = true}} end,
     ui_state = function() return {available = true, mode = 'game', mouse_x = ui_mouse_at[1], mouse_y = ui_mouse_at[2], screen_left = 0, screen_top = 0, screen_right = 1024, screen_bottom = 768} end,
     item = function(id)
         if id == 50 then return {id = 50, type = 2, kind = 5, flags = 0, type_flags = 0, on_ground = true, rarity = 13, set = false, classes = 0x8, gold = false, x = 1, y = 2, layer = 0} end
@@ -100,6 +101,10 @@ local native = {
     ui_region = function(...) ui_recording[#ui_recording + 1] = {'region', ...}; return true end,
     ui_events = function() local e = ui_events_queue; ui_events_queue = {}; return e end,
     key_down = function(vk) return keys_held[vk] == true end,
+    layout_read = function() return layout_file end,
+    layout_write = function(text) layout_file = text; return true end,
+    ui_can_move_windows = function() return true end,
+    ui_move_window = function(slot, x, y, set) moved_windows[slot] = set and {x, y} or nil; return true end,
     write_file = function(dir, rel, text) files[dir] = files[dir] or {}; files[dir][rel] = text; return true end,
     -- automation
     auto_mods = function() return {} end,
@@ -333,6 +338,7 @@ click(20, 40 + 18 + 18 + 5) -- the list's second entry
 ok(widgets.index == 2, 'dropdown picks the second entry (' .. tostring(widgets.index) .. ')')
 click(15, 15)
 ok(widgets.checked == false and widgets.changes == 2, 'checkbox toggles back')
+ok(moved_windows[1] and moved_windows[1][1] == 512 and moved_windows[1][2] == 192 - 388, 'stored game window placed (' .. tostring(moved_windows[1] and moved_windows[1][1]) .. ')')
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end
