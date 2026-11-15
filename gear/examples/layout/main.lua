@@ -30,6 +30,7 @@ local drag = nil            -- {key, mode = 'move' | 'size', ...} while the mous
 local snapping = cfg.snap ~= false
 local toolbar_rect = nil    -- the toolbar's place this frame (for the self test)
 local popup_rect = nil      -- the settings popup's
+local popup_pin = nil       -- where the popup was put for the selected frame's place
 
 local NAMES = {
     UI_WND_STATS_CHAR = 'Character', UI_WND_TASKBAR = 'Action bar', UI_WND_QUESTBOOK = 'Quest log',
@@ -44,14 +45,18 @@ local function pretty(name)
     return (s:gsub('(%a)(%w*)', function(a, b) return a:upper() .. b end))
 end
 
--- Every frame the edit mode covers: {key, name, x, y, w, h, game | panel, resizable, min_w, min_h}.
+-- Every frame the edit mode covers: {key, name, x, y, w, h, game | panel, resizable, min_w, min_h}. A game window's
+-- frame is where it drew (its tabs and ornaments too, `bounds`), else its rect; ox, oy: from there to its place.
 local function collect()
     local list = {}
     if ui.can_move_windows() then
         for _, w in ipairs(ui.windows()) do
-            if w.drawn and w.movable and w.width > 0 and w.height > 0 and w.name ~= '' then
+            local b = w.bounds
+            if w.drawn and w.movable and w.name ~= '' and (b or (w.width > 0 and w.height > 0)) then
+                local wx, wy = w.x + w.frame_x, w.y + w.frame_y
+                b = b or {x = wx, y = wy, w = w.width, h = w.height}
                 list[#list + 1] = {key = 'game:' .. w.name, name = pretty(w.name), game = w.name,
-                    x = w.x + w.frame_x, y = w.y + w.frame_y, w = w.width, h = w.height}
+                    x = b.x, y = b.y, w = b.w, h = b.h, ox = wx - b.x, oy = wy - b.y}
             end
         end
     end
@@ -66,7 +71,7 @@ end
 
 local function move(f, x, y, w, h)
     if f.game then
-        ui.set_window_position(f.game, x, y)
+        ui.set_window_position(f.game, x + f.ox, y + f.oy)
     else
         ui.set_panel_rect(f.key, x, y, w, h)
         if f.resizable and w then
@@ -114,9 +119,9 @@ end
 local function nudge(f, dx, dy)
     local e = ui.layout()[f.key]
     local vx, vy
-    if e then vx, vy = e.x, e.y else vx, vy = ui.to_virtual(f.x, f.y) end
+    if e then vx, vy = e.x, e.y else vx, vy = ui.to_virtual(f.x + (f.ox or 0), f.y + (f.oy or 0)) end
     local x, y = ui.from_virtual(vx + dx, vy + dy)
-    move(f, x, y)
+    move(f, x - (f.ox or 0), y - (f.oy or 0))
 end
 
 -- Arrow keys with auto repeat (after about 0.3 s, then every third frame).
@@ -192,6 +197,13 @@ local function popup(f, sl, st, sr, sb)
     end
     if not px then px, py = clamp_x(f.x + 10), clamp_y(f.y + 10) end
     px, py = math.floor(px), math.floor(py)
+    -- It stays put while only the frame's size changes (its own sliders would move away under the cursor).
+    local pin = popup_pin
+    if pin and pin.key == f.key and pin.fx == f.x and pin.fy == f.y and pin.h == ph then
+        px, py = pin.x, pin.y
+    else
+        popup_pin = {key = f.key, fx = f.x, fy = f.y, h = ph, x = px, y = py}
+    end
     popup_rect = {x = px, y = py, w = pw, h = ph}
     ui.region('popup', px, py, pw, ph, top)
     ui.rect(px, py, pw, ph, 0xEC101018, top)
@@ -202,7 +214,7 @@ local function popup(f, sl, st, sr, sb)
         selected = nil
     end
     local y = py + 28
-    local vx, vy = ui.to_virtual(f.x, f.y)
+    local vx, vy = ui.to_virtual(f.x + (f.ox or 0), f.y + (f.oy or 0))
     ui.text(('Position %d, %d  (of 4096)'):format(math.floor(vx + 0.5), math.floor(vy + 0.5)), px + 8, y,
         {font = 7, color = C.text, layer = 'top'})
     ui.text(f.key, px + 8, y + 16, {font = 7, color = C.text_dim, layer = 'top'})
@@ -420,11 +432,33 @@ gear.task(function()
     if not second then
         local w, x, y = inventory()
         check('inventory open', w and w.drawn)
+        -- The cursor on the inventory's first item: the game shows its tooltip, but not under the edit mode.
+        local hx, hy = A.ui_to_pixels(x + 18, y + 24)
+        A.move(hx, hy)
+        gear.wait(1.2)
+        A.screenshot('hover-normal')
         A.press('f7')
         gear.wait(0.6)
         check('F7 turns the edit mode on', ui.edit_mode())
+        A.move(hx + 1, hy)
+        gear.wait(1.2)
+        A.screenshot('editmode-hover')
         A.screenshot('editmode-on')
-        for _, fr in ipairs(collect()) do print(('frame %s %q at %d,%d %dx%d'):format(fr.key, fr.name, fr.x, fr.y, fr.w, fr.h)) end
+        for _, ww in ipairs(ui.windows()) do
+            if ww.visible or ww.bounds then
+                local b = ww.bounds
+                print(('window %s slot %d visible %s drawn %s movable %s rect %d,%d %dx%d frame %d,%d bounds %s'):format(
+                    ww.name, ww.slot, tostring(ww.visible), tostring(ww.drawn), tostring(ww.movable), ww.x, ww.y,
+                    ww.width, ww.height, ww.frame_x, ww.frame_y,
+                    b and ('%d,%d %dx%d'):format(b.x, b.y, b.w, b.h) or '-'))
+            end
+        end
+        local inv
+        for _, fr in ipairs(collect()) do
+            print(('frame %s %q at %d,%d %dx%d'):format(fr.key, fr.name, fr.x, fr.y, fr.w, fr.h))
+            if fr.key == 'game:UI_WND_INVENTORY' then inv = fr end
+        end
+        check('inventory overlay covers its tabs', inv and inv.y < y - 8, inv and ('overlay y %d, window y %d'):format(inv.y, y))
 
         -- A click selects (and moves nothing).
         A.ui_click(x + w.width / 2, y + w.height / 2)
@@ -435,9 +469,10 @@ gear.task(function()
         A.screenshot('editmode-selected')
 
         -- A drag anywhere on the overlay moves it (snapping may pull it a few units).
-        drag_ui(x + 300, y + 120, x + 300 + 250, y + 120 - 200)
+        -- (Not over the sample panel: the selected frame lies on top of the others.)
+        drag_ui(x + 300, y + 120, x + 300 + 250, y + 120 - 100)
         local _, x2, y2 = inventory()
-        check('inventory dragged', x2 and math.abs(x2 - (x + 250)) <= SNAP + 1 and math.abs(y2 - (y - 200)) <= SNAP + 1,
+        check('inventory dragged', x2 and math.abs(x2 - (x + 250)) <= SNAP + 1 and math.abs(y2 - (y - 100)) <= SNAP + 1,
             ('%s,%s -> %s,%s'):format(x, y, tostring(x2), tostring(y2)))
         A.screenshot('editmode-dragged')
 
@@ -461,12 +496,39 @@ gear.task(function()
             local q = sample()
             check('panel resized at its corner', q and math.abs(q.w - (p.w + 60)) < 3 and math.abs(q.h - (p.h + 30)) < 3,
                 q and ('%dx%d -> %dx%d'):format(p.w, p.h, q.w, q.h))
+            -- The popup's Width and Height sliders (a click at their middle) and its Reset button.
+            gear.wait(0.3)
+            local st = ui.state()
+            local pr = popup_rect
+            check('popup shown', pr ~= nil)
+            if pr then
+                A.ui_click(pr.x + 58 + 60, pr.y + 66 + 8)
+                gear.wait(0.5)
+                q = sample()
+                local ew = p.min_width + 0.5 * (math.floor(st.screen_right - st.screen_left) - p.min_width)
+                check('width slider', q and math.abs(q.w - ew) <= 4, q and ('%d, expected %.0f'):format(q.w, ew))
+                pr = popup_rect
+                A.ui_click(pr.x + 58 + 60, pr.y + 88 + 8)
+                gear.wait(0.5)
+                q = sample()
+                local eh = p.min_height + 0.5 * (math.floor(st.screen_bottom - st.screen_top) - p.min_height)
+                check('height slider', q and math.abs(q.h - eh) <= 4, q and ('%d, expected %.0f'):format(q.h, eh))
+                A.screenshot('editmode-sliders')
+                pr = popup_rect
+                A.ui_click(pr.x + 8 + 60, pr.y + 112 + 11)
+                gear.wait(0.5)
+                q = sample()
+                check('reset button', q and math.abs(q.x - 60) < 1 and math.abs(q.y - 120) < 1 and math.abs(q.w - 200) < 1
+                    and math.abs(q.h - 110) < 1,
+                    q and ('%d,%d %dx%d'):format(q.x, q.y, q.w, q.h))
+                check('still selected after reset', selected == 'layout:sample', selected)
+            end
+            p = sample()
             drag_ui(p.x + 40, p.y + 40, p.x + 40 + 200, p.y + 40 + 150)
             gear.wait(0.3)
             q = sample()
             check('panel dragged', q and math.abs(q.x - (p.x + 200)) <= SNAP + 1 and math.abs(q.y - (p.y + 150)) <= SNAP + 1,
                 q and ('%d,%d -> %d,%d'):format(p.x, p.y, q.x, q.y))
-            check('popup shown', popup_rect ~= nil)
             A.screenshot('editmode-popup')
         end
 
