@@ -424,6 +424,15 @@ namespace
         return 1;
     }
 
+    // native.overlay_served(path) -> how many opens of `path` the overlay served from a mod
+    int nativeOverlayServed(lua_State* L)
+    {
+        size_t n = 0;
+        const char* path = luaL_checklstring(L, 1, &n);
+        lua_pushnumber(L, static_cast<lua_Number>(Overlay::served(std::string(path, n))));
+        return 1;
+    }
+
     // An id argument: a whole number in 1..2^31-1, or 0 if it is none.
     uint32_t checkId(lua_State* L, int arg)
     {
@@ -1442,6 +1451,7 @@ namespace
             {"setting", nativeSetting},
             {"overlay_info", nativeOverlayInfo},
             {"overlay_resolve", nativeOverlayResolve},
+            {"overlay_served", nativeOverlayServed},
             {"hero", nativeHero},
             {"world_changes", nativeWorldChanges},
             {"object", nativeObject},

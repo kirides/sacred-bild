@@ -20,6 +20,9 @@ namespace Overlay
     // Where the game's open of `path` ends up (the same text if no rule applies). For logs and gear.files.resolve.
     std::string resolve(const std::string& path);
 
+    // How many times the game opened `path` (relative to the game folder) and got a mod's file; 0 if never.
+    unsigned served(const std::string& path);
+
     // The number of file rules and whether the saves are redirected, for the mod `id`.
     bool info(const std::string& id, size_t& files, std::string& saves);
 }

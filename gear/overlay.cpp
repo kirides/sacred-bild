@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -23,6 +24,8 @@ namespace
     };
 
     std::vector<ModRules> g_rules;
+    std::mutex g_servedLock;
+    std::unordered_map<std::string, unsigned> g_served;     // game path (lower case) -> opens served from a mod
     std::string g_gameDir;                                      // lower case, no trailing backslash
     bool g_installed = false;
 
@@ -111,7 +114,7 @@ namespace
     }
 
     // The mod path a game path maps to; false if no rule applies. `write`: the call may create the file.
-    bool map(const char* path, std::string& out, bool write)
+    bool map(const char* path, std::string& out, bool write, bool count = true)
     {
         if (g_rules.empty() || !path || !*path)
         {
@@ -128,6 +131,11 @@ namespace
             if (it != r.files.end() && (write || exists(it->second)))
             {
                 out = it->second;
+                if (count)
+                {
+                    std::lock_guard guard(g_servedLock);
+                    ++g_served[rel];
+                }
                 return true;
             }
             if (r.saves && (rel == "save" || rel.rfind("save\\", 0) == 0))
@@ -387,10 +395,22 @@ bool Overlay::install(const std::wstring& gameDir)
     return true;
 }
 
+unsigned Overlay::served(const std::string& path)
+{
+    std::string rel = lower(backslashes(path));
+    while (rel.rfind(".\\", 0) == 0)
+    {
+        rel.erase(0, 2);
+    }
+    std::lock_guard guard(g_servedLock);
+    const auto it = g_served.find(rel);
+    return it == g_served.end() ? 0 : it->second;
+}
+
 std::string Overlay::resolve(const std::string& path)
 {
     std::string mapped;
-    return map(path.c_str(), mapped, false) ? mapped : path;
+    return map(path.c_str(), mapped, false, false) ? mapped : path;
 }
 
 bool Overlay::info(const std::string& id, size_t& files, std::string& saves)

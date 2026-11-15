@@ -71,6 +71,7 @@ local native = {
     end,
     overlay_info = function(id) if id == 'ab' then return 2, 'C:/mods/ab/save' end end,
     overlay_resolve = function(path) return 'mapped:' .. path end,
+    overlay_served = function(path) return path == 'bin/balance.bin' and 3 or 0 end,
     text_get = function(id) if id == 8193 then return 'Ability name' end end,
     setting = function(key) if key == 'SR_HD_WIDTH' then return '2560' end end,
     table_string = function(name, index, offset)
@@ -241,6 +242,7 @@ files.ab = {
         abil.no_text = gear.text.get(99)
         abil.overlay = gear.files.overlay()
         abil.resolved = gear.files.resolve('SRB/balance.bin')
+        abil.served = {gear.files.served('bin/balance.bin'), gear.files.served('x')}
         abil.setting = gear.settings.get('SR_HD_WIDTH')
         abil.no_setting = gear.settings.get('NOPE')
         -- writes that are not restored explicitly are undone when the mod is switched off
@@ -350,6 +352,7 @@ ok(math.abs(abil.after_restore[1] - 0.8) < 1e-9 and abil.after_restore[2] == 0 a
 ok(abil.text == 'Ability name' and abil.no_text == nil, 'gear.text.get')
 ok(abil.overlay and abil.overlay.files == 2 and abil.overlay.saves == 'C:/mods/ab/save', 'gear.files.overlay')
 ok(abil.resolved == 'mapped:SRB/balance.bin', 'gear.files.resolve')
+ok(abil.served[1] == 3 and abil.served[2] == 0, 'gear.files.served')
 ok(abil.setting == '2560' and abil.no_setting == nil, 'gear.settings.get')
 
 -- Frames: session start, pipes, timers, tasks.

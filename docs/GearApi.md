@@ -479,7 +479,7 @@ The types whose name contains `text` (plain text, any case), ordered by id.
 
 Reached as `gear.data.abilities`.
 
-The exe's two ability tables as one table by id: T1 (ids from 1000, 0x78-byte records) and T2 (ids from 1, 0x94-byte records). `abilities[id]` is the record of ability `id` (nil if there is none); its fields read and write by name. A field has a name where code that uses it proves what it is, and is `unk_<offset>` (in hex) otherwise. Writes go to the live tables, are checked for type and range, and are undone with `restore` (and when the mod is switched off).
+The exe's two ability tables as one table by id: T1 (the combat arts: ids from 1000, 0x78-byte records) and T2 (the spells: ids from 1, 0x94-byte records). `abilities[id]` is the record of ability `id` (nil if there is none); its fields read and write by name. A field has a name where code that uses it proves what it is, and is `unk_<offset>` (in hex) otherwise. Writes go to the live tables, are checked for type and range, and are undone with `restore` (and when the mod is switched off).
 
 #### `gear.data.abilities:ids() -> integer[]`
 
@@ -520,14 +520,16 @@ Undoes this mod's writes to the ability tables.
 
 Written `ability` in the signatures.
 
-One ability record. Reading a field of a table the ability is not in (or an unknown name) gives nil; writing one is an error, as is writing a value that does not fit the field or the `id`. T1 has `name_text`, `target_mode`, `effect_base`, `effect_per_level`, `effect2_base` and `effect2_per_level`; T2 has `target_mode` and `value0_base` .. `value3_per_level`; both have `id` and the `unk_` fields.
+One ability record. Reading a field of a table the ability is not in (or an unknown name) gives nil; writing one is an error, as is writing a value that does not fit the field or the `id`. Both have `id`, `name_text`, `description_text`, `target_mode` and the `unk_` fields; T1 also `effect_base`, `effect_per_level`, `effect2_base` and `effect2_per_level`; T2 also `value0_base` .. `value3_per_level`.
 
 | Field | Type | |
 |---|---|---|
 | `table` | `string` | `'T1'` or `'T2'`. |
 | `index` | `integer` | The record's index in its table. |
+| `kind` | `string` | `'combat_art'` (T1: ids from 1000) or `'spell'` (T2: ids from 1): what the names in the game's texts say they are. |
 | `id` | `integer` | The ability's id. |
-| `name_text` | `integer` | T1: the text id of the name (`gear.text.get`). |
+| `name_text` | `integer` | The text id of the name (`gear.text.get`). |
+| `description_text` | `integer` | The text id of the description. |
 | `target_mode` | `integer` | How the ability is aimed (the engine passes it on to the targeting code). |
 | `effect_base` | `number` | T1: the first effect is `effect_base + level * effect_per_level` (level 1..100). |
 | `effect_per_level` | `number` | T1. |
@@ -592,6 +594,13 @@ The path the game's open of `path` (relative to the game folder) ends up at: the
 
 - `path`: `string`
 - returns `string`
+
+#### `gear.files.served(path) -> integer`
+
+How many times the game opened `path` (relative to the game folder) and was served a mod's file by the overlay.
+
+- `path`: `string`
+- returns `integer`
 
 ### GearOverlayInfo
 

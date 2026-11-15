@@ -128,7 +128,7 @@ def main():
             fields('GearData'))
     abil = set(re.findall(r'^function abilities:(\w+)\(', kernel, re.M))
     compare('gear.data.abilities', abil, {f.name for f in model.classes['GearAbilities'].funcs})
-    abil_fields = set(re.findall(r"(\w+) = \{0x[0-9A-Fa-f]+, '", kernel)) | {'table', 'index'}
+    abil_fields = set(re.findall(r"(\w+) = \{0x[0-9A-Fa-f]+, '", kernel)) | {'table', 'index', 'kind'}
     compare('ability record', abil_fields, fields('GearAbility'))
     text_src = re.search(r'^\s{8}text = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.text', set(re.findall(r'^\s{12}(\w+) = function', text_src.group(1), re.M)) if text_src else set(), members('GearText'))

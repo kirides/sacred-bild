@@ -186,7 +186,7 @@ local ABILITY_TABLES = {
     T1 = {
         native = 'ability_t1', stride = 0x78, unknown = {kind = 'u32', size = 4},
         fields = {
-            id = {0x00, 'i16'}, name_text = {0x04, 'u32'}, target_mode = {0x4C, 'u32'},
+            id = {0x00, 'i16'}, name_text = {0x04, 'u32'}, description_text = {0x08, 'u32'}, target_mode = {0x4C, 'u32'},
             effect_base = {0x50, 'f32'}, effect_per_level = {0x54, 'f32'},
             effect2_base = {0x58, 'f32'}, effect2_per_level = {0x5C, 'f32'},
         },
@@ -194,7 +194,7 @@ local ABILITY_TABLES = {
     T2 = {
         native = 'ability_t2', stride = 0x94, unknown = {kind = 'u16', size = 2},
         fields = {
-            id = {0x00, 'i16'}, target_mode = {0x3C, 'u8'},
+            id = {0x00, 'i16'}, name_text = {0x04, 'u32'}, description_text = {0x08, 'u32'}, target_mode = {0x3C, 'u8'},
             value0_base = {0x42, 'i16'}, value0_per_level = {0x44, 'i16'},
             value1_base = {0x46, 'i16'}, value1_per_level = {0x48, 'i16'},
             value2_base = {0x4A, 'i16'}, value2_per_level = {0x4C, 'i16'},
@@ -259,6 +259,7 @@ function ability_mt.__index(self, field)
     local info = rawget(self, '__info')
     if field == 'table' then return info.table end
     if field == 'index' then return info.index end
+    if field == 'kind' then return info.table == 'T1' and 'combat_art' or 'spell' end
     local t = ABILITY_TABLES[info.table]
     local f = t.fields[field]
     if not f then return nil end
@@ -1948,6 +1949,10 @@ local function make_env(mod)
             resolve = function(path)
                 assert(type(path) == 'string', 'path must be a string')
                 return native.overlay_resolve(path)
+            end,
+            served = function(path)
+                assert(type(path) == 'string', 'path must be a string')
+                return native.overlay_served(path)
             end,
         },
         -- Values of the game's Settings.cfg ("KEY : value" lines), as text.
