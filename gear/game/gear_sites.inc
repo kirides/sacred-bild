@@ -21,6 +21,7 @@ static const ConstSiteSpec kConstSites[] = {
     {"difficulty.factor", 2, &Gear::Addr::siteFn56B130, 0x1FCC, 0, 0x00890DEC}, // 0056D0FC in 0056B130
     {"difficulty.factor", 3, &Gear::Addr::siteFn56B130, 0x1FD6, 0, 0x00890750}, // 0056D106 in 0056B130
     {"difficulty.factor", 4, &Gear::Addr::siteFn56B130, 0x1FE0, 0, 0x00890DE8}, // 0056D110 in 0056B130
+    {"difficulty.scale", 0, &Gear::Addr::siteFn56B130, 0x5826, 1, 0x00890CB0}, // 00570956 in 0056B130
     {"scale.559BF0", 0, &Gear::Addr::siteFn559BF0, 0x318, 1, 0x00890CB0}, // 00559F08 in 00559BF0
     {"scale.559BF0", 1, &Gear::Addr::siteFn559BF0, 0x559, 1, 0x00890CB0}, // 0055A149 in 00559BF0
     {"scale.559BF0", 2, &Gear::Addr::siteFn559BF0, 0x658, 1, 0x00890CB0}, // 0055A248 in 00559BF0

@@ -465,6 +465,18 @@ namespace
         return 3;
     }
 
+    // native.difficulty() -> the running game's difficulty level (0 .. 4) | nil
+    int nativeDifficulty(lua_State* L)
+    {
+        if (!Gear::Addr::g_difficulty)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, *Gear::Addr::g_difficulty);
+        return 1;
+    }
+
     // native.combat_constant_active(bool): whether some mod handles `combat.constant`
     int nativeCombatConstantActive(lua_State* L)
     {
@@ -1546,6 +1558,7 @@ namespace
             {"level_factor_active", nativeLevelFactorActive},
             {"site_hooks", nativeSiteHooks},
             {"combat_constant_active", nativeCombatConstantActive},
+            {"difficulty", nativeDifficulty},
             {"site_selftest_start", nativeSiteSelfTestStart},
             {"site_selftest_result", nativeSiteSelfTestResult},
             {"engine_level_factor_start", nativeEngineLevelFactorStart},

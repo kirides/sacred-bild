@@ -43,6 +43,7 @@
 ---@field text GearText The game's texts by id.
 ---@field settings GearSettings The game's Settings.cfg.
 ---@field files GearFiles The mod's file overlay.
+---@field game GearGame Facts about the running game.
 ---@field hooks GearHooks The engine hooks that ask mods for values.
 ---@field json GearJson JSON encoding and decoding.
 ---@field pipe GearPipeModule Named pipe clients.

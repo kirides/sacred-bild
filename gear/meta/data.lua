@@ -226,6 +226,17 @@ function GearHooks.stats(name) end
 ---@field answered integer
 ---@field busy integer
 
+-- ## The running game (gear.game)
+
+-- path gear.game
+--- Facts about the running game.
+---@class GearGame
+local GearGame = {}
+
+--- The difficulty level of the running game: 0 (bronze) to 4 (niobium); nil if the game is not running.
+---@return integer?
+function GearGame.difficulty() end
+
 -- ## JSON (gear.json)
 
 -- path gear.json

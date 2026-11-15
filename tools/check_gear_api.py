@@ -135,6 +135,8 @@ def main():
     files_src = re.search(r'^\s{8}files = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.files', set(re.findall(r'^\s{12}(\w+) = function', files_src.group(1), re.M)) if files_src else set(),
             members('GearFiles'))
+    game_src = re.search(r'^\s{8}game = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
+    compare('gear.game', set(re.findall(r'^\s{12}(\w+) = function', game_src.group(1), re.M)) if game_src else set(), members('GearGame'))
     hooks_src = re.search(r'^\s{8}hooks = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.hooks', set(re.findall(r'^\s{12}(\w+) = function', hooks_src.group(1), re.M)) if hooks_src else set(), members('GearHooks'))
     settings_src = re.search(r'^\s{8}settings = \{(.*?)^\s{8}\},', kernel, re.M | re.S)

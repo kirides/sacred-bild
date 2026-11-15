@@ -149,6 +149,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `text` | `GearText` | The game's texts by id. |
 | `settings` | `GearSettings` | The game's Settings.cfg. |
 | `files` | `GearFiles` | The mod's file overlay. |
+| `game` | `GearGame` | Facts about the running game. |
 | `hooks` | `GearHooks` | The engine hooks that ask mods for values. |
 | `json` | `GearJson` | JSON encoding and decoding. |
 | `pipe` | `GearPipeModule` | Named pipe clients. |
@@ -636,6 +637,20 @@ The counters of a hook since the game started: how often the engine asked, how o
 | `calls` | `integer` |  |
 | `answered` | `integer` |  |
 | `busy` | `integer` |  |
+
+## The running game (gear.game)
+
+### GearGame
+
+Reached as `gear.game`.
+
+Facts about the running game.
+
+#### `gear.game.difficulty() -> integer?`
+
+The difficulty level of the running game: 0 (bronze) to 4 (niobium); nil if the game is not running.
+
+- returns `integer?`
 
 ## JSON (gear.json)
 

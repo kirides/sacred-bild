@@ -97,6 +97,8 @@ namespace Gear::Addr
     inline uintptr_t siteFn559BF0{};
     inline uintptr_t siteFn56B130{};
 
+    // ENG 0182EE44: the difficulty level of the running game (0 .. 4).
+    inline Sacred::Global<int32_t> g_difficulty{};
     inline Sacred::Global<uint8_t> abilityTable1First{};
     inline Sacred::Global<uint8_t> abilityTable1End{};
     inline Sacred::Global<uint8_t> abilityTable2First{};

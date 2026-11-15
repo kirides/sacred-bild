@@ -72,6 +72,8 @@ GEAR = [
     ('abilityTable2End', 0x00955344, 'data', 0x004D232A),
     ('textResources_instance', 0x006725E0, 'func'),
     ('textResources_get', 0x00672C90, 'func'),
+    # The difficulty level of the running game (0 .. 4): the engine's own code indexes tables with it (ReBorn's appended code too).
+    ('g_difficulty', 0x0182EE44, 'data'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

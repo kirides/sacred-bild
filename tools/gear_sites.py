@@ -38,6 +38,8 @@ CONSTANT_SITES = [
     ('difficulty.factor', 2, 'siteFn56B130', 0x0056B130, 0x0056D0FC, 'fld', 0x00890DEC, 1.67),
     ('difficulty.factor', 3, 'siteFn56B130', 0x0056B130, 0x0056D106, 'fld', 0x00890750, 2.0),
     ('difficulty.factor', 4, 'siteFn56B130', 0x0056B130, 0x0056D110, 'fld', 0x00890DE8, 2.34),
+    # the 0.01 of 0056B130's damage scale (ReBorn divides it by a per difficulty constant: 1 1 1 2 4)
+    ('difficulty.scale', 0, 'siteFn56B130', 0x0056B130, 0x00570956, 'fmul', 0x00890CB0, 0.01),
     # three 0.01 scales in 00559BF0
     ('scale.559BF0', 0, 'siteFn559BF0', 0x00559BF0, 0x00559F08, 'fmul', 0x00890CB0, 0.01),
     ('scale.559BF0', 1, 'siteFn559BF0', 0x00559BF0, 0x0055A149, 'fmul', 0x00890CB0, 0.01),

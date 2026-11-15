@@ -1970,6 +1970,10 @@ local function make_env(mod)
                 return native.overlay_served(path)
             end,
         },
+        -- The running game.
+        game = {
+            difficulty = function() return native.difficulty() end,
+        },
         -- Counters of the engine hooks that ask the mods for a value (gear/sitehook.cpp).
         hooks = {
             stats = function(name)
