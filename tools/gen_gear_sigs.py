@@ -82,6 +82,20 @@ GEAR = [
     ('cObjectManager_destroy', 0x005FBDB0, 'func'),
     ('cItem_dataHash', 0x0042BF20, 'func'),
     ('cItem_entriesInsert', 0x005C9230, 'func'),
+    # Socketing: the engine's "insert upgrade" (thiscall (item, upgrade id, socket) -> bool, ret 8).
+    ('cItem_insertUpgrade', 0x005BFF60, 'func'),
+    # Item tooltips (gear/itemtip.cpp): the reserved popup of the UI manager and the calls the inventory's hover uses.
+    ('cUI_Manager_getPopup', 0x0075B1E0, 'func'),
+    ('cUI_Popup_addFlags', 0x006E8860, 'func'),
+    # SacredBild detours the start of this one and its own signature window covers the first 0x1B bytes, so the
+    # signature is taken further in (0x6E6ED6, `mov al, [esp + 0x1C]`): the function is that address minus 0x36.
+    ('cUI_Popup_setTextBody', 0x006E6ED6, 'code'),
+    ('cUI_Popup_show', 0x00732550, 'func'),
+    ('cUI_Popup_setOwner', 0x006E81C0, 'func'),
+    ('engine_alloc', 0x008321A0, 'func'),
+    ('engine_free', 0x0041D3B0, 'func'),
+    # cWeapon3D's network read / write (vtable slot 8): tells weapons from other items (their four extra dwords).
+    ('cWeapon3D_netIO', 0x005CF2D0, 'func'),
     # Saving (gear/save.cpp). The savegame window's event (code 0xF, sub 2; its class is made by the factory 0x8080A0
     # as `*p = &vtable`, 0x24 bytes) goes to cEngine::receiveEvent (0x618090, vtable slot 0 of the engine): it records
     # the slot and sets bit 0x40 of the engine's flags (+0x54), which the render thread loop turns into the write of

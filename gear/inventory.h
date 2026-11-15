@@ -53,6 +53,10 @@ namespace Inventory
     // Destroys item `id`, which must be in no container.
     bool destroy(uint32_t id, const char*& error);
 
+    // Puts upgrade item `upgradeId` (a rune lying in the world or in no container) into a free socket of item
+    // `itemId`, as the blacksmith does: the item gains its bonuses and an entry, the upgrade item is consumed.
+    bool socket(uint32_t itemId, uint32_t upgradeId, const char*& error);
+
     // Copies item `id` to bytes: its type and its own data (the 0x82-byte entries and record the engine's network
     // code sends), not where it is. Format: u32 type, u16 entry count, the entries, the record.
     bool exportItem(uint32_t id, std::string& bytes, const char*& error);

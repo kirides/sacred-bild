@@ -138,6 +138,21 @@ function GearUi.image(id, x, y, w, h, opts) end
 ---@return boolean drawn False when it could not be queued (a bad window or layer); whether the model really draws is known to the game's renderer only.
 function GearUi.item_icon(item, x, y, w, h, opts) end
 
+--- The game's own tooltip popup for an item, as the inventory windows show it (framed, the name in the rarity colour,
+--- price, protection, level, bonus lines), centered on (x, y) of the 1024x768 layout and kept on the screen. `item` is
+--- an item (a table from `gear.world.item` or a container's `items()`), an item id, or the string `gear.inv.export`
+--- made (a temporary item is made to read the text from and destroyed at once; single player only). Call it every
+--- frame the tooltip should be shown; it is drawn by the game's popup pass. `x`, `y` are the popup's top-left corner.
+--- It also returns the popup's size as of its last layout (what the previous tooltip it showed took; 0 at first), so
+--- a mod can place the next one beside a region.
+---@param item GearItem|integer|string
+---@param x number
+---@param y number
+---@return boolean? ok
+---@return number|string? width_or_error The popup's width in layout units, or the message when `ok` is nil.
+---@return number? height
+function GearUi.item_tooltip(item, x, y) end
+
 --- The UI images whose sheet name contains `filter` (any case), all of them without a filter.
 ---@param filter? string
 ---@return GearImageInfo[]

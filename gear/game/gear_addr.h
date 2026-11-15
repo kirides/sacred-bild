@@ -126,6 +126,15 @@ namespace Gear::Addr
     // entries (begin / end / capacity pointers at +0x100 / +0x104 / +0x108 of the item; `this` is item + 0x100).
     // ret 0xC.
     inline Sacred::Thiscall<void(void* vector, void* pos, uint32_t count, const void* fill)> cItem_entriesInsert{};
+    // ENG 005BFF60 ("insert upgrade"): thiscall (item, upgrade item id, socket) -> 1 if it went in, ret 8. The
+    // blacksmith's socket window calls it (006A2660): the upgrade item (a rune) is checked (cItemBase, free socket
+    // left: the item's record +0x124..+0x12B counts the sockets), its bonuses are added to the item's record (+0x12C
+    // ...), its own 0x82-byte record is appended to the item's entries and the upgrade item is destroyed.
+    inline Sacred::Thiscall<uint8_t(void* item, uint32_t upgradeId, uint32_t socket)> cItem_insertUpgrade{};
+    // ENG 005CF2D0: cWeapon3D's network read / write (vtable slot 8, thiscall (stream, write, code), ret 0xC). Gear
+    // only compares an item's slot 8 with it to tell weapons, which keep four more dwords (+0x19C, +0x1AC, +0x1A0,
+    // +0x1BC) that the engine's save and network code copy after the common item data.
+    inline Sacred::Thiscall<uint32_t(void* weapon, void* stream, int write, uint32_t code)> cWeapon3D_netIO{};
 
     // Saving (gear/save.cpp). ENG 00890B38: the vtable of the savegame window's event (0x24 bytes; slot 1 returns the
     // code, 0xF). The event goes to cEngine::receiveEvent (ENG 00618090, vtable slot 0 of the engine object, thiscall
@@ -161,4 +170,23 @@ namespace Gear::Addr
     // tables hold (not the keys of global.res).
     inline Sacred::Cdecl<void*()> textResources_instance{};
     inline Sacred::Thiscall<const wchar_t* const*(void* self, uint32_t id)> textResources_get{};
+
+
+    // Item tooltips (gear/itemtip.cpp): what the inventory windows do when the cursor rests on an item. The equipment
+    // window's hover (006B7700) takes the UI manager's reserved popup (u16 at manager +0x54, ENG 0075B1E0 (index) ->
+    // cUI_Popup*), builds the item's text with its virtual function 17 (thiscall (std::vector<wchar_t>* out, record or
+    // 0, 0, 0x5F) ret 0x10: name in the rarity colour, price, protection, level and the bonus lines as colour codes),
+    // sets the popup's flags (006E8860 (0xA): clamp to the screen), its x / y (+0x24 / +0x28: the popup is centered on
+    // them in the 1024x768 layout), its text (006E6EA0 (0, vector*, 0) ret 0xC), shows it (00732550 (1)) and ties it
+    // to the item (006E81C0 (item id)). The vector's buffer comes from the engine's allocator (008321A0 (bytes), cdecl)
+    // and is freed with 0041D3B0 (stdcall (ptr, count)).
+    inline Sacred::Thiscall<void*(void* manager, uint32_t index)> cUI_Manager_getPopup{};
+    inline Sacred::Thiscall<void(void* popup, uint32_t flags)> cUI_Popup_addFlags{};
+    // ENG 006E6EA0 (ret 0xC): found by its body (see gen_gear_sigs.py), the entry is 0x36 bytes before.
+    inline uintptr_t cUI_Popup_setTextBody{};
+    inline Sacred::Thiscall<void(void* popup, uint32_t a, void* text, uint8_t b)> cUI_Popup_setText(){ return {cUI_Popup_setTextBody - 0x36}; }
+    inline Sacred::Thiscall<void(void* popup, uint32_t flag)> cUI_Popup_show{};
+    inline Sacred::Thiscall<void(void* popup, uint32_t itemId)> cUI_Popup_setOwner{};
+    inline Sacred::Cdecl<void*(uint32_t bytes)> engine_alloc{};
+    inline Sacred::Thiscall<void(void* unused, void* ptr, uint32_t count)> engine_free{};
 }

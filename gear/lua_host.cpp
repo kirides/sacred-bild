@@ -3,6 +3,7 @@
 #include "gear.h"
 #include "instance.h"
 #include "inventory.h"
+#include "itemtip.h"
 #include "itemicon.h"
 #include "keyblock.h"
 #include "log.h"
@@ -1579,6 +1580,50 @@ namespace
         return pushFailure(L, error);
     }
 
+    // native.inv_socket(item id, upgrade id) -> true | nil, message
+    int nativeInvSocket(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1), upgrade = checkId(L, 2);
+        const char* error = "bad arguments";
+        if (id && upgrade && Inventory::socket(id, upgrade, error))
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.item_tooltip(item id | exported bytes, x, y) -> true, width, height | nil, message
+    int nativeItemTooltip(lua_State* L)
+    {
+        const lua_Number x = luaL_checknumber(L, 2), y = luaL_checknumber(L, 3);
+        const char* error = "bad arguments";
+        bool ok = false;
+        int w = 0, h = 0;
+        if (x > -4096 && x < 4096 && y > -4096 && y < 4096)
+        {
+            if (lua_type(L, 1) == LUA_TSTRING)
+            {
+                size_t n = 0;
+                const char* data = lua_tolstring(L, 1, &n);
+                ok = n <= 65536 && ItemTip::showExported(std::string(data, n), static_cast<int>(x), static_cast<int>(y), w, h, error);
+            }
+            else
+            {
+                const uint32_t id = checkId(L, 1);
+                ok = id && ItemTip::show(id, static_cast<int>(x), static_cast<int>(y), w, h, error);
+            }
+        }
+        if (ok)
+        {
+            lua_pushboolean(L, 1);
+            lua_pushnumber(L, w);
+            lua_pushnumber(L, h);
+            return 3;
+        }
+        return pushFailure(L, error);
+    }
+
     // native.inv_export(item id) -> bytes | nil, message
     int nativeInvExport(lua_State* L)
     {
@@ -2012,6 +2057,8 @@ namespace
             {"inv_put", nativeInvPut},
             {"inv_remove", nativeInvRemove},
             {"inv_destroy", nativeInvDestroy},
+            {"inv_socket", nativeInvSocket},
+            {"item_tooltip", nativeItemTooltip},
             {"inv_export", nativeInvExport},
             {"inv_import", nativeInvImport},
             {nullptr, nullptr},

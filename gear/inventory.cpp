@@ -23,6 +23,10 @@ namespace
     constexpr uintptr_t kItemType = 0x10, kItemEntries = 0x100, kItemRecord = 0x118, kItemHash = 0x120;
     constexpr size_t kEntrySize = 0x82;
     constexpr uint32_t kMaxEntries = 64;
+    // A weapon (cWeapon3D) keeps four more dwords after the common data, written in this order by the engine's save
+    // and network code (005CF1A0, 005CF2D0): exported as a 16-byte trailer after the record.
+    constexpr uintptr_t kWeaponExtra[4] = {0x19C, 0x1AC, 0x1A0, 0x1BC};
+    constexpr size_t kWeaponExtraSize = 16;
 
     bool safeCopy(void* dst, const void* src, size_t size)
     {
@@ -194,6 +198,51 @@ namespace
             std::memcpy(reinterpret_cast<void*>(o + kItemRecord), record, kEntrySize);
             *reinterpret_cast<uint32_t*>(o + kItemHash) =
                 Addr::cItem_dataHash(nullptr, reinterpret_cast<void*>(o + kItemRecord));
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    int callSocket(uintptr_t item, uint32_t upgradeId)
+    {
+        __try
+        {
+            return Addr::cItem_insertUpgrade(reinterpret_cast<void*>(item), upgradeId, 0) & 0xFF ? 1 : 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    // Whether item object `o` is a weapon: its vtable's slot 8 is cWeapon3D's.
+    bool isWeapon(uintptr_t o)
+    {
+        uintptr_t vtable = 0, slot8 = 0;
+        return Addr::cWeapon3D_netIO && readAt(o, 0, vtable) && readAt(vtable, 8 * 4, slot8) &&
+               slot8 == static_cast<uintptr_t>(Addr::cWeapon3D_netIO);
+    }
+
+    // The weapon's four extra dwords <-> 16 bytes. 1 done, -1 fault.
+    int callWeaponExtra(uintptr_t o, uint8_t* bytes, bool write)
+    {
+        __try
+        {
+            for (size_t i = 0; i < 4; ++i)
+            {
+                auto* field = reinterpret_cast<uint8_t*>(o + kWeaponExtra[i]);
+                if (write)
+                {
+                    std::memcpy(field, bytes + i * 4, 4);
+                }
+                else
+                {
+                    std::memcpy(bytes + i * 4, field, 4);
+                }
+            }
             return 1;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -400,6 +449,34 @@ bool Inventory::destroy(uint32_t id, const char*& error)
     return true;
 }
 
+bool Inventory::socket(uint32_t itemId, uint32_t upgradeId, const char*& error)
+{
+    const uintptr_t item = World::itemObject(itemId);
+    if (!World::changesAllowed() || !Addr::cItem_insertUpgrade)
+    {
+        error = "inventory changes are not possible now (no single player game)";
+        return false;
+    }
+    if (!item || !World::itemObject(upgradeId) || itemId == upgradeId)
+    {
+        error = "no such item";
+        return false;
+    }
+    const int r = callSocket(item, upgradeId);
+    if (r < 0)
+    {
+        LOG("Inventory: socketing {} into {} faulted", upgradeId, itemId);
+        error = "the game faulted while socketing";
+        return false;
+    }
+    if (!r)
+    {
+        error = "the item has no free socket, or the upgrade does not fit";
+        return false;
+    }
+    return true;
+}
+
 bool Inventory::exportItem(uint32_t id, std::string& bytes, const char*& error)
 {
     const uintptr_t o = World::itemObject(id);
@@ -416,13 +493,19 @@ bool Inventory::exportItem(uint32_t id, std::string& bytes, const char*& error)
         return false;
     }
     const uint16_t n = static_cast<uint16_t>((end - begin) / kEntrySize);
-    std::string out(4 + 2 + n * kEntrySize + kEntrySize, '\0');
+    const bool weapon = isWeapon(o);
+    std::string out(4 + 2 + n * kEntrySize + kEntrySize + (weapon ? kWeaponExtraSize : 0), '\0');
     std::memcpy(&out[0], &type, 4);
     std::memcpy(&out[4], &n, 2);
     if ((n && !safeCopy(&out[6], reinterpret_cast<const void*>(begin), n * kEntrySize)) ||
         !safeCopy(&out[6 + n * kEntrySize], reinterpret_cast<const void*>(o + kItemRecord), kEntrySize))
     {
         error = "cannot read the item";
+        return false;
+    }
+    if (weapon && callWeaponExtra(o, reinterpret_cast<uint8_t*>(&out[6 + n * kEntrySize + kEntrySize]), false) < 0)
+    {
+        error = "cannot read the weapon";
         return false;
     }
     bytes = std::move(out);
@@ -445,7 +528,8 @@ uint32_t Inventory::importItem(const std::string& bytes, const char*& error)
     }
     std::memcpy(&type, bytes.data(), 4);
     std::memcpy(&n, bytes.data() + 4, 2);
-    if (n > kMaxEntries || bytes.size() != 6 + n * kEntrySize + kEntrySize)
+    const size_t base = 6 + n * kEntrySize + kEntrySize;
+    if (n > kMaxEntries || (bytes.size() != base && bytes.size() != base + kWeaponExtraSize))
     {
         error = "the item data has the wrong size";
         return 0;
@@ -464,7 +548,15 @@ uint32_t Inventory::importItem(const std::string& bytes, const char*& error)
     }
     const uintptr_t o = World::itemObject(id);
     const auto* data = reinterpret_cast<const uint8_t*>(bytes.data());
-    const int r = o ? callApply(o, data + 6, n, data + 6 + n * kEntrySize) : 0;
+    int r = o ? callApply(o, data + 6, n, data + 6 + n * kEntrySize) : 0;
+    if (r > 0 && bytes.size() == base + kWeaponExtraSize)
+    {
+        // Saved from a weapon: its four extra dwords. Blobs of weapons saved before they were kept have none and
+        // leave the new weapon's own values.
+        uint8_t extra[kWeaponExtraSize];
+        std::memcpy(extra, data + base, sizeof(extra));
+        r = isWeapon(o) ? callWeaponExtra(o, extra, true) : 0;
+    }
     if (r <= 0)
     {
         LOG("Inventory: giving the new item {} (type {}) its data {}", id, type, r < 0 ? "faulted" : "was refused");

@@ -1405,6 +1405,15 @@ The size of an item in cells, or nil.
 - returns `w` `integer?`
 - returns `h` `integer?`
 
+#### `gear.inv.socket(item_id, upgrade_id) -> boolean?, string?`
+
+Puts an upgrade item (a rune lying in the world, e.g. made with `create`, or in no container) into a free socket of an item, as the blacksmith does: the item gains the rune's bonuses and an entry, the rune is consumed. Single player only.
+
+- `item_id`: `integer`
+- `upgrade_id`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `gear.inv.export(item_id) -> string?, string?`
 
 Copies an item to a binary string: its type and its own data, not where it is. `hex` makes it text for JSON.
@@ -1637,6 +1646,17 @@ What the game's inventory windows show for an item, its own 3D model, drawn by t
 - `h`: `number`
 - `opts`: `GearDrawOpts` (optional)
 - returns `drawn` `boolean` - False when it could not be queued (a bad window or layer); whether the model really draws is known to the game's renderer only.
+
+#### `gear.ui.item_tooltip(item, x, y) -> boolean?, number|string?, number?`
+
+The game's own tooltip popup for an item, as the inventory windows show it (framed, the name in the rarity colour, price, protection, level, bonus lines), centered on (x, y) of the 1024x768 layout and kept on the screen. `item` is an item (a table from `gear.world.item` or a container's `items()`), an item id, or the string `gear.inv.export` made (a temporary item is made to read the text from and destroyed at once; single player only). Call it every frame the tooltip should be shown; it is drawn by the game's popup pass. `x`, `y` are the popup's top-left corner. It also returns the popup's size as of its last layout (what the previous tooltip it showed took; 0 at first), so a mod can place the next one beside a region.
+
+- `item`: `GearItem|integer|string`
+- `x`: `number`
+- `y`: `number`
+- returns `ok` `boolean?`
+- returns `width_or_error` `number|string?` - The popup's width in layout units, or the message when `ok` is nil.
+- returns `height` `number?`
 
 #### `gear.ui.images(filter) -> GearImageInfo[]`
 

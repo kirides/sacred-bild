@@ -41,6 +41,15 @@ static const Sig::Entry kGearSigs[] = {
     {"cObjectManager_destroy", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A0 ?? ?? ?? ?? 64 89 25 00 00 00 00 81 EC 88 00 00 00 53 33 DB 55", 0, Sig::Take::Match, &Gear::Addr::cObjectManager_destroy}, // 005FBDB0, 005FBE10
     {"cItem_dataHash", "8B 44 24 04 6A 00 6A 00 50 E8 ?? ?? ?? ?? 83 C4 0C", 0, Sig::Take::Match, &Gear::Addr::cItem_dataHash}, // 0042BF20, 0042BDF0
     {"cItem_entriesInsert", "81 EC 8C 00 00 00 53 55 56 8B B4 24 A0 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_entriesInsert}, // 005C9230, 005C91A0
+    {"cItem_insertUpgrade", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 8C 00 00 00 8B 84 24 9C 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_insertUpgrade}, // 005BFF60, 005BFED0
+    {"cUI_Manager_getPopup", "8B 91 28 01 00 00 8B 44 24 04 56 8B B1 24 01 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Manager_getPopup}, // 0075B1E0, 0075AAC0
+    {"cUI_Popup_addFlags", "8B 44 24 04 8B 91 54 01 00 00 0B D0", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_addFlags}, // 006E8860, 006E84A0
+    {"cUI_Popup_setTextBody", "8A 44 24 1C 84 C0 74 0F 8B 85 54 01 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_setTextBody}, // 006E6ED6, 006E6B16
+    {"cUI_Popup_show", "53 8B 5C 24 08 56 8B F1 F6 46 10 01", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_show}, // 00732550, 00731E70
+    {"cUI_Popup_setOwner", "8B 44 24 04 85 C0 89 81 D0 21 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_setOwner}, // 006E81C0, 006E7E00
+    {"engine_alloc", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 08 8B 44 24 18 53 48", 0, Sig::Take::Match, &Gear::Addr::engine_alloc}, // 008321A0, 00830F60
+    {"engine_free", "8B 4C 24 04 85 C9 74 23 8B 44 24 08", 0, Sig::Take::Match, &Gear::Addr::engine_free}, // 0041D3B0, 0041D390
+    {"cWeapon3D_netIO", "51 53 55 56 8B 74 24 14 57 8B F9 8B 06 8B CE FF 50 14 8B 6C 24 20 8B 5C 24 1C 55 53 56 8B CF 89 44 24 1C C7 44 24 24 0D F0 AD BA", 0, Sig::Take::Match, &Gear::Addr::cWeapon3D_netIO}, // 005CF2D0, 005CF240
     {"cSaveEvent_vtable", "8B F1 8B 46 20 C7 06 ?? ?? ?? ?? 85 C0 74 09 50", 7, Sig::Take::Abs32, &Gear::Addr::cSaveEvent_vtable}, // 00890B38, 0088EB38
     {"abilityTable1First", "B8 ?? ?? ?? ?? 66 39 10 74 0E 83 C0 78 41 3D ?? ?? ?? ?? 72 F0", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1First}, // 0094FE28, 0094DE28
     {"abilityTable1End", "3D ?? ?? ?? ?? 72 F0 33 C0 C3 8D 04 49 8D 04 80", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1End}, // 00952A38, 00950A38

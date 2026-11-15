@@ -177,6 +177,7 @@ if(SACREDGEAR)
     gear/text.cpp
     gear/pickup.cpp
     gear/inventory.cpp
+    gear/itemtip.cpp
     gear/save.cpp
     gear/keyblock.cpp
     gear/itemicon.cpp

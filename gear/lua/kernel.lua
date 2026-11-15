@@ -916,6 +916,12 @@ function inv.size(item_id)
     return native.inv_size(item_id)
 end
 
+-- inv.socket(item_id, upgrade_id) -> true | nil, message: puts the upgrade item (a rune) into a free socket of the
+-- item, as the blacksmith does; the rune is consumed.
+function inv.socket(item_id, upgrade_id)
+    return native.inv_socket(item_id, upgrade_id)
+end
+
 -- inv.export(item_id) -> bytes | nil, message: the item's type and own data as a binary string (not where it is).
 function inv.export(item_id)
     return native.inv_export(item_id)
@@ -1395,6 +1401,16 @@ local function make_ui(mod)
             'x, y, w and h must be numbers')
         ui_count(mod)
         return native.ui_item_icon(layer, slot, x, y, w, h, id, kind)
+    end
+    -- ui.item_tooltip(item, x, y) -> true | nil, message: the game's own tooltip popup for an item (framed, name in the
+    -- rarity colour, price, protection, level, bonuses) with its top-left corner at (x, y) of the 1024x768 layout, kept on the
+    -- screen. `item`: an item table (gear.world.item, container:items()), an item id, or an export string
+    -- (gear.inv.export: a temporary item is made to read the text from). Call it every frame the tooltip should show.
+    function ui.item_tooltip(item, x, y)
+        assert(type(x) == 'number' and type(y) == 'number', 'x and y must be numbers')
+        if type(item) == 'table' then item = item.id end
+        if type(item) ~= 'number' and type(item) ~= 'string' then error('item_tooltip wants an item, an id or an export', 2) end
+        return native.item_tooltip(item, x, y)
     end
     function ui.image_info(id)
         local info = type(id) == 'number' and native.ui_image_info(id)
