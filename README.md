@@ -29,25 +29,29 @@ change its settings and re-bind its keys, with a warning when two mods want the 
 
 ![The in-game mod manager](docs/images/gear-mod-manager.jpg)
 
-**Layout editor** (F7), like the edit mode of an MMO: every game window and mod panel gets an overlay; click one and
-drag it anywhere, it snaps to screen edges and to other windows, the arrow keys nudge it, and your layout is
-remembered.
+**Layout editor**, like the edit mode of an MMO: hold **Alt** (the game shows its labels) and click *Edit layout*
+at the top left. Every game window and mod panel gets an overlay; click one and drag it anywhere, it snaps to screen
+edges and to other windows, the arrow keys nudge it, and your layout is remembered. *Done* leaves the edit mode.
 
 ![The layout editor](docs/images/gear-layout-editor.jpg)
 
 **Loot filter** (settings in game with F5): your hero picks up only what is worth it: items for its class, above a
 quality you choose, per category (weapons, armor, jewelry, runes, ...) and per potion type. Filtered items' labels
-are dimmed so the good drops stand out.
+are dimmed so the good drops stand out, and while you hold Alt an overlay shows the active rules (switch it off with
+*Show overlay* in the Mods screen).
 
-![The loot filter and its settings](docs/images/gear-loot-filter.jpg)
+![The loot filter settings](docs/images/gear-loot-filter.jpg)
 
 **Shared stash** (F10, from the extra mods): one stash for all your heroes. Put an item in with one hero, take it
 out with another, with its random properties and runes intact.
 
 ![The shared stash beside the inventory](docs/images/gear-shared-stash.jpg)
 
-**Autosave** (F6, from the extra mods): saves your game periodically, so a crash or a
-bad fight costs minutes, not an hour.
+**Autosave** (from the extra mods): saves the game every few minutes of play (5 by default, set it in the Mods
+screen) into its own slots 97 to 99, oldest first, so a crash or a bad fight costs minutes, not an hour. F6 saves
+right now, and a short note confirms each save.
+
+![An autosave note](docs/images/gear-autosave.jpg)
 
 The loot filter and the layout editor are in this repository (`gear/examples`); the shared stash, the autosave and
 more are in [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods). A mod is a folder in the game's `mods`
