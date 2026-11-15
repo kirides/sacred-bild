@@ -565,6 +565,38 @@ ok(widgets.panel.x == 400 and widgets.panel.w == 200, 'reset_panel: its own plac
 keys_held[0x25] = true
 ok(widgets.ui.key_down('left') and not widgets.ui.key_down('right'), 'key_down')
 keys_held[0x25] = nil
+-- tooltip placement: clear of the cursor sprite, flipped at the screen's edges
+do
+    local tr = widgets.ui.tooltip_rect
+    local function clear(x, y, w, h, mx, my)
+        return x >= mx + 30 or x + w <= mx or y >= my + 38 or y + h <= my
+    end
+    local x, y = tr(100, 20, {x = 500, y = 300})
+    ok(x == 504 and y == 342, 'tooltip: below and right of the cursor tip (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 1000, y = 300})
+    ok(x == 896 and y == 342, 'tooltip: flips left at the right edge (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 500, y = 760})
+    ok(x == 504 and y == 736, 'tooltip: flips above at the bottom edge (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 1020, y = 760})
+    ok(x == 916 and y == 736, 'tooltip: flips left and above in the bottom right corner (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 0, y = 0})
+    ok(x == 4 and y == 42, 'tooltip: top left corner (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 200, y = 40, bounds = {0, 0, 400, 100}})
+    ok(x == 204 and y == 16 and clear(x, y, 100, 20, 200, 40), 'tooltip: inside a small area it goes above (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 500, y = 300, cursor = false})
+    ok(x == 504 and y == 304, 'tooltip: only a gap where the point has no cursor (' .. x .. ',' .. y .. ')')
+    -- every cursor place of a grid: inside the screen and clear of the sprite
+    local bad
+    for mx = 0, 1024, 64 do
+        for my = 0, 768, 64 do
+            local px, py = tr(180, 20, {x = mx, y = my})
+            if px < 0 or py < 0 or px + 180 > 1024 or py + 20 > 768 or not clear(px, py, 180, 20, mx, my) then bad = {mx, my, px, py} end
+        end
+    end
+    ok(bad == nil, 'tooltip: inside the screen and clear of the cursor everywhere' .. (bad and (' at ' .. table.concat(bad, ',')) or ''))
+    ok(not pcall(tr, 'x', 20), 'tooltip_rect: bad arguments error')
+end
+
 -- mod ab raised errors in every frame and was switched off: the write it made last is undone
 ok(math.abs(ability_store['ability_t1:1:80'] - 0.8) < 1e-9, 'switching a mod off undoes its ability writes')
 

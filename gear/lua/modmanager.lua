@@ -6,10 +6,12 @@
 local ui = gear.ui
 local C = ui.COLORS
 
-local PER_PAGE = 6          -- mods per page of the list
+local ROW_H, ROW_STEP = 58, 62   -- a mod's row in the list and the distance between rows
 local SETTING_ROWS = 9      -- rows of settings per page (section headers count)
 local KEY_ROWS = 7          -- key binds per page
-local W, H = 640, 452       -- the panel
+local W, H_MAX = 640, 482   -- the panel: its height is the most it takes, less on a small screen
+local FOOTER_TOP = 42      -- the footer band: from this far above the panel's bottom edge down to it
+local FOOTER_ITEM_H = 22   -- footer controls are this tall and centered in the band (see footer_y)
 local LAYER = {layer = 'top'}
 
 local RED, AMBER, GREEN, DIM = 0xFFFF7070, 0xFFFFC060, 0xFF90E890, C.text_dim
@@ -22,6 +24,14 @@ local screen = {
 ---------------------------------------------------------------------------------------------------------------
 -- Helpers
 ---------------------------------------------------------------------------------------------------------------
+-- The footer band of a panel: [p.y + p.h - FOOTER_TOP, p.y + p.h). Its items share one top edge, footer_y, so they
+-- sit on one line; the lists end above the band.
+local function footer_y(p) return p.y + p.h - FOOTER_TOP + math.floor((FOOTER_TOP - 10 - FOOTER_ITEM_H) / 2) + 4 end
+local function footer_top(p) return p.y + p.h - FOOTER_TOP end
+-- How many rows of ROW_STEP fit between `top` and the footer band (a gap of 6 above the band).
+local function rows_fitting(p, top, step, row_h)
+    return math.max(1, math.floor((footer_top(p) - 6 - top - row_h) / step) + 1)
+end
 local measured = {}
 local function text_w(text, opts)
     local key = text .. '\0' .. tostring(opts and opts.size) .. tostring(opts and opts.bold)
@@ -128,7 +138,7 @@ local function key_conflicts_of(e)
 end
 
 local function draw_row(e, x, y, w)
-    local h = 58
+    local h = ROW_H
     local bad = e.state == 'error' or e.state == 'invalid'
     ui.rect(x, y, w, h, bad and 0x60401818 or 0x50181824, LAYER)
     ui.frame(x, y, w, h, bad and 0xFF804040 or C.edge_dim, 1, LAYER)
@@ -192,18 +202,19 @@ local function draw_list(p)
         ui.text(fit(screen.message, w - 120), x + 90, y, {height = 20, valign = 'middle', color = AMBER, layer = 'top'})
     end
     y = y + 24
-    local pages = math.max(1, math.ceil(#list / PER_PAGE))
+    local per_page = rows_fitting(p, y, ROW_STEP, ROW_H)
+    local pages = math.max(1, math.ceil(#list / per_page))
     screen.page = math.max(1, math.min(pages, screen.page))
-    local first = (screen.page - 1) * PER_PAGE
-    for i = 1, PER_PAGE do
+    local first = (screen.page - 1) * per_page
+    for i = 1, per_page do
         local e = list[first + i]
         if not e then break end
-        draw_row(e, x, y + (i - 1) * 62, w)
+        draw_row(e, x, y + (i - 1) * ROW_STEP, w)
     end
-    local fy = p.y + p.h - 34
+    local fy = footer_y(p)
     screen.page = paging('lp', x, fy, w, screen.page, pages)
-    ui.text('Saved in mods\\gear_mods.json', x, fy, {height = 22, valign = 'middle', size = 11, color = DIM, layer = 'top'})
-    if ui.button('close', x + w - 80, fy, 80, 22, 'Close', LAYER) then close_screen() end
+    ui.text('Saved in mods\\gear_mods.json', x, fy, {height = FOOTER_ITEM_H, valign = 'middle', size = 11, color = DIM, layer = 'top'})
+    if ui.button('close', x + w - 80, fy, 80, FOOTER_ITEM_H, 'Close', LAYER) then close_screen() end
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -355,7 +366,7 @@ local function draw_settings(p, e)
             setting_row(e.id, item, x, ry, w)
         end
     end
-    local fy = p.y + p.h - 34
+    local fy = footer_y(p)
     if ui.button('reset_all', x, fy, 130, 22, 'Reset to defaults', {layer = 'top', tooltip = 'Every setting of this mod back to its default'}) then
         admin.reset(e.id)
         if #defs > 0 then screen.restart = screen.restart end
@@ -418,7 +429,7 @@ local function draw_keys(p, e)
                 {size = 11, color = AMBER, layer = 'top'})
         end
     end
-    local fy = p.y + p.h - 34
+    local fy = footer_y(p)
     ui.text('Click a key, then press the new one. Esc cancels, Backspace unbinds.', x, fy,
         {height = 22, valign = 'middle', size = 11, color = DIM, layer = 'top'})
     if pages > 1 then screen.tab_page = paging('kp', x + w - 280, fy, 200, screen.tab_page, pages) end
@@ -498,6 +509,7 @@ gear.on('draw', function(state)
     local l, t, r, b = ui.screen()
     local blocker = ui.region('blocker', l, t, r - l, b - t, LAYER)
     if blocker.pressed then stop_input() end
+    local H = math.max(300, math.min(H_MAX, b - t - 16))
     local px, py = (l + r - W) / 2, math.max(t + 8, (t + b - H) / 2)
     local p = ui.panel('main', 'Mods', px, py, W, H, {layer = 'top', closable = true})
     if not p.open then

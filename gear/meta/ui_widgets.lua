@@ -79,6 +79,25 @@ local GearUi = {}
 ---@return GearRegionState
 function GearUi.region(id, x, y, w, h, opts) end
 
+--- Options of `tooltip_rect`.
+---@class GearTooltipRectOpts
+---@field x? number The point to keep clear (default: the cursor's hotspot).
+---@field y? number
+---@field bounds? number[] `{left, top, right, bottom}` the tooltip must stay inside (default: the screen); pass a panel's rectangle to keep it in that panel.
+---@field cursor? boolean `false`: the point has no cursor sprite below and right of it, so only a small gap is kept (default true).
+
+--- Where to put a `w` x `h` tooltip, or any popup beside the cursor, so that it never lies under the game's cursor
+--- sprite (an arrow reaching about 30 x 38 layout units right and down of the hotspot) and stays inside the screen.
+--- The default place is below the cursor's tip, to its right; when that leaves `bounds` it flips to below-left,
+--- above-right, above-left, then beside the cursor, and as a last resort is clamped and pushed off the sprite. The
+--- widgets' `tooltip` option already uses it. Returns the top-left corner.
+---@param w number
+---@param h number
+---@param opts? GearTooltipRectOpts
+---@return number x
+---@return number y
+function GearUi.tooltip_rect(w, h, opts) end
+
 --- Text in the widgets' look (the UI font), with a tooltip if `opts.tooltip`.
 ---@param id string|integer
 ---@param text any

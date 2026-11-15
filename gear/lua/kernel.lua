@@ -1190,13 +1190,45 @@ end
 
 -- The tooltip of the widget hovered long enough, drawn last on the top layer beside the cursor.
 local UI_TOOLTIP_DELAY = 0.4
+-- The game's cursor sprite (an arrow whose tip is the hotspot) reaches this far right and down of the hotspot, in layout
+-- units (measured at the 1024 x 768 layout; the sprite is smaller in layout units at higher resolutions).
+local UI_CURSOR_W, UI_CURSOR_H = 30, 38
+
+-- Where a w x h tooltip goes for a cursor at (mx, my): the first of below-right, below-left, above-right, above-left,
+-- right of and left of the cursor that lies inside `bounds` ({left, top, right, bottom}) and clear of the cursor
+-- sprite (cw x ch from the hotspot); if none does, the first clamped into the bounds and pushed off the sprite.
+local function tooltip_place(w, h, mx, my, bounds, cw, ch, gap)
+    local l, t, r, b = bounds[1], bounds[2], bounds[3], bounds[4]
+    local function inside(x, y) return x >= l and y >= t and x + w <= r and y + h <= b end
+    -- candidates: below / above the sprite, left or right aligned to the hotspot; beside it, level with the hotspot
+    local cands = {
+        {mx + gap, my + ch + gap},
+        {mx - w - gap, my + ch + gap},
+        {mx + gap, my - h - gap},
+        {mx - w - gap, my - h - gap},
+        {mx + cw + gap, my},
+        {mx - w - gap, my},
+    }
+    for _, c in ipairs(cands) do
+        if inside(c[1], c[2]) then return c[1], c[2] end
+    end
+    -- last resort: clamp the preferred place, then move it off the sprite (up, else right, else left)
+    local x = math.max(l, math.min(cands[1][1], r - w))
+    local y = math.max(t, math.min(cands[1][2], b - h))
+    if x < mx + cw and x + w > mx and y < my + ch and y + h > my then
+        if my - h - gap >= t then y = my - h - gap
+        elseif mx + cw + gap + w <= r then x = mx + cw + gap
+        else x = math.max(l, mx - w - gap) end
+    end
+    return x, y
+end
 local function ui_end_tick()
     local t = ui_tooltip
     if not t then return end
-    local x, y = ui_mouse.x + 18, ui_mouse.y + 20
     local w = (ui_measure(t.text, {}) or (#t.text * 6)) + 12
     local s = ui_tick_state or {}
-    if s.screen_right and x + w > s.screen_right then x = ui_mouse.x - w - 4 end
+    local x, y = tooltip_place(w, 20, ui_mouse.x, ui_mouse.y,
+        {s.screen_left or 0, s.screen_top or 0, s.screen_right or 1024, s.screen_bottom or 768}, UI_CURSOR_W, UI_CURSOR_H, 4)
     native.ui_rect(2, -1, x, y, w, 20, 0xE0101018)
     native.ui_rect(2, -1, x, y, w, 1, 0xFFC8AA5A)
     native.ui_rect(2, -1, x, y + 19, w, 1, 0xFFC8AA5A)
@@ -1779,6 +1811,26 @@ local function make_ui(mod)
         return nil
     end
     function ui.state() return native.ui_state() end
+    -- ui.tooltip_rect(w, h, opts) -> x, y: where to put a w x h tooltip (or any popup beside the cursor) so that it is
+    -- clear of the game's cursor sprite and inside the screen. opts: x, y (the point to avoid, default the cursor),
+    -- bounds {left, top, right, bottom} (default the screen), cursor = false (the point has no sprite: only the gap).
+    function ui.tooltip_rect(w, h, opts)
+        assert(type(w) == 'number' and type(h) == 'number', 'w and h must be numbers')
+        opts = opts or {}
+        assert(type(opts) == 'table', 'opts must be a table')
+        local s = native.ui_state()
+        local b = opts.bounds
+        if b ~= nil then
+            assert(type(b) == 'table' and #b == 4, 'bounds must be {left, top, right, bottom}')
+        else
+            b = {s.screen_left or 0, s.screen_top or 0, s.screen_right or 1024, s.screen_bottom or 768}
+        end
+        local mx = opts.x or ui_mouse.x
+        local my = opts.y or ui_mouse.y
+        local cw, ch = UI_CURSOR_W, UI_CURSOR_H
+        if opts.cursor == false then cw, ch = 0, 0 end
+        return tooltip_place(w, h, mx, my, b, cw, ch, 4)
+    end
     function ui.screen()
         local s = native.ui_state()
         return s.screen_left, s.screen_top, s.screen_right, s.screen_bottom

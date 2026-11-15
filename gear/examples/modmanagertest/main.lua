@@ -41,19 +41,35 @@ local function click(x, y, wait)
     gear.wait(wait or 0.4)
 end
 
--- The row of a mod in the list: page and place on it (6 per page, sorted by name, the manager itself last).
+-- The list's metrics (modmanager.lua): rows of 58 every 62 from the panel's top + 52, down to 6 above the footer
+-- band, which is the panel's last 42; the footer's controls are 22 tall at the panel's bottom - 33.
+local function footer_rect()
+    local p = panel()
+    return {y = p.y + p.h - 42, h = 42, controls_y = p.y + p.h - 33, controls_h = 22}
+end
+local function per_page()
+    local p = panel()
+    return math.max(1, math.floor((p.y + p.h - 42 - 6 - (p.y + 52) - 58) / 62) + 1)
+end
+local function row_rect(slot)
+    local p = panel()
+    return {y = p.y + 52 + (slot - 1) * 62, h = 58}
+end
+
+-- The row of a mod in the list: page and place on it (sorted by name, the manager itself last).
 local function row_of(id)
     local n = 0
+    local pp = per_page()
     for _, m in ipairs(gear.mods.list()) do
         if not m.builtin then
             n = n + 1
-            if m.id == id then return math.ceil(n / 6), (n - 1) % 6 + 1, n end
+            if m.id == id then return math.ceil(n / pp), (n - 1) % pp + 1, n end
         end
     end
 end
 local function list_page(page)
     local g = geo()
-    local fy = g.p.y + g.p.h - 34
+    local fy = footer_rect().controls_y
     local mid = g.x + g.w / 2
     for _ = 1, 6 do click(mid - 75, fy + 11, 0.15) end            -- back to page 1
     for _ = 2, page do click(mid + 75, fy + 11, 0.25) end
@@ -90,6 +106,18 @@ gear.task(function()
     local inv = ui.window('UI_WND_INVENTORY')
     check('a game hotkey (I) does nothing while the screen is open', not (inv and inv.drawn), inv and inv.drawn)
     A.screenshot('mm-1-list')
+    -- Layout: no row reaches into the footer band, the footer controls lie inside the panel, below the rows.
+    do
+        local pp, fr, p = per_page(), footer_rect(), panel()
+        local clash
+        for slot = 1, pp do
+            local r = row_rect(slot)
+            if r.y + r.h > fr.y or r.y < p.y then clash = slot end
+        end
+        check('no row of the list intersects the footer', clash == nil and pp >= 1, ('rows %d, footer at %d, last row ends %d'):format(pp, fr.y, row_rect(pp).y + 58))
+        check('the footer controls are inside the panel', fr.controls_y >= fr.y and fr.controls_y + fr.controls_h <= p.y + p.h, fr.controls_y)
+        check('the panel fits the screen', p.y >= 0 and p.y + p.h <= select(4, ui.screen()), ('%d..%d'):format(p.y, p.y + p.h))
+    end
     local g = geo()
     list_page(2)
     A.screenshot('mm-2-list-page2')
@@ -135,7 +163,7 @@ gear.task(function()
     check('color slider changes the color', S.get('tint') ~= 0xFF3080C0, string.format('%08X', S.get('tint')))
     A.screenshot('mm-6-settings-changed')
     -- Reset to defaults (the button at the left of the footer).
-    local fy = g.p.y + g.p.h - 34
+    local fy = footer_rect().controls_y
     click(g.x + 60, fy + 11, 0.5)
     check('Reset to defaults', S.get('flag') == false and S.get('level') == 3 and S.get('mode') == 'first'
         and S.get('name') == 'abc' and S.get('tint') == 0xFF3080C0)
