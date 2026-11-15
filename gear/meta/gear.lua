@@ -41,6 +41,7 @@
 ---@field json GearJson JSON encoding and decoding.
 ---@field pipe GearPipeModule Named pipe clients.
 ---@field world GearWorld The world: hero, creatures, items, spawning, pickup rules.
+---@field inv GearInv Inventories: containers, items, export and import of items.
 ---@field ui GearUi Drawing on top of the game, widgets, panels and the layout.
 ---@field auto? GearAuto Automation (only with `-gear-auto` and `automation = true` in `mod.lua`).
 gear = {}

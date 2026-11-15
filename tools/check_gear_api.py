@@ -109,6 +109,14 @@ def main():
     creature = set(re.findall(r'^\s*function creature_mt:(\w+)\(', kernel, re.M))
     compare('creature', creature, {f.name for f in model.classes['Creature'].funcs})
 
+    # --- gear.inv
+    inv_src = between(kernel, r'^local inv = \{', r'^-- Pickup rules per mod', 'inv')
+    inv = set(re.findall(r'^\s*function inv\.(\w+)\(', inv_src, re.M))
+    inv |= keys_of_table_line(re.search(r'^local inv = (\{[^\n]*\})', inv_src, re.M).group(1))
+    compare('gear.inv', inv, members('GearInv'))
+    cont = set(re.findall(r'^\s*function Container:(\w+)\(', inv_src, re.M))
+    compare('container', cont, {f.name for f in model.classes['GearContainer'].funcs})
+
     # --- gear.ui
     ui_src = between(kernel, r'^local function make_ui\(mod\)', r'^-- Custom events', 'make_ui')
     ui = set(re.findall(r'^\s*function ui\.(\w+)\(', ui_src, re.M))

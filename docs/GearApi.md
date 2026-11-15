@@ -147,6 +147,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `json` | `GearJson` | JSON encoding and decoding. |
 | `pipe` | `GearPipeModule` | Named pipe clients. |
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
+| `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
 | `ui` | `GearUi` | Drawing on top of the game, widgets, panels and the layout. |
 | `auto` | `GearAuto` | Automation (only with `-gear-auto` and `automation = true` in `mod.lua`). (optional) |
 
@@ -862,6 +863,150 @@ Moves the creature. Single player only.
 - `layer`: `integer` (optional) - Default: the current layer.
 - returns `ok` `boolean?`
 - returns `error` `string?`
+
+## Inventories (gear.inv)
+
+The game keeps the hero's backpack, the chest and the shops' stock as grids of cells, "containers" (32 of them). The backpack of the hero with object id n is container n (the local hero in single player: 1), the chest is container 17. An item takes w x h cells; `col` and `row` are its top-left cell, counted from 0. Everything that changes an inventory works in single player only (`gear.world.can_change()`); the calls go through the game's own inventory and object code, so the cells, the items' owners and the object lists stay as when the player moves an item. `export` copies an item to bytes (its type and own data: the random properties), `add` makes it again, so that an item can leave the game and come back unchanged (see the `shared-stash` mod).
+
+### GearContainer
+
+Written `container` in the signatures.
+
+One inventory grid, from `gear.inv.container`.
+
+| Field | Type | |
+|---|---|---|
+| `index` | `integer` | The container's number (0..31). |
+| `columns` | `integer` | Cells across. |
+| `rows` | `integer` | Cells down. |
+
+#### `container:items() -> GearInvItem[]`
+
+The items in the container, in cell order: `gear.world.item` tables plus the cell and size.
+
+- returns `GearInvItem[]`
+
+#### `container:free_spot(w, h) -> integer?, integer?`
+
+Room for a `w` x `h` item: its top-left cell, or nil.
+
+- `w`: `integer`
+- `h`: `integer`
+- returns `col` `integer?`
+- returns `row` `integer?`
+
+#### `container:put(item_id, col, row) -> boolean?, string?`
+
+Puts an item that lies in the world or was taken out of a container at the cell (the cells must be free).
+
+- `item_id`: `integer`
+- `col`: `integer`
+- `row`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `container:take(item_id) -> boolean?, string?`
+
+Takes the item out; the item object stays (put it somewhere or `gear.inv.destroy` it).
+
+- `item_id`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+### GearInvItem
+
+Includes everything of `GearItem`.
+
+An item in a container: a `GearItem` with its place in the grid.
+
+| Field | Type | |
+|---|---|---|
+| `col` | `integer` | Top-left cell (from 0). |
+| `row` | `integer` |  |
+| `w` | `integer` | Width in cells. |
+| `h` | `integer` | Height in cells. |
+
+### GearInv
+
+Reached as `gear.inv`.
+
+Inventories: containers, the items in them, and items copied to bytes and made again.
+
+| Field | Type | |
+|---|---|---|
+| `CHEST` | `integer` | The chest's container number (17). |
+
+#### `gear.inv.container(which) -> GearContainer?`
+
+A container: `'chest'`, `'backpack'` (the local hero's) or its number (0..31). Nil if there is none.
+
+- `which`: `'chest'|'backpack'|integer`
+- returns `GearContainer?`
+
+#### `gear.inv.size(item_id) -> integer?, integer?`
+
+The size of an item in cells, or nil.
+
+- `item_id`: `integer`
+- returns `w` `integer?`
+- returns `h` `integer?`
+
+#### `gear.inv.export(item_id) -> string?, string?`
+
+Copies an item to a binary string: its type and its own data, not where it is. `hex` makes it text for JSON.
+
+- `item_id`: `integer`
+- returns `bytes` `string?`
+- returns `error` `string?`
+
+#### `gear.inv.create(bytes) -> integer?, string?`
+
+Makes a new item from `export`'s bytes, lying at the hero's feet (single player only). Put it into a container or `destroy` it.
+
+- `bytes`: `string`
+- returns `item_id` `integer?`
+- returns `error` `string?`
+
+#### `gear.inv.destroy(item_id) -> boolean?, string?`
+
+Deletes an item that is in no container.
+
+- `item_id`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.inv.add(container, bytes) -> integer?, integer|string?, integer?`
+
+Makes a new item from `export`'s bytes straight into the container (the first spot with room). Nothing changes when it fails.
+
+- `container`: `GearContainer`
+- `bytes`: `string`
+- returns `item_id` `integer?`
+- returns `col` `integer|string?` - The cell, or the error message when `item_id` is nil.
+- returns `row` `integer?`
+
+#### `gear.inv.remove(container, item_id) -> string?, string?`
+
+Takes the item out of the container, destroys it and returns its export. If that fails the item is where it was.
+
+- `container`: `GearContainer`
+- `item_id`: `integer`
+- returns `bytes` `string?`
+- returns `error` `string?`
+
+#### `gear.inv.hex(bytes) -> string`
+
+Bytes as lowercase hex text.
+
+- `bytes`: `string`
+- returns `string`
+
+#### `gear.inv.unhex(text) -> string?`
+
+Hex text back to bytes, or nil if it is not hex.
+
+- `text`: `string`
+- returns `string?`
 
 ## Drawing (gear.ui)
 

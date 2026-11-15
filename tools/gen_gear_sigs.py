@@ -61,6 +61,17 @@ GEAR = [
     ('cUI_Manager_receiveEvent', 0x00757840, 'func'),
     ('cEventMouseDown_vtable', 0x0089704C, 'data'),
     ('cEventMouseUp_vtable', 0x00899248, 'data'),
+    # Inventories (gear/inventory.cpp): the manager of the 32 containers (backpacks, the chest ...) and the calls
+    # the engine's own inventory code uses to find room for an item, put it in, take it out, and to create and
+    # destroy items.
+    ('g_pInventory', 0x00AD4448, 'data'),
+    ('cInventory_findSpace', 0x005DABA0, 'func'),
+    ('cInventory_put', 0x005D9F00, 'func'),
+    ('cInventory_remove', 0x005DA630, 'func'),
+    ('cItemType_size', 0x00428D60, 'func'),
+    ('cObjectManager_destroy', 0x005FBDB0, 'func'),
+    ('cItem_dataHash', 0x0042BF20, 'func'),
+    ('cItem_entriesInsert', 0x005C9230, 'func'),
 ]
 
 

@@ -650,6 +650,129 @@ function world.items_near(x, y, radius, opts)
     return out
 end
 
+-- Inventories: gear.inv. The game keeps a hero's backpack, the chest and so on as grids of cells ("containers", 32 of
+-- them: the backpack of the hero with object id n is container n, the chest is container 17).
+local inv = {CHEST = 17}
+
+local Container = {}
+Container.__index = Container
+
+local function make_container(index)
+    local info = type(index) == 'number' and native.inv_container(index)
+    if not info then return nil end
+    return setmetatable({index = index, columns = info.columns, rows = info.rows}, Container)
+end
+
+-- inv.container(which) -> container | nil. `which`: 'chest', 'backpack' (the local hero's) or the number (0..31).
+function inv.container(which)
+    if which == 'chest' then which = inv.CHEST
+    elseif which == 'backpack' then which = native.hero()
+    end
+    if type(which) ~= 'number' then return nil end
+    return make_container(which)
+end
+
+-- container:items() -> the items in it, in cell order: world.item's table plus `col`, `row` (top-left cell, from 0),
+-- `w`, `h` (size in cells).
+function Container:items()
+    local out = {}
+    for _, e in ipairs(native.inv_items(self.index)) do
+        local it = world.item(e.id)
+        if it then
+            it.col, it.row, it.w, it.h = e.x, e.y, e.w, e.h
+            out[#out + 1] = it
+        end
+    end
+    return out
+end
+
+-- container:free_spot(w, h) -> col, row | nil: room for a w x h item.
+function Container:free_spot(w, h)
+    return native.inv_find_space(self.index, w, h)
+end
+
+-- container:put(item_id, col, row) -> true | nil, message: puts an item that lies in the world or was taken out of a
+-- container at that cell.
+function Container:put(item_id, col, row)
+    return native.inv_put(self.index, item_id, col, row)
+end
+
+-- container:take(item_id) -> true | nil, message: takes the item out; the item object stays (put it somewhere or
+-- inv.destroy it).
+function Container:take(item_id)
+    return native.inv_remove(self.index, item_id)
+end
+
+-- inv.size(item_id) -> w, h | nil: the size in cells.
+function inv.size(item_id)
+    return native.inv_size(item_id)
+end
+
+-- inv.export(item_id) -> bytes | nil, message: the item's type and own data as a binary string (not where it is).
+function inv.export(item_id)
+    return native.inv_export(item_id)
+end
+
+-- inv.create(bytes) -> item_id | nil, message: a new item from export's bytes, lying at the hero's feet.
+function inv.create(bytes)
+    return native.inv_import(bytes)
+end
+
+-- inv.destroy(item_id) -> true | nil, message: deletes an item that is in no container.
+function inv.destroy(item_id)
+    return native.inv_destroy(item_id)
+end
+
+-- inv.add(container, bytes) -> item_id, col, row | nil, message: a new item from export's bytes straight into the
+-- container (the first spot with room). Nothing changes when it fails.
+function inv.add(container, bytes)
+    local id, err = native.inv_import(bytes)
+    if not id then return nil, err end
+    local w, h = native.inv_size(id)
+    local col, row
+    if w then col, row = container:free_spot(w, h) end
+    if not col then
+        native.inv_destroy(id)
+        return nil, 'no room'
+    end
+    local ok, perr = container:put(id, col, row)
+    if not ok then
+        native.inv_destroy(id)
+        return nil, perr
+    end
+    return id, col, row
+end
+
+-- inv.remove(container, item_id) -> bytes | nil, message: takes the item out of the container, destroys it and
+-- returns its export. If it fails the item is back where it was.
+function inv.remove(container, item_id)
+    local bytes, err = native.inv_export(item_id)
+    if not bytes then return nil, err end
+    local found
+    for _, e in ipairs(native.inv_items(container.index)) do
+        if e.id == item_id then found = e break end
+    end
+    if not found then return nil, 'the item is not in that container' end
+    local ok, terr = native.inv_remove(container.index, item_id)
+    if not ok then return nil, terr end
+    local dok, derr = native.inv_destroy(item_id)
+    if not dok then
+        native.inv_put(container.index, item_id, found.x, found.y)
+        return nil, derr
+    end
+    return bytes
+end
+
+-- inv.hex(bytes) -> text, inv.unhex(text) -> bytes | nil: for keeping the bytes in JSON.
+function inv.hex(bytes)
+    return (bytes:gsub('.', function(c) return string.format('%02x', c:byte()) end))
+end
+
+function inv.unhex(text)
+    if type(text) ~= 'string' or #text % 2 ~= 0 or text:find('[^0-9a-fA-F]') then return nil end
+    return (text:gsub('%x%x', function(h) return string.char(tonumber(h, 16)) end))
+end
+
 -- Pickup rules per mod (gear.world.pickup_rules): merged after each tick and handed to the native side.
 local pickup_rules = {}     -- mod -> {block = {id = true}, dim = {id = true}, dim_alpha}
 local pickup_dirty = false
@@ -1768,6 +1891,7 @@ local function make_env(mod)
         pickup_dirty = true
     end
     w.pickup_refused = function() return native.pickup_refused() end    gear.world = w
+    gear.inv = inv
     gear.ui = make_ui(mod)
     -- gear.on(event, fn) -> handle; gear.off(handle). Events: "load" (all mods loaded), "frame" (dt in seconds,
     -- every in-game frame on the engine thread), "session.start" (hero), "session.stop", and the custom events

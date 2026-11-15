@@ -157,6 +157,23 @@ Pickup rules hold in single player and for the host's own hero; a network client
 (its own message) and are not filtered. Item ids are only valid while the item exists: a mod that filters loot looks
 at the items around the hero every fraction of a second and hands over the current list (`gear/examples/lootfilter`).
 
+#### Inventories
+
+| | |
+|---|---|
+| `gear.inv.container(which)` | A container (an inventory grid): `'chest'`, `'backpack'` (the local hero's) or its number (0..31; the backpack of the hero with object id n is n, the chest is 17), or nil. `.index`, `.columns`, `.rows`. |
+| `c:items()` | The items in it in cell order: `gear.world.item` tables plus `col`, `row` (top-left cell, from 0), `w`, `h` (cells). |
+| `c:free_spot(w, h)`, `c:put(id, col, row)`, `c:take(id)` | Room for a w x h item; puts an item at a cell; takes one out (the object stays). |
+| `gear.inv.export(id)` | The item's type and own data (its random properties) as a binary string. `gear.inv.hex(bytes)` and `gear.inv.unhex(text)` make it text for JSON. |
+| `gear.inv.create(bytes)`, `gear.inv.add(c, bytes)` | A new item from those bytes, at the hero's feet, or straight into the container's first free spot (nothing changes if it fails). |
+| `gear.inv.remove(c, id)`, `gear.inv.destroy(id)` | Takes an item out of the container, destroys it and returns its export; deletes an item that is in no container. |
+
+All of it works in single player only (`gear.world.can_change()`) and goes through the engine's own inventory and
+object code, under the fault guard. An exported item made again is byte for byte the same (type, entries, data):
+the self test of `shared-stash` and the probe that found the format moved 55 backpack items through the chest and
+back with equal exports. What is not copied is where an item was: the engine owns that. Gear exposes no
+inventory events yet, so a mod looks at the containers when it needs them (the stash panel refreshes 4 times a second).
+
 #### UI drawing
 
 `gear.ui` draws on top of the game: translucent rectangles, text in the game's own fonts and the game's own UI
@@ -268,7 +285,7 @@ panels move either way.
 
 Files: `gear.read(name)` reads a file of the mod's folder, `gear.save(name, text)` writes one (directly in the mod's
 folder, `*.json`, `*.txt` or `*.lua` other than `mod.lua` and `main.lua`, at most 1 MB): for settings a mod's own UI
-changes.
+changes. A write is atomic (a temporary file moved over the old one), so a crash leaves the old file or the new one.
 
 ```lua
 gear.on('draw', function(state)
@@ -307,6 +324,7 @@ faults returns nil and a message instead of crashing the game.
 | `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices from `config.lua`; filtered items' labels are dimmed; an overlay shows the rules; a settings panel (F8 or the overlay's button: class checkboxes, quality dropdowns, potion checkboxes, label dimming) saves to `settings.json`. Self test with `-gear-auto`. |
 | `layout` | A layout editor in the manner of an MMO's edit mode (F7 or its button): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
+| `shared-stash` (in the sacred-gear-mods repository) | A stash shared by all heroes of the player, in a panel beside the chest window, built on `gear.inv`: items are copied to `stash.json` in the mod's folder and back, the file written first on a deposit and last on a withdrawal. |
 
 ## Automation
 
@@ -463,6 +481,7 @@ What Sacred Gear relies on, English GOG addresses:
 | `cObjectManager::create` 0x005FBA40 | thiscall (type, position*, 0, broadcast, x) -> id; the hero is created with (type, pos, 0, 1, 0), the script command CreateNPC with (type, pos, 0, 0, x). |
 | `cObjectManager::pop` 0x005FCCB0 | thiscall (id, position*): places an object (teleport); ParkCreature (0x006073D0) moves one far away with it. |
 | Object types | `*0x00AAB5E4` + id * 0x80 (0 < id < 0x7E60): +0x2E kind, +0x37 name. |
+| Inventories | `*0x00AD4448`: the inventory manager (made by 0x005DEBC0), 32 containers of 0x1180 bytes (0x005DEC90 (index) returns one). Container: +0x18 + cell * 12 the cells, +0x115C columns, +0x115E rows, +0x1160 its number; cell = row * columns + column: dword item id on an item's top-left cell (0 on its other cells), byte +4 flags (bit 0 taken), +5 / +6 the item's width / height there, on its other cells the column / row of its top-left cell. Container n (1..16) is the backpack of the hero with object id n; 17 the chest (`UI_WND_CHEST`, 20 x 10, made by 0x006ACB40); 18, 25..27 are small grids (3 x 5, 3 x 5, 7 x 5, 7 x 5) whose use is not examined; 20..22 hold the shops' stock in the test savegame. `0x005DABA0` (thiscall (w, h, slot*, byRow) -> bool) finds room, `0x005D9F00` (slot, id, w, h, notify) puts an item in (takes it out of the world: flag 2 at +0x14; tells the item its owner), `0x005DA630` (id, notify) takes it out of the container (the object stays), `0x00428D60` (stdcall (type, w*, h*)) is a type's size in cells, `0x005FBDB0` (id, 1, 0, 0) destroys an object (the engine does this after taking an item out, e.g. on using a potion, 0x005BFF60). An item (cItemBase) keeps its own state in a vector of 0x82-byte entries (+0x100 begin, +0x104 end, +0x108 capacity), 0x82 bytes at +0x118 (the record copy: class mask and rarity at +0x11C) and a number made from them at +0x120 (0x0042BF20 (record) -> hash, set after reading an item, 0x005C7690); the network read of an item (vtable slot 8, 0x005C7A50) restores exactly the entries and the record. Gear copies those to bytes (type, count, entries, record) and rebuilds an item by creating one of the type (0x005FBA40) and overwriting them (growing the vector with 0x005C9230). |
 | Loading a savegame | The menu (0x0071CC90 action 6) sets the players object's (`*0x0182EBE8`) +0x14 to 1 and posts message 0x8002 (wParam 1, lParam the savegame number) to the game window (`*0x00CDCA1C` +0xB0) (0x007561E0). |
 | UI manager | `*0x017EEBBC`: +0x08 flags (1 menus, 4 in game, 0x10 cinematic, 0x200 help), +0x80 the in-game windows, +0x130 the five menu screens, +0x144 the message box. |
 | UI pass (mod drawing) | `cUI_Manager_render` (0x00758ED0, arg: the IDirect3DDevice7 the UI draws with; SacredBild hooks it) draws pretransformed FVF 0x1C4 quads in the 1024x768 layout. Gear draws from: the popup pass 0x00758DC0 (thiscall (device, flag), "hud", before the original), the call at 0x0075934F (the party arrows 0x006D01F0, cdecl (device), "world", before the original; reached in game only) and the call at 0x00759585 (`call 0x649BE0`, after the escape menu and the message box in every mode, EBX = device; "top"). Every render state, texture stage state and the stage 0 texture it changes are read before and set back after, so the game's state cache (0x00643430) and SacredBild's state shadow stay right; text runs through the game's font with the game's states. |

@@ -174,6 +174,7 @@ if(SACREDGEAR)
     gear/ui.cpp
     gear/text.cpp
     gear/pickup.cpp
+    gear/inventory.cpp
     gear/gear.rc
   )
   target_include_directories(SacredGear PRIVATE gear ${LUAJIT_INCLUDE_DIRS}/luajit)

@@ -87,4 +87,8 @@ namespace World
     uint32_t heroClass(uint32_t id);
     uint32_t classBit(uint32_t heroClass);
     constexpr uint32_t kAllClasses = 0xC0003F;
+
+    // The address of the live item object `id` (an item, not any object), 0 if there is none: for the code that
+    // reads and rewrites an item in place (gear/inventory.cpp). Valid until the item is destroyed.
+    uintptr_t itemObject(uint32_t id);
 }

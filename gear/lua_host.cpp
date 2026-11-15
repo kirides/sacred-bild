@@ -2,6 +2,7 @@
 #include "automation.h"
 #include "gear.h"
 #include "instance.h"
+#include "inventory.h"
 #include "log.h"
 #include "pickup.h"
 #include "pipe.h"
@@ -930,12 +931,21 @@ namespace
             }
             else
             {
-                HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                // Atomic: written to <name>.tmp, flushed, then moved over the file, so a crash leaves the old file or
+                // the new one, never half of one.
+                const std::wstring temp = path + L".tmp";
+                HANDLE f = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
                 DWORD written = 0;
-                const bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, text, static_cast<DWORD>(n), &written, nullptr) && written == n;
+                bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, text, static_cast<DWORD>(n), &written, nullptr) &&
+                          written == n && FlushFileBuffers(f);
                 if (f != INVALID_HANDLE_VALUE)
                 {
                     CloseHandle(f);
+                }
+                ok = ok && MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+                if (!ok)
+                {
+                    DeleteFileW(temp.c_str());
                 }
                 if (!ok)
                 {
@@ -1013,6 +1023,151 @@ namespace
         lua_pushnumber(L, cls);
         lua_pushnumber(L, World::classBit(cls));
         return 2;
+    }
+
+    // native.inv_container(index) -> {columns, rows} | nil
+    int nativeInvContainer(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 1);
+        Inventory::Container c;
+        if (!(index >= 0 && index < Inventory::kContainers) || !Inventory::container(static_cast<uint32_t>(index), c))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 2);
+        lua_pushnumber(L, c.columns);
+        lua_setfield(L, -2, "columns");
+        lua_pushnumber(L, c.rows);
+        lua_setfield(L, -2, "rows");
+        return 1;
+    }
+
+    // native.inv_items(index) -> { {id, x, y, w, h}, ... }
+    int nativeInvItems(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 1);
+        std::vector<Inventory::Entry> list;
+        if (index >= 0 && index < Inventory::kContainers)
+        {
+            list = Inventory::items(static_cast<uint32_t>(index));
+        }
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        for (size_t i = 0; i < list.size(); ++i)
+        {
+            lua_createtable(L, 0, 5);
+            auto num = [L](const char* k, lua_Number v) { lua_pushnumber(L, v); lua_setfield(L, -2, k); };
+            num("id", list[i].id);
+            num("x", list[i].x);
+            num("y", list[i].y);
+            num("w", list[i].width);
+            num("h", list[i].height);
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.inv_size(item id) -> w, h | nil
+    int nativeInvSize(lua_State* L)
+    {
+        uint32_t w = 0, h = 0;
+        const uint32_t id = checkId(L, 1);
+        if (!id || !Inventory::itemSize(id, w, h))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, w);
+        lua_pushnumber(L, h);
+        return 2;
+    }
+
+    // native.inv_find_space(index, w, h) -> x, y | nil
+    int nativeInvFindSpace(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 1), w = luaL_checknumber(L, 2), h = luaL_checknumber(L, 3);
+        uint32_t x = 0, y = 0;
+        if (!(index >= 0 && index < Inventory::kContainers && w >= 1 && w <= 16 && h >= 1 && h <= 16) ||
+            !Inventory::findSpace(static_cast<uint32_t>(index), static_cast<uint32_t>(w), static_cast<uint32_t>(h), x, y))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, x);
+        lua_pushnumber(L, y);
+        return 2;
+    }
+
+    // native.inv_put(index, item id, x, y) -> true | nil, message
+    int nativeInvPut(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 1), x = luaL_checknumber(L, 3), y = luaL_checknumber(L, 4);
+        const uint32_t id = checkId(L, 2);
+        const char* error = "bad arguments";
+        if (id && index >= 0 && index < Inventory::kContainers && x >= 0 && x < 256 && y >= 0 && y < 256 &&
+            Inventory::put(static_cast<uint32_t>(index), id, static_cast<uint32_t>(x), static_cast<uint32_t>(y), error))
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.inv_remove(index, item id) -> true | nil, message
+    int nativeInvRemove(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 1);
+        const uint32_t id = checkId(L, 2);
+        const char* error = "bad arguments";
+        if (id && index >= 0 && index < Inventory::kContainers &&
+            Inventory::remove(static_cast<uint32_t>(index), id, error))
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.inv_destroy(item id) -> true | nil, message
+    int nativeInvDestroy(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const char* error = "bad arguments";
+        if (id && Inventory::destroy(id, error))
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.inv_export(item id) -> bytes | nil, message
+    int nativeInvExport(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const char* error = "bad arguments";
+        std::string bytes;
+        if (id && Inventory::exportItem(id, bytes, error))
+        {
+            lua_pushlstring(L, bytes.data(), bytes.size());
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.inv_import(bytes) -> item id | nil, message
+    int nativeInvImport(lua_State* L)
+    {
+        size_t n = 0;
+        const char* data = luaL_checklstring(L, 1, &n);
+        const char* error = "bad arguments";
+        const uint32_t id = n <= 65536 ? Inventory::importItem(std::string(data, n), error) : 0;
+        if (id)
+        {
+            lua_pushnumber(L, id);
+            return 1;
+        }
+        return pushFailure(L, error);
     }
 
     // native.pickup_rules({blocked ids}, {dimmed ids}, dim_alpha)
@@ -1359,6 +1514,15 @@ namespace
             {"hero_class", nativeHeroClass},
             {"pickup_rules", nativePickupRules},
             {"pickup_refused", nativePickupRefused},
+            {"inv_container", nativeInvContainer},
+            {"inv_items", nativeInvItems},
+            {"inv_size", nativeInvSize},
+            {"inv_find_space", nativeInvFindSpace},
+            {"inv_put", nativeInvPut},
+            {"inv_remove", nativeInvRemove},
+            {"inv_destroy", nativeInvDestroy},
+            {"inv_export", nativeInvExport},
+            {"inv_import", nativeInvImport},
             {nullptr, nullptr},
         };
         lua_newtable(L);

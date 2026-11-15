@@ -81,4 +81,36 @@ namespace Gear::Addr
     inline Sacred::Thiscall<uint8_t(void* manager, void* event)> cUI_Manager_receiveEvent{};
     inline Sacred::Global<uint8_t> cEventMouseDown_vtable{};
     inline Sacred::Global<uint8_t> cEventMouseUp_vtable{};
+
+    // Inventories (gear/inventory.cpp). ENG 00AD4448: the inventory manager (made by 005DEBC0), nullptr before a
+    // game ran: 32 containers of 0x1180 bytes. A container (the backpack of the hero with object id n is container
+    // n, the chest is container 0x11): +0x18 + cell * 12 the cells, a grid of +0x115C columns by +0x115E rows with
+    // cell = row * columns + column (dword item id on an item's top-left cell, 0 on the others; +4 flags, bit 0 =
+    // taken; on the item's cell +5 / +6 its width and height, on its other cells the column / row of its top-left
+    // cell), +0x1160 the container's number.
+    inline Sacred::Global<void*> g_pInventory{};
+    // ENG 005DABA0: finds room for a w x h item; stores the cell in *slot, true if there is room. `byRow`: scan row
+    // by row instead of column by column. ret 0x10.
+    inline Sacred::Thiscall<uint8_t(void* container, uint32_t w, uint32_t h, uint16_t* slot, int byRow)>
+        cInventory_findSpace{};
+    // ENG 005D9F00: puts item `id` (w x h) at `slot`: sets the cells, takes the item out of the world, tells the
+    // item its owner. 0 if the cells are not free. `notify`: tell the network peers (the engine passes 1 for a
+    // click, 0 when it sorts). ret 0x14.
+    inline Sacred::Thiscall<uint32_t(void* container, uint32_t slot, uint32_t id, uint32_t w, uint32_t h, int notify)>
+        cInventory_put{};
+    // ENG 005DA630: takes item `id` out of this container (the cells are cleared; the item object stays); 1 if it
+    // was in it. ret 8.
+    inline Sacred::Thiscall<uint32_t(void* container, uint32_t id, int notify)> cInventory_remove{};
+    // ENG 00428D60 (stdcall (type, uint16* w, uint16* h), no `this`): the size in cells of an item type.
+    inline Sacred::Thiscall<uint32_t(void* unused, uint32_t type, uint16_t* w, uint16_t* h)> cItemType_size{};
+    // ENG 005FBDB0 ("cObjectManager::destroy"): destroys object `id`; the engine calls it with (id, 1, 0, 0) after
+    // taking an item out of its inventory (use of a potion, 005BFF60). ret 0x10.
+    inline Sacred::Thiscall<void(void* manager, uint32_t id, int a2, int a3, int a4)> cObjectManager_destroy{};
+    // ENG 0042BF20 (stdcall (record)): the number an item keeps at +0x120, made from its 0x82-byte data at +0x118
+    // (the savegame loader sets it so after reading an item, 005C7690).
+    inline Sacred::Thiscall<uint32_t(void* unused, const void* record)> cItem_dataHash{};
+    // ENG 005C9230: inserts `count` copies of the 0x82 bytes at `fill` at `pos` into the item's vector of 0x82-byte
+    // entries (begin / end / capacity pointers at +0x100 / +0x104 / +0x108 of the item; `this` is item + 0x100).
+    // ret 0xC.
+    inline Sacred::Thiscall<void(void* vector, void* pos, uint32_t count, const void* fill)> cItem_entriesInsert{};
 }
