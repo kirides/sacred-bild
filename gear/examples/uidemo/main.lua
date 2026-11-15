@@ -163,6 +163,7 @@ gear.task(function()
     if not A.wait_for_game(180) then
         check('game with a hero', false)
     else
+        ui.reset_layout('uidemo:')     -- the gallery where the test expects it
         gear.wait(4)
         local w, h = ui.text_size('Sacred Gear')
         check('text measures', w and w > 0, ('%s x %s'):format(tostring(w), tostring(h)))
@@ -209,6 +210,7 @@ gear.task(function()
         local hx2, hy2 = hero:position()
         check('clicks did not reach the world (the hero stayed)', hx2 == hx and hy2 == hy, ('%d,%d -> %d,%d'):format(hx, hy, hx2, hy2))
     end
+    ui.reset_layout('uidemo:')
     A.write('uidemo.json', gear.json.encode(results))
     print(('%d passed, %d failed'):format(results.passed, results.failed))
     if cfg.quit then A.quit(results.failed == 0 and 0 or 1) end
