@@ -260,7 +260,7 @@ faults returns nil and a message instead of crashing the game.
 | `twitch_integration` | The Twitch connector's pipe, mapped by `custom.lua` to actions, offered one at a time inside a game as `twitch.command`. |
 | `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
 | `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F9) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
-| `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices from `config.lua`; filtered items' labels are dimmed; an overlay shows the rules. Self test with `-gear-auto`. |
+| `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices from `config.lua`; filtered items' labels are dimmed; an overlay shows the rules; a settings panel (F8 or the overlay's button: class checkboxes, quality dropdowns, potion checkboxes, label dimming) saves to `settings.json`. Self test with `-gear-auto`. |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 
 ## Automation

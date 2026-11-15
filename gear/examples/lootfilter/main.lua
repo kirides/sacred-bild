@@ -1,5 +1,6 @@
--- A loot filter: the hero picks up only the items the rules allow (config.lua); the labels of the others are dimmed
--- on the ground, and a small overlay shows the rules in force. Gold is always picked up.
+-- A loot filter: the hero picks up only the items the rules allow (config.lua, or the in-game settings panel: F8 or
+-- the overlay's button, saved to settings.json); the labels of the others are dimmed on the ground, and a small overlay
+-- shows the rules in force. Gold is always picked up.
 --
 -- How it works: every quarter second the mod looks at the items lying around the hero (gear.world.items_near),
 -- decides for each and hands the ones to refuse to Gear (gear.world.pickup_rules), which turns the game's pickup
@@ -154,10 +155,155 @@ local function overlay(state)
     line(('Set items: %s, quest: %s'):format(cfg.keep_set and 'always' or 'by rule', cfg.keep_quest and 'always' or 'by rule'), x + 6, ty); ty = ty + 13
     line(('Nearby: %d items, %d filtered'):format(stats.near, stats.blocked), x + 6, ty); ty = ty + 13
     line(('Refused pickups: %d'):format(W.pickup_refused()), x + 6, ty, 0xFFB0B0B0)
+    if ui.button('open-settings', x + 6, y + h + 4, 184, 20, 'Settings (F8)', {tooltip = 'Change the rules in game'}) then
+        ui.show_panel('settings', not ui.panel_open('settings'))
+    end
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- The settings panel: the same rules, changed in game and saved to settings.json in this folder (it overrides
+-- config.lua; delete it to go back to config.lua).
+---------------------------------------------------------------------------------------------------------------
+local SETTINGS = 'settings.json'
+local SAVED_KEYS = {'enabled', 'classes', 'min_quality', 'categories', 'potions', 'keep_quest', 'keep_set', 'dim_alpha'}
+local saved_note = 0
+
+local function load_settings()
+    local text = gear.read(SETTINGS)
+    if not text then return end
+    local s, err = gear.json.decode(text)
+    if type(s) ~= 'table' then
+        print('settings.json ignored: ' .. tostring(err))
+        return
+    end
+    for _, k in ipairs(SAVED_KEYS) do
+        if s[k] ~= nil then cfg[k] = s[k] end
+    end
+    check_config()
+    print('settings.json loaded')
+end
+
+local function save_settings()
+    local s = {}
+    for _, k in ipairs(SAVED_KEYS) do s[k] = cfg[k] end
+    local ok, err = gear.save(SETTINGS, gear.json.encode(s))
+    saved_note = gear.time() + 2
+    if not ok then print('cannot save the settings: ' .. tostring(err)) end
+    return ok
+end
+
+load_settings()
+ui.show_panel('settings', false)
+
+local QUALITY_OPTIONS = {'normal', 'magic', 'rare', 'set', 'unique'}
+local CATEGORY_OPTIONS = {'(minimum)', 'normal', 'magic', 'rare', 'set', 'unique', 'never'}
+local function index_of(list, v)
+    for i, x in ipairs(list) do if x == v then return i end end
+    return 1
+end
+
+local function settings_panel()
+    local p = ui.panel('settings', 'Loot filter settings', 240, 70, 540, 392)
+    if not p.open then return end
+    local x, y = p.content_x, p.content_y
+    local changed, _ = false, nil
+    local c
+    c, cfg.enabled = ui.checkbox('enabled', x, y, 'Filter on', cfg.enabled, {tooltip = 'Off: the hero picks up everything'})
+    changed = changed or c
+
+    -- Classes
+    y = y + 26
+    ui.label('l-classes', 'Pick up items for', x, y, {color = ui.COLORS.accent})
+    local mode = cfg.classes == 'own' and 1 or cfg.classes == false and 2 or 3
+    c, mode = ui.radio_group('classmode', x, y + 18, {'my class', 'any class', 'these classes:'}, mode,
+        {horizontal = true, tooltips = {'The hero\'s own class', 'Every item, whatever its class',
+            'The classes ticked below (for your other heroes too)'}})
+    if c then
+        changed = true
+        if mode == 1 then cfg.classes = 'own'
+        elseif mode == 2 then cfg.classes = false
+        else
+            local own = W.hero() and W.hero():class()
+            cfg.classes = {own or 'seraphim'}
+        end
+    end
+    local picked = {}
+    if type(cfg.classes) == 'table' then for _, n in ipairs(cfg.classes) do picked[n] = true end end
+    for i, cls in ipairs(W.CLASSES) do
+        local cx = x + ((i - 1) % 4) * 128
+        local cy = y + 40 + math.floor((i - 1) / 4) * 20
+        local cc, on = ui.checkbox('class-' .. cls.name, cx, cy, cls.name, picked[cls.name] == true,
+            {enabled = mode == 3})
+        if cc then
+            changed = true
+            picked[cls.name] = on
+            local list = {}
+            for _, k in ipairs(W.CLASSES) do if picked[k.name] then list[#list + 1] = k.name end end
+            cfg.classes = list
+        end
+    end
+
+    -- Qualities (dropdowns last in each row so their lists cover what follows)
+    y = y + 90
+    ui.label('l-quality', 'Lowest quality', x, y + 2, {color = ui.COLORS.accent,
+        tooltip = 'Items below it are left on the ground'})
+    local rows = {}
+    for i, cat in ipairs(CATEGORIES) do
+        rows[i] = {cat = cat, x = x + ((i - 1) % 2) * 260, y = y + 30 + math.floor((i - 1) / 2) * 24}
+        ui.text(cat, rows[i].x, rows[i].y + 2, {font = 7})
+    end
+
+    -- Potions and the rest
+    local py = y + 30 + 4 * 24 + 8
+    ui.label('l-potions', 'Potions', x, py, {color = ui.COLORS.accent})
+    for i, k in ipairs(POTIONS) do
+        local pc, on = ui.checkbox('potion-' .. k, x + (i - 1) * 100, py + 18, k, cfg.potions[k] ~= false,
+            {tooltip = k == 'colored' and 'The black, blue, green, red and yellow potions' or nil})
+        if pc then cfg.potions[k] = on; changed = true end
+    end
+    py = py + 46
+    c, cfg.keep_set = ui.checkbox('keep_set', x, py, 'Set items always', cfg.keep_set == true)
+    changed = changed or c
+    c, cfg.keep_quest = ui.checkbox('keep_quest', x + 180, py, 'Quest items always', cfg.keep_quest ~= false)
+    changed = changed or c
+    ui.text('Dim filtered labels', x, py + 26, {font = 7})
+    c, cfg.dim_alpha = ui.slider('dim', x + 140, py + 26, 200, 0, 255, cfg.dim_alpha, {step = 5,
+        tooltip = 'Alpha of the labels of filtered items (255: not dimmed)'})
+    changed = changed or c
+
+    if ui.button('save', x, py + 56, 120, 22, 'Save', {tooltip = 'Writes settings.json in the mod\'s folder'}) then
+        save_settings()
+    end
+    if ui.button('close', x + 130, py + 56, 120, 22, 'Close') then ui.show_panel('settings', false) end
+    if gear.time() < saved_note then ui.text('saved', x + 262, py + 59, {font = 7, color = 0xFF80FF80}) end
+
+    -- The quality dropdowns, drawn last so an open list lies over the rows below it.
+    c, cfg.min_quality = (function()
+        local ch, i = ui.dropdown('min_quality', x + 140, y, 120, QUALITY_OPTIONS, index_of(QUALITY_OPTIONS, cfg.min_quality))
+        return ch, QUALITY_OPTIONS[i]
+    end)()
+    changed = changed or c
+    for i = #rows, 1, -1 do
+        local r = rows[i]
+        local rule = cfg.categories[r.cat]
+        local cur = rule == false and 'never' or rule or '(minimum)'
+        local ch, idx = ui.dropdown('cat-' .. r.cat, r.x + 80, r.y, 120, CATEGORY_OPTIONS, index_of(CATEGORY_OPTIONS, cur))
+        if ch then
+            local v = CATEGORY_OPTIONS[idx]
+            cfg.categories[r.cat] = v == 'never' and false or v ~= '(minimum)' and v or nil
+            changed = true
+        end
+    end
+    if changed then refresh() end
 end
 
 gear.on('draw', function(state)
-    if state then overlay(state) end
+    if not state then return end
+    overlay(state)
+    if state.mode == 'game' and not state.exclusive then
+        if ui.key_pressed(cfg.settings_key or 'f8') then ui.show_panel('settings', not ui.panel_open('settings')) end
+        settings_panel()
+    end
 end)
 
 ---------------------------------------------------------------------------------------------------------------
@@ -270,6 +416,32 @@ gear.task(function()
     print(('after the clicks: potion on the ground %s, weapon on the ground %s, refused %d'):format(
         tostring(p2 and p2.on_ground), tostring(w2 and w2.on_ground), W.pickup_refused() - before))
     check('the weapon stays on the ground', w2 and w2.on_ground)
+
+    -- The settings panel: opened from the overlay's button, a quality picked, a potion unticked, saved.
+    local before_settings = gear.read(SETTINGS)
+    local oh = 18 + (7 + #CATEGORIES) * 13
+    A.ui_click(cfg.overlay_x + 90, cfg.overlay_y + oh + 14)
+    gear.wait(0.5)
+    check('settings panel opens', ui.panel_open('settings'))
+    A.screenshot('lootfilter-settings')
+    local px, py = 248, 98 + 26 + 90           -- content (248, 98); the quality row
+    A.ui_click(px + 190, py + 9)                -- the lowest quality dropdown
+    gear.wait(0.5)
+    A.screenshot('lootfilter-settings-dropdown')
+    A.ui_click(px + 190, py + 18 + 1 + 18 + 9)  -- its second entry: magic
+    gear.wait(0.5)
+    check('lowest quality from the dropdown', cfg.min_quality == 'magic', cfg.min_quality)
+    local potions_y = py + 30 + 4 * 24 + 8 + 18
+    A.ui_click(px + 200 + 7, potions_y + 8)     -- the stamina checkbox
+    gear.wait(0.5)
+    check('potion checkbox', cfg.potions.stamina == false, tostring(cfg.potions.stamina))
+    A.ui_click(px + 50, potions_y - 18 + 46 + 56 + 11)   -- Save
+    gear.wait(0.5)
+    local saved = gear.read(SETTINGS)
+    check('settings saved', saved and saved:find('"magic"', 1, true) ~= nil, saved)
+    A.screenshot('lootfilter-settings-saved')
+    -- Leave the folder as it was.
+    gear.save(SETTINGS, before_settings or '{}')
     A.write('lootfilter.json', gear.json.encode(results))
     print(('%d passed, %d failed'):format(results.passed, results.failed))
     if cfg.test_quit then A.quit(results.failed == 0 and 0 or 1) end
