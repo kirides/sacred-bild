@@ -1,5 +1,5 @@
 -- A loot filter: the hero picks up only the items the rules allow (config.lua, or the in-game settings panel: F8 or
--- the overlay's button, saved to settings.json); the labels of the others are dimmed on the ground, and a small overlay
+-- the overlay's button, kept in the mod manager's gear_mods.json); the labels of the others are dimmed on the ground, and a small overlay
 -- shows the rules in force. Gold is always picked up.
 --
 -- How it works: every quarter second the mod looks at the items lying around the hero (gear.world.items_near),
@@ -164,35 +164,83 @@ end
 -- The settings panel: the same rules, changed in game and saved to settings.json in this folder (it overrides
 -- config.lua; delete it to go back to config.lua).
 ---------------------------------------------------------------------------------------------------------------
-local SETTINGS = 'settings.json'
+-- The rules live in the mod manager's settings (declared in mod.lua); `cfg` is the working copy the rest of the mod
+-- reads. pull() takes the player's settings into it, push() writes it back after the panel changed it.
+local S = gear.settings
 local SAVED_KEYS = {'enabled', 'classes', 'min_quality', 'categories', 'potions', 'keep_quest', 'keep_set', 'dim_alpha'}
-local saved_note = 0
+local pushing = false
 
-local function load_settings()
-    local text = gear.read(SETTINGS)
-    if not text then return end
-    local s, err = gear.json.decode(text)
-    if type(s) ~= 'table' then
-        print('settings.json ignored: ' .. tostring(err))
-        return
+local function chosen_classes()
+    local list = {}
+    for _, c in ipairs(W.CLASSES) do
+        if S.get('class_' .. c.name) then list[#list + 1] = c.name end
     end
-    for _, k in ipairs(SAVED_KEYS) do
-        if s[k] ~= nil then cfg[k] = s[k] end
+    return list
+end
+
+-- One setting into cfg.
+local function apply_setting(id, v)
+    if id == 'classes_mode' then
+        cfg.classes = v == 'own' and 'own' or v == 'any' and false or chosen_classes()
+    elseif id:sub(1, 6) == 'class_' then
+        if type(cfg.classes) == 'table' then cfg.classes = chosen_classes() end
+    elseif id:sub(1, 4) == 'cat_' then
+        cfg.categories[id:sub(5)] = v == 'never' and false or v ~= '(minimum)' and v or nil
+    elseif id:sub(1, 13) == 'potion_color_' then
+        cfg.potions[id:sub(14)] = v == 'leave' and false or v == 'take' and true or nil
+    elseif id:sub(1, 7) == 'potion_' then
+        cfg.potions[id:sub(8)] = v
+    else
+        cfg[id] = v
+    end
+end
+
+local function pull()
+    for id in pairs(S.all()) do
+        if S.is_set(id) then apply_setting(id, S.get(id)) end
     end
     check_config()
-    print('settings.json loaded')
 end
 
-local function save_settings()
-    local s = {}
-    for _, k in ipairs(SAVED_KEYS) do s[k] = cfg[k] end
-    local ok, err = gear.save(SETTINGS, gear.json.encode(s))
-    saved_note = gear.time() + 2
-    if not ok then print('cannot save the settings: ' .. tostring(err)) end
-    return ok
+local function push()
+    pushing = true
+    S.set('enabled', cfg.enabled == true)
+    S.set('keep_quest', cfg.keep_quest ~= false)
+    S.set('keep_set', cfg.keep_set == true)
+    S.set('dim_alpha', cfg.dim_alpha)
+    S.set('min_quality', cfg.min_quality)
+    S.set('classes_mode', cfg.classes == 'own' and 'own' or cfg.classes == false and 'any' or 'chosen')
+    local picked = {}
+    if type(cfg.classes) == 'table' then for _, n in ipairs(cfg.classes) do picked[n] = true end end
+    for _, c in ipairs(W.CLASSES) do S.set('class_' .. c.name, picked[c.name] == true) end
+    for _, cat in ipairs(CATEGORIES) do
+        local rule = cfg.categories[cat]
+        S.set('cat_' .. cat, rule == false and 'never' or rule or '(minimum)')
+    end
+    for _, k in ipairs(POTIONS) do S.set('potion_' .. k, cfg.potions[k] ~= false) end
+    for _, color in ipairs({'black', 'blue', 'green', 'red', 'yellow'}) do
+        local rule = cfg.potions[color]
+        S.set('potion_color_' .. color, rule == false and 'leave' or rule == true and 'take' or 'default')
+    end
+    pushing = false
 end
 
-load_settings()
+-- The old settings.json of this folder, once.
+S.migrate('settings.json', function(old)
+    for _, k in ipairs(SAVED_KEYS) do
+        if old[k] ~= nil then cfg[k] = old[k] end
+    end
+    check_config()
+    push()
+    print('settings.json migrated to the mod manager')
+end)
+pull()
+gear.on('settings.changed', function(id, v)
+    if pushing then return end
+    apply_setting(id, v)
+    check_config()
+    refresh()
+end)
 ui.show_panel('settings', false)
 
 local QUALITY_OPTIONS = {'normal', 'magic', 'rare', 'set', 'unique'}
@@ -271,11 +319,8 @@ local function settings_panel()
         tooltip = 'Alpha of the labels of filtered items (255: not dimmed)'})
     changed = changed or c
 
-    if ui.button('save', x, py + 56, 120, 22, 'Save', {tooltip = 'Writes settings.json in the mod\'s folder'}) then
-        save_settings()
-    end
-    if ui.button('close', x + 130, py + 56, 120, 22, 'Close') then ui.show_panel('settings', false) end
-    if gear.time() < saved_note then ui.text('saved', x + 262, py + 56, {height = 22, valign = 'middle', color = 0xFF80FF80}) end
+    if ui.button('close', x, py + 56, 120, 22, 'Close') then ui.show_panel('settings', false) end
+    ui.text('Also in the Mods screen (F11)', x + 130, py + 56, {height = 22, valign = 'middle', size = 11, color = ui.COLORS.text_dim})
 
     -- The quality dropdowns, drawn last so an open list lies over the rows below it.
     c, cfg.min_quality = (function()
@@ -294,16 +339,17 @@ local function settings_panel()
             changed = true
         end
     end
-    if changed then refresh() end
+    if changed then push(); refresh() end
 end
 
 gear.on('draw', function(state)
     if not state then return end
     overlay(state)
-    if state.mode == 'game' and not state.exclusive then
-        if ui.key_pressed(cfg.settings_key or 'f8') then ui.show_panel('settings', not ui.panel_open('settings')) end
-        settings_panel()
-    end
+    if state.mode == 'game' and not state.exclusive then settings_panel() end
+end)
+
+gear.keys.on('panel', function()
+    ui.show_panel('settings', not ui.panel_open('settings'))
 end)
 
 ---------------------------------------------------------------------------------------------------------------
@@ -418,7 +464,6 @@ gear.task(function()
     check('the weapon stays on the ground', w2 and w2.on_ground)
 
     -- The settings panel: opened from the overlay's button, a quality picked, a potion unticked, saved.
-    local before_settings = gear.read(SETTINGS)
     local oh = 18 + (7 + #CATEGORIES) * 13
     A.ui_click(cfg.overlay_x + 90, cfg.overlay_y + oh + 14)
     gear.wait(0.5)
@@ -435,13 +480,10 @@ gear.task(function()
     A.ui_click(px + 200 + 7, potions_y + 8)     -- the stamina checkbox
     gear.wait(0.5)
     check('potion checkbox', cfg.potions.stamina == false, tostring(cfg.potions.stamina))
-    A.ui_click(px + 50, potions_y - 18 + 46 + 56 + 11)   -- Save
-    gear.wait(0.5)
-    local saved = gear.read(SETTINGS)
-    check('settings saved', saved and saved:find('"magic"', 1, true) ~= nil, saved)
     A.screenshot('lootfilter-settings-saved')
-    -- Leave the folder as it was.
-    gear.save(SETTINGS, before_settings or '{}')
+    check('settings kept in the mod manager', S.get('min_quality') == 'magic' and S.get('potion_stamina') == false,
+        tostring(S.get('min_quality')) .. ' ' .. tostring(S.get('potion_stamina')))
+    S.reset()      -- leave the state as it was
     A.write('lootfilter.json', gear.json.encode(results))
     print(('%d passed, %d failed'):format(results.passed, results.failed))
     if cfg.test_quit then A.quit(results.failed == 0 and 0 or 1) end

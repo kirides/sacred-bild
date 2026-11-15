@@ -116,14 +116,15 @@ local function fonts()
     end
 end
 
+gear.keys.on('gallery', function() ui.show_panel('gallery', not ui.panel_open('gallery')) end)
+
 gear.on('draw', function(state)
     if not state or state.mode ~= 'game' or state.exclusive then return end
     local hero = gear.world.hero()
-    if cfg.panel then panel(hero) end
-    if cfg.images then gallery() end
-    if ui.key_pressed(cfg.key or 'f9') then ui.show_panel('gallery', not ui.panel_open('gallery')) end
-    if cfg.inventory then inventory_note(state) end
-    if cfg.fonts then fonts() end
+    if gear.settings.get('panel') then panel(hero) end
+    if gear.settings.get('images') then gallery() end
+    if gear.settings.get('inventory') then inventory_note(state) end
+    if gear.settings.get('fonts') then fonts() end
     -- The top layer lies over the escape menu and message boxes too.
     ui.text('uidemo: top layer', 0, 748, {width = 1024, align = 'center', layer = 'top',
         color = ui.rgba(255, 255, 255, 200), background = ui.rgba(0, 0, 0, 120), padding = 2})

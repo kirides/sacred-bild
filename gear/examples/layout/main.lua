@@ -27,7 +27,8 @@ local SNAP = 8              -- layout units within which a dragged frame snaps
 
 local selected = nil        -- the key of the selected frame ('game:UI_WND_INVENTORY', 'mod:panel')
 local drag = nil            -- {key, mode = 'move' | 'size', ...} while the mouse button is held on a frame
-local snapping = cfg.snap ~= false
+local snapping = gear.settings.get('snap')
+gear.on('settings.changed', function(id, v) if id == 'snap' then snapping = v end end)
 local toolbar_rect = nil    -- the toolbar's place this frame (for the self test)
 local popup_rect = nil      -- the settings popup's
 local popup_pin = nil       -- where the popup was put for the selected frame's place
@@ -331,11 +332,13 @@ local function toolbar(state)
     end
     local changed, on = ui.checkbox('snap', x, y + 94, 'Snap to edges and frames', snapping, {layer = 'top',
         tooltip = 'Hold Shift while dragging to place freely'})
-    if changed then snapping = on end
+    if changed then snapping = on; gear.settings.set('snap', on) end
 end
 
 -- The self test's own resizable panel, so a mod panel shows up in the edit mode without another mod.
 local sample_panel = gear.auto ~= nil
+
+gear.keys.on('edit', function() ui.set_edit_mode(not ui.edit_mode()) end)
 
 gear.on('draw', function(state)
     if not state or state.mode ~= 'game' or state.exclusive then
@@ -347,7 +350,6 @@ gear.on('draw', function(state)
             min_height = 80, closable = false})
         if p.open then ui.text('A mod panel', p.content_x, p.content_y, {}) end
     end
-    if ui.key_pressed(cfg.key) then ui.set_edit_mode(not ui.edit_mode()) end
     if ui.edit_mode() then
         -- The editor covers the screen on the top layer: out of the way of the escape menu and message boxes.
         if state.escape_menu or state.message_box then
