@@ -241,6 +241,12 @@ bool DeviceProxy::beginOverlay3D(Overlay3D& restore)
     const float tw = static_cast<float>(vp.dwWidth), th = static_cast<float>(vp.dwHeight);
     const float a = w0 / tw, b = (2.0f * (x0 - vp.dwX) + w0) / tw - 1.0f;
     const float c = h0 / th, d = 1.0f - (2.0f * (y0 - vp.dwY) + h0) / th;
+    if (UiCanvas::tracing())
+    {
+        D3DVIEWPORT7 cur;
+        m_real->GetViewport(&cur);
+        UiCanvas::trace(Fmt::format("overlay3D game viewport {},{} {}x{} -> screen {:.0f},{:.0f} {:.0f}x{:.0f} in {},{} {}x{} (real now {},{} {}x{}) proj m11 {:.4f} m22 {:.4f}", m_uiViewport.dwX, m_uiViewport.dwY, m_uiViewport.dwWidth, m_uiViewport.dwHeight, x0, y0, w0, h0, vp.dwX, vp.dwY, vp.dwWidth, vp.dwHeight, cur.dwX, cur.dwY, cur.dwWidth, cur.dwHeight, projection._11, projection._22));
+    }
     D3DMATRIX adjusted = projection;
     for (int r = 0; r < 4; ++r)
     {
@@ -282,7 +288,10 @@ void DeviceProxy::beginUi()
     }
     m_ui = true;
     m_real->GetViewport(&m_savedViewport);
-    m_uiViewport = {0, 0, 1024, 768, m_savedViewport.dvMinZ, m_savedViewport.dvMaxZ};
+    // ReBorn lays the UI out in screen coordinates: its item models' projection spans the whole screen.
+    m_uiViewport = Sacred::reBorn()
+        ? D3DVIEWPORT7{0, 0, static_cast<DWORD>(Resolution::width()), static_cast<DWORD>(Resolution::height()), m_savedViewport.dvMinZ, m_savedViewport.dvMaxZ}
+        : D3DVIEWPORT7{0, 0, 1024, 768, m_savedViewport.dvMinZ, m_savedViewport.dvMaxZ};
     if (UiCanvas::frame().confine)
     {
         D3DVIEWPORT7 vp = canvasViewport(m_uiViewport);
