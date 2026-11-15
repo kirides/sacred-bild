@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime": {
+    "version": "LuaJIT",
+    "builtin": {
+      "io": "disable",
+      "debug": "disable",
+      "package": "disable",
+      "jit": "disable",
+      "ffi": "disable",
+      "os": "disable",
+      "utf8": "disable",
+      "bit32": "disable"
+    }
+  },
+  "workspace": {
+    "library": ["gear/meta"],
+    "ignoreDir": ["gear/lua", "gear/tests", "out", "vcpkg_installed", "cmake-build-debug", "dist", "ports"],
+    "checkThirdParty": false
+  }
+}

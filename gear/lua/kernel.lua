@@ -1089,7 +1089,8 @@ local function make_ui(mod)
         local w, h = ui_measure(tostring(text), opts)
         if opts.tooltip then region(id, x, y, w or 60, h or 14, opts) end
         return ui.text(text, x, y, {font = opts.font, size = opts.size, face = opts.face, bold = opts.bold,
-            height = opts.height, valign = opts.valign, color = label_color(opts), layer = opts.layer})
+            italic = opts.italic, height = opts.height, valign = opts.valign, color = label_color(opts),
+            layer = opts.layer})
     end
 
     -- ui.button(id, x, y, w, h, text, opts) -> clicked

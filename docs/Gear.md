@@ -91,6 +91,8 @@ so handlers see the frame's state, never a half-updated one, and need no locks.
 
 ### Lua API
 
+The complete reference, with every parameter, option and return value, is [GearApi.md](GearApi.md). It is generated from the LuaLS annotations in `gear/meta/`, which give editors completion and checks for mod code (setup: [Editor support](GearApi.md#editor-support-lua-language-server)); `tools/check_gear_api.py` fails when they and the code drift apart.
+
 | | |
 |---|---|
 | `gear.on(event, fn)` | Calls `fn` for `event`; returns a handle. |
@@ -445,6 +447,8 @@ Tools (Python 3 with `pefile` and `capstone`, `SACRED_ENG` as for SacredBild's t
 |---|---|
 | `tools/gen_gear_sigs.py` | Writes `gear/game/gear_sigs.inc` from the entries listed in it |
 | `tools/check_gear_overlap.py` | Fails if a Sacred Gear signature window overlaps one SacredBild patches (or one of SacredBild's overlaps one Gear patches) |
+| `tools/check_gear_api.py` | Fails if the LuaLS annotations in `gear/meta/*.lua` and the Lua API in `gear/lua/kernel.lua` / `gear/lua_host.cpp` disagree (names, both ways), or if `docs/GearApi.md` is out of date |
+| `tools/gen_gear_api_docs.py` | Writes `docs/GearApi.md` from `gear/meta/*.lua` (and `docs/GearApi.head.md`) |
 
 Build: part of the normal build (`cmake --build --preset release` -> `out/build/msvc-x86/RelWithDebInfo/SacredGear.dll`);
 `-DSACREDGEAR=OFF` leaves it out. vcpkg provides LuaJIT, statically linked like everything else.
