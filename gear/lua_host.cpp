@@ -2317,9 +2317,9 @@ LuaHost::Answer LuaHost::damage(int damage, int victimType, int attackerType, in
     else if (lua_isnumber(L, -1))
     {
         const lua_Number v = lua_tonumber(L, -1);
-        if (v > -1e9 && v < 1e9)
+        if (v == v)     // not NaN; anything outside 0 .. 65534 saturates in the stub (no wrap around)
         {
-            out = static_cast<int>(v);
+            out = v >= 65535 ? 65534 : v <= 0 ? 0 : static_cast<int>(v);
             answer = Answer::Value;
         }
     }

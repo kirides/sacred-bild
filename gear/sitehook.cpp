@@ -373,23 +373,25 @@ namespace
         {
             g_damageSiteCalls[site].fetch_add(1, std::memory_order_relaxed);
         }
+        // never above the 16 bit maximum, whoever computed it (no wrap around, the value saturates)
+        constexpr int kMaxDamage = 65534;
         if (!g_damageActive.load(std::memory_order_relaxed))
         {
-            return damage;
+            return damage > kMaxDamage ? kMaxDamage : damage;
         }
         int result = 0;
         switch (LuaHost::damage(damage, typeOfVictim(victim), typeOfCreature(attacker), site, result))
         {
         case LuaHost::Answer::Value:
             g_damageAnswered.fetch_add(1, std::memory_order_relaxed);
-            return std::clamp(result, 0, 65534);
+            return std::clamp(result, 0, kMaxDamage);
         case LuaHost::Answer::Busy:
             g_damageBusy.fetch_add(1, std::memory_order_relaxed);
             break;
         default:
             break;
         }
-        return damage;
+        return damage > kMaxDamage ? kMaxDamage : damage;
     }
 
     // The stub of a damage site: the displaced `call __ftol` runs (the damage is in eax afterwards), the handler may replace it.
