@@ -1,11 +1,12 @@
--- A layout editor in the manner of an MMO's edit mode: F7 (or its button) unlocks the UI. Then every open game window
+-- A layout editor in the manner of an MMO's edit mode: its "Edit layout" button (top left, shown while Alt shows the
+-- game's labels) unlocks the UI. Then every open game window
 -- (inventory, equipment, skills, minimap, taskbar, shops, log book ...) and every mod panel is covered by a translucent
 -- blue overlay with its name, so you still see what lies below it:
 --  * click a frame to select it (gold); drag it anywhere on its overlay to move it;
 --  * it snaps to the screen's edges and centre and to the other frames' edges and centres (hold Shift: no snapping);
 --  * the arrow keys nudge the selected frame by one unit of the virtual 4096 x 4096 screen (Shift: 10);
 --  * its settings popup shows its place, resets it and, for resizable panels, sets the size (or drag the corner);
---  * a click on empty space deselects it; Done (F7) ends the edit mode.
+--  * a click on empty space deselects it; Done ends the edit mode. The mod binds no key.
 -- Places are kept in mods\gear_layout.json in that virtual screen, so they stay when the resolution changes.
 -- Moving the game's windows needs SacredBild (its UI frames); the mod panels move without it.
 --
@@ -33,6 +34,7 @@ local toolbar_rect = nil    -- the toolbar's place this frame (for the self test
 local popup_rect = nil      -- the settings popup's
 local popup_pin = nil       -- where the popup was put for the selected frame's place
 local edit_button_shown = false     -- the "Edit layout" button was drawn this frame
+local done_rect = nil               -- the toolbar's Done button (for the self test)
 local show_text_until = 0           -- gear.time() until which the button stays after Alt was released
 
 local NAMES = {
@@ -323,7 +325,8 @@ local function toolbar(state)
         ui.text('Game windows need SacredBild.', x, y, {color = 0xFFFF8080, layer = 'top'})
     end
     ui.text('Arrows nudge it (Shift: 10).', x, y + 15, {color = C.text_dim, layer = 'top'})
-    if ui.button('done', x, y + 36, 112, 22, 'Done (F7)', {layer = 'top'}) then ui.set_edit_mode(false) end
+    done_rect = {x = x, y = y + 36, w = 112, h = 22}
+    if ui.button('done', x, y + 36, 112, 22, 'Done', {layer = 'top'}) then ui.set_edit_mode(false) end
     if ui.button('reset-game', x + 122, y + 36, 112, 22, 'Reset windows', {layer = 'top',
         tooltip = 'The game windows back to their places'}) then
         ui.reset_layout('game:')
@@ -339,8 +342,6 @@ end
 
 -- The self test's own resizable panel, so a mod panel shows up in the edit mode without another mod.
 local sample_panel = gear.auto ~= nil
-
-gear.keys.on('edit', function() ui.set_edit_mode(not ui.edit_mode()) end)
 
 gear.on('draw', function(state)
     if not state or state.mode ~= 'game' or state.exclusive then
@@ -364,12 +365,12 @@ gear.on('draw', function(state)
         if f then popup(f, state.screen_left, state.screen_top, state.screen_right, state.screen_bottom) end
     else
         selected, drag, toolbar_rect, popup_rect = nil, nil, nil, nil
-        -- The button only with the game's labels (Alt held), like the game's own text; F7 works without it.
+        -- The button only with the game's labels (Alt held), like the game's own text.
         -- It stays a moment after Alt is released, so a click made just before still lands on it.
         if state.show_text then show_text_until = gear.time() + 0.4 end
         edit_button_shown = gear.time() < show_text_until
         if edit_button_shown and ui.button('edit', state.screen_left + 4, state.screen_top + 4, 80, 20, 'Edit layout',
-            {tooltip = 'Move windows and panels (F7)'}) then
+            {tooltip = 'Move windows and panels'}) then
             ui.set_edit_mode(true)
         end
     end
@@ -459,9 +460,17 @@ gear.task(function()
         A.move(hx, hy)
         gear.wait(1.2)
         A.screenshot('hover-normal')
-        A.press('f7')
+        -- In through the "Edit layout" button, which shows while Alt is held.
+        local s = ui.state()
+        A.key_down('alt')
+        for _ = 1, 20 do
+            if edit_button_shown then break end
+            gear.wait(0.1)
+        end
+        A.ui_click(s.screen_left + 44, s.screen_top + 14)
+        A.key_up('alt')
         gear.wait(0.6)
-        check('F7 turns the edit mode on', ui.edit_mode())
+        check('the Edit layout button turns the edit mode on', ui.edit_mode())
         A.move(hx + 1, hy)
         gear.wait(1.2)
         A.screenshot('editmode-hover')
@@ -571,9 +580,10 @@ gear.task(function()
             local t2 = toolbar_rect
             check('toolbar dragged', t2 and math.abs(t2.x - (t.x + 250)) < 3, t2 and ('%d -> %d'):format(t.x, t2.x))
         end
-        A.press('f7')
+        local d = done_rect
+        if d then A.ui_click(d.x + d.w / 2, d.y + d.h / 2) end
         gear.wait(0.8)
-        check('F7 ends the edit mode', not ui.edit_mode())
+        check('Done ends the edit mode', not ui.edit_mode())
         A.screenshot('editmode-done')
         local l2 = ui.layout()
         check('stored', l2['game:UI_WND_INVENTORY'] ~= nil and l2['layout:sample'] ~= nil and l2['layout:toolbar'] ~= nil,
