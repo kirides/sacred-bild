@@ -107,6 +107,40 @@ namespace
     {
         const cUI_Manager* manager = cUI_Manager::instance();
         const bool inGame = manager && (manager->flags & cUI_Manager::inGame) && !UiState::exclusiveWindow();
+        if (Sacred::reBorn())
+        {
+            static bool lastInv = false;
+            const bool inv = manager && UiState::shown(UiState::Window::inventory);
+            if (inv != lastInv)
+            {
+                lastInv = inv;
+                if (inv && Config::debug.uiTrace) { g_autoTrace = 3; }
+            }
+            static const cUI_Window2* lastExclusive = nullptr;
+            const cUI_Window2* ex = manager ? UiState::exclusiveWindow() : nullptr;
+            if (ex != lastExclusive)
+            {
+                lastExclusive = ex;
+                if (ex)
+                {
+                    LOG("UI canvas: exclusive window at {},{} {}x{}", ex->x, ex->y, ex->width, ex->height);
+                }
+                else
+                {
+                    LOG("UI canvas: no exclusive window");
+                }
+            }
+        }
+        if (!inGame && Sacred::reBorn() && manager && (manager->flags & cUI_Manager::inGame))
+        {
+            // ReBorn's world map is a window of the screen's size: drawn and picked as it is.
+            const cUI_Window2* alone = UiState::exclusiveWindow();
+            if (alone && (alone->width > 1024 || alone->height > 768))
+            {
+                static const Layout native{1.0f, 0.0f, 0.0f};
+                return native;
+            }
+        }
         if (!inGame && Sacred::reBorn() && manager && (manager->flags & cUI_Manager::inMenus))
         {
             return reBornMenuLayout(*manager);

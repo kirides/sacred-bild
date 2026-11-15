@@ -2,6 +2,7 @@
 #include "game/build.h"
 #include "game/resolution.h"
 #include "game/ui_canvas.h"
+#include "game/ui_state.h"
 #include "game/ui_windows.h"
 #include "config/debug.h"
 #include "config/ui.h"
@@ -136,6 +137,22 @@ namespace
 
     Frame reBornFrame(const cUI_Window2* window)
     {
+        {
+            static int last[32][4];
+            int i = 31;
+            for (int k = 0; k < static_cast<int>(W::count); ++k)
+            {
+                if (cUI_Manager::instance()->window(static_cast<W>(k)) == window)
+                {
+                    i = k;
+                }
+            }
+            if (last[i][0] != window->x || last[i][1] != window->y || last[i][2] != window->width || last[i][3] != window->height)
+            {
+                last[i][0] = window->x; last[i][1] = window->y; last[i][2] = window->width; last[i][3] = window->height;
+                LOG("UI anchor: ReBorn window {} at {},{} {}x{}", i == 31 ? "?" : UiState::name(static_cast<W>(i)), window->x, window->y, window->width, window->height);
+            }
+        }
         return UiCanvas::placed(reBornAnchor(window->x, window->width, Resolution::width() - 1024),
                                 reBornAnchor(window->y, window->height, Resolution::height() - 768));
     }
@@ -153,7 +170,7 @@ namespace
                 ReleaseSRWLockShared(&g_moveLock);
                 if (moved.set)
                 {
-                    out = {moved.x, moved.y, owner.index != static_cast<int>(W::taskbar)};
+                    out = {moved.x, moved.y, owner.index != static_cast<int>(W::taskbar) && !Sacred::reBorn()};
                     return true;
                 }
             }
