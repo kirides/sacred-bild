@@ -178,6 +178,29 @@ local GearSettings = {}
 ---@return string?
 function GearSettings.get(key) end
 
+-- ## Files (gear.files)
+
+-- path gear.files
+--- The file overlay: a mod's own data files served where the game opens the original ones, and the mod's own save folder.
+--- Declared in `mods/<id>/overlay.txt` (`game\path = dataile` per line, `saves = save`), read when Sacred Gear starts
+--- because the game opens its data files before any Lua runs. See [Gear.md](Gear.md).
+---@class GearFiles
+local GearFiles = {}
+
+--- What this mod's overlay does, nil if the mod has no `overlay.txt` (or the run does not use it).
+---@return GearOverlayInfo?
+function GearFiles.overlay() end
+
+--- The path the game's open of `path` (relative to the game folder) ends up at: the mod's file if an overlay rule applies,
+--- else `path` unchanged.
+---@param path string
+---@return string
+function GearFiles.resolve(path) end
+
+---@class GearOverlayInfo
+---@field files integer The number of file rules.
+---@field saves string? The mod's save folder (absolute) if the game's `Save\` folder is redirected to it.
+
 -- ## JSON (gear.json)
 
 -- path gear.json

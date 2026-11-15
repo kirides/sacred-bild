@@ -146,6 +146,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `data` | `GearData` | The engine's data tables (read only, except the abilities). |
 | `text` | `GearText` | The game's texts by id. |
 | `settings` | `GearSettings` | The game's Settings.cfg. |
+| `files` | `GearFiles` | The mod's file overlay. |
 | `json` | `GearJson` | JSON encoding and decoding. |
 | `pipe` | `GearPipeModule` | Named pipe clients. |
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
@@ -570,6 +571,34 @@ The value of `key` as text (nil if the file has no such key). Read each time, so
 
 - `key`: `string`
 - returns `string?`
+
+## Files (gear.files)
+
+### GearFiles
+
+Reached as `gear.files`.
+
+The file overlay: a mod's own data files served where the game opens the original ones, and the mod's own save folder. Declared in `mods/<id>/overlay.txt` (`game\path = dataile` per line, `saves = save`), read when Sacred Gear starts because the game opens its data files before any Lua runs. See [Gear.md](Gear.md).
+
+#### `gear.files.overlay() -> GearOverlayInfo?`
+
+What this mod's overlay does, nil if the mod has no `overlay.txt` (or the run does not use it).
+
+- returns `GearOverlayInfo?`
+
+#### `gear.files.resolve(path) -> string`
+
+The path the game's open of `path` (relative to the game folder) ends up at: the mod's file if an overlay rule applies, else `path` unchanged.
+
+- `path`: `string`
+- returns `string`
+
+### GearOverlayInfo
+
+| Field | Type | |
+|---|---|---|
+| `files` | `integer` | The number of file rules. |
+| `saves` | `string` | The mod's save folder (absolute) if the game's `Save\` folder is redirected to it. (optional) |
 
 ## JSON (gear.json)
 

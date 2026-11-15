@@ -132,6 +132,9 @@ def main():
     compare('ability record', abil_fields, fields('GearAbility'))
     text_src = re.search(r'^\s{8}text = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.text', set(re.findall(r'^\s{12}(\w+) = function', text_src.group(1), re.M)) if text_src else set(), members('GearText'))
+    files_src = re.search(r'^\s{8}files = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
+    compare('gear.files', set(re.findall(r'^\s{12}(\w+) = function', files_src.group(1), re.M)) if files_src else set(),
+            members('GearFiles'))
     settings_src = re.search(r'^\s{8}settings = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.settings', set(re.findall(r'^\s{12}(\w+) = function', settings_src.group(1), re.M)) if settings_src else set(),
             members('GearSettings'))

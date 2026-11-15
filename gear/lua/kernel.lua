@@ -1938,6 +1938,18 @@ local function make_env(mod)
                 return native.text_get(id)
             end,
         },
+        -- The mod's file overlay (mods/<id>/overlay.txt, applied when Sacred Gear starts).
+        files = {
+            overlay = function()
+                local count, saves = native.overlay_info(mod.id)
+                if not count then return nil end
+                return {files = count, saves = saves ~= '' and saves or nil}
+            end,
+            resolve = function(path)
+                assert(type(path) == 'string', 'path must be a string')
+                return native.overlay_resolve(path)
+            end,
+        },
         -- Values of the game's Settings.cfg ("KEY : value" lines), as text.
         settings = {
             get = function(key)

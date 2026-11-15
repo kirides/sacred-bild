@@ -40,6 +40,7 @@
 ---@field data GearData The engine's data tables (read only, except the abilities).
 ---@field text GearText The game's texts by id.
 ---@field settings GearSettings The game's Settings.cfg.
+---@field files GearFiles The mod's file overlay.
 ---@field json GearJson JSON encoding and decoding.
 ---@field pipe GearPipeModule Named pipe clients.
 ---@field world GearWorld The world: hero, creatures, items, spawning, pickup rules.

@@ -69,6 +69,8 @@ local native = {
         ability_store[name .. ':' .. index .. ':' .. offset] = value
         return true
     end,
+    overlay_info = function(id) if id == 'ab' then return 2, 'C:/mods/ab/save' end end,
+    overlay_resolve = function(path) return 'mapped:' .. path end,
     text_get = function(id) if id == 8193 then return 'Ability name' end end,
     setting = function(key) if key == 'SR_HD_WIDTH' then return '2560' end end,
     table_string = function(name, index, offset)
@@ -237,6 +239,8 @@ files.ab = {
         abil.after_restore = {A[1001].effect_base, A[1001].effect_per_level, A[1001].unk_40, A[2].value1_base, A[2].target_mode}
         abil.text = gear.text.get(8193)
         abil.no_text = gear.text.get(99)
+        abil.overlay = gear.files.overlay()
+        abil.resolved = gear.files.resolve('SRB/balance.bin')
         abil.setting = gear.settings.get('SR_HD_WIDTH')
         abil.no_setting = gear.settings.get('NOPE')
         -- writes that are not restored explicitly are undone when the mod is switched off
@@ -344,6 +348,8 @@ ok(abil.restored == 5, 'restore undoes every field this mod wrote: ' .. tostring
 ok(math.abs(abil.after_restore[1] - 0.8) < 1e-9 and abil.after_restore[2] == 0 and abil.after_restore[3] == 0
    and abil.after_restore[4] == 0 and abil.after_restore[5] == 0, 'the values are the original ones again')
 ok(abil.text == 'Ability name' and abil.no_text == nil, 'gear.text.get')
+ok(abil.overlay and abil.overlay.files == 2 and abil.overlay.saves == 'C:/mods/ab/save', 'gear.files.overlay')
+ok(abil.resolved == 'mapped:SRB/balance.bin', 'gear.files.resolve')
 ok(abil.setting == '2560' and abil.no_setting == nil, 'gear.settings.get')
 
 -- Frames: session start, pipes, timers, tasks.

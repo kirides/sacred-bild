@@ -4,6 +4,7 @@
 #include "instance.h"
 #include "log.h"
 #include "pickup.h"
+#include "overlay.h"
 #include "pipe.h"
 #include "tables.h"
 #include "ui.h"
@@ -393,6 +394,33 @@ namespace
             }
         }
         lua_pushnil(L);
+        return 1;
+    }
+
+    // native.overlay_info(mod id) -> file rule count, saves folder ("" if not redirected) | nil
+    int nativeOverlayInfo(lua_State* L)
+    {
+        size_t n = 0;
+        const char* id = luaL_checklstring(L, 1, &n);
+        size_t files = 0;
+        std::string saves;
+        if (!Overlay::info(std::string(id, n), files, saves))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, static_cast<lua_Number>(files));
+        lua_pushlstring(L, saves.data(), saves.size());
+        return 2;
+    }
+
+    // native.overlay_resolve(path) -> the path the game's open of `path` ends up at
+    int nativeOverlayResolve(lua_State* L)
+    {
+        size_t n = 0;
+        const char* path = luaL_checklstring(L, 1, &n);
+        const std::string out = Overlay::resolve(std::string(path, n));
+        lua_pushlstring(L, out.data(), out.size());
         return 1;
     }
 
@@ -1412,6 +1440,8 @@ namespace
             {"table_write", nativeTableWrite},
             {"text_get", nativeTextGet},
             {"setting", nativeSetting},
+            {"overlay_info", nativeOverlayInfo},
+            {"overlay_resolve", nativeOverlayResolve},
             {"hero", nativeHero},
             {"world_changes", nativeWorldChanges},
             {"object", nativeObject},
