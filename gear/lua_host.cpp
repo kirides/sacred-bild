@@ -2,6 +2,7 @@
 #include "automation.h"
 #include "gear.h"
 #include "log.h"
+#include "pickup.h"
 #include "pipe.h"
 #include "tables.h"
 #include "ui.h"
@@ -742,6 +743,107 @@ namespace
         return 1;
     }
 
+    // native.item(id) -> {id, type, kind, flags, type_flags, on_ground, rarity, set, classes, gold, x, y, layer} | nil
+    int nativeItem(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        World::Item it;
+        if (!id || !World::item(id, it))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 13);
+        auto num = [L](const char* k, lua_Number v) { lua_pushnumber(L, v); lua_setfield(L, -2, k); };
+        auto flag = [L](const char* k, bool v) { lua_pushboolean(L, v); lua_setfield(L, -2, k); };
+        num("id", it.id);
+        num("type", it.type);
+        num("kind", it.kind);
+        num("flags", it.flags);
+        num("type_flags", it.typeFlags);
+        flag("on_ground", it.onGround);
+        num("rarity", it.rarity);
+        flag("set", it.setItem);
+        num("classes", it.classMask);
+        flag("gold", it.gold);
+        num("x", it.position.x);
+        num("y", it.position.y);
+        num("layer", it.position.layer);
+        return 1;
+    }
+
+    // native.items_near(x, y, layer, radius, limit) -> {id, ...}
+    int nativeItemsNear(lua_State* L)
+    {
+        World::Position at;
+        const bool ok = checkPosition(L, 1, at);
+        const lua_Number radius = luaL_checknumber(L, 4);
+        const lua_Number limit = luaL_optnumber(L, 5, 64);
+        std::vector<uint32_t> ids;
+        if (ok && radius > 0 && radius < 1e6 && limit >= 1)
+        {
+            ids = World::itemsNear(at, radius, static_cast<size_t>(limit < 4096 ? limit : 4096));
+        }
+        lua_createtable(L, static_cast<int>(ids.size()), 0);
+        for (size_t i = 0; i < ids.size(); ++i)
+        {
+            lua_pushnumber(L, ids[i]);
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.hero_class(id) -> class (1..9) | nil, and its bit in an item's class mask
+    int nativeHeroClass(lua_State* L)
+    {
+        const uint32_t cls = World::heroClass(checkId(L, 1));
+        if (!cls)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, cls);
+        lua_pushnumber(L, World::classBit(cls));
+        return 2;
+    }
+
+    // native.pickup_rules({blocked ids}, {dimmed ids}, dim_alpha)
+    std::vector<uint32_t> idList(lua_State* L, int arg)
+    {
+        std::vector<uint32_t> out;
+        const size_t n = lua_objlen(L, arg);
+        for (size_t i = 1; i <= n && i <= 65536; ++i)
+        {
+            lua_rawgeti(L, arg, static_cast<int>(i));
+            const lua_Number v = lua_tonumber(L, -1);
+            lua_pop(L, 1);
+            if (v >= 1 && v < 2147483648.0)
+            {
+                out.push_back(static_cast<uint32_t>(v));
+            }
+        }
+        return out;
+    }
+
+    int nativePickupRules(lua_State* L)
+    {
+        luaL_checktype(L, 1, LUA_TTABLE);
+        luaL_checktype(L, 2, LUA_TTABLE);
+        const lua_Number alpha = luaL_optnumber(L, 3, 255);
+        {
+            std::vector<uint32_t> blocked = idList(L, 1), dimmed = idList(L, 2);
+            Pickup::setRules(std::move(blocked), std::move(dimmed),
+                             static_cast<uint8_t>(alpha >= 0 && alpha <= 255 ? alpha : 255));
+        }
+        return 0;
+    }
+
+    int nativePickupRefused(lua_State* L)
+    {
+        lua_pushnumber(L, Pickup::refused());
+        return 1;
+    }
+
     // Automation (only registered when it is on, see start()).
     int nativeAutoMods(lua_State* L)
     {
@@ -1025,6 +1127,11 @@ namespace
             {"ui_text_size", nativeUiTextSize},
             {"ui_windows", nativeUiWindows},
             {"ui_state", nativeUiState},
+            {"item", nativeItem},
+            {"items_near", nativeItemsNear},
+            {"hero_class", nativeHeroClass},
+            {"pickup_rules", nativePickupRules},
+            {"pickup_refused", nativePickupRefused},
             {nullptr, nullptr},
         };
         lua_newtable(L);

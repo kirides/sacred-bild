@@ -555,6 +555,119 @@ function world.creatures_near(x, y, radius, opts)
     return out
 end
 
+-- Hero classes: the hero's type (1..9) and the bit an item's class mask has for it.
+local CLASSES = {
+    {id = 1, name = 'seraphim', bit = 0x1}, {id = 2, name = 'gladiator', bit = 0x2},
+    {id = 3, name = 'battlemage', bit = 0x4}, {id = 4, name = 'darkelf', bit = 0x8},
+    {id = 5, name = 'woodelf', bit = 0x10}, {id = 6, name = 'vampiress', bit = 0x20},
+    {id = 8, name = 'dwarf', bit = 0x400000}, {id = 9, name = 'daemon', bit = 0x800000},
+}
+local CLASS_BY_ID, CLASS_BY_NAME = {}, {}
+for _, c in ipairs(CLASSES) do CLASS_BY_ID[c.id] = c; CLASS_BY_NAME[c.name] = c end
+local ALL_CLASSES = 0xC0003F
+world.CLASSES = CLASSES
+
+-- The hero's class: name ('darkelf' ...) and id, nil for other creatures.
+function creature_mt:class()
+    local id = native.hero_class(self.id)
+    local c = id and CLASS_BY_ID[id]
+    if c then return c.name, c.id end
+end
+
+-- Items. The kind (the type record's +0x2E) -> category; quality from the rarity (as the label colours).
+local ITEM_CATEGORY = {
+    [5] = 'weapon', [0x21] = 'weapon', [0xD] = 'shield', [8] = 'jewelry', [0x14] = 'jewelry', [9] = 'potion',
+    [0x1C] = 'rune', [0x10] = 'scroll', [7] = 'special', [0xF] = 'special', [0x1D] = 'special', [0x1E] = 'special',
+    [0x1F] = 'special', [6] = 'armor', [0x11] = 'armor', [0x12] = 'armor', [0x13] = 'armor', [0x15] = 'armor',
+    [0x16] = 'armor', [0x17] = 'armor', [0x18] = 'armor', [0x19] = 'armor',
+}
+local QUALITIES = {'normal', 'magic', 'rare', 'set', 'unique'}   -- ascending
+local QUALITY_RANK = {}
+for i, q in ipairs(QUALITIES) do QUALITY_RANK[q] = i end
+world.QUALITIES = QUALITIES
+
+local function quality_of(rarity, set)
+    if set then return 'set' end
+    if rarity >= 15 then return 'unique' end
+    if rarity >= 12 then return 'rare' end
+    if rarity >= 5 then return 'magic' end
+    return 'normal'
+end
+
+-- Potions by type id (their type names are only model files: BOTTLE01.GRN, potion_large.grn ...): the three
+-- sizes of health (0x13C0..), mana (0x13C3..) and stamina (0x13C6..) potions, and the coloured potions in three
+-- sizes of five colours each (black, blue, green, red, yellow).
+local POTION_COLORS = {'black', 'blue', 'green', 'red', 'yellow'}
+local function potion_kind(type_id)
+    if type_id >= 0x13C0 and type_id <= 0x13C2 then return 'health' end
+    if type_id >= 0x13C3 and type_id <= 0x13C5 then return 'mana' end
+    if type_id >= 0x13C6 and type_id <= 0x13C8 then return 'stamina' end
+    for _, first in ipairs({0x1411, 0x1416, 0x1430}) do
+        if type_id >= first and type_id < first + 5 then return 'colored', POTION_COLORS[type_id - first + 1] end
+    end
+    return 'other'
+end
+
+-- world.item(id) -> {id, type, type_name, kind, category, rarity, quality, quality_rank, set, classes (names; empty:
+-- every class), class_mask, gold, quest, potion ('health', 'mana', 'stamina', 'colored', 'other') and potion_color,
+-- on_ground, x, y, layer} | nil
+function world.item(id)
+    local it = type(id) == 'number' and native.item(id)
+    if not it then return nil end
+    it.type_name = data.object_types:name(it.type)
+    it.category = it.gold and 'gold' or ITEM_CATEGORY[it.kind] or 'other'
+    it.quality = quality_of(it.rarity, it.set)
+    it.quality_rank = QUALITY_RANK[it.quality]
+    it.class_mask = it.classes
+    local classes = {}
+    if it.class_mask ~= 0 and bit.band(it.class_mask, ALL_CLASSES) ~= ALL_CLASSES then
+        for _, c in ipairs(CLASSES) do
+            if bit.band(it.class_mask, c.bit) ~= 0 then classes[#classes + 1] = c.name end
+        end
+    end
+    it.classes = classes
+    it.quest = bit.band(it.type_flags, 0x1000000) ~= 0
+    if it.category == 'potion' then it.potion, it.potion_color = potion_kind(it.type) end
+    return it
+end
+
+-- Whether an item (world.item's table) can be used by class `name` ('darkelf' ...).
+function world.usable_by(item, name)
+    if #item.classes == 0 then return true end
+    for _, c in ipairs(item.classes) do if c == name then return true end end
+    return false
+end
+
+-- Items lying in the world within `radius` of (x, y) on opts.layer (default 0), nearest first: world.item tables.
+function world.items_near(x, y, radius, opts)
+    assert(type(x) == 'number' and type(y) == 'number' and type(radius) == 'number', 'x, y, radius must be numbers')
+    opts = opts or {}
+    local out = {}
+    for _, id in ipairs(native.items_near(x, y, opts.layer or 0, radius, opts.limit or 64)) do
+        local it = world.item(id)
+        if it then out[#out + 1] = it end
+    end
+    return out
+end
+
+-- Pickup rules per mod (gear.world.pickup_rules): merged after each tick and handed to the native side.
+local pickup_rules = {}     -- mod -> {block = {id = true}, dim = {id = true}, dim_alpha}
+local pickup_dirty = false
+
+local function publish_pickup_rules()
+    if not pickup_dirty then return end
+    pickup_dirty = false
+    local blocked, dimmed, alpha = {}, {}, 255
+    for mod, r in pairs(pickup_rules) do
+        if not mod.disabled then
+            for id in pairs(r.block) do blocked[#blocked + 1] = id end
+            for id in pairs(r.dim) do dimmed[#dimmed + 1] = id end
+            alpha = math.min(alpha, r.dim_alpha)
+        end
+    end
+    native.pickup_rules(blocked, dimmed, alpha)
+end
+
 -- A random point between `min` and `max` world units from (x, y).
 function world.around(x, y, min, max)
     assert(type(x) == 'number' and type(y) == 'number', 'x and y must be numbers')
@@ -1048,7 +1161,21 @@ local function make_env(mod)
     local w = {}
     for k, v in pairs(world) do w[k] = v end
     w.spawn = function(kind, x, y, opts) return spawn(mod, kind, x, y, opts) end
-    gear.world = w
+    -- pickup_rules({block = {ids}, dim = {ids}, dim_alpha = 0..255}): this mod's items the local hero does not pick
+    -- up and items whose ground labels are dimmed; replaces the mod's previous rules (nil: none).
+    w.pickup_rules = function(rules)
+        if rules == nil then
+            pickup_rules[mod] = nil
+        else
+            assert(type(rules) == 'table', 'rules must be a table')
+            local r = {block = {}, dim = {}, dim_alpha = math.max(0, math.min(255, math.floor(rules.dim_alpha or 96)))}
+            for _, id in ipairs(rules.block or {}) do r.block[id] = true end
+            for _, id in ipairs(rules.dim or {}) do r.dim[id] = true end
+            pickup_rules[mod] = r
+        end
+        pickup_dirty = true
+    end
+    w.pickup_refused = function() return native.pickup_refused() end    gear.world = w
     gear.ui = make_ui(mod)
     -- gear.on(event, fn) -> handle; gear.off(handle). Events: "load" (all mods loaded), "frame" (dt in seconds,
     -- every in-game frame on the engine thread), "session.start" (hero), "session.stop", and the custom events
@@ -1269,6 +1396,7 @@ function kernel.tick(dt)
     kernel.dispatch('frame', dt)
     kernel.dispatch('draw', gear_ui_state())
     native.ui_commit()
+    publish_pickup_rules()
 end
 
 -- Automation only: a tick in the menus (every 50 ms while no in-game frame runs), on the automation thread.
@@ -1281,6 +1409,7 @@ function kernel.idle()
     kernel.dispatch('idle')
     kernel.dispatch('draw', gear_ui_state())
     native.ui_commit()
+    publish_pickup_rules()
 end
 
 -- The mod whose code was running when the host had to stop it (time budget), for the log.

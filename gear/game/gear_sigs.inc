@@ -21,4 +21,8 @@ static const Sig::Entry kGearSigs[] = {
     {"g_pTextureManager", "74 1C 85 C0 75 02 8B C5 8B 0D ?? ?? ?? ?? 6A 00", 10, Sig::Take::Abs32, &Gear::Addr::g_pTextureManager}, // 013E7838, 013E57B8
     {"cTextureManager_get", "55 8B 6C 24 08 56 81 FD 00 00 01 00", 0, Sig::Take::Match, &Gear::Addr::cTextureManager_get}, // 0065ED90, 0065F010
     {"uiImageTextures", "8B 04 95 ?? ?? ?? ?? 89 86 4C 02 00 00 B8 00 01 00 00", 3, Sig::Take::Abs32, &Gear::Addr::uiImageTextures}, // 009ECED8, 009EAEE0
+    {"cItemBase_typeDescriptor", "8B 55 00 6A 01 8B CD FF 52 28 53 68 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::cItemBase_typeDescriptor}, // 0094EBC0, 0094CBC0
+    {"cCreature_pickupItem", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 58 53 8B 5C 24 6C", 0, Sig::Take::Match, &Gear::Addr::cCreature_pickupItem}, // 00558080, 00557EC0
+    {"cCreature_collectFilter", "53 8B 5C 24 08 55 56 85 DB 57 8B E9", 0, Sig::Take::Match, &Gear::Addr::cCreature_collectFilter}, // 004EC330, 004EC170
+    {"cItem_labelColor", "53 55 8B 6C 24 0C 56 57 8B F9 85 ED", 0, Sig::Take::Match, &Gear::Addr::cItem_labelColor}, // 005C13C0, 005C1330
 };

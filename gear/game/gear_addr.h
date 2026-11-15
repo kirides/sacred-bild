@@ -62,4 +62,15 @@ namespace Gear::Addr
     inline Sacred::Thiscall<uint8_t*(void* manager, uint32_t handle, int flags)> cTextureManager_get{};
     // ENG 009ECED8: +0x28 of the first UI image record (0x54 bytes from 009ECEB0; the last is named "INVALID_MAX").
     inline Sacred::Global<uint32_t> uiImageTextures{};
+
+    // Items and pickup (gear/world.cpp, gear/pickup.cpp). ENG 0094EBC0: cItemBase's RTTI type descriptor.
+    inline Sacred::Global<uint8_t> cItemBase_typeDescriptor{};
+    // ENG 00558080 ("pickupItem"): moves world item `id` to the creature (gold to its purse); 1 if it did. The click
+    // pickup (0053CEB0), the collect behaviour (004ECF69, 004ED095) and the host's message 0x20C call it, none looks
+    // at the result. Returning 0 before it runs leaves everything as it was.
+    inline Sacred::Thiscall<uint32_t(void* creature, uint32_t id)> cCreature_pickupItem{};
+    // ENG 004EC330: whether the collect behaviour (004EC560) takes `item` (settings.cfg PICKUPAUTO).
+    inline Sacred::Thiscall<uint8_t(void* creature, void* item)> cCreature_collectFilter{};
+    // ENG 005C13C0: the item's label colour (ARGB) from its data (`record`, nullptr: the item's own at +0x118).
+    inline Sacred::Thiscall<uint32_t(void* item, void* record)> cItem_labelColor{};
 }

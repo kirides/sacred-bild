@@ -140,6 +140,21 @@ A creature object `c` (`c.id`) reads the game each time; after the object is gon
 changes: `c:set_hp(hp)` (1..max: mods do not kill through it), `c:set_gold(n)`, `c:add_gold(n)` (heroes),
 `c:teleport(x, y, layer)`.
 
+#### Items and pickup
+
+| | |
+|---|---|
+| `gear.world.item(id)` | An item object (weapon, armour, ring, amulet, potion, rune ...) as a table, or nil: `id`, `type`, `type_name`, `kind` (the type record's kind), `category` (`'weapon'`, `'armor'`, `'shield'`, `'jewelry'`, `'potion'`, `'rune'`, `'scroll'`, `'special'`, `'gold'`, `'other'`), `rarity` (0..15) and `quality` (`'normal'` 0-4, `'magic'` 5-11, `'rare'` 12-14, `'unique'` 15, or `'set'` for set items; the game's label colours white, blue, yellow, gold, green) with `quality_rank` (1..5 in `gear.world.QUALITIES` order), `set`, `classes` (the hero classes that can use it, empty: every class) and `class_mask`, `gold`, `quest`, `potion` (`'health'`, `'mana'`, `'stamina'`, `'colored'`, `'other'`) and `potion_color` (`'black'`, `'blue'`, `'green'`, `'red'`, `'yellow'`), `on_ground`, `x`, `y`, `layer`. |
+| `gear.world.items_near(x, y, radius, {layer, limit})` | The items lying in the world there, nearest first (default limit 64). |
+| `gear.world.usable_by(item, class)` | Whether `class` (`'darkelf'` ...) can use the item. |
+| `hero:class()` | The hero's class: `'seraphim'`, `'gladiator'`, `'battlemage'`, `'darkelf'`, `'woodelf'`, `'vampiress'`, `'dwarf'`, `'daemon'` (and its id); nil for other creatures. `gear.world.CLASSES` lists them `{id, name, bit}`. |
+| `gear.world.pickup_rules({block = {ids}, dim = {ids}, dim_alpha})` | This mod's pickup rules, replacing its previous ones (`nil`: none): the local hero does not pick up the `block` items (a click on them does nothing, the automatic collecting passes them by), and the ground labels of the `dim` items are drawn with their alpha scaled to `dim_alpha` (0..255, default 96). The rules of all mods are merged after each tick. |
+| `gear.world.pickup_refused()` | Pickups refused so far. |
+
+Pickup rules hold in single player and for the host's own hero; a network client's pickups go through the host
+(its own message) and are not filtered. Item ids are only valid while the item exists: a mod that filters loot looks
+at the items around the hero every fraction of a second and hands over the current list (`gear/examples/lootfilter`).
+
 #### UI drawing
 
 `gear.ui` draws on top of the game: translucent rectangles, text in the game's own fonts and the game's own UI
@@ -214,6 +229,7 @@ faults returns nil and a message instead of crashing the game.
 | `twitch_integration` | The Twitch connector's pipe, mapped by `custom.lua` to actions, offered one at a time inside a game as `twitch.command`. |
 | `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
 | `uidemo` | `gear.ui`: a translucent hero panel, UI images in the three fit modes, a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test with screenshots. |
+| `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices from `config.lua`; filtered items' labels are dimmed; an overlay shows the rules. Self test with `-gear-auto`. |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 
 ## Automation
@@ -259,7 +275,8 @@ Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest`,
 ## Compatibility
 
 - No mods: Sacred Gear installs its hooks (the engine's per-frame zoom update; for mod drawing the UI manager's popup
-  pass and two calls inside its render, see Engine notes), calls the game's code unchanged through them and does
+  pass and two calls inside its render; for pickup rules the item pickup, the collect filter and the item label
+  colour; see Engine notes), calls the game's code unchanged through them and does
   nothing else. Savegames, multiplayer and the game's behavior are the vanilla ones. Automation adds import hooks on
   `sacred.exe`'s input and window functions (see Automation) and a message hook on the game window, only when it
   is on.
@@ -293,6 +310,7 @@ search) from the `sacred_core` library (`src/fmt.*`, `log.*`, `patch.*`, `sig.*`
 | `gear/world.*` | Objects through the game's object manager: hero, creatures, spawn, teleport, health, gold |
 | `gear/pipe.*` | Named pipe clients, each on a thread of its own |
 | `gear/automation.*` | Automation: options, input, UI state, savegame loading, screenshots |
+| `gear/pickup.*` | Pickup rules: the hooks on the game's pickup, the collect filter and the item label colour |
 | `gear/ui.*` | Mod drawing: the draw commands, the hooks in the UI pass, Direct3D 7 quads with the game's states saved and restored, the game's fonts and UI images, window and UI state queries |
 | `gear/tests/kernel_test.lua` | Tests of the kernel with the native side mocked: `luajit gear/tests/kernel_test.lua` |
 | `gear/lua_host.*` | The LuaJIT state on the engine thread, native functions for the kernel, time budget |
@@ -327,3 +345,5 @@ What Sacred Gear relies on, English GOG addresses:
 | Fonts | `*0x00CDCA70`: a vector of `cFont*` by id. Vtable +0x18 `draw(device, cRect*, const wchar_t*, ARGB, flags)` (cRect: i32 x, y, i16 w, h; flags 1 centered and 4 right-aligned in the rect's width, 0x20 curved, 0x200 measure only), +0x28 `lineHeight(ch)`, +0x2C `textWidth(text)` (cFontTTF2 only). Backslash codes in the text: `\c` color, `\g` an inline UI image, `\r` reset, `\w`. |
 | UI images | 0x54-byte records from 0x009ECEB0 (ids = indices, 1..1885; 1886 is "INVALID_MAX"): +0x08 the sheet's TGA name, +0x28 texture handle (`cTextureManager_get` 0x0065ED90 on `*0x013E7838`, +0x14 the surface), +0x2C..+0x38 u0, v0, u1, v1 (pixels until 0x761580 normalizes them), +0x4C / +0x50 width / height. |
 | SacredBild (optional) | `ddraw.dll` exports `SacredBild_UiPushFrame(window, confine)`, `SacredBild_UiPopFrame()` and `SacredBild_UiScreenBounds(float[4])`; Gear draws a command with `window` in that window's UI frame and the others in the unconfined canvas. Without them (no SacredBild) the layout is drawn as the game draws it. |
+| Items | An item is a `cItemBase` (RTTI type descriptor 0x0094EBC0). Its +0x118 holds a copy of its item record's data; the dword +0x11C: class mask (bits 0-5 Seraphim, Gladiator, Battle Mage, Dark Elf, Wood Elf, Vampiress; 0x400000 Dwarf; 0x800000 Daemon; 0 or 0xC0003F every class) and rarity (bits 16-19). Item records: `*(typeManager + 0x563004) + index * 0x102` (index: the type record's +0x18; count at +0x563000), +0x23 nonzero: set item. Object flags +0x14: 0x02 not in the world (inventory, being picked up), 0x10 freed. Type record +0x00 bit 24: quest item. Gold: types 0x140C-0x140F. Potions: 0x13C0-0x13C8 health / mana / stamina bottles (three sizes each); 0x1411, 0x1416, 0x1430: large, medium, small coloured potions (black, blue, green, red, yellow); which colour does what is not checked. The hero's class is its type (1..9, 7 unused). |
+| Pickup | `cCreature::pickupItem` 0x00558080 (thiscall (creature, item id) -> 1 / 0, ret 4) is the only code that moves a world item to a creature: the click pickup (0x0053CEB0), the collect behaviour (0x004ECF69, 0x004ED095) and the host's message 0x20C call it and ignore the result. Gear returns 0 there for a blocked item and the local hero. The collect behaviour's filter 0x004EC330 (thiscall (creature, cObject*) -> bool; settings.cfg PICKUPAUTO) returns false for them. A network client sends message 0x141 instead (0x0053A170). Item label colour: 0x005C13C0 (thiscall (item, record or 0) -> ARGB): set green 0xFF15FF25; rarity 0-4 0xFFEFEFEF, 5-11 0xFFA0A0FF, 12-14 0xFFF0E040, 15 0xFFC19A33; class-restricted items take their class's colour unless UNIQUE_COLOR is on. |

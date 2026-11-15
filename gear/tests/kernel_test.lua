@@ -19,6 +19,7 @@ local objects = {}
 local pipe_events = {}
 local sent = {}
 local ui_recording, ui_published = {}, {}
+local pickup_published
 
 local native = {
     version = 'test',
@@ -86,7 +87,16 @@ local native = {
     ui_font_count = function() return 8 end,
     ui_text_size = function(text) return #text * 7, 14 end,
     ui_windows = function() return {{name = 'UI_WND_INVENTORY', slot = 1, x = 0, y = 388, width = 640, height = 256, visible = true, drawn = true}} end,
-    ui_state = function() return {available = true, mode = 'game', screen_left = 0, screen_top = 0, screen_right = 1024, screen_bottom = 768} end,    -- automation
+    ui_state = function() return {available = true, mode = 'game', screen_left = 0, screen_top = 0, screen_right = 1024, screen_bottom = 768} end,
+    item = function(id)
+        if id == 50 then return {id = 50, type = 2, kind = 5, flags = 0, type_flags = 0, on_ground = true, rarity = 13, set = false, classes = 0x8, gold = false, x = 1, y = 2, layer = 0} end
+        if id == 51 then return {id = 51, type = 0x13C1, kind = 9, flags = 0, type_flags = 0x1000000, on_ground = true, rarity = 0, set = false, classes = 0xC0003F, gold = false, x = 1, y = 2, layer = 0} end
+    end,
+    items_near = function() return {50, 51} end,
+    hero_class = function(id) if id == 1 then return 4, 0x8 end end,
+    pickup_rules = function(b, d, a) pickup_published = {block = b, dim = d, alpha = a} end,
+    pickup_refused = function() return 0 end,
+    -- automation
     auto_mods = function() return {} end,
     auto_state = function() return {menus = true, in_game = false, dialog = false, cinematic = false, width = 800, height = 600, mouse_x = 0, mouse_y = 0} end,
     auto_ui = function() return {} end,
@@ -144,7 +154,20 @@ files.a = {
             record.no_window = gear.ui.image(1, 0, 0, 32, 32, {window = 'UI_WND_NOPE'})
             record.bad_layer = not pcall(gear.ui.rect, 0, 0, 1, 1, 0, {layer = 'nope'})
         end)
-        record.images = #gear.ui.images('spell01')    ]],
+        record.images = #gear.ui.images('spell01')
+        gear.on('frame', function()
+            local h = gear.world.hero()
+            if not h then return end
+            record.class = h:class()
+            local items = gear.world.items_near(0, 0, 500)
+            record.items = items
+            local block = {}
+            for _, it in ipairs(items) do
+                if not gear.world.usable_by(it, 'gladiator') then block[#block + 1] = it.id end
+            end
+            gear.world.pickup_rules({block = block, dim = block, dim_alpha = 80})
+        end)
+    ]],
 }
 files.b = {
     ['mod.lua'] = "return {id = 'b', requires = {'a'}}",
@@ -221,7 +244,15 @@ ok(ui_published[2][1] == 'text' and ui_published[2][2] == 2 and ui_published[2][
    ui_published[2][9] == 0xFFFF0000 and ui_published[2][10] == 1 and ui_published[2][11] == 1, 'text: layer, plain text, color table, align')
 ok(ui_published[3][1] == 'image' and ui_published[3][3] == 1 and ui_published[3][10] == 1, 'image in a window, contain')
 ok(rec.no_window == false and rec.bad_layer, 'unknown window draws nothing, bad layer errors')
-ok(rec.images == 1, 'images by sheet')clock = 0.6
+ok(rec.images == 1, 'images by sheet')
+ok(rec.class == 'darkelf', 'hero class (' .. tostring(rec.class) .. ')')
+local it1, it2 = rec.items and rec.items[1], rec.items and rec.items[2]
+ok(it1 and it1.category == 'weapon' and it1.quality == 'rare' and it1.classes[1] == 'darkelf' and #it1.classes == 1,
+   'item: category, quality, classes')
+ok(it2 and it2.category == 'potion' and it2.potion == 'health' and #it2.classes == 0 and it2.quest, 'potion, every class, quest')
+ok(pickup_published and #pickup_published.block == 1 and pickup_published.block[1] == 50 and pickup_published.alpha == 80,
+   'pickup rules published')
+clock = 0.6
 kernel.tick(0.016)
 ok(rec.every == 1, 'every fires')
 clock = 1.1

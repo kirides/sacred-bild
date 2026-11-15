@@ -60,4 +60,31 @@ namespace World
     // Sets a creature's health (clamped to 1..max: a mod does not kill through this) or a hero's gold.
     bool setHealth(uint32_t id, int32_t health, const char*& error);
     bool setGold(uint32_t id, uint32_t gold, const char*& error);
+    // Items (objects of class cItemBase: weapons, armour, rings and amulets, potions, runes ...).
+    struct Item
+    {
+        uint32_t id = 0;
+        uint32_t type = 0;
+        uint8_t kind = 0;           // the type record's +0x2E (docs/Gear.md, "Items")
+        uint32_t flags = 0;         // the object's +0x14
+        uint32_t typeFlags = 0;     // the type record's +0
+        bool onGround = false;      // lying in the world (not in an inventory, not being picked up)
+        uint8_t rarity = 0;         // 0..15: 0-4 normal, 5-11 magic, 12-14 rare, 15 unique (the label colours)
+        bool setItem = false;       // part of a set (green label)
+        uint32_t classMask = 0;     // the classes that can use it (World::classBit); 0 or all: any
+        bool gold = false;
+        Position position;
+    };
+
+    // The item with `id`; false if there is none or it is not an item.
+    bool item(uint32_t id, Item& out);
+
+    // Ids of the items lying in the world within `radius` of (x, y) on `layer`, nearest first.
+    std::vector<uint32_t> itemsNear(const Position& at, double radius, size_t limit);
+
+    // The hero class of a hero (its type: 1 Seraphim, 2 Gladiator, 3 Battle Mage, 4 Dark Elf, 5 Wood Elf,
+    // 6 Vampiress, 8 Dwarf, 9 Daemon), 0 if `id` is no hero; and the bit an item's class mask has for it.
+    uint32_t heroClass(uint32_t id);
+    uint32_t classBit(uint32_t heroClass);
+    constexpr uint32_t kAllClasses = 0xC0003F;
 }

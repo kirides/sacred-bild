@@ -166,6 +166,35 @@ namespace
         return true;
     }
 
+    // Items. The type records (*g_pTypeManager + type * 0x80): +0x00 flags (bit 24: quest item, 0x00428680), +0x18
+    // the item record's index, +0x2E the kind. Item records: *(typeManager + 0x563004) + index * 0x102, count at
+    // +0x563000 (00434030); +0x23 nonzero: a set item. An item object (cItemBase) keeps a copy of its record's second
+    // half at +0x118; its dword +0x11C holds the class mask (bits 0-5, 22, 23) and the rarity (bits 16-19), as the
+    // label colour (005C13C0) reads them. Gold: types 0x140C-0x140F (0043AF50).
+    constexpr uintptr_t kItemData = 0x11C;
+    constexpr uintptr_t kTypeRecordSize = 0x80, kTypeKind = 0x2E, kTypeItemIndex = 0x18;
+    constexpr uintptr_t kItemCount = 0x563000, kItemRecords = 0x563004, kItemRecordSize = 0x102, kItemSet = 0x23;
+    constexpr uint32_t kFlagOwned = 0x02;   // not lying in the world (in an inventory, being picked up)
+
+    bool callIsItem(uintptr_t object)
+    {
+        __try
+        {
+            return Addr::cItemBase_typeDescriptor &&
+                   Addr::rtDynamicCast(reinterpret_cast<void*>(object), 0, Addr::cObject_typeDescriptor.get(),
+                                       Addr::cItemBase_typeDescriptor.get(), 0) != nullptr;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    uintptr_t typeManager()
+    {
+        void* tm = nullptr;
+        return Addr::g_pTypeManager && safeCopy(&tm, Addr::g_pTypeManager.get(), sizeof(tm)) ? reinterpret_cast<uintptr_t>(tm) : 0;
+    }
     // A spot in the world: inside the 128 x 128 sectors of 64 tiles each that the map indexes (00635C40).
     bool validSpot(const World::Position& at)
     {
@@ -373,4 +402,91 @@ bool World::setGold(uint32_t id, uint32_t gold, const char*& error)
         return false;
     }
     return true;
+}
+
+bool World::item(uint32_t id, Item& out)
+{
+    void* m = available() ? manager() : nullptr;
+    const uintptr_t o = live(m, id);
+    const uintptr_t tm = typeManager();
+    if (!o || !tm || !callIsItem(o))
+    {
+        return false;
+    }
+    Item r{};
+    r.id = id;
+    uint32_t data = 0;
+    if (!readAt(o, kType, r.type) || !readAt(o, kFlags, r.flags) || !readPos(o, r.position) ||
+        !readAt(o, kItemData, data) || r.type == 0 || r.type >= kTypeCount)
+    {
+        return false;
+    }
+    const uintptr_t type = tm + r.type * kTypeRecordSize;
+    uint16_t index = 0;
+    if (!readAt(type, 0, r.typeFlags) || !readAt(type, kTypeKind, r.kind) || !readAt(type, kTypeItemIndex, index))
+    {
+        return false;
+    }
+    uint32_t count = 0;
+    uintptr_t records = 0;
+    uint8_t set = 0;
+    if (readAt(tm, kItemCount, count) && readAt(tm, kItemRecords, records) && records && index < count &&
+        readAt(records, index * kItemRecordSize + kItemSet, set))
+    {
+        r.setItem = set != 0;
+    }
+    r.onGround = !(r.flags & (kFlagOwned | kFlagGone));
+    r.rarity = static_cast<uint8_t>((data >> 16) & 0xF);
+    r.classMask = data & kAllClasses;
+    r.gold = r.type >= 0x140C && r.type <= 0x140F;
+    out = r;
+    return true;
+}
+
+std::vector<uint32_t> World::itemsNear(const Position& at, double radius, size_t limit)
+{
+    std::vector<std::pair<double, uint32_t>> found;
+    void* m = available() ? manager() : nullptr;
+    const uint32_t n = slots(m);
+    const double r2 = radius * radius;
+    for (uint32_t id = kHeroIds + 1; id < n; ++id)
+    {
+        const uintptr_t o = live(m, id);
+        Position p;
+        uint32_t flags = 0;
+        if (!o || !readAt(o, kFlags, flags) || (flags & kFlagOwned) || !readPos(o, p) || p.layer != at.layer)
+        {
+            continue;
+        }
+        const double dx = static_cast<double>(p.x) - at.x, dy = static_cast<double>(p.y) - at.y;
+        const double d2 = dx * dx + dy * dy;
+        if (d2 <= r2 && callIsItem(o))
+        {
+            found.emplace_back(d2, id);
+        }
+    }
+    std::sort(found.begin(), found.end());
+    std::vector<uint32_t> ids;
+    for (size_t i = 0; i < found.size() && i < limit; ++i)
+    {
+        ids.push_back(found[i].second);
+    }
+    return ids;
+}
+
+uint32_t World::heroClass(uint32_t id)
+{
+    void* m = available() ? manager() : nullptr;
+    const uintptr_t o = id >= 1 && id <= kHeroIds ? live(m, id) : 0;
+    uint32_t type = 0;
+    return o && callIsCreature(o) && readAt(o, kType, type) && type >= 1 && type <= 9 ? type : 0;
+}
+
+uint32_t World::classBit(uint32_t heroClass)
+{
+    if (heroClass >= 1 && heroClass <= 6)
+    {
+        return 1u << (heroClass - 1);
+    }
+    return heroClass == 8 ? 0x400000u : heroClass == 9 ? 0x800000u : 0;
 }

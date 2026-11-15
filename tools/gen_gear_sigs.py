@@ -46,6 +46,15 @@ GEAR = [
     # The UI images: 0x54-byte records from 0x9ECEB0 (this is their +0x28, the texture handle, as the loader
     # 0x75CC70 walks them).
     ('uiImageTextures', 0x009ECED8, 'data'),
+    # Items and pickup (gear/world.cpp, gear/pickup.cpp). cItemBase's type descriptor for __RTDynamicCast;
+    # cCreature::pickupItem (thiscall (creature, item id) -> 1 picked / 0 not, ret 4: the only code that moves a world
+    # item to a creature; its callers ignore the result); the collect behaviour's filter (thiscall (creature,
+    # cObject* item) -> bool, ret 4: which items it walks to and picks up); an item's label colour (thiscall (item,
+    # record or 0) -> ARGB, ret 4).
+    ('cItemBase_typeDescriptor', 0x0094EBC0, 'data'),
+    ('cCreature_pickupItem', 0x00558080, 'func'),
+    ('cCreature_collectFilter', 0x004EC330, 'func'),
+    ('cItem_labelColor', 0x005C13C0, 'func'),
 ]
 
 
