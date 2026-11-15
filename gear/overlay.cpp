@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <fstream>
 #include <mutex>
 #include <sstream>
@@ -373,7 +374,11 @@ bool Overlay::install(const std::wstring& gameDir)
     // The exe's imports, and SacredBild's (ddraw.dll reads the language files itself): the same kernel32 functions.
     auto hook = [](const char* name, void* replacement) {
         void* previous = Patch::iat("KERNEL32.dll", name, replacement);
-        Patch::iat("ddraw.dll", "KERNEL32.dll", name, replacement);
+        // SacredBild reads the language files with these two
+        if (std::strcmp(name, "CreateFileA") == 0 || std::strcmp(name, "GetFileAttributesA") == 0)
+        {
+            Patch::iat("ddraw.dll", "KERNEL32.dll", name, replacement);
+        }
         return previous;
     };
     g_createFile = reinterpret_cast<CreateFileAFn>(hook("CreateFileA", reinterpret_cast<void*>(&hookCreateFileA)));
