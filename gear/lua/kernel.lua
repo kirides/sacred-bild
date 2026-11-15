@@ -1634,7 +1634,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'level.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'level.', 'combat.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -1870,6 +1870,13 @@ local function make_auto()
         assert(type(name) == 'string' and type(text) == 'string', 'name and text must be strings')
         return native.auto_write(name, text)
     end
+    -- Starts the engine's own level function on a worker thread (it answers through the level.factor hook when a mod handles
+    -- it); false if one is running or the function was not found. `engine_level_factor_result` gives the integer once done.
+    function auto.engine_level_factor_start(level)
+        assert(type(level) == 'number', 'level must be a number')
+        return native.engine_level_factor_start(level)
+    end
+    function auto.engine_level_factor_result() return native.engine_level_factor_result() end
     function auto.quit(code)
         native.auto_release()
         native.auto_quit(code or 0)
@@ -1958,8 +1965,8 @@ local function make_env(mod)
         -- Counters of the engine hooks that ask the mods for a value (gear/sitehook.cpp).
         hooks = {
             stats = function(name)
-                assert(name == 'level.factor', "the hook must be 'level.factor'")
-                local calls, answered, busy = native.site_hooks()
+                assert(name == 'level.factor' or name == 'combat.constant', "the hook must be 'level.factor' or 'combat.constant'")
+                local calls, answered, busy = native.site_hooks(name)
                 return {calls = calls, answered = answered, busy = busy}
             end,
         },
@@ -2026,6 +2033,7 @@ local function make_env(mod)
         local h = {mod = mod, fn = fn, event = event}
         list[#list + 1] = h
         if event == 'level.factor' then native.level_factor_active(true) end
+        if event == 'combat.constant' then native.combat_constant_active(true) end
         return h
     end
     function gear.off(h)
@@ -2035,6 +2043,7 @@ local function make_env(mod)
             if list[i] == h then table.remove(list, i) end
         end
         if h.event == 'level.factor' and #list == 0 then native.level_factor_active(false) end
+        if h.event == 'combat.constant' and #list == 0 then native.combat_constant_active(false) end
     end
     env.gear = gear
     return env
@@ -2232,6 +2241,22 @@ function kernel.level_factor(level, site)
             if ok and type(result) == 'number' then
                 return math.floor(result + 0.5)
             end
+        end
+    end
+    return nil
+end
+
+-- `combat.constant`: the engine loads one of its pooled float constants inside its own code (a hit handler's effect scale, the
+-- difficulty factors ...). The first handler that returns a number answers; handlers get (name, vanilla value, index among that
+-- name's places). A handler that returns nil leaves the vanilla value.
+function kernel.combat_constant(name, vanilla, index)
+    local list = handlers['combat.constant']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'combat.constant', h.fn, name, vanilla, index)
+            if ok and type(result) == 'number' then return result end
         end
     end
     return nil

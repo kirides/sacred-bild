@@ -37,4 +37,9 @@ static const Sig::Entry kGearSigs[] = {
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
     {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270
+    {"siteFn5038F0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC B0 08 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn5038F0}, // 005038F0, 00503730
+    {"siteFn506770", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 90 0F 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn506770}, // 00506770, 005065B0
+    {"siteFn50AC00", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 98 04 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn50AC00}, // 0050AC00, 0050AA40
+    {"siteFn56B130", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 08 02 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn56B130}, // 0056B130, 0056AFF0
+    {"siteFn559BF0", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC D8 07 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn559BF0}, // 00559BF0, 00559A30
 };

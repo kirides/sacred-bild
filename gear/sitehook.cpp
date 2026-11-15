@@ -20,6 +20,16 @@ namespace
         uint8_t length;                 // the block's length
         uint8_t prefix;                 // the block's leading instruction that loads the level (4 or 0)
     };
+    struct ConstSiteSpec
+    {
+        const char* name;
+        int index;
+        const uintptr_t* function;
+        uint32_t offset;
+        uint8_t multiply;           // 1: fmul (D8 0D), 0: fld (D9 05)
+        uint32_t constant;          // the pooled constant's address the instruction loads
+    };
+
 #include "game/gear_sites.inc"
 
     constexpr int kNoAnswer = static_cast<int>(0x80000000);   // the handler's "no mod answered"
@@ -81,6 +91,76 @@ namespace
         {
             code.push_back(static_cast<uint8_t>(v >> (8 * i)));
         }
+    }
+
+    // --- constant sites: one `fmul dword [abs]` / `fld dword [abs]` that loads a pooled float -------------------------------
+
+    // (the generated table is included once, with the level sites')
+
+    std::atomic<bool> g_constantActive{false};
+    std::atomic<unsigned> g_constCalls{0}, g_constAnswered{0}, g_constBusy{0};
+
+    // Called by the stubs: the float the instruction should load, in st0 (cdecl float result). Any thread the game calls from.
+    extern "C" float __cdecl constantHandler(int site)
+    {
+        const ConstSiteSpec& spec = kConstSites[site];
+        const float vanilla = *reinterpret_cast<const float*>(static_cast<uintptr_t>(spec.constant));
+        g_constCalls.fetch_add(1, std::memory_order_relaxed);
+        if (!g_constantActive.load(std::memory_order_relaxed))
+        {
+            return vanilla;
+        }
+        double result = 0;
+        switch (LuaHost::combatConstant(spec.name, vanilla, spec.index, result))
+        {
+        case LuaHost::Answer::Value:
+            g_constAnswered.fetch_add(1, std::memory_order_relaxed);
+            return static_cast<float>(result);
+        case LuaHost::Answer::Busy:
+            g_constBusy.fetch_add(1, std::memory_order_relaxed);
+            return vanilla;
+        default:
+            return vanilla;
+        }
+    }
+
+    // The stub of a constant site: keeps the registers and flags the engine code may still use, gets the float from the
+    // handler (it arrives in st0) and does what the displaced instruction did with it.
+    uintptr_t buildConstantStub(uintptr_t site, const ConstSiteSpec& spec, int index)
+    {
+        std::vector<uint8_t> code;
+        emit(code, {0x9C});                                         // pushfd
+        emit(code, {0x50});                                         // push eax
+        emit(code, {0x51});                                         // push ecx
+        emit(code, {0x52});                                         // push edx
+        emit(code, {0x68});                                         // push site index
+        emit32(code, static_cast<uint32_t>(index));
+        emit(code, {0xB8});                                         // mov eax, handler
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&constantHandler)));
+        emit(code, {0xFF, 0xD0});                                   // call eax: the float is in st0
+        emit(code, {0x8D, 0x64, 0x24, 0x04});                       // lea esp, [esp + 4]
+        emit(code, {0x5A});                                         // pop edx
+        emit(code, {0x59});                                         // pop ecx
+        emit(code, {0x58});                                         // pop eax
+        emit(code, {0x9D});                                         // popfd
+        if (spec.multiply)
+        {
+            emit(code, {0xDE, 0xC9});                               // fmulp st(1), st(0)
+        }
+        emit(code, {0xE9});                                         // jmp after the instruction
+        const size_t fixup = code.size();
+        emit32(code, 0);
+        void* memory = VirtualAlloc(nullptr, code.size() + 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!memory)
+        {
+            return 0;
+        }
+        const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
+        const uint32_t v = static_cast<uint32_t>((site + 6) - (base + fixup + 4));
+        std::memcpy(&code[fixup], &v, 4);
+        std::memcpy(memory, code.data(), code.size());
+        FlushInstructionCache(GetCurrentProcess(), memory, code.size());
+        return base;
     }
 
     // The stub for one site (see the header). Returns its address, 0 if no memory could be had.
@@ -193,13 +273,56 @@ size_t SiteHook::install()
         }
         ++installed;
     }
-    LOG("Site hooks: {} of {} installed", installed, std::size(kSites));
-    return installed;
+    size_t constants = 0;
+    for (int i = 0; i < static_cast<int>(std::size(kConstSites)); ++i)
+    {
+        const ConstSiteSpec& spec = kConstSites[i];
+        if (!*spec.function)
+        {
+            LOG("Site hook {}[{}]: its function was not found: not installed", spec.name, spec.index);
+            continue;
+        }
+        const uintptr_t address = *spec.function + spec.offset;
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(address);
+        uint32_t operand;
+        std::memcpy(&operand, b + 2, 4);
+        const bool ok = b[0] == (spec.multiply ? 0xD8 : 0xD9) && b[1] == (spec.multiply ? 0x0D : 0x05) && operand == spec.constant;
+        if (!ok)
+        {
+            LOG("Site hook {}[{}] at {:08x}: the code is not the expected load: not installed", spec.name, spec.index, address);
+            continue;
+        }
+        const uintptr_t stub = buildConstantStub(address, spec, i);
+        if (!stub)
+        {
+            continue;
+        }
+        uint8_t bytes[6] = {0xE9, 0, 0, 0, 0, 0x90};
+        const uint32_t rel = static_cast<uint32_t>(stub - (address + 5));
+        std::memcpy(bytes + 1, &rel, 4);
+        if (Patch::write(address, bytes, 6))
+        {
+            ++constants;
+        }
+    }
+    LOG("Site hooks: {} of {} level sites, {} of {} constant sites installed", installed, std::size(kSites), constants,
+        std::size(kConstSites));
+    return installed + constants;
 }
 
 void SiteHook::setLevelFactorActive(bool active)
 {
     g_levelActive.store(active);
+}
+
+void SiteHook::setConstantActive(bool active)
+{
+    g_constantActive.store(active);
+}
+
+SiteHook::Stats SiteHook::constantStats()
+{
+    return {g_constCalls.load(), g_constAnswered.load(), g_constBusy.load()};
 }
 
 SiteHook::Stats SiteHook::levelFactorStats()

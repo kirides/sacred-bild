@@ -92,6 +92,10 @@ def main():
     for hook, name, fn, site, length, prefix in gear_sites.SITES:
         lines.append(f'    {{"{hook}", &Gear::Addr::{name}, 0x{site - fn:X}, {length}, {prefix}}}, // {site:08X} in {fn:08X}')
     lines.append('};')
+    lines.append('static const ConstSiteSpec kConstSites[] = {')
+    for name, index, fnname, fn, site, op, addr, vanilla in gear_sites.CONSTANT_SITES:
+        lines.append(f'    {{"{name}", {index}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {1 if op == "fmul" else 0}, 0x{addr:08X}}}, // {site:08X} in {fn:08X}')
+    lines.append('};')
     with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sites.inc'), 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     if failed:

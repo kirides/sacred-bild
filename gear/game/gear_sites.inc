@@ -7,3 +7,21 @@ static const SiteSpec kSites[] = {
     {"level.factor", &Gear::Addr::levelFn5893B0, 0x51EA, 35, 0}, // 0058E59A in 005893B0
     {"level.factor", &Gear::Addr::levelFn5893B0, 0x5261, 35, 0}, // 0058E611 in 005893B0
 };
+static const ConstSiteSpec kConstSites[] = {
+    {"hit.effect_scale", 0, &Gear::Addr::siteFn5038F0, 0x1B49, 1, 0x00890DA0}, // 00505439 in 005038F0
+    {"hit.effect_scale", 1, &Gear::Addr::siteFn506770, 0xE1F, 1, 0x00890DA0}, // 0050758F in 00506770
+    {"hit.effect_scale", 2, &Gear::Addr::siteFn50AC00, 0xECC, 1, 0x00890DA0}, // 0050BACC in 0050AC00
+    {"hit.effect_scale", 3, &Gear::Addr::levelFn50E6C0, 0xC5D, 1, 0x00890DA0}, // 0050F31D in 0050E6C0
+    {"hit.chance_scale", 0, &Gear::Addr::siteFn5038F0, 0x1D34, 1, 0x00890CB0}, // 00505624 in 005038F0
+    {"hit.chance_scale", 1, &Gear::Addr::siteFn506770, 0x1023, 1, 0x00890CB0}, // 00507793 in 00506770
+    {"hit.chance_scale", 2, &Gear::Addr::siteFn50AC00, 0x10B4, 1, 0x00890CB0}, // 0050BCB4 in 0050AC00
+    {"hit.chance_scale", 3, &Gear::Addr::levelFn50E6C0, 0xE56, 1, 0x00890CB0}, // 0050F516 in 0050E6C0
+    {"difficulty.factor", 0, &Gear::Addr::siteFn56B130, 0x1FAB, 0, 0x0089066C}, // 0056D0DB in 0056B130
+    {"difficulty.factor", 1, &Gear::Addr::siteFn56B130, 0x1FC2, 0, 0x00890DF0}, // 0056D0F2 in 0056B130
+    {"difficulty.factor", 2, &Gear::Addr::siteFn56B130, 0x1FCC, 0, 0x00890DEC}, // 0056D0FC in 0056B130
+    {"difficulty.factor", 3, &Gear::Addr::siteFn56B130, 0x1FD6, 0, 0x00890750}, // 0056D106 in 0056B130
+    {"difficulty.factor", 4, &Gear::Addr::siteFn56B130, 0x1FE0, 0, 0x00890DE8}, // 0056D110 in 0056B130
+    {"scale.559BF0", 0, &Gear::Addr::siteFn559BF0, 0x318, 1, 0x00890CB0}, // 00559F08 in 00559BF0
+    {"scale.559BF0", 1, &Gear::Addr::siteFn559BF0, 0x559, 1, 0x00890CB0}, // 0055A149 in 00559BF0
+    {"scale.559BF0", 2, &Gear::Addr::siteFn559BF0, 0x658, 1, 0x00890CB0}, // 0055A248 in 00559BF0
+};

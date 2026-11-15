@@ -8,6 +8,7 @@
 #include "pipe.h"
 #include "sitehook.h"
 #include "tables.h"
+#include "game/gear_addr.h"
 #include "ui.h"
 #include "world.h"
 
@@ -20,6 +21,7 @@
 #include <cctype>
 #include <cstring>
 #include <mutex>
+#include <thread>
 #include <string>
 #include <vector>
 
@@ -442,14 +444,59 @@ namespace
         return 0;
     }
 
-    // native.site_hooks() -> calls, answered, busy: the counters of the level.factor site hooks
+    // native.combat_constant_active(bool): whether some mod handles `combat.constant`
+    int nativeCombatConstantActive(lua_State* L)
+    {
+        SiteHook::setConstantActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.site_hooks(name) -> calls, answered, busy: the counters of the site hooks of `level.factor` (default) or `combat.constant`
     int nativeSiteHooks(lua_State* L)
     {
-        const SiteHook::Stats s = SiteHook::levelFactorStats();
+        const char* which = luaL_optstring(L, 1, "level.factor");
+        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : SiteHook::levelFactorStats();
         lua_pushnumber(L, s.calls);
         lua_pushnumber(L, s.answered);
         lua_pushnumber(L, s.busy);
         return 3;
+    }
+
+    // native.engine_level_factor_start(level) -> started: tests of the level.factor hook (automation): a worker thread calls the
+    // engine's own level function (ENG 0051CC30, whose first block is a site hook) a moment later, when Lua is not running, so the
+    // answer path of the hook can be exercised; native.engine_level_factor_result() -> value | nil.
+    std::atomic<int> g_levelCallState{0};       // 0 idle, 1 running, 2 done
+    std::atomic<int> g_levelCallResult{0};
+
+    int nativeEngineLevelFactorStart(lua_State* L)
+    {
+        const int level = static_cast<int>(luaL_checknumber(L, 1));
+        const uintptr_t fn = Gear::Addr::levelFn51CC30;
+        int idle = 0;
+        if (!fn || !g_levelCallState.compare_exchange_strong(idle, 1))
+        {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+        std::thread([level, fn] {
+            Sleep(150);
+            g_levelCallResult = reinterpret_cast<int(__stdcall*)(int)>(fn)(level);
+            g_levelCallState = 2;
+        }).detach();
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    int nativeEngineLevelFactorResult(lua_State* L)
+    {
+        if (g_levelCallState.load() != 2)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, g_levelCallResult.load());
+        g_levelCallState = 0;
+        return 1;
     }
 
     // An id argument: a whole number in 1..2^31-1, or 0 if it is none.
@@ -1477,6 +1524,9 @@ namespace
             {"overlay_served", nativeOverlayServed},
             {"level_factor_active", nativeLevelFactorActive},
             {"site_hooks", nativeSiteHooks},
+            {"combat_constant_active", nativeCombatConstantActive},
+            {"engine_level_factor_start", nativeEngineLevelFactorStart},
+            {"engine_level_factor_result", nativeEngineLevelFactorResult},
             {"hero", nativeHero},
             {"world_changes", nativeWorldChanges},
             {"object", nativeObject},
@@ -1646,6 +1696,48 @@ LuaHost::Answer LuaHost::levelFactor(double level, int site, int& out)
             out = static_cast<int>(v);
             answer = Answer::Value;
         }
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::combatConstant(const char* name, double vanilla, int index, double& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "combat_constant");
+    lua_remove(L, -2);
+    lua_pushstring(L, name);
+    lua_pushnumber(L, vanilla);
+    lua_pushnumber(L, index);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 3, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.combat_constant failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        out = lua_tonumber(L, -1);
+        answer = Answer::Value;
     }
     lua_pop(L, 1);
     return answer;

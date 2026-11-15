@@ -24,4 +24,9 @@ namespace SiteHook
         unsigned calls = 0, answered = 0, busy = 0;
     };
     Stats levelFactorStats();
+
+    // combat.constant: the engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); the mods
+    // may answer with another number (event `combat.constant`: name, vanilla value, index).
+    void setConstantActive(bool active);
+    Stats constantStats();
 }

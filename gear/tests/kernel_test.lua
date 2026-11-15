@@ -19,7 +19,7 @@ local objects = {}
 local pipe_events = {}
 local sent = {}
 local ability_store = {}
-local level_active
+local level_active, constant_active
 local ui_recording, ui_published = {}, {}
 local pickup_published
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
@@ -73,6 +73,7 @@ local native = {
     overlay_info = function(id) if id == 'ab' then return 2, 'C:/mods/ab/save' end end,
     overlay_resolve = function(path) return 'mapped:' .. path end,
     level_factor_active = function(v) level_active = v end,
+    combat_constant_active = function(v) constant_active = v end,
     site_hooks = function() return 7, 5, 1 end,
     overlay_served = function(path) return path == 'bin/balance.bin' and 3 or 0 end,
     text_get = function(id) if id == 8193 then return 'Ability name' end end,
@@ -254,6 +255,12 @@ files.ab = {
             return 1 + (level > 12 and 1 or 0) + (level > 24 and 1 or 0) + (level > 36 and 1 or 0)
         end)
         abil.stats = gear.hooks.stats('level.factor')
+        gear.on('combat.constant', function(name, vanilla, index)
+            if name == 'hit.effect_scale' then return 1.0 end
+            if name == 'difficulty.factor' then return vanilla * 0.5 end
+            return nil
+        end)
+        abil.emit_constant = not pcall(gear.emit, 'combat.constant', 1)
         abil.emit_level = not pcall(gear.emit, 'level.factor', 1)
         -- writes that are not restored explicitly are undone when the mod is switched off
         A[1001].effect_base = 4
@@ -367,7 +374,10 @@ ok(level_active == true, 'registering level.factor tells the host')
 ok(kernel.level_factor(5, 0) == 1 and kernel.level_factor(13, 1) == 2 and kernel.level_factor(30, 2) == 3
    and kernel.level_factor(37, 3) == 4, 'level.factor answers with the handler')
 ok(kernel.level_factor(50, 4) == nil, 'level.factor: no number, no answer')
-ok(abil.emit_level, 'mods cannot emit level.factor')
+ok(abil.emit_level and abil.emit_constant, 'mods cannot emit level.factor or combat.constant')
+ok(constant_active == true, 'registering combat.constant tells the host')
+ok(kernel.combat_constant('hit.effect_scale', 0.2, 2) == 1.0 and kernel.combat_constant('difficulty.factor', 2.0, 3) == 1.0
+   and kernel.combat_constant('hit.chance_scale', 0.01, 0) == nil, 'combat.constant answers with the handler')
 ok(abil.stats.calls == 7 and abil.stats.answered == 5 and abil.stats.busy == 1, 'gear.hooks.stats')
 ok(abil.setting == '2560' and abil.no_setting == nil, 'gear.settings.get')
 

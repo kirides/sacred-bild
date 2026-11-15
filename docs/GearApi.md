@@ -105,6 +105,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'idle'` | Automation only: every 50 ms in the menus. |
 | `'session.start'` | A game with a hero runs. |
 | `'session.stop'` | That hero is gone. |
+| `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
 
 ### GearHandler
@@ -167,6 +168,7 @@ Forms:
 - `fun(event: 'idle', fn: fun()): GearHandler`
 - `fun(event: 'session.start', fn: fun(hero: Creature)): GearHandler`
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
+- `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
 - `fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler`
 
 - `event`: `string`
@@ -624,7 +626,7 @@ The engine hooks that ask mods for a value inside the game's own code (see the e
 
 The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
 
-- `name`: `'level.factor'`
+- `name`: `'level.factor'|'combat.constant'`
 - returns `GearHookStats`
 
 ### GearHookStats
@@ -1802,6 +1804,19 @@ Saves a screenshot (`.bmp`) of the game's back buffer into `GearAutomation\<inst
 
 - `name`: `string`
 - returns `ok` `boolean?`
+
+#### `gear.auto.engine_level_factor_start(level) -> boolean`
+
+Starts the engine's own level function on a worker thread (the first of the `level.factor` hooks): the call goes through the hook, so a mod that handles `level.factor` answers it. For tests.
+
+- `level`: `integer`
+- returns `started` `boolean` - false if a call is running or the function was not found.
+
+#### `gear.auto.engine_level_factor_result() -> integer?`
+
+The integer the call started by `engine_level_factor_start` returned; nil until it is done.
+
+- returns `integer?`
 
 #### `gear.auto.write(name, text) -> boolean?`
 

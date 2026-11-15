@@ -107,6 +107,16 @@ function GearAuto.load_save(slot) end
 ---@return boolean? ok
 function GearAuto.screenshot(name) end
 
+--- Starts the engine's own level function on a worker thread (the first of the `level.factor` hooks): the call goes through the
+--- hook, so a mod that handles `level.factor` answers it. For tests.
+---@param level integer
+---@return boolean started false if a call is running or the function was not found.
+function GearAuto.engine_level_factor_start(level) end
+
+--- The integer the call started by `engine_level_factor_start` returned; nil until it is done.
+---@return integer?
+function GearAuto.engine_level_factor_result() end
+
 --- Writes a file into `GearAutomation\<instance>`.
 ---@param name string
 ---@param text string

@@ -90,6 +90,12 @@ namespace Gear::Addr
     inline uintptr_t levelFn51CC30{};
     inline uintptr_t levelFn50E6C0{};
     inline uintptr_t levelFn5893B0{};
+    // The functions with constant sites (the hit handlers 005038F0, 00506770, 0050AC00 and 0050E6C0 (levelFn50E6C0), 00559BF0, 0056B130).
+    inline uintptr_t siteFn5038F0{};
+    inline uintptr_t siteFn506770{};
+    inline uintptr_t siteFn50AC00{};
+    inline uintptr_t siteFn559BF0{};
+    inline uintptr_t siteFn56B130{};
 
     inline Sacred::Global<uint8_t> abilityTable1First{};
     inline Sacred::Global<uint8_t> abilityTable1End{};
