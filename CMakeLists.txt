@@ -168,6 +168,8 @@ if(SACREDGEAR)
     gear/hooks.cpp
     gear/lua_host.cpp
     gear/tables.cpp
+    gear/overlay.cpp
+    gear/sitehook.cpp
     gear/world.cpp
     gear/pipe.cpp
     gear/automation.cpp

@@ -109,6 +109,9 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'session.stop'` | That hero is gone. |
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'game.save_failed'` | It could not be written. |
+| `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
+| `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
+| `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
 
 ### GearHandler
 
@@ -147,12 +150,15 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `version` | `string` | Sacred Gear's version. |
 | `mod` | `GearModInfo` | This mod's identity. |
 | `config` | `table<string, any>` | This mod's settings: the manifest's `config`, overridden by `config.lua`. |
-| `data` | `GearData` | The engine's data tables (read only). |
+| `data` | `GearData` | The engine's data tables (read only, except the abilities). |
+| `text` | `GearText` | The game's texts by id. |
+| `files` | `GearFiles` | The mod's file overlay. |
+| `hooks` | `GearHooks` | The engine hooks that ask mods for values. |
 | `json` | `GearJson` | JSON encoding and decoding. |
 | `pipe` | `GearPipeModule` | Named pipe clients. |
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
-| `game` | `GearGame` | The game itself: saving. |
+| `game` | `GearGame` | The game itself: difficulty and saving. |
 | `settings` | `GearSettings` | This mod's settings (declared in `mod.lua`, changed by the player in the mod manager). |
 | `keys` | `GearKeys` | This mod's declared key binds. |
 | `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
@@ -175,6 +181,9 @@ Forms:
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
+- `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
+- `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
+- `fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler`
 
 - `event`: `string`
 - `fn`: `fun(...: any)`
@@ -356,12 +365,13 @@ A line in `SacredGear.log`, prefixed with the mod's id. Same as `gear.log`.
 
 Reached as `gear.data`.
 
-The engine's data tables, read only.
+The engine's data tables: read only, except the abilities.
 
 | Field | Type | |
 |---|---|---|
 | `object_types` | `GearObjectTypes` | The type records every object refers to (0x80 bytes; id = index, 1..0x7E5F). |
 | `creature_types` | `GearTable` | `Pak\Creature.pak`'s records (0x56 bytes). |
+| `abilities` | `GearAbilities` | The ability tables of the exe by id (skills, combat arts, spells), which a mod can change. |
 
 ### GearRecord
 
@@ -485,6 +495,165 @@ The types whose name contains `text` (plain text, any case), ordered by id.
 | `id` | `integer` |  |
 | `name` | `string` |  (optional) |
 | `kind` | `integer` |  (optional) |
+
+## Abilities (gear.data.abilities)
+
+### GearAbilities
+
+Reached as `gear.data.abilities`.
+
+The exe's two ability tables as one table by id: T1 (the combat arts: ids from 1000, 0x78-byte records) and T2 (the spells: ids from 1, 0x94-byte records). `abilities[id]` is the record of ability `id` (nil if there is none); its fields read and write by name. A field has a name where code that uses it proves what it is, and is `unk_<offset>` (in hex) otherwise. Writes go to the live tables, are checked for type and range, and are undone with `restore` (and when the mod is switched off).
+
+#### `gear.data.abilities:ids() -> integer[]`
+
+The ids of all abilities, ascending.
+
+- returns `integer[]`
+
+#### `gear.data.abilities:fields(id) -> GearAbilityField[]?`
+
+The fields of the table that ability `id` is in, ordered by offset.
+
+- `id`: `integer`
+- returns `fields` `GearAbilityField[]?` - nil if there is no such ability.
+
+#### `gear.data.abilities:apply(edits) -> integer?, string[]?`
+
+Writes many fields at once: `{[id] = {field = value, ...}}`. Everything is checked first; if any id, field or value is wrong nothing is written and the problems are returned.
+
+- `edits`: `table<integer, table<string, number>>`
+- returns `written` `integer?` - The number of fields written (nil if nothing was).
+- returns `problems` `string[]?` - What was wrong.
+
+#### `gear.data.abilities:restore() -> integer`
+
+Undoes this mod's writes to the ability tables.
+
+- returns `restored` `integer` - The number of fields restored.
+
+### GearAbilityField
+
+| Field | Type | |
+|---|---|---|
+| `name` | `string` |  |
+| `offset` | `integer` | The byte offset in the record. |
+| `kind` | `string` | `'u8'`, `'i16'`, `'f32'` ... |
+
+### GearAbility
+
+Written `ability` in the signatures.
+
+One ability record. Reading a field of a table the ability is not in (or an unknown name) gives nil; writing one is an error, as is writing a value that does not fit the field or the `id`. Both have `id`, `name_text`, `description_text`, `target_mode` and the `unk_` fields; T1 also `effect_base`, `effect_per_level`, `effect2_base` and `effect2_per_level`; T2 also `value0_base` .. `value3_per_level`.
+
+| Field | Type | |
+|---|---|---|
+| `table` | `string` | `'T1'` or `'T2'`. |
+| `index` | `integer` | The record's index in its table. |
+| `kind` | `string` | `'combat_art'` (T1: ids from 1000) or `'spell'` (T2: ids from 1): what the names in the game's texts say they are. |
+| `id` | `integer` | The ability's id. |
+| `name_text` | `integer` | The text id of the name (`gear.text.get`). |
+| `description_text` | `integer` | The text id of the description. |
+| `target_mode` | `integer` | How the ability is aimed (the engine passes it on to the targeting code). |
+| `effect_base` | `number` | T1: the first effect is `effect_base + level * effect_per_level` (level 1..100). |
+| `effect_per_level` | `number` | T1. |
+| `effect2_base` | `number` | T1: the second effect. |
+| `effect2_per_level` | `number` | T1. |
+| `value0_base` | `integer` | T2: the first value is `value0_base + level * value0_per_level`. |
+| `value0_per_level` | `integer` | T2. |
+| `value1_base` | `integer` | T2. |
+| `value1_per_level` | `integer` | T2. |
+| `value2_base` | `integer` | T2. |
+| `value2_per_level` | `integer` | T2. |
+| `value3_base` | `integer` | T2. |
+| `value3_per_level` | `integer` | T2. |
+
+## Game text (gear.text)
+
+### GearText
+
+Reached as `gear.text`.
+
+The game's own texts, by the text ids its data tables hold (not the keys of `global.res`).
+
+#### `gear.text.get(id) -> string?`
+
+The text for `id` (UTF-8), nil if the game has none.
+
+- `id`: `integer`
+- returns `string?`
+
+## Files (gear.files)
+
+### GearFiles
+
+Reached as `gear.files`.
+
+The file overlay: a mod's own data files served where the game opens the original ones, and the mod's own save folder. Declared in `mods/<id>/overlay.txt` (`game\path = dataile` per line, `saves = save`), read when Sacred Gear starts because the game opens its data files before any Lua runs. See [Gear.md](Gear.md).
+
+#### `gear.files.overlay() -> GearOverlayInfo?`
+
+What this mod's overlay does, nil if the mod has no `overlay.txt` (or the run does not use it).
+
+- returns `GearOverlayInfo?`
+
+#### `gear.files.resolve(path) -> string`
+
+The path the game's open of `path` (relative to the game folder) ends up at: the mod's file if an overlay rule applies, else `path` unchanged.
+
+- `path`: `string`
+- returns `string`
+
+#### `gear.files.served(path) -> integer`
+
+How many times the game opened `path` (relative to the game folder) and was served a mod's file by the overlay.
+
+- `path`: `string`
+- returns `integer`
+
+### GearOverlayInfo
+
+| Field | Type | |
+|---|---|---|
+| `files` | `integer` | The number of file rules. |
+| `saves` | `string` | The mod's save folder (absolute) if the game's `Save\` folder is redirected to it. (optional) |
+
+## Engine hooks (gear.hooks)
+
+### GearHooks
+
+Reached as `gear.hooks`.
+
+The engine hooks that ask mods for a value inside the game's own code (see the events `level.factor`).
+
+#### `gear.hooks.stats(name) -> GearHookStats`
+
+The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
+
+- `name`: `'level.factor'|'combat.constant'|'creature.ability'`
+- returns `GearHookStats`
+
+#### `gear.hooks.sites() -> GearHookSite[]`
+
+Every hook site and how often the engine ran it (a site whose function was not found or whose code did not match is listed with address 0).
+
+- returns `GearHookSite[]`
+
+### GearHookSite
+
+| Field | Type | |
+|---|---|---|
+| `hook` | `string` | The hook's name (`level.factor`, or the name of a `combat.constant`). |
+| `index` | `integer` | The place among those of that name. |
+| `address` | `integer` | Where the site is in the game. |
+| `calls` | `integer` | How many times the engine ran the site. |
+
+### GearHookStats
+
+| Field | Type | |
+|---|---|---|
+| `calls` | `integer` |  |
+| `answered` | `integer` |  |
+| `busy` | `integer` |  |
 
 ## JSON (gear.json)
 
@@ -888,6 +1057,12 @@ Reached as `gear.game`.
 
 Saving the game through the engine's own save request, the one the savegame window sends: the file is `Save\GAME<slot>.PAK` (slot 0 is the quicksave; the game lists the savegames sorted by file name). Single player only. A save is a request: the engine writes the file a moment later on its render thread, and the result comes as the events `game.saved` and `game.save_failed`. Slots 1 to 99 show as `GAME01` to `GAME99`; a mod that saves on its own should keep to slots the player does not use (the game's savegame window picks the first free number for manual saves).
 
+#### `gear.game.difficulty() -> integer?`
+
+The difficulty level of the running game: 0 (bronze) to 4 (niobium); nil if the game is not running.
+
+- returns `integer?`
+
 #### `gear.game.can_save() -> boolean, string?`
 
 Whether a save may start now: a living hero in a single player game, the game itself shown (no cinematic, no window drawn alone, no escape menu or message box), no save or load pending.
@@ -996,10 +1171,17 @@ This mod's declared settings (`settings` in `mod.lua`) with the player's values.
 
 #### `gear.settings.get(id) -> boolean|number|string`
 
-The value of a setting.
+The value of a setting. An undeclared UPPER_CASE name is a key of the game's `Settings.cfg` and gives that file's text (see `game`), nil if it has no such key; any other undeclared name is an error.
 
 - `id`: `string`
 - returns `boolean|number|string`
+
+#### `gear.settings.game(key) -> string?`
+
+The value of `key` in the game's `Settings.cfg` (`KEY : value` lines) as text, nil if the file has no such key. Read each time, so it is what the file says now.
+
+- `key`: `string`
+- returns `string?`
 
 #### `gear.settings.set(id, value) -> boolean?, string?`
 
@@ -2060,6 +2242,31 @@ Saves a screenshot (`.bmp`) of the game's back buffer into `GearAutomation\<inst
 
 - `name`: `string`
 - returns `ok` `boolean?`
+
+#### `gear.auto.engine_level_factor_start(level) -> boolean`
+
+Starts the engine's own level function on a worker thread (the first of the `level.factor` hooks): the call goes through the hook, so a mod that handles `level.factor` answers it. For tests.
+
+- `level`: `integer`
+- returns `started` `boolean` - false if a call is running or the function was not found.
+
+#### `gear.auto.engine_level_factor_result() -> integer?`
+
+The integer the call started by `engine_level_factor_start` returned; nil until it is done.
+
+- returns `integer?`
+
+#### `gear.auto.site_hook_selftest_start() -> boolean`
+
+Tests the stubs of the constant site hooks on two functions built in memory (`fmul dword [c]` and `fld dword [c]`, with the sites `selftest.fmul` and `selftest.fld` of the event `combat.constant`); a worker thread calls them when Lua is idle.
+
+- returns `started` `boolean` - false if a test is running.
+
+#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean}?`
+
+The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. nil until it is done.
+
+- returns `{fmul: number, fld: number, registers_kept: boolean}?`
 
 #### `gear.auto.write(name, text) -> boolean?`
 

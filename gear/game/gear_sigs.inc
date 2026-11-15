@@ -42,4 +42,20 @@ static const Sig::Entry kGearSigs[] = {
     {"cItem_dataHash", "8B 44 24 04 6A 00 6A 00 50 E8 ?? ?? ?? ?? 83 C4 0C", 0, Sig::Take::Match, &Gear::Addr::cItem_dataHash}, // 0042BF20, 0042BDF0
     {"cItem_entriesInsert", "81 EC 8C 00 00 00 53 55 56 8B B4 24 A0 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_entriesInsert}, // 005C9230, 005C91A0
     {"cSaveEvent_vtable", "8B F1 8B 46 20 C7 06 ?? ?? ?? ?? 85 C0 74 09 50", 7, Sig::Take::Abs32, &Gear::Addr::cSaveEvent_vtable}, // 00890B38, 0088EB38
+    {"abilityTable1First", "B8 ?? ?? ?? ?? 66 39 10 74 0E 83 C0 78 41 3D ?? ?? ?? ?? 72 F0", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1First}, // 0094FE28, 0094DE28
+    {"abilityTable1End", "3D ?? ?? ?? ?? 72 F0 33 C0 C3 8D 04 49 8D 04 80", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1End}, // 00952A38, 00950A38
+    {"abilityTable2First", "B8 ?? ?? ?? ?? 66 39 10 74 10 05 94 00 00 00 41", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable2First}, // 00952ACC, 00950ACC
+    {"abilityTable2End", "3D ?? ?? ?? ?? 72 EE 33 C0 C3 8D 04 C9 8D 0C 81", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable2End}, // 00955344, 00953344
+    {"textResources_instance", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A1 ?? ?? ?? ?? 64 89 25 00 00 00 00 83 EC 0C", 0, Sig::Take::Match, &Gear::Addr::textResources_instance}, // 006725E0, 006728C0
+    {"textResources_get", "8B 44 24 04 56 83 F8 FF 8B F1 74 4A", 0, Sig::Take::Match, &Gear::Addr::textResources_get}, // 00672C90, 00672F70
+    {"g_difficulty", "8B 4C 24 68 8B 54 24 2C A1 ?? ?? ?? ?? 83 F8 04", 9, Sig::Take::Abs32, &Gear::Addr::g_difficulty}, // 0182EE44, 0182CDC4
+    {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
+    {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
+    {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270
+    {"siteFn5038F0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC B0 08 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn5038F0}, // 005038F0, 00503730
+    {"siteFn506770", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 90 0F 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn506770}, // 00506770, 005065B0
+    {"siteFn50AC00", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 98 04 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn50AC00}, // 0050AC00, 0050AA40
+    {"siteFn56B130", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 08 02 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn56B130}, // 0056B130, 0056AFF0
+    {"siteFn559BF0", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC D8 07 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn559BF0}, // 00559BF0, 00559A30
+    {"abilityAiFn", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC 38 05 00 00", 0, Sig::Take::Match, &Gear::Addr::abilityAiFn}, // 004D4E50, 004D4C90
 };

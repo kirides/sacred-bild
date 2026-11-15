@@ -51,10 +51,17 @@
 ---@class GearSettings
 local GearSettings = {}
 
---- The value of a setting.
+--- The value of a setting. An undeclared UPPER_CASE name is a key of the game's `Settings.cfg` and gives that file's text
+--- (see `game`), nil if it has no such key; any other undeclared name is an error.
 ---@param id string
 ---@return boolean|number|string
 function GearSettings.get(id) end
+
+--- The value of `key` in the game's `Settings.cfg` (`KEY : value` lines) as text, nil if the file has no such key.
+--- Read each time, so it is what the file says now.
+---@param key string
+---@return string?
+function GearSettings.game(key) end
 
 --- Sets a value (kept in `gear_mods.json`); the mod's `settings.changed` handlers run if it changed. Returns true,
 --- or nil and a message if the value does not fit the setting.

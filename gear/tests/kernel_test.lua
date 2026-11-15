@@ -18,6 +18,9 @@ local hero_id = nil
 local objects = {}
 local pipe_events = {}
 local sent = {}
+local ability_store = {}
+local ability_active
+local level_active, constant_active
 local ui_recording, ui_published = {}, {}
 local pickup_published
 save_block, save_calls, save_results = nil, {}, {}
@@ -50,11 +53,37 @@ local native = {
     table_info = function(name)
         if name == 'object_types' then return 4, 0x80 end
         if name == 'creature_types' then return 2, 0x56 end
+        if name == 'ability_t1' then return 2, 0x78 end
+        if name == 'ability_t2' then return 2, 0x94 end
     end,
     table_read = function(name, index, offset, kind)
         if name == 'object_types' and offset == 0x2E then return index == 2 and 3 or 8 end
+        if name == 'ability_t1' or name == 'ability_t2' then
+            if offset == 0 then return ({ability_t1 = {1000, 1001}, ability_t2 = {1, 2}})[name][index + 1] end
+            local v = ability_store[name .. ':' .. index .. ':' .. offset]
+            if v ~= nil then return v end
+            return (name == 'ability_t1' and offset == 0x50) and 0.8 or 0
+        end
         return 0
     end,
+    table_write = function(name, index, offset, kind, value)
+        local limits = {u8 = {0, 255}, i16 = {-32768, 32767}, u16 = {0, 65535}}
+        local l = limits[kind]
+        if l and (value < l[1] or value > l[2]) then return false end
+        ability_store[name .. ':' .. index .. ':' .. offset] = value
+        return true
+    end,
+    overlay_info = function(id) if id == 'ab' then return 2, 'C:/mods/ab/save' end end,
+    overlay_resolve = function(path) return 'mapped:' .. path end,
+    level_factor_active = function(v) level_active = v end,
+    combat_constant_active = function(v) constant_active = v end,
+    creature_ability_active = function(v) ability_active = v end,
+    difficulty = function() return 2 end,
+    site_hooks = function() return 7, 5, 1 end,
+    site_hook_sites = function() return {{hook = 'level.factor', index = 0, address = 5, calls = 2}} end,
+    overlay_served = function(path) return path == 'bin/balance.bin' and 3 or 0 end,
+    text_get = function(id) if id == 8193 then return 'Ability name' end end,
+    setting = function(key) if key == 'SR_HD_WIDTH' then return '2560' end end,
     table_string = function(name, index, offset)
         if name == 'object_types' and offset == 0x37 then
             return ({[1] = 'Sword', [2] = 'Goblin', [3] = ''})[index] or nil
@@ -211,6 +240,62 @@ files.b = {
         has_auto = gear.auto ~= nil
     ]],
 }
+files.ab = {
+    ['mod.lua'] = "return {id = 'ab'}",
+    ['main.lua'] = [[
+        abil = {}
+        local A = gear.data.abilities
+        abil.t1 = A[1001]
+        abil.t2 = A[2]
+        abil.none = A[5555]
+        abil.table1, abil.table2 = abil.t1.table, abil.t2.table
+        abil.before = abil.t1.effect_base
+        abil.name_text = abil.t1.name_text
+        abil.ids = #A:ids()
+        abil.fields = #A:fields(1001)
+        -- a write through the record and through apply
+        abil.t1.effect_base = 1.5
+        abil.after = abil.t1.effect_base
+        abil.n, abil.problems = A:apply({[1001] = {effect_per_level = 0.25, unk_40 = 7}, [2] = {value1_base = 12, target_mode = 3}})
+        abil.applied = {A[1001].effect_per_level, A[1001].unk_40, A[2].value1_base, A[2].target_mode}
+        -- nothing is written when one entry is wrong
+        abil.bad_n, abil.bad_problems = A:apply({[1001] = {effect_base = 9}, [2] = {nope = 1}, [7777] = {x = 1}})
+        abil.unchanged = A[1001].effect_base
+        abil.bad_field = not pcall(function() A[1001].nope = 1 end)
+        abil.bad_type = not pcall(function() A[1001].effect_base = 'x' end)
+        abil.id_locked = not pcall(function() A[1001].id = 3 end)
+        abil.range = not pcall(function() A[2].target_mode = 300 end)
+        abil.set_view = not pcall(function() A[1] = {} end)
+        abil.restored = A:restore()
+        abil.after_restore = {A[1001].effect_base, A[1001].effect_per_level, A[1001].unk_40, A[2].value1_base, A[2].target_mode}
+        abil.text = gear.text.get(8193)
+        abil.no_text = gear.text.get(99)
+        abil.overlay = gear.files.overlay()
+        abil.resolved = gear.files.resolve('SRB/balance.bin')
+        abil.served = {gear.files.served('bin/balance.bin'), gear.files.served('x')}
+        abil.setting = gear.settings.get('SR_HD_WIDTH')
+        abil.no_setting = gear.settings.get('NOPE')
+        -- the level.factor site hook: tiers of 12 levels, and no answer above 40
+        gear.on('creature.ability', function(t, vanilla, index) if t == 7 then return vanilla + 1 end end)
+        gear.on('level.factor', function(level, site)
+            if level > 40 then return nil end
+            return 1 + (level > 12 and 1 or 0) + (level > 24 and 1 or 0) + (level > 36 and 1 or 0)
+        end)
+        abil.stats = gear.hooks.stats('level.factor')
+        abil.sites = gear.hooks.sites()
+        gear.on('combat.constant', function(name, vanilla, index)
+            if name == 'hit.effect_scale' then return 1.0 end
+            if name == 'difficulty.factor' then return vanilla * 0.5 end
+            return nil
+        end)
+        abil.difficulty = gear.game.difficulty()
+        abil.emit_constant = not pcall(gear.emit, 'combat.constant', 1)
+        abil.emit_level = not pcall(gear.emit, 'level.factor', 1)
+        -- writes that are not restored explicitly are undone when the mod is switched off
+        A[1001].effect_base = 4
+        gear.on('frame', function() error('off') end)
+    ]],
+}
 files.w = {
     ['mod.lua'] = "return {id = 'w'}",
     ['main.lua'] = [[
@@ -283,7 +368,7 @@ f:close()
 local chunk = assert(loadstring(source, '=kernel'))
 local kernel = chunk(native)
 
-ok(kernel.load() == 7, 'seven mods load: a, b, w, s, t, m and the manager (c, d and u are not)')
+ok(kernel.load() == 8, 'eight mods load: a, b, w, s, t, m, ab and the manager (c, d and u are not)')
 
 -- Reach mod a's globals through a handler's environment.
 local env_a
@@ -324,6 +409,56 @@ ok(rec.auto, 'automation for a mod that asks for it')
 ok(rec.auto_instance == 'test', 'gear.auto.instance')
 ok(rec.goblin == 2, 'type by name')
 ok(rec.search == 2, 'type search')
+
+
+-- The ability tables, gear.text and gear.settings (mod ab). Its globals are reached through a handler's environment.
+local abil
+do
+    local i = 1
+    while true do
+        local name, value = debug.getupvalue(kernel.dispatch, i)
+        if not name then break end
+        if name == 'handlers' then
+            for _, h in ipairs(value['frame']) do
+                local env = getfenv(h.fn)
+                if env.abil then abil = env.abil end
+            end
+        end
+        i = i + 1
+    end
+end
+ok(abil ~= nil, 'found mod ab globals')
+ok(abil.none == nil, 'an unknown ability id is nil')
+ok(abil.table1 == 'T1' and abil.table2 == 'T2', 'abilities route to their table by id')
+ok(abil.ids == 4, 'ids lists both tables')
+ok(abil.fields > 20, 'fields lists the named and the unk_ fields')
+ok(math.abs(abil.before - 0.8) < 1e-9 and abil.after == 1.5, 'a field reads and writes through the record')
+ok(abil.n == 4 and abil.problems == nil, 'apply writes every field: ' .. tostring(abil.n))
+ok(abil.applied[1] == 0.25 and abil.applied[2] == 7 and abil.applied[3] == 12 and abil.applied[4] == 3, 'apply wrote the values')
+ok(abil.bad_n == nil and #abil.bad_problems == 2, 'apply reports every problem: ' .. tostring(abil.bad_problems and #abil.bad_problems))
+ok(abil.unchanged == 1.5, 'apply writes nothing when an entry is wrong')
+ok(abil.bad_field and abil.bad_type and abil.id_locked and abil.range and abil.set_view, 'bad writes are errors')
+ok(abil.restored == 5, 'restore undoes every field this mod wrote: ' .. tostring(abil.restored))
+ok(math.abs(abil.after_restore[1] - 0.8) < 1e-9 and abil.after_restore[2] == 0 and abil.after_restore[3] == 0
+   and abil.after_restore[4] == 0 and abil.after_restore[5] == 0, 'the values are the original ones again')
+ok(abil.text == 'Ability name' and abil.no_text == nil, 'gear.text.get')
+ok(abil.overlay and abil.overlay.files == 2 and abil.overlay.saves == 'C:/mods/ab/save', 'gear.files.overlay')
+ok(abil.resolved == 'mapped:SRB/balance.bin', 'gear.files.resolve')
+ok(abil.served[1] == 3 and abil.served[2] == 0, 'gear.files.served')
+ok(level_active == true, 'registering level.factor tells the host')
+ok(kernel.level_factor(5, 0) == 1 and kernel.level_factor(13, 1) == 2 and kernel.level_factor(30, 2) == 3
+   and kernel.level_factor(37, 3) == 4, 'level.factor answers with the handler')
+ok(kernel.level_factor(50, 4) == nil, 'level.factor: no number, no answer')
+ok(ability_active == true, 'registering creature.ability tells the host')
+ok(kernel.creature_ability(7, 25, 0, 0) == 26 and kernel.creature_ability(8, 25, 0, 0) == nil, 'creature.ability answers with the handler')
+ok(abil.emit_level and abil.emit_constant, 'mods cannot emit level.factor or combat.constant')
+ok(abil.difficulty == 2, 'gear.game.difficulty')
+ok(constant_active == true, 'registering combat.constant tells the host')
+ok(kernel.combat_constant('hit.effect_scale', 0.2, 2) == 1.0 and kernel.combat_constant('difficulty.factor', 2.0, 3) == 1.0
+   and kernel.combat_constant('hit.chance_scale', 0.01, 0) == nil, 'combat.constant answers with the handler')
+ok(abil.sites[1].hook == 'level.factor' and abil.sites[1].calls == 2, 'gear.hooks.sites')
+ok(abil.stats.calls == 7 and abil.stats.answered == 5 and abil.stats.busy == 1, 'gear.hooks.stats')
+ok(abil.setting == '2560' and abil.no_setting == nil, 'gear.settings.get')
 
 -- Frames: session start, pipes, timers, tasks.
 hero_id = 1
@@ -430,6 +565,9 @@ ok(widgets.panel.x == 400 and widgets.panel.w == 200, 'reset_panel: its own plac
 keys_held[0x25] = true
 ok(widgets.ui.key_down('left') and not widgets.ui.key_down('right'), 'key_down')
 keys_held[0x25] = nil
+-- mod ab raised errors in every frame and was switched off: the write it made last is undone
+ok(math.abs(ability_store['ability_t1:1:80'] - 0.8) < 1e-9, 'switching a mod off undoes its ability writes')
+
 -- gear.game: saving
 do
     local game = rec.game
@@ -735,7 +873,7 @@ do
     key(0x7A)     -- F11
     ok(has_text('Mods') and has_text('Page 1 / 2'), 'F11 opens the screen with page 1 of 2')
     dump('page 1')
-    ok(has_text('Dependent') and has_text('Mod manager') == false and has_text('9 installed'), 'rows of the first page')
+    ok(has_text('Dependent') and has_text('Mod manager') == false and has_text('10 installed'), 'rows of the first page')
     ok(has_prefix('Off: requires missing'), 'a mod whose requirement is missing says so')
     ok(has_prefix('Cannot be loaded') == false, 'invalid mods are on a later page')
     ok(click_text('>') and has_text('Page 2 / 2') and has_text('Mod manager'), 'next page shows the manager itself')
@@ -743,7 +881,7 @@ do
     ok(has_prefix('Cannot be loaded'), 'an invalid manifest is listed with its message')
     ok(click_text('<') and has_text('Page 1 / 2'), 'previous page')
     click_text('>')
-    ok(click_text('Settings', 1), 'click Settings of "Settings mod" (first on page 2)')
+    ok(click_text('Settings', 2), 'click Settings of "Settings mod" (second on page 2)')
     dump('settings')
     ok(has_text('Reset to defaults') and has_text('Flag') and has_text('Numbers'), 'settings page: rows and section header')
     -- the bool checkbox: its text is 'On'
@@ -767,7 +905,7 @@ do
     ok(click_text('Default') and s_env.gear.keys.binding('open') == 'ctrl+k', 'Default restores it')
     -- back to the list, switch the mod off
     ok(click_text('< Back') and has_text('Page 2 / 2'), 'back to the list (same page)')
-    ok(click_text('On', 1), 'switch "Settings mod" off')
+    ok(click_text('On', 2), 'switch "Settings mod" off')
     tick()
     ok(handler_global(k, 'settings.changed', 'srec') == nil and has_text('Off'), 'the mod is unloaded and its switch says Off')
     click_text('<')

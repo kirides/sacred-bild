@@ -127,6 +127,20 @@ the player left to the menu), `'game.saved'` (`slot`, `info`) and `'game.save_fa
 Both are read only and have `:count()`, `:stride()` and `:get(i)` (record `i` from 0, or nil); a record reads fields by
 byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(off, max)`; nil if out of range.
 
+#### Abilities, game text, settings, file overlay
+
+- `gear.data.abilities[id]`: the exe's two ability tables as one table by id (the combat arts, ids from 1000, and the spells, ids from 1).
+  A record's fields read and write by name (`effect_base`, `value0_per_level`, `name_text` ..., `unk_<offset>` where no consumer
+  proves a name); writes go to the live tables, are checked for type and range, and are undone by `abilities:restore()` and when the
+  mod is switched off. `abilities:apply({[id] = {field = value}})` checks everything first and then writes it. `gear.text.get(text_id)`
+  gives the game's text for a name or description id; `gear.settings.get(key)` a value of `Settings.cfg`.
+- The file overlay serves a mod's own data where the game opens the original files. `mods/<id>/overlay.txt` has one rule per line
+  (`#` comments): `binalance.bin = dataalance.bin` (the game's open of that path, relative to the game folder, gets the mod's file
+  if it exists) and `saves = save` (the game's `Save\` folder is the mod's `save\` folder; the vanilla saves are neither read nor
+  written). The rules are read when Sacred Gear starts, because the game opens its data files before any Lua runs, for the mods the
+  run uses (`-gear-mods=a,b`, else all). `gear.files.overlay()`, `gear.files.resolve(path)` and `gear.files.served(path)` show what applies and
+  what the game really opened through it.
+
 #### World
 
 Positions are world units (`gear.world.TILE`, about 53.7, is one tile; the screen shows about 534 x 400 around the

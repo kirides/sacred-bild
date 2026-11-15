@@ -4,10 +4,11 @@
 -- ## Data tables (gear.data)
 
 -- path gear.data
---- The engine's data tables, read only.
+--- The engine's data tables: read only, except the abilities.
 ---@class GearData
 ---@field object_types GearObjectTypes The type records every object refers to (0x80 bytes; id = index, 1..0x7E5F).
 ---@field creature_types GearTable `Pak\Creature.pak`'s records (0x56 bytes).
+---@field abilities GearAbilities The ability tables of the exe by id (skills, combat arts, spells), which a mod can change.
 local GearData = {}
 
 -- path record
@@ -92,6 +93,137 @@ function GearObjectTypes:search(text, limit) end
 ---@field id integer
 ---@field name string?
 ---@field kind integer?
+
+-- ## Abilities (gear.data.abilities)
+
+-- path gear.data.abilities
+--- The exe's two ability tables as one table by id: T1 (the combat arts: ids from 1000, 0x78-byte records) and T2 (the spells: ids
+--- from 1, 0x94-byte records). `abilities[id]` is the record of ability `id` (nil if there is none); its fields read and write by name.
+--- A field has a name where code that uses it proves what it is, and is `unk_<offset>` (in hex) otherwise. Writes go to the
+--- live tables, are checked for type and range, and are undone with `restore` (and when the mod is switched off).
+---@class GearAbilities
+local GearAbilities = {}
+
+--- The ids of all abilities, ascending.
+---@return integer[]
+function GearAbilities:ids() end
+
+--- The fields of the table that ability `id` is in, ordered by offset.
+---@param id integer
+---@return GearAbilityField[]? fields nil if there is no such ability.
+function GearAbilities:fields(id) end
+
+--- Writes many fields at once: `{[id] = {field = value, ...}}`. Everything is checked first; if any id, field or value is
+--- wrong nothing is written and the problems are returned.
+---@param edits table<integer, table<string, number>>
+---@return integer? written The number of fields written (nil if nothing was).
+---@return string[]? problems What was wrong.
+function GearAbilities:apply(edits) end
+
+--- Undoes this mod's writes to the ability tables.
+---@return integer restored The number of fields restored.
+function GearAbilities:restore() end
+
+---@class GearAbilityField
+---@field name string
+---@field offset integer The byte offset in the record.
+---@field kind string `'u8'`, `'i16'`, `'f32'` ...
+
+-- path ability
+--- One ability record. Reading a field of a table the ability is not in (or an unknown name) gives nil; writing one is an
+--- error, as is writing a value that does not fit the field or the `id`. Both have `id`, `name_text`, `description_text`,
+--- `target_mode` and the `unk_` fields; T1 also `effect_base`, `effect_per_level`, `effect2_base` and `effect2_per_level`; T2 also
+--- `value0_base` .. `value3_per_level`.
+---@class GearAbility
+---@field table string `'T1'` or `'T2'`.
+---@field index integer The record's index in its table.
+---@field kind string `'combat_art'` (T1: ids from 1000) or `'spell'` (T2: ids from 1): what the names in the game's texts say they are.
+---@field id integer The ability's id.
+---@field name_text integer The text id of the name (`gear.text.get`).
+---@field description_text integer The text id of the description.
+---@field target_mode integer How the ability is aimed (the engine passes it on to the targeting code).
+---@field effect_base number T1: the first effect is `effect_base + level * effect_per_level` (level 1..100).
+---@field effect_per_level number T1.
+---@field effect2_base number T1: the second effect.
+---@field effect2_per_level number T1.
+---@field value0_base integer T2: the first value is `value0_base + level * value0_per_level`.
+---@field value0_per_level integer T2.
+---@field value1_base integer T2.
+---@field value1_per_level integer T2.
+---@field value2_base integer T2.
+---@field value2_per_level integer T2.
+---@field value3_base integer T2.
+---@field value3_per_level integer T2.
+local GearAbility = {}
+
+-- ## Game text (gear.text)
+
+-- path gear.text
+--- The game's own texts, by the text ids its data tables hold (not the keys of `global.res`).
+---@class GearText
+local GearText = {}
+
+--- The text for `id` (UTF-8), nil if the game has none.
+---@param id integer
+---@return string?
+function GearText.get(id) end
+
+-- ## Files (gear.files)
+
+-- path gear.files
+--- The file overlay: a mod's own data files served where the game opens the original ones, and the mod's own save folder.
+--- Declared in `mods/<id>/overlay.txt` (`game\path = dataile` per line, `saves = save`), read when Sacred Gear starts
+--- because the game opens its data files before any Lua runs. See [Gear.md](Gear.md).
+---@class GearFiles
+local GearFiles = {}
+
+--- What this mod's overlay does, nil if the mod has no `overlay.txt` (or the run does not use it).
+---@return GearOverlayInfo?
+function GearFiles.overlay() end
+
+--- The path the game's open of `path` (relative to the game folder) ends up at: the mod's file if an overlay rule applies,
+--- else `path` unchanged.
+---@param path string
+---@return string
+function GearFiles.resolve(path) end
+
+--- How many times the game opened `path` (relative to the game folder) and was served a mod's file by the overlay.
+---@param path string
+---@return integer
+function GearFiles.served(path) end
+
+---@class GearOverlayInfo
+---@field files integer The number of file rules.
+---@field saves string? The mod's save folder (absolute) if the game's `Save\` folder is redirected to it.
+
+-- ## Engine hooks (gear.hooks)
+
+-- path gear.hooks
+--- The engine hooks that ask mods for a value inside the game's own code (see the events `level.factor`).
+---@class GearHooks
+local GearHooks = {}
+
+--- The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often
+--- Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
+---@param name 'level.factor'|'combat.constant'|'creature.ability'
+---@return GearHookStats
+function GearHooks.stats(name) end
+
+--- Every hook site and how often the engine ran it (a site whose function was not found or whose code did not match is listed
+--- with address 0).
+---@return GearHookSite[]
+function GearHooks.sites() end
+
+---@class GearHookSite
+---@field hook string The hook's name (`level.factor`, or the name of a `combat.constant`).
+---@field index integer The place among those of that name.
+---@field address integer Where the site is in the game.
+---@field calls integer How many times the engine ran the site.
+
+---@class GearHookStats
+---@field calls integer
+---@field answered integer
+---@field busy integer
 
 -- ## JSON (gear.json)
 

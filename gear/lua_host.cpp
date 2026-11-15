@@ -7,19 +7,25 @@
 #include "keyblock.h"
 #include "log.h"
 #include "pickup.h"
+#include "overlay.h"
 #include "pipe.h"
 #include "save.h"
+#include "sitehook.h"
 #include "tables.h"
+#include "game/gear_addr.h"
 #include "ui.h"
 #include "world.h"
 
 #include <windows.h>
+#include <filesystem>
+#include <fstream>
 #include <lua.hpp>
 
 #include <atomic>
 #include <cctype>
 #include <cstring>
 #include <mutex>
+#include <thread>
 #include <string>
 #include <vector>
 
@@ -31,11 +37,13 @@ namespace
 {
     HMODULE g_module = nullptr;
     std::wstring g_modsDir;     // <game>\mods
+    std::wstring g_gameDir;     // the folder of the game's exe
     lua_State* g_lua = nullptr;
     bool g_started = false;
     // Lua runs on whichever thread calls frame(): the engine's in-game loop, which a new game may run on a new
     // thread. Only one at a time, and never re-entered (a game function a mod calls could come back to the hook).
     std::mutex g_running;
+    thread_local bool t_inLua = false;     // this thread is inside a kernel call (a hook it triggers must not enter Lua again)
     std::atomic<ULONGLONG> g_lastFrame{0};
     int g_kernelRef = LUA_NOREF;
 
@@ -311,6 +319,249 @@ namespace
             return 1;
         }
         lua_pushlstring(L, text.data(), text.size());
+        return 1;
+    }
+
+    // native.table_write(name, index, offset, kind, value) -> true | false
+    int nativeTableWrite(lua_State* L)
+    {
+        size_t n = 0;
+        const char* name = luaL_checklstring(L, 1, &n);
+        const lua_Number index = luaL_checknumber(L, 2);
+        const lua_Number offset = luaL_checknumber(L, 3);
+        const char* kindName = luaL_checkstring(L, 4);
+        const lua_Number value = luaL_checknumber(L, 5);
+        static constexpr struct { const char* name; Tables::Kind kind; } kKinds[] = {
+            {"u8", Tables::Kind::U8}, {"i8", Tables::Kind::I8}, {"u16", Tables::Kind::U16}, {"i16", Tables::Kind::I16},
+            {"u32", Tables::Kind::U32}, {"i32", Tables::Kind::I32}, {"f32", Tables::Kind::F32},
+        };
+        const Tables::Kind* kind = nullptr;
+        for (const auto& k : kKinds)
+        {
+            if (std::strcmp(k.name, kindName) == 0)
+            {
+                kind = &k.kind;
+            }
+        }
+        const bool ok = kind && index >= 0 && offset >= 0 && index < 1e9 && offset < 1e9 &&
+            index == static_cast<lua_Number>(static_cast<size_t>(index)) &&
+            offset == static_cast<lua_Number>(static_cast<size_t>(offset)) &&
+            Tables::write(std::string_view(name, n), static_cast<size_t>(index), static_cast<size_t>(offset), *kind, value);
+        lua_pushboolean(L, ok);
+        return 1;
+    }
+
+    // native.text_get(id) -> string | nil: the game's text for a text id
+    int nativeTextGet(lua_State* L)
+    {
+        const lua_Number id = luaL_checknumber(L, 1);
+        std::string text;
+        if (!(id >= 1 && id < 4294967296.0) || id != static_cast<lua_Number>(static_cast<uint32_t>(id)) ||
+            !Tables::text(static_cast<uint32_t>(id), text))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushlstring(L, text.data(), text.size());
+        return 1;
+    }
+
+    // native.setting(key) -> string | nil: a value of the game's Settings.cfg ("KEY : value" lines, read each time)
+    int nativeSetting(lua_State* L)
+    {
+        size_t n = 0;
+        const char* key = luaL_checklstring(L, 1, &n);
+        std::ifstream file(std::filesystem::path(g_gameDir) / L"Settings.cfg");
+        std::string line;
+        while (std::getline(file, line))
+        {
+            const size_t colon = line.find(':');
+            if (colon == std::string::npos)
+            {
+                continue;
+            }
+            size_t end = colon;
+            while (end > 0 && (line[end - 1] == ' ' || line[end - 1] == '	'))
+            {
+                --end;
+            }
+            if (end == n && line.compare(0, end, key, n) == 0)
+            {
+                size_t begin = colon + 1;
+                while (begin < line.size() && (line[begin] == ' ' || line[begin] == '	'))
+                {
+                    ++begin;
+                }
+                size_t last = line.size();
+                while (last > begin && (line[last - 1] == '' || line[last - 1] == ' ' || line[last - 1] == '	'))
+                {
+                    --last;
+                }
+                lua_pushlstring(L, line.data() + begin, last - begin);
+                return 1;
+            }
+        }
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // native.overlay_info(mod id) -> file rule count, saves folder ("" if not redirected) | nil
+    int nativeOverlayInfo(lua_State* L)
+    {
+        size_t n = 0;
+        const char* id = luaL_checklstring(L, 1, &n);
+        size_t files = 0;
+        std::string saves;
+        if (!Overlay::info(std::string(id, n), files, saves))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, static_cast<lua_Number>(files));
+        lua_pushlstring(L, saves.data(), saves.size());
+        return 2;
+    }
+
+    // native.overlay_resolve(path) -> the path the game's open of `path` ends up at
+    int nativeOverlayResolve(lua_State* L)
+    {
+        size_t n = 0;
+        const char* path = luaL_checklstring(L, 1, &n);
+        const std::string out = Overlay::resolve(std::string(path, n));
+        lua_pushlstring(L, out.data(), out.size());
+        return 1;
+    }
+
+    // native.overlay_served(path) -> how many opens of `path` the overlay served from a mod
+    int nativeOverlayServed(lua_State* L)
+    {
+        size_t n = 0;
+        const char* path = luaL_checklstring(L, 1, &n);
+        lua_pushnumber(L, static_cast<lua_Number>(Overlay::served(std::string(path, n))));
+        return 1;
+    }
+
+    // native.level_factor_active(bool): whether some mod handles `level.factor`
+    int nativeLevelFactorActive(lua_State* L)
+    {
+        SiteHook::setLevelFactorActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.site_hook_sites() -> {{hook, index, address, calls}, ...}: every site hook and how often the engine ran it
+    int nativeSiteHookSites(lua_State* L)
+    {
+        const auto sites = SiteHook::sites();
+        lua_createtable(L, static_cast<int>(sites.size()), 0);
+        int n = 0;
+        for (const auto& s : sites)
+        {
+            lua_createtable(L, 0, 4);
+            lua_pushstring(L, s.hook);
+            lua_setfield(L, -2, "hook");
+            lua_pushnumber(L, s.index);
+            lua_setfield(L, -2, "index");
+            lua_pushnumber(L, static_cast<lua_Number>(s.address));
+            lua_setfield(L, -2, "address");
+            lua_pushnumber(L, s.calls);
+            lua_setfield(L, -2, "calls");
+            lua_rawseti(L, -2, ++n);
+        }
+        return 1;
+    }
+
+    // native.site_selftest_start() -> started; native.site_selftest_result() -> fmul, fld, registers kept | nil
+    int nativeSiteSelfTestStart(lua_State* L)
+    {
+        lua_pushboolean(L, SiteHook::selfTestStart());
+        return 1;
+    }
+
+    int nativeSiteSelfTestResult(lua_State* L)
+    {
+        SiteHook::SelfTest r;
+        if (!SiteHook::selfTestResult(r))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, r.fmul);
+        lua_pushnumber(L, r.fld);
+        lua_pushboolean(L, r.registersKept);
+        return 3;
+    }
+
+    // native.difficulty() -> the running game's difficulty level (0 .. 4) | nil
+    int nativeDifficulty(lua_State* L)
+    {
+        if (!Gear::Addr::g_difficulty)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, *Gear::Addr::g_difficulty);
+        return 1;
+    }
+
+    // native.creature_ability_active(bool): whether some mod handles `creature.ability`
+    int nativeCreatureAbilityActive(lua_State* L)
+    {
+        SiteHook::setAbilityActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.combat_constant_active(bool): whether some mod handles `combat.constant`
+    int nativeCombatConstantActive(lua_State* L)
+    {
+        SiteHook::setConstantActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.site_hooks(name) -> calls, answered, busy: the counters of the site hooks of `level.factor` (default) or `combat.constant`
+    int nativeSiteHooks(lua_State* L)
+    {
+        const char* which = luaL_optstring(L, 1, "level.factor");
+        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : SiteHook::levelFactorStats();
+        lua_pushnumber(L, s.calls);
+        lua_pushnumber(L, s.answered);
+        lua_pushnumber(L, s.busy);
+        return 3;
+    }
+
+    // native.engine_level_factor_start(level) -> started: tests of the level.factor hook (automation): a worker thread calls the
+    // engine's own level function (ENG 0051CC30, whose first block is a site hook) a moment later, when Lua is not running, so the
+    // answer path of the hook can be exercised; native.engine_level_factor_result() -> value | nil.
+    std::atomic<int> g_levelCallState{0};       // 0 idle, 1 running, 2 done
+    std::atomic<int> g_levelCallResult{0};
+
+    int nativeEngineLevelFactorStart(lua_State* L)
+    {
+        const int level = static_cast<int>(luaL_checknumber(L, 1));
+        const uintptr_t fn = Gear::Addr::levelFn51CC30;
+        int idle = 0;
+        if (!fn || !g_levelCallState.compare_exchange_strong(idle, 1))
+        {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+        std::thread([level, fn] {
+            Sleep(150);
+            g_levelCallResult = reinterpret_cast<int(__stdcall*)(int)>(fn)(level);
+            g_levelCallState = 2;
+        }).detach();
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    int nativeEngineLevelFactorResult(lua_State* L)
+    {
+        if (g_levelCallState.load() != 2)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, g_levelCallResult.load());
+        g_levelCallState = 0;
         return 1;
     }
 
@@ -1626,7 +1877,9 @@ namespace
         lua_remove(L, -2);
         lua_insert(L, -(nargs + 1));
         setBudget(budget);
+        t_inLua = true;
         const int status = lua_pcall(L, nargs, 0, 0);
+        t_inLua = false;
         g_deadline = 0;
         if (status != 0)
         {
@@ -1637,6 +1890,8 @@ namespace
         }
         return true;
     }
+
+    constexpr double kHookBudget = 0.02;    // seconds for one answer to a site hook
 
     void start()
     {
@@ -1675,6 +1930,22 @@ namespace
             {"table_info", nativeTableInfo},
             {"table_read", nativeTableRead},
             {"table_string", nativeTableString},
+            {"table_write", nativeTableWrite},
+            {"text_get", nativeTextGet},
+            {"setting", nativeSetting},
+            {"overlay_info", nativeOverlayInfo},
+            {"overlay_resolve", nativeOverlayResolve},
+            {"overlay_served", nativeOverlayServed},
+            {"level_factor_active", nativeLevelFactorActive},
+            {"site_hooks", nativeSiteHooks},
+            {"combat_constant_active", nativeCombatConstantActive},
+            {"difficulty", nativeDifficulty},
+            {"creature_ability_active", nativeCreatureAbilityActive},
+            {"site_hook_sites", nativeSiteHookSites},
+            {"site_selftest_start", nativeSiteSelfTestStart},
+            {"site_selftest_result", nativeSiteSelfTestResult},
+            {"engine_level_factor_start", nativeEngineLevelFactorStart},
+            {"engine_level_factor_result", nativeEngineLevelFactorResult},
             {"hero", nativeHero},
             {"world_changes", nativeWorldChanges},
             {"save_blocked", nativeSaveBlocked},
@@ -1782,6 +2053,7 @@ void LuaHost::configure(HMODULE module, const std::wstring& gameDir)
 {
     g_module = module;
     g_modsDir = gameDir + L"\\mods";
+    g_gameDir = gameDir;
 }
 
 void LuaHost::frame(float dt)
@@ -1820,6 +2092,140 @@ void LuaHost::idle()
         return;
     }
     callKernel("idle", 0, kFrameBudget);
+}
+
+LuaHost::Answer LuaHost::levelFactor(double level, int site, int& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "level_factor");
+    lua_remove(L, -2);
+    lua_pushnumber(L, level);
+    lua_pushnumber(L, site);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 2, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.level_factor failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        const lua_Number v = lua_tonumber(L, -1);
+        if (v >= 0 && v < 1e9)
+        {
+            out = static_cast<int>(v);
+            answer = Answer::Value;
+        }
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::combatConstant(const char* name, double vanilla, int index, double& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "combat_constant");
+    lua_remove(L, -2);
+    lua_pushstring(L, name);
+    lua_pushnumber(L, vanilla);
+    lua_pushnumber(L, index);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 3, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.combat_constant failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        out = lua_tonumber(L, -1);
+        answer = Answer::Value;
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::creatureAbility(int type, int vanilla, int index, int address, int& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "creature_ability");
+    lua_remove(L, -2);
+    lua_pushnumber(L, type);
+    lua_pushnumber(L, vanilla);
+    lua_pushnumber(L, index);
+    lua_pushnumber(L, address);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 4, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.creature_ability failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        const lua_Number v = lua_tonumber(L, -1);
+        if (v >= 0 && v < 65536)
+        {
+            out = static_cast<int>(v);
+            answer = Answer::Value;
+        }
+    }
+    lua_pop(L, 1);
+    return answer;
 }
 
 unsigned long long LuaHost::lastFrameTime()

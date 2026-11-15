@@ -4,6 +4,7 @@
 #include "keyblock.h"
 #include "instance.h"
 #include "log.h"
+#include "overlay.h"
 #include "lua_host.h"
 #include "sig.h"
 #include "game/gear_addr.h"
@@ -100,6 +101,7 @@ namespace
         Log::init(Instance::logPath(gameDir, L"SacredGear.log").c_str());
         LOG("Sacred Gear {} " __DATE__ " " __TIME__, Gear::kVersion);
         Automation::installInstance(gameDir);
+        Overlay::install(gameDir);
         const size_t missing = Sig::resolve(kGearSigs);
         if (missing)
         {

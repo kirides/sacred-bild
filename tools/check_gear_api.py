@@ -132,7 +132,21 @@ def main():
 
     # --- data, json, pipes
     data_ctor = between(kernel, r'^local data = \{', r'^\}', 'data')
-    compare('gear.data', set(re.findall(r'^\s{4}(\w+)\s*=', data_ctor, re.M)), fields('GearData'))
+    compare('gear.data', set(re.findall(r'^\s{4}(\w+)\s*=', data_ctor, re.M)) | set(re.findall(r'^data\.(\w+) = ', kernel, re.M)),
+            fields('GearData'))
+    abil = set(re.findall(r'^function abilities:(\w+)\(', kernel, re.M))
+    compare('gear.data.abilities', abil, {f.name for f in model.classes['GearAbilities'].funcs})
+    abil_fields = set(re.findall(r"(\w+) = \{0x[0-9A-Fa-f]+, '", kernel)) | {'table', 'index', 'kind'}
+    compare('ability record', abil_fields, fields('GearAbility'))
+    text_src = re.search(r'^\s{8}text = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
+    compare('gear.text', set(re.findall(r'^\s{12}(\w+) = function', text_src.group(1), re.M)) if text_src else set(), members('GearText'))
+    files_src = re.search(r'^\s{8}files = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
+    compare('gear.files', set(re.findall(r'^\s{12}(\w+) = function', files_src.group(1), re.M)) if files_src else set(),
+            members('GearFiles'))
+    game_src = re.search(r'^    gear\.game = \{(.*?)^    \}', kernel, re.M | re.S)
+    compare('gear.game', set(re.findall(r'^\s{8}(\w+) = function', game_src.group(1), re.M)) if game_src else set(), members('GearGame'))
+    hooks_src = re.search(r'^\s{8}hooks = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
+    compare('gear.hooks', set(re.findall(r'^\s{12}(\w+) = function', hooks_src.group(1), re.M)) if hooks_src else set(), members('GearHooks'))
     view = set(re.findall(r'^\s*function view:(\w+)\(', kernel, re.M))
     compare('data table', view, {f.name for f in model.classes['GearTable'].funcs})
     otypes = set(re.findall(r'^function data\.object_types:(\w+)\(', kernel, re.M))
@@ -154,6 +168,7 @@ def main():
 
     # --- events
     events = set(re.findall(r"kernel\.dispatch(?:_to)?\((?:[\w.]+, )?'([\w.]+)'", kernel))
+    events |= set(re.findall(r"handlers\['([\w.]+)'\]", kernel))      # events the host asks for (site hooks)
     meta_events = set()
     for fn in model.globals + [f for c in model.classes.values() for f in c.funcs]:
         if fn.name == 'on':

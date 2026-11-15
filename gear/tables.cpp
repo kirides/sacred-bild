@@ -22,6 +22,43 @@ namespace
         }
     }
 
+    // memcpy into the game's memory, failing instead of crashing.
+    bool safeWrite(void* dst, const void* src, size_t size)
+    {
+        __try
+        {
+            std::memcpy(dst, src, size);
+            return true;
+        }
+        __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+        {
+            return false;
+        }
+    }
+
+    // The wide string the game's text table holds for `id`; nullptr if there is none. No C++ objects (__try).
+    const wchar_t* gameText(uint32_t id)
+    {
+        if (!Gear::Addr::textResources_instance || !Gear::Addr::textResources_get)
+        {
+            return nullptr;
+        }
+        __try
+        {
+            void* table = Gear::Addr::textResources_instance();
+            if (!table)
+            {
+                return nullptr;
+            }
+            const wchar_t* const* entry = Gear::Addr::textResources_get(table, id);
+            return entry ? *entry : nullptr;
+        }
+        __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+        {
+            return nullptr;
+        }
+    }
+
     struct Span
     {
         uintptr_t first = 0;
@@ -34,6 +71,7 @@ namespace
         std::string_view name;
         size_t stride;
         bool (*locate)(Span& out);
+        bool writable;
     };
 
     // Creature types: Pak\Creature.pak is a 0x100-byte header ("CIF", record count at +4) and 0x56-byte records,
@@ -87,9 +125,38 @@ namespace
         return true;
     }
 
+    // Ability tables: static arrays; the first record and the end come from the lookup functions' own code.
+    constexpr size_t kAbility1Stride = 0x78;
+    constexpr size_t kAbility2Stride = 0x94;
+
+    bool locateAbilities(Span& out, const uint8_t* first, const uint8_t* end, size_t stride)
+    {
+        const auto a = reinterpret_cast<uintptr_t>(first), b = reinterpret_cast<uintptr_t>(end);
+        if (!a || b <= a || (b - a) % stride != 0 || (b - a) / stride > 4096)
+        {
+            return false;
+        }
+        out = {a, (b - a) / stride};
+        return true;
+    }
+
+    bool locateAbility1(Span& out)
+    {
+        return Gear::Addr::abilityTable1First && Gear::Addr::abilityTable1End &&
+               locateAbilities(out, Gear::Addr::abilityTable1First.get(), Gear::Addr::abilityTable1End.get(), kAbility1Stride);
+    }
+
+    bool locateAbility2(Span& out)
+    {
+        return Gear::Addr::abilityTable2First && Gear::Addr::abilityTable2End &&
+               locateAbilities(out, Gear::Addr::abilityTable2First.get(), Gear::Addr::abilityTable2End.get(), kAbility2Stride);
+    }
+
     constexpr Table kTables[] = {
-        {"creature_types", kCreatureStride, &locateCreatureTypes},
-        {"object_types", kObjectTypeStride, &locateObjectTypes},
+        {"creature_types", kCreatureStride, &locateCreatureTypes, false},
+        {"object_types", kObjectTypeStride, &locateObjectTypes, false},
+        {"ability_t1", kAbility1Stride, &locateAbility1, true},
+        {"ability_t2", kAbility2Stride, &locateAbility2, true},
     };
 
     const Table* find(std::string_view name)
@@ -174,5 +241,60 @@ bool Tables::readString(std::string_view name, size_t index, size_t offset, size
         return false;
     }
     out.assign(bytes, strnlen(bytes, size));
+    return true;
+}
+
+bool Tables::write(std::string_view name, size_t index, size_t offset, Kind kind, double value)
+{
+    const Table* t = find(name);
+    Span span;
+    const size_t size = sizeOf(kind);
+    if (!t || !t->writable || offset > t->stride || size > t->stride - offset || !t->locate(span) || index >= span.count)
+    {
+        return false;
+    }
+    uint8_t bytes[4] = {};
+    switch (kind)
+    {
+    case Kind::F32:
+    {
+        const float v = static_cast<float>(value);
+        std::memcpy(bytes, &v, 4);
+        break;
+    }
+    default:
+    {
+        // an integer that fits the kind
+        const double lo = kind == Kind::U8 || kind == Kind::U16 || kind == Kind::U32 ? 0.0
+            : kind == Kind::I8 ? -128.0 : kind == Kind::I16 ? -32768.0 : -2147483648.0;
+        const double hi = kind == Kind::U8 ? 255.0 : kind == Kind::I8 ? 127.0 : kind == Kind::U16 ? 65535.0
+            : kind == Kind::I16 ? 32767.0 : kind == Kind::I32 ? 2147483647.0 : 4294967295.0;
+        if (!(value >= lo && value <= hi) || value != static_cast<double>(static_cast<int64_t>(value)))
+        {
+            return false;
+        }
+        const int64_t v = static_cast<int64_t>(value);
+        std::memcpy(bytes, &v, size);     // little endian: the low bytes
+        break;
+    }
+    }
+    return safeWrite(reinterpret_cast<void*>(span.first + index * t->stride + offset), bytes, size);
+}
+
+bool Tables::text(uint32_t id, std::string& out)
+{
+    const wchar_t* wide = gameText(id);
+    if (!wide || !*wide)
+    {
+        return false;
+    }
+    const int length = static_cast<int>(wcsnlen(wide, 4096));
+    const int bytes = WideCharToMultiByte(CP_UTF8, 0, wide, length, nullptr, 0, nullptr, nullptr);
+    if (bytes <= 0)
+    {
+        return false;
+    }
+    out.resize(static_cast<size_t>(bytes));
+    WideCharToMultiByte(CP_UTF8, 0, wide, length, out.data(), bytes, nullptr, nullptr);
     return true;
 }

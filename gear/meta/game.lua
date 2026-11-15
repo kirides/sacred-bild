@@ -13,6 +13,10 @@
 ---@class GearGame
 local GearGame = {}
 
+--- The difficulty level of the running game: 0 (bronze) to 4 (niobium); nil if the game is not running.
+---@return integer?
+function GearGame.difficulty() end
+
 --- Whether a save may start now: a living hero in a single player game, the game itself shown (no cinematic, no
 --- window drawn alone, no escape menu or message box), no save or load pending.
 ---@return boolean ok
