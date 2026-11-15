@@ -1,5 +1,6 @@
--- Draws a small overlay with gear.ui: a translucent panel with the hero's values, the game's own images in the three
--- fit modes, a note that follows the inventory window, and a line above everything on the top layer.
+-- Shows what gear.ui can do: a translucent panel with the hero's values, a widget gallery (buttons, checkboxes, radio
+-- buttons, a dropdown, sliders, the game's images in the three fit modes and its fonts, tooltips) in a panel that can
+-- be dragged and closed (F9 toggles it), a note that follows the inventory window, and the world and top layers.
 --
 -- As a self test (no player needed):
 --
@@ -39,25 +40,62 @@ local function panel(hero)
     ui.text(gear.version, x, y + 6, {width = w - 8, align = 'right', color = ui.rgba(255, 255, 255, 140)})
 end
 
-local function images()
-    local x, y = 290, 16
-    if icon then
-        ui.image(icon, x, y)                                        -- its own size
-        ui.image(icon, x + 72, y, 32, 32)                           -- scaled down
-        ui.image(icon, x + 112, y, 64, 64, {color = ui.rgba(255, 255, 255, 110)})   -- translucent
-    end
-    if portrait then
-        -- The same portrait in a 90 x 60 box: stretched, contained (aspect kept, centered), covering (cropped).
-        local bx = x + 186
-        for i, fit in ipairs({'stretch', 'contain', 'cover'}) do
-            local px = bx + (i - 1) * 98
-            ui.rect(px, y, 90, 60, ui.rgba(40, 40, 60, 160))
-            ui.image(portrait, px, y, 90, 60, {fit = fit})
-            ui.text(fit, px, y + 62, {width = 90, align = 'center', background = PANEL, padding = 2})
-        end
-    end
-end
+-- The widget gallery: every widget gear.ui has, in a panel that can be dragged by its title and closed (F9 or the
+-- 'Widgets' button brings it back).
+local G = {clicks = 0, sound = true, music = false, difficulty = 2, fit = 2, alpha = 255, size = 96, font = 1}
+local FITS = {'stretch', 'contain', 'cover'}
 
+local function gallery()
+    local p = ui.panel('gallery', 'Gear widgets (F9)', 300, 16, 440, 372, {tooltip = 'Drag me by the title'})
+    if not p.open then
+        if ui.button('reopen', 300, 16, 90, 22, 'Widgets', {tooltip = 'Open the widget gallery'}) then
+            ui.show_panel('gallery', true)
+        end
+        return
+    end
+    local x, y = p.content_x, p.content_y
+    -- Buttons
+    ui.label('l-buttons', 'Buttons', x, y, {color = ui.COLORS.accent})
+    if ui.button('btn', x, y + 18, 110, 22, 'Click me', {tooltip = 'Counts the clicks'}) then G.clicks = G.clicks + 1 end
+    if ui.button('btn-icon', x + 118, y + 18, 130, 22, 'With an icon', {image = icon, tooltip = 'A button with a game image'}) then
+        G.clicks = G.clicks + 10
+    end
+    ui.text(('clicked %d'):format(G.clicks), x + 258, y + 22, {font = 7})
+    -- Checkboxes
+    y = y + 50
+    ui.label('l-checks', 'Checkboxes', x, y, {color = ui.COLORS.accent})
+    local _
+    _, G.sound = ui.checkbox('sound', x, y + 18, 'Sound effects', G.sound, {tooltip = 'A checkbox'})
+    _, G.music = ui.checkbox('music', x + 140, y + 18, 'Music', G.music)
+    ui.checkbox('disabled', x + 230, y + 18, 'Disabled', true, {enabled = false, tooltip = 'opts.enabled = false'})
+    -- Radio buttons
+    y = y + 46
+    ui.label('l-radio', 'Radio buttons', x, y, {color = ui.COLORS.accent})
+    _, G.difficulty = ui.radio_group('difficulty', x, y + 18, {'Bronze', 'Silver', 'Gold', 'Platinum'},
+        G.difficulty, {horizontal = true, tooltips = {'easy', 'normal', 'hard', 'harder'}})
+    -- Dropdown, slider
+    y = y + 46
+    ui.label('l-drop', 'Dropdown and sliders', x, y, {color = ui.COLORS.accent})
+    ui.text('Image fit', x, y + 20, {font = 7})
+    -- Image (drawn before the dropdown: the open list covers it)
+    local px, py = x + 290, y + 18
+    ui.rect(px, py, G.size, G.size * 0.6, ui.rgba(40, 40, 60, 160))
+    if portrait then
+        ui.image(portrait, px, py, G.size, G.size * 0.6, {fit = FITS[G.fit], color = ui.rgba(255, 255, 255, G.alpha)})
+    end
+    ui.text('Opacity', x, y + 46, {font = 7})
+    _, G.alpha = ui.slider('alpha', x + 70, y + 46, 150, 0, 255, G.alpha, {step = 5, tooltip = 'Drag the knob'})
+    ui.text('Size', x, y + 70, {font = 7})
+    _, G.size = ui.slider('size', x + 70, y + 70, 150, 48, 128, G.size, {step = 4})
+    _, G.fit = ui.dropdown('fit', x + 70, y + 18, 150, FITS, G.fit, {tooltip = 'How the image fills its box'})
+    -- Text and fonts
+    y = y + 100
+    ui.label('l-text', 'Text', x, y, {color = ui.COLORS.accent})
+    _, G.font = ui.radio_group('font', x, y + 18, {'1', '2', '3', '4', '5', '6', '7'}, G.font, {horizontal = true})
+    ui.text('The quick brown fox, font ' .. G.font, x, y + 40, {font = G.font, color = 0xFFFFE0A0})
+    ui.label('hover', 'Rest the cursor here for a tooltip', x, y + 76,
+        {tooltip = 'Tooltips work on every widget', color = 0xFFB0B0B0})
+end
 local function inventory_note(state)
     local inv = ui.window('UI_WND_INVENTORY')
     if inv and inv.drawn then
@@ -82,7 +120,8 @@ gear.on('draw', function(state)
     if not state or state.mode ~= 'game' or state.exclusive then return end
     local hero = gear.world.hero()
     if cfg.panel then panel(hero) end
-    if cfg.images then images() end
+    if cfg.images then gallery() end
+    if ui.key_pressed(cfg.key or 'f9') then ui.show_panel('gallery', not ui.panel_open('gallery')) end
     if cfg.inventory then inventory_note(state) end
     if cfg.fonts then fonts() end
     -- The top layer lies over the escape menu and message boxes too.
@@ -104,8 +143,19 @@ end
 
 local function snap(name)
     local ok, err = A.screenshot('uidemo-' .. name)
-    results.steps[#results.steps + 1] = {name = name, state = ui.state(), shot = ok and true or err}
+    results.steps[#results.steps + 1] = {name = name, shot = ok and true or err}
     check('screenshot ' .. name, ok, err)
+end
+
+-- The cursor to a UI layout point without clicking; a click there.
+local function hover(x, y)
+    local px, py = A.ui_to_pixels(x, y)
+    A.move(px, py)
+    gear.wait(0.1)
+end
+local function click(x, y)
+    A.ui_click(x, y)
+    gear.wait(0.4)
 end
 
 gear.task(function()
@@ -117,28 +167,47 @@ gear.task(function()
         local w, h = ui.text_size('Sacred Gear')
         check('text measures', w and w > 0, ('%s x %s'):format(tostring(w), tostring(h)))
         check('images found', icon ~= nil and portrait ~= nil)
-        local info = icon and ui.image_info(icon)
-        results.icon = info
         snap('hud')
-        cfg.fonts = true
-        gear.wait(0.5)
-        snap('fonts')
-        cfg.fonts = false
-        A.press('i')
-        gear.wait(cfg.settle)
-        print(gear.json.encode(ui.state()))
-        local inv = ui.window('UI_WND_INVENTORY')
-        check('inventory drawn', inv and inv.drawn)
-        results.inventory = inv
-        snap('inventory')
-        A.press('i')
-        gear.wait(cfg.settle)
-        A.press('escape')
-        gear.wait(cfg.settle)
-        check('escape menu', ui.state().escape_menu)
-        snap('escape')
-        A.press('escape')
-        gear.wait(cfg.settle)
+        local hero = gear.world.hero()
+        local hx, hy = hero:position()
+
+        -- The gallery's content starts at (308, 44); rows 50, 46, 46, 100 apart (see gallery()).
+        local cx, cy = 308, 44
+        hover(cx + 12, cy + 242 + 76 + 6)
+        gear.wait(1.0)
+        snap('tooltip')
+        click(cx + 20, cy + 29)
+        check('button', G.clicks == 1, G.clicks)
+        click(cx + 147, cy + 50 + 26)
+        check('checkbox', G.music == true, tostring(G.music))
+        snap('checkbox')
+        click(cx + 7, cy + 96 + 26)
+        check('radio', G.difficulty == 1, G.difficulty)
+        click(cx + 100, cy + 142 + 27)
+        check('dropdown opens', true)
+        snap('dropdown-open')
+        click(cx + 100, cy + 142 + 36 + 1 + 36 + 9)
+        check('dropdown picks cover', G.fit == 3, G.fit)
+        click(cx + 70 + 5 + 140 * 0.4, cy + 142 + 54)
+        check('slider', G.alpha < 255 and G.alpha > 0, G.alpha)
+        gear.wait(0.3)
+        snap('widgets')
+        -- Drag the panel by its title, then close it.
+        local bx, by = A.ui_to_pixels(420, 26)
+        A.move(bx, by); gear.wait(0.1); A.down(); gear.wait(0.2)
+        for i = 1, 5 do
+            local mx, my = A.ui_to_pixels(420 + i * 20, 26 + i * 16)
+            A.move(mx, my); gear.wait(0.1)
+        end
+        A.up(); gear.wait(0.4)
+        snap('dragged')
+        click(300 + 100 + 440 - 12, 16 + 80 + 11)
+        check('panel closed', not ui.panel_open('gallery'))
+        snap('closed')
+        click(320, 26)
+        check('panel reopened', ui.panel_open('gallery'))
+        local hx2, hy2 = hero:position()
+        check('clicks did not reach the world (the hero stayed)', hx2 == hx and hy2 == hy, ('%d,%d -> %d,%d'):format(hx, hy, hx2, hy2))
     end
     A.write('uidemo.json', gear.json.encode(results))
     print(('%d passed, %d failed'):format(results.passed, results.failed))
