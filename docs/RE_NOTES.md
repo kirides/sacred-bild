@@ -568,7 +568,8 @@ Per-window re-anchoring does not work: children are absolute, many renderers dra
   axis-aligned quads to the canvas. Clear rects are mapped; GetViewport returns the virtual viewport.
 - Two placements: in game (`[UI] Scale`) and menus (`ScaleMode=InGame`: as large as fits; `Full`: the in-game
   one), picked by the UI manager's mode (`+8` bit `0x04` in game; `0x03` in the menus, `0x4C` in game, `0x43`
-  leaving it); an open full-screen window in game takes the menus' placement. The outermost UI scope keeps the
+  leaving it); a window the manager draws alone in game (savegame, options, character, world map:
+  `UiState::exclusiveWindow`) takes the menus' placement. The outermost UI scope keeps the
   placement it started with.
 - Loading screen (`dxDriver7_drawLoadingScreen`, GDI on the back buffer's DC, then `dxDriver7_flip`, only when the
   progress bar moved): SacredBild puts a 1024x768 system memory surface in the driver's back buffer slot (`+0xBC`)
@@ -590,8 +591,10 @@ Anchored HUD (`src/game/ui_anchor.*`): moving the windows themselves would miss 
 above, so each anchored window keeps its 1024x768 coordinates and runs in a frame, a copy of the 1024x768
 space placed against a screen edge. The frame is per thread (`UiCanvas::FrameScope`); the proxy maps draws into
 the current frame and confines them to its rect; the 72 UI reads of the cursor return it relative to the
-current frame. The vtable slots `+0x10`, `+0x14`, `+0x1C`, `+0x24` (and `+0x44` where it is render2) of the
-anchored windows' classes point at thunks that enter the window's frame and shift mouse button events and
+current frame. `UiWindows` (`src/game/ui_windows.*`) points the vtable slots `+0x10`, `+0x14`, `+0x1C`, `+0x24`
+(and `+0x44` where the manager calls it as render2) of the classes of all of the manager's objects (windows, menu
+screens, message box, popups, text lines) at thunks that record which object runs on the thread
+(`UiWindows::current()`) and ask UiAnchor for its frame; UiAnchor enters it and shifts mouse button events and
 isInside arguments into it (all classes are single inheritance; the slot after a vtable's last entry is the
 next one's RTTI pointer, which bounds the patch). Popups take the frame in which their text was set and are
 drawn unconfined. A popup that a window set the text of (its tooltips and hints, e.g. the blacksmith's "Place the weapon or armor here ...", which lies over its item grid) takes no mouse events and is never hit by `isInside`: the grid under it still gets the clicks and the drop highlight. The cursor itself, the manager's own drawing and every other window stay in the canvas.
@@ -610,15 +613,16 @@ would push against an edge of its 1024x768 screen goes against that edge of the 
 frame), centered ones go to the screen center. The help screen sets all its texts in the canvas; after
 `cUI_Manager_showHelp` each entry that explains a window gets that window's frame (a table per screen and entry), the
 inventory screen's "[H]" hint (20, 80) the screen's top-left corner, general hints and the world map's stay in the
-canvas. Untextured translucent black quads over the whole 1024x768 screen
-are drawn over the whole screen: the escape menu's background (`0x6BB390`, 0x6F000000) and the dimmed background
+canvas. Untextured translucent black quads over the whole 1024x768 screen drawn while the escape menu or an
+object with flag 0x800 runs (`UiWindows::current()`) are drawn over the whole screen: the escape menu's background (`0x6BB390`, 0x6F000000) and the dimmed background
 of message boxes (windows with flag 0x800, `cUI_Control2_render`, 0x9F000000). The stats window's close button is an embedded control at `+0x210` named `UI_STAT_BTN_BASE`
 (stats-relative 242,10, parent set); the game flags controls of that name with 0x20000 on level-up (`0x57F033`), and
 the stats window's show (`0x6A5FA0`) messages them as well. `[Debug] UiTrace` logs a frame's UI draws with their frame
 and the calling code (a stack scan for return addresses into sacred.exe) for finding the rest.
 Known gap: the party arrows stay in the canvas. The cinematic letterbox bars (`cUI_Manager_render` with manager
 flag `0x10`: untextured opaque black FVF `0x1C4` strips, x 0..1024, y 0..h and 768-h..768, h growing to 64) are
-moved against the screen's top and bottom edge across its width (`DeviceProxy::drawScreenBar`).
+moved against the screen's top and bottom edge across its width when the manager draws them itself (no wrapped
+object's call) in cinematic mode (`DeviceProxy::drawScreenBar`).
 
 World map (megamap, `cUI_Manager +0x94`, vtable `0x896714`: render `0x6C9F60`, receiveEvent `0x6C8140`, show
 `0x6C7BB0`): a 1024x768 view scrolled over the map image. Scroll at `+0xC016C`/`+0xC0170`, clamped to the map size

@@ -61,6 +61,12 @@ namespace Sacred
         // without it (cUI_Button2 render 0072B700).
         static constexpr uint32_t enabledFlag = 0x04;
         static constexpr uint32_t checkedFlag = 0x10;   // a check box's or radio button's checked state
+        // A window that dims the screen behind it: cUI_Control2's render draws a translucent black quad over the
+        // whole 1024x768 screen first (the message boxes).
+        static constexpr uint32_t dimsScreenFlag = 0x800;
+        // The control has the keyboard focus (ENG 00732630 takes it: sets this and sends the "FOCUS" event, which
+        // clears it in every other control and puts the control into cUI_Manager::focus).
+        static constexpr uint32_t focusFlag = 0x8000;
 
         const Vtable* vtable;
         uint8_t _04[0x10 - 0x04];
@@ -68,7 +74,7 @@ namespace Sacred
         uint8_t _14[0x24 - 0x14];
         int32_t x, y;
         int16_t width, height;
-        uint8_t _30[0x50 - 0x30];
+        char name[0x20];            // "UI_WND_INVENTORY": what the game's UI events address (default-constructed: garbage)
         cUI_Control2* parent;       // x/y are relative to it; nullptr: to the screen
         uint8_t _54[0x78 - 0x54];
 
@@ -89,7 +95,8 @@ namespace Sacred
     static_assert(offsetof(cUI_Control2::Vtable, receiveEvent) == 0x10);
     static_assert(offsetof(cUI_Control2::Vtable, render) == 0x14 && offsetof(cUI_Control2::Vtable, isInside) == 0x1C);
     static_assert(offsetof(cUI_Control2, flags) == 0x10 && offsetof(cUI_Control2, x) == 0x24);
-    static_assert(offsetof(cUI_Control2, width) == 0x2C && offsetof(cUI_Control2, parent) == 0x50);
+    static_assert(offsetof(cUI_Control2, width) == 0x2C && offsetof(cUI_Control2, name) == 0x30);
+    static_assert(offsetof(cUI_Control2, parent) == 0x50);
     static_assert(sizeof(cUI_Control2) == 0x78);
 
     // A control embedded in its window (not a child), of `Size` bytes, whose class SacredBild doesn't need.
@@ -620,8 +627,10 @@ namespace Sacred
     static_assert(offsetof(cUI_Options, exploreMap) == 0x19C && offsetof(cUI_Options, fsaa) == 0x1A4);
     static_assert(offsetof(cUI_Options, sfxVolume) == 0x1A8 && offsetof(cUI_Options, mapAlpha) == 0x1B4);
 
-    // The UI manager (one instance): the menu screens, the in-game windows (createGameWindows makes them once per
-    // game) and the popups; render draws the letterbox bars and all of them.
+    // The UI manager (one instance, ctor ENG 00756A90): the menu screens, the in-game windows (createGameWindows makes
+    // them once per game, 0075A250 destroys them on the way back to the menus) and the popups; render (00758ED0) draws
+    // the letterbox bars and all of them, receiveEvent (vtable slot 0, 00757840) hands them the input. Which windows
+    // it draws and asks, in which order, is in game/ui_state.cpp and docs/UI_SYSTEM.md.
     struct cUI_Manager
     {
         // The in-game windows (cUI_Window2 subclasses), with their rects in the 1024x768 layout.
@@ -639,12 +648,12 @@ namespace Sacred
             console,        // chat input, 256,640 512x128
             questbook,      // the log book (cUI_Diary)
             savegame,       // full screen
-            escapeMenu,
-            _b4,
+            escapeMenu,     // 256,240 512x272; drawn over everything else in game
+            purchase,       // UI_WND_PURCHASE: buy / sell confirmation
             master,         // combat art master, 0,0 640x336
             options,        // full screen
             chest,          // 0,0 640x320
-            _c4,
+            horse,          // UI_WND_HORSE: the stable
             networkInfo,    // the player list of a network game (cUI_NetworkInfo)
             netPortraits,   // 0,0 896x64
             character,      // character export, full screen
@@ -653,11 +662,19 @@ namespace Sacred
             count,
         };
 
-        // In flags.
+        // In flags. The mode is cinematic, else menus, else in game, in that order (render and receiveEvent test them so).
         static constexpr uint32_t inMenus = 0x01;       // the menu screens are drawn
+        static constexpr uint32_t menusCreated = 0x02;  // menus[] exist
         static constexpr uint32_t inGame = 0x04;
-        static constexpr uint32_t cinematic = 0x10;
+        static constexpr uint32_t windowsCreated = 0x08;    // windows[] exist; nullptr (or stale) without it
+        static constexpr uint32_t cinematic = 0x10;     // letterbox bars; only the escape menu gets events
+        static constexpr uint32_t cinematicFadeOut = 0x20;
+        static constexpr uint32_t gameUiActive = 0x40;  // set by createGameWindows; the HUD and the message box need it
+        static constexpr uint32_t inputBlocked = 0x80;  // mouse and key events are swallowed
+        static constexpr uint32_t popupsHidden = 0x100;
         static constexpr uint32_t helpScreen = 0x200;   // the help screen (H key) is shown
+        static constexpr uint32_t helpHint = 0x400;     // "[H] shows or hides the help screen"
+        static constexpr uint32_t tabHint = 0x800;      // "[TAB] for the overview map"
         static constexpr int menuCount = 5;
         static constexpr int savegameMenu = 3;          // menus[savegameMenu]: the savegame window (loading)
 
@@ -672,9 +689,14 @@ namespace Sacred
         Vector<cUI_Popup*> popups;
         // The menu screens (start menu and the screens reached from it), drawn while flags have inMenus.
         cUI_Window2* menus[menuCount];
-        cUI_BusyDlg* dialog;        // a message box over them (also in game)
-        uint8_t _148[0x14C - 0x148];
-        cUI_Window2* other;         // a window of unknown use (the controller's UI trace lists it)
+        // The message box (also in game), the only modal window: while it is visible it gets every mouse and key
+        // event first and they count as taken; it is drawn last.
+        cUI_BusyDlg* dialog;
+        // The control with the keyboard focus (an edit control), nullptr if none: set by the "FOCUS" event, cleared
+        // when a window holding it hides.
+        cUI_Control2* focus;
+        // +0x14C: the message lines over the world ("UI_WND_TEXTLINES", cUI_TextLines, 0,0 1024x768) are embedded
+        // here, not pointed to: textLines().
 
         // nullptr before the game made it.
         static cUI_Manager* instance() { return *Addr::g_pUiManager; }
@@ -686,13 +708,14 @@ namespace Sacred
         cUI_Savegame* savegame() { return static_cast<cUI_Savegame*>(window(Window::savegame)); }
         cUI_EscMenu* escapeMenu() { return static_cast<cUI_EscMenu*>(window(Window::escapeMenu)); }
         cUI_NetworkInfo* networkInfo() { return static_cast<cUI_NetworkInfo*>(window(Window::networkInfo)); }
+        cUI_Window2* textLines() { return reinterpret_cast<cUI_Window2*>(reinterpret_cast<uint8_t*>(this) + 0x14C); }
 
         bool isCursorOverUi(int x, int y) { return Addr::cUI_Manager_isCursorOverUi(this, x, y); }
     };
     static_assert(offsetof(cUI_Manager, flags) == 0x08 && offsetof(cUI_Manager, helpPopups) == 0x56);
     static_assert(offsetof(cUI_Manager, windows) == 0x80 && sizeof(cUI_Manager::windows) == 0xDC - 0x80);
     static_assert(offsetof(cUI_Manager, popups) == 0x124 && offsetof(cUI_Manager, menus) == 0x130);
-    static_assert(offsetof(cUI_Manager, dialog) == 0x144 && offsetof(cUI_Manager, other) == 0x14C);
+    static_assert(offsetof(cUI_Manager, dialog) == 0x144 && offsetof(cUI_Manager, focus) == 0x148);
 
     struct cFont
     {

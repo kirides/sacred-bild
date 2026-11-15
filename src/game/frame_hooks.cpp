@@ -10,6 +10,8 @@
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
 #include "game/ui_canvas.h"
+#include "game/ui_state.h"
+#include "game/ui_windows.h"
 #include "config/debug.h"
 #include "config/display.h"
 #include "config/render.h"
@@ -283,8 +285,10 @@ namespace
     {
         D3DStats::mark(D3DStats::TimerCount);
         D3DStats::Scope s{D3DStats::TUi};
-        // The original screen showed nothing but a full-screen window; keep the world beside the canvas hidden.
-        if (UiCanvas::enabled() && device && UiCanvas::fullScreenWindowOpen())
+        UiWindows::sync();
+        // The manager draws a window alone (savegame, options, character, world map): the original screen showed
+        // nothing else, so keep the world beside the canvas hidden.
+        if (UiCanvas::enabled() && device && UiState::exclusiveWindow())
         {
             const LONG l = std::lround(UiCanvas::left()), t = std::lround(UiCanvas::top());
             const LONG r = std::lround(UiCanvas::right()), b = std::lround(UiCanvas::bottom());

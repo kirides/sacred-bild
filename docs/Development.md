@@ -33,6 +33,8 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 | `src/sacred/` | The game's classes as structs (the Sacred Gold API): fields at their offsets and vtables as structs of function pointers, both checked by `static_assert`, member functions calling the game's code. `engine.h` (cEngine, orders), `object.h` (cObject / cCreature, cObjectManager), `world.h` (cWorldView, sectors, tiles, map data), `render.h` (dxDriver7, textures, cQuadBatcher), `ui.h` (cUI_Control2 / cUI_Window2 and their subclasses, cUI_Manager, events, fonts), `mouse.h`, `text.h`, `net.h` (cGCclass; gameserver.exe's cApp / cNetServer); `address.h` the typed addresses, `vector.h` the exe's std::vector |
 | `src/game/gameserver*` | The same for gameserver.exe, and its patches |
 | `src/game/resolution.*`, `resolution_sites.inc` | Any resolution: window, back buffer, world view; the 1024x768 constants patched (generated) |
+| `src/game/ui_state.*` | What the UI manager shows and who gets the input, by its own rules (mode, windows drawn alone, HUD, message box, focus); see `docs/UI_SYSTEM.md` |
+| `src/game/ui_windows.*` | The manager's windows, menus, message box, popups and text lines with their virtual functions wrapped: which one runs on a thread (`current()`), frames per object for UiAnchor |
 | `src/game/ui_canvas.*` | The 1024x768 UI in a scaled, centered canvas; cursor mapping |
 | `src/game/ui_anchor.*` | HUD windows placed at the screen edges (`[UI] Anchor`, `[UI.Layout]`) |
 | `src/game/device_proxy.*` | The IDirect3DDevice7 the game gets: UI draws into the canvas, world draws to the batcher |

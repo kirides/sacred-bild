@@ -23,6 +23,7 @@
 #include "game/sound_lock.h"
 #include "game/sprite_quads.h"
 #include "game/ui_anchor.h"
+#include "game/ui_windows.h"
 #include "game/ui_canvas.h"
 #include "game/world_passes.h"
 #include "net/connection.h"
@@ -97,6 +98,7 @@ void Sacred::installHooks()
     Resolution::install();
     Focus::install();
     UiCanvas::install();
+    UiWindows::install();
     UiAnchor::install();
     Overlay::install();
     Controller::install();

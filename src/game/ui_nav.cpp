@@ -1,6 +1,7 @@
 #include "game/ui_nav.h"
 #include "game/ui_anchor.h"
 #include "game/ui_canvas.h"
+#include "game/ui_state.h"
 #include "patch.h"
 #include "sacred/net.h"
 #include "sacred/text.h"
@@ -716,9 +717,7 @@ namespace
 
     cUI_Window2* messageBox()
     {
-        cUI_Manager* manager = ::manager();
-        cUI_Window2* box = manager ? manager->dialog : nullptr;
-        return visible(box) ? box : nullptr;
+        return UiState::messageBox();
     }
 
     void collectWindow(cUI_Window2* window, std::vector<Point>& out)
@@ -818,24 +817,14 @@ namespace
         }
         else if (flags & cUI_Manager::inGame)
         {
+            // What the manager draws: a window alone, or the HUD and the windows over it.
             using W = cUI_Manager::Window;
-            bool alone = false;
-            for (W w : {W::savegame, W::options, W::character, W::megamap})
+            for (int i = 0; i < static_cast<int>(W::count); ++i)
             {
-                if (visible(manager->window(w)))
+                const auto w = static_cast<W>(i);
+                if (w != W::overviewMap && w != W::console && UiState::shown(w))
                 {
-                    add(manager->window(w));
-                    alone = true;
-                }
-            }
-            if (!alone)
-            {
-                for (int i = 0; i < static_cast<int>(W::count); ++i)
-                {
-                    if (i != static_cast<int>(W::overviewMap) && i != static_cast<int>(W::console))
-                    {
-                        add(manager->windows[i]);
-                    }
+                    add(UiState::window(w));
                 }
             }
         }
@@ -1020,15 +1009,7 @@ cUI_Window2* UiNav::modal()
     {
         return box;
     }
-    const uint32_t flags = manager->flags;
-    if (!(flags & cUI_Manager::inMenus) && (flags & cUI_Manager::inGame))
-    {
-        if (cUI_Window2* menu = manager->escapeMenu(); visible(menu))
-        {
-            return menu;
-        }
-    }
-    return nullptr;
+    return UiState::escapeMenu();
 }
 
 bool UiNav::home(cUI_Window2* window, float& outX, float& outY)
@@ -1174,9 +1155,7 @@ cUI_Diary* UiNav::logBook()
     {
         return nullptr;
     }
-    const uint32_t flags = manager->flags;
-    cUI_Diary* diary = manager->questbook();
-    return !(flags & cUI_Manager::inMenus) && (flags & cUI_Manager::inGame) && visible(diary) ? diary : nullptr;
+    return UiState::shown(cUI_Manager::Window::questbook) ? manager->questbook() : nullptr;
 }
 
 bool UiNav::bookTab(int step, float& outX, float& outY)
@@ -1303,8 +1282,8 @@ bool UiNav::bookEntry(int step, float& outX, float& outY)
 bool UiNav::inventoryTab(int step, float& outX, float& outY)
 {
     cUI_Manager* manager = ::manager();
-    cUI_Inventory3* inventory = manager ? manager->inventory() : nullptr;
-    cUI_Inventory3::Tabs* tabs = visible(inventory) ? inventory->tabs : nullptr;
+    cUI_Inventory3* inventory = manager && UiState::shown(cUI_Manager::Window::inventory) ? manager->inventory() : nullptr;
+    cUI_Inventory3::Tabs* tabs = inventory ? inventory->tabs : nullptr;
     cUI_TabControl* control = tabs ? tabs->tabControl : nullptr;
     if (!control || className(control) != "cUI_TabControl")
     {
@@ -1371,7 +1350,8 @@ cUI_Savegame* UiNav::savegames()
         return nullptr;
     }
     const bool menus = manager->flags & cUI_Manager::inMenus;
-    cUI_Window2* window = menus ? manager->menus[cUI_Manager::savegameMenu] : manager->savegame();
+    cUI_Window2* window = menus ? manager->menus[cUI_Manager::savegameMenu]
+        : UiState::shown(cUI_Manager::Window::savegame) ? manager->savegame() : nullptr;
     auto* savegame = static_cast<cUI_Savegame*>(window);
     return visible(window) && kindOf(window) == Savegames && listMode(savegame) ? savegame : nullptr;
 }

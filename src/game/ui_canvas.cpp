@@ -3,6 +3,7 @@
 #include "game/device_proxy.h"
 #include "game/resolution.h"
 #include "game/sacred_addr.h"
+#include "game/ui_state.h"
 #include "config/debug.h"
 #include "config/ui.h"
 #include "log.h"
@@ -45,30 +46,12 @@ namespace
     decltype(Addr::renderSavePortrait)::Ptr g_origSavePortrait = nullptr;
     decltype(Addr::cInventoryEntry_render)::Ptr g_origHeldItem = nullptr;
 
-    bool fullScreenWindowOpen(const cUI_Manager* manager)
-    {
-        for (const cUI_Window2* window : manager->windows)
-        {
-            if (!window || !window->visible())
-            {
-                continue;
-            }
-            const int x = window->x, y = window->y, w = window->width, h = window->height;
-            if (x <= 0 && y <= 0 && x + w >= 1023 && y + h >= 767)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // The UI manager's state picks the layout: in game, unless a full-screen window (options, savegame, character,
-    // megamap) replaces the game's screen, which the manager then draws alone. A UI scope keeps the layout it
-    // started with.
+    // The UI manager's state picks the layout: in game, unless a window the manager draws alone (savegame, options,
+    // character, world map) replaces the game's screen. A UI scope keeps the layout it started with.
     const Layout& liveLayout()
     {
         const cUI_Manager* manager = cUI_Manager::instance();
-        const bool inGame = manager && (manager->flags & cUI_Manager::inGame) && !fullScreenWindowOpen(manager);
+        const bool inGame = manager && (manager->flags & cUI_Manager::inGame) && !UiState::exclusiveWindow();
         return inGame ? g_game : g_menu;
     }
 
@@ -281,18 +264,6 @@ namespace
 }
 
 bool UiCanvas::enabled() { return g_enabled; }
-
-bool UiCanvas::fullScreenWindowOpen()
-{
-    const cUI_Manager* manager = cUI_Manager::instance();
-    return manager && ::fullScreenWindowOpen(manager);
-}
-
-bool UiCanvas::inGame()
-{
-    const cUI_Manager* manager = cUI_Manager::instance();
-    return manager && (manager->flags & cUI_Manager::inGame);
-}
 
 UiCanvas::Bounds UiCanvas::menuCanvas()
 {

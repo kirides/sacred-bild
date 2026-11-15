@@ -6,6 +6,7 @@
 #include "game/resolution.h"
 #include "game/ui_canvas.h"
 #include "game/ui_nav.h"
+#include "game/ui_state.h"
 #include "input/bindings.h"
 #include "input/gamepad.h"
 #include "input/inject.h"
@@ -306,23 +307,10 @@ namespace
         }
     }
 
-    // A window that takes the cursor is open (not the HUD: taskbar, minimap, overview map, chat, party portraits).
-    bool windowOpen(cUI_Manager* manager)
+    // A window that takes the cursor is shown (not the HUD: taskbar, minimap, overview map, chat, party portraits).
+    bool windowOpen()
     {
-        using W = cUI_Manager::Window;
-        for (int i = static_cast<int>(W::taskbar) + 1; i < static_cast<int>(W::count); ++i)
-        {
-            const auto w = static_cast<W>(i);
-            if (w == W::overviewMap || w == W::minimap || w == W::console || w == W::netPortraits)
-            {
-                continue;
-            }
-            if (shown(manager->window(w)))
-            {
-                return true;
-            }
-        }
-        return UiNav::modal() != nullptr;
+        return UiState::cursorWindowShown() || UiNav::modal() != nullptr;
     }
 
     Context detect()
@@ -351,7 +339,7 @@ namespace
             return Context::Book;
         }
         float hx, hy;
-        if (!inGame || g_cursorMode || windowOpen(manager) || !AimAssist::hero(hx, hy))
+        if (!inGame || g_cursorMode || windowOpen() || !AimAssist::hero(hx, hy))
         {
             return Context::Ui;
         }
@@ -385,7 +373,7 @@ namespace
             add(menu, &menu);
         }
         add(manager->dialog, &manager->dialog);
-        add(manager->other, &manager->other);
+        add(manager->textLines(), manager->textLines());
         if (cUI_BusyDlg* box = manager->dialog; shown(box))
         {
             seen += Fmt::format("[{} buttons] ", UiNav::buttonCount(box));
@@ -1093,7 +1081,7 @@ namespace
             return;
         }
         cUI_Taskbar2* taskbar = manager ? manager->taskbar() : nullptr;
-        if (!shown(taskbar))
+        if (!taskbar || !UiState::shown(cUI_Manager::Window::taskbar))
         {
             return;
         }

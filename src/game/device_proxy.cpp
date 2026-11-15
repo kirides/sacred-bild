@@ -2,6 +2,8 @@
 #include "game/d3d_stats.h"
 #include "game/gpu_skin.h"
 #include "game/ui_canvas.h"
+#include "game/ui_state.h"
+#include "game/ui_windows.h"
 #include "render/fvf.h"
 #include "config/render.h"
 #include "config/ui.h"
@@ -358,7 +360,10 @@ bool DeviceProxy::mapToCanvas(DWORD fvf, const void* verts, DWORD count, const v
 
 bool DeviceProxy::drawScreenDim(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, DWORD flags, HRESULT& hr)
 {
-    if (m_texture0 || count != 4 || !(fvf & D3DFVF_DIFFUSE) ||
+    const UiWindows::Owner owner = UiWindows::current();
+    const bool dims = owner.is(UiState::Window::escapeMenu) ||
+        (owner.object && (owner.object->flags & Sacred::cUI_Control2::dimsScreenFlag));
+    if (!dims || m_texture0 || count != 4 || !(fvf & D3DFVF_DIFFUSE) ||
         m_virtMinX > 0.5f || m_virtMinY > 0.5f || m_virtMaxX < 1022.5f || m_virtMaxY < 766.5f)
     {
         return false;
@@ -396,11 +401,18 @@ bool DeviceProxy::drawScreenDim(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, D
     return true;
 }
 
+// The letterbox bars are the manager's own drawing (no window's call) in cinematic mode in game.
+static bool cinematicBars()
+{
+    return UiWindows::current().kind == UiWindows::Kind::None && UiState::mode() == UiState::Mode::Cinematic &&
+        (UiState::manager()->flags & Sacred::cUI_Manager::inGame);
+}
+
 bool DeviceProxy::drawScreenBar(D3DPRIMITIVETYPE type, DWORD fvf, DWORD count, DWORD flags, HRESULT& hr)
 {
     const bool top = m_virtMinY < 0.5f, bottom = m_virtMaxY > 767.5f;
     if (m_texture0 || count != 4 || !(fvf & D3DFVF_DIFFUSE) || m_virtMinX > 0.5f || m_virtMaxX < 1023.5f ||
-        top == bottom || !UiCanvas::inGame())
+        top == bottom || !cinematicBars())
     {
         return false;
     }

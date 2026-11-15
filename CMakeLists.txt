@@ -76,6 +76,8 @@ set(DDRAW_SOURCES
   src/game/click_walk.cpp
   src/game/options_screen.cpp
   src/game/ui_nav.cpp
+  src/game/ui_state.cpp
+  src/game/ui_windows.cpp
   src/game/movie.cpp
   src/game/d3d_stats.cpp
   src/game/device_proxy.cpp
