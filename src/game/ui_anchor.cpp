@@ -1,4 +1,6 @@
 #include "game/ui_anchor.h"
+#include "game/build.h"
+#include "game/resolution.h"
 #include "game/ui_canvas.h"
 #include "game/ui_windows.h"
 #include "config/debug.h"
@@ -108,6 +110,36 @@ namespace
     decltype(Addr::cUI_Popup_setTextId)::Ptr g_origSetTextId = nullptr;
     LayoutFn g_origPopupLayout = nullptr;
 
+    // ReBorn's windows carry the offset of the edge they are anchored to ((screen - 1024) * 0, 1/2 or 1) in their
+    // position. The anchor is the one that puts the window's original 1024x768 position (x0, y0) inside the screen
+    // it was laid out for, the centered one if several do (or none, for a window parked elsewhere).
+    float reBornAnchor(int pos, int size, int room)
+    {
+        int found = -1;
+        for (int i = 0; i < 3; ++i)
+        {
+            const float origin = pos - 0.5f * i * room;     // i = 0, 1, 2: anchor 0, 1/2, 1
+            if (origin >= -8.0f && origin + size <= 1024.0f + 8.0f)
+            {
+                if (i == 1)
+                {
+                    return 0.5f;
+                }
+                if (found < 0)
+                {
+                    found = i;
+                }
+            }
+        }
+        return found < 0 ? 0.5f : 0.5f * found;
+    }
+
+    Frame reBornFrame(const cUI_Window2* window)
+    {
+        return UiCanvas::placed(reBornAnchor(window->x, window->width, Resolution::width() - 1024),
+                                reBornAnchor(window->y, window->height, Resolution::height() - 768));
+    }
+
     // The frame an object of the manager's runs in (UiWindows::Handlers::frame).
     bool frameOf(const UiWindows::Owner& owner, Frame& out)
     {
@@ -129,7 +161,7 @@ namespace
             {
                 if (owner.is(kAnchors[i].window))
                 {
-                    out = g_frames[i];
+                    out = Sacred::reBorn() && cUI_Manager::instance() && cUI_Manager::instance()->window(kAnchors[i].window) ? reBornFrame(cUI_Manager::instance()->window(kAnchors[i].window)) : g_frames[i];
                     return true;
                 }
             }
@@ -378,6 +410,9 @@ namespace
         int& y = popup->y;
         const int w = popup->width, h = popup->height;
         const UiCanvas::Bounds screen = UiCanvas::screenBounds();
+        // The screen the game laid the popup out for (ReBorn's is the real one).
+        const int gameW = Sacred::reBorn() ? Resolution::width() : 1024;
+        const int gameH = Sacred::reBorn() ? Resolution::height() : 768;
         const int left = static_cast<int>(std::ceil(screen.left)), top = static_cast<int>(std::ceil(screen.top));
         const int right = static_cast<int>(std::floor(screen.right)), bottom = static_cast<int>(std::floor(screen.bottom));
         if (saved & cUI_Popup::clampToScreen)
@@ -385,9 +420,9 @@ namespace
             // Where the game would push the popup against an edge of its 1024x768 screen (the effects list is
             // placed at 16,16 to sit in the top-left corner), it goes against that edge of the real screen.
             if (x < 16) x = left + 16;
-            else if (x + w + 16 > 1024) x = right - 32 - w;
+            else if (x + w + 16 > gameW) x = right - 32 - w;
             if (y < 16) y = top + 16;
-            else if (y + h + 16 > 768) y = bottom - 32 - h;
+            else if (y + h + 16 > gameH) y = bottom - 32 - h;
             x = std::max(std::min(x, right - 32 - w), left + 16);
             y = std::max(std::min(y, bottom - 32 - h), top + 16);
         }
@@ -428,7 +463,7 @@ void UiAnchor::install()
     {
         const Config::Ui::Position& pos = Config::ui.*kAnchors[i].position;
         g_frames[i] = g_anchored ? UiCanvas::placed(pos.x / 4096.0f, pos.y / 4096.0f) : Frame{};
-        g_frames[i].confine = kAnchors[i].confine;
+        g_frames[i].confine = kAnchors[i].confine && !Sacred::reBorn();
     }
     g_cornerFrame = g_anchored ? left : Frame{};
     if (g_anchored)

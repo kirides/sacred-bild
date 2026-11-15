@@ -1,6 +1,8 @@
 #include "game/device_proxy.h"
+#include "game/build.h"
 #include "game/d3d_stats.h"
 #include "game/gpu_skin.h"
+#include "game/resolution.h"
 #include "game/ui_canvas.h"
 #include "game/ui_state.h"
 #include "game/ui_windows.h"
@@ -184,8 +186,10 @@ D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt) const
     const float s = p.scale;
     const float l = std::max(p.clipLeft, p.originX);
     const float t = std::max(p.clipTop, p.originY);
-    const float r = std::min(p.clipRight, p.originX + 1024.0f * s);
-    const float b = std::min(p.clipBottom, p.originY + 768.0f * s);
+    // ReBorn's windows have the offset of their anchor in their coordinates: they are not inside the canvas.
+    const bool wholeScreen = Sacred::reBorn() && !UiCanvas::frame().confine;
+    const float r = wholeScreen ? p.clipRight : std::min(p.clipRight, p.originX + 1024.0f * s);
+    const float b = wholeScreen ? p.clipBottom : std::min(p.clipBottom, p.originY + 768.0f * s);
     const float x0 = std::max(p.originX + virt.dwX * s, l);
     const float y0 = std::max(p.originY + virt.dwY * s, t);
     const float x1 = std::min(p.originX + (virt.dwX + virt.dwWidth) * s, r);
@@ -349,6 +353,14 @@ bool DeviceProxy::mapToCanvas(DWORD fvf, const void* verts, DWORD count, const v
         maxY = std::max(maxY, p[1]);
     }
     mapped = m_scratch.data();
+    // ReBorn's menu backdrops cover the whole screen (its menus are laid out for the screen size, the widgets for
+    // 1024x768): they are drawn as they are, not scaled with the canvas.
+    if (Sacred::reBorn() && !UiCanvas::inGame() && m_virtMinX <= 0.5f && m_virtMinY <= 0.5f &&
+        m_virtMaxX >= Resolution::width() - 1.5f && m_virtMaxY >= Resolution::height() - 1.5f)
+    {
+        std::memcpy(m_scratch.data(), verts, bytes);
+        return true;
+    }
     const bool onScreen = m_virtMaxX > 0 && m_virtMinX < 1024 && m_virtMaxY > 0 && m_virtMinY < 768;
     if (confine && onScreen && (m_virtMaxX > 1100 || m_virtMaxY > 830 || m_virtMinX < -76 || m_virtMinY < -62))
     {

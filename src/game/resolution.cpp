@@ -1,4 +1,5 @@
 #include "game/resolution.h"
+#include "game/build.h"
 #include "game/focus.h"
 #include "game/ui_canvas.h"
 #include "config/ddraw.h"
@@ -14,7 +15,11 @@
 #include <intrin.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <span>
+#include <string>
 #include <vector>
 
 namespace
@@ -92,6 +97,12 @@ namespace
     }
 
     // The site holds what the table expects: its address came from a signature, so check before patching.
+    bool isDepthSite(Kind k)
+    {
+        return k == Kind::ImmNear || k == Kind::ImmFar || k == Kind::MemDepthHalfH || k == Kind::MemDepthNear ||
+            k == Kind::MemDepthScale || k == Kind::MemDepthBias;
+    }
+
     bool holdsExpected(const Site& s, uintptr_t addr)
     {
         uint32_t operand;
@@ -173,7 +184,9 @@ namespace
         // Always 32 bits per pixel: GFX32 : 0 asks for a 16-bit mode, which only a fullscreen game uses (windowed
         // takes the desktop's format, textures their own formats either way).
         bpp = 32;
-        if (static_cast<uint16_t>(w) != 1024 || static_cast<uint16_t>(h) != 768)
+        // The game asks for 1024x768 (ReBorn: for the size it read from its settings), the size it is patched to run at.
+        const bool ownSize = Sacred::reBorn() && w == g_width && h == g_height;
+        if (!ownSize && (static_cast<uint16_t>(w) != 1024 || static_cast<uint16_t>(h) != 768))
         {
             return g_origFindMode(self, edx, w, h, bpp, flags);
         }
@@ -195,7 +208,7 @@ namespace
         return g_syntheticMode;
     }
 
-    // The loading screen and splash are GDI blits into a 1024x768 frame; center them.
+    // The loading screen and splash are GDI blits into a 1024x768 frame; center them (ReBorn offsets them itself).
     using BitBltFn = BOOL(WINAPI*)(HDC, int, int, int, int, HDC, int, int, DWORD);
     using DrawTextAFn = int(WINAPI*)(HDC, LPCSTR, int, LPRECT, UINT);
     using CreateWindowExAFn = HWND(WINAPI*)(DWORD, LPCSTR, LPCSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
@@ -207,7 +220,7 @@ namespace
 
     BOOL WINAPI hookBitBlt(HDC dst, int x, int y, int w, int h, HDC src, int sx, int sy, DWORD rop)
     {
-        if (!t_nativeGdi && (g_centerGdi || (x == 0 && y == 0 && w == 1024 && h == 768)))
+        if (!t_nativeGdi && !Sacred::reBorn() && (g_centerGdi || (x == 0 && y == 0 && w == 1024 && h == 768)))
         {
             x += Resolution::centerX();
             y += Resolution::centerY();
@@ -217,7 +230,7 @@ namespace
 
     int WINAPI hookDrawTextA(HDC dc, LPCSTR text, int len, LPRECT rect, UINT format)
     {
-        if (g_centerGdi && rect)
+        if (g_centerGdi && !Sacred::reBorn() && rect)
         {
             RECT r = *rect;
             OffsetRect(&r, Resolution::centerX(), Resolution::centerY());
@@ -332,9 +345,11 @@ namespace
     ConvertFn g_origPixelsToWorld = nullptr;
     ConvertFn g_origWorldToPixels = nullptr;
 
+    // The unzoomed projection is built from +-267 x +-200 for 1024x768 pixels; ReBorn builds it from extents already
+    // scaled to the screen size.
     bool isUnzoomed(const float* proj)
     {
-        return proj == &(*Addr::g_unzoomedProjection)[0][0];
+        return !Sacred::reBorn() && proj == &(*Addr::g_unzoomedProjection)[0][0];
     }
 
     float* __cdecl hookPixelsToWorld(float* out, const float* p, const float* m, const float* proj)
@@ -733,7 +748,7 @@ namespace
     void __fastcall hookLoadingScreen(dxDriver7* self, void* edx, uint32_t progress, const char* text)
     {
         IDirectDrawSurface7*& back = self->back;
-        if (IDirectDrawSurface7* canvas = back && UiCanvas::enabled() ? loadingCanvas(self) : nullptr)
+        if (IDirectDrawSurface7* canvas = back && UiCanvas::enabled() && !Sacred::reBorn() ? loadingCanvas(self) : nullptr)
         {
             t_loadingBack = back;
             back = canvas;
@@ -758,6 +773,61 @@ namespace
         g_centerGdi = false;
     }
 
+    // The integer of `key` in Settings.cfg ("KEY : value" lines, next to the exe), 0 if it is not there.
+    int settingsInt(const char* key)
+    {
+        std::ifstream file("Settings.cfg");
+        std::string line;
+        while (std::getline(file, line))
+        {
+            const size_t colon = line.find(':');
+            if (colon == std::string::npos)
+            {
+                continue;
+            }
+            const size_t end = line.find_last_not_of(" 	", colon == 0 ? 0 : colon - 1);
+            if (end != std::string::npos && line.compare(0, end + 1, key) == 0 && end + 1 == std::strlen(key))
+            {
+                return std::atoi(line.c_str() + colon + 1);
+            }
+        }
+        return 0;
+    }
+
+    // ReBorn's code appended to the exe (in its .rsrc section, called from the game's startup) reads the size from
+    // Settings.cfg and, when that has none, falls back to 1024 / 768. From the size it derives everything else the
+    // game's patched code uses (the cull rectangle, the UI offsets, ...). Making our size that fallback sets all of it.
+    void setReBornDefaults()
+    {
+        const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+        const IMAGE_SECTION_HEADER* section = IMAGE_FIRST_SECTION(nt);
+        for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section)
+        {
+            if (std::memcmp(section->Name, ".rsrc", 6) != 0)
+            {
+                continue;
+            }
+            uintptr_t width = 0, height = 0;
+            const Sig::Entry entries[] = {
+                {"ReBorn default width", "66 85 C0 75 05 B8 00 04 00 00 A3", 6, Sig::Take::Match, &width},
+                {"ReBorn default height", "66 85 C0 75 05 B8 00 03 00 00 A3", 6, Sig::Take::Match, &height},
+            };
+            const std::span<const uint8_t> data(reinterpret_cast<const uint8_t*>(base + section->VirtualAddress),
+                section->Misc.VirtualSize);
+            if (Sig::resolve(entries, data, reinterpret_cast<uintptr_t>(data.data())) == 0 &&
+                Patch::imm32(width, 1024, g_width) && Patch::imm32(height, 768, g_height))
+            {
+                LOG("Resolution: ReBorn's default size is now {}x{}", g_width, g_height);
+            }
+            else
+            {
+                LOG("Resolution: ReBorn's size defaults not found; set SR_WIDTH / SR_HEIGHT in Settings.cfg");
+            }
+            return;
+        }
+    }
+
     void chooseSize()
     {
         int w = Config::display.width;
@@ -766,6 +836,24 @@ namespace
         {
             w = GetSystemMetrics(SM_CXSCREEN);
             h = GetSystemMetrics(SM_CYSCREEN);
+        }
+        if (Sacred::reBorn())
+        {
+            // ReBorn's own setting (SacredReborn config.exe) wins: it patches the game to that size.
+            // SR_HD_* (with SR_HD_ENABLE : 1) in the current ReBorn, SR_WIDTH / SR_HEIGHT in older ones.
+            const bool hd = settingsInt("SR_HD_ENABLE") != 0;
+            int cfgW = hd ? settingsInt("SR_HD_WIDTH") : 0, cfgH = hd ? settingsInt("SR_HD_HEIGHT") : 0;
+            if (cfgW <= 0 || cfgH <= 0)
+            {
+                cfgW = settingsInt("SR_WIDTH");
+                cfgH = settingsInt("SR_HEIGHT");
+            }
+            if (cfgW > 0 && cfgH > 0)
+            {
+                LOG("Resolution: {}x{} from SR_HD_* / SR_WIDTH in Settings.cfg", cfgW, cfgH);
+                w = cfgW;
+                h = cfgH;
+            }
         }
         // The UI layout needs at least the original canvas.
         g_width = std::max(w, 1024);
@@ -808,8 +896,8 @@ void Resolution::refresh()
     const float m22 = (*Addr::g_unzoomedProjection)[1][1];
     if (m11 != 0.0f && m22 != 0.0f)
     {
-        g_unzXF = m11 * 1024.0f / g_widthF;
-        g_unzYF = m22 * 768.0f / g_heightF;
+        g_unzXF = Sacred::reBorn() ? m11 : m11 * 1024.0f / g_widthF;
+        g_unzYF = Sacred::reBorn() ? m22 : m22 * 768.0f / g_heightF;
     }
 }
 void Resolution::beforeFlip(dxDriver7* dxDriver)
@@ -844,6 +932,10 @@ void Resolution::install()
         g_origSetWindowPos = static_cast<SetWindowPosFn>(
             Patch::iat("USER32.dll", "SetWindowPos", reinterpret_cast<void*>(&hookSetWindowPos)));
     }
+    if (Sacred::reBorn())
+    {
+        setReBornDefaults();
+    }
     if (!active())
     {
         return;
@@ -864,6 +956,10 @@ void Resolution::install()
         if (!addrs[i])
         {
             continue;
+        }
+        if (Sacred::reBorn() && isDepthSite(s.kind))
+        {
+            continue;   // ReBorn keeps the game's depth range; its models vanish with ours
         }
         if (!holdsExpected(s, addrs[i]))
         {

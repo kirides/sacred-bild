@@ -272,8 +272,11 @@ namespace
 
 void Language::install()
 {
-    g_operatorNew = reinterpret_cast<OperatorNewFn>(callTarget(Addr::textTableAllocCall));
-    if (g_operatorNew)
+    if (!Addr::textTableAllocCall || !Addr::cTextTable_load.address)
+    {
+        LOG("Language: this build loads its text from files itself; the text stays the game's");
+    }
+    else if ((g_operatorNew = reinterpret_cast<OperatorNewFn>(callTarget(Addr::textTableAllocCall))) != nullptr)
     {
         Patch::hook(g_origLoadText, Addr::cTextTable_load, &hookLoadText, "cTextTable_load");
     }

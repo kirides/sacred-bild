@@ -15,6 +15,8 @@ namespace UiCanvas
     // Hooks the cursor and the world's mouse reads; call inside a Patch transaction after Resolution::install.
     void install();
     bool enabled();
+    // The UI manager is in game (not in the menus or leaving them).
+    bool inGame();
 
     // Canvas placement in physical pixels (in game or menus, see above).
     float left();

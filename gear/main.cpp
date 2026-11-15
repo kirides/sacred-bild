@@ -37,7 +37,7 @@ namespace
     {
         const size_t slash = exe.find_last_of(L"\\/");
         const wchar_t* name = exe.c_str() + (slash == std::wstring::npos ? 0 : slash + 1);
-        return _wcsicmp(name, L"sacred.exe") == 0;
+        return _wcsicmp(name, L"sacred.exe") == 0 || _wcsicmp(name, L"SacredReborn.exe") == 0;
     }
 
     // One Sacred Gear per process: with an ASI loader and SacredBild both present, SacredGear.asi and

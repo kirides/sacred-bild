@@ -14,6 +14,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SACRED_ENG = os.environ.get('SACRED_ENG', r'B:\Spiele\GOG Games\sacred gold GOG\Sacred.exe')
 GAMESERVER_ENG = os.environ.get('GAMESERVER_ENG', r'B:\Spiele\GOG Games\sacred gold GOG\GameServer.exe')
 SACRED_DE = os.environ.get('SACRED_DE', r'B:\Spiele\GOG Games\Sacred Gold\sacred.exe')
+# Sacred ReBorn: the German exe with patched code (same PE timestamp) and its own cTextTable_load.
+SACRED_REBORN = os.environ.get('SACRED_REBORN', r'B:\Spiele\GOG Games\sacred gold ReBorn\SacredReborn.exe')
+GAMESERVER_REBORN = os.environ.get('GAMESERVER_REBORN', r'B:\Spiele\GOG Games\sacred gold ReBorn\SacredReborn Gameserver.exe')
 GAMESERVER_DE = os.environ.get('GAMESERVER_DE', r'B:\Spiele\GOG Games\Sacred Gold\gameserver.exe')
 
 
@@ -115,7 +118,7 @@ SACRED = [
     ('cObject3D_drawModel', 0x0044A9D0, 'func'),
     ('cWorldView_initRowWalk', 0x006328C0, 'func'),
     ('g_viewCameraX', 0x00AD7998, 'data'),
-    ('g_viewCameraY', 0x00AD799C, 'data'),
+    ('g_viewCameraY', 0x00AD799C, 'data', 0x00632410),           # mov [g_viewCameraY], ecx (ReBorn patched its other uses)
     # map data record caches
     ('layerRecordCache', 0x00635FE0, 'func'),
     ('recordCache', 0x00635E50, 'func'),
@@ -181,6 +184,10 @@ GAMESERVER = [
 ]
 
 
+# Not found in ReBorn, whose cTextTable_load reads the language files itself (see Language::install).
+OPTIONAL = {'cTextTable_load', 'textTableAllocCall'}
+
+
 def resolve(ref, others, name, va, kind, start=None):
     if kind == 'data':
         refs = [sigs.operand_of(ref, start, va)] if start is not None else sigs.xrefs(ref, va, 40)
@@ -206,28 +213,41 @@ def emit(path, header, namespace, entries, ref, others, table):
              f'static const Sig::Entry {table}[] = {{']
     report = {}
     failed = []
+    optional_lines = []
     for e in entries:
         name, va, kind = e[:3]
         start = e[3] if len(e) > 3 else None
-        r = resolve(ref, others, name, va, kind, start)
+        is_optional = name in OPTIONAL
+        # An optional entry need not exist in ReBorn; the C++ side leaves the feature off when it is not found.
+        builds = [o for o in others if not (is_optional and o.path == SACRED_REBORN)]
+        r = resolve(ref, builds, name, va, kind, start)
         if not r:
             failed.append(name)
             print(f'FAILED {name} {va:#010x}', file=sys.stderr)
             continue
         sig, off, take, addrs = r
-        report[name] = {f'{i.timestamp:08X}': f'{a:08X}' for i, a in zip([ref] + others, addrs)}
+        report[name] = {}
+        for i, a in zip([ref] + builds, addrs):
+            key = f'{i.timestamp:08X}'
+            if key in report[name]:     # ReBorn has the German exe's timestamp
+                key += ':' + os.path.basename(i.path).lower()
+            report[name][key] = f'{a:08X}'
         where = ', '.join(f'{a:08X}' for a in addrs)
-        lines.append(f'    {{"{name}", "{sigs.fmt(sig)}", {off}, Sig::Take::{take}, &{namespace}::{name}}}, // {where}')
+        (optional_lines if is_optional else lines).append(
+            f'    {{"{name}", "{sigs.fmt(sig)}", {off}, Sig::Take::{take}, &{namespace}::{name}}}, // {where}')
         print(f'{name:28} {take:5} +{off:<3} {where}')
     lines.append('};')
+    if optional_lines:
+        lines += [f'// Entries that builds may lack (counted apart from {table}).',
+                  f'static const Sig::Entry kOptional{table[1:]}[] = {{'] + optional_lines + ['};']
     with open(os.path.join(ROOT, path), 'w', newline='\n') as f:
         f.write(header + '\n'.join(lines) + '\n')
     return report, failed
 
 
 def main():
-    sacred = sigs.Image(SACRED_ENG, _A), other_builds(SACRED_DE)
-    server = sigs.Image(GAMESERVER_ENG), other_builds(GAMESERVER_DE)
+    sacred = sigs.Image(SACRED_ENG, _A), other_builds(SACRED_DE, SACRED_REBORN)
+    server = sigs.Image(GAMESERVER_ENG), other_builds(GAMESERVER_DE, GAMESERVER_REBORN)
     report = {}
     r, f1 = emit('src/game/sacred_sigs.inc', '', 'Sacred::Addr', SACRED, *sacred, 'kAddressSigs')
     report['sacred.exe'] = r
