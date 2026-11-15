@@ -24,6 +24,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 | `src/ui/form.*` | `Ui::Form`: settings windows declared in code (pages, groups, rows of controls bound to ini keys), laid out and run as dialogs |
 | `src/log.*`, `src/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
 | `src/patch.*`, `src/sig.*` | Code patches and hooks; byte signature search |
+| `sacred_core` (CMake) | `src/fmt.*`, `log.*`, `patch.*`, `sig.*` as a static library, linked by SacredBild and by Sacred Gear (`gear/`, see [Sacred Gear](Gear.md)) |
 | `src/spin_lock.h` | Locks for the render thread's hot paths |
 | `src/mem.h` | Fields of granny.dll's objects by byte offset (`Mem::field`) |
 | `src/profiler.*` | `[Debug] Profiler` |

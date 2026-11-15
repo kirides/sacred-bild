@@ -36,6 +36,28 @@ namespace
         return dir.substr(0, dir.find_last_of(L"\\/"));
     }
 
+    // Sacred Gear (the mod kit, its own DLL) if it is in the game folder. It works without SacredBild too, through any
+    // DLL loader; with SacredBild its players need none. The two never patch the same bytes
+    // (tools/check_gear_overlap.py), so either can load first. This may run under the loader lock (startGame from
+    // DllMain): Sacred Gear's DllMain only scans and hooks, it loads nothing. If an ASI loader already put a Sacred
+    // Gear in, that one stays the only active one (the first claims the process).
+    void loadSacredGear(const std::wstring& gameDir)
+    {
+        const std::wstring path = gameDir + L"\\SacredGear.dll";
+        if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+        {
+            return;
+        }
+        if (LoadLibraryW(path.c_str()))
+        {
+            LOG("Sacred Gear loaded (SacredGear.log)");
+        }
+        else
+        {
+            LOG("Sacred Gear: SacredGear.dll does not load: {}", GetLastError());
+        }
+    }
+
     // From here on everything reads the settings (config/).
     bool startGame(const std::wstring& gameDir)
     {
@@ -51,6 +73,7 @@ namespace
         {
             LOG("Unsupported sacred.exe build: game hooks disabled, ddraw is passed through");
         }
+        loadSacredGear(gameDir);
         return true;
     }
 
