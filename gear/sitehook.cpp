@@ -55,6 +55,13 @@ namespace
         uint8_t kind;               // 0 push imm8, 1 push imm32 (int), 2 push imm32 (float)
         uint32_t vanilla;           // the immediate the site is expected to push (its bits)
     };
+    struct BranchSiteSpec
+    {
+        const char* name;
+        int index;
+        const uintptr_t* function;
+        uint32_t offset;
+    };
 #include "game/gear_sites.inc"
 
     constexpr int kNoAnswer = static_cast<int>(0x80000000);   // the handler's "no mod answered"
@@ -786,6 +793,94 @@ namespace
         return base;
     }
 
+    // --- combat.branch sites --------------------------------------------------------------------------------------------
+
+    std::atomic<bool> g_branchActive{false};
+    std::atomic<unsigned> g_branchCalls{0}, g_branchAnswered{0}, g_branchBusy{0};
+    std::atomic<unsigned> g_branchSiteCalls[std::size(kBranchSites)];
+    BranchSiteSpec g_branchTestSpec = {};        // the self test's site (after the generated ones)
+
+    // Where the stub goes on: `target` when the branch is taken, else `fall`. `vanilla` says whether the engine's condition took it.
+    extern "C" uintptr_t __cdecl branchHandler(int site, int vanilla, uintptr_t target, uintptr_t fall)
+    {
+        g_branchCalls.fetch_add(1, std::memory_order_relaxed);
+        if (site >= 0 && site < static_cast<int>(std::size(kBranchSites)))
+        {
+            g_branchSiteCalls[site].fetch_add(1, std::memory_order_relaxed);
+        }
+        if (!g_branchActive.load(std::memory_order_relaxed))
+        {
+            return vanilla ? target : fall;
+        }
+        const BranchSiteSpec& spec = site < static_cast<int>(std::size(kBranchSites)) ? kBranchSites[site] : g_branchTestSpec;
+        bool take = false;
+        switch (LuaHost::branch(spec.name, spec.index, vanilla != 0, take))
+        {
+        case LuaHost::Answer::Value:
+            g_branchAnswered.fetch_add(1, std::memory_order_relaxed);
+            return take ? target : fall;
+        case LuaHost::Answer::Busy:
+            g_branchBusy.fetch_add(1, std::memory_order_relaxed);
+            break;
+        default:
+            break;
+        }
+        return vanilla ? target : fall;
+    }
+
+    // The stub: the displaced `jcc rel32` is evaluated on the real flags (it only records whether it would jump), the handler decides, and
+    // the stub jumps to the target or the next instruction with the registers and flags exactly as they were.
+    uintptr_t buildBranchStub(uintptr_t site, int index)
+    {
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(site);
+        int32_t rel = 0;
+        std::memcpy(&rel, b + 2, 4);
+        const uintptr_t target = site + 6 + rel;
+        const uintptr_t fall = site + 6;
+        std::vector<uint8_t> code;
+        void* memory = VirtualAlloc(nullptr, 160, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!memory)
+        {
+            return 0;
+        }
+        const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
+        const uintptr_t vanillaCell = base + 128, destCell = base + 132;
+        emit(code, {0x0F, b[1]});                                   // the original jcc, to `taken`
+        const size_t jccRel = code.size();
+        emit32(code, 0);
+        emit(code, {0xC7, 0x05});                                   // mov dword [vanilla], 0
+        emit32(code, static_cast<uint32_t>(vanillaCell));
+        emit32(code, 0);
+        emit(code, {0xEB, 0x0A});                                   // jmp ask (over the next 10 bytes)
+        const size_t taken = code.size();
+        emit(code, {0xC7, 0x05});                                   // taken: mov dword [vanilla], 1
+        emit32(code, static_cast<uint32_t>(vanillaCell));
+        emit32(code, 1);
+        const uint32_t jr = static_cast<uint32_t>(taken - (jccRel + 4));
+        std::memcpy(&code[jccRel], &jr, 4);
+        emit(code, {0x9C, 0x60});                                   // ask: pushfd; pushad
+        emit(code, {0x68});
+        emit32(code, static_cast<uint32_t>(fall));                  // push fall
+        emit(code, {0x68});
+        emit32(code, static_cast<uint32_t>(target));                // push target
+        emit(code, {0xFF, 0x35});                                   // push dword [vanilla]
+        emit32(code, static_cast<uint32_t>(vanillaCell));
+        emit(code, {0x68});
+        emit32(code, static_cast<uint32_t>(index));                 // push site index
+        emit(code, {0xB8});
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&branchHandler)));
+        emit(code, {0xFF, 0xD0});                                   // call eax
+        emit(code, {0x83, 0xC4, 0x10});                             // add esp, 16
+        emit(code, {0xA3});                                         // mov [dest], eax
+        emit32(code, static_cast<uint32_t>(destCell));
+        emit(code, {0x61, 0x9D});                                   // popad; popfd
+        emit(code, {0xFF, 0x25});                                   // jmp dword [dest]
+        emit32(code, static_cast<uint32_t>(destCell));
+        std::memcpy(memory, code.data(), code.size());
+        FlushInstructionCache(GetCurrentProcess(), memory, code.size());
+        return base;
+    }
+
     // The stub for one site (see the header). Returns its address, 0 if no memory could be had.
     uintptr_t buildStub(uintptr_t site, const SiteSpec& spec, int index)
     {
@@ -1125,11 +1220,38 @@ size_t SiteHook::install()
             ++slots;
         }
     }
+    size_t branches = 0;
+    for (const BranchSiteSpec& spec : kBranchSites)
+    {
+        if (!*spec.function)
+        {
+            continue;
+        }
+        const uintptr_t address = *spec.function + spec.offset;
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(address);
+        if (b[0] != 0x0F || b[1] < 0x80 || b[1] > 0x8F)
+        {
+            LOG("Site hook {}[{}] at {:08x}: the code is not a jcc rel32: not installed", spec.name, spec.index, address);
+            continue;
+        }
+        const uintptr_t stub = buildBranchStub(address, static_cast<int>(&spec - kBranchSites));
+        if (!stub)
+        {
+            continue;
+        }
+        uint8_t bytes[6] = {0xE9, 0, 0, 0, 0, 0x90};
+        const uint32_t jump = static_cast<uint32_t>(stub - (address + 5));
+        std::memcpy(bytes + 1, &jump, 4);
+        if (Patch::write(address, bytes, sizeof(bytes)))
+        {
+            ++branches;
+        }
+    }
     LOG("Site hooks: {} of {} level sites, {} of {} constant sites, {} of {} creature.ability sites, {} of {} damage sites, {} of {} effect.add sites, "
-        "{} of {} bonus.constant sites, {} of {} skillslot.select sites installed", installed, std::size(kSites), constants,
-        std::size(kConstSites), abilities, std::size(kAbilitySites), damages, std::size(kDamageSites), effects, std::size(kEffectSites), bonuses,
-        std::size(kBonusSites), slots, std::size(kSlotSites));
-    return installed + constants + abilities + damages + effects + bonuses + slots;
+        "{} of {} bonus.constant sites, {} of {} skillslot.select sites, {} of {} combat.branch sites installed", installed, std::size(kSites),
+        constants, std::size(kConstSites), abilities, std::size(kAbilitySites), damages, std::size(kDamageSites), effects, std::size(kEffectSites),
+        bonuses, std::size(kBonusSites), slots, std::size(kSlotSites), branches, std::size(kBranchSites));
+    return installed + constants + abilities + damages + effects + bonuses + slots + branches;
 }
 
 void SiteHook::setLevelFactorActive(bool active)
@@ -1518,6 +1640,42 @@ namespace
         r.slotByte = static_cast<int>(g_regs[0]);
     }
 
+    uintptr_t g_branchBlob = 0;
+
+    // xor eax, eax; cmp eax, 0 (flags: equal); je L; mov [r0], 1; ret; L: mov [r0], 2; ret   -- the site is the je (the engine's branch is taken)
+    void runBranchTest(SiteHook::SelfTest& r)
+    {
+        if (!g_branchBlob)
+        {
+            std::vector<uint8_t> code;
+            emit(code, {0x33, 0xC0, 0x83, 0xF8, 0x00});
+            const size_t site = code.size();
+            emit(code, {0x0F, 0x84});
+            emit32(code, 11);                                       // over `mov [r0], 1; ret` (10 + 1 bytes)
+            emit(code, {0xC7, 0x05});
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[0])));
+            emit32(code, 1);
+            emit(code, {0xC3});
+            emit(code, {0xC7, 0x05});
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[0])));
+            emit32(code, 2);
+            emit(code, {0xC3});
+            void* memory = VirtualAlloc(nullptr, code.size() + 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+            std::memcpy(memory, code.data(), code.size());
+            g_branchBlob = reinterpret_cast<uintptr_t>(memory);
+            static uintptr_t holder;
+            holder = g_branchBlob;
+            g_branchTestSpec = {"selftest.branch", 0, &holder, static_cast<uint32_t>(site)};
+            const uintptr_t stub = buildBranchStub(g_branchBlob + site, static_cast<int>(std::size(kBranchSites)));
+            uint8_t bytes[6] = {0xE9, 0, 0, 0, 0, 0x90};
+            const uint32_t jump = static_cast<uint32_t>(stub - (g_branchBlob + site + 5));
+            std::memcpy(bytes + 1, &jump, 4);
+            std::memcpy(reinterpret_cast<void*>(g_branchBlob + site), bytes, 6);
+        }
+        runBlob(g_branchBlob);
+        r.branchTaken = static_cast<int>(g_regs[0]);
+    }
+
     void selfTestThread()
     {
         Sleep(150);     // Lua is not running now
@@ -1550,6 +1708,7 @@ namespace
         runEffectTest(r);
         runBonusTest(r);
         runSlotTest(r);
+        runBranchTest(r);
         g_selfResult = r;
         g_selfState = 2;
     }
@@ -1589,6 +1748,11 @@ std::vector<SiteHook::SiteInfo> SiteHook::sites()
     {
         const uintptr_t fn = *kConstSites[i].function;
         out.push_back({kConstSites[i].name, kConstSites[i].index, fn ? fn + kConstSites[i].offset : 0, g_constSiteCalls[i].load()});
+    }
+    for (size_t i = 0; i < std::size(kBranchSites); ++i)
+    {
+        const uintptr_t fn = *kBranchSites[i].function;
+        out.push_back({"combat.branch", static_cast<int>(i), fn ? fn + kBranchSites[i].offset : 0, g_branchSiteCalls[i].load()});
     }
     for (size_t i = 0; i < std::size(kSlotSites); ++i)
     {
@@ -1661,6 +1825,16 @@ void SiteHook::setSkillSlotActive(bool active)
 SiteHook::Stats SiteHook::skillSlotStats()
 {
     return {g_slotCalls.load(), g_slotAnswered.load(), g_slotBusy.load()};
+}
+
+void SiteHook::setBranchActive(bool active)
+{
+    g_branchActive.store(active);
+}
+
+SiteHook::Stats SiteHook::branchStats()
+{
+    return {g_branchCalls.load(), g_branchAnswered.load(), g_branchBusy.load()};
 }
 
 SiteHook::Stats SiteHook::abilityStats()

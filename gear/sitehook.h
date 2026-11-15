@@ -57,6 +57,10 @@ namespace SiteHook
 
     // skillslot.select: a digit key selected a skill slot (event `skillslot.select`: the place among the five).
     void setSkillSlotActive(bool active);
+
+    // combat.branch: the outcome of some conditional jumps of the hit handlers (event `combat.branch`: name, whether the engine takes the jump, index).
+    void setBranchActive(bool active);
+    Stats branchStats();
     Stats skillSlotStats();
     Stats bonusStats();
     Stats effectStats();
@@ -84,6 +88,8 @@ namespace SiteHook
         float bonusFloat = 0;
         // skillslot.select stub on a function built in memory: the displaced `mov byte [esp+0x13], 1` must still have run (1)
         int slotByte = 0;
+        // combat.branch stub on a function built in memory (an equal compare, then `je`): 2 when the jump was taken, 1 when it fell through
+        int branchTaken = 0;
     };
     bool selfTestStart();
     bool selfTestResult(SelfTest& out);

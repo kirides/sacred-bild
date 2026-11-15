@@ -500,7 +500,8 @@ namespace
         lua_pushnumber(L, r.bonusInt);
         lua_pushnumber(L, r.bonusFloat);
         lua_pushnumber(L, r.slotByte);
-        return 15;
+        lua_pushnumber(L, r.branchTaken);
+        return 16;
     }
 
     // native.difficulty() -> the running game's difficulty level (0 .. 4) | nil
@@ -513,6 +514,13 @@ namespace
         }
         lua_pushnumber(L, *Gear::Addr::g_difficulty);
         return 1;
+    }
+
+    // native.branch_active(bool): whether some mod handles `combat.branch`
+    int nativeBranchActive(lua_State* L)
+    {
+        SiteHook::setBranchActive(lua_toboolean(L, 1) != 0);
+        return 0;
     }
 
     // native.skillslot_active(bool): whether some mod handles `skillslot.select`
@@ -568,7 +576,7 @@ namespace
     int nativeSiteHooks(lua_State* L)
     {
         const char* which = luaL_optstring(L, 1, "level.factor");
-        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : std::strcmp(which, "effect.add") == 0 ? SiteHook::effectStats() : std::strcmp(which, "bonus.constant") == 0 ? SiteHook::bonusStats() : std::strcmp(which, "skillslot.select") == 0 ? SiteHook::skillSlotStats() : SiteHook::levelFactorStats();
+        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : std::strcmp(which, "effect.add") == 0 ? SiteHook::effectStats() : std::strcmp(which, "bonus.constant") == 0 ? SiteHook::bonusStats() : std::strcmp(which, "skillslot.select") == 0 ? SiteHook::skillSlotStats() : std::strcmp(which, "combat.branch") == 0 ? SiteHook::branchStats() : SiteHook::levelFactorStats();
         lua_pushnumber(L, s.calls);
         lua_pushnumber(L, s.answered);
         lua_pushnumber(L, s.busy);
@@ -1992,6 +2000,7 @@ namespace
             {"effect_active", nativeEffectActive},
             {"bonus_active", nativeBonusActive},
             {"skillslot_active", nativeSkillSlotActive},
+            {"branch_active", nativeBranchActive},
             {"cursor_click", nativeCursorClick},
             {"site_hook_sites", nativeSiteHookSites},
             {"site_selftest_start", nativeSiteSelfTestStart},
@@ -2509,6 +2518,48 @@ bool LuaHost::cursorClick()
     using HandleEvent = void(__thiscall*)(void* target, void* event, int flag);
     reinterpret_cast<HandleEvent>(Gear::Addr::cWindow_handleEventInner - 0x30)(target, event, 0);
     return true;
+}
+
+LuaHost::Answer LuaHost::branch(const char* name, int index, bool vanilla, bool& take)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "combat_branch");
+    lua_remove(L, -2);
+    lua_pushstring(L, name);
+    lua_pushboolean(L, vanilla ? 1 : 0);
+    lua_pushnumber(L, index);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 3, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.combat_branch failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isboolean(L, -1))
+    {
+        take = lua_toboolean(L, -1) != 0;
+        answer = Answer::Value;
+    }
+    lua_pop(L, 1);
+    return answer;
 }
 
 unsigned long long LuaHost::lastFrameTime()

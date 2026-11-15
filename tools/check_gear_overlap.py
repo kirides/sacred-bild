@@ -106,9 +106,13 @@ def main():
         for b in bild_all:
             if site < b[2] and b[1] < site + 5:
                 clashes.append(((f'slot site {site:08X}', site, site + 5), b))
+    for name, index, fnname, fn, site in gear_sites.BRANCH_SITES:
+        for b in bild_all:
+            if site < b[2] and b[1] < site + 6:
+                clashes.append(((f'branch site {name}[{index}] {site:08X}', site, site + 6), b))
     for g, b in clashes:
         print(f'overlap: Gear {g[0]} {g[1]:08X}-{g[2]:08X} and SacredBild {b[0]} {b[1]:08X}-{b[2]:08X}')
-    print(f'{len(gear)} Gear windows ({len(gear_patched)} patched names, {len(gear_sites.SITES) + len(gear_sites.CONSTANT_SITES) + len(gear_sites.ABILITY_SITES) + len(gear_sites.DAMAGE_SITES) + len(gear_sites.EFFECT_SITES) + len(gear_sites.BONUS_SITES) + len(gear_sites.SLOT_SITES)} site hooks), {len(bild_all)} SacredBild windows '
+    print(f'{len(gear)} Gear windows ({len(gear_patched)} patched names, {len(gear_sites.SITES) + len(gear_sites.CONSTANT_SITES) + len(gear_sites.ABILITY_SITES) + len(gear_sites.DAMAGE_SITES) + len(gear_sites.EFFECT_SITES) + len(gear_sites.BONUS_SITES) + len(gear_sites.SLOT_SITES) + len(gear_sites.BRANCH_SITES)} site hooks), {len(bild_all)} SacredBild windows '
           f'({len(bild_patch_windows)} patched), {len(clashes)} overlaps')
     sys.exit(1 if clashes else 0)
 

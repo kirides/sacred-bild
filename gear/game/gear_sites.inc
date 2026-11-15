@@ -80,3 +80,10 @@ static const AbilitySiteSpec kSlotSites[] = {
     {3, &Gear::Addr::skillSlotFn, 0x6B5, 0}, // 006E2275 copy
     {4, &Gear::Addr::skillSlotFn, 0x6DE, 1}, // 006E229E call
 };
+static const BranchSiteSpec kBranchSites[] = {
+    {"hit.condition", 0, &Gear::Addr::siteFn5038F0, 0x1940}, // 00505230 in 005038F0
+    {"hit.secondary", 0, &Gear::Addr::siteFn5038F0, 0x1AA5}, // 00505395 in 005038F0
+    {"hit.secondary", 1, &Gear::Addr::siteFn506770, 0xD77}, // 005074E7 in 00506770
+    {"hit.secondary", 2, &Gear::Addr::siteFn50AC00, 0xE2A}, // 0050BA2A in 0050AC00
+    {"hit.secondary", 3, &Gear::Addr::levelFn50E6C0, 0xBBC}, // 0050F27C in 0050E6C0
+};

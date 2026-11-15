@@ -132,6 +132,19 @@ SLOT_SITES = [
 ]
 
 
+# Branch sites (the four hit handlers): a conditional `jcc rel32` (6 bytes) whose outcome Gear lets the mods decide: the event
+# `combat.branch` (name, whether the engine's own condition takes the jump, index) returns true (jump) or false (fall through). 'hit.condition'
+# is `cmp word [ebp], 0x3FC; jne` of the combat art handler (the art id 0x3FC); 'hit.secondary' is the `je` after the creation of an effect
+# object (types 0x34B, 0x360, 0x35C, 0x35E): taken when the object could not be made, the code after it adds the secondary effect.
+BRANCH_SITES = [
+    ('hit.condition', 0, 'siteFn5038F0', 0x005038F0, 0x00505230),
+    ('hit.secondary', 0, 'siteFn5038F0', 0x005038F0, 0x00505395),
+    ('hit.secondary', 1, 'siteFn506770', 0x00506770, 0x005074E7),
+    ('hit.secondary', 2, 'siteFn50AC00', 0x0050AC00, 0x0050BA2A),
+    ('hit.secondary', 3, 'levelFn50E6C0', 0x0050E6C0, 0x0050F27C),
+]
+
+
 def functions():
     seen = {}
     for _, name, va, _, _, _ in SITES:

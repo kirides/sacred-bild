@@ -19,7 +19,7 @@ local objects = {}
 local pipe_events = {}
 local sent = {}
 local ability_store = {}
-local ability_active, damage_active, effect_active, bonus_active, slot_active
+local ability_active, damage_active, effect_active, bonus_active, slot_active, branch_active
 local clicks = 0
 local level_active, constant_active
 local ui_recording, ui_published = {}, {}
@@ -83,6 +83,7 @@ local native = {
     effect_active = function(v) effect_active = v end,
     bonus_active = function(v) bonus_active = v end,
     skillslot_active = function(v) slot_active = v end,
+    branch_active = function(v) branch_active = v end,
     cursor_click = function() clicks = clicks + 1; return true end,
     difficulty = function() return 2 end,
     site_hooks = function() return 7, 5, 1 end,
@@ -283,6 +284,7 @@ files.ab = {
         abil.no_setting = gear.settings.get('NOPE')
         -- the level.factor site hook: tiers of 12 levels, and no answer above 40
         gear.on('creature.ability', function(t, vanilla, index) if t == 7 then return vanilla + 1 end end)
+        gear.on('combat.branch', function(name, vanilla, index) if name == 'hit.secondary' then return true end end)
         gear.on('skillslot.select', function(index) if index == 2 then gear.game.cursor_click() end end)
         gear.on('bonus.constant', function(index, vanilla) if index == 2 then return vanilla + 1 end end)
         gear.on('effect.add', function(e) if e.ability == 7 then return {value = e.value, finish = true} end end)
@@ -459,6 +461,8 @@ ok(level_active == true, 'registering level.factor tells the host')
 ok(kernel.level_factor(5, 0) == 1 and kernel.level_factor(13, 1) == 2 and kernel.level_factor(30, 2) == 3
    and kernel.level_factor(37, 3) == 4, 'level.factor answers with the handler')
 ok(kernel.level_factor(50, 4) == nil, 'level.factor: no number, no answer')
+ok(branch_active == true, 'registering combat.branch tells the host')
+ok(kernel.combat_branch('hit.secondary', false, 1) == true and kernel.combat_branch('hit.condition', true, 0) == nil, 'combat.branch answers with the handler')
 ok(slot_active == true, 'registering skillslot.select tells the host')
 kernel.skillslot_select(2); kernel.skillslot_select(1)
 ok(clicks == 1, 'skillslot.select reaches the handler (and gear.game.cursor_click the host)')

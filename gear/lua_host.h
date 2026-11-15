@@ -57,6 +57,9 @@ namespace LuaHost
     // gear.game.cursor_click(): the UI gets a click at the cursor (ReBorn's quick cast). False if the UI or the cursor is not there.
     bool cursorClick();
 
+    // event `combat.branch`: whether a conditional jump is taken (`vanilla`: the engine's own condition).
+    Answer branch(const char* name, int index, bool vanilla, bool& take);
+
     // event `damage`: the final damage of a hit; `victimType` / `attackerType` -1 for none. The answer is not yet clamped.
     Answer damage(int damage, int victimType, int attackerType, int index, int& out);
 
