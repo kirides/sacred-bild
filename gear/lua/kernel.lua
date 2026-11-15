@@ -1877,6 +1877,14 @@ local function make_auto()
         return native.engine_level_factor_start(level)
     end
     function auto.engine_level_factor_result() return native.engine_level_factor_result() end
+    -- Tests the stubs of the constant site hooks on two functions built in memory; a worker thread calls them when Lua is idle, so
+    -- the handlers of `combat.constant` may answer for `selftest.fmul` / `selftest.fld`.
+    function auto.site_hook_selftest_start() return native.site_selftest_start() end
+    function auto.site_hook_selftest_result()
+        local fmul, fld, regs = native.site_selftest_result()
+        if fmul == nil then return nil end
+        return {fmul = fmul, fld = fld, registers_kept = regs}
+    end
     function auto.quit(code)
         native.auto_release()
         native.auto_quit(code or 0)

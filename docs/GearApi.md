@@ -1818,6 +1818,18 @@ The integer the call started by `engine_level_factor_start` returned; nil until 
 
 - returns `integer?`
 
+#### `gear.auto.site_hook_selftest_start() -> boolean`
+
+Tests the stubs of the constant site hooks on two functions built in memory (`fmul dword [c]` and `fld dword [c]`, with the sites `selftest.fmul` and `selftest.fld` of the event `combat.constant`); a worker thread calls them when Lua is idle.
+
+- returns `started` `boolean` - false if a test is running.
+
+#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean}?`
+
+The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. nil until it is done.
+
+- returns `{fmul: number, fld: number, registers_kept: boolean}?`
+
 #### `gear.auto.write(name, text) -> boolean?`
 
 Writes a file into `GearAutomation\<instance>`.

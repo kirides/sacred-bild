@@ -444,6 +444,27 @@ namespace
         return 0;
     }
 
+    // native.site_selftest_start() -> started; native.site_selftest_result() -> fmul, fld, registers kept | nil
+    int nativeSiteSelfTestStart(lua_State* L)
+    {
+        lua_pushboolean(L, SiteHook::selfTestStart());
+        return 1;
+    }
+
+    int nativeSiteSelfTestResult(lua_State* L)
+    {
+        SiteHook::SelfTest r;
+        if (!SiteHook::selfTestResult(r))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, r.fmul);
+        lua_pushnumber(L, r.fld);
+        lua_pushboolean(L, r.registersKept);
+        return 3;
+    }
+
     // native.combat_constant_active(bool): whether some mod handles `combat.constant`
     int nativeCombatConstantActive(lua_State* L)
     {
@@ -1525,6 +1546,8 @@ namespace
             {"level_factor_active", nativeLevelFactorActive},
             {"site_hooks", nativeSiteHooks},
             {"combat_constant_active", nativeCombatConstantActive},
+            {"site_selftest_start", nativeSiteSelfTestStart},
+            {"site_selftest_result", nativeSiteSelfTestResult},
             {"engine_level_factor_start", nativeEngineLevelFactorStart},
             {"engine_level_factor_result", nativeEngineLevelFactorResult},
             {"hero", nativeHero},

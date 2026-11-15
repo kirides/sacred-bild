@@ -117,6 +117,16 @@ function GearAuto.engine_level_factor_start(level) end
 ---@return integer?
 function GearAuto.engine_level_factor_result() end
 
+--- Tests the stubs of the constant site hooks on two functions built in memory (`fmul dword [c]` and `fld dword [c]`, with the
+--- sites `selftest.fmul` and `selftest.fld` of the event `combat.constant`); a worker thread calls them when Lua is idle.
+---@return boolean started false if a test is running.
+function GearAuto.site_hook_selftest_start() end
+
+--- The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times
+--- 1.0), `registers_kept` whether eax, ecx and edx survived the stub. nil until it is done.
+---@return {fmul: number, fld: number, registers_kept: boolean}?
+function GearAuto.site_hook_selftest_result() end
+
 --- Writes a file into `GearAutomation\<instance>`.
 ---@param name string
 ---@param text string

@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <thread>
 #include <vector>
 
 namespace
@@ -97,13 +98,16 @@ namespace
 
     // (the generated table is included once, with the level sites')
 
+    ConstSiteSpec g_testSpecs[2] = {};      // the self test's two sites (after the generated ones)
+    uintptr_t g_testBlob[2] = {};           // their code blobs
+    float g_testConstant = 0.2f;            // the pooled constant they load
     std::atomic<bool> g_constantActive{false};
     std::atomic<unsigned> g_constCalls{0}, g_constAnswered{0}, g_constBusy{0};
 
     // Called by the stubs: the float the instruction should load, in st0 (cdecl float result). Any thread the game calls from.
     extern "C" float __cdecl constantHandler(int site)
     {
-        const ConstSiteSpec& spec = kConstSites[site];
+        const ConstSiteSpec& spec = site < static_cast<int>(std::size(kConstSites)) ? kConstSites[site] : g_testSpecs[site - std::size(kConstSites)];
         const float vanilla = *reinterpret_cast<const float*>(static_cast<uintptr_t>(spec.constant));
         g_constCalls.fetch_add(1, std::memory_order_relaxed);
         if (!g_constantActive.load(std::memory_order_relaxed))
@@ -323,6 +327,106 @@ void SiteHook::setConstantActive(bool active)
 SiteHook::Stats SiteHook::constantStats()
 {
     return {g_constCalls.load(), g_constAnswered.load(), g_constBusy.load()};
+}
+
+namespace
+{
+    std::atomic<int> g_selfState{0};            // 0 idle, 1 running, 2 done
+    SiteHook::SelfTest g_selfResult;
+    uint32_t g_regs[3];
+
+    // A function that loads 1.0 (fmul) or nothing (fld), the constant, stores eax, ecx and edx and returns st0 as a double:
+    //   mov eax, 11111111; mov ecx, 22222222; mov edx, 33333333; [fld1;] fmul|fld dword [c]; mov [r0], eax; mov [r1], ecx;
+    //   mov [r2], edx; ret
+    uintptr_t buildSelfTestBlob(bool multiply, uint32_t& siteOffset)
+    {
+        std::vector<uint8_t> code;
+        emit(code, {0xB8});
+        emit32(code, 0x11111111);
+        emit(code, {0xB9});
+        emit32(code, 0x22222222);
+        emit(code, {0xBA});
+        emit32(code, 0x33333333);
+        if (multiply)
+        {
+            emit(code, {0xD9, 0xE8});               // fld1
+        }
+        siteOffset = static_cast<uint32_t>(code.size());
+        emit(code, {multiply ? uint8_t(0xD8) : uint8_t(0xD9), multiply ? uint8_t(0x0D) : uint8_t(0x05)});
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_testConstant)));
+        emit(code, {0xA3});
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[0])));
+        emit(code, {0x89, 0x0D});
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[1])));
+        emit(code, {0x89, 0x15});
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[2])));
+        emit(code, {0xC3});
+        void* memory = VirtualAlloc(nullptr, code.size() + 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (memory)
+        {
+            std::memcpy(memory, code.data(), code.size());
+        }
+        return reinterpret_cast<uintptr_t>(memory);
+    }
+
+    double runBlob(uintptr_t blob)
+    {
+        g_regs[0] = g_regs[1] = g_regs[2] = 0;
+        return reinterpret_cast<double(__cdecl*)()>(blob)();
+    }
+
+    void selfTestThread()
+    {
+        Sleep(150);     // Lua is not running now
+        SiteHook::SelfTest r;
+        const bool first = !g_testBlob[0];
+        if (first)
+        {
+            const char* names[2] = {"selftest.fmul", "selftest.fld"};
+            for (int k = 0; k < 2; ++k)
+            {
+                uint32_t offset = 0;
+                g_testBlob[k] = buildSelfTestBlob(k == 0, offset);
+                static uintptr_t holders[2];
+                holders[k] = g_testBlob[k];
+                g_testSpecs[k] = {names[k], 0, &holders[k], offset, static_cast<uint8_t>(k == 0 ? 1 : 0), static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_testConstant))};
+                const uintptr_t stub = buildConstantStub(g_testBlob[k] + offset, g_testSpecs[k], static_cast<int>(std::size(kConstSites)) + k);
+                uint8_t bytes[6] = {0xE9, 0, 0, 0, 0, 0x90};
+                const uint32_t rel = static_cast<uint32_t>(stub - (g_testBlob[k] + offset + 5));
+                std::memcpy(bytes + 1, &rel, 4);
+                std::memcpy(reinterpret_cast<void*>(g_testBlob[k] + offset), bytes, 6);
+            }
+        }
+        r.fmul = runBlob(g_testBlob[0]);
+        const bool regsA = g_regs[0] == 0x11111111 && g_regs[1] == 0x22222222 && g_regs[2] == 0x33333333;
+        r.fld = runBlob(g_testBlob[1]);
+        const bool regsB = g_regs[0] == 0x11111111 && g_regs[1] == 0x22222222 && g_regs[2] == 0x33333333;
+        r.registersKept = regsA && regsB;
+        g_selfResult = r;
+        g_selfState = 2;
+    }
+}
+
+bool SiteHook::selfTestStart()
+{
+    int idle = 0;
+    if (!g_selfState.compare_exchange_strong(idle, 1))
+    {
+        return false;
+    }
+    std::thread(selfTestThread).detach();
+    return true;
+}
+
+bool SiteHook::selfTestResult(SelfTest& out)
+{
+    if (g_selfState.load() != 2)
+    {
+        return false;
+    }
+    out = g_selfResult;
+    g_selfState = 0;
+    return true;
 }
 
 SiteHook::Stats SiteHook::levelFactorStats()
