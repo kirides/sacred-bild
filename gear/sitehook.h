@@ -48,6 +48,10 @@ namespace SiteHook
 
     // damage: the final damage of a hit (event `damage`: the damage, the victim's and the attacker's creature types).
     void setDamageActive(bool active);
+
+    // effect.add: the engine adds a value to a creature's effect entry (event `effect.add`).
+    void setEffectActive(bool active);
+    Stats effectStats();
     Stats damageStats();
 
     // Self test of the constant stubs, for automation: builds two small functions in memory (one with an `fmul dword [c]`, one with a
@@ -64,6 +68,9 @@ namespace SiteHook
         bool abilityKept = false;
         // damage stub on a function built in memory (damage 12.4 rounds to 12; a handler of the fake attacker of type 77 answers)
         int damage = 0;
+        // effect.add stub on a function built in memory (the sum 3.5 for entry 0): the exit taken (1 engine path, 2 next entry, 3 leave),
+        // the two entries' values times 100 and the creature's effect counter (4 before).
+        int effectExit = 0, effectEntry0 = 0, effectEntry1 = 0, effectCounter = 0;
     };
     bool selfTestStart();
     bool selfTestResult(SelfTest& out);

@@ -413,6 +413,209 @@ namespace
         return base;
     }
 
+    // --- effect.add sites -----------------------------------------------------------------------------------------------
+
+    std::atomic<bool> g_effectActive{false};
+    std::atomic<unsigned> g_effectCalls{0}, g_effectAnswered{0}, g_effectBusy{0};
+    std::atomic<unsigned> g_effectSiteCalls[std::size(kEffectSites)];
+
+    bool readMem(uintptr_t at, void* out, size_t n)
+    {
+        __try
+        {
+            std::memcpy(out, reinterpret_cast<const void*>(at), n);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    bool writeMem(uintptr_t at, const void* in, size_t n)
+    {
+        __try
+        {
+            std::memcpy(reinterpret_cast<void*>(at), in, n);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    // The engine's "value below this becomes 0" constant of the effect function (ENG 00890668).
+    float effectFloor()
+    {
+        float v = 0;
+        return readMem(0x890668, &v, sizeof(v)) ? v : 0.0f;
+    }
+
+    // Called by the stubs with `list` = the effect list object (esi: its creature's fields are at fixed offsets below it), `entry` the
+    // entry the loop is at, `sum` the new value (old + added), `caller` the return address of the function. 0: the engine's own store,
+    // 1: the mod handled it, continue with the next entry, 2: the mod handled it, leave the function.
+    extern "C" int __cdecl effectHandler(int site, uintptr_t list, uintptr_t entry, const double* sum, uintptr_t caller)
+    {
+        g_effectCalls.fetch_add(1, std::memory_order_relaxed);
+        if (site >= 0 && site < static_cast<int>(std::size(kEffectSites)))
+        {
+            g_effectSiteCalls[site].fetch_add(1, std::memory_order_relaxed);
+        }
+        if (!g_effectActive.load(std::memory_order_relaxed) || (caller >= kEffectAiLow && caller <= kEffectAiHigh))
+        {
+            return 0;
+        }
+        LuaHost::EffectInfo info;
+        int32_t id = 0, counter = 0, flags = 0;
+        uint16_t ability = 0, effect = 0;
+        float maxValue = 0, current = 0;
+        readMem(list - 0x39C, &id, 4);
+        readMem(list - 0x288, &ability, 2);
+        readMem(list + 0x148, &flags, 4);
+        readMem(entry + 4, &effect, 2);
+        readMem(entry + 0xA, &maxValue, 4);
+        readMem(entry + 0x12, &current, 4);
+        readMem(list - 0x214, &counter, 4);
+        info.creature = id;
+        info.ability = ability;
+        info.effect = effect;
+        info.flags = flags;
+        info.value = *sum;
+        info.max = maxValue;
+        info.current = current;
+        info.counter = counter;
+        LuaHost::EffectAnswer answer;
+        switch (LuaHost::effectAdd(info, answer))
+        {
+        case LuaHost::Answer::Value:
+            break;
+        case LuaHost::Answer::Busy:
+            g_effectBusy.fetch_add(1, std::memory_order_relaxed);
+            return 0;
+        default:
+            return 0;
+        }
+        g_effectAnswered.fetch_add(1, std::memory_order_relaxed);
+        // the entry to change: the loop's, or the next one (from there on) with the effect id the mod named
+        uintptr_t target = entry;
+        if (answer.effect >= 0)
+        {
+            uintptr_t end = 0;
+            int32_t endValue = 0;
+            if (readMem(list + 0x106, &endValue, 4))
+            {
+                end = static_cast<uintptr_t>(endValue);
+            }
+            for (uintptr_t at = entry; at + 0x16 <= end; at += 0x16)
+            {
+                uint16_t id16 = 0;
+                if (readMem(at + 4, &id16, 2) && id16 == answer.effect)
+                {
+                    target = at;
+                    break;
+                }
+            }
+        }
+        float maxOfTarget = 0;
+        readMem(target + 0xA, &maxOfTarget, 4);
+        if (answer.hasValue)
+        {
+            const float v = static_cast<float>(answer.value);
+            writeMem(target + 0x12, &v, 4);
+        }
+        if (answer.clamp)
+        {
+            // the engine's clamps: a sum above the maximum becomes the maximum, a value below its floor becomes 0
+            if (!answer.hasValue && static_cast<float>(*sum) > maxOfTarget)
+            {
+                writeMem(target + 0x12, &maxOfTarget, 4);
+            }
+            else if (answer.hasValue)
+            {
+                float v = 0;
+                readMem(target + 0x12, &v, 4);
+                if (v > maxOfTarget)
+                {
+                    writeMem(target + 0x12, &maxOfTarget, 4);
+                }
+            }
+            float now = 0;
+            readMem(target + 0x12, &now, 4);
+            if (now < effectFloor())
+            {
+                const float zero = 0;
+                writeMem(target + 0x12, &zero, 4);
+            }
+        }
+        if (answer.stack == 1 || answer.stack == 2)
+        {
+            int32_t c = 1;
+            if (answer.stack == 2)
+            {
+                readMem(list - 0x214, &c, 4);
+                ++c;
+            }
+            writeMem(list - 0x214, &c, 4);
+        }
+        return answer.finish ? 2 : 1;
+    }
+
+    // The stub: the sum (st0) is kept as an 80 bit value and as a double, the handler decides; 0 runs the displaced fstp / fld (the 80 bit
+    // sum, so the engine's own result is bit for bit the same) and continues at the clamp, 1 jumps to the loop's next entry, 2 leaves.
+    uintptr_t buildEffectStub(uintptr_t site, int index, uintptr_t nextEntry, uintptr_t leave)
+    {
+        std::vector<uint8_t> code;
+        void* memory = VirtualAlloc(nullptr, 160, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!memory)
+        {
+            return 0;
+        }
+        const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
+        auto jmpTo = [&](uintptr_t target, std::initializer_list<uint8_t> opcode) {
+            emit(code, opcode);
+            emit32(code, static_cast<uint32_t>(target - (base + code.size() + 4)));
+        };
+        emit(code, {0x83, 0xEC, 0x18});                             // sub esp, 24      [0..9] tbyte sum, [12..19] double sum, [20] ecx
+        emit(code, {0x89, 0x4C, 0x24, 0x14});                       // mov [esp+20], ecx
+        emit(code, {0xD9, 0xC0});                                   // fld st0
+        emit(code, {0xDD, 0x5C, 0x24, 0x0C});                       // fstp qword [esp+12]
+        emit(code, {0xDB, 0x3C, 0x24});                             // fstp tbyte [esp]
+        emit(code, {0x8B, 0x54, 0x24, 0x40});                       // mov edx, [esp+0x40]   (the function's return address)
+        emit(code, {0x8D, 0x44, 0x24, 0x0C});                       // lea eax, [esp+12]
+        emit(code, {0x52, 0x50, 0x51, 0x56});                       // push edx; push eax; push ecx; push esi
+        emit(code, {0x68});                                         // push site index
+        emit32(code, static_cast<uint32_t>(index));
+        emit(code, {0xB8});                                         // mov eax, handler
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&effectHandler)));
+        emit(code, {0xFF, 0xD0});                                   // call eax
+        emit(code, {0x83, 0xC4, 0x14});                             // add esp, 20
+        emit(code, {0x8B, 0x4C, 0x24, 0x14});                       // mov ecx, [esp+20]
+        emit(code, {0x83, 0xF8, 0x01});                             // cmp eax, 1
+        emit(code, {0x74});                                         // je next
+        const size_t jeNext = code.size();
+        emit(code, {0x00});
+        emit(code, {0x83, 0xF8, 0x02});                             // cmp eax, 2
+        emit(code, {0x74});                                         // je leave
+        const size_t jeLeave = code.size();
+        emit(code, {0x00});
+        // engine path
+        emit(code, {0xDB, 0x2C, 0x24});                             // fld tbyte [esp]
+        emit(code, {0x83, 0xC4, 0x18});                             // add esp, 24
+        emit(code, {0xD9, 0x59, 0x12});                             // fstp dword [ecx+0x12]
+        emit(code, {0xD9, 0x41, 0x12});                             // fld dword [ecx+0x12]
+        jmpTo(site + 6, {0xE9});
+        code[jeNext] = static_cast<uint8_t>(code.size() - (jeNext + 1));
+        emit(code, {0x83, 0xC4, 0x18});                             // next: add esp, 24
+        jmpTo(nextEntry, {0xE9});
+        code[jeLeave] = static_cast<uint8_t>(code.size() - (jeLeave + 1));
+        emit(code, {0x83, 0xC4, 0x18});                             // leave: add esp, 24
+        jmpTo(leave, {0xE9});
+        std::memcpy(memory, code.data(), code.size());
+        FlushInstructionCache(GetCurrentProcess(), memory, code.size());
+        return base;
+    }
+
     // The stub for one site (see the header). Returns its address, 0 if no memory could be had.
     uintptr_t buildStub(uintptr_t site, const SiteSpec& spec, int index)
     {
@@ -636,9 +839,48 @@ size_t SiteHook::install()
             ++damages;
         }
     }
-    LOG("Site hooks: {} of {} level sites, {} of {} constant sites, {} of {} creature.ability sites, {} of {} damage sites installed", installed,
-        std::size(kSites), constants, std::size(kConstSites), abilities, std::size(kAbilitySites), damages, std::size(kDamageSites));
-    return installed + constants + abilities + damages;
+    size_t effects = 0;
+    for (const DamageSiteSpec& spec : kEffectSites)
+    {
+        if (!*spec.function)
+        {
+            continue;
+        }
+        const uintptr_t address = *spec.function + spec.offset;
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(address);
+        static const uint8_t expect[6] = {0xD9, 0x59, 0x12, 0xD9, 0x41, 0x12};
+        if (std::memcmp(b, expect, sizeof(expect)) != 0)
+        {
+            LOG("Site hook effect.add[{}] at {:08x}: the code is not the expected fstp / fld: not installed", spec.index, address);
+            continue;
+        }
+        // the loop's next entry (after the clamps: the code that recomputes the end of the list) and the function's epilogue (pop edi ...)
+        const uintptr_t next = *spec.function + 0x12A;      // ENG 0056259A
+        const uintptr_t leave = *spec.function + 0x155;     // ENG 005625C5
+        const uint8_t* nb = reinterpret_cast<const uint8_t*>(next);
+        const uint8_t* lb = reinterpret_cast<const uint8_t*>(leave);
+        if (nb[0] != 0x8B || nb[1] != 0x8E || lb[0] != 0x5F || lb[1] != 0x5E)
+        {
+            LOG("Site hook effect.add[{}]: the loop's next entry / epilogue are not where expected: not installed", spec.index);
+            continue;
+        }
+        const uintptr_t stub = buildEffectStub(address, spec.index, next, leave);
+        if (!stub)
+        {
+            continue;
+        }
+        uint8_t bytes[6] = {0xE9, 0, 0, 0, 0, 0x90};
+        const uint32_t jump = static_cast<uint32_t>(stub - (address + 5));
+        std::memcpy(bytes + 1, &jump, 4);
+        if (Patch::write(address, bytes, sizeof(bytes)))
+        {
+            ++effects;
+        }
+    }
+    LOG("Site hooks: {} of {} level sites, {} of {} constant sites, {} of {} creature.ability sites, {} of {} damage sites, {} of {} effect.add sites "
+        "installed", installed, std::size(kSites), constants, std::size(kConstSites), abilities, std::size(kAbilitySites), damages,
+        std::size(kDamageSites), effects, std::size(kEffectSites));
+    return installed + constants + abilities + damages + effects;
 }
 
 void SiteHook::setLevelFactorActive(bool active)
@@ -834,6 +1076,95 @@ namespace
         r.damage = static_cast<int>(g_regs[0]);
     }
 
+    // The effect.add self test: a function with the engine's frame (sub esp, 0x18; four pushes), a fake effect list in memory and the six byte
+    // site; the three exits record which one the stub took (1: the clamp code (engine path), 2: next entry, 3: leave).
+    alignas(16) uint8_t g_fakeList[0x800];
+    uintptr_t g_effectBlob = 0;
+    float g_effectSum = 3.5f;
+    uint32_t g_effectExit = 0;
+
+    void setupFakeList()
+    {
+        std::memset(g_fakeList, 0, sizeof(g_fakeList));
+        const uintptr_t list = reinterpret_cast<uintptr_t>(&g_fakeList[0x400]);
+        const uintptr_t entries = reinterpret_cast<uintptr_t>(&g_fakeList[0x600]);
+        const int32_t id = 5, flags = 0x4000000, counter = 4;
+        const uint16_t ability = 7;
+        std::memcpy(reinterpret_cast<void*>(list - 0x39C), &id, 4);
+        std::memcpy(reinterpret_cast<void*>(list - 0x288), &ability, 2);
+        std::memcpy(reinterpret_cast<void*>(list + 0x148), &flags, 4);
+        std::memcpy(reinterpret_cast<void*>(list - 0x214), &counter, 4);
+        const int32_t end = static_cast<int32_t>(entries + 2 * 0x16);
+        std::memcpy(reinterpret_cast<void*>(list + 0x106), &end, 4);
+        for (int k = 0; k < 2; ++k)
+        {
+            const uintptr_t e = entries + k * 0x16;
+            const uint16_t effect = static_cast<uint16_t>(10 + k);
+            const float maxValue = 100.0f, value = 1.0f;
+            std::memcpy(reinterpret_cast<void*>(e + 4), &effect, 2);
+            std::memcpy(reinterpret_cast<void*>(e + 0xA), &maxValue, 4);
+            std::memcpy(reinterpret_cast<void*>(e + 0x12), &value, 4);
+        }
+    }
+
+    void runEffectTest(SiteHook::SelfTest& r)
+    {
+        if (!g_effectBlob)
+        {
+            std::vector<uint8_t> code;
+            emit(code, {0x83, 0xEC, 0x18, 0x53, 0x55, 0x56, 0x57});    // sub esp, 0x18; push ebx; push ebp; push esi; push edi
+            emit(code, {0xBE});                                         // mov esi, list
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_fakeList[0x400])));
+            emit(code, {0xB9});                                         // mov ecx, entry 0
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_fakeList[0x600])));
+            emit(code, {0xD9, 0x05});                                   // fld dword [sum]
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_effectSum)));
+            const size_t site = code.size();
+            emit(code, {0xD9, 0x59, 0x12, 0xD9, 0x41, 0x12});          // the site
+            emit(code, {0xDD, 0xD8});                                   // engine path: fstp st(0)
+            emit(code, {0xC7, 0x05});
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_effectExit)));
+            emit32(code, 1);
+            emit(code, {0xEB, 0x00});
+            const size_t jmp1 = code.size() - 1;
+            const size_t nextAt = code.size();
+            emit(code, {0xC7, 0x05});
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_effectExit)));
+            emit32(code, 2);
+            emit(code, {0xEB, 0x00});
+            const size_t jmp2 = code.size() - 1;
+            const size_t leaveAt = code.size();
+            emit(code, {0xC7, 0x05});
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_effectExit)));
+            emit32(code, 3);
+            const size_t endAt = code.size();
+            emit(code, {0x5F, 0x5E, 0x5D, 0x5B, 0x83, 0xC4, 0x18, 0xC3});
+            code[jmp1] = static_cast<uint8_t>(endAt - (jmp1 + 1));
+            code[jmp2] = static_cast<uint8_t>(endAt - (jmp2 + 1));
+            void* memory = VirtualAlloc(nullptr, code.size() + 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+            const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
+            std::memcpy(memory, code.data(), code.size());
+            g_effectBlob = base;
+            const uintptr_t stub = buildEffectStub(base + site, static_cast<int>(std::size(kEffectSites)), base + nextAt, base + leaveAt);
+            uint8_t bytes[6] = {0xE9, 0, 0, 0, 0, 0x90};
+            const uint32_t jump = static_cast<uint32_t>(stub - (base + site + 5));
+            std::memcpy(bytes + 1, &jump, 4);
+            std::memcpy(reinterpret_cast<void*>(base + site), bytes, 6);
+        }
+        setupFakeList();
+        g_effectExit = 0;
+        runBlob(g_effectBlob);
+        r.effectExit = static_cast<int>(g_effectExit);
+        float v0 = 0, v1 = 0;
+        int32_t counter = 0;
+        std::memcpy(&v0, &g_fakeList[0x600 + 0x12], 4);
+        std::memcpy(&v1, &g_fakeList[0x600 + 0x16 + 0x12], 4);
+        std::memcpy(&counter, &g_fakeList[0x400 - 0x214], 4);
+        r.effectEntry0 = static_cast<int>(v0 * 100 + 0.5f);
+        r.effectEntry1 = static_cast<int>(v1 * 100 + 0.5f);
+        r.effectCounter = counter;
+    }
+
     void selfTestThread()
     {
         Sleep(150);     // Lua is not running now
@@ -863,6 +1194,7 @@ namespace
         r.registersKept = regsA && regsB;
         runAbilityTests(r);
         runDamageTest(r);
+        runEffectTest(r);
         g_selfResult = r;
         g_selfState = 2;
     }
@@ -903,6 +1235,11 @@ std::vector<SiteHook::SiteInfo> SiteHook::sites()
         const uintptr_t fn = *kConstSites[i].function;
         out.push_back({kConstSites[i].name, kConstSites[i].index, fn ? fn + kConstSites[i].offset : 0, g_constSiteCalls[i].load()});
     }
+    for (size_t i = 0; i < std::size(kEffectSites); ++i)
+    {
+        const uintptr_t fn = *kEffectSites[i].function;
+        out.push_back({"effect.add", kEffectSites[i].index, fn ? fn + kEffectSites[i].offset : 0, g_effectSiteCalls[i].load()});
+    }
     for (size_t i = 0; i < std::size(kDamageSites); ++i)
     {
         const uintptr_t fn = *kDamageSites[i].function;
@@ -929,6 +1266,16 @@ void SiteHook::setDamageActive(bool active)
 SiteHook::Stats SiteHook::damageStats()
 {
     return {g_damageCalls.load(), g_damageAnswered.load(), g_damageBusy.load()};
+}
+
+void SiteHook::setEffectActive(bool active)
+{
+    g_effectActive.store(active);
+}
+
+SiteHook::Stats SiteHook::effectStats()
+{
+    return {g_effectCalls.load(), g_effectAnswered.load(), g_effectBusy.load()};
 }
 
 SiteHook::Stats SiteHook::abilityStats()

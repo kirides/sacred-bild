@@ -57,3 +57,7 @@ static const AbilitySiteSpec kAbilitySites[] = {
 static const DamageSiteSpec kDamageSites[] = {
     {0, &Gear::Addr::siteFn56B130, 0x297B}, // 0056DAAB
 };
+static const DamageSiteSpec kEffectSites[] = {
+    {0, &Gear::Addr::effectAddFn, 0xFD}, // 0056256D
+};
+static const uintptr_t kEffectAiLow = 0x4DA04B, kEffectAiHigh = 0x4DA23C;

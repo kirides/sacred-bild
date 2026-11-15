@@ -91,6 +91,16 @@ DAMAGE_SITES = [
 ]
 
 
+# Effect site (ENG 00562470, "add a value to the creature's effect entries, clamp to their maximum"): the store of the new sum into the entry,
+# `fstp [ecx+0x12]; fld [ecx+0x12]`. Gear answers it with the event `effect.add`; the AI's own calls (EFFECT_AI_CALLERS, return addresses in
+# 004DA04B .. 004DA23C) always keep the engine's behaviour (ReBorn keeps a vanilla copy of the function for them).
+EFFECT_FUNCTION = ('effectAddFn', 0x00562470)
+EFFECT_SITES = [
+    0x0056256D,
+]
+EFFECT_AI_CALLERS = (0x004DA04B, 0x004DA23C)
+
+
 def functions():
     seen = {}
     for _, name, va, _, _, _ in SITES:
@@ -98,4 +108,5 @@ def functions():
     for _, _, name, va, _, _, _, _ in CONSTANT_SITES:
         seen[name] = va
     seen[ABILITY_FUNCTION[0]] = ABILITY_FUNCTION[1]
+    seen[EFFECT_FUNCTION[0]] = EFFECT_FUNCTION[1]
     return seen

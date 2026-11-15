@@ -1789,7 +1789,7 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
-local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true}
+local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true, ['effect.add'] = true}
 local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'settings.', 'level.', 'combat.', 'creature.'}
 local emit_depth = 0
 
@@ -2037,9 +2037,10 @@ local function make_auto()
     -- the handlers of `combat.constant` may answer for `selftest.fmul` / `selftest.fld`.
     function auto.site_hook_selftest_start() return native.site_selftest_start() end
     function auto.site_hook_selftest_result()
-        local fmul, fld, regs, store, add, edx, kept, damage = native.site_selftest_result()
+        local fmul, fld, regs, store, add, edx, kept, damage, exit_, e0, e1, counter = native.site_selftest_result()
         if fmul == nil then return nil end
-        return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept, damage = damage}
+        return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept, damage = damage,
+                effect_exit = exit_, effect_entry0 = e0, effect_entry1 = e1, effect_counter = counter}
     end
     function auto.quit(code)
         native.auto_release()
@@ -2646,7 +2647,7 @@ local function make_env(mod)
         -- Counters of the engine hooks that ask the mods for a value (gear/sitehook.cpp).
         hooks = {
             stats = function(name)
-                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage', "the hook must be 'level.factor', 'combat.constant', 'creature.ability' or 'damage'")
+                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage' or name == 'effect.add', "the hook must be 'level.factor', 'combat.constant', 'creature.ability', 'damage' or 'effect.add'")
                 local calls, answered, busy = native.site_hooks(name)
                 return {calls = calls, answered = answered, busy = busy}
             end,
@@ -2739,6 +2740,7 @@ local function make_env(mod)
         if event == 'combat.constant' then native.combat_constant_active(true) end
         if event == 'creature.ability' then native.creature_ability_active(true) end
         if event == 'damage' then native.damage_active(true) end
+        if event == 'effect.add' then native.effect_active(true) end
         return h
     end
     function gear.off(h)
@@ -2751,6 +2753,7 @@ local function make_env(mod)
         if h.event == 'combat.constant' and #list == 0 then native.combat_constant_active(false) end
         if h.event == 'creature.ability' and #list == 0 then native.creature_ability_active(false) end
         if h.event == 'damage' and #list == 0 then native.damage_active(false) end
+        if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
     end
     env.gear = gear
     return env
@@ -3262,6 +3265,23 @@ function kernel.creature_ability(type_id, vanilla, index, address)
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, 'creature.ability', h.fn, type_id, vanilla, index, address)
             if ok and type(result) == 'number' then return math.floor(result) end
+        end
+    end
+    return nil
+end
+
+-- `effect.add`: the engine adds a value to a creature's effect entry (`FUN_00562330`'s loop, over every entry). A handler gets
+-- `e = {creature, ability, effect, flags, counter, value, max, current}` (the creature's id, the ability it is using, the entry's effect id,
+-- the creature's flags, its effect counter, the new sum, the entry's maximum and current value) and returns nil (the engine's own store) or
+-- a table `{value = sum | nil (do not store), effect = entry to change instead, clamp = true, finish = false, stack = 'set' | 'inc'}`.
+function kernel.effect_add(e)
+    local list = handlers['effect.add']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'effect.add', h.fn, e)
+            if ok and type(result) == 'table' then return result end
         end
     end
     return nil

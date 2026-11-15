@@ -127,8 +127,10 @@ function GearAuto.site_hook_selftest_start() end
 --- functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the
 --- amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived.
 --- `damage` is the result of the `damage` stub on a function built in memory (12.4 rounds to 12 without an answer).
+--- The `effect_*` fields test the `effect.add` stub on a function built in memory with a fake effect list (the sum 3.5 for entry 0, the
+--- creature's counter 4): the exit taken (1 engine path, 2 next entry, 3 leave), both entries' values times 100 and the counter.
 --- nil until it is done.
----@return {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer}?
+---@return {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer}?
 function GearAuto.site_hook_selftest_result() end
 
 --- Writes a file into `GearAutomation\<instance>`.

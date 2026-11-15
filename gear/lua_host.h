@@ -32,6 +32,22 @@ namespace LuaHost
     // event `creature.ability`: the ability id for a creature of `type` (the AI's vanilla id, -1 where the site has none), at site `index` / `address`.
     Answer creatureAbility(int type, int vanilla, int index, int address, int& out);
 
+    // event `effect.add`: the engine adds a value to a creature's effect entry. `info` is what it is about to do, `answer` what the mod wants.
+    struct EffectInfo
+    {
+        int creature = 0, ability = 0, effect = 0, flags = 0, counter = 0;
+        double value = 0;
+        float max = 0, current = 0;
+    };
+    struct EffectAnswer
+    {
+        bool hasValue = false, clamp = true, finish = false;
+        double value = 0;
+        int effect = -1;        // -1: the entry the engine is at
+        int stack = 0;          // 1 the creature's effect counter becomes 1, 2 it grows by one
+    };
+    Answer effectAdd(const EffectInfo& info, EffectAnswer& answer);
+
     // event `damage`: the final damage of a hit; `victimType` / `attackerType` -1 for none. The answer is not yet clamped.
     Answer damage(int damage, int victimType, int attackerType, int index, int& out);
 

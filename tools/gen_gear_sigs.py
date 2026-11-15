@@ -134,6 +134,12 @@ def main():
         fnname, fn = gear_sites.DAMAGE_FUNCTION
         lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}}}, // {site:08X}')
     lines.append('};')
+    lines.append('static const DamageSiteSpec kEffectSites[] = {')
+    for i, site in enumerate(gear_sites.EFFECT_SITES):
+        fnname, fn = gear_sites.EFFECT_FUNCTION
+        lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}}}, // {site:08X}')
+    lines.append('};')
+    lines.append(f'static const uintptr_t kEffectAiLow = 0x{gear_sites.EFFECT_AI_CALLERS[0]:X}, kEffectAiHigh = 0x{gear_sites.EFFECT_AI_CALLERS[1]:X};')
     with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sites.inc'), 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     if failed:

@@ -144,6 +144,8 @@ namespace Gear::Addr
     // The functions with constant sites (the hit handlers 005038F0, 00506770, 0050AC00 and 0050E6C0 (levelFn50E6C0), 00559BF0, 0056B130).
     // The creature AI step (ENG 004D4E50) with the sites where it picks the ability a creature uses.
     inline uintptr_t abilityAiFn{};
+    // The effect-entry function (ENG 00562470): add a value to a creature's effect entries, clamp to their maximum.
+    inline uintptr_t effectAddFn{};
     inline uintptr_t siteFn5038F0{};
     inline uintptr_t siteFn506770{};
     inline uintptr_t siteFn50AC00{};

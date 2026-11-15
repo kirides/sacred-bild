@@ -493,7 +493,11 @@ namespace
         lua_pushnumber(L, r.abilityEdx);
         lua_pushboolean(L, r.abilityKept);
         lua_pushnumber(L, r.damage);
-        return 8;
+        lua_pushnumber(L, r.effectExit);
+        lua_pushnumber(L, r.effectEntry0);
+        lua_pushnumber(L, r.effectEntry1);
+        lua_pushnumber(L, r.effectCounter);
+        return 12;
     }
 
     // native.difficulty() -> the running game's difficulty level (0 .. 4) | nil
@@ -506,6 +510,13 @@ namespace
         }
         lua_pushnumber(L, *Gear::Addr::g_difficulty);
         return 1;
+    }
+
+    // native.effect_active(bool): whether some mod handles `effect.add`
+    int nativeEffectActive(lua_State* L)
+    {
+        SiteHook::setEffectActive(lua_toboolean(L, 1) != 0);
+        return 0;
     }
 
     // native.damage_active(bool): whether some mod handles `damage`
@@ -533,7 +544,7 @@ namespace
     int nativeSiteHooks(lua_State* L)
     {
         const char* which = luaL_optstring(L, 1, "level.factor");
-        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : SiteHook::levelFactorStats();
+        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : std::strcmp(which, "effect.add") == 0 ? SiteHook::effectStats() : SiteHook::levelFactorStats();
         lua_pushnumber(L, s.calls);
         lua_pushnumber(L, s.answered);
         lua_pushnumber(L, s.busy);
@@ -1954,6 +1965,7 @@ namespace
             {"difficulty", nativeDifficulty},
             {"creature_ability_active", nativeCreatureAbilityActive},
             {"damage_active", nativeDamageActive},
+            {"effect_active", nativeEffectActive},
             {"site_hook_sites", nativeSiteHookSites},
             {"site_selftest_start", nativeSiteSelfTestStart},
             {"site_selftest_result", nativeSiteSelfTestResult},
@@ -2286,6 +2298,86 @@ LuaHost::Answer LuaHost::damage(int damage, int victimType, int attackerType, in
     }
     lua_pop(L, 1);
     return answer;
+}
+
+LuaHost::Answer LuaHost::effectAdd(const EffectInfo& info, EffectAnswer& answer)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "effect_add");
+    lua_remove(L, -2);
+    lua_createtable(L, 0, 8);
+    const auto num = [L](const char* key, double v) {
+        lua_pushnumber(L, v);
+        lua_setfield(L, -2, key);
+    };
+    num("creature", info.creature);
+    num("ability", info.ability);
+    num("effect", info.effect);
+    num("flags", info.flags);
+    num("counter", info.counter);
+    num("value", info.value);
+    num("max", info.max);
+    num("current", info.current);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 1, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer result = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.effect_add failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_istable(L, -1))
+    {
+        result = Answer::Value;
+        lua_getfield(L, -1, "value");
+        if (lua_isnumber(L, -1))
+        {
+            answer.hasValue = true;
+            answer.value = lua_tonumber(L, -1);
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "effect");
+        if (lua_isnumber(L, -1))
+        {
+            answer.effect = static_cast<int>(lua_tonumber(L, -1));
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "clamp");
+        if (lua_isboolean(L, -1))
+        {
+            answer.clamp = lua_toboolean(L, -1) != 0;
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "finish");
+        answer.finish = lua_toboolean(L, -1) != 0;
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "stack");
+        if (lua_isstring(L, -1))
+        {
+            const char* mode = lua_tostring(L, -1);
+            answer.stack = std::strcmp(mode, "set") == 0 ? 1 : std::strcmp(mode, "inc") == 0 ? 2 : 0;
+        }
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+    return result;
 }
 
 unsigned long long LuaHost::lastFrameTime()
