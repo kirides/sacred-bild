@@ -37,7 +37,9 @@
 ---@field version string Sacred Gear's version.
 ---@field mod GearModInfo This mod's identity.
 ---@field config table<string, any> This mod's settings: the manifest's `config`, overridden by `config.lua`.
----@field data GearData The engine's data tables (read only).
+---@field data GearData The engine's data tables (read only, except the abilities).
+---@field text GearText The game's texts by id.
+---@field settings GearSettings The game's Settings.cfg.
 ---@field json GearJson JSON encoding and decoding.
 ---@field pipe GearPipeModule Named pipe clients.
 ---@field world GearWorld The world: hero, creatures, items, spawning, pickup rules.

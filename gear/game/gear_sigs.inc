@@ -28,4 +28,10 @@ static const Sig::Entry kGearSigs[] = {
     {"cUI_Manager_receiveEvent", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC D8 03 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Manager_receiveEvent}, // 00757840, 00757120
     {"cEventMouseDown_vtable", "C6 44 24 3A 00 8B 0C A8 C7 44 24 28 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::cEventMouseDown_vtable}, // 0089704C, 008950A8
     {"cEventMouseUp_vtable", "C7 00 ?? ?? ?? ?? 5E C3 33 C0 5E C3 90 90 90 56", 2, Sig::Take::Abs32, &Gear::Addr::cEventMouseUp_vtable}, // 00899248, 00897248
+    {"abilityTable1First", "B8 ?? ?? ?? ?? 66 39 10 74 0E 83 C0 78 41 3D ?? ?? ?? ?? 72 F0", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1First}, // 0094FE28, 0094DE28
+    {"abilityTable1End", "3D ?? ?? ?? ?? 72 F0 33 C0 C3 8D 04 49 8D 04 80", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1End}, // 00952A38, 00950A38
+    {"abilityTable2First", "B8 ?? ?? ?? ?? 66 39 10 74 10 05 94 00 00 00 41", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable2First}, // 00952ACC, 00950ACC
+    {"abilityTable2End", "3D ?? ?? ?? ?? 72 EE 33 C0 C3 8D 04 C9 8D 0C 81", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable2End}, // 00955344, 00953344
+    {"textResources_instance", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A1 ?? ?? ?? ?? 64 89 25 00 00 00 00 83 EC 0C", 0, Sig::Take::Match, &Gear::Addr::textResources_instance}, // 006725E0, 006728C0
+    {"textResources_get", "8B 44 24 04 56 83 F8 FF 8B F1 74 4A", 0, Sig::Take::Match, &Gear::Addr::textResources_get}, // 00672C90, 00672F70
 };

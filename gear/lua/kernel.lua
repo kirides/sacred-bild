@@ -30,6 +30,7 @@ local MAX_ERRORS = 10   -- a mod whose handlers raised this many errors is switc
 local mods = {}         -- loaded mods in load order: {id, name, version, dir, env, errors, disabled}
 local handlers = {}     -- event name -> array of {mod, fn}
 local current           -- the mod whose code runs at the moment (for messages)
+local restore_abilities    -- defined with the ability tables below
 
 local function log(fmt, ...)
     native.log(string.format(fmt, ...))
@@ -71,6 +72,7 @@ local function call(mod, what, fn, ...)
         log('[%s] error in %s: %s', mod.id, what, result)
         if mod.errors >= MAX_ERRORS and not mod.disabled then
             mod.disabled = true
+            if restore_abilities then restore_abilities(mod) end
             log('[%s] %d errors: the mod is switched off until the game restarts', mod.id, mod.errors)
         end
     end
@@ -173,11 +175,216 @@ function data.object_types:search(text, limit)
     return out
 end
 
+---------------------------------------------------------------------------------------------------------------
+-- The ability tables (gear.data.abilities): the exe's two static record tables, T1 (ids from 1000, 0x78-byte records)
+-- and T2 (ids from 1, 0x94-byte records), as one table by id. Fields have names where a consumer proves them
+-- (behaviours.md of sacred-gear-reborn-decomp) and `unk_<offset>` otherwise. Writes go to the live tables, are checked
+-- for type and range, and are remembered per mod so they can be undone (`restore`, and when the mod is switched off).
+---------------------------------------------------------------------------------------------------------------
+local KIND_SIZE = {u8 = 1, i8 = 1, u16 = 2, i16 = 2, u32 = 4, i32 = 4, f32 = 4}
+local ABILITY_TABLES = {
+    T1 = {
+        native = 'ability_t1', stride = 0x78, unknown = {kind = 'u32', size = 4},
+        fields = {
+            id = {0x00, 'i16'}, name_text = {0x04, 'u32'}, target_mode = {0x4C, 'u32'},
+            effect_base = {0x50, 'f32'}, effect_per_level = {0x54, 'f32'},
+            effect2_base = {0x58, 'f32'}, effect2_per_level = {0x5C, 'f32'},
+        },
+    },
+    T2 = {
+        native = 'ability_t2', stride = 0x94, unknown = {kind = 'u16', size = 2},
+        fields = {
+            id = {0x00, 'i16'}, target_mode = {0x3C, 'u8'},
+            value0_base = {0x42, 'i16'}, value0_per_level = {0x44, 'i16'},
+            value1_base = {0x46, 'i16'}, value1_per_level = {0x48, 'i16'},
+            value2_base = {0x4A, 'i16'}, value2_per_level = {0x4C, 'i16'},
+            value3_base = {0x4E, 'i16'}, value3_per_level = {0x50, 'i16'},
+        },
+    },
+}
+do
+    -- every byte not covered by a named field belongs to an unk_<offset> slot
+    for _, t in pairs(ABILITY_TABLES) do
+        local covered = {}
+        for _, f in pairs(t.fields) do
+            for b = f[1], f[1] + KIND_SIZE[f[2]] - 1 do covered[b] = true end
+        end
+        local size = t.unknown.size
+        for off = size, t.stride - size, size do
+            local free = true
+            for b = off, off + size - 1 do
+                if covered[b] then free = false end
+            end
+            if free then t.fields[('unk_%02x'):format(off)] = {off, t.unknown.kind} end
+        end
+    end
+end
+
+local ability_index         -- id -> {table = 'T1'|'T2', index = n}
+local ability_journal = {}  -- mod -> {[table:index:offset] = {native, index, offset, kind, original}}
+
+local function build_ability_index()
+    if ability_index then return ability_index end
+    local index = {}
+    for _, name in ipairs({'T1', 'T2'}) do
+        local t = ABILITY_TABLES[name]
+        local count = native.table_info(t.native)
+        if not count or count == 0 then return nil end
+        for i = 0, count - 1 do
+            local id = native.table_read(t.native, i, 0, 'i16')
+            if id and not index[id] then index[id] = {table = name, index = i} end
+        end
+    end
+    ability_index = index
+    return index
+end
+
+local function ability_write(mod, t, index, field, value)
+    local f = t.fields[field]
+    local before = native.table_read(t.native, index, f[1], f[2])
+    local journal = ability_journal[mod]
+    if not journal then
+        journal = {}
+        ability_journal[mod] = journal
+    end
+    local key = ('%s:%d:%d'):format(t.native, index, f[1])
+    if before ~= nil and not journal[key] then
+        journal[key] = {t.native, index, f[1], f[2], before}
+    end
+    return native.table_write(t.native, index, f[1], f[2], value)
+end
+
+local ability_mt = {}
+function ability_mt.__index(self, field)
+    local info = rawget(self, '__info')
+    if field == 'table' then return info.table end
+    if field == 'index' then return info.index end
+    local t = ABILITY_TABLES[info.table]
+    local f = t.fields[field]
+    if not f then return nil end
+    return native.table_read(t.native, info.index, f[1], f[2])
+end
+function ability_mt.__newindex(self, field, value)
+    local info = rawget(self, '__info')
+    local t = ABILITY_TABLES[info.table]
+    local f = t.fields[field]
+    if not f then
+        error(("ability %d (%s) has no field '%s'"):format(rawget(self, '__id'), info.table, tostring(field)), 2)
+    end
+    if field == 'id' then error('the id of an ability cannot be changed', 2) end
+    if type(value) ~= 'number' then error(("field '%s' needs a number"):format(field), 2) end
+    if not ability_write(current or 'kernel', t, info.index, field, value) then
+        error(("cannot write %s = %s (out of range for %s, or the table is not available)")
+            :format(field, tostring(value), f[2]), 2)
+    end
+end
+ability_mt.__metatable = false
+
+local abilities = {__writable_view = true}
+local abilities_mt = {}
+function abilities_mt.__index(self, id)
+    if type(id) ~= 'number' then return rawget(abilities, id) end
+    local index = build_ability_index()
+    local entry = index and index[id]
+    if not entry then return nil end
+    return setmetatable({__info = entry, __id = id}, ability_mt)
+end
+function abilities_mt.__newindex() error('abilities are changed field by field: gear.data.abilities[id].field = value', 2) end
+abilities_mt.__metatable = false
+
+-- The ids of all abilities, ascending.
+function abilities:ids()
+    local index = build_ability_index()
+    local out = {}
+    for id in pairs(index or {}) do out[#out + 1] = id end
+    table.sort(out)
+    return out
+end
+
+-- {{name, offset, kind}, ...}: the fields of the ability `id`'s table, by offset; nil if there is no such ability.
+function abilities:fields(id)
+    local index = build_ability_index()
+    local entry = index and index[id]
+    if not entry then return nil end
+    local out = {}
+    for name, f in pairs(ABILITY_TABLES[entry.table].fields) do
+        out[#out + 1] = {name = name, offset = f[1], kind = f[2]}
+    end
+    table.sort(out, function(a, b) return a.offset < b.offset end)
+    return out
+end
+
+-- edits = {[id] = {field = value, ...}}: checks every id, field and value first, then writes all of them. Returns the
+-- number of fields written, or nil and the list of problems (nothing is written then).
+function abilities:apply(edits)
+    assert(type(edits) == 'table', 'edits must be a table')
+    local index = build_ability_index()
+    if not index then return nil, {'the ability tables are not available'} end
+    local problems, plan = {}, {}
+    for id, fields in pairs(edits) do
+        local entry = index[id]
+        if not entry then
+            problems[#problems + 1] = ('ability %s does not exist'):format(tostring(id))
+        else
+            local t = ABILITY_TABLES[entry.table]
+            for field, value in pairs(fields) do
+                local f = t.fields[field]
+                if not f then
+                    problems[#problems + 1] = ('ability %d (%s) has no field %s'):format(id, entry.table, tostring(field))
+                elseif field == 'id' then
+                    problems[#problems + 1] = ('ability %d: the id cannot be changed'):format(id)
+                elseif type(value) ~= 'number' then
+                    problems[#problems + 1] = ('ability %d: %s needs a number'):format(id, field)
+                else
+                    plan[#plan + 1] = {t, entry.index, field, value, id}
+                end
+            end
+        end
+    end
+    if #problems > 0 then
+        table.sort(problems)
+        return nil, problems
+    end
+    local written = 0
+    for _, p in ipairs(plan) do
+        if ability_write(current or 'kernel', p[1], p[2], p[3], p[4]) then
+            written = written + 1
+        else
+            problems[#problems + 1] = ('ability %d: %s = %s does not fit'):format(p[5], p[3], tostring(p[4]))
+        end
+    end
+    if #problems > 0 then
+        table.sort(problems)
+        return written, problems
+    end
+    return written
+end
+
+restore_abilities = function(mod)
+    local journal = ability_journal[mod]
+    if not journal then return 0 end
+    local n = 0
+    for _, e in pairs(journal) do
+        if native.table_write(e[1], e[2], e[3], e[4], e[5]) then n = n + 1 end
+    end
+    ability_journal[mod] = nil
+    return n
+end
+
+-- Undoes this mod's writes to the ability tables; returns how many fields it restored.
+function abilities:restore()
+    return restore_abilities(current or 'kernel')
+end
+
+setmetatable(abilities, abilities_mt)
+data.abilities = abilities
+
 -- Read-only views of kernel tables: mods share `data`, `json` and the world functions, so none may change them
 -- for the others. Nested tables are wrapped too (once each).
 local frozen = setmetatable({}, {__mode = 'k'})
 local function readonly(t)
     if type(t) ~= 'table' then return t end
+    if rawget(t, '__writable_view') then return t end
     if frozen[t] then return frozen[t] end
     local proxy = setmetatable({}, {
         __index = function(_, k) return readonly(t[k]) end,
@@ -1724,6 +1931,20 @@ local function make_env(mod)
         time = native.time,
         pipe = {open = function(name) return open_pipe(mod, name) end},
         emit = emit,
+        -- The game's own texts, by the ids its data tables hold.
+        text = {
+            get = function(id)
+                assert(type(id) == 'number', 'id must be a number')
+                return native.text_get(id)
+            end,
+        },
+        -- Values of the game's Settings.cfg ("KEY : value" lines), as text.
+        settings = {
+            get = function(key)
+                assert(type(key) == 'string', 'key must be a string')
+                return native.setting(key)
+            end,
+        },
     }
     function gear.after(seconds, fn) return add_timer(mod, seconds, fn, nil) end
     function gear.every(seconds, fn)

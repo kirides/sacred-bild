@@ -61,6 +61,16 @@ GEAR = [
     ('cUI_Manager_receiveEvent', 0x00757840, 'func'),
     ('cEventMouseDown_vtable', 0x0089704C, 'data'),
     ('cEventMouseUp_vtable', 0x00899248, 'data'),
+    # The ability tables (gear/tables.cpp): T1 (ids from 1000, 0x78-byte records) and T2 (ids from 1, 0x94-byte
+    # records) are static arrays that 0x4D1AF0 / 0x4D2310 scan by id; the lookups load the first record and compare
+    # against the end (0x952A38 and 0x955344 are the end of T1 and of T2). The text lookup (the text table's instance
+    # and `get(id)`) that the tables' name ids go through.
+    ('abilityTable1First', 0x0094FE28, 'data', 0x004D1AFA),
+    ('abilityTable1End', 0x00952A38, 'data', 0x004D1B08),
+    ('abilityTable2First', 0x00952ACC, 'data', 0x004D231A),
+    ('abilityTable2End', 0x00955344, 'data', 0x004D232A),
+    ('textResources_instance', 0x006725E0, 'func'),
+    ('textResources_get', 0x00672C90, 'func'),
 ]
 
 

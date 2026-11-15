@@ -143,7 +143,9 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `version` | `string` | Sacred Gear's version. |
 | `mod` | `GearModInfo` | This mod's identity. |
 | `config` | `table<string, any>` | This mod's settings: the manifest's `config`, overridden by `config.lua`. |
-| `data` | `GearData` | The engine's data tables (read only). |
+| `data` | `GearData` | The engine's data tables (read only, except the abilities). |
+| `text` | `GearText` | The game's texts by id. |
+| `settings` | `GearSettings` | The game's Settings.cfg. |
 | `json` | `GearJson` | JSON encoding and decoding. |
 | `pipe` | `GearPipeModule` | Named pipe clients. |
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
@@ -339,12 +341,13 @@ A line in `SacredGear.log`, prefixed with the mod's id. Same as `gear.log`.
 
 Reached as `gear.data`.
 
-The engine's data tables, read only.
+The engine's data tables: read only, except the abilities.
 
 | Field | Type | |
 |---|---|---|
 | `object_types` | `GearObjectTypes` | The type records every object refers to (0x80 bytes; id = index, 1..0x7E5F). |
 | `creature_types` | `GearTable` | `Pak\Creature.pak`'s records (0x56 bytes). |
+| `abilities` | `GearAbilities` | The ability tables of the exe by id (skills, combat arts, spells), which a mod can change. |
 
 ### GearRecord
 
@@ -468,6 +471,105 @@ The types whose name contains `text` (plain text, any case), ordered by id.
 | `id` | `integer` |  |
 | `name` | `string` |  (optional) |
 | `kind` | `integer` |  (optional) |
+
+## Abilities (gear.data.abilities)
+
+### GearAbilities
+
+Reached as `gear.data.abilities`.
+
+The exe's two ability tables as one table by id: T1 (ids from 1000, 0x78-byte records) and T2 (ids from 1, 0x94-byte records). `abilities[id]` is the record of ability `id` (nil if there is none); its fields read and write by name. A field has a name where code that uses it proves what it is, and is `unk_<offset>` (in hex) otherwise. Writes go to the live tables, are checked for type and range, and are undone with `restore` (and when the mod is switched off).
+
+#### `gear.data.abilities:ids() -> integer[]`
+
+The ids of all abilities, ascending.
+
+- returns `integer[]`
+
+#### `gear.data.abilities:fields(id) -> GearAbilityField[]?`
+
+The fields of the table that ability `id` is in, ordered by offset.
+
+- `id`: `integer`
+- returns `fields` `GearAbilityField[]?` - nil if there is no such ability.
+
+#### `gear.data.abilities:apply(edits) -> integer?, string[]?`
+
+Writes many fields at once: `{[id] = {field = value, ...}}`. Everything is checked first; if any id, field or value is wrong nothing is written and the problems are returned.
+
+- `edits`: `table<integer, table<string, number>>`
+- returns `written` `integer?` - The number of fields written (nil if nothing was).
+- returns `problems` `string[]?` - What was wrong.
+
+#### `gear.data.abilities:restore() -> integer`
+
+Undoes this mod's writes to the ability tables.
+
+- returns `restored` `integer` - The number of fields restored.
+
+### GearAbilityField
+
+| Field | Type | |
+|---|---|---|
+| `name` | `string` |  |
+| `offset` | `integer` | The byte offset in the record. |
+| `kind` | `string` | `'u8'`, `'i16'`, `'f32'` ... |
+
+### GearAbility
+
+Written `ability` in the signatures.
+
+One ability record. Reading a field of a table the ability is not in (or an unknown name) gives nil; writing one is an error, as is writing a value that does not fit the field or the `id`. T1 has `name_text`, `target_mode`, `effect_base`, `effect_per_level`, `effect2_base` and `effect2_per_level`; T2 has `target_mode` and `value0_base` .. `value3_per_level`; both have `id` and the `unk_` fields.
+
+| Field | Type | |
+|---|---|---|
+| `table` | `string` | `'T1'` or `'T2'`. |
+| `index` | `integer` | The record's index in its table. |
+| `id` | `integer` | The ability's id. |
+| `name_text` | `integer` | T1: the text id of the name (`gear.text.get`). |
+| `target_mode` | `integer` | How the ability is aimed (the engine passes it on to the targeting code). |
+| `effect_base` | `number` | T1: the first effect is `effect_base + level * effect_per_level` (level 1..100). |
+| `effect_per_level` | `number` | T1. |
+| `effect2_base` | `number` | T1: the second effect. |
+| `effect2_per_level` | `number` | T1. |
+| `value0_base` | `integer` | T2: the first value is `value0_base + level * value0_per_level`. |
+| `value0_per_level` | `integer` | T2. |
+| `value1_base` | `integer` | T2. |
+| `value1_per_level` | `integer` | T2. |
+| `value2_base` | `integer` | T2. |
+| `value2_per_level` | `integer` | T2. |
+| `value3_base` | `integer` | T2. |
+| `value3_per_level` | `integer` | T2. |
+
+## Game text (gear.text)
+
+### GearText
+
+Reached as `gear.text`.
+
+The game's own texts, by the text ids its data tables hold (not the keys of `global.res`).
+
+#### `gear.text.get(id) -> string?`
+
+The text for `id` (UTF-8), nil if the game has none.
+
+- `id`: `integer`
+- returns `string?`
+
+## Settings (gear.settings)
+
+### GearSettings
+
+Reached as `gear.settings`.
+
+The game's `Settings.cfg` (`KEY : value` lines).
+
+#### `gear.settings.get(key) -> string?`
+
+The value of `key` as text (nil if the file has no such key). Read each time, so it is what the file says now.
+
+- `key`: `string`
+- returns `string?`
 
 ## JSON (gear.json)
 

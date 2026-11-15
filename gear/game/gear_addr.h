@@ -81,4 +81,17 @@ namespace Gear::Addr
     inline Sacred::Thiscall<uint8_t(void* manager, void* event)> cUI_Manager_receiveEvent{};
     inline Sacred::Global<uint8_t> cEventMouseDown_vtable{};
     inline Sacred::Global<uint8_t> cEventMouseUp_vtable{};
+
+    // The ability tables (gear/tables.cpp), static arrays in .data: T1 (ENG 0094FE28..00952A38, 0x78-byte records, ids from
+    // 1000, scanned by 004D1AF0) and T2 (ENG 00952ACC..00955344, 0x94-byte records, ids from 1, scanned by 004D2310). Each
+    // is the address of the first record / one past the last (found in the lookups' own code).
+    inline Sacred::Global<uint8_t> abilityTable1First{};
+    inline Sacred::Global<uint8_t> abilityTable1End{};
+    inline Sacred::Global<uint8_t> abilityTable2First{};
+    inline Sacred::Global<uint8_t> abilityTable2End{};
+    // The game's text table (ENG 006725E0: the instance, cdecl; 00672C90: thiscall (instance, text id) -> a pointer to
+    // the wide string's pointer; an id the table does not have gives an empty string). Text ids are the ones the data
+    // tables hold (not the keys of global.res).
+    inline Sacred::Cdecl<void*()> textResources_instance{};
+    inline Sacred::Thiscall<const wchar_t* const*(void* self, uint32_t id)> textResources_get{};
 }

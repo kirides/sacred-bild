@@ -4,10 +4,11 @@
 -- ## Data tables (gear.data)
 
 -- path gear.data
---- The engine's data tables, read only.
+--- The engine's data tables: read only, except the abilities.
 ---@class GearData
 ---@field object_types GearObjectTypes The type records every object refers to (0x80 bytes; id = index, 1..0x7E5F).
 ---@field creature_types GearTable `Pak\Creature.pak`'s records (0x56 bytes).
+---@field abilities GearAbilities The ability tables of the exe by id (skills, combat arts, spells), which a mod can change.
 local GearData = {}
 
 -- path record
@@ -92,6 +93,90 @@ function GearObjectTypes:search(text, limit) end
 ---@field id integer
 ---@field name string?
 ---@field kind integer?
+
+-- ## Abilities (gear.data.abilities)
+
+-- path gear.data.abilities
+--- The exe's two ability tables as one table by id: T1 (ids from 1000, 0x78-byte records) and T2 (ids from 1, 0x94-byte
+--- records). `abilities[id]` is the record of ability `id` (nil if there is none); its fields read and write by name.
+--- A field has a name where code that uses it proves what it is, and is `unk_<offset>` (in hex) otherwise. Writes go to the
+--- live tables, are checked for type and range, and are undone with `restore` (and when the mod is switched off).
+---@class GearAbilities
+local GearAbilities = {}
+
+--- The ids of all abilities, ascending.
+---@return integer[]
+function GearAbilities:ids() end
+
+--- The fields of the table that ability `id` is in, ordered by offset.
+---@param id integer
+---@return GearAbilityField[]? fields nil if there is no such ability.
+function GearAbilities:fields(id) end
+
+--- Writes many fields at once: `{[id] = {field = value, ...}}`. Everything is checked first; if any id, field or value is
+--- wrong nothing is written and the problems are returned.
+---@param edits table<integer, table<string, number>>
+---@return integer? written The number of fields written (nil if nothing was).
+---@return string[]? problems What was wrong.
+function GearAbilities:apply(edits) end
+
+--- Undoes this mod's writes to the ability tables.
+---@return integer restored The number of fields restored.
+function GearAbilities:restore() end
+
+---@class GearAbilityField
+---@field name string
+---@field offset integer The byte offset in the record.
+---@field kind string `'u8'`, `'i16'`, `'f32'` ...
+
+-- path ability
+--- One ability record. Reading a field of a table the ability is not in (or an unknown name) gives nil; writing one is an
+--- error, as is writing a value that does not fit the field or the `id`. T1 has `name_text`, `target_mode`, `effect_base`,
+--- `effect_per_level`, `effect2_base` and `effect2_per_level`; T2 has `target_mode` and `value0_base` ..
+--- `value3_per_level`; both have `id` and the `unk_` fields.
+---@class GearAbility
+---@field table string `'T1'` or `'T2'`.
+---@field index integer The record's index in its table.
+---@field id integer The ability's id.
+---@field name_text integer T1: the text id of the name (`gear.text.get`).
+---@field target_mode integer How the ability is aimed (the engine passes it on to the targeting code).
+---@field effect_base number T1: the first effect is `effect_base + level * effect_per_level` (level 1..100).
+---@field effect_per_level number T1.
+---@field effect2_base number T1: the second effect.
+---@field effect2_per_level number T1.
+---@field value0_base integer T2: the first value is `value0_base + level * value0_per_level`.
+---@field value0_per_level integer T2.
+---@field value1_base integer T2.
+---@field value1_per_level integer T2.
+---@field value2_base integer T2.
+---@field value2_per_level integer T2.
+---@field value3_base integer T2.
+---@field value3_per_level integer T2.
+local GearAbility = {}
+
+-- ## Game text (gear.text)
+
+-- path gear.text
+--- The game's own texts, by the text ids its data tables hold (not the keys of `global.res`).
+---@class GearText
+local GearText = {}
+
+--- The text for `id` (UTF-8), nil if the game has none.
+---@param id integer
+---@return string?
+function GearText.get(id) end
+
+-- ## Settings (gear.settings)
+
+-- path gear.settings
+--- The game's `Settings.cfg` (`KEY : value` lines).
+---@class GearSettings
+local GearSettings = {}
+
+--- The value of `key` as text (nil if the file has no such key). Read each time, so it is what the file says now.
+---@param key string
+---@return string?
+function GearSettings.get(key) end
 
 -- ## JSON (gear.json)
 

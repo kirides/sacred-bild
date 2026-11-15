@@ -124,7 +124,17 @@ def main():
 
     # --- data, json, pipes
     data_ctor = between(kernel, r'^local data = \{', r'^\}', 'data')
-    compare('gear.data', set(re.findall(r'^\s{4}(\w+)\s*=', data_ctor, re.M)), fields('GearData'))
+    compare('gear.data', set(re.findall(r'^\s{4}(\w+)\s*=', data_ctor, re.M)) | set(re.findall(r'^data\.(\w+) = ', kernel, re.M)),
+            fields('GearData'))
+    abil = set(re.findall(r'^function abilities:(\w+)\(', kernel, re.M))
+    compare('gear.data.abilities', abil, {f.name for f in model.classes['GearAbilities'].funcs})
+    abil_fields = set(re.findall(r"(\w+) = \{0x[0-9A-Fa-f]+, '", kernel)) | {'table', 'index'}
+    compare('ability record', abil_fields, fields('GearAbility'))
+    text_src = re.search(r'^\s{8}text = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
+    compare('gear.text', set(re.findall(r'^\s{12}(\w+) = function', text_src.group(1), re.M)) if text_src else set(), members('GearText'))
+    settings_src = re.search(r'^\s{8}settings = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
+    compare('gear.settings', set(re.findall(r'^\s{12}(\w+) = function', settings_src.group(1), re.M)) if settings_src else set(),
+            members('GearSettings'))
     view = set(re.findall(r'^\s*function view:(\w+)\(', kernel, re.M))
     compare('data table', view, {f.name for f in model.classes['GearTable'].funcs})
     otypes = set(re.findall(r'^function data\.object_types:(\w+)\(', kernel, re.M))

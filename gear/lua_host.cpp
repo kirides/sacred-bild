@@ -10,6 +10,8 @@
 #include "world.h"
 
 #include <windows.h>
+#include <filesystem>
+#include <fstream>
 #include <lua.hpp>
 
 #include <atomic>
@@ -27,6 +29,7 @@ namespace
 {
     HMODULE g_module = nullptr;
     std::wstring g_modsDir;     // <game>\mods
+    std::wstring g_gameDir;     // the folder of the game's exe
     lua_State* g_lua = nullptr;
     bool g_started = false;
     // Lua runs on whichever thread calls frame(): the engine's in-game loop, which a new game may run on a new
@@ -307,6 +310,89 @@ namespace
             return 1;
         }
         lua_pushlstring(L, text.data(), text.size());
+        return 1;
+    }
+
+    // native.table_write(name, index, offset, kind, value) -> true | false
+    int nativeTableWrite(lua_State* L)
+    {
+        size_t n = 0;
+        const char* name = luaL_checklstring(L, 1, &n);
+        const lua_Number index = luaL_checknumber(L, 2);
+        const lua_Number offset = luaL_checknumber(L, 3);
+        const char* kindName = luaL_checkstring(L, 4);
+        const lua_Number value = luaL_checknumber(L, 5);
+        static constexpr struct { const char* name; Tables::Kind kind; } kKinds[] = {
+            {"u8", Tables::Kind::U8}, {"i8", Tables::Kind::I8}, {"u16", Tables::Kind::U16}, {"i16", Tables::Kind::I16},
+            {"u32", Tables::Kind::U32}, {"i32", Tables::Kind::I32}, {"f32", Tables::Kind::F32},
+        };
+        const Tables::Kind* kind = nullptr;
+        for (const auto& k : kKinds)
+        {
+            if (std::strcmp(k.name, kindName) == 0)
+            {
+                kind = &k.kind;
+            }
+        }
+        const bool ok = kind && index >= 0 && offset >= 0 && index < 1e9 && offset < 1e9 &&
+            index == static_cast<lua_Number>(static_cast<size_t>(index)) &&
+            offset == static_cast<lua_Number>(static_cast<size_t>(offset)) &&
+            Tables::write(std::string_view(name, n), static_cast<size_t>(index), static_cast<size_t>(offset), *kind, value);
+        lua_pushboolean(L, ok);
+        return 1;
+    }
+
+    // native.text_get(id) -> string | nil: the game's text for a text id
+    int nativeTextGet(lua_State* L)
+    {
+        const lua_Number id = luaL_checknumber(L, 1);
+        std::string text;
+        if (!(id >= 1 && id < 4294967296.0) || id != static_cast<lua_Number>(static_cast<uint32_t>(id)) ||
+            !Tables::text(static_cast<uint32_t>(id), text))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushlstring(L, text.data(), text.size());
+        return 1;
+    }
+
+    // native.setting(key) -> string | nil: a value of the game's Settings.cfg ("KEY : value" lines, read each time)
+    int nativeSetting(lua_State* L)
+    {
+        size_t n = 0;
+        const char* key = luaL_checklstring(L, 1, &n);
+        std::ifstream file(std::filesystem::path(g_gameDir) / L"Settings.cfg");
+        std::string line;
+        while (std::getline(file, line))
+        {
+            const size_t colon = line.find(':');
+            if (colon == std::string::npos)
+            {
+                continue;
+            }
+            size_t end = colon;
+            while (end > 0 && (line[end - 1] == ' ' || line[end - 1] == '	'))
+            {
+                --end;
+            }
+            if (end == n && line.compare(0, end, key, n) == 0)
+            {
+                size_t begin = colon + 1;
+                while (begin < line.size() && (line[begin] == ' ' || line[begin] == '	'))
+                {
+                    ++begin;
+                }
+                size_t last = line.size();
+                while (last > begin && (line[last - 1] == '' || line[last - 1] == ' ' || line[last - 1] == '	'))
+                {
+                    --last;
+                }
+                lua_pushlstring(L, line.data() + begin, last - begin);
+                return 1;
+            }
+        }
+        lua_pushnil(L);
         return 1;
     }
 
@@ -1323,6 +1409,9 @@ namespace
             {"table_info", nativeTableInfo},
             {"table_read", nativeTableRead},
             {"table_string", nativeTableString},
+            {"table_write", nativeTableWrite},
+            {"text_get", nativeTextGet},
+            {"setting", nativeSetting},
             {"hero", nativeHero},
             {"world_changes", nativeWorldChanges},
             {"object", nativeObject},
@@ -1411,6 +1500,7 @@ void LuaHost::configure(HMODULE module, const std::wstring& gameDir)
 {
     g_module = module;
     g_modsDir = gameDir + L"\\mods";
+    g_gameDir = gameDir;
 }
 
 void LuaHost::frame(float dt)
