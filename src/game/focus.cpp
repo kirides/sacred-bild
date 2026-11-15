@@ -32,9 +32,32 @@ namespace
     RECT g_clip = {};       // what Windows made of it
 
     // One of the game's windows (the main window, a dialog, a message box) is in the foreground.
+    // Sacred Gear's automation (isolated input) keeps the game from ever taking the real foreground and exports the
+    // window it shows as the foreground one; optional, looked up until found (the DLL may load after this one).
+    HWND automationForeground()
+    {
+        using Fn = HWND(__cdecl*)();
+        static std::atomic<Fn> fn{nullptr};
+        static std::atomic<unsigned> misses{0};
+        Fn f = fn.load();
+        if (!f && (misses.fetch_add(1) & 0xFF) == 0)
+        {
+            if (HMODULE gear = GetModuleHandleW(L"SacredGear.dll"))
+            {
+                f = reinterpret_cast<Fn>(GetProcAddress(gear, "SacredGear_IsolatedForeground"));
+                fn = f;
+            }
+        }
+        return f ? f() : nullptr;
+    }
+
     bool active()
     {
         DWORD process = 0;
+        if (automationForeground())
+        {
+            return true;
+        }
         HWND foreground = GetForegroundWindow();
         return foreground && GetWindowThreadProcessId(foreground, &process) && process == GetCurrentProcessId();
     }

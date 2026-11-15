@@ -196,7 +196,9 @@ and it believes it is the foreground window and active (it never sees itself dea
 a window (for example with SacredBild's windowed mode): an exclusive fullscreen display takes the screen whatever
 Gear does. `-gear-shared-input` (`SACREDGEAR_SHARED_INPUT=1`) turns the isolation off: the game then takes real
 input too and the cursor is virtual only until the real mouse moves. These hooks are import hooks on `sacred.exe`
-only; other DLLs in the process (SacredBild among them) still see the real foreground window and keys.
+only. The foreground it believes in is a virtual one: the window it asked to activate (`SetForegroundWindow`, `SetFocus`, `SetActiveWindow`, `BringWindowToTop`), else its first top-level window; `GetForegroundWindow`, `GetFocus` and `GetActiveWindow` answer with it, so the startup wait for the foreground ends. SacredBild asks `SacredGear_IsolatedForeground()` (an optional export of `SacredGear.dll`) and counts the game as active then, so it does not swallow the injected keys.
+
+`screenshot(name)` reads the game's own back buffer in-process (read-only lock of the DirectDraw surface; works with the vanilla ddraw and SacredBild's d3d9 backend, 16 and 32 bit) on the thread that renders: the engine's frame thread in game, the window's thread in the menus. It needs neither focus nor a visible window.
 
 Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest`, then read
 `GearAutomation\selftest.json` and the exit code.

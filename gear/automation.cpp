@@ -4,9 +4,13 @@
 #include "lua_host.h"
 #include "patch.h"
 
+#include <ddraw.h>
 #include <shellapi.h>
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <cwchar>
 #include <map>
@@ -69,6 +73,8 @@ namespace
     SetHwndFn g_origSetCapture = nullptr;
     BoolHwndFn g_origSetForegroundWindow = nullptr;
     BoolHwndFn g_origBringWindowToTop = nullptr;
+    HwndFn g_origGetActiveWindow = nullptr;
+    SetHwndFn g_origSetActiveWindow = nullptr;
     ShowWindowFn g_origShowWindow = nullptr;
     SetWindowPosFn g_origSetWindowPos = nullptr;
     CreateWindowExAFn g_origCreateWindowExA = nullptr;
@@ -102,12 +108,39 @@ namespace
                m == WM_MOUSELEAVE;
     }
 
+    // Screenshot requests from the automation thread (the menus): the message hook runs them on the window's
+    // thread, which is the one that renders and flips there.
+    constexpr UINT kCapture = WM_APP + 0x3F39;
+    struct CaptureRequest
+    {
+        std::vector<uint8_t> bgr;       // out: 24 bits per pixel, top-down rows of width * 3 bytes
+        int width = 0, height = 0;
+        const char* error = nullptr;
+        bool done = false;
+    };
+    bool captureBackBuffer(CaptureRequest& r);
+    std::mutex g_captureLock;
+    std::condition_variable g_captureDone;
+    CaptureRequest* g_captureRequest = nullptr;
+    DWORD g_driverThread = 0;
+
     LRESULT CALLBACK messageHook(int code, WPARAM wParam, LPARAM lParam)
     {
         if (code == HC_ACTION && lParam)
         {
             MSG* msg = reinterpret_cast<MSG*>(lParam);
-            if (msg->message == kInjected && msg->lParam == kInjectedTag)
+            if (msg->message == kCapture && wParam == PM_REMOVE)
+            {
+                std::lock_guard guard(g_captureLock);
+                if (g_captureRequest && !g_captureRequest->done)
+                {
+                    captureBackBuffer(*g_captureRequest);
+                    g_captureRequest->done = true;
+                    g_captureDone.notify_all();
+                }
+                msg->message = WM_NULL;
+            }
+            else if (msg->message == kInjected && msg->lParam == kInjectedTag)
             {
                 std::lock_guard guard(g_pendingLock);
                 const auto it = g_pending.find(msg->wParam);
@@ -300,23 +333,75 @@ namespace
         return ok;
     }
 
-    // Focus and activation: the game asks to be in front (00811440 loops on SetForegroundWindow until it is, or
-    // times out). Isolated, it never takes the foreground or the focus, and is told it has them.
+    // Focus and activation: the game asks to be in front (00811440 loops on SetForegroundWindow / SetFocus until
+    // GetForegroundWindow / GetFocus answer with its window, or times out). Isolated, it never takes the foreground
+    // or the focus for real: the window it asked for (else its first top-level window) is the "virtual foreground"
+    // and every query answers with it. It cannot rely on g_pApp: the loop runs while the window is being created,
+    // before the application object has the handle.
+    std::atomic<HWND> g_virtualForeground{nullptr};
+
+    HWND virtualForeground()
+    {
+        HWND v = g_virtualForeground.load();
+        if (v && IsWindow(v))
+        {
+            return v;
+        }
+        return Automation::window();
+    }
+
+    bool ownWindow(HWND w)
+    {
+        DWORD process = 0;
+        return w && IsWindow(w) && GetWindowThreadProcessId(w, &process) && process == GetCurrentProcessId();
+    }
+
+    void setVirtualForeground(HWND w)
+    {
+        if (ownWindow(w))
+        {
+            g_virtualForeground = GetAncestor(w, GA_ROOT);
+        }
+    }
+
     HWND WINAPI hookGetForegroundWindow()
     {
-        HWND w = isolated() ? Automation::window() : nullptr;
+        HWND w = isolated() ? virtualForeground() : nullptr;
         return w ? w : g_origGetForegroundWindow();
     }
 
     HWND WINAPI hookGetFocus()
     {
-        HWND w = isolated() ? Automation::window() : nullptr;
+        HWND w = isolated() ? virtualForeground() : nullptr;
         return w ? w : g_origGetFocus();
+    }
+
+    HWND WINAPI hookGetActiveWindow()
+    {
+        HWND w = isolated() ? virtualForeground() : nullptr;
+        return w ? w : g_origGetActiveWindow();
     }
 
     HWND WINAPI hookSetFocus(HWND w)
     {
-        return isolated() ? Automation::window() : g_origSetFocus(w);
+        if (!isolated())
+        {
+            return g_origSetFocus(w);
+        }
+        const HWND previous = virtualForeground();
+        setVirtualForeground(w);
+        return previous;
+    }
+
+    HWND WINAPI hookSetActiveWindow(HWND w)
+    {
+        if (!isolated())
+        {
+            return g_origSetActiveWindow(w);
+        }
+        const HWND previous = virtualForeground();
+        setVirtualForeground(w);
+        return previous;
     }
 
     HWND WINAPI hookSetCapture(HWND w)
@@ -326,12 +411,22 @@ namespace
 
     BOOL WINAPI hookSetForegroundWindow(HWND w)
     {
-        return isolated() ? TRUE : g_origSetForegroundWindow(w);
+        if (!isolated())
+        {
+            return g_origSetForegroundWindow(w);
+        }
+        setVirtualForeground(w);
+        return TRUE;
     }
 
     BOOL WINAPI hookBringWindowToTop(HWND w)
     {
-        return isolated() ? TRUE : g_origBringWindowToTop(w);
+        if (!isolated())
+        {
+            return g_origBringWindowToTop(w);
+        }
+        setVirtualForeground(w);
+        return TRUE;
     }
 
     BOOL WINAPI hookShowWindow(HWND w, int cmd)
@@ -369,7 +464,17 @@ namespace
         {
             exStyle = (exStyle | WS_EX_NOACTIVATE) & ~static_cast<DWORD>(WS_EX_TOPMOST);
         }
-        return g_origCreateWindowExA(exStyle, cls, name, style, x, y, w, h, parent, menu, instance, param);
+        const HWND created =
+            g_origCreateWindowExA(exStyle, cls, name, style, x, y, w, h, parent, menu, instance, param);
+        if (created && isolated() && !(style & WS_CHILD))
+        {
+            HWND v = g_virtualForeground.load();
+            if (!v || !IsWindow(v))
+            {
+                g_virtualForeground = created;      // the first top-level window is "in front"
+            }
+        }
+        return created;
     }
 
     HHOOK WINAPI hookSetWindowsHookExA(int id, HOOKPROC proc, HINSTANCE module, DWORD thread)
@@ -575,6 +680,7 @@ namespace
 
     void driver()
     {
+        g_driverThread = GetCurrentThreadId();
         ULONGLONG readySince = 0;
         bool loadDone = g_options.loadSlot < 0;
         for (;;)
@@ -655,6 +761,8 @@ void Automation::install(const std::wstring&)
         hookImport(g_origSetCapture, "SetCapture", &hookSetCapture);
         hookImport(g_origSetForegroundWindow, "SetForegroundWindow", &hookSetForegroundWindow);
         hookImport(g_origBringWindowToTop, "BringWindowToTop", &hookBringWindowToTop);
+        hookImport(g_origGetActiveWindow, "GetActiveWindow", &hookGetActiveWindow);
+        hookImport(g_origSetActiveWindow, "SetActiveWindow", &hookSetActiveWindow);
         hookImport(g_origShowWindow, "ShowWindow", &hookShowWindow);
         hookImport(g_origSetWindowPos, "SetWindowPos", &hookSetWindowPos);
         hookImport(g_origCreateWindowExA, "CreateWindowExA", &hookCreateWindowExA);
@@ -944,92 +1052,180 @@ bool Automation::loadSave(int slot, const char*& error)
     return true;
 }
 
+namespace
+{
+    // Shift and width of the lowest set run of a colour mask.
+    void maskShift(uint32_t mask, int& shift, int& bits)
+    {
+        shift = bits = 0;
+        if (!mask)
+        {
+            return;
+        }
+        while (!((mask >> shift) & 1))
+        {
+            ++shift;
+        }
+        while (shift + bits < 32 && ((mask >> (shift + bits)) & 1))
+        {
+            ++bits;
+        }
+    }
+
+    uint8_t scaleChannel(uint32_t v, int bits)
+    {
+        if (bits == 0)
+        {
+            return 0;
+        }
+        return bits >= 8 ? static_cast<uint8_t>(v >> (bits - 8)) : static_cast<uint8_t>((v * 255) / ((1u << bits) - 1));
+    }
+
+    // Locks `surface` for reading and converts it to 24-bit BGR rows (top-down) in `out` (width x height). 16 and
+    // 32 bits per pixel, whatever the channel masks. Raw pointers only: the exception handler cannot sit in a
+    // function with objects to unwind.
+    const char* readSurface(IDirectDrawSurface7* surface, uint8_t* out, int width, int height)
+    {
+        __try
+        {
+            DDSURFACEDESC2 desc{};
+            desc.dwSize = sizeof(desc);
+            const HRESULT hr = surface->Lock(nullptr, &desc, DDLOCK_READONLY | DDLOCK_WAIT, nullptr);
+            if (FAILED(hr) || !desc.lpSurface)
+            {
+                return "cannot lock the back buffer";
+            }
+            const char* error = nullptr;
+            const int bpp = static_cast<int>(desc.ddpfPixelFormat.dwRGBBitCount);
+            const int w = std::min<int>(width, static_cast<int>(desc.dwWidth));
+            const int h = std::min<int>(height, static_cast<int>(desc.dwHeight));
+            if ((bpp != 16 && bpp != 32) || w <= 0 || h <= 0)
+            {
+                error = "unsupported back buffer format";
+            }
+            else
+            {
+                int rs, rb, gs, gb, bs, bb;
+                maskShift(desc.ddpfPixelFormat.dwRBitMask, rs, rb);
+                maskShift(desc.ddpfPixelFormat.dwGBitMask, gs, gb);
+                maskShift(desc.ddpfPixelFormat.dwBBitMask, bs, bb);
+                const uint8_t* base = static_cast<const uint8_t*>(desc.lpSurface);
+                for (int y = 0; y < h; ++y)
+                {
+                    const uint8_t* row = base + static_cast<size_t>(y) * desc.lPitch;
+                    uint8_t* dst = out + static_cast<size_t>(y) * width * 3;
+                    for (int x = 0; x < w; ++x)
+                    {
+                        const uint32_t px = bpp == 32 ? reinterpret_cast<const uint32_t*>(row)[x]
+                                                      : reinterpret_cast<const uint16_t*>(row)[x];
+                        dst[x * 3 + 0] = scaleChannel((px >> bs) & ((1u << bb) - 1), bb);
+                        dst[x * 3 + 1] = scaleChannel((px >> gs) & ((1u << gb) - 1), gb);
+                        dst[x * 3 + 2] = scaleChannel((px >> rs) & ((1u << rb) - 1), rb);
+                    }
+                }
+            }
+            surface->Unlock(nullptr);
+            return error;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return "exception while reading the back buffer";
+        }
+    }
+
+    // The game's own back buffer (dxDriver7, the object g_pApp points to: +0x1C height, +0x20 width, +0xBC the
+    // IDirectDrawSurface7; SacredBild's ddraw9 reads render targets back in its Lock). On the thread that renders.
+    bool captureBackBuffer(CaptureRequest& r)
+    {
+        const uintptr_t driver = global(Addr::g_pApp);
+        uint16_t height = 0, width = 0;
+        uintptr_t back = 0;
+        if (!driver || !readAt(driver, 0x1C, height) || !readAt(driver, 0x20, width) || !readAt(driver, 0xBC, back) ||
+            !back || !width || !height)
+        {
+            r.error = "the game has no back buffer yet";
+            return false;
+        }
+        r.width = width;
+        r.height = height;
+        r.bgr.assign(static_cast<size_t>(width) * height * 3, 0);
+        r.error = readSurface(reinterpret_cast<IDirectDrawSurface7*>(back), r.bgr.data(), width, height);
+        return r.error == nullptr;
+    }
+}
+
 bool Automation::screenshot(const std::wstring& path, const char*& error)
 {
-    HWND w = window();
-    int width = 0, height = 0;
-    clientSize(width, height);
-    if (!w || width <= 0 || height <= 0)
+    CaptureRequest request;
+    if (g_driverThread && GetCurrentThreadId() == g_driverThread)
     {
-        error = "no game window";
-        return false;
-    }
-    HDC screen = GetDC(w);
-    HDC mem = CreateCompatibleDC(screen);
-    BITMAPINFO bi{};
-    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
-    bi.bmiHeader.biWidth = width;
-    bi.bmiHeader.biHeight = height;     // bottom-up, as BMP files store it
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 24;
-    bi.bmiHeader.biCompression = BI_RGB;
-    void* bits = nullptr;
-    HBITMAP bmp = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    bool ok = false;
-    if (mem && bmp)
-    {
-        HGDIOBJ old = SelectObject(mem, bmp);
-        // PrintWindow with PW_RENDERFULLCONTENT (2) gets Direct3D content of a window in the background too;
-        // BitBlt from the window's DC where it fails (older Windows).
-        // Direct3D content comes out black through PrintWindow with SacredBild's d3d9 backend, so first copy what the
-        // desktop shows at the client area (the game window has to be in front), then fall back to the other ways.
-        if (GetForegroundWindow() != w)
+        // The menus: the window's thread renders; ask it between two frames.
+        HWND w = window();
+        if (!w)
         {
-            // A Win32 process may only take the foreground right after input; a synthetic Alt press allows it.
-            keybd_event(VK_MENU, 0, 0, 0);
-            keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
-            ShowWindow(w, SW_SHOW);
-            SetForegroundWindow(w);
-            Sleep(150);
+            error = "no game window";
+            return false;
         }
-        POINT origin{0, 0};
-        ClientToScreen(w, &origin);
-        HDC desktop = GetDC(nullptr);
-        ok = desktop && BitBlt(mem, 0, 0, width, height, desktop, origin.x, origin.y, SRCCOPY | CAPTUREBLT);
-        if (desktop)
+        std::unique_lock lock(g_captureLock);
+        g_captureRequest = &request;
+        PostMessageW(w, kCapture, 0, 0);
+        const bool answered = g_captureDone.wait_for(lock, std::chrono::seconds(10), [&] { return request.done; });
+        g_captureRequest = nullptr;
+        if (!answered)
         {
-            ReleaseDC(nullptr, desktop);
-        }
-        ok = ok || PrintWindow(w, mem, PW_CLIENTONLY | 2) || BitBlt(mem, 0, 0, width, height, screen, 0, 0, SRCCOPY);
-        GdiFlush();
-        SelectObject(mem, old);
-    }
-    if (ok)
-    {
-        const DWORD stride = (static_cast<DWORD>(width) * 3 + 3) & ~3u;
-        const DWORD size = stride * static_cast<DWORD>(height);
-        BITMAPFILEHEADER fh{};
-        fh.bfType = 0x4D42;
-        fh.bfOffBits = sizeof(fh) + sizeof(bi.bmiHeader);
-        fh.bfSize = fh.bfOffBits + size;
-        HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        DWORD written = 0;
-        ok = f != INVALID_HANDLE_VALUE && WriteFile(f, &fh, sizeof(fh), &written, nullptr) &&
-             WriteFile(f, &bi.bmiHeader, sizeof(bi.bmiHeader), &written, nullptr) &&
-             WriteFile(f, bits, size, &written, nullptr);
-        if (f != INVALID_HANDLE_VALUE)
-        {
-            CloseHandle(f);
-        }
-        if (!ok)
-        {
-            error = "cannot write the file";
+            error = "the game did not render in time";
+            return false;
         }
     }
     else
     {
-        error = "cannot capture the window";
+        captureBackBuffer(request);     // in game: the engine's thread, which is the one that flips
     }
-    if (bmp)
+    if (request.error)
     {
-        DeleteObject(bmp);
+        error = request.error;
+        return false;
     }
-    if (mem)
+    const int width = request.width, height = request.height;
+    BITMAPINFOHEADER bi{};
+    bi.biSize = sizeof(bi);
+    bi.biWidth = width;
+    bi.biHeight = height;       // bottom-up, as BMP files store it
+    bi.biPlanes = 1;
+    bi.biBitCount = 24;
+    bi.biCompression = BI_RGB;
+    const DWORD stride = (static_cast<DWORD>(width) * 3 + 3) & ~3u;
+    std::vector<uint8_t> file(stride * static_cast<size_t>(height), 0);
+    for (int y = 0; y < height; ++y)
     {
-        DeleteDC(mem);
+        std::memcpy(file.data() + static_cast<size_t>(height - 1 - y) * stride,
+                    request.bgr.data() + static_cast<size_t>(y) * width * 3, static_cast<size_t>(width) * 3);
     }
-    ReleaseDC(w, screen);
+    BITMAPFILEHEADER fh{};
+    fh.bfType = 0x4D42;
+    fh.bfOffBits = sizeof(fh) + sizeof(bi);
+    fh.bfSize = fh.bfOffBits + static_cast<DWORD>(file.size());
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    DWORD written = 0;
+    const bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, &fh, sizeof(fh), &written, nullptr) &&
+                    WriteFile(f, &bi, sizeof(bi), &written, nullptr) &&
+                    WriteFile(f, file.data(), static_cast<DWORD>(file.size()), &written, nullptr);
+    if (f != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(f);
+    }
+    if (!ok)
+    {
+        error = "cannot write the file";
+    }
     return ok;
+}
+
+// For SacredBild: the window automation shows as the foreground one (isolated input), nullptr if the real
+// foreground counts. Optional: neither DLL needs the other.
+extern "C" __declspec(dllexport) HWND __cdecl SacredGear_IsolatedForeground()
+{
+    return isolated() ? virtualForeground() : nullptr;
 }
 
 void Automation::quit(int code)
