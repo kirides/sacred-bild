@@ -49,6 +49,17 @@ namespace
         {W::trade, &Config::Ui::shops},
     };
     Frame g_frames[std::size(kAnchors)];
+    bool g_anchored = false;        // [UI.Layout] places the windows (else they stay in the canvas)
+    bool g_handlersSet = false;
+
+    // Windows moved at run time (SacredBild_UiSetWindowFrame): a frame of their own, wherever it is.
+    struct MovedWindow
+    {
+        bool set = false;
+        float x = 0.0f, y = 0.0f;
+    };
+    MovedWindow g_moved[static_cast<size_t>(W::count)];
+    SRWLOCK g_moveLock = SRWLOCK_INIT;
 
     // Popups take the frame of the code that set their text (those set in the canvas are not listed) and are drawn
     // unconfined: their layout keeps them on the whole screen instead of the 1024x768 rect.
@@ -102,6 +113,18 @@ namespace
     {
         if (owner.kind == UiWindows::Kind::Window)
         {
+            // A window moved at run time (Sacred Gear's layout editing) first.
+            if (owner.index >= 0 && owner.index < static_cast<int>(W::count))
+            {
+                AcquireSRWLockShared(&g_moveLock);
+                const MovedWindow moved = g_moved[owner.index];
+                ReleaseSRWLockShared(&g_moveLock);
+                if (moved.set)
+                {
+                    out = {moved.x, moved.y, owner.index != static_cast<int>(W::taskbar)};
+                    return true;
+                }
+            }
             for (size_t i = 0; i < std::size(kAnchors); ++i)
             {
                 if (owner.is(kAnchors[i].window))
@@ -388,34 +411,44 @@ namespace
 
 void UiAnchor::install()
 {
-    if (!Config::ui.anchor || !UiCanvas::enabled())
+    if (!UiCanvas::enabled())
     {
         return;
     }
+    // The handlers run whenever the canvas is on, so windows moved at run time (SacredBild_UiSetWindowFrame) have a
+    // frame even without the [UI.Layout] anchoring; the windows' frames stay the canvas then.
     const Frame left = UiCanvas::placed(0.0f, 0.0f), right = UiCanvas::placed(1.0f, 1.0f);
-    if (std::fabs(left.x) < 0.5f && std::fabs(left.y) < 0.5f && std::fabs(right.x) < 0.5f && std::fabs(right.y) < 0.5f)
+    const bool room = !(std::fabs(left.x) < 0.5f && std::fabs(left.y) < 0.5f && std::fabs(right.x) < 0.5f && std::fabs(right.y) < 0.5f);
+    g_anchored = Config::ui.anchor && room;
+    if (Config::ui.anchor && !room)
     {
         LOG("UI anchor: the canvas covers the screen, nothing to move");
-        return;
     }
     for (size_t i = 0; i < std::size(kAnchors); ++i)
     {
         const Config::Ui::Position& pos = Config::ui.*kAnchors[i].position;
-        g_frames[i] = UiCanvas::placed(pos.x / 4096.0f, pos.y / 4096.0f);
+        g_frames[i] = g_anchored ? UiCanvas::placed(pos.x / 4096.0f, pos.y / 4096.0f) : Frame{};
         g_frames[i].confine = kAnchors[i].confine;
     }
-    g_cornerFrame = left;
-    LOG("UI anchor: frames reach {:.1f},{:.1f} .. {:.1f},{:.1f} beyond the canvas", left.x, left.y, right.x, right.y);
+    g_cornerFrame = g_anchored ? left : Frame{};
+    if (g_anchored)
+    {
+        LOG("UI anchor: frames reach {:.1f},{:.1f} .. {:.1f},{:.1f} beyond the canvas", left.x, left.y, right.x, right.y);
+    }
     UiWindows::Handlers handlers;
     handlers.frame = &frameOf;
     handlers.receiveEvent = &onEvent;
     handlers.isInside = &onInside;
     handlers.windowsCreated = &onWindowsCreated;
     UiWindows::setHandlers(handlers);
-    Patch::hook(g_origShowHelp, Addr::cUI_Manager_showHelp, &hookShowHelp, "cUI_Manager::showHelp");
-    Patch::hook(g_origSetText, Addr::cUI_Popup_setText, &hookSetText, "cUI_Popup::setText");
-    Patch::hook(g_origSetTextId, Addr::cUI_Popup_setTextId, &hookSetTextId, "cUI_Popup::setTextId");
-    Patch::hook(g_origPopupLayout, Addr::cUI_Popup_layout, &hookPopupLayout, "cUI_Popup::layout");
+    g_handlersSet = true;
+    if (g_anchored)
+    {
+        Patch::hook(g_origShowHelp, Addr::cUI_Manager_showHelp, &hookShowHelp, "cUI_Manager::showHelp");
+        Patch::hook(g_origSetText, Addr::cUI_Popup_setText, &hookSetText, "cUI_Popup::setText");
+        Patch::hook(g_origSetTextId, Addr::cUI_Popup_setTextId, &hookSetTextId, "cUI_Popup::setTextId");
+        Patch::hook(g_origPopupLayout, Addr::cUI_Popup_layout, &hookPopupLayout, "cUI_Popup::layout");
+    }
 }
 
 bool UiAnchor::frame(cUI_Window2* window, UiCanvas::Frame& out)
@@ -469,5 +502,46 @@ extern "C" int __cdecl SacredBild_UiScreenBounds(float* bounds)
     bounds[1] = b.top;
     bounds[2] = b.right;
     bounds[3] = b.bottom;
+    return 1;
+}
+
+// Moving the game's windows at run time (Sacred Gear's layout editing). `slot` is the window's index in the UI
+// manager's table (cUI_Manager::Window). Set: the window runs in a frame of its own at (x, y) against the canvas, in
+// layout units, confined to that frame's 1024x768 rect like an anchored window (set 0: back to its [UI.Layout]
+// place). The windows the game draws alone (world map, savegame, options, character export) do not move. Get: the
+// window's frame now. Both return 0 while SacredBild's UI canvas is off.
+extern "C" int __cdecl SacredBild_UiSetWindowFrame(int slot, float x, float y, int set)
+{
+    if (!g_handlersSet || slot < 0 || slot >= static_cast<int>(W::count))
+    {
+        return 0;
+    }
+    const W w = static_cast<W>(slot);
+    if (w == W::megamap || w == W::savegame || w == W::options || w == W::character)
+    {
+        return 0;
+    }
+    AcquireSRWLockExclusive(&g_moveLock);
+    g_moved[slot] = {set != 0, x, y};
+    ReleaseSRWLockExclusive(&g_moveLock);
+    return 1;
+}
+
+extern "C" int __cdecl SacredBild_UiGetWindowFrame(int slot, float* x, float* y)
+{
+    if (!g_handlersSet || slot < 0 || slot >= static_cast<int>(W::count) || !x || !y)
+    {
+        return 0;
+    }
+    UiWindows::Owner owner;
+    owner.kind = UiWindows::Kind::Window;
+    owner.index = slot;
+    Frame frame;
+    if (!frameOf(owner, frame))
+    {
+        frame = {};
+    }
+    *x = frame.x;
+    *y = frame.y;
     return 1;
 }
