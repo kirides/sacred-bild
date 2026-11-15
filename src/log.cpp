@@ -1,8 +1,10 @@
 #include "log.h"
 
 #include <windows.h>
+#include <share.h>
 #include <cstdio>
 #include <mutex>
+#include <string>
 
 namespace
 {

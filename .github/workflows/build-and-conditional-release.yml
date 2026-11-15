@@ -28,6 +28,7 @@ jobs:
     outputs:
       artifact-id-release: ${{ steps.artifact-upload-release.outputs.artifact-id }}
       artifact-id-debug: ${{ steps.artifact-upload-debug.outputs.artifact-id }}
+      artifact-id-gear: ${{ steps.artifact-upload-gear.outputs.artifact-id }}
 
     steps:
       - name: Checkout repository
@@ -122,6 +123,35 @@ jobs:
           path: ${{ steps.package.outputs.release-dir }}
           if-no-files-found: error
 
+      # Sacred Gear: a release of its own, laid out like the game folder (SacredGear.dll, an example mod in mods\).
+      - name: Prepare Sacred Gear release structure
+        id: package-gear
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $tagOrGitShortHash = $env:GITHUB_REF_NAME
+          } else {
+            $shortHash = $env:GITHUB_SHA.Substring(0, 9)
+            $tagOrGitShortHash = "git-$shortHash"
+          }
+          $relDir = "SacredGear-$tagOrGitShortHash"
+          $buildDir = "out/build/msvc-x86/RelWithDebInfo"
+
+          New-Item -Path "$relDir/mods" -ItemType Directory -Force | Out-Null
+          Copy-Item -Path "$buildDir/SacredGear.dll", "$buildDir/SacredGear.pdb" -Destination $relDir
+          Copy-Item -Path "gear/examples/hello" -Destination "$relDir/mods/hello" -Recurse
+          Copy-Item -Path "docs/Gear.md", "LICENSE" -Destination $relDir
+
+          "release-dir=$relDir" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Sacred Gear artifact
+        id: artifact-upload-gear
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package-gear.outputs.release-dir }}
+          path: ${{ steps.package-gear.outputs.release-dir }}
+          if-no-files-found: error
+
   # The matchmaking server (Go): tested, then built for the systems people run servers on.
   matchmaker:
     runs-on: ubuntu-latest
@@ -188,7 +218,7 @@ jobs:
         id: download-artifact
         uses: actions/download-artifact@v8
         with:
-          artifact-ids: ${{ needs.build.outputs.artifact-id-release }},${{ needs.build.outputs.artifact-id-debug }}
+          artifact-ids: ${{ needs.build.outputs.artifact-id-release }},${{ needs.build.outputs.artifact-id-debug }},${{ needs.build.outputs.artifact-id-gear }}
           path: downloaded-artifacts
 
       - name: Download matchmaker artifacts

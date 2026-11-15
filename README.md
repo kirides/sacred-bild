@@ -72,6 +72,7 @@ The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll`
 | [RE notes](docs/RE_NOTES.md) | What the game's code does, as far as SacredBild needs it |
 | [UDP protocol](docs/UDP_PROTOCOL.md) | The UDP connection's and the matchmaker's wire formats |
 | [Matchmaker](matchmaker/README.md) | Running a matchmaking server |
+| [Sacred Gear](docs/Gear.md) | The LuaJIT mod kit, a separate DLL from this repository (works with or without SacredBild) |
 
 ## Credits
 

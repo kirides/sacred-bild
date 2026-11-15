@@ -20,6 +20,27 @@ find_path(DETOURS_INCLUDE_DIRS "detours/detours.h" REQUIRED)
 find_library(DETOURS_LIBRARY_RELEASE detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH REQUIRED)
 find_library(DETOURS_LIBRARY_DEBUG detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/lib" NO_DEFAULT_PATH REQUIRED)
 set(DETOURS_LIBRARY optimized ${DETOURS_LIBRARY_RELEASE} debug ${DETOURS_LIBRARY_DEBUG})
+# LuaJIT (Sacred Gear): vcpkg installs its headers under include/luajit and the library as lua51.lib.
+find_path(LUAJIT_INCLUDE_DIRS "luajit/lua.hpp" REQUIRED)
+find_library(LUAJIT_LIBRARY_RELEASE NAMES lua51 luajit-5.1 luajit PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH REQUIRED)
+find_library(LUAJIT_LIBRARY_DEBUG NAMES lua51 luajit-5.1 luajit PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/lib" NO_DEFAULT_PATH REQUIRED)
+set(LUAJIT_LIBRARY optimized ${LUAJIT_LIBRARY_RELEASE} debug ${LUAJIT_LIBRARY_DEBUG})
+
+set(COMMON_DEFINITIONS WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+set(COMMON_OPTIONS /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
+
+# What SacredBild and Sacred Gear share: the log, formatting, code patches and hooks, signature search. Each DLL links
+# its own copy (its own log file, its own Detours transactions).
+add_library(sacred_core STATIC
+  src/fmt.cpp
+  src/log.cpp
+  src/patch.cpp
+  src/sig.cpp
+)
+target_include_directories(sacred_core PUBLIC src PRIVATE ${DETOURS_INCLUDE_DIRS})
+target_link_libraries(sacred_core PUBLIC ${DETOURS_LIBRARY})
+target_compile_definitions(sacred_core PUBLIC ${COMMON_DEFINITIONS})
+target_compile_options(sacred_core PRIVATE ${COMMON_OPTIONS})
 
 # Largest sources first: MSBuild (/MP) and Ninja start compiles in list order, so a big file listed late would
 # finish alone at the end of a fresh build.
@@ -42,14 +63,10 @@ endfunction()
 set(DDRAW_SOURCES
   src/main.cpp
   src/proxy.cpp
-  src/log.cpp
   src/config.cpp
   src/crash_dump.cpp
-  src/fmt.cpp
-  src/patch.cpp
   src/profiler.cpp
   src/settings_window.cpp
-  src/sig.cpp
   src/system_ddraw.cpp
   src/game/build.cpp
   src/game/focus.cpp
@@ -122,9 +139,8 @@ add_library(ddraw SHARED ${DDRAW_SOURCES})
 target_include_directories(ddraw PRIVATE src ${DETOURS_INCLUDE_DIRS})
 # The resource script embeds the button prompts' atlas (tools/gen_prompts.py).
 set_source_files_properties(src/version.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/overlay/prompts.png)
-target_link_libraries(ddraw PRIVATE ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
-target_compile_definitions(ddraw PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
-target_compile_options(ddraw PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
+target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
+target_compile_options(ddraw PRIVATE ${COMMON_OPTIONS})
 target_precompile_headers(ddraw PRIVATE src/pch.h)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.
 # The map file lets tools/profile_report.py name functions in SacredBild's own samples.
@@ -140,6 +156,34 @@ if(SACRED_GAME_DIR)
   add_custom_command(TARGET ddraw POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:ddraw> "${SACRED_GAME_DIR}/ddraw.dll"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_PDB_FILE:ddraw> "${SACRED_GAME_DIR}/ddraw.pdb")
+endif()
+
+# Sacred Gear: the LuaJIT mod kit, a DLL of its own (docs/Gear.md). It does not need SacredBild: SacredBild loads it
+# from the game folder, and any other DLL loader (an ASI loader, an injector) can load it instead.
+option(SACREDGEAR "Build Sacred Gear (SacredGear.dll)" ON)
+if(SACREDGEAR)
+  add_library(SacredGear SHARED
+    gear/main.cpp
+    gear/hooks.cpp
+    gear/lua_host.cpp
+    gear/tables.cpp
+    gear/world.cpp
+    gear/pipe.cpp
+    gear/automation.cpp
+    gear/gear.rc
+  )
+  target_include_directories(SacredGear PRIVATE gear ${LUAJIT_INCLUDE_DIRS}/luajit)
+  set_source_files_properties(gear/gear.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kernel.lua)
+  target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} shell32)
+  target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})
+  # SAFESEH off as for ddraw (Detours trampolines); /MAP for profiles.
+  target_link_options(SacredGear PRIVATE /SAFESEH:NO /MAP)
+  set_target_properties(SacredGear PROPERTIES OUTPUT_NAME "SacredGear")
+  if(SACRED_GAME_DIR)
+    add_custom_command(TARGET SacredGear POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SacredGear> "${SACRED_GAME_DIR}/SacredGear.dll"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_PDB_FILE:SacredGear> "${SACRED_GAME_DIR}/SacredGear.pdb")
+  endif()
 endif()
 
 # Test bench for the UDP transport and the matchmaker client outside the game (tools/nettest/nettest.cpp).
