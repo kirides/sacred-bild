@@ -46,6 +46,10 @@ namespace SiteHook
     void setAbilityActive(bool active);
     Stats abilityStats();
 
+    // damage: the final damage of a hit (event `damage`: the damage, the victim's and the attacker's creature types).
+    void setDamageActive(bool active);
+    Stats damageStats();
+
     // Self test of the constant stubs, for automation: builds two small functions in memory (one with an `fmul dword [c]`, one with a
     // `fld dword [c]`), hooks them like a constant site named `selftest.fmul` / `selftest.fld` and calls them from a worker thread
     // (Lua is not running then, so the mods may answer): the results are st0 after the instruction, and whether eax, ecx and edx
@@ -58,6 +62,8 @@ namespace SiteHook
         // left (vanilla 100, 1000 and 0x32 when no mod answers), and whether the registers survived.
         int abilityStore = 0, abilityAdd = 0, abilityEdx = 0;
         bool abilityKept = false;
+        // damage stub on a function built in memory (damage 12.4 rounds to 12; a handler of the fake attacker of type 77 answers)
+        int damage = 0;
     };
     bool selfTestStart();
     bool selfTestResult(SelfTest& out);

@@ -82,6 +82,15 @@ ABILITY_SITES = [
 ]
 
 
+# Damage site (ENG 0056B130, the damage resolution of a hit): the `call __ftol` that turns the final float damage into the integer the
+# function returns and the engine applies (after it the code only zeroes it for immune creatures). Gear answers it with the event
+# `damage`: a handler gets the damage, the victim's and the attacker's creature types and may return another damage (16 bit: 0 .. 65534).
+DAMAGE_FUNCTION = ('siteFn56B130', 0x0056B130)
+DAMAGE_SITES = [
+    0x0056DAAB,
+]
+
+
 def functions():
     seen = {}
     for _, name, va, _, _, _ in SITES:

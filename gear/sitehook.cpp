@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <atomic>
 #include <cstdint>
+#include <algorithm>
 #include <cstring>
 #include <thread>
 #include <string>
@@ -38,6 +39,12 @@ namespace
         const uintptr_t* function;
         uint32_t offset;
         uint8_t kind;               // 0 store, 1 add, 2 edx
+    };
+    struct DamageSiteSpec
+    {
+        int index;
+        const uintptr_t* function;
+        uint32_t offset;
     };
 #include "game/gear_sites.inc"
 
@@ -325,6 +332,87 @@ namespace
         return base;
     }
 
+    // --- damage sites ---------------------------------------------------------------------------------------------------
+
+    std::atomic<bool> g_damageActive{false};
+    std::atomic<unsigned> g_damageCalls{0}, g_damageAnswered{0}, g_damageBusy{0};
+    std::atomic<unsigned> g_damageSiteCalls[std::size(kDamageSites)];
+
+    // The creature type of a creature (a pointer, 0 for none) read safely: +0x10.
+    int typeOfCreature(uintptr_t creature)
+    {
+        return creature ? creatureType(creature) : -1;
+    }
+
+    // The victim is a creature's combat object: [victim + 4] is the creature (the stub passes edi), the attacker is the creature (ebp).
+    int typeOfVictim(uintptr_t victim)
+    {
+        __try
+        {
+            return victim ? creatureType(*reinterpret_cast<const uintptr_t*>(victim + 4)) : -1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    extern "C" int __cdecl damageHandler(int site, int damage, uintptr_t victim, uintptr_t attacker)
+    {
+        g_damageCalls.fetch_add(1, std::memory_order_relaxed);
+        if (site >= 0 && site < static_cast<int>(std::size(kDamageSites)))
+        {
+            g_damageSiteCalls[site].fetch_add(1, std::memory_order_relaxed);
+        }
+        if (!g_damageActive.load(std::memory_order_relaxed))
+        {
+            return damage;
+        }
+        int result = 0;
+        switch (LuaHost::damage(damage, typeOfVictim(victim), typeOfCreature(attacker), site, result))
+        {
+        case LuaHost::Answer::Value:
+            g_damageAnswered.fetch_add(1, std::memory_order_relaxed);
+            return std::clamp(result, 0, 65534);
+        case LuaHost::Answer::Busy:
+            g_damageBusy.fetch_add(1, std::memory_order_relaxed);
+            break;
+        default:
+            break;
+        }
+        return damage;
+    }
+
+    // The stub of a damage site: the displaced `call __ftol` runs (the damage is in eax afterwards), the handler may replace it.
+    uintptr_t buildDamageStub(uintptr_t site, uintptr_t ftol, int index)
+    {
+        std::vector<uint8_t> code;
+        const uintptr_t base0 = 0;
+        (void)base0;
+        void* memory = VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!memory)
+        {
+            return 0;
+        }
+        const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
+        emit(code, {0xE8});                                         // call __ftol
+        emit32(code, static_cast<uint32_t>(ftol - (base + code.size() + 4)));
+        emit(code, {0x51, 0x52});                                   // push ecx; push edx
+        emit(code, {0x55, 0x57, 0x50});                             // push ebp (attacker); push edi (victim); push eax (damage)
+        emit(code, {0x68});                                         // push site index
+        emit32(code, static_cast<uint32_t>(index));
+        emit(code, {0xB9});                                         // mov ecx, handler
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&damageHandler)));
+        emit(code, {0xFF, 0xD1});                                   // call ecx
+        emit(code, {0x83, 0xC4, 0x10});                             // add esp, 16
+        emit(code, {0x5A, 0x59});                                   // pop edx; pop ecx
+        emit(code, {0xE9});                                         // jmp after the call
+        emit32(code, static_cast<uint32_t>((site + 5) - (base + code.size() + 4)));
+        std::memcpy(memory, code.data(), code.size());
+        FlushInstructionCache(GetCurrentProcess(), memory, code.size());
+        return base;
+    }
+
     // The stub for one site (see the header). Returns its address, 0 if no memory could be had.
     uintptr_t buildStub(uintptr_t site, const SiteSpec& spec, int index)
     {
@@ -517,9 +605,40 @@ size_t SiteHook::install()
             ++abilities;
         }
     }
-    LOG("Site hooks: {} of {} level sites, {} of {} constant sites, {} of {} creature.ability sites installed", installed, std::size(kSites),
-        constants, std::size(kConstSites), abilities, std::size(kAbilitySites));
-    return installed + constants + abilities;
+    size_t damages = 0;
+    for (const DamageSiteSpec& spec : kDamageSites)
+    {
+        if (!*spec.function)
+        {
+            continue;
+        }
+        const uintptr_t address = *spec.function + spec.offset;
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(address);
+        int32_t rel = 0;
+        std::memcpy(&rel, b + 1, 4);
+        const uintptr_t ftol = address + 5 + rel;
+        // `call __ftol; mov esi, eax`
+        if (b[0] != 0xE8 || b[5] != 0x8B || b[6] != 0xF0)
+        {
+            LOG("Site hook damage[{}] at {:08x}: the code is not the expected call: not installed", spec.index, address);
+            continue;
+        }
+        const uintptr_t stub = buildDamageStub(address, ftol, spec.index);
+        if (!stub)
+        {
+            continue;
+        }
+        uint8_t bytes[5] = {0xE9, 0, 0, 0, 0};
+        const uint32_t jump = static_cast<uint32_t>(stub - (address + 5));
+        std::memcpy(bytes + 1, &jump, 4);
+        if (Patch::write(address, bytes, sizeof(bytes)))
+        {
+            ++damages;
+        }
+    }
+    LOG("Site hooks: {} of {} level sites, {} of {} constant sites, {} of {} creature.ability sites, {} of {} damage sites installed", installed,
+        std::size(kSites), constants, std::size(kConstSites), abilities, std::size(kAbilitySites), damages, std::size(kDamageSites));
+    return installed + constants + abilities + damages;
 }
 
 void SiteHook::setLevelFactorActive(bool active)
@@ -665,6 +784,56 @@ namespace
         r.abilityKept = kept;
     }
 
+    uintptr_t g_damageBlob = 0;
+    uintptr_t g_ftolThunk = 0;
+    float g_damageConstant = 12.4f;
+    uint32_t g_fakeVictim[2];               // [0] unused, [1] = the fake creature (type at +0x10)
+
+    // fld dword [c]; mov edi, victim; mov ebp, attacker(= fake creature); call thunk (fistp); mov esi, eax; mov [r0], eax; ret.
+    // The thunk is `sub esp, 4; fistp dword [esp]; pop eax; ret`: the displaced __ftol. The site is the call, followed by mov esi, eax.
+    void runDamageTest(SiteHook::SelfTest& r)
+    {
+        if (!g_damageBlob)
+        {
+            std::vector<uint8_t> thunk{0x83, 0xEC, 0x04, 0xDB, 0x1C, 0x24, 0x58, 0xC3};
+            void* t = VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+            std::memcpy(t, thunk.data(), thunk.size());
+            g_ftolThunk = reinterpret_cast<uintptr_t>(t);
+            std::vector<uint8_t> code;
+            emit(code, {0x57, 0x55, 0x56});                         // push edi; push ebp; push esi
+            emit(code, {0xD9, 0x05});                               // fld dword [c]
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_damageConstant)));
+            emit(code, {0xBF});                                     // mov edi, victim
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_fakeVictim[0])));
+            emit(code, {0xBD});                                     // mov ebp, attacker
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_fakeCreature[0])));
+            const size_t site = code.size();
+            emit(code, {0xE8});
+            emit32(code, 0);
+            emit(code, {0x8B, 0xF0});                               // mov esi, eax
+            emit(code, {0xA3});
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[0])));
+            emit(code, {0x5E, 0x5D, 0x5F, 0xC3});                   // pop esi; pop ebp; pop edi; ret
+            void* memory = VirtualAlloc(nullptr, code.size() + 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+            const uintptr_t at = reinterpret_cast<uintptr_t>(memory) + site;
+            const uint32_t rel = static_cast<uint32_t>(g_ftolThunk - (at + 5));
+            std::memcpy(&code[site + 1], &rel, 4);
+            std::memcpy(memory, code.data(), code.size());
+            g_damageBlob = reinterpret_cast<uintptr_t>(memory);
+            // the stub, like the installer does it
+            const uintptr_t stub = buildDamageStub(at, g_ftolThunk, static_cast<int>(std::size(kDamageSites)));
+            uint8_t bytes[5] = {0xE9, 0, 0, 0, 0};
+            const uint32_t jump = static_cast<uint32_t>(stub - (at + 5));
+            std::memcpy(bytes + 1, &jump, 4);
+            std::memcpy(reinterpret_cast<void*>(at), bytes, 5);
+        }
+        std::memset(g_fakeCreature, 0, sizeof(g_fakeCreature));
+        g_fakeCreature[4] = 77;                                     // the attacker's type
+        g_fakeVictim[1] = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_fakeCreature[0]));
+        runBlob(g_damageBlob);
+        r.damage = static_cast<int>(g_regs[0]);
+    }
+
     void selfTestThread()
     {
         Sleep(150);     // Lua is not running now
@@ -693,6 +862,7 @@ namespace
         const bool regsB = g_regs[0] == 0x11111111 && g_regs[1] == 0x22222222 && g_regs[2] == 0x33333333;
         r.registersKept = regsA && regsB;
         runAbilityTests(r);
+        runDamageTest(r);
         g_selfResult = r;
         g_selfState = 2;
     }
@@ -733,6 +903,11 @@ std::vector<SiteHook::SiteInfo> SiteHook::sites()
         const uintptr_t fn = *kConstSites[i].function;
         out.push_back({kConstSites[i].name, kConstSites[i].index, fn ? fn + kConstSites[i].offset : 0, g_constSiteCalls[i].load()});
     }
+    for (size_t i = 0; i < std::size(kDamageSites); ++i)
+    {
+        const uintptr_t fn = *kDamageSites[i].function;
+        out.push_back({"damage", kDamageSites[i].index, fn ? fn + kDamageSites[i].offset : 0, g_damageSiteCalls[i].load()});
+    }
     for (size_t i = 0; i < std::size(kAbilitySites); ++i)
     {
         const uintptr_t fn = *kAbilitySites[i].function;
@@ -744,6 +919,16 @@ std::vector<SiteHook::SiteInfo> SiteHook::sites()
 void SiteHook::setAbilityActive(bool active)
 {
     g_abilityActive.store(active);
+}
+
+void SiteHook::setDamageActive(bool active)
+{
+    g_damageActive.store(active);
+}
+
+SiteHook::Stats SiteHook::damageStats()
+{
+    return {g_damageCalls.load(), g_damageAnswered.load(), g_damageBusy.load()};
 }
 
 SiteHook::Stats SiteHook::abilityStats()

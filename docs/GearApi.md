@@ -110,12 +110,22 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'game.save_failed'` | It could not be written. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
+| `'damage'` | The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534). |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
 | `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
 
-### GearHandler
+### GearHit
 
-A handler registered with `gear.on`; pass it to `gear.off` to remove it.
+A handler registered with `gear.on`; pass it to `gear.off` to remove it. What the `damage` event gets.
+
+| Field | Type | |
+|---|---|---|
+| `damage` | `integer` | The damage the engine computed (after the resistances, before it is applied). |
+| `victim_type` | `integer` | Creature type of the one that is hit (-1: unknown). |
+| `attacker_type` | `integer` | Creature type of the attacker (-1: none, e.g. a trap or an effect). |
+| `site` | `integer` | Which damage hook site (0: the damage resolution of the hit handlers). |
+
+### GearHandler
 
 | Field | Type | |
 |---|---|---|
@@ -182,6 +192,7 @@ Forms:
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
+- `fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
 - `fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler`
 
@@ -629,7 +640,7 @@ The engine hooks that ask mods for a value inside the game's own code (see the e
 
 The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
 
-- `name`: `'level.factor'|'combat.constant'|'creature.ability'`
+- `name`: `'level.factor'|'combat.constant'|'creature.ability'|'damage'`
 - returns `GearHookStats`
 
 #### `gear.hooks.sites() -> GearHookSite[]`
@@ -2262,11 +2273,11 @@ Tests the stubs of the constant site hooks on two functions built in memory (`fm
 
 - returns `started` `boolean` - false if a test is running.
 
-#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean}?`
+#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer}?`
 
-The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. The `ability_*` fields test the `creature.ability` stubs on three functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived. nil until it is done.
+The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. The `ability_*` fields test the `creature.ability` stubs on three functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived. `damage` is the result of the `damage` stub on a function built in memory (12.4 rounds to 12 without an answer). nil until it is done.
 
-- returns `{fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean}?`
+- returns `{fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer}?`
 
 #### `gear.auto.write(name, text) -> boolean?`
 

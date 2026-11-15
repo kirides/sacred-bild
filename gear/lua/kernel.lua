@@ -1789,7 +1789,7 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
-local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true}
+local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true}
 local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'settings.', 'level.', 'combat.', 'creature.'}
 local emit_depth = 0
 
@@ -2037,9 +2037,9 @@ local function make_auto()
     -- the handlers of `combat.constant` may answer for `selftest.fmul` / `selftest.fld`.
     function auto.site_hook_selftest_start() return native.site_selftest_start() end
     function auto.site_hook_selftest_result()
-        local fmul, fld, regs, store, add, edx, kept = native.site_selftest_result()
+        local fmul, fld, regs, store, add, edx, kept, damage = native.site_selftest_result()
         if fmul == nil then return nil end
-        return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept}
+        return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept, damage = damage}
     end
     function auto.quit(code)
         native.auto_release()
@@ -2646,7 +2646,7 @@ local function make_env(mod)
         -- Counters of the engine hooks that ask the mods for a value (gear/sitehook.cpp).
         hooks = {
             stats = function(name)
-                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability', "the hook must be 'level.factor', 'combat.constant' or 'creature.ability'")
+                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage', "the hook must be 'level.factor', 'combat.constant', 'creature.ability' or 'damage'")
                 local calls, answered, busy = native.site_hooks(name)
                 return {calls = calls, answered = answered, busy = busy}
             end,
@@ -2738,6 +2738,7 @@ local function make_env(mod)
         if event == 'level.factor' then native.level_factor_active(true) end
         if event == 'combat.constant' then native.combat_constant_active(true) end
         if event == 'creature.ability' then native.creature_ability_active(true) end
+        if event == 'damage' then native.damage_active(true) end
         return h
     end
     function gear.off(h)
@@ -2749,6 +2750,7 @@ local function make_env(mod)
         if h.event == 'level.factor' and #list == 0 then native.level_factor_active(false) end
         if h.event == 'combat.constant' and #list == 0 then native.combat_constant_active(false) end
         if h.event == 'creature.ability' and #list == 0 then native.creature_ability_active(false) end
+        if h.event == 'damage' and #list == 0 then native.damage_active(false) end
     end
     env.gear = gear
     return env
@@ -3259,6 +3261,23 @@ function kernel.creature_ability(type_id, vanilla, index, address)
         local h = list[i]
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, 'creature.ability', h.fn, type_id, vanilla, index, address)
+            if ok and type(result) == 'number' then return math.floor(result) end
+        end
+    end
+    return nil
+end
+
+-- `damage`: the final damage of a hit, as the engine is about to apply it (a hook inside its damage resolution). A handler gets
+-- `hit = {damage, victim_type, attacker_type}` (creature types, -1 for none) and may return another damage; the engine keeps 16 bit
+-- (0 .. 65534). The first handler that returns a number answers.
+function kernel.damage(damage, victim_type, attacker_type, index)
+    local list = handlers['damage']
+    if not list then return nil end
+    local hit = {damage = damage, victim_type = victim_type, attacker_type = attacker_type, site = index}
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'damage', h.fn, hit)
             if ok and type(result) == 'number' then return math.floor(result) end
         end
     end

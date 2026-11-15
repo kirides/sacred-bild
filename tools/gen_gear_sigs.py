@@ -129,6 +129,11 @@ def main():
         code = {'store': 0, 'add': 1, 'edx': 2}[kind]
         lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {code}}}, // {site:08X} {kind}')
     lines.append('};')
+    lines.append('static const DamageSiteSpec kDamageSites[] = {')
+    for i, site in enumerate(gear_sites.DAMAGE_SITES):
+        fnname, fn = gear_sites.DAMAGE_FUNCTION
+        lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}}}, // {site:08X}')
+    lines.append('};')
     with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sites.inc'), 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     if failed:
