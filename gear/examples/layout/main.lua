@@ -129,16 +129,25 @@ local function nudge(f, dx, dy)
     move(f, x - (f.ox or 0), y - (f.oy or 0))
 end
 
--- Arrow keys with auto repeat (after about 0.3 s, then every third frame).
+-- Arrow keys with auto repeat: once when pressed, again after 0.4 s held, then every 0.06 s. Timed, not counted in
+-- frames: at a few hundred frames per second "18 frames" passed within one short key press, which nudged twice.
 local held = {}
 local function repeating(key)
     if not ui.key_down(key) then
         held[key] = nil
         return false
     end
-    local n = (held[key] or 0) + 1
-    held[key] = n
-    return n == 1 or (n > 18 and n % 3 == 0)
+    local now = gear.time()
+    local next_at = held[key]
+    if not next_at then
+        held[key] = now + 0.4
+        return true
+    end
+    if now >= next_at then
+        held[key] = now + 0.06
+        return true
+    end
+    return false
 end
 
 -- The largest of a few fonts in which the name fits the frame (cached per name and font).
