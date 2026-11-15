@@ -300,6 +300,10 @@ only. The foreground it believes in is a virtual one: the window it asked to act
 
 `screenshot(name)` reads the game's own back buffer in-process (read-only lock of the DirectDraw surface; works with the vanilla ddraw and SacredBild's d3d9 backend, 16 and 32 bit) on the thread that renders: the engine's frame thread in game, the window's thread in the menus. It needs neither focus nor a visible window.
 
+In the menus the back buffer is empty between some frames (the Direct3D 9 backend does not keep it), so the screenshot asks again until it holds a picture (up to 40 tries), and falls back to the primary surface. Characters (`WM_CHAR`) are not dropped as real input while isolated: the game takes its hotkeys from the ones `TranslateMessage` makes out of the injected key messages. The virtual cursor starts in the middle of the window.
+
+A watchdog ends a run that takes too long: `-gear-timeout=SECONDS` (`SACREDGEAR_TIMEOUT`, default 300, 0 = off) quits with exit code 3 and logs `Automation: watchdog timeout`; the same if the game window does not answer, or an in-game run has no frame, for 60 s. Run tests with a timeout below the time you allow them.
+
 Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest`, then read
 `GearAutomation\selftest.json` and the exit code.
 

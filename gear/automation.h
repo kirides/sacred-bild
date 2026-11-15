@@ -30,6 +30,10 @@ namespace Automation
         // and may come to the front. Off by default: automation is isolated, the game only sees injected input and
         // never takes the focus, so the player keeps using the PC while a test runs.
         bool sharedInput = false;
+        // -gear-timeout=SECONDS (SACREDGEAR_TIMEOUT): a watchdog ends the run with exit code 3 ("Automation: watchdog
+        // timeout" in the log) after this long; 0 turns it off. It also ends it when the game window does not answer,
+        // or an in-game run has no frame, for 60 s.
+        int timeoutSeconds = 300;
     };
 
     // From the command line and the environment; the same every call.

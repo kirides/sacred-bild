@@ -41,6 +41,7 @@ namespace
     // ones.
     bool g_virtualCursor = false;
     POINT g_cursor{};
+    bool g_cursorSet = false;
     POINT g_realAtSwitch{};
     std::set<int> g_held;
 
@@ -103,6 +104,13 @@ namespace
 
     bool isInput(UINT m)
     {
+        // Not the characters (WM_CHAR..WM_SYSDEADCHAR): TranslateMessage makes them from the key messages, which
+        // were injected ones here (real key messages are dropped before it sees them), and the game takes its
+        // hotkeys from them.
+        if (m >= WM_CHAR && m <= WM_SYSDEADCHAR)
+        {
+            return false;
+        }
         return (m >= WM_KEYFIRST && m <= WM_KEYLAST) || (m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) ||
                (m >= WM_NCMOUSEMOVE && m <= WM_NCXBUTTONDBLCLK) || m == WM_INPUT || m == WM_MOUSEHOVER ||
                m == WM_MOUSELEAVE;
@@ -228,6 +236,18 @@ namespace
 
     POINT screenCursor()
     {
+        if (HWND w = Automation::window())
+        {
+            if (!g_cursorSet)
+            {
+                RECT r{};
+                if (GetClientRect(w, &r))
+                {
+                    g_cursor = {(r.right - r.left) / 2, (r.bottom - r.top) / 2};   // the middle until automation moves it
+                    g_cursorSet = true;
+                }
+            }
+        }
         POINT p = g_cursor;
         if (HWND w = Automation::window())
         {
@@ -278,6 +298,7 @@ namespace
         }
         std::lock_guard guard(g_inputLock);
         g_cursor = p;
+        g_cursorSet = true;
         return TRUE;
     }
 
@@ -515,6 +536,7 @@ namespace
             case kActivate:
                 CallWindowProcA(g_origWndProc, w, WM_ACTIVATEAPP, TRUE, 0);
                 CallWindowProcA(g_origWndProc, w, WM_ACTIVATE, WA_ACTIVE, 0);
+                CallWindowProcA(g_origWndProc, w, WM_SETFOCUS, 0, 0);
                 return 0;
             case WM_ACTIVATEAPP:
                 wParam = TRUE;
@@ -559,6 +581,29 @@ namespace
             }
         }
         LOG("Automation: attached to the game window{}", isolated() ? " (isolated: the player's input stays theirs)" : "");
+    }
+
+    // The game replaces its window procedure when a game starts, which drops ours: it would then see the real
+    // (never active) window state and ignore input. Put ours back over the game's new one (only over the game's
+    // own: a procedure of another module may already call ours).
+    void reattachWindowProc()
+    {
+        HWND w = Automation::window();
+        if (!isolated() || !w || !g_origWndProc)
+        {
+            return;
+        }
+        const auto current = reinterpret_cast<WNDPROC>(GetWindowLongPtrA(w, GWLP_WNDPROC));
+        const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+        const auto addr = reinterpret_cast<uintptr_t>(current);
+        if (current && current != &windowProc && addr >= base && addr < base + nt->OptionalHeader.SizeOfImage)
+        {
+            g_origWndProc = current;
+            SetWindowLongPtrA(w, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&windowProc));
+            PostMessageA(w, kActivate, 0, 0);
+            LOG("Automation: the game replaced its window procedure; ours is back in front of it");
+        }
     }
 
     LPARAM cursorParam()
@@ -610,7 +655,7 @@ namespace
         g_parsed = true;
         int argc = 0;
         LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-        std::wstring load, mods;
+        std::wstring load, mods, timeoutText;
         bool enabled = envVar("SACREDGEAR_AUTO") == "1";
         g_options.sharedInput = envVar("SACREDGEAR_SHARED_INPUT") == "1";
         for (int i = 1; argv && i < argc; ++i)
@@ -627,6 +672,10 @@ namespace
             else if (_wcsicmp(a.c_str(), L"-gear-shared-input") == 0)
             {
                 g_options.sharedInput = true;
+            }
+            else if (_wcsnicmp(a.c_str(), L"-gear-timeout=", 14) == 0)
+            {
+                timeoutText = a.substr(14);
             }
             else if (_wcsnicmp(a.c_str(), L"-gear-mods=", 11) == 0)
             {
@@ -656,6 +705,23 @@ namespace
             modsText = envVar("SACREDGEAR_MODS");
         }
         g_options.enabled = enabled;
+        {
+            std::string t;
+            for (const wchar_t c : timeoutText)
+            {
+                t.push_back(static_cast<char>(c));
+            }
+            if (t.empty())
+            {
+                t = envVar("SACREDGEAR_TIMEOUT");
+            }
+            char* end = nullptr;
+            const long v = t.empty() ? -1 : std::strtol(t.c_str(), &end, 10);
+            if (!t.empty() && end && *end == '\0' && v >= 0 && v <= 86400)
+            {
+                g_options.timeoutSeconds = static_cast<int>(v);
+            }
+        }
         if (enabled && !loadText.empty())
         {
             char* end = nullptr;
@@ -678,9 +744,44 @@ namespace
         return s.available && s.menus && !s.inGame && !s.dialog && !s.cinematic && Automation::window();
     }
 
+    // Ends a run that took too long, or whose game stopped answering (distinct exit code 3).
+    void watchdog(ULONGLONG started, ULONGLONG now, ULONGLONG& stuckSince)
+    {
+        if (g_options.timeoutSeconds > 0 && now - started > static_cast<ULONGLONG>(g_options.timeoutSeconds) * 1000)
+        {
+            LOG("Automation: watchdog timeout ({} s)", g_options.timeoutSeconds);
+            Automation::quit(3);
+        }
+        bool stuck = false;
+        if (HWND w = Automation::window())
+        {
+            DWORD_PTR result = 0;
+            stuck = !SendMessageTimeoutW(w, WM_NULL, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &result);
+        }
+        if (!stuck && Automation::uiState().inGame && LuaHost::lastFrameTime() && now - LuaHost::lastFrameTime() > 10000)
+        {
+            stuck = true;       // in a game, but no frame
+        }
+        if (!stuck)
+        {
+            stuckSince = 0;
+        }
+        else if (!stuckSince)
+        {
+            stuckSince = now;
+        }
+        else if (now - stuckSince > 60000)
+        {
+            LOG("Automation: watchdog timeout (the game stopped responding for 60 s)");
+            Automation::quit(3);
+        }
+    }
+
     void driver()
     {
         g_driverThread = GetCurrentThreadId();
+        const ULONGLONG started = GetTickCount64();
+        ULONGLONG stuckSince = 0, lastCheck = 0;
         ULONGLONG readySince = 0;
         bool loadDone = g_options.loadSlot < 0;
         for (;;)
@@ -690,10 +791,29 @@ namespace
             {
                 attachWindow(Automation::window());
             }
+            else
+            {
+                reattachWindowProc();
+            }
             const ULONGLONG now = GetTickCount64();
+            if (now - lastCheck >= 1000)
+            {
+                lastCheck = now;
+                watchdog(started, now, stuckSince);
+            }
             if (now - LuaHost::lastFrameTime() > 250)
             {
                 LuaHost::idle();
+            }
+            {
+                static bool centered = false;
+                if (!centered && isolated() && Automation::uiState().inGame)
+                {
+                    centered = true;
+                    int cw = 0, ch = 0;
+                    Automation::clientSize(cw, ch);
+                    Automation::mouseMove(cw / 2, ch / 2);
+                }
             }
             if (!loadDone)
             {
@@ -921,6 +1041,7 @@ void Automation::mouseMove(int x, int y)
     {
         std::lock_guard guard(g_inputLock);
         g_cursor = {x, y};
+        g_cursorSet = true;
         g_virtualCursor = true;
         if (g_origGetCursorPos && !isolated())
         {
@@ -1133,6 +1254,18 @@ namespace
         }
     }
 
+    bool isBlank(const CaptureRequest& r)
+    {
+        for (size_t i = 0; i < r.bgr.size(); i += 61)
+        {
+            if (r.bgr[i])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // The game's own back buffer (dxDriver7, the object g_pApp points to: +0x1C height, +0x20 width, +0xBC the
     // IDirectDrawSurface7; SacredBild's ddraw9 reads render targets back in its Lock). On the thread that renders.
     bool captureBackBuffer(CaptureRequest& r)
@@ -1150,6 +1283,13 @@ namespace
         r.height = height;
         r.bgr.assign(static_cast<size_t>(width) * height * 3, 0);
         r.error = readSurface(reinterpret_cast<IDirectDrawSurface7*>(back), r.bgr.data(), width, height);
+        const auto blank = [&r] { return isBlank(r); };
+        // The menus draw straight to the primary surface (+0xB8), not the back buffer.
+        uintptr_t primary = 0;
+        if (!r.error && blank() && readAt(driver, 0xB8, primary) && primary)
+        {
+            r.error = readSurface(reinterpret_cast<IDirectDrawSurface7*>(primary), r.bgr.data(), width, height);
+        }
         return r.error == nullptr;
     }
 }
@@ -1166,15 +1306,27 @@ bool Automation::screenshot(const std::wstring& path, const char*& error)
             error = "no game window";
             return false;
         }
-        std::unique_lock lock(g_captureLock);
-        g_captureRequest = &request;
-        PostMessageW(w, kCapture, 0, 0);
-        const bool answered = g_captureDone.wait_for(lock, std::chrono::seconds(10), [&] { return request.done; });
-        g_captureRequest = nullptr;
-        if (!answered)
+        // A menu frame clears the back buffer before it draws: between two frames it may be empty (the Direct3D 9
+        // backend does not keep it), so ask again a few times until something is in it.
+        for (int attempt = 0; attempt < 40; ++attempt)
         {
-            error = "the game did not render in time";
-            return false;
+            request = CaptureRequest();
+            std::unique_lock lock(g_captureLock);
+            g_captureRequest = &request;
+            PostMessageW(w, kCapture, 0, 0);
+            const bool answered = g_captureDone.wait_for(lock, std::chrono::seconds(10), [&] { return request.done; });
+            g_captureRequest = nullptr;
+            if (!answered)
+            {
+                error = "the game did not render in time";
+                return false;
+            }
+            if (request.error || !isBlank(request))
+            {
+                break;
+            }
+            lock.unlock();
+            Sleep(25);
         }
     }
     else
