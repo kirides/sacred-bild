@@ -199,6 +199,10 @@ D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt) const
     vp.dwY = static_cast<DWORD>(std::lround(y0));
     vp.dwWidth = static_cast<DWORD>(std::max(1L, std::lround(x1 - x0)));
     vp.dwHeight = static_cast<DWORD>(std::max(1L, std::lround(y1 - y0)));
+    if (UiCanvas::tracing())
+    {
+        UiCanvas::trace(Fmt::format("viewport {},{} {}x{} -> {},{} {}x{} (clip {:.0f},{:.0f}..{:.0f},{:.0f}, origin {:.0f},{:.0f} scale {:.2f})", virt.dwX, virt.dwY, virt.dwWidth, virt.dwHeight, vp.dwX, vp.dwY, vp.dwWidth, vp.dwHeight, p.clipLeft, p.clipTop, p.clipRight, p.clipBottom, p.originX, p.originY, s));
+    }
     return vp;
 }
 
