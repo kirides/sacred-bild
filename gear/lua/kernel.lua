@@ -1549,7 +1549,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -1891,6 +1891,27 @@ local function make_env(mod)
         pickup_dirty = true
     end
     w.pickup_refused = function() return native.pickup_refused() end    gear.world = w
+    gear.game = {
+        -- can_save() -> true | false, reason: whether a save may start now.
+        can_save = function()
+            local why = native.save_blocked()
+            if why then return false, why end
+            return true
+        end,
+        -- save(slot, name?, opts?) -> true | nil, message: asks the engine to save into Save\GAME<slot>.PAK. The
+        -- result comes as 'game.saved' / 'game.save_failed'. opts: {thumbnail = bool}.
+        save = function(slot, name, opts)
+            assert(type(slot) == 'number', 'slot must be a number')
+            assert(name == nil or type(name) == 'string', 'name must be a string')
+            assert(opts == nil or type(opts) == 'table', 'opts must be a table')
+            return native.save_request(slot, name or '', opts ~= nil and opts.thumbnail == true)
+        end,
+        save_pending = function() return native.save_pending() end,
+        save_info = function(slot)
+            assert(type(slot) == 'number', 'slot must be a number')
+            return native.save_info(slot)
+        end,
+    }
     gear.inv = inv
     gear.ui = make_ui(mod)
     -- gear.on(event, fn) -> handle; gear.off(handle). Events: "load" (all mods loaded), "frame" (dt in seconds,
@@ -2100,10 +2121,24 @@ local function gear_ui_state()
     return ui_tick_state
 end
 
+-- The finished saves (gear.game.save) as 'game.saved' (slot, info) and 'game.save_failed' (slot, message).
+local function poll_saves()
+    while true do
+        local r = native.save_poll()
+        if not r then return end
+        if r.ok then
+            kernel.dispatch('game.saved', r.slot, r.info)
+        else
+            kernel.dispatch('game.save_failed', r.slot, r.message)
+        end
+    end
+end
+
 -- One in-game frame: sessions, pipes, timers, the frame handlers, then the draw handlers; the frame's drawing is
 -- published at the end.
 function kernel.tick(dt)
     check_session()
+    poll_saves()
     poll_pipes()
     run_timers()
     ui_begin_tick()

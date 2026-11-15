@@ -110,7 +110,7 @@ The complete reference, with every parameter, option and return value, is [GearA
 
 Events: `'load'` (all mods loaded), `'frame'` (`dt`, every in-game frame), `'draw'` (`state`, after the frame handlers: see [UI drawing](#ui-drawing)), `'session.start'` (`hero`, a creature
 object: a game with a hero runs), `'session.stop'` (that hero is gone: noticed with the next game's first frame when
-the player left to the menu), `'idle'` (automation only: every 50 ms in the menus), and the custom events mods emit.
+the player left to the menu), `'game.saved'` (`slot`, `info`) and `'game.save_failed'` (`slot`, `message`: the outcome of a `gear.game.save`), `'idle'` (automation only: every 50 ms in the menus), and the custom events mods emit.
 
 #### Data
 
@@ -156,6 +156,18 @@ changes: `c:set_hp(hp)` (1..max: mods do not kill through it), `c:set_gold(n)`, 
 Pickup rules hold in single player and for the host's own hero; a network client's pickups go through the host
 (its own message) and are not filtered. Item ids are only valid while the item exists: a mod that filters loot looks
 at the items around the hero every fraction of a second and hands over the current list (`gear/examples/lootfilter`).
+
+#### Saving
+
+| | |
+|---|---|
+| `gear.game.can_save()` | `true`, or `false` and why not: a living hero in a single player game, the game shown (no cinematic, window drawn alone, escape menu or message box), no save or load pending. |
+| `gear.game.save(slot, name, {thumbnail})` | Asks the engine to save into `Save\GAME<slot>.PAK` (slot 0 the quicksave, up to 509), as the savegame window does; `true` when accepted, else nil and a message (the engine refuses while a trade, chest or similar window is open). `name` is the display name (60 ASCII characters). The result comes as the events `'game.saved'` / `'game.save_failed'`. |
+| `gear.game.save_pending()` | Whether a save or a load is queued or being written. |
+| `gear.game.save_info(slot)` | `{exists, size, mtime}` of the slot's file (`mtime` in unix seconds), so a mod can rotate slots oldest first. |
+
+The engine writes the file a moment later on its render thread; Sacred Gear sees the write end (the engine's flags)
+and compares the file before and after. See `autosave` in the sacred-gear-mods repository for a periodic autosave.
 
 #### Inventories
 
@@ -481,6 +493,7 @@ What Sacred Gear relies on, English GOG addresses:
 | `cObjectManager::create` 0x005FBA40 | thiscall (type, position*, 0, broadcast, x) -> id; the hero is created with (type, pos, 0, 1, 0), the script command CreateNPC with (type, pos, 0, 0, x). |
 | `cObjectManager::pop` 0x005FCCB0 | thiscall (id, position*): places an object (teleport); ParkCreature (0x006073D0) moves one far away with it. |
 | Object types | `*0x00AAB5E4` + id * 0x80 (0 < id < 0x7E60): +0x2E kind, +0x37 name. |
+| Saving | The savegame window (0x0071CC90 action 2) sends a 0x24-byte event (vtable 0x00890B38, +4 code 0xF, +8 sub 2, +0xC slot, +0x10 stored in the header, +0x14 capture the picture first, +0x18 check that no trade or chest window blocks (the engine logs AUTOSAVE and refuses otherwise), +0x20 the display name, copied into the engine's 64 bytes at +0x6A) to `cEngine::receiveEvent` (0x00618090, thiscall (event)). It stores the slot at engine +0x68 and sets 0x40 in the engine's flags (+0x54), unless that bit is already set. The render thread loop (0x0060E350) writes `SAVE\GAME%02d.PAK` (0x00619BF0) when `flags & 0xC0` and clears them; 0x200 is a queued load. Byte `*0x0182EBE8` +4 is 0 in single player. |
 | Inventories | `*0x00AD4448`: the inventory manager (made by 0x005DEBC0), 32 containers of 0x1180 bytes (0x005DEC90 (index) returns one). Container: +0x18 + cell * 12 the cells, +0x115C columns, +0x115E rows, +0x1160 its number; cell = row * columns + column: dword item id on an item's top-left cell (0 on its other cells), byte +4 flags (bit 0 taken), +5 / +6 the item's width / height there, on its other cells the column / row of its top-left cell. Container n (1..16) is the backpack of the hero with object id n; 17 the chest (`UI_WND_CHEST`, 20 x 10, made by 0x006ACB40); 18, 25..27 are small grids (3 x 5, 3 x 5, 7 x 5, 7 x 5) whose use is not examined; 20..22 hold the shops' stock in the test savegame. `0x005DABA0` (thiscall (w, h, slot*, byRow) -> bool) finds room, `0x005D9F00` (slot, id, w, h, notify) puts an item in (takes it out of the world: flag 2 at +0x14; tells the item its owner), `0x005DA630` (id, notify) takes it out of the container (the object stays), `0x00428D60` (stdcall (type, w*, h*)) is a type's size in cells, `0x005FBDB0` (id, 1, 0, 0) destroys an object (the engine does this after taking an item out, e.g. on using a potion, 0x005BFF60). An item (cItemBase) keeps its own state in a vector of 0x82-byte entries (+0x100 begin, +0x104 end, +0x108 capacity), 0x82 bytes at +0x118 (the record copy: class mask and rarity at +0x11C) and a number made from them at +0x120 (0x0042BF20 (record) -> hash, set after reading an item, 0x005C7690); the network read of an item (vtable slot 8, 0x005C7A50) restores exactly the entries and the record. Gear copies those to bytes (type, count, entries, record) and rebuilds an item by creating one of the type (0x005FBA40) and overwriting them (growing the vector with 0x005C9230). |
 | Loading a savegame | The menu (0x0071CC90 action 6) sets the players object's (`*0x0182EBE8`) +0x14 to 1 and posts message 0x8002 (wParam 1, lParam the savegame number) to the game window (`*0x00CDCA1C` +0xB0) (0x007561E0). |
 | UI manager | `*0x017EEBBC`: +0x08 flags (1 menus, 4 in game, 0x10 cinematic, 0x200 help), +0x80 the in-game windows, +0x130 the five menu screens, +0x144 the message box. |

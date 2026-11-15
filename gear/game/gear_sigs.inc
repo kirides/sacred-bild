@@ -36,4 +36,5 @@ static const Sig::Entry kGearSigs[] = {
     {"cObjectManager_destroy", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A0 ?? ?? ?? ?? 64 89 25 00 00 00 00 81 EC 88 00 00 00 53 33 DB 55", 0, Sig::Take::Match, &Gear::Addr::cObjectManager_destroy}, // 005FBDB0, 005FBE10
     {"cItem_dataHash", "8B 44 24 04 6A 00 6A 00 50 E8 ?? ?? ?? ?? 83 C4 0C", 0, Sig::Take::Match, &Gear::Addr::cItem_dataHash}, // 0042BF20, 0042BDF0
     {"cItem_entriesInsert", "81 EC 8C 00 00 00 53 55 56 8B B4 24 A0 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_entriesInsert}, // 005C9230, 005C91A0
+    {"cSaveEvent_vtable", "8B F1 8B 46 20 C7 06 ?? ?? ?? ?? 85 C0 74 09 50", 7, Sig::Take::Abs32, &Gear::Addr::cSaveEvent_vtable}, // 00890B38, 0088EB38
 };

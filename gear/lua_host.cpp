@@ -6,6 +6,7 @@
 #include "log.h"
 #include "pickup.h"
 #include "pipe.h"
+#include "save.h"
 #include "tables.h"
 #include "ui.h"
 #include "world.h"
@@ -355,6 +356,98 @@ namespace
     int nativeWorldChanges(lua_State* L)
     {
         lua_pushboolean(L, World::changesAllowed());
+        return 1;
+    }
+
+    // Saving (gear/save.cpp).
+    // native.save_blocked() -> nil | why not
+    int nativeSaveBlocked(lua_State* L)
+    {
+        const char* why = Save::blocked();
+        if (why)
+        {
+            lua_pushstring(L, why);
+        }
+        else
+        {
+            lua_pushnil(L);
+        }
+        return 1;
+    }
+
+    // native.save_request(slot, name, thumbnail) -> true | nil, message
+    int nativeSaveRequest(lua_State* L)
+    {
+        const lua_Number slot = luaL_checknumber(L, 1);
+        size_t length = 0;
+        const char* name = luaL_optlstring(L, 2, "", &length);
+        const bool thumbnail = lua_toboolean(L, 3) != 0;
+        if (slot < 0 || slot > Save::kMaxSlot || slot != static_cast<uint32_t>(slot))
+        {
+            lua_pushnil(L);
+            lua_pushstring(L, "the slot is a whole number 0..509");
+            return 2;
+        }
+        const char* error = "";
+        const bool ok = Save::request(static_cast<uint32_t>(slot), std::string(name, length), thumbnail, error);
+        if (ok)
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        lua_pushnil(L);
+        lua_pushstring(L, error);
+        return 2;
+    }
+
+    int nativeSavePending(lua_State* L)
+    {
+        lua_pushboolean(L, Save::pending());
+        return 1;
+    }
+
+    void pushFileInfo(lua_State* L, const Save::FileInfo& info)
+    {
+        lua_createtable(L, 0, 3);
+        lua_pushboolean(L, info.exists);
+        lua_setfield(L, -2, "exists");
+        lua_pushnumber(L, static_cast<lua_Number>(info.size));
+        lua_setfield(L, -2, "size");
+        lua_pushnumber(L, static_cast<lua_Number>(info.mtime));
+        lua_setfield(L, -2, "mtime");
+    }
+
+    // native.save_info(slot) -> {exists, size, mtime}
+    int nativeSaveInfo(lua_State* L)
+    {
+        const lua_Number slot = luaL_checknumber(L, 1);
+        if (slot < 0 || slot > Save::kMaxSlot || slot != static_cast<uint32_t>(slot))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        pushFileInfo(L, Save::fileInfo(static_cast<uint32_t>(slot)));
+        return 1;
+    }
+
+    // native.save_poll() -> nil | {slot, ok, message, info}
+    int nativeSavePoll(lua_State* L)
+    {
+        Save::Result r;
+        if (!Save::takeResult(r))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 4);
+        lua_pushnumber(L, r.slot);
+        lua_setfield(L, -2, "slot");
+        lua_pushboolean(L, r.ok);
+        lua_setfield(L, -2, "ok");
+        lua_pushlstring(L, r.message.data(), r.message.size());
+        lua_setfield(L, -2, "message");
+        pushFileInfo(L, r.info);
+        lua_setfield(L, -2, "info");
         return 1;
     }
 
@@ -1480,6 +1573,11 @@ namespace
             {"table_string", nativeTableString},
             {"hero", nativeHero},
             {"world_changes", nativeWorldChanges},
+            {"save_blocked", nativeSaveBlocked},
+            {"save_request", nativeSaveRequest},
+            {"save_pending", nativeSavePending},
+            {"save_info", nativeSaveInfo},
+            {"save_poll", nativeSavePoll},
             {"object", nativeObject},
             {"creatures_near", nativeCreaturesNear},
             {"spawn", nativeSpawn},

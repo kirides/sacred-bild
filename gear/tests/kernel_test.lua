@@ -20,6 +20,7 @@ local pipe_events = {}
 local sent = {}
 local ui_recording, ui_published = {}, {}
 local pickup_published
+save_block, save_calls, save_results = nil, {}, {}
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
 layout_file, moved_windows = '{"game:UI_WND_INVENTORY":{"x":2048,"y":1024}}', {}
 
@@ -105,6 +106,15 @@ local native = {
     layout_write = function(text) layout_file = text; return true end,
     ui_can_move_windows = function() return true end,
     ui_move_window = function(slot, x, y, set) moved_windows[slot] = set and {x, y} or nil; return true end,
+    save_blocked = function() return save_block end,
+    save_request = function(slot, name, thumb)
+        if save_block then return nil, save_block end
+        save_calls[#save_calls + 1] = {slot, name, thumb}
+        return true
+    end,
+    save_pending = function() return false end,
+    save_info = function(slot) if slot <= 509 then return {exists = slot == 97, size = 5, mtime = 100} end end,
+    save_poll = function() return table.remove(save_results, 1) end,
     write_file = function(dir, rel, text) files[dir] = files[dir] or {}; files[dir][rel] = text; return true end,
     -- automation
     auto_instance = function() return 'test' end,
@@ -132,6 +142,9 @@ files.a = {
         gear.on('session.start', function(h) record.hero = h.id end)
         gear.on('session.stop', function() record.stopped = true end)
         gear.on('test.ping', function(v) record.ping = v end)
+        record.game = gear.game
+        gear.on('game.saved', function(slot, info) record.saved = {slot, info.size} end)
+        gear.on('game.save_failed', function(slot, message) record.save_failed = {slot, message} end)
         record.cfg = gear.config
         record.json = gear.json.encode({a = {1, 2, 3}, b = 'x"y', c = true})
         local v, err = gear.json.decode('{"type":"chat","data":{"text":"#hi \\u00e9","n":[1,2.5,-3e2]},"z":null}')
@@ -362,6 +375,26 @@ ok(widgets.panel.x == 400 and widgets.panel.w == 200, 'reset_panel: its own plac
 keys_held[0x25] = true
 ok(widgets.ui.key_down('left') and not widgets.ui.key_down('right'), 'key_down')
 keys_held[0x25] = nil
+-- gear.game: saving
+do
+    local game = rec.game
+    ok(game and game.can_save() == true, 'can_save when nothing blocks')
+    save_block = 'a window is open'
+    local can, why = game.can_save()
+    ok(can == false and why == 'a window is open', 'can_save gives the reason')
+    local r, err = game.save(97, 'x')
+    ok(r == nil and err == 'a window is open', 'save refused while blocked')
+    save_block = nil
+    ok(game.save(98, 'Autosave', {thumbnail = true}) == true and save_calls[1][1] == 98 and save_calls[1][2] == 'Autosave'
+        and save_calls[1][3] == true, 'save passes slot, name and thumbnail')
+    ok(game.save(5) == true and save_calls[2][2] == '' and save_calls[2][3] == false, 'save defaults')
+    ok(game.save_info(97).exists and game.save_info(5000) == nil, 'save_info')
+    save_results[1] = {slot = 98, ok = true, message = '', info = {exists = true, size = 77, mtime = 1}}
+    save_results[2] = {slot = 99, ok = false, message = 'disk full', info = {exists = false, size = 0, mtime = 0}}
+    kernel.tick(0.016)
+    ok(rec.saved and rec.saved[1] == 98 and rec.saved[2] == 77, 'game.saved event')
+    ok(rec.save_failed and rec.save_failed[1] == 99 and rec.save_failed[2] == 'disk full', 'game.save_failed event')
+end
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

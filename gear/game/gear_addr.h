@@ -113,4 +113,11 @@ namespace Gear::Addr
     // entries (begin / end / capacity pointers at +0x100 / +0x104 / +0x108 of the item; `this` is item + 0x100).
     // ret 0xC.
     inline Sacred::Thiscall<void(void* vector, void* pos, uint32_t count, const void* fill)> cItem_entriesInsert{};
+
+    // Saving (gear/save.cpp). ENG 00890B38: the vtable of the savegame window's event (0x24 bytes; slot 1 returns the
+    // code, 0xF). The event goes to cEngine::receiveEvent (ENG 00618090, vtable slot 0 of the engine object, thiscall
+    // (engine, event) -> 1, ret 4; SacredBild hooks its first bytes, so it is called through the vtable): it records
+    // the slot (uint16 at engine+0x68) and sets bit 0x40 of the dword at engine+0x54 (already set: returns at once,
+    // busy); the render thread loop (0060E350) then writes "SAVE\GAME%02d.PAK" (00619BF0) and clears bits 0xC0.
+    inline Sacred::Global<uint8_t> cSaveEvent_vtable{};
 }

@@ -12,6 +12,8 @@
 ---| 'idle' # Automation only: every 50 ms in the menus.
 ---| 'session.start' # A game with a hero runs.
 ---| 'session.stop' # That hero is gone.
+---| 'game.saved' # A save `gear.game.save` asked for is written.
+---| 'game.save_failed' # It could not be written.
 
 --- A handler registered with `gear.on`; pass it to `gear.off` to remove it.
 ---@class GearHandler
@@ -42,6 +44,7 @@
 ---@field pipe GearPipeModule Named pipe clients.
 ---@field world GearWorld The world: hero, creatures, items, spawning, pickup rules.
 ---@field inv GearInv Inventories: containers, items, export and import of items.
+---@field game GearGame The game itself: saving.
 ---@field ui GearUi Drawing on top of the game, widgets, panels and the layout.
 ---@field auto? GearAuto Automation (only with `-gear-auto` and `automation = true` in `mod.lua`).
 gear = {}
@@ -54,6 +57,8 @@ gear = {}
 ---@overload fun(event: 'idle', fn: fun()): GearHandler
 ---@overload fun(event: 'session.start', fn: fun(hero: Creature)): GearHandler
 ---@overload fun(event: 'session.stop', fn: fun()): GearHandler
+---@overload fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler
+---@overload fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler
 ---@param event string
 ---@param fn fun(...: any)
 ---@return GearHandler
@@ -64,7 +69,7 @@ function gear.on(event, fn) end
 function gear.off(handle) end
 
 --- Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the
---- prefixes `session.`, `gear.` and `pipe.` are reserved. Handlers may emit events too, up to 8 levels deep.
+--- prefixes `session.`, `gear.`, `pipe.` and `game.` are reserved. Handlers may emit events too, up to 8 levels deep.
 ---@param event string
 ---@param ... any
 function gear.emit(event, ...) end

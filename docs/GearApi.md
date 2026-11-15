@@ -105,6 +105,8 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'idle'` | Automation only: every 50 ms in the menus. |
 | `'session.start'` | A game with a hero runs. |
 | `'session.stop'` | That hero is gone. |
+| `'game.saved'` | A save `gear.game.save` asked for is written. |
+| `'game.save_failed'` | It could not be written. |
 
 ### GearHandler
 
@@ -148,6 +150,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `pipe` | `GearPipeModule` | Named pipe clients. |
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
+| `game` | `GearGame` | The game itself: saving. |
 | `ui` | `GearUi` | Drawing on top of the game, widgets, panels and the layout. |
 | `auto` | `GearAuto` | Automation (only with `-gear-auto` and `automation = true` in `mod.lua`). (optional) |
 
@@ -163,6 +166,8 @@ Forms:
 - `fun(event: 'idle', fn: fun()): GearHandler`
 - `fun(event: 'session.start', fn: fun(hero: Creature)): GearHandler`
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
+- `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
+- `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
 
 - `event`: `string`
 - `fn`: `fun(...: any)`
@@ -176,7 +181,7 @@ Removes a handler.
 
 #### `gear.emit(event, ...)`
 
-Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.` and `pipe.` are reserved. Handlers may emit events too, up to 8 levels deep.
+Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.` and `game.` are reserved. Handlers may emit events too, up to 8 levels deep.
 
 - `event`: `string`
 - `...`: `any`
@@ -863,6 +868,62 @@ Moves the creature. Single player only.
 - `layer`: `integer` (optional) - Default: the current layer.
 - returns `ok` `boolean?`
 - returns `error` `string?`
+
+## Saving (gear.game)
+
+### GearGame
+
+Reached as `gear.game`.
+
+Saving the game through the engine's own save request, the one the savegame window sends: the file is `Save\GAME<slot>.PAK` (slot 0 is the quicksave; the game lists the savegames sorted by file name). Single player only. A save is a request: the engine writes the file a moment later on its render thread, and the result comes as the events `game.saved` and `game.save_failed`. Slots 1 to 99 show as `GAME01` to `GAME99`; a mod that saves on its own should keep to slots the player does not use (the game's savegame window picks the first free number for manual saves).
+
+#### `gear.game.can_save() -> boolean, string?`
+
+Whether a save may start now: a living hero in a single player game, the game itself shown (no cinematic, no window drawn alone, no escape menu or message box), no save or load pending.
+
+- returns `ok` `boolean`
+- returns `reason` `string?` - Why not.
+
+### GearSaveOpts
+
+What `save` can be told.
+
+| Field | Type | |
+|---|---|---|
+| `thumbnail` | `boolean` | Let the engine capture the savegame's picture first (default false: the savegame keeps no new picture). (optional) |
+
+#### `gear.game.save(slot, name, opts) -> boolean?, string?`
+
+Asks the engine to save into slot `slot` (0 to 509). The engine refuses while a trading, chest or similar window is open. Returns true when the request is accepted; the outcome is the event `game.saved` or `game.save_failed`.
+
+- `slot`: `integer`
+- `name`: `string` (optional) - The savegame's display name, at most 60 ASCII characters.
+- `opts`: `GearSaveOpts` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.game.save_pending() -> boolean`
+
+Whether a save (or a load) is queued or being written.
+
+- returns `boolean`
+
+### GearSaveInfo
+
+The file of a slot.
+
+| Field | Type | |
+|---|---|---|
+| `exists` | `boolean` |  |
+| `size` | `number` | Bytes. |
+| `mtime` | `number` | Last write, unix seconds. |
+
+#### `gear.game.save_info(slot) -> GearSaveInfo?`
+
+The savegame file of `slot`: nil for a slot outside 0..509, else a table whose `exists` says if the file is there.
+
+- `slot`: `integer`
+- returns `GearSaveInfo?`
 
 ## Inventories (gear.inv)
 

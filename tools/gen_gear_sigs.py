@@ -72,6 +72,11 @@ GEAR = [
     ('cObjectManager_destroy', 0x005FBDB0, 'func'),
     ('cItem_dataHash', 0x0042BF20, 'func'),
     ('cItem_entriesInsert', 0x005C9230, 'func'),
+    # Saving (gear/save.cpp). The savegame window's event (code 0xF, sub 2; its class is made by the factory 0x8080A0
+    # as `*p = &vtable`, 0x24 bytes) goes to cEngine::receiveEvent (0x618090, vtable slot 0 of the engine): it records
+    # the slot and sets bit 0x40 of the engine's flags (+0x54), which the render thread loop turns into the write of
+    # Save\GAMEnn.PAK. The engine is called through its vtable: SacredBild hooks the function's first bytes.
+    ('cSaveEvent_vtable', 0x00890B38, 'data'),
 ]
 
 

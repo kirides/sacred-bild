@@ -2,6 +2,7 @@
 #include "lua_host.h"
 #include "patch.h"
 #include "pickup.h"
+#include "save.h"
 #include "ui.h"
 #include "game/gear_addr.h"
 
@@ -13,6 +14,7 @@ namespace
     void __fastcall hookUpdateZoom(void* engine, void* edx, float dt)
     {
         g_updateZoom(engine, edx, dt);
+        Save::frame(engine);
         LuaHost::frame(dt);
     }
 }
