@@ -120,9 +120,12 @@ end
 
 -- Only while the game shows its labels (Alt held), like the game's own text; the settings panel stays open on its own.
 local overlay_shown = false
+local show_text_until = 0       -- gear.time() until which the overlay stays after Alt was released
 local function overlay(state)
     overlay_shown = false
-    if not cfg.overlay or state.mode ~= 'game' or state.exclusive or not state.show_text then return end
+    -- It stays a moment after Alt is released, so a click made just before still lands on its button.
+    if state.show_text then show_text_until = gear.time() + 0.4 end
+    if not cfg.overlay or state.mode ~= 'game' or state.exclusive or gear.time() >= show_text_until then return end
     overlay_shown = true
     local x, y = cfg.overlay_x, cfg.overlay_y
     local rows = 7 + #CATEGORIES
@@ -490,14 +493,6 @@ gear.task(function()
     end
     gear.wait(0.2)
     A.ui_click(cfg.overlay_x + 90, cfg.overlay_y + oh + 14)
-    gear.wait(0.5)
-    if not ui.panel_open('settings') then
-        -- The first click after Alt went down is lost now and then (seen 5 times in 16 runs, isolated input); a
-        -- second one has always opened it.
-        print('settings button: second click')
-        A.ui_click(cfg.overlay_x + 90, cfg.overlay_y + oh + 14)
-        gear.wait(0.5)
-    end
     A.key_up('alt')
     gear.wait(0.5)
     check('settings panel opens', ui.panel_open('settings'))

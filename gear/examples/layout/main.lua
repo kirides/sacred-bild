@@ -31,8 +31,9 @@ local snapping = gear.settings.get('snap')
 gear.on('settings.changed', function(id, v) if id == 'snap' then snapping = v end end)
 local toolbar_rect = nil    -- the toolbar's place this frame (for the self test)
 local popup_rect = nil      -- the settings popup's
-local popup_pin = nil
-local edit_button_shown = false     -- the "Edit layout" button was drawn this frame       -- where the popup was put for the selected frame's place
+local popup_pin = nil       -- where the popup was put for the selected frame's place
+local edit_button_shown = false     -- the "Edit layout" button was drawn this frame
+local show_text_until = 0           -- gear.time() until which the button stays after Alt was released
 
 local NAMES = {
     UI_WND_STATS_CHAR = 'Character', UI_WND_TASKBAR = 'Action bar', UI_WND_QUESTBOOK = 'Quest log',
@@ -364,8 +365,10 @@ gear.on('draw', function(state)
     else
         selected, drag, toolbar_rect, popup_rect = nil, nil, nil, nil
         -- The button only with the game's labels (Alt held), like the game's own text; F7 works without it.
-        edit_button_shown = state.show_text
-        if state.show_text and ui.button('edit', state.screen_left + 4, state.screen_top + 4, 80, 20, 'Edit layout',
+        -- It stays a moment after Alt is released, so a click made just before still lands on it.
+        if state.show_text then show_text_until = gear.time() + 0.4 end
+        edit_button_shown = gear.time() < show_text_until
+        if edit_button_shown and ui.button('edit', state.screen_left + 4, state.screen_top + 4, 80, 20, 'Edit layout',
             {tooltip = 'Move windows and panels (F7)'}) then
             ui.set_edit_mode(true)
         end
@@ -440,7 +443,7 @@ gear.task(function()
     check('Alt: edit button shown', edit_button_shown)
     A.screenshot('showtext-on')
     A.key_up('alt')
-    gear.wait(0.4)
+    gear.wait(0.8)
     check('Alt released: button gone', not edit_button_shown)
     A.press('i')
     gear.wait(1.5)
