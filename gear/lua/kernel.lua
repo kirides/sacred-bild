@@ -810,6 +810,8 @@ local function ui_begin_tick()
     for _, e in ipairs(native.ui_events()) do
         local s = ui_input[e.region] or {}
         ui_input[e.region] = s
+        -- The button's own position: the cursor read at the tick may still be the one before it moved there.
+        ui_mouse.x, ui_mouse.y = e.x, e.y
         if e.down then
             if e.button == 0 then
                 s.pressed = true

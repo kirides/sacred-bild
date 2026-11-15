@@ -63,6 +63,14 @@ namespace UiWindows
     // (FrameHooks) and after createGameWindows.
     void sync();
 
+    // Where the manager's windows drew: the device proxy reports each UI draw (the vertices' rect in the calling
+    // thread's frame) and the window drawing it gets the union, in its own layout (without its frame, so the rect
+    // does not lag behind a move), clipped to 1024x768; unconfined draws (the held item) do not count. publishDrawn
+    // (after cUI_Manager::render) makes the frame's rects the ones export SacredBild_UiGetWindowBounds reports: a
+    // window's visual bounds, its tabs and ornaments beyond its rect included.
+    void noteDraw(float minX, float minY, float maxX, float maxY);
+    void publishDrawn();
+
     // Call inside a Patch transaction after UiCanvas::install (does nothing without the canvas).
     void install();
 }

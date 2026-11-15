@@ -16,6 +16,11 @@ namespace UiCanvas
     void install();
     bool enabled();
 
+    // Sacred Gear's cursor filter (export SacredBild_UiSetCursorFilter) says whether mod UI lies under the cursor.
+    // While it does, the UI's own cursor reads see the cursor far off the screen (no hover or tooltip of a window
+    // under a mod's panel) and the world picks nothing there. Asked once per UI frame (cUI_Manager::render).
+    void updateCursorFilter();
+
     // Canvas placement in physical pixels (in game or menus, see above).
     float left();
     float top();

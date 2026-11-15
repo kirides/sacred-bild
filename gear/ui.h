@@ -95,6 +95,10 @@ namespace Ui
         bool drawn = false;         // open and drawn this frame (not behind a window the manager draws alone)
         float frameX = 0, frameY = 0;   // where its frame puts its layout (SacredBild), 0, 0: the canvas
         bool movable = false;       // moveWindow can place it
+        // Where it drew in the last frame (SacredBild), canvas coordinates: its visual bounds, tabs and ornaments
+        // beyond its rect included. false: it drew nothing, or no SacredBild.
+        bool hasBounds = false;
+        float boundsX = 0, boundsY = 0, boundsW = 0, boundsH = 0;
     };
     bool window(const std::string& name, WindowInfo& out);
 

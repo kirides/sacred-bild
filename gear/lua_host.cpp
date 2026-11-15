@@ -704,6 +704,15 @@ namespace
         num("frame_y", w.frameY);
         lua_pushboolean(L, w.movable);
         lua_setfield(L, -2, "movable");
+        if (w.hasBounds)
+        {
+            lua_createtable(L, 0, 4);
+            num("x", w.boundsX);
+            num("y", w.boundsY);
+            num("w", w.boundsW);
+            num("h", w.boundsH);
+            lua_setfield(L, -2, "bounds");
+        }
     }
 
     // native.ui_windows() -> {window, ...}

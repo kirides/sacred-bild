@@ -286,6 +286,7 @@ namespace
         D3DStats::mark(D3DStats::TimerCount);
         D3DStats::Scope s{D3DStats::TUi};
         UiWindows::sync();
+        UiCanvas::updateCursorFilter();
         // The manager draws a window alone (savegame, options, character, world map): the original screen showed
         // nothing else, so keep the world beside the canvas hidden.
         if (UiCanvas::enabled() && device && UiState::exclusiveWindow())
@@ -312,6 +313,7 @@ namespace
             UiCanvas::Scope ui;
             g_origUiRender(self, edx, device);
         }
+        UiWindows::publishDrawn();
         D3DStats::mark(D3DStats::TGameAfterUi);
     }
 }
