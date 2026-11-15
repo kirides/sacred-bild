@@ -497,7 +497,7 @@ For self tests and scripted runs without a player. Off unless the game starts wi
 
 | Option | |
 |---|---|
-| `-gear-load=N` (`SACREDGEAR_LOAD`) | Loads savegame N (`Save\GAMEnn.PAK`, 0 the quicksave) as soon as the main menu is up, the way the menu's savegame window does it. |
+| `-gear-load=N` (`SACREDGEAR_LOAD`) | Loads savegame N (`Save\GAMEnn.PAK`, 0 the quicksave) as soon as the main menu is up, the way the menu's savegame window does it. The file is looked up through the file overlay (a mod's save folder counts); if it does not exist the run logs `Automation: cannot load savegame` and ends with exit code 4 (the game itself crashes on a missing savegame). |
 | `-gear-mods=a,b` (`SACREDGEAR_MODS`) | Loads only these mods. |
 | `-gear-instance=NAME` (`SACREDGEAR_INSTANCE`) | Names the run, default `pid<PID>`. See "Parallel runs". |
 | `-gear-window=WxH[+X+Y]` (`SACREDGEAR_WINDOW`) | SacredBild only: the size of the game window, default 1600x900, at least 1024x768 (smaller values are raised to it). See below. |
