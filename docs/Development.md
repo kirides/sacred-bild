@@ -107,19 +107,18 @@ Reverse engineering helpers (how addresses and offsets were found):
 
 ## Game-launch lock
 
-Several agents share the game folders, and two `Sacred.exe` instances (or one deleting the other's GearAutomation output) break each other's self tests. Until Sacred Gear can run tests in parallel, every launch of `Sacred.exe` / `SacredReborn.exe` goes through the machine-wide lock `tools/game-lock.ps1`. The lock is one file, `%ProgramData%\sacred-bild\game.lock` (override: `-LockPath` or `SACRED_GAME_LOCK`), holding the owner's `-Id` (unique text per agent, e.g. `agent-uitest-1`), PID and start time. It is created atomically, waiters log the wait every 5 s.
+Several agents share the game folders. Launches of `Sacred.exe` / `SacredReborn.exe` run in parallel: each gets a unique `-gear-instance=NAME`, and Gear writes its outputs to `GearAutomation\NAME\`. What still collides is copying DLLs and mods into the game folder (a running game holds them, and one agent would overwrite another's build), so that step goes through the machine-wide lock `tools/game-lock.ps1`. The lock is one file, `%ProgramData%\sacred-bild\game.lock` (override: `-LockPath` or `SACRED_GAME_LOCK`), holding the owner's `-Id` (unique text per agent, e.g. `agent-uitest-1`), PID and start time. It is created atomically, waiters log the wait every 5 s.
 
-Wrapper (preferred; acquires, runs, releases even on error, exits with the command's exit code):
+Hold the lock only for the copy, then release it before launching:
 
-    powershell -NoProfile -File tools\game-lock.ps1 run -Id <agent-id> -- "B:\Spiele\GOG Games\sacred gold GOG\Sacred.exe" -gear-auto ...
-
-Separate steps, when the test is several commands (copy DLLs, launch, collect screenshots, all inside the lock):
-
-    powershell -NoProfile -File tools\game-lock.ps1 acquire -Id <agent-id> [-TimeoutSeconds 3600]
-    ... test ...
+    powershell -NoProfile -File tools\game-lock.ps1 acquire -Id <agent-id>
+    ... copy ddraw.dll / SacredGear.dll / mods ...
     powershell -NoProfile -File tools\game-lock.ps1 release -Id <agent-id>
+    Sacred.exe -gear-instance=<agent-id> ...
 
-`status` shows the holder. `release` refuses (exit 3) if another id holds it; `-Force` overrides. Acquire exits 2 on timeout. A lock is stale and taken over after `-MaxAgeMinutes` (default 30), or when its owner PID is gone (`run` records the wrapper's PID; with `acquire` pass `-OwnerPid` of a long-lived process, otherwise only the age applies). Always release, copy your DLLs/mods only after acquiring, and keep a held test short.
+Or in one step: `powershell -NoProfile -File tools\game-lock.ps1 run -Id <agent-id> -- <copy command> [args]` (acquires, runs, releases, exits with the command's exit code).
+
+`status` shows the holder. `release` refuses (exit 3) if another id holds it; `-Force` overrides. Acquire exits 2 on timeout (`-TimeoutSeconds`, default 3600). A lock is stale and taken over after `-MaxAgeMinutes` (default 30), or when its owner PID is gone (`run` records the wrapper's PID; with `acquire` pass `-OwnerPid` of a long-lived process, otherwise only the age applies). Always release.
 
 ## Build
 
