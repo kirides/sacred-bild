@@ -81,9 +81,12 @@ static const AbilitySiteSpec kSlotSites[] = {
     {4, &Gear::Addr::skillSlotFn, 0x6DE, 1}, // 006E229E call
 };
 static const BranchSiteSpec kBranchSites[] = {
-    {"hit.condition", 0, &Gear::Addr::siteFn5038F0, 0x1940}, // 00505230 in 005038F0
-    {"hit.secondary", 0, &Gear::Addr::siteFn5038F0, 0x1AA5}, // 00505395 in 005038F0
-    {"hit.secondary", 1, &Gear::Addr::siteFn506770, 0xD77}, // 005074E7 in 00506770
-    {"hit.secondary", 2, &Gear::Addr::siteFn50AC00, 0xE2A}, // 0050BA2A in 0050AC00
-    {"hit.secondary", 3, &Gear::Addr::levelFn50E6C0, 0xBBC}, // 0050F27C in 0050E6C0
+    {"hit.condition", 0, &Gear::Addr::siteFn5038F0, 0x1940, 0}, // 00505230 in 005038F0
+    {"hit.secondary", 0, &Gear::Addr::siteFn5038F0, 0x1AA5, 0}, // 00505395 in 005038F0
+    {"hit.secondary", 1, &Gear::Addr::siteFn506770, 0xD77, 0}, // 005074E7 in 00506770
+    {"hit.secondary", 2, &Gear::Addr::siteFn50AC00, 0xE2A, 0}, // 0050BA2A in 0050AC00
+    {"hit.secondary", 3, &Gear::Addr::levelFn50E6C0, 0xBBC, 0}, // 0050F27C in 0050E6C0
+    {"ai.timer", 0, &Gear::Addr::abilityAiFn, 0x2218, 8}, // 004D7068 in 004D4E50
+    {"ability.dispatch", 0, &Gear::Addr::siteFn51D840, 0x1C4, 3}, // 0051DA04 in 0051D840
+    {"color.clamp", 0, &Gear::Addr::siteFnColor, 0x238B, 4}, // 004DEF0B in 004DCB80
 };

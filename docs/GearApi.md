@@ -110,7 +110,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'game.save_failed'` | It could not be written. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
-| `'combat.branch'` | A conditional jump in the hit handlers: a handler may decide whether it is taken (`name`, `vanilla`, `index`). |
+| `'combat.branch'` | A conditional jump in the hit handlers and a few other functions: a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`). |
 | `'skillslot.select'` | A digit key selected a skill slot of the HUD (`index`: which of the five places in the key handler). |
 | `'bonus.constant'` | A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another. |
 | `'effect.add'` | The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`). |
@@ -223,7 +223,7 @@ Forms:
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
-- `fun(event: 'combat.branch', fn: fun(name: string, vanilla: boolean, index: integer): boolean?): GearHandler`
+- `fun(event: 'combat.branch', fn: fun(name: string, vanilla: boolean, index: integer, eax: integer): boolean?): GearHandler`
 - `fun(event: 'skillslot.select', fn: fun(index: integer)): GearHandler`
 - `fun(event: 'bonus.constant', fn: fun(index: integer, vanilla: number, address: integer): number?): GearHandler`
 - `fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler`
@@ -2314,11 +2314,11 @@ Tests the stubs of the constant site hooks on two functions built in memory (`fm
 
 - returns `started` `boolean` - false if a test is running.
 
-#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer, bonus_int: integer, bonus_float: number, slot_byte: integer, branch_taken: integer}?`
+#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer, bonus_int: integer, bonus_float: number, slot_byte: integer, branch_taken: integer, branch2_path: integer, branch2_eax: integer}?`
 
-The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. The `ability_*` fields test the `creature.ability` stubs on three functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived. `damage` is the result of the `damage` stub on a function built in memory (12.4 rounds to 12 without an answer). The `effect_*` fields test the `effect.add` stub on a function built in memory with a fake effect list (the sum 3.5 for entry 0, the creature's counter 4): the exit taken (1 engine path, 2 next entry, 3 leave), both entries' values times 100 and the counter. `bonus_int` / `bonus_float` are what the `bonus.constant` stubs push on functions built in memory (`push 5` and `push 3.5`). `slot_byte` is 1 when the `skillslot.select` stub kept the displaced instruction working on a function built in memory. `branch_taken` is 2 when the `combat.branch` stub took the jump of a function built in memory (1: fell through). nil until it is done.
+The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. The `ability_*` fields test the `creature.ability` stubs on three functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived. `damage` is the result of the `damage` stub on a function built in memory (12.4 rounds to 12 without an answer). The `effect_*` fields test the `effect.add` stub on a function built in memory with a fake effect list (the sum 3.5 for entry 0, the creature's counter 4): the exit taken (1 engine path, 2 next entry, 3 leave), both entries' values times 100 and the counter. `bonus_int` / `bonus_float` are what the `bonus.constant` stubs push on functions built in memory (`push 5` and `push 3.5`). `slot_byte` is 1 when the `skillslot.select` stub kept the displaced instruction working on a function built in memory. `branch_taken` is 2 when the `combat.branch` stub took the jump of a function built in memory (1: fell through). `branch2_path` / `branch2_eax`: the same for a `jcc rel8` whose next instruction (`add eax, -2`, eax = 0x28) is displaced with it. nil until it is done.
 
-- returns `{fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer, bonus_int: integer, bonus_float: number, slot_byte: integer, branch_taken: integer}?`
+- returns `{fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer, bonus_int: integer, bonus_float: number, slot_byte: integer, branch_taken: integer, branch2_path: integer, branch2_eax: integer}?`
 
 #### `gear.auto.write(name, text) -> boolean?`
 

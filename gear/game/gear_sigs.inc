@@ -66,4 +66,6 @@ static const Sig::Entry kGearSigs[] = {
     {"effectAddFn", "83 EC 18 53 55 56 8B F1 57 8B 46 04", 0, Sig::Take::Match, &Gear::Addr::effectAddFn}, // 00562470, 00562330
     {"bonusFn", "81 EC 34 08 00 00 53 55 56 57 8B 3D ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::bonusFn}, // 00571710, 005715D0
     {"skillSlotFn", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC C8 00 00 00 53 8B 9C 24 DC 00 00 00", 0, Sig::Take::Match, &Gear::Addr::skillSlotFn}, // 006E1BC0, 006E1970
+    {"siteFn51D840", "8A 44 24 08 83 EC 44 53 55 8B 6C 24 50", 0, Sig::Take::Match, &Gear::Addr::siteFn51D840}, // 0051D840, 0051D680
+    {"siteFnColor", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 48 07 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFnColor}, // 004DCB80, 004DC9C0
 };

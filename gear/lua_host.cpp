@@ -501,7 +501,9 @@ namespace
         lua_pushnumber(L, r.bonusFloat);
         lua_pushnumber(L, r.slotByte);
         lua_pushnumber(L, r.branchTaken);
-        return 16;
+        lua_pushnumber(L, r.branch2Path);
+        lua_pushnumber(L, r.branch2Eax);
+        return 18;
     }
 
     // native.difficulty() -> the running game's difficulty level (0 .. 4) | nil
@@ -2520,7 +2522,7 @@ bool LuaHost::cursorClick()
     return true;
 }
 
-LuaHost::Answer LuaHost::branch(const char* name, int index, bool vanilla, bool& take)
+LuaHost::Answer LuaHost::branch(const char* name, int index, bool vanilla, int eax, bool& take)
 {
     if (t_inLua)
     {
@@ -2542,9 +2544,10 @@ LuaHost::Answer LuaHost::branch(const char* name, int index, bool vanilla, bool&
     lua_pushstring(L, name);
     lua_pushboolean(L, vanilla ? 1 : 0);
     lua_pushnumber(L, index);
+    lua_pushnumber(L, eax);
     setBudget(kHookBudget);
     t_inLua = true;
-    const int status = lua_pcall(L, 3, 1, 0);
+    const int status = lua_pcall(L, 4, 1, 0);
     t_inLua = false;
     g_deadline = 0;
     Answer answer = Answer::None;

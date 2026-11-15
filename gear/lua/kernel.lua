@@ -2037,10 +2037,11 @@ local function make_auto()
     -- the handlers of `combat.constant` may answer for `selftest.fmul` / `selftest.fld`.
     function auto.site_hook_selftest_start() return native.site_selftest_start() end
     function auto.site_hook_selftest_result()
-        local fmul, fld, regs, store, add, edx, kept, damage, exit_, e0, e1, counter, bonus_int, bonus_float, slot_byte, branch_taken = native.site_selftest_result()
+        local fmul, fld, regs, store, add, edx, kept, damage, exit_, e0, e1, counter, bonus_int, bonus_float, slot_byte, branch_taken, branch2_path, branch2_eax = native.site_selftest_result()
         if fmul == nil then return nil end
         return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept, damage = damage,
-                effect_exit = exit_, effect_entry0 = e0, effect_entry1 = e1, effect_counter = counter, bonus_int = bonus_int, bonus_float = bonus_float, slot_byte = slot_byte, branch_taken = branch_taken}
+                effect_exit = exit_, effect_entry0 = e0, effect_entry1 = e1, effect_counter = counter, bonus_int = bonus_int, bonus_float = bonus_float, slot_byte = slot_byte, branch_taken = branch_taken,
+                branch2_path = branch2_path, branch2_eax = branch2_eax}
     end
     function auto.quit(code)
         native.auto_release()
@@ -3277,15 +3278,15 @@ function kernel.creature_ability(type_id, vanilla, index, address)
     return nil
 end
 
--- `combat.branch`: a conditional jump in the hit handlers; a handler gets `(name, vanilla, index)` (`vanilla`: whether the engine's own
--- condition takes the jump) and returns true (jump) or false (fall through), nil keeps the engine's. The first boolean answers.
-function kernel.combat_branch(name, vanilla, index)
+-- `combat.branch`: a conditional jump in the hit handlers and a few other functions; a handler gets `(name, vanilla, index, eax)` (`vanilla`:
+-- whether the engine's own condition takes the jump, `eax` the register the compare before it used) and returns true (jump) or false (fall through), nil keeps the engine's. The first boolean answers.
+function kernel.combat_branch(name, vanilla, index, eax)
     local list = handlers['combat.branch']
     if not list then return nil end
     for i = 1, #list do
         local h = list[i]
         if h and not h.mod.disabled then
-            local ok, result = call(h.mod, 'combat.branch', h.fn, name, vanilla, index)
+            local ok, result = call(h.mod, 'combat.branch', h.fn, name, vanilla, index, eax)
             if ok and type(result) == 'boolean' then return result end
         end
     end

@@ -90,6 +90,8 @@ namespace SiteHook
         int slotByte = 0;
         // combat.branch stub on a function built in memory (an equal compare, then `je`): 2 when the jump was taken, 1 when it fell through
         int branchTaken = 0;
+        // the same with a `jcc rel8` and a displaced `add eax, -2` (eax = 0x28 at the compare): path (2 jump taken, 1 fell through) and eax afterwards
+        int branch2Path = 0, branch2Eax = 0;
     };
     bool selfTestStart();
     bool selfTestResult(SelfTest& out);

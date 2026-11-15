@@ -142,7 +142,12 @@ BRANCH_SITES = [
     ('hit.secondary', 1, 'siteFn506770', 0x00506770, 0x005074E7),
     ('hit.secondary', 2, 'siteFn50AC00', 0x0050AC00, 0x0050BA2A),
     ('hit.secondary', 3, 'levelFn50E6C0', 0x0050E6C0, 0x0050F27C),
+    # `jcc rel8` (two bytes): the next instruction(s) (the last number: how many bytes) are copied into the stub with it
+    ('ai.timer', 0, 'abilityAiFn', 0x004D4E50, 0x004D7068),         # cmp eax, 0xB7 (the creature type); jne
+    ('ability.dispatch', 0, 'siteFn51D840', 0x0051D840, 0x0051DA04), # cmp eax, 0x28 (the ability id); jge
+    ('color.clamp', 0, 'siteFnColor', 0x004DCB80, 0x004DEF0B),       # cmp word [esp+0x30], 0xFF; jbe
 ]
+BRANCH_EXTRA = {0x004D7068: 8, 0x0051DA04: 3, 0x004DEF0B: 4}
 
 
 def functions():
@@ -155,4 +160,6 @@ def functions():
     seen[EFFECT_FUNCTION[0]] = EFFECT_FUNCTION[1]
     seen[BONUS_FUNCTION[0]] = BONUS_FUNCTION[1]
     seen[SLOT_FUNCTION[0]] = SLOT_FUNCTION[1]
+    for _, _, fnname, fn, _ in BRANCH_SITES:
+        seen[fnname] = fn
     return seen

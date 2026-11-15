@@ -162,7 +162,8 @@ def main():
     lines.append('};')
     lines.append('static const BranchSiteSpec kBranchSites[] = {')
     for name, index, fnname, fn, site in gear_sites.BRANCH_SITES:
-        lines.append(f'    {{"{name}", {index}, &Gear::Addr::{fnname}, 0x{site - fn:X}}}, // {site:08X} in {fn:08X}')
+        extra = gear_sites.BRANCH_EXTRA.get(site, 0)
+        lines.append(f'    {{"{name}", {index}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {extra}}}, // {site:08X} in {fn:08X}')
     lines.append('};')
     with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sites.inc'), 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')

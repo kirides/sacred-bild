@@ -58,7 +58,7 @@ namespace LuaHost
     bool cursorClick();
 
     // event `combat.branch`: whether a conditional jump is taken (`vanilla`: the engine's own condition).
-    Answer branch(const char* name, int index, bool vanilla, bool& take);
+    Answer branch(const char* name, int index, bool vanilla, int eax, bool& take);
 
     // event `damage`: the final damage of a hit; `victimType` / `attackerType` -1 for none. The answer is not yet clamped.
     Answer damage(int damage, int victimType, int attackerType, int index, int& out);

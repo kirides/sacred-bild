@@ -61,6 +61,7 @@ namespace
         int index;
         const uintptr_t* function;
         uint32_t offset;
+        uint8_t extra;              // bytes after a `jcc rel8` that are copied into the stub (0 for a `jcc rel32`)
     };
 #include "game/gear_sites.inc"
 
@@ -798,10 +799,10 @@ namespace
     std::atomic<bool> g_branchActive{false};
     std::atomic<unsigned> g_branchCalls{0}, g_branchAnswered{0}, g_branchBusy{0};
     std::atomic<unsigned> g_branchSiteCalls[std::size(kBranchSites)];
-    BranchSiteSpec g_branchTestSpec = {};        // the self test's site (after the generated ones)
+    BranchSiteSpec g_branchTestSpecs[2] = {};    // the self test's sites (after the generated ones)
 
     // Where the stub goes on: `target` when the branch is taken, else `fall`. `vanilla` says whether the engine's condition took it.
-    extern "C" uintptr_t __cdecl branchHandler(int site, int vanilla, uintptr_t target, uintptr_t fall)
+    extern "C" uintptr_t __cdecl branchHandler(int site, int vanilla, uint32_t eax, uintptr_t target, uintptr_t fall)
     {
         g_branchCalls.fetch_add(1, std::memory_order_relaxed);
         if (site >= 0 && site < static_cast<int>(std::size(kBranchSites)))
@@ -812,9 +813,9 @@ namespace
         {
             return vanilla ? target : fall;
         }
-        const BranchSiteSpec& spec = site < static_cast<int>(std::size(kBranchSites)) ? kBranchSites[site] : g_branchTestSpec;
+        const BranchSiteSpec& spec = site < static_cast<int>(std::size(kBranchSites)) ? kBranchSites[site] : g_branchTestSpecs[site - std::size(kBranchSites)];
         bool take = false;
-        switch (LuaHost::branch(spec.name, spec.index, vanilla != 0, take))
+        switch (LuaHost::branch(spec.name, spec.index, vanilla != 0, static_cast<int>(eax), take))
         {
         case LuaHost::Answer::Value:
             g_branchAnswered.fetch_add(1, std::memory_order_relaxed);
@@ -830,22 +831,31 @@ namespace
 
     // The stub: the displaced `jcc rel32` is evaluated on the real flags (it only records whether it would jump), the handler decides, and
     // the stub jumps to the target or the next instruction with the registers and flags exactly as they were.
-    uintptr_t buildBranchStub(uintptr_t site, int index)
+    uintptr_t buildBranchStub(uintptr_t site, int index, uint8_t extra)
     {
         const uint8_t* b = reinterpret_cast<const uint8_t*>(site);
-        int32_t rel = 0;
-        std::memcpy(&rel, b + 2, 4);
-        const uintptr_t target = site + 6 + rel;
-        const uintptr_t fall = site + 6;
+        const bool wide = b[0] == 0x0F;
+        const size_t length = (wide ? 6 : 2) + extra;
+        uintptr_t target;
+        if (wide)
+        {
+            int32_t rel = 0;
+            std::memcpy(&rel, b + 2, 4);
+            target = site + 6 + rel;
+        }
+        else
+        {
+            target = site + 2 + static_cast<int8_t>(b[1]);
+        }
         std::vector<uint8_t> code;
-        void* memory = VirtualAlloc(nullptr, 160, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        void* memory = VirtualAlloc(nullptr, 192, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
         if (!memory)
         {
             return 0;
         }
         const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
-        const uintptr_t vanillaCell = base + 128, destCell = base + 132;
-        emit(code, {0x0F, b[1]});                                   // the original jcc, to `taken`
+        const uintptr_t vanillaCell = base + 160, destCell = base + 164;
+        emit(code, {0x0F, static_cast<uint8_t>(wide ? b[1] : b[0] + 0x10)});   // the original jcc (as rel32), to `taken`
         const size_t jccRel = code.size();
         emit32(code, 0);
         emit(code, {0xC7, 0x05});                                   // mov dword [vanilla], 0
@@ -860,9 +870,11 @@ namespace
         std::memcpy(&code[jccRel], &jr, 4);
         emit(code, {0x9C, 0x60});                                   // ask: pushfd; pushad
         emit(code, {0x68});
-        emit32(code, static_cast<uint32_t>(fall));                  // push fall
+        const size_t fallPatch = code.size();
+        emit32(code, 0);                                            // push fall (patched below)
         emit(code, {0x68});
         emit32(code, static_cast<uint32_t>(target));                // push target
+        emit(code, {0xFF, 0x74, 0x24, 0x24});                       // push dword [esp + 0x24]: eax of the pushad block (two pushes since)
         emit(code, {0xFF, 0x35});                                   // push dword [vanilla]
         emit32(code, static_cast<uint32_t>(vanillaCell));
         emit(code, {0x68});
@@ -870,12 +882,23 @@ namespace
         emit(code, {0xB8});
         emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&branchHandler)));
         emit(code, {0xFF, 0xD0});                                   // call eax
-        emit(code, {0x83, 0xC4, 0x10});                             // add esp, 16
+        emit(code, {0x83, 0xC4, 0x14});                             // add esp, 20
         emit(code, {0xA3});                                         // mov [dest], eax
         emit32(code, static_cast<uint32_t>(destCell));
         emit(code, {0x61, 0x9D});                                   // popad; popfd
         emit(code, {0xFF, 0x25});                                   // jmp dword [dest]
         emit32(code, static_cast<uint32_t>(destCell));
+        uintptr_t fall = site + length;
+        if (extra)
+        {
+            // the fall-through path: the copied instruction(s), then back
+            fall = base + code.size();
+            code.insert(code.end(), b + 2, b + 2 + extra);
+            emit(code, {0xE9});
+            emit32(code, static_cast<uint32_t>((site + length) - (base + code.size() + 4)));
+        }
+        const uint32_t fallValue = static_cast<uint32_t>(fall);
+        std::memcpy(&code[fallPatch], &fallValue, 4);
         std::memcpy(memory, code.data(), code.size());
         FlushInstructionCache(GetCurrentProcess(), memory, code.size());
         return base;
@@ -1229,20 +1252,24 @@ size_t SiteHook::install()
         }
         const uintptr_t address = *spec.function + spec.offset;
         const uint8_t* b = reinterpret_cast<const uint8_t*>(address);
-        if (b[0] != 0x0F || b[1] < 0x80 || b[1] > 0x8F)
+        const bool wide = b[0] == 0x0F && b[1] >= 0x80 && b[1] <= 0x8F;
+        const bool narrow = b[0] >= 0x70 && b[0] <= 0x7F;
+        const size_t length = (wide ? 6 : 2) + spec.extra;
+        if (!(wide || narrow) || length < 5 || (wide && spec.extra))
         {
-            LOG("Site hook {}[{}] at {:08x}: the code is not a jcc rel32: not installed", spec.name, spec.index, address);
+            LOG("Site hook {}[{}] at {:08x}: the code is not the expected jcc: not installed", spec.name, spec.index, address);
             continue;
         }
-        const uintptr_t stub = buildBranchStub(address, static_cast<int>(&spec - kBranchSites));
+        const uintptr_t stub = buildBranchStub(address, static_cast<int>(&spec - kBranchSites), spec.extra);
         if (!stub)
         {
             continue;
         }
-        uint8_t bytes[6] = {0xE9, 0, 0, 0, 0, 0x90};
+        std::vector<uint8_t> bytes(length, 0x90);
+        bytes[0] = 0xE9;
         const uint32_t jump = static_cast<uint32_t>(stub - (address + 5));
-        std::memcpy(bytes + 1, &jump, 4);
-        if (Patch::write(address, bytes, sizeof(bytes)))
+        std::memcpy(&bytes[1], &jump, 4);
+        if (Patch::write(address, bytes.data(), bytes.size()))
         {
             ++branches;
         }
@@ -1640,7 +1667,7 @@ namespace
         r.slotByte = static_cast<int>(g_regs[0]);
     }
 
-    uintptr_t g_branchBlob = 0;
+    uintptr_t g_branchBlob = 0, g_branchBlob2 = 0;
 
     // xor eax, eax; cmp eax, 0 (flags: equal); je L; mov [r0], 1; ret; L: mov [r0], 2; ret   -- the site is the je (the engine's branch is taken)
     void runBranchTest(SiteHook::SelfTest& r)
@@ -1665,8 +1692,8 @@ namespace
             g_branchBlob = reinterpret_cast<uintptr_t>(memory);
             static uintptr_t holder;
             holder = g_branchBlob;
-            g_branchTestSpec = {"selftest.branch", 0, &holder, static_cast<uint32_t>(site)};
-            const uintptr_t stub = buildBranchStub(g_branchBlob + site, static_cast<int>(std::size(kBranchSites)));
+            g_branchTestSpecs[0] = {"selftest.branch", 0, &holder, static_cast<uint32_t>(site), 0};
+            const uintptr_t stub = buildBranchStub(g_branchBlob + site, static_cast<int>(std::size(kBranchSites)), 0);
             uint8_t bytes[6] = {0xE9, 0, 0, 0, 0, 0x90};
             const uint32_t jump = static_cast<uint32_t>(stub - (g_branchBlob + site + 5));
             std::memcpy(bytes + 1, &jump, 4);
@@ -1674,6 +1701,42 @@ namespace
         }
         runBlob(g_branchBlob);
         r.branchTaken = static_cast<int>(g_regs[0]);
+
+        // a `jcc rel8` with a displaced instruction: mov eax, 0x28; cmp eax, 0x28; jge T; add eax, -2; mov [r1], eax; mov [r0], 1; ret; T: mov [r0], 2; ret
+        if (!g_branchBlob2)
+        {
+            std::vector<uint8_t> code;
+            emit(code, {0xB8, 0x28, 0x00, 0x00, 0x00, 0x83, 0xF8, 0x28});
+            const size_t site = code.size();
+            emit(code, {0x7D, 0x13});
+            emit(code, {0x83, 0xC0, 0xFE});
+            emit(code, {0xA3});
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[1])));
+            emit(code, {0xC7, 0x05});
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[0])));
+            emit32(code, 1);
+            emit(code, {0xC3});
+            emit(code, {0xC7, 0x05});
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[0])));
+            emit32(code, 2);
+            emit(code, {0xC3});
+            void* memory = VirtualAlloc(nullptr, code.size() + 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+            std::memcpy(memory, code.data(), code.size());
+            g_branchBlob2 = reinterpret_cast<uintptr_t>(memory);
+            static uintptr_t holder2;
+            holder2 = g_branchBlob2;
+            g_branchTestSpecs[1] = {"selftest.branch2", 0, &holder2, static_cast<uint32_t>(site), 3};
+            const uintptr_t stub = buildBranchStub(g_branchBlob2 + site, static_cast<int>(std::size(kBranchSites)) + 1, 3);
+            std::vector<uint8_t> bytes(5, 0x90);
+            bytes[0] = 0xE9;
+            const uint32_t jump = static_cast<uint32_t>(stub - (g_branchBlob2 + site + 5));
+            std::memcpy(&bytes[1], &jump, 4);
+            std::memcpy(reinterpret_cast<void*>(g_branchBlob2 + site), bytes.data(), 5);
+        }
+        g_regs[1] = 0;
+        runBlob(g_branchBlob2);
+        r.branch2Path = static_cast<int>(g_regs[0]);
+        r.branch2Eax = static_cast<int>(g_regs[1]);
     }
 
     void selfTestThread()

@@ -157,6 +157,8 @@ namespace Gear::Addr
     inline Sacred::Global<int32_t> g_cursorX{};
     inline Sacred::Global<int32_t> g_cursorY{};
     inline uintptr_t cWindow_handleEventInner{};     // the handler is 0x30 bytes before this
+    inline uintptr_t siteFn51D840{};         // the ability dispatch (ENG 0051D840)
+    inline uintptr_t siteFnColor{};          // ENG 004DCB80
     inline uintptr_t siteFn5038F0{};
     inline uintptr_t siteFn506770{};
     inline uintptr_t siteFn50AC00{};
