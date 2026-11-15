@@ -55,6 +55,12 @@ GEAR = [
     ('cCreature_pickupItem', 0x00558080, 'func'),
     ('cCreature_collectFilter', 0x004EC330, 'func'),
     ('cItem_labelColor', 0x005C13C0, 'func'),
+    # Mod UI input (gear/ui.cpp): cUI_Manager::receiveEvent (vtable slot 0, thiscall (manager, cEvent*) -> bool,
+    # ret 4; cEngine_receiveEvent hands it every mouse and key event before the world) and the two mouse button
+    # event classes (button at +4, x / y at +8 / +0xC in UI layout coordinates).
+    ('cUI_Manager_receiveEvent', 0x00757840, 'func'),
+    ('cEventMouseDown_vtable', 0x0089704C, 'data'),
+    ('cEventMouseUp_vtable', 0x00899248, 'data'),
 ]
 
 

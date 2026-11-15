@@ -743,6 +743,109 @@ namespace
         return 1;
     }
 
+    // native.ui_region(layer, x, y, w, h, handle) -> bool
+    int nativeUiRegion(lua_State* L)
+    {
+        Ui::Command c;
+        c.kind = Ui::Kind::Region;
+        const lua_Number layer = luaL_checknumber(L, 1);
+        const lua_Number handle = luaL_checknumber(L, 6);
+        bool ok = layer >= 0 && layer < static_cast<int>(Ui::Layer::Count) && uiBox(L, c, 2) && handle >= 1 &&
+                  handle < 4294967296.0;
+        c.layer = static_cast<Ui::Layer>(ok ? static_cast<int>(layer) : 0);
+        c.region = ok ? static_cast<uint32_t>(handle) : 0;
+        lua_pushboolean(L, ok && Ui::add(std::move(c)));
+        return 1;
+    }
+
+    // native.ui_events() -> {{down, button, x, y, region}, ...}
+    int nativeUiEvents(lua_State* L)
+    {
+        const std::vector<Ui::InputEvent> events = Ui::takeEvents();
+        lua_createtable(L, static_cast<int>(events.size()), 0);
+        for (size_t i = 0; i < events.size(); ++i)
+        {
+            const Ui::InputEvent& e = events[i];
+            lua_createtable(L, 0, 5);
+            lua_pushboolean(L, e.down);
+            lua_setfield(L, -2, "down");
+            lua_pushnumber(L, e.button);
+            lua_setfield(L, -2, "button");
+            lua_pushnumber(L, e.x);
+            lua_setfield(L, -2, "x");
+            lua_pushnumber(L, e.y);
+            lua_setfield(L, -2, "y");
+            lua_pushnumber(L, e.region);
+            lua_setfield(L, -2, "region");
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.key_down(vk) -> bool
+    int nativeKeyDown(lua_State* L)
+    {
+        const lua_Number vk = luaL_checknumber(L, 1);
+        lua_pushboolean(L, vk > 0 && vk < 256 && Ui::keyDown(static_cast<int>(vk)));
+        return 1;
+    }
+
+    // native.write_file(dir, relative, text) -> true | nil, message. A mod's own folder only, and only files named
+    // *.json, *.txt or *.lua that are not mod.lua or main.lua (a mod keeps its settings, it does not rewrite itself).
+    int nativeWriteFile(lua_State* L)
+    {
+        size_t dirLen = 0, relLen = 0, n = 0;
+        const char* dir = luaL_checklstring(L, 1, &dirLen);
+        const char* rel = luaL_checklstring(L, 2, &relLen);
+        const char* text = luaL_checklstring(L, 3, &n);
+        const char* error = nullptr;
+        {
+            const std::string r(rel, relLen);
+            std::string lower = r;
+            for (char& ch : lower)
+            {
+                ch = static_cast<char>(tolower(static_cast<unsigned char>(ch)));
+            }
+            auto endsWith = [&lower](const char* s) {
+                const size_t k = std::strlen(s);
+                return lower.size() >= k && lower.compare(lower.size() - k, k, s) == 0;
+            };
+            const std::wstring path = modPath(dir, dirLen, rel, relLen);
+            if (path.empty() || r.find_first_of("\\/") != std::string::npos)
+            {
+                error = "only files directly in the mod's folder";
+            }
+            else if (!(endsWith(".json") || endsWith(".txt") || endsWith(".lua")) || lower == "mod.lua" || lower == "main.lua")
+            {
+                error = "only .json, .txt and .lua files other than mod.lua and main.lua";
+            }
+            else if (n > 1024 * 1024)
+            {
+                error = "the text is larger than 1 MB";
+            }
+            else
+            {
+                HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                DWORD written = 0;
+                const bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, text, static_cast<DWORD>(n), &written, nullptr) && written == n;
+                if (f != INVALID_HANDLE_VALUE)
+                {
+                    CloseHandle(f);
+                }
+                if (!ok)
+                {
+                    error = "cannot write the file";
+                }
+            }
+        }
+        if (error)
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.item(id) -> {id, type, kind, flags, type_flags, on_ground, rarity, set, classes, gold, x, y, layer} | nil
     int nativeItem(lua_State* L)
     {
@@ -1128,6 +1231,10 @@ namespace
             {"ui_windows", nativeUiWindows},
             {"ui_state", nativeUiState},
             {"item", nativeItem},
+            {"ui_region", nativeUiRegion},
+            {"ui_events", nativeUiEvents},
+            {"key_down", nativeKeyDown},
+            {"write_file", nativeWriteFile},
             {"items_near", nativeItemsNear},
             {"hero_class", nativeHeroClass},
             {"pickup_rules", nativePickupRules},

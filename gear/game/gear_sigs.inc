@@ -25,4 +25,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cCreature_pickupItem", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 58 53 8B 5C 24 6C", 0, Sig::Take::Match, &Gear::Addr::cCreature_pickupItem}, // 00558080, 00557EC0
     {"cCreature_collectFilter", "53 8B 5C 24 08 55 56 85 DB 57 8B E9", 0, Sig::Take::Match, &Gear::Addr::cCreature_collectFilter}, // 004EC330, 004EC170
     {"cItem_labelColor", "53 55 8B 6C 24 0C 56 57 8B F9 85 ED", 0, Sig::Take::Match, &Gear::Addr::cItem_labelColor}, // 005C13C0, 005C1330
+    {"cUI_Manager_receiveEvent", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC D8 03 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Manager_receiveEvent}, // 00757840, 00757120
+    {"cEventMouseDown_vtable", "C6 44 24 3A 00 8B 0C A8 C7 44 24 28 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::cEventMouseDown_vtable}, // 0089704C, 008950A8
+    {"cEventMouseUp_vtable", "C7 00 ?? ?? ?? ?? 5E C3 33 C0 5E C3 90 90 90 56", 2, Sig::Take::Abs32, &Gear::Addr::cEventMouseUp_vtable}, // 00899248, 00897248
 };

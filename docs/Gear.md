@@ -192,8 +192,39 @@ Positions and sizes are the UI's **1024x768 layout**, the space the game lays it
   the window itself; nothing is drawn while the window does not exist (in the menus). Without it the command uses
   the canvas and may reach beyond it to the screen's edges (see `screen()`).
 
-A mod may issue 2000 draw commands per tick. Drawing changes nothing in the game: the overlay takes no mouse
-clicks (a later version adds input), and the game's own UI keeps working under it.
+A mod may issue 2000 draw commands per tick (widgets count their rectangles and texts).
+
+#### Widgets and input
+
+Widgets are immediate mode too: call them every frame with the current values; each draws itself, takes the mouse
+over its rectangle and returns what the player did since the last frame. `id` names the widget within the mod.
+Every widget takes `opts.tooltip` (shown after the cursor rests on it for 0.4 s), `opts.layer` and
+`opts.enabled = false` (greyed out, no clicks). Positions are canvas coordinates (not `opts.window`).
+
+| | |
+|---|---|
+| `button(id, x, y, w, h, text, opts)` | true when clicked. `opts.image`: a UI image beside the text. |
+| `checkbox(id, x, y, text, checked, opts)` | `changed, checked`. |
+| `radio(id, x, y, text, selected, opts)` | true when clicked. |
+| `radio_group(id, x, y, options, index, opts)` | `changed, index`; `opts.horizontal`, `opts.spacing`, `opts.tooltips` (one per option). |
+| `dropdown(id, x, y, w, options, index, opts)` | `changed, index`. The open list lies on the top layer; a click beside it closes it. |
+| `slider(id, x, y, w, min, max, value, opts)` | `changed, value` while dragged; `opts.step` (default 1), `opts.format` (`'%g'`; false: no number). |
+| `label(id, text, x, y, opts)` | Text in the widgets' look (font 7), with a tooltip if `opts.tooltip`. |
+| `panel(id, title, x, y, w, h, opts)` | A window: `{open, x, y, w, h, content_x, content_y}`. Its title bar drags it (the position is kept for the session), its X closes it (`open` false); `show_panel(id, open)` and `panel_open(id)`. `opts.closable`, `opts.draggable` (default true). |
+| `region(id, x, y, w, h, opts)` | A rectangle that takes the mouse, for widgets of a mod's own: `{hover, pressed, released, clicked, held}`. |
+| `mouse()` | The cursor in layout coordinates. |
+| `key_pressed(name)` | True once per press of a key (`'f9'`, `'a'`, `'escape'` ...), read while the game's window has the focus. |
+| `COLORS` | The widgets' colours. |
+
+Input: a left click (press and release) over a mod's region is taken from the game: the UI manager's event handler
+(0x00757840) reports it handled, so neither the game's windows nor the world see it, and the release that follows
+goes to the same region. Regions on the world and hud layers take nothing while the escape menu or a message box is
+up. Hover is decided against the previous frame's regions (the topmost under the cursor), so an open dropdown hides
+what lies below it. Keyboard input is only `key_pressed` for now (no text fields).
+
+Files: `gear.read(name)` reads a file of the mod's folder, `gear.save(name, text)` writes one (directly in the mod's
+folder, `*.json`, `*.txt` or `*.lua` other than `mod.lua` and `main.lua`, at most 1 MB): for settings a mod's own UI
+changes.
 
 ```lua
 gear.on('draw', function(state)
@@ -228,7 +259,7 @@ faults returns nil and a message instead of crashing the game.
 | `hello` | The smallest mod: events and the creature types. |
 | `twitch_integration` | The Twitch connector's pipe, mapped by `custom.lua` to actions, offered one at a time inside a game as `twitch.command`. |
 | `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
-| `uidemo` | `gear.ui`: a translucent hero panel, UI images in the three fit modes, a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test with screenshots. |
+| `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F9) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
 | `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices from `config.lua`; filtered items' labels are dimmed; an overlay shows the rules. Self test with `-gear-auto`. |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 

@@ -73,4 +73,12 @@ namespace Gear::Addr
     inline Sacred::Thiscall<uint8_t(void* creature, void* item)> cCreature_collectFilter{};
     // ENG 005C13C0: the item's label colour (ARGB) from its data (`record`, nullptr: the item's own at +0x118).
     inline Sacred::Thiscall<uint32_t(void* item, void* record)> cItem_labelColor{};
+
+    // Mod UI input (gear/ui.cpp). ENG 00757840: cUI_Manager::receiveEvent (vtable slot 0); cEngine_receiveEvent
+    // (00618090) gives it every mouse and key event first, and the world gets a mouse event only if it returns
+    // false. ENG 0089704C / 00899248: the vtables of the mouse button down / up events (+4 button, +8 / +0xC x, y
+    // in UI layout coordinates).
+    inline Sacred::Thiscall<uint8_t(void* manager, void* event)> cUI_Manager_receiveEvent{};
+    inline Sacred::Global<uint8_t> cEventMouseDown_vtable{};
+    inline Sacred::Global<uint8_t> cEventMouseUp_vtable{};
 }

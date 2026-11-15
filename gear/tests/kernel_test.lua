@@ -20,6 +20,7 @@ local pipe_events = {}
 local sent = {}
 local ui_recording, ui_published = {}, {}
 local pickup_published
+ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
 
 local native = {
     version = 'test',
@@ -87,7 +88,7 @@ local native = {
     ui_font_count = function() return 8 end,
     ui_text_size = function(text) return #text * 7, 14 end,
     ui_windows = function() return {{name = 'UI_WND_INVENTORY', slot = 1, x = 0, y = 388, width = 640, height = 256, visible = true, drawn = true}} end,
-    ui_state = function() return {available = true, mode = 'game', screen_left = 0, screen_top = 0, screen_right = 1024, screen_bottom = 768} end,
+    ui_state = function() return {available = true, mode = 'game', mouse_x = ui_mouse_at[1], mouse_y = ui_mouse_at[2], screen_left = 0, screen_top = 0, screen_right = 1024, screen_bottom = 768} end,
     item = function(id)
         if id == 50 then return {id = 50, type = 2, kind = 5, flags = 0, type_flags = 0, on_ground = true, rarity = 13, set = false, classes = 0x8, gold = false, x = 1, y = 2, layer = 0} end
         if id == 51 then return {id = 51, type = 0x13C1, kind = 9, flags = 0, type_flags = 0x1000000, on_ground = true, rarity = 0, set = false, classes = 0xC0003F, gold = false, x = 1, y = 2, layer = 0} end
@@ -96,6 +97,10 @@ local native = {
     hero_class = function(id) if id == 1 then return 4, 0x8 end end,
     pickup_rules = function(b, d, a) pickup_published = {block = b, dim = d, alpha = a} end,
     pickup_refused = function() return 0 end,
+    ui_region = function(...) ui_recording[#ui_recording + 1] = {'region', ...}; return true end,
+    ui_events = function() local e = ui_events_queue; ui_events_queue = {}; return e end,
+    key_down = function(vk) return keys_held[vk] == true end,
+    write_file = function(dir, rel, text) files[dir] = files[dir] or {}; files[dir][rel] = text; return true end,
     -- automation
     auto_mods = function() return {} end,
     auto_state = function() return {menus = true, in_game = false, dialog = false, cinematic = false, width = 800, height = 600, mouse_x = 0, mouse_y = 0} end,
@@ -177,8 +182,20 @@ files.b = {
         has_auto = gear.auto ~= nil
     ]],
 }
-files.c = {
-    ['mod.lua'] = "return {id = 'c', requires = {'missing'}}",
+files.w = {
+    ['mod.lua'] = "return {id = 'w'}",
+    ['main.lua'] = [[
+        widgets = {checked = false, index = 1}
+        gear.on('draw', function()
+            local ui = gear.ui
+            local ch, v = ui.checkbox('cb', 10, 10, 'Check', widgets.checked, {tooltip = 'tip'})
+            if ch then widgets.checked = v; widgets.changes = (widgets.changes or 0) + 1 end
+            local dc, i = ui.dropdown('dd', 10, 40, 100, {'one', 'two', 'three'}, widgets.index)
+            if dc then widgets.index = i end
+        end)
+    ]],
+}
+files.c = {    ['mod.lua'] = "return {id = 'c', requires = {'missing'}}",
     ['main.lua'] = "error('must not run')",
 }
 
@@ -188,7 +205,7 @@ f:close()
 local chunk = assert(loadstring(source, '=kernel'))
 local kernel = chunk(native)
 
-ok(kernel.load() == 2, 'two mods load (c is skipped)')
+ok(kernel.load() == 3, 'three mods load (c is skipped)')
 
 -- Reach mod a's globals through a handler's environment.
 local env_a
@@ -238,7 +255,7 @@ ok(rec.hero == 1, 'session.start with the hero')
 ok(rec.connected and rec.msg == 'hello', 'pipe connect and message')
 ok(rec.task == 'started', 'task runs until its first wait')
 ok(rec.draw_mode == 'game', 'draw handlers get the UI state')
-ok(#ui_published == 3, 'a frame publishes its draws (' .. #ui_published .. ')')
+ok(#ui_published >= 3 and ui_published[1][1] == 'rect', 'a frame publishes its draws (' .. #ui_published .. ')')
 ok(ui_published[1][1] == 'rect' and ui_published[1][8] == 0x80000000, 'rect with rgba color')
 ok(ui_published[2][1] == 'text' and ui_published[2][2] == 2 and ui_published[2][4] == 'a/b' and
    ui_published[2][9] == 0xFFFF0000 and ui_published[2][10] == 1 and ui_published[2][11] == 1, 'text: layer, plain text, color table, align')
@@ -277,6 +294,45 @@ kernel.tick(0.016)
 ok(rec.stopped, 'session.stop')
 kernel.idle()
 
+-- Widgets: a region's handle from the published frame, a click on it (press and release), the next frame.
+local function region_at(x, y)
+    local last
+    for _, c in ipairs(ui_published) do
+        if c[1] == 'region' and x >= c[3] and y >= c[4] and x < c[3] + c[5] and y < c[4] + c[6] then
+            last = c[7]
+        end
+    end
+    return last
+end
+local function click(x, y)
+    ui_mouse_at = {x, y}
+    kernel.tick(0.016)         -- hover (and the regions under the cursor)
+    local h = region_at(x, y)
+    ui_events_queue = {{down = true, button = 0, x = x, y = y, region = h}, {down = false, button = 0, x = x, y = y, region = h}}
+    kernel.tick(0.016)
+end
+local widgets
+do
+    local i = 1
+    while true do
+        local name, value = debug.getupvalue(kernel.dispatch, i)
+        if not name then break end
+        if name == 'handlers' then
+            for _, h in ipairs(value['draw']) do
+                local env = getfenv(h.fn)
+                if env.widgets then widgets = env.widgets end
+            end
+        end
+        i = i + 1
+    end
+end
+click(15, 15)
+ok(widgets and widgets.checked == true and widgets.changes == 1, 'checkbox toggles on a click')
+click(15, 45)               -- opens the dropdown
+click(20, 40 + 18 + 18 + 5) -- the list's second entry
+ok(widgets.index == 2, 'dropdown picks the second entry (' .. tostring(widgets.index) .. ')')
+click(15, 15)
+ok(widgets.checked == false and widgets.changes == 2, 'checkbox toggles back')
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

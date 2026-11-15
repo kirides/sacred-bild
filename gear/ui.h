@@ -19,7 +19,8 @@
 namespace Ui
 {
     enum class Layer : uint8_t { World, Hud, Top, Count };
-    enum class Kind : uint8_t { Rect, Text, Image };
+    // Region: draws nothing; a rectangle that takes the mouse (see input below).
+    enum class Kind : uint8_t { Rect, Text, Image, Region };
     enum class Fit : uint8_t { Stretch, Contain, Cover };
 
     struct Command
@@ -38,7 +39,26 @@ namespace Ui
         float padding = 0;
         // Image
         uint32_t image = 0;
+        // Region
+        uint32_t region = 0;        // the kernel's handle, reported with the events
     };
+
+    // Input. A mouse button pressed over a region (the last one registered on the highest layer wins) is taken
+    // from the game: the UI manager reports it handled, so neither the game's windows nor the world see it, and the
+    // release that follows is taken too. Regions of the world and hud layers take nothing while the escape menu or a
+    // message box is up. Events wait for the next tick.
+    struct InputEvent
+    {
+        bool down = false;          // pressed, else released
+        int button = 0;             // the event's +4 (0: left)
+        int x = 0, y = 0;           // UI layout coordinates
+        uint32_t region = 0;        // the region pressed (a release: the one its press went to)
+    };
+    std::vector<InputEvent> takeEvents();
+
+    // Whether virtual key `vk` is held, read from the keyboard while the game's window has the focus (false
+    // otherwise, so keys typed into other programs do not count).
+    bool keyDown(int vk);
 
     // Lua thread: adds a command to the frame being recorded (false when the frame is full).
     bool add(Command&& command);

@@ -572,6 +572,7 @@ namespace
             case Kind::Rect: drawRect(device, state, c); break;
             case Kind::Image: drawImage(device, state, c); break;
             case Kind::Text: drawText(device, state, c); break;
+            case Kind::Region: break;
             }
             return true;
         }
@@ -681,6 +682,109 @@ namespace
     {
         return site + 5 + *reinterpret_cast<const int32_t*>(site + 1);
     }
+
+    // ---- Input ----
+
+    struct HitRegion
+    {
+        Layer layer;
+        float x, y, w, h;
+        uint32_t handle;
+    };
+    std::vector<HitRegion> g_regions;           // of the published frame, bottom to top (g_lock)
+    std::vector<Ui::InputEvent> g_events;       // until the next tick (g_lock)
+    uint32_t g_captured = 0;                    // the region a captured press went to, 0: none (g_lock)
+    constexpr size_t kMaxEvents = 256;
+
+    decltype(Gear::Addr::cUI_Manager_receiveEvent)::Ptr g_origReceiveEvent = nullptr;
+
+    struct MouseEvent
+    {
+        uintptr_t vtable;
+        int32_t button;
+        int32_t x, y;
+    };
+
+    // The region under (x, y), 0 if none: the topmost; world and hud regions are covered by the escape menu and
+    // message boxes.
+    uint32_t regionAt(uintptr_t m, int x, int y)
+    {
+        if (!g_publishedAt || GetTickCount64() - g_publishedAt > kStaleMs)
+        {
+            return 0;
+        }
+        const bool covered = visible(windowAt(m, kEscapeMenuSlot)) || visible(readOr<uintptr_t>(m + 0x144, 0));
+        for (auto it = g_regions.rbegin(); it != g_regions.rend(); ++it)
+        {
+            if (covered && it->layer != Layer::Top)
+            {
+                continue;
+            }
+            if (x >= it->x && y >= it->y && x < it->x + it->w && y < it->y + it->h)
+            {
+                return it->handle;
+            }
+        }
+        return 0;
+    }
+
+    uint8_t __fastcall hookReceiveEvent(void* manager, void* edx, void* event)
+    {
+        MouseEvent e{};
+        const uintptr_t down = Gear::Addr::cEventMouseDown_vtable, up = Gear::Addr::cEventMouseUp_vtable;
+        if (event && down && up && read(reinterpret_cast<uintptr_t>(event), e) && (e.vtable == down || e.vtable == up))
+        {
+            std::scoped_lock lock(g_lock);
+            uint32_t region = 0;
+            if (e.vtable == down)
+            {
+                region = regionAt(reinterpret_cast<uintptr_t>(manager), e.x, e.y);
+                if (region)
+                {
+                    g_captured = region;
+                }
+            }
+            else if (g_captured)
+            {
+                region = g_captured;
+                g_captured = 0;
+            }
+            if (region)
+            {
+                if (g_events.size() < kMaxEvents)
+                {
+                    g_events.push_back({e.vtable == down, e.button, e.x, e.y, region});
+                }
+                return 1;   // handled: the game's windows and the world do not see it
+            }
+        }
+        return g_origReceiveEvent(manager, edx, event);
+    }
+
+    // Whether the foreground window belongs to the game.
+    bool gameHasFocus()
+    {
+        HWND w = GetForegroundWindow();
+        DWORD pid = 0;
+        if (w)
+        {
+            GetWindowThreadProcessId(w, &pid);
+        }
+        return pid == GetCurrentProcessId();
+    }
+}
+
+std::vector<Ui::InputEvent> Ui::takeEvents()
+{
+    std::scoped_lock lock(g_lock);
+    std::vector<InputEvent> out;
+    out.swap(g_events);
+    return out;
+}
+
+bool Ui::keyDown(int vk)
+{
+    return vk > 0 && vk < 256 && gameHasFocus() && (GetAsyncKeyState(vk) & 0x8000) != 0;
 }
 
 bool Ui::add(Command&& command)
@@ -708,6 +812,17 @@ void Ui::commit()
         g_recording[i].clear();
     }
     g_recorded = 0;
+    g_regions.clear();
+    for (size_t i = 0; i < kLayers; ++i)
+    {
+        for (const Command& c : g_published[i])
+        {
+            if (c.kind == Kind::Region && c.w > 0 && c.h > 0)
+            {
+                g_regions.push_back({c.layer, c.x, c.y, c.w, c.h, c.region});
+            }
+        }
+    }
     g_publishedAt = GetTickCount64();
 }
 
@@ -731,6 +846,15 @@ bool Ui::install()
     else
     {
         LOG("UI: the world / top draw calls are not calls: those layers stay empty");
+    }
+    if (A::cUI_Manager_receiveEvent && A::cEventMouseDown_vtable && A::cEventMouseUp_vtable)
+    {
+        ok = Patch::hook(g_origReceiveEvent, Gear::Addr::cUI_Manager_receiveEvent, hookReceiveEvent,
+                         "cUI_Manager_receiveEvent") && ok;
+    }
+    else
+    {
+        LOG("UI: the UI's event handler was not found: mod UI takes no mouse input");
     }
     return ok;
 }

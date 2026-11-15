@@ -752,10 +752,107 @@ local function ui_count(mod)
     ui_counts[mod] = n
 end
 
+-- Input for widgets. Regions (gear.ui.region and every widget) are rectangles that take the mouse: a press over the
+-- topmost one is taken from the game and reported with the next tick. Hover is decided against the previous
+-- frame's regions (the topmost under the cursor), so a dropdown's open list hides what lies below it.
+local ui_handles = {}       -- key (mod id .. '\0' .. widget id) -> handle
+local ui_handle_key = {}    -- handle -> key
+local ui_next_handle = 1
+local ui_regions = {}       -- this tick's regions, in order: {handle, layer, x, y, w, h}
+local ui_prev_regions = {}
+local ui_input = {}         -- handle -> {pressed, released, clicked} of this tick
+local ui_active = nil       -- the handle whose press has no release yet
+local ui_hot = nil          -- the topmost region under the cursor
+local ui_mouse = {x = 0, y = 0}
+local ui_tick_state = nil   -- native.ui_state() of this tick
+local ui_tooltip = nil      -- {text, mod} to draw at the end of the tick
+local ui_hover_since = {}   -- handle -> time the cursor came over it
+local ui_dropdown = nil     -- the open dropdown's handle
+local ui_keys = {}          -- mod -> vk -> held at the last query
+
+local function ui_handle(mod, id)
+    local key = mod.id .. '\0' .. tostring(id)
+    local h = ui_handles[key]
+    if not h then
+        h = ui_next_handle
+        ui_next_handle = ui_next_handle + 1
+        ui_handles[key] = h
+        ui_handle_key[h] = key
+    end
+    return h
+end
+
 local function ui_begin_tick()
     ui_counts = {}
     ui_slots = nil
+    ui_prev_regions, ui_regions = ui_regions, {}
+    ui_tooltip = nil
+    ui_tick_state = native.ui_state()
+    ui_mouse.x, ui_mouse.y = ui_tick_state.mouse_x or 0, ui_tick_state.mouse_y or 0
+    -- The topmost region of the last frame under the cursor (layers in draw order, then the order registered).
+    ui_hot = nil
+    local best = -1
+    for i, r in ipairs(ui_prev_regions) do
+        local rank = r.layer * 100000 + i
+        if rank > best and ui_mouse.x >= r.x and ui_mouse.y >= r.y and ui_mouse.x < r.x + r.w and ui_mouse.y < r.y + r.h then
+            ui_hot, best = r.handle, rank
+        end
+    end
+    local now = native.time()
+    for h in pairs(ui_hover_since) do
+        if h ~= ui_hot then ui_hover_since[h] = nil end
+    end
+    if ui_hot and not ui_hover_since[ui_hot] then ui_hover_since[ui_hot] = now end
+    ui_input = {}
+    for _, e in ipairs(native.ui_events()) do
+        local s = ui_input[e.region] or {}
+        ui_input[e.region] = s
+        if e.down then
+            if e.button == 0 then
+                s.pressed = true
+                ui_active = e.region
+            end
+        else
+            s.released = true
+            if ui_active == e.region then
+                ui_active = nil
+                -- A click: released over the region it was pressed on.
+                for _, r in ipairs(ui_prev_regions) do
+                    if r.handle == e.region and e.x >= r.x and e.y >= r.y and e.x < r.x + r.w and e.y < r.y + r.h then
+                        s.clicked = true
+                    end
+                end
+            end
+        end
+    end
 end
+
+-- The tooltip of the widget hovered long enough, drawn last on the top layer beside the cursor.
+local UI_TOOLTIP_DELAY = 0.4
+local function ui_end_tick()
+    local t = ui_tooltip
+    if not t then return end
+    local x, y = ui_mouse.x + 18, ui_mouse.y + 20
+    local w = (native.ui_text_size(t.text, 7) or (#t.text * 6)) + 12
+    local s = ui_tick_state or {}
+    if s.screen_right and x + w > s.screen_right then x = ui_mouse.x - w - 4 end
+    native.ui_rect(2, -1, x, y, w, 20, 0xE0101018)
+    native.ui_rect(2, -1, x, y, w, 1, 0xFFC8AA5A)
+    native.ui_rect(2, -1, x, y + 19, w, 1, 0xFFC8AA5A)
+    native.ui_rect(2, -1, x, y, 1, 20, 0xFFC8AA5A)
+    native.ui_rect(2, -1, x + w - 1, y, 1, 20, 0xFFC8AA5A)
+    native.ui_text(2, -1, t.text, x + 6, y + 3, 0, 0, 0xFFF0F0F0, 7, 0, 0, 0)
+end
+
+-- Key names for gear.ui.key_pressed.
+local UI_VK = {
+    escape = 0x1B, enter = 0x0D, space = 0x20, tab = 0x09, shift = 0x10, control = 0x11, alt = 0x12,
+    left = 0x25, up = 0x26, right = 0x27, down = 0x28, insert = 0x2D, delete = 0x2E, home = 0x24, ['end'] = 0x23,
+    pageup = 0x21, pagedown = 0x22,
+}
+for i = 1, 12 do UI_VK['f' .. i] = 0x6F + i end
+for c = string.byte('a'), string.byte('z') do UI_VK[string.char(c)] = c - 32 end
+for c = string.byte('0'), string.byte('9') do UI_VK[string.char(c)] = c end
 
 local function make_ui(mod)
     local ui = {WIDTH = 1024, HEIGHT = 768}
@@ -822,6 +919,247 @@ local function make_ui(mod)
         return out
     end
     function ui.fonts() return native.ui_font_count() end
+
+    ---------------------------------------------------------------------------------------------------------
+    -- Widgets (immediate mode): call them every frame with the current values; they draw themselves, take the
+    -- mouse over their rectangles and return what the player did since the last frame. `id` names a widget
+    -- within the mod (any string or number, unique per widget). opts.tooltip shows a text after the cursor rests
+    -- on the widget; opts.layer as for drawing (default 'hud'); opts.enabled = false greys it out.
+    ---------------------------------------------------------------------------------------------------------
+    local C = {
+        bg = 0xC8141420, bg_hover = 0xD8282838, bg_down = 0xE03C3C50, edge = 0xFFC8AA5A, edge_dim = 0xFF6E5E3A,
+        text = 0xFFF0F0F0, text_dim = 0xFF8C8C8C, accent = 0xFFFFD780, title = 0xE0302418,
+    }
+    ui.COLORS = C
+
+    -- ui.region(id, x, y, w, h, opts) -> {hover, pressed, released, clicked, held}: a rectangle that takes the
+    -- mouse, for widgets of a mod's own.
+    function ui.region(id, x, y, w, h, opts)
+        opts = opts or {}
+        local layer = UI_LAYERS[opts.layer or 'hud']
+        if not layer then error('layer is "world", "hud" or "top"', 2) end
+        local handle = ui_handle(mod, id)
+        ui_count(mod)
+        native.ui_region(layer, x, y, w, h, handle)
+        ui_regions[#ui_regions + 1] = {handle = handle, layer = layer, x = x, y = y, w = w, h = h}
+        local s = ui_input[handle] or {}
+        local enabled = opts.enabled ~= false
+        local r = {
+            hover = ui_hot == handle,
+            pressed = enabled and s.pressed or false,
+            released = s.released or false,
+            clicked = enabled and s.clicked or false,
+            held = enabled and ui_active == handle,
+        }
+        if r.hover and opts.tooltip and ui_hover_since[handle] and native.time() - ui_hover_since[handle] >= UI_TOOLTIP_DELAY then
+            ui_tooltip = {text = tostring(opts.tooltip):gsub('\\', '/'), mod = mod}
+        end
+        return r
+    end
+    local region = ui.region
+
+    -- The cursor in layout coordinates, and whether the left button is held over a mod's widget.
+    function ui.mouse() return ui_mouse.x, ui_mouse.y end
+
+    -- ui.key_pressed(name): true once per press of the key ('f9', 'a', 'escape' ...), while the game has the focus.
+    function ui.key_pressed(name)
+        local vk = type(name) == 'number' and name or UI_VK[tostring(name):lower()]
+        if not vk then error('unknown key ' .. tostring(name), 2) end
+        local keys = ui_keys[mod] or {}
+        ui_keys[mod] = keys
+        local down = native.key_down(vk)
+        local was = keys[vk]
+        keys[vk] = down
+        return down and not was
+    end
+
+    local function box(x, y, w, h, fill, edge, opts)
+        ui.rect(x, y, w, h, fill, opts)
+        ui.frame(x, y, w, h, edge, 1, opts)
+    end
+    local function label_color(opts) return opts.enabled == false and C.text_dim or (opts.color or C.text) end
+
+    -- ui.label(text, x, y, opts): text with the widgets' look (font 7 unless opts.font), a tooltip if opts.tooltip.
+    function ui.label(id, text, x, y, opts)
+        opts = opts or {}
+        local font = opts.font or 7
+        local w, h = native.ui_text_size(tostring(text), font)
+        if opts.tooltip then region(id, x, y, w or 60, h or 14, opts) end
+        return ui.text(text, x, y, {font = font, color = label_color(opts), layer = opts.layer})
+    end
+
+    -- ui.button(id, x, y, w, h, text, opts) -> clicked
+    function ui.button(id, x, y, w, h, text, opts)
+        opts = opts or {}
+        local r = region(id, x, y, w, h, opts)
+        local fill = (r.held and C.bg_down) or (r.hover and C.bg_hover) or C.bg
+        box(x, y, w, h, fill, r.hover and C.edge or C.edge_dim, opts)
+        if opts.image then
+            ui.image(opts.image, x + 2, y + 2, h - 4, h - 4, {fit = 'contain', layer = opts.layer})
+        end
+        ui.text(text, x, y + math.floor((h - 14) / 2), {width = w, align = 'center', font = 7,
+            color = label_color(opts), layer = opts.layer})
+        return r.clicked
+    end
+
+    -- ui.checkbox(id, x, y, text, checked, opts) -> changed, checked
+    function ui.checkbox(id, x, y, text, checked, opts)
+        opts = opts or {}
+        local tw = native.ui_text_size(tostring(text), 7) or 60
+        local r = region(id, x, y, 18 + tw, 16, opts)
+        box(x, y + 1, 14, 14, r.hover and C.bg_hover or C.bg, r.hover and C.edge or C.edge_dim, opts)
+        if checked then ui.rect(x + 3, y + 4, 8, 8, opts.enabled == false and C.text_dim or C.accent, opts) end
+        ui.text(text, x + 20, y, {font = 7, color = label_color(opts), layer = opts.layer})
+        if r.clicked then return true, not checked end
+        return false, checked
+    end
+
+    -- A round mark of radius 6 from rectangles (the overlay has no circles).
+    local function disc(cx, cy, rad, color, opts)
+        for dy = -rad, rad - 1 do
+            local yy = dy + 0.5
+            local half = math.floor(math.sqrt(math.max(0, rad * rad - yy * yy)) + 0.5)
+            ui.rect(cx - half, cy + dy, half * 2, 1, color, opts)
+        end
+    end
+
+    -- ui.radio(id, x, y, text, selected, opts) -> clicked
+    function ui.radio(id, x, y, text, selected, opts)
+        opts = opts or {}
+        local tw = native.ui_text_size(tostring(text), 7) or 60
+        local r = region(id, x, y, 18 + tw, 16, opts)
+        disc(x + 7, y + 8, 7, r.hover and C.edge or C.edge_dim, opts)
+        disc(x + 7, y + 8, 6, r.hover and C.bg_hover or 0xF0141420, opts)
+        if selected then disc(x + 7, y + 8, 3, opts.enabled == false and C.text_dim or C.accent, opts) end
+        ui.text(text, x + 20, y, {font = 7, color = label_color(opts), layer = opts.layer})
+        return r.clicked
+    end
+
+    -- ui.radio_group(id, x, y, options, index, opts{horizontal, spacing}) -> changed, index
+    function ui.radio_group(id, x, y, options, index, opts)
+        opts = opts or {}
+        local changed = false
+        local px, py = x, y
+        for i, text in ipairs(options) do
+            local o = {tooltip = opts.tooltips and opts.tooltips[i], layer = opts.layer, enabled = opts.enabled}
+            if ui.radio(tostring(id) .. '#' .. i, px, py, text, i == index, o) and i ~= index then
+                index, changed = i, true
+            end
+            if opts.horizontal then
+                px = px + 26 + (native.ui_text_size(tostring(text), 7) or 60) + (opts.spacing or 8)
+            else
+                py = py + (opts.spacing or 18)
+            end
+        end
+        return changed, index
+    end
+
+    -- ui.dropdown(id, x, y, w, options, index, opts) -> changed, index. The open list lies on the top layer; a
+    -- click anywhere else closes it.
+    function ui.dropdown(id, x, y, w, options, index, opts)
+        opts = opts or {}
+        local h = 18
+        local handle = ui_handle(mod, id)
+        local open = ui_dropdown == handle
+        local r = region(id, x, y, w, h, opts)
+        box(x, y, w, h, (r.hover or open) and C.bg_hover or C.bg, (r.hover or open) and C.edge or C.edge_dim, opts)
+        ui.text(tostring(options[index] or ''), x + 6, y + 2, {font = 7, color = label_color(opts), layer = opts.layer})
+        -- the arrow
+        for i = 0, 3 do ui.rect(x + w - 14 + i, y + 7 + i, 8 - 2 * i, 1, C.accent, opts) end
+        if r.clicked then
+            open = not open
+            ui_dropdown = open and handle or nil
+        end
+        local changed = false
+        if open then
+            local s = ui_tick_state or {}
+            local top = {layer = 'top'}
+            -- Behind the list: the whole screen, so a click beside it closes it (and goes nowhere else).
+            local away = region(tostring(id) .. '#away', s.screen_left or 0, s.screen_top or 0,
+                (s.screen_right or 1024) - (s.screen_left or 0), (s.screen_bottom or 768) - (s.screen_top or 0), top)
+            local ly = y + h
+            box(x, ly, w, #options * 18 + 2, 0xF0141420, C.edge, top)
+            for i, text in ipairs(options) do
+                local ir = region(tostring(id) .. '#' .. i, x + 1, ly + 1 + (i - 1) * 18, w - 2, 18, top)
+                if ir.hover or i == index then
+                    ui.rect(x + 1, ly + 1 + (i - 1) * 18, w - 2, 18, ir.hover and 0xFF4A3C28 or 0xFF2A2418, top)
+                end
+                ui.text(tostring(text), x + 6, ly + 3 + (i - 1) * 18, {font = 7, layer = 'top',
+                    color = i == index and C.accent or C.text})
+                if ir.clicked then
+                    changed = i ~= index
+                    index = i
+                    ui_dropdown = nil
+                end
+            end
+            if away.clicked then ui_dropdown = nil end
+        end
+        return changed, index
+    end
+
+    -- ui.slider(id, x, y, w, min, max, value, opts{step, format}) -> changed, value
+    function ui.slider(id, x, y, w, min, max, value, opts)
+        opts = opts or {}
+        local r = region(id, x, y, w, 16, opts)
+        ui.rect(x, y + 7, w, 2, C.edge_dim, opts)
+        local function at(v) return x + (w - 10) * ((v - min) / math.max(max - min, 1e-9)) end
+        local changed = false
+        if r.held or r.pressed then
+            local t = math.max(0, math.min(1, (ui_mouse.x - x - 5) / math.max(w - 10, 1)))
+            local v = min + t * (max - min)
+            local step = opts.step or 1
+            v = math.floor(v / step + 0.5) * step
+            if v ~= value then value, changed = v, true end
+        end
+        ui.rect(x, y + 7, at(value) - x + 5, 2, C.accent, opts)
+        box(at(value), y + 2, 10, 12, (r.hover or r.held) and C.bg_down or C.bg_hover, C.edge, opts)
+        if opts.format ~= false then
+            ui.text((opts.format or '%g'):format(value), x + w + 6, y, {font = 7, color = label_color(opts), layer = opts.layer})
+        end
+        return changed, value
+    end
+
+    -- ui.panel(id, title, x, y, w, h, opts{closable, draggable, layer}) -> panel {x, y, w, h, open, content_x,
+    -- content_y}. A window of the mod's: the title bar drags it (it keeps the position for the session), its X
+    -- closes it (panel.open false; ui.show_panel(id) opens it again). Its body takes the mouse, so clicks on it do
+    -- not reach the game.
+    local panels = {}
+    function ui.show_panel(id, open)
+        local p = panels[id] or {}
+        panels[id] = p
+        p.closed = open == false
+    end
+    function ui.panel_open(id)
+        return not (panels[id] and panels[id].closed)
+    end
+    function ui.panel(id, title, x, y, w, h, opts)
+        opts = opts or {}
+        local p = panels[id] or {}
+        panels[id] = p
+        if p.closed then return {open = false} end
+        x, y = x + (p.dx or 0), y + (p.dy or 0)
+        local o = {layer = opts.layer}
+        ui.rect(x, y, w, h, opts.background or 0xD80E0E14, o)
+        ui.frame(x, y, w, h, C.edge, 1, o)
+        ui.rect(x + 1, y + 1, w - 2, 20, C.title, o)
+        ui.text(title, x + 8, y + 3, {font = 7, color = C.accent, layer = opts.layer})
+        region(tostring(id) .. '#body', x, y, w, h, o)
+        if opts.draggable ~= false then
+            local bar = region(tostring(id) .. '#bar', x, y, w - 24, 21, {layer = opts.layer, tooltip = opts.tooltip})
+            if bar.pressed then p.grab_x, p.grab_y = ui_mouse.x - (p.dx or 0), ui_mouse.y - (p.dy or 0) end
+            if bar.held and p.grab_x then
+                p.dx, p.dy = ui_mouse.x - p.grab_x, ui_mouse.y - p.grab_y
+            end
+        end
+        if opts.closable ~= false then
+            local cr = region(tostring(id) .. '#close', x + w - 21, y + 2, 18, 18, {layer = opts.layer, tooltip = 'Close'})
+            ui.text('x', x + w - 21, y + 2, {width = 18, align = 'center', font = 7,
+                color = cr.hover and 0xFFFF8080 or C.text, layer = opts.layer})
+            if cr.clicked then p.closed = true end
+        end
+        return {open = true, x = x, y = y, w = w, h = h, content_x = x + 8, content_y = y + 28}
+    end
+
     function ui.text_size(text, font)
         return native.ui_text_size(tostring(text), font or 1)
     end
@@ -1152,6 +1490,16 @@ local function make_env(mod)
         local t = timer_of[handle]
         if t and t.mod == mod then t.cancelled = true end
     end
+    -- A mod's own files: gear.read(name) -> text | nil, message; gear.save(name, text) -> true | nil, message
+    -- (names directly in the mod's folder; saving only *.json, *.txt, *.lua other than mod.lua and main.lua).
+    function gear.read(name)
+        assert(type(name) == 'string', 'name must be a string')
+        return native.read_file(mod.dir, name)
+    end
+    function gear.save(name, text)
+        assert(type(name) == 'string' and type(text) == 'string', 'name and text must be strings')
+        return native.write_file(mod.dir, name, text)
+    end
     gear.task = function(fn) start_task(mod, fn) end
     gear.wait = wait
     gear.wait_until = wait_until
@@ -1381,8 +1729,7 @@ end
 
 -- The 'draw' handlers get the UI state (gear.ui.state()); read only when someone draws.
 local function gear_ui_state()
-    local list = handlers.draw
-    if list and #list > 0 then return native.ui_state() end
+    return ui_tick_state
 end
 
 -- One in-game frame: sessions, pipes, timers, the frame handlers, then the draw handlers; the frame's drawing is
@@ -1395,6 +1742,7 @@ function kernel.tick(dt)
     run_tasks()
     kernel.dispatch('frame', dt)
     kernel.dispatch('draw', gear_ui_state())
+    ui_end_tick()
     native.ui_commit()
     publish_pickup_rules()
 end
@@ -1408,6 +1756,7 @@ function kernel.idle()
     run_tasks()
     kernel.dispatch('idle')
     kernel.dispatch('draw', gear_ui_state())
+    ui_end_tick()
     native.ui_commit()
     publish_pickup_rules()
 end
