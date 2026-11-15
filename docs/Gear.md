@@ -214,6 +214,7 @@ Every widget takes `opts.tooltip` (shown after the cursor rests on it for 0.4 s)
 | `region(id, x, y, w, h, opts)` | A rectangle that takes the mouse, for widgets of a mod's own: `{hover, pressed, released, clicked, held}`. |
 | `mouse()` | The cursor in layout coordinates. |
 | `key_pressed(name)` | True once per press of a key (`'f9'`, `'a'`, `'escape'` ...), read while the game's window has the focus. |
+| `key_down(name)` | Whether the key is held. Both see the keys [automation](#automation) holds; isolated automation sees only those. |
 | `COLORS` | The widgets' colours. |
 
 Input: a left click (press and release) over a mod's region is taken from the game: the UI manager's event handler
@@ -232,7 +233,10 @@ layout keeps its places when the resolution changes. The game's own windows are 
 
 | | |
 |---|---|
-| `edit_mode()`, `set_edit_mode(on)` | The edit mode: panels show their ids (and resize grips). A layout editor turns it on (`gear/examples/layout`, F7). |
+| `edit_mode()`, `set_edit_mode(on)` | The edit mode: a flag for every mod (panels get a highlighted frame); a layout editor turns it on and draws its overlays (`gear/examples/layout`, F7). |
+| `panels()` | The panels of every mod drawn this tick (those not drawn yet: as of the last tick): `{key, mod, id, title, x, y, w, h, resizable, min_width, min_height, layer}`. |
+| `set_panel_rect(key, x, y, w, h)` | Puts any mod's panel at (x, y) of the canvas and, if it is resizable, makes it w x h (`nil`: the size stays; never below its minimum); kept in the layout, taken the next time its mod draws it. False for an unknown panel. |
+| `reset_panel(key)` | That panel back to the place and size its mod gives it. |
 | `can_move_windows()` | Whether the game's windows can be moved (needs SacredBild's UI frames). |
 | `set_window_position(name, x, y)` | Puts game window `name` with its top-left corner at (x, y) of the canvas and keeps it in the layout. Any in-game window but those the game draws alone (world map, savegame, options, character export). |
 | `reset_window(name)`, `reset_layout(prefix)` | Back to its own place; forget all places (or those whose key starts with `prefix`, e.g. `'game:'`). |
@@ -286,7 +290,7 @@ faults returns nil and a message instead of crashing the game.
 | `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
 | `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F9) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
 | `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices from `config.lua`; filtered items' labels are dimmed; an overlay shows the rules; a settings panel (F8 or the overlay's button: class checkboxes, quality dropdowns, potion checkboxes, label dimming) saves to `settings.json`. Self test with `-gear-auto`. |
-| `layout` | A layout editor (F7 or its button): drag the game's open windows anywhere and the mods' panels, resize resizable ones, reset; kept in `mods\gear_layout.json`. Self test (run it twice: move, then check the restore and reset). |
+| `layout` | A layout editor in the manner of an MMO's edit mode (F7 or its button): every open game window and mod panel gets a translucent blue overlay with its name; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 
 ## Automation
