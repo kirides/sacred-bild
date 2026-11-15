@@ -1,3 +1,4 @@
+---@type GearModManifest
 -- The manifest: a table, evaluated without any globals.
 return {
     id = 'hello',
