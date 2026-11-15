@@ -1,5 +1,68 @@
 # SacredBild
 
+**Sacred Gold, made to run and play like it is not 2004.** SacredBild and Sacred Gear are two drop-in DLLs for the
+GOG / Steam Sacred Gold (also the German build and Sacred ReBorn). You copy them into the game folder; nothing else
+about your install changes.
+
+## For players
+
+### What you get from SacredBild (`ddraw.dll`)
+
+- **Your monitor's resolution**: 1440p, 4K, ultrawide. The world shows more at its original sharpness, and the old
+  1024x768 interface is scaled and centered with its windows at the screen edges.
+- **Smooth frame rates**: a new renderer (Direct3D 9Ex) with merged draw calls, the ground kept on the GPU and
+  characters animated on several threads. Walking through a town with many characters no longer stutters.
+- **Controller support**: Xbox, PlayStation and Switch pads: walk with the stick, aim-assisted attacks and combat arts,
+  cursor and D-pad menus, button prompts on screen.
+- **Multiplayer that works today**: LAN games over a VPN, a UDP connection instead of TCP, and a matchmaker so friends
+  can find and join your game without port forwarding.
+- **Any language**: one install runs every language you have text and speech files for.
+- Small things that add up: input only while the game is focused, the cursor kept in the window, a frame limiter
+  that does not burn a CPU core, full-screen screenshots, crash dumps.
+
+### What you get from Sacred Gear (`SacredGear.dll`)
+
+Sacred Gear lets the game run **mods** (small Lua scripts) and ships with some. It works with SacredBild or on its own.
+
+**Mod manager** (F11, or the *Mods* button under the escape menu): see every installed mod, switch each on or off,
+change its settings and re-bind its keys, with a warning when two mods want the same key.
+
+![The in-game mod manager](docs/images/gear-mod-manager.jpg)
+
+**Layout editor** (F7), like the edit mode of an MMO: every game window and mod panel gets an overlay; click one and
+drag it anywhere, it snaps to screen edges and to other windows, the arrow keys nudge it, and your layout is
+remembered.
+
+![The layout editor](docs/images/gear-layout-editor.jpg)
+
+**Loot filter** (settings in game with F5): your hero picks up only what is worth it: items for its class, above a
+quality you choose, per category (weapons, armor, jewelry, runes, ...) and per potion type. Filtered items' labels
+are dimmed so the good drops stand out.
+
+![The loot filter and its settings](docs/images/gear-loot-filter.jpg)
+
+**Shared stash** (F10, from the extra mods): one stash for all your heroes. Put an item in with one hero, take it
+out with another, with its random properties and runes intact.
+
+![The shared stash beside the inventory](docs/images/gear-shared-stash.jpg)
+
+**Autosave** (F6, from the extra mods): saves your game periodically, so a crash or a
+bad fight costs minutes, not an hour.
+
+The loot filter and the layout editor are in this repository (`gear/examples`); the shared stash, the autosave and
+more are in [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods). A mod is a folder in the game's `mods`
+folder: copy it in, press F11, switch it on. Writing your own is covered in [Sacred Gear](docs/Gear.md).
+
+### Install
+
+Download a [release](../../releases) (tagged versions, plus a nightly of every push to `main`) and extract the zip
+into the Sacred Gold folder. `SacredGear.dll` next to the game loads with SacredBild. Mods go into `mods`. The
+[Install](#install-1) section below has the details, Steam, Wine and DDrawCompat included.
+
+---
+
+## Technical overview
+
 > **AI disclosure:** SacredBild is developed with an AI coding assistant (Anthropic's Claude). Most of the code,
 > the reverse engineering notes and this documentation were written with it, at the maintainer's direction; the
 > maintainer decides what goes in and tests the changes in the game. The source is kept to what the features need
