@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cstring>
 #include <cwchar>
+#include <map>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -31,15 +32,128 @@ namespace
     bool g_parsed = false;
 
     std::mutex g_inputLock;
-    bool g_virtualCursor = false;   // GetCursorPos answers with g_cursor (client pixels) until the real mouse moves
+    // Automation's own cursor (client pixels) and held keys / buttons. Isolated (the default): the game sees only
+    // these. Shared (-gear-shared-input): the virtual cursor until the real mouse moves, held keys added to the real
+    // ones.
+    bool g_virtualCursor = false;
     POINT g_cursor{};
-    POINT g_realAtSwitch{};         // the real cursor when automation took over, to notice the player moving it
+    POINT g_realAtSwitch{};
     std::set<int> g_held;
 
+    bool isolated() { return g_options.enabled && !g_options.sharedInput; }
+
     using GetCursorPosFn = BOOL(WINAPI*)(LPPOINT);
+    using SetCursorPosFn = BOOL(WINAPI*)(int, int);
+    using ClipCursorFn = BOOL(WINAPI*)(const RECT*);
     using GetAsyncKeyStateFn = SHORT(WINAPI*)(int);
+    using GetKeyStateFn = SHORT(WINAPI*)(int);
+    using GetKeyboardStateFn = BOOL(WINAPI*)(PBYTE);
+    using HwndFn = HWND(WINAPI*)();
+    using SetHwndFn = HWND(WINAPI*)(HWND);
+    using BoolHwndFn = BOOL(WINAPI*)(HWND);
+    using ShowWindowFn = BOOL(WINAPI*)(HWND, int);
+    using SetWindowPosFn = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
+    using CreateWindowExAFn = HWND(WINAPI*)(DWORD, LPCSTR, LPCSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+    using SetWindowsHookExAFn = HHOOK(WINAPI*)(int, HOOKPROC, HINSTANCE, DWORD);
+    using UnhookWindowsHookExFn = BOOL(WINAPI*)(HHOOK);
+
     GetCursorPosFn g_origGetCursorPos = nullptr;
+    SetCursorPosFn g_origSetCursorPos = nullptr;
+    ClipCursorFn g_origClipCursor = nullptr;
     GetAsyncKeyStateFn g_origGetAsyncKeyState = nullptr;
+    GetKeyStateFn g_origGetKeyState = nullptr;
+    GetKeyboardStateFn g_origGetKeyboardState = nullptr;
+    HwndFn g_origGetForegroundWindow = nullptr;
+    HwndFn g_origGetFocus = nullptr;
+    SetHwndFn g_origSetFocus = nullptr;
+    SetHwndFn g_origSetCapture = nullptr;
+    BoolHwndFn g_origSetForegroundWindow = nullptr;
+    BoolHwndFn g_origBringWindowToTop = nullptr;
+    ShowWindowFn g_origShowWindow = nullptr;
+    SetWindowPosFn g_origSetWindowPos = nullptr;
+    CreateWindowExAFn g_origCreateWindowExA = nullptr;
+    SetWindowsHookExAFn g_origSetWindowsHookExA = nullptr;
+    UnhookWindowsHookExFn g_origUnhookWindowsHookEx = nullptr;
+
+    // A system-wide low-level hook the game asked for while isolated: never installed (the game's own one swallows
+    // the Windows keys and Alt+Tab for the whole desktop), answered with this handle.
+    const HHOOK kFakeHook = reinterpret_cast<HHOOK>(static_cast<uintptr_t>(0x6EA70001));
+
+    // Input automation posts as a private message that the message hook (on the window's thread) turns into the real
+    // one just before the game gets it; real mouse and keyboard messages are dropped there while isolated.
+    constexpr UINT kInjected = WM_APP + 0x3F37;
+    constexpr LPARAM kInjectedTag = 0x6EA7;
+    struct Pending
+    {
+        UINT message;
+        WPARAM wParam;
+        LPARAM lParam;
+    };
+    std::mutex g_pendingLock;
+    std::map<WPARAM, Pending> g_pending;
+    WPARAM g_nextPending = 1;
+    HHOOK g_messageHook = nullptr;
+    HMODULE g_module = nullptr;
+
+    bool isInput(UINT m)
+    {
+        return (m >= WM_KEYFIRST && m <= WM_KEYLAST) || (m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) ||
+               (m >= WM_NCMOUSEMOVE && m <= WM_NCXBUTTONDBLCLK) || m == WM_INPUT || m == WM_MOUSEHOVER ||
+               m == WM_MOUSELEAVE;
+    }
+
+    LRESULT CALLBACK messageHook(int code, WPARAM wParam, LPARAM lParam)
+    {
+        if (code == HC_ACTION && lParam)
+        {
+            MSG* msg = reinterpret_cast<MSG*>(lParam);
+            if (msg->message == kInjected && msg->lParam == kInjectedTag)
+            {
+                std::lock_guard guard(g_pendingLock);
+                const auto it = g_pending.find(msg->wParam);
+                if (it == g_pending.end())
+                {
+                    msg->message = WM_NULL;
+                }
+                else
+                {
+                    const Pending p = it->second;
+                    if (wParam == PM_REMOVE)
+                    {
+                        g_pending.erase(it);
+                    }
+                    msg->message = p.message;
+                    msg->wParam = p.wParam;
+                    msg->lParam = p.lParam;
+                }
+            }
+            else if (isolated() && isInput(msg->message))
+            {
+                msg->message = WM_NULL;     // the player's own input, meant for another window
+            }
+        }
+        return CallNextHookEx(g_messageHook, code, wParam, lParam);
+    }
+
+    void post(HWND w, UINT message, WPARAM wParam, LPARAM lParam)
+    {
+        if (!w)
+        {
+            return;
+        }
+        if (!g_messageHook)
+        {
+            PostMessageW(w, message, wParam, lParam);
+            return;
+        }
+        WPARAM id = 0;
+        {
+            std::lock_guard guard(g_pendingLock);
+            id = g_nextPending++;
+            g_pending[id] = {message, wParam, lParam};
+        }
+        PostMessageW(w, kInjected, id, kInjectedTag);
+    }
 
     bool safeCopy(void* dst, const void* src, size_t size)
     {
@@ -79,9 +193,29 @@ namespace
         }
     }
 
-    // GetCursorPos of the game: the virtual cursor (in screen coordinates) while automation owns it.
+    POINT screenCursor()
+    {
+        POINT p = g_cursor;
+        if (HWND w = Automation::window())
+        {
+            ClientToScreen(w, &p);
+        }
+        return p;
+    }
+
+    // GetCursorPos of the game: automation's cursor (isolated always; shared until the real mouse moves).
     BOOL WINAPI hookGetCursorPos(LPPOINT pt)
     {
+        if (isolated())
+        {
+            if (!pt)
+            {
+                return FALSE;
+            }
+            std::lock_guard guard(g_inputLock);
+            *pt = screenCursor();
+            return TRUE;
+        }
         const BOOL ok = g_origGetCursorPos(pt);
         std::lock_guard guard(g_inputLock);
         if (!g_virtualCursor || !pt)
@@ -93,20 +227,233 @@ namespace
             g_virtualCursor = false;    // the player moved the mouse: theirs again
             return ok;
         }
-        POINT p = g_cursor;
+        *pt = screenCursor();
+        return TRUE;
+    }
+
+    // The game moves the cursor to keep it on its world spot: only automation's cursor moves while isolated.
+    BOOL WINAPI hookSetCursorPos(int x, int y)
+    {
+        if (!isolated())
+        {
+            return g_origSetCursorPos(x, y);
+        }
+        POINT p{x, y};
         if (HWND w = Automation::window())
         {
-            ClientToScreen(w, &p);
+            ScreenToClient(w, &p);
         }
-        *pt = p;
+        std::lock_guard guard(g_inputLock);
+        g_cursor = p;
         return TRUE;
+    }
+
+    BOOL WINAPI hookClipCursor(const RECT* r)
+    {
+        return isolated() ? TRUE : g_origClipCursor(r);
+    }
+
+    SHORT heldState(int vk)
+    {
+        std::lock_guard guard(g_inputLock);
+        return g_held.count(vk) ? static_cast<SHORT>(0x8000) : 0;
     }
 
     SHORT WINAPI hookGetAsyncKeyState(int vk)
     {
-        const SHORT state = g_origGetAsyncKeyState(vk);
+        if (isolated())
+        {
+            return heldState(vk);
+        }
+        return static_cast<SHORT>(g_origGetAsyncKeyState(vk) | heldState(vk));
+    }
+
+    SHORT WINAPI hookGetKeyState(int vk)
+    {
+        if (isolated())
+        {
+            return heldState(vk);
+        }
+        return static_cast<SHORT>(g_origGetKeyState(vk) | heldState(vk));
+    }
+
+    BOOL WINAPI hookGetKeyboardState(PBYTE keys)
+    {
+        if (!keys)
+        {
+            return FALSE;
+        }
+        BOOL ok = TRUE;
+        if (isolated())
+        {
+            std::memset(keys, 0, 256);
+        }
+        else
+        {
+            ok = g_origGetKeyboardState(keys);
+        }
         std::lock_guard guard(g_inputLock);
-        return g_held.count(vk) ? static_cast<SHORT>(state | 0x8000) : state;
+        for (int vk : g_held)
+        {
+            keys[vk & 0xFF] |= 0x80;
+        }
+        return ok;
+    }
+
+    // Focus and activation: the game asks to be in front (00811440 loops on SetForegroundWindow until it is, or
+    // times out). Isolated, it never takes the foreground or the focus, and is told it has them.
+    HWND WINAPI hookGetForegroundWindow()
+    {
+        HWND w = isolated() ? Automation::window() : nullptr;
+        return w ? w : g_origGetForegroundWindow();
+    }
+
+    HWND WINAPI hookGetFocus()
+    {
+        HWND w = isolated() ? Automation::window() : nullptr;
+        return w ? w : g_origGetFocus();
+    }
+
+    HWND WINAPI hookSetFocus(HWND w)
+    {
+        return isolated() ? Automation::window() : g_origSetFocus(w);
+    }
+
+    HWND WINAPI hookSetCapture(HWND w)
+    {
+        return isolated() ? nullptr : g_origSetCapture(w);
+    }
+
+    BOOL WINAPI hookSetForegroundWindow(HWND w)
+    {
+        return isolated() ? TRUE : g_origSetForegroundWindow(w);
+    }
+
+    BOOL WINAPI hookBringWindowToTop(HWND w)
+    {
+        return isolated() ? TRUE : g_origBringWindowToTop(w);
+    }
+
+    BOOL WINAPI hookShowWindow(HWND w, int cmd)
+    {
+        if (isolated())
+        {
+            switch (cmd)
+            {
+            case SW_SHOWNORMAL: case SW_RESTORE: case SW_SHOWDEFAULT: cmd = SW_SHOWNOACTIVATE; break;
+            case SW_SHOW: case SW_SHOWMAXIMIZED: cmd = SW_SHOWNA; break;
+            case SW_SHOWMINIMIZED: case SW_MINIMIZE: cmd = SW_SHOWMINNOACTIVE; break;
+            default: break;
+            }
+        }
+        return g_origShowWindow(w, cmd);
+    }
+
+    BOOL WINAPI hookSetWindowPos(HWND w, HWND after, int x, int y, int cx, int cy, UINT flags)
+    {
+        if (isolated())
+        {
+            flags |= SWP_NOACTIVATE;
+            if (after == HWND_TOPMOST || after == HWND_TOP)
+            {
+                flags |= SWP_NOZORDER;      // not over the player's windows
+            }
+        }
+        return g_origSetWindowPos(w, after, x, y, cx, cy, flags);
+    }
+
+    HWND WINAPI hookCreateWindowExA(DWORD exStyle, LPCSTR cls, LPCSTR name, DWORD style, int x, int y, int w, int h,
+                                    HWND parent, HMENU menu, HINSTANCE instance, LPVOID param)
+    {
+        if (isolated() && !(style & WS_CHILD))
+        {
+            exStyle = (exStyle | WS_EX_NOACTIVATE) & ~static_cast<DWORD>(WS_EX_TOPMOST);
+        }
+        return g_origCreateWindowExA(exStyle, cls, name, style, x, y, w, h, parent, menu, instance, param);
+    }
+
+    HHOOK WINAPI hookSetWindowsHookExA(int id, HOOKPROC proc, HINSTANCE module, DWORD thread)
+    {
+        if (isolated() && (id == WH_KEYBOARD_LL || id == WH_MOUSE_LL))
+        {
+            LOG("Automation: the game's system-wide {} hook is not installed (isolated input)",
+                id == WH_KEYBOARD_LL ? "keyboard" : "mouse");
+            return kFakeHook;
+        }
+        return g_origSetWindowsHookExA(id, proc, module, thread);
+    }
+
+    BOOL WINAPI hookUnhookWindowsHookEx(HHOOK h)
+    {
+        return h == kFakeHook ? TRUE : g_origUnhookWindowsHookEx(h);
+    }
+
+    // Replaces sacred.exe's import `name` with `hook`, keeping the original in `orig` (left null if the game does
+    // not import it).
+    template <class Fn>
+    void hookImport(Fn& orig, const char* name, Fn hook)
+    {
+        orig = reinterpret_cast<Fn>(Patch::iat("USER32.dll", name, reinterpret_cast<void*>(hook)));
+    }
+
+    // While isolated the game window never becomes active; this window procedure makes the game believe it is,
+    // so it neither pauses nor mutes when the player works in other windows.
+    constexpr UINT kActivate = WM_APP + 0x3F38;
+    WNDPROC g_origWndProc = nullptr;
+
+    LRESULT CALLBACK windowProc(HWND w, UINT message, WPARAM wParam, LPARAM lParam)
+    {
+        if (isolated())
+        {
+            switch (message)
+            {
+            case kActivate:
+                CallWindowProcA(g_origWndProc, w, WM_ACTIVATEAPP, TRUE, 0);
+                CallWindowProcA(g_origWndProc, w, WM_ACTIVATE, WA_ACTIVE, 0);
+                return 0;
+            case WM_ACTIVATEAPP:
+                wParam = TRUE;
+                break;
+            case WM_ACTIVATE:
+                wParam = MAKEWPARAM(WA_ACTIVE, HIWORD(wParam));
+                break;
+            case WM_KILLFOCUS:
+            case WM_CAPTURECHANGED:
+                return 0;
+            case WM_MOUSEACTIVATE:
+                return MA_NOACTIVATE;
+            default:
+                break;
+            }
+        }
+        return CallWindowProcA(g_origWndProc, w, message, wParam, lParam);
+    }
+
+    // The window exists: the message hook on its thread, and no activation for a window made before Gear loaded.
+    void attachWindow(HWND w)
+    {
+        if (g_messageHook || !w)
+        {
+            return;
+        }
+        const DWORD thread = GetWindowThreadProcessId(w, nullptr);
+        g_messageHook = SetWindowsHookExW(WH_GETMESSAGE, messageHook, g_module, thread);
+        if (!g_messageHook)
+        {
+            LOG("Automation: cannot hook the window's messages ({}): input goes straight to the window", GetLastError());
+            return;
+        }
+        if (isolated())
+        {
+            SetWindowLongW(w, GWL_EXSTYLE, (GetWindowLongW(w, GWL_EXSTYLE) | WS_EX_NOACTIVATE) & ~WS_EX_TOPMOST);
+            g_origWndProc = reinterpret_cast<WNDPROC>(
+                SetWindowLongPtrA(w, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&windowProc)));
+            if (g_origWndProc)
+            {
+                PostMessageA(w, kActivate, 0, 0);     // runs on the window's thread
+            }
+        }
+        LOG("Automation: attached to the game window{}", isolated() ? " (isolated: the player's input stays theirs)" : "");
     }
 
     LPARAM cursorParam()
@@ -160,6 +507,7 @@ namespace
         LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
         std::wstring load, mods;
         bool enabled = envVar("SACREDGEAR_AUTO") == "1";
+        g_options.sharedInput = envVar("SACREDGEAR_SHARED_INPUT") == "1";
         for (int i = 1; argv && i < argc; ++i)
         {
             const std::wstring a = argv[i];
@@ -171,6 +519,10 @@ namespace
             {
                 load = a.substr(11);
             }
+            else if (_wcsicmp(a.c_str(), L"-gear-shared-input") == 0)
+            {
+                g_options.sharedInput = true;
+            }
             else if (_wcsnicmp(a.c_str(), L"-gear-mods=", 11) == 0)
             {
                 mods = a.substr(11);
@@ -180,8 +532,16 @@ namespace
         {
             LocalFree(argv);
         }
-        std::string loadText(load.begin(), load.end());
-        std::string modsText(mods.begin(), mods.end());   // ids are ASCII
+        std::string loadText;
+        for (const wchar_t c : load)
+        {
+            loadText.push_back(static_cast<char>(c));   // slot numbers are ASCII
+        }
+        std::string modsText;   // ids are ASCII
+        for (const wchar_t c : mods)
+        {
+            modsText.push_back(static_cast<char>(c));
+        }
         if (loadText.empty())
         {
             loadText = envVar("SACREDGEAR_LOAD");
@@ -220,6 +580,10 @@ namespace
         for (;;)
         {
             Sleep(50);
+            if (!g_messageHook)
+            {
+                attachWindow(Automation::window());
+            }
             const ULONGLONG now = GetTickCount64();
             if (now - LuaHost::lastFrameTime() > 250)
             {
@@ -268,26 +632,35 @@ void Automation::install(const std::wstring&)
     {
         return;
     }
-    LOG("Automation on{}{}", g_options.loadSlot >= 0 ? ", loading savegame " + std::to_string(g_options.loadSlot) : "",
+    LOG("Automation on ({} input){}{}", isolated() ? "isolated" : "shared", g_options.loadSlot >= 0 ? ", loading savegame " + std::to_string(g_options.loadSlot) : "",
         g_options.mods.empty() ? "" : ", only some mods");
-    g_origGetCursorPos = reinterpret_cast<GetCursorPosFn>(
-        Patch::iat("USER32.dll", "GetCursorPos", reinterpret_cast<void*>(&hookGetCursorPos)));
-    g_origGetAsyncKeyState = reinterpret_cast<GetAsyncKeyStateFn>(
-        Patch::iat("USER32.dll", "GetAsyncKeyState", reinterpret_cast<void*>(&hookGetAsyncKeyState)));
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&messageHook), &g_module);
+    hookImport(g_origGetCursorPos, "GetCursorPos", &hookGetCursorPos);
+    hookImport(g_origGetAsyncKeyState, "GetAsyncKeyState", &hookGetAsyncKeyState);
     if (!g_origGetCursorPos || !g_origGetAsyncKeyState)
     {
-        LOG("Automation: input hooks not installed; simulated input may not reach the game");
-        // Restore what did install, so the game calls the real functions.
-        if (g_origGetCursorPos)
-        {
-            Patch::iat("USER32.dll", "GetCursorPos", reinterpret_cast<void*>(g_origGetCursorPos));
-        }
-        if (g_origGetAsyncKeyState)
-        {
-            Patch::iat("USER32.dll", "GetAsyncKeyState", reinterpret_cast<void*>(g_origGetAsyncKeyState));
-        }
-        g_origGetCursorPos = nullptr;
-        g_origGetAsyncKeyState = nullptr;
+        LOG("Automation: the cursor and key imports were not found; simulated input may not reach the game");
+    }
+    // The rest only where the game imports them.
+    hookImport(g_origGetKeyState, "GetKeyState", &hookGetKeyState);
+    hookImport(g_origGetKeyboardState, "GetKeyboardState", &hookGetKeyboardState);
+    if (isolated())
+    {
+        hookImport(g_origSetCursorPos, "SetCursorPos", &hookSetCursorPos);
+        hookImport(g_origClipCursor, "ClipCursor", &hookClipCursor);
+        hookImport(g_origGetForegroundWindow, "GetForegroundWindow", &hookGetForegroundWindow);
+        hookImport(g_origGetFocus, "GetFocus", &hookGetFocus);
+        hookImport(g_origSetFocus, "SetFocus", &hookSetFocus);
+        hookImport(g_origSetCapture, "SetCapture", &hookSetCapture);
+        hookImport(g_origSetForegroundWindow, "SetForegroundWindow", &hookSetForegroundWindow);
+        hookImport(g_origBringWindowToTop, "BringWindowToTop", &hookBringWindowToTop);
+        hookImport(g_origShowWindow, "ShowWindow", &hookShowWindow);
+        hookImport(g_origSetWindowPos, "SetWindowPos", &hookSetWindowPos);
+        hookImport(g_origCreateWindowExA, "CreateWindowExA", &hookCreateWindowExA);
+        hookImport(g_origSetWindowsHookExA, "SetWindowsHookExA", &hookSetWindowsHookExA);
+        hookImport(g_origUnhookWindowsHookEx, "UnhookWindowsHookEx", &hookUnhookWindowsHookEx);
+        // A hook the game already installed (Gear injected late): cannot be taken back, only noted.
     }
     std::thread(driver).detach();
 }
@@ -441,16 +814,19 @@ void Automation::mouseMove(int x, int y)
         std::lock_guard guard(g_inputLock);
         g_cursor = {x, y};
         g_virtualCursor = true;
-        if (g_origGetCursorPos)
+        if (g_origGetCursorPos && !isolated())
         {
             g_origGetCursorPos(&g_realAtSwitch);
         }
     }
-    if (w)
+    WPARAM state;
+    LPARAM pos;
     {
         std::lock_guard guard(g_inputLock);
-        PostMessageW(w, WM_MOUSEMOVE, buttonState(), cursorParam());
+        state = buttonState();
+        pos = cursorParam();
     }
+    post(w, WM_MOUSEMOVE, state, pos);
 }
 
 void Automation::button(int vk, bool down)
@@ -464,19 +840,22 @@ void Automation::button(int vk, bool down)
     default: return;
     }
     HWND w = window();
-    std::lock_guard guard(g_inputLock);
-    if (down)
+    WPARAM state;
+    LPARAM pos;
     {
-        g_held.insert(vk);
+        std::lock_guard guard(g_inputLock);
+        if (down)
+        {
+            g_held.insert(vk);
+        }
+        else
+        {
+            g_held.erase(vk);
+        }
+        state = buttonState();
+        pos = cursorParam();
     }
-    else
-    {
-        g_held.erase(vk);
-    }
-    if (w)
-    {
-        PostMessageW(w, message, buttonState(), cursorParam());
-    }
+    post(w, message, state, pos);
 }
 
 void Automation::key(int vk, bool down)
@@ -501,16 +880,13 @@ void Automation::key(int vk, bool down)
     {
         const UINT scan = MapVirtualKeyW(static_cast<UINT>(vk), MAPVK_VK_TO_VSC);
         const LPARAM lp = 1 | (static_cast<LPARAM>(scan) << 16) | (down ? 0 : (3 << 30));
-        PostMessageW(w, down ? WM_KEYDOWN : WM_KEYUP, static_cast<WPARAM>(vk), lp);
+        post(w, down ? WM_KEYDOWN : WM_KEYUP, static_cast<WPARAM>(vk), lp);
     }
 }
 
 void Automation::character(wchar_t ch)
 {
-    if (HWND w = window())
-    {
-        PostMessageW(w, WM_CHAR, ch, 1);
-    }
+    post(window(), WM_CHAR, ch, 1);
 }
 
 void Automation::releaseAll()
@@ -595,7 +971,26 @@ bool Automation::screenshot(const std::wstring& path, const char*& error)
         HGDIOBJ old = SelectObject(mem, bmp);
         // PrintWindow with PW_RENDERFULLCONTENT (2) gets Direct3D content of a window in the background too;
         // BitBlt from the window's DC where it fails (older Windows).
-        ok = PrintWindow(w, mem, PW_CLIENTONLY | 2) || BitBlt(mem, 0, 0, width, height, screen, 0, 0, SRCCOPY);
+        // Direct3D content comes out black through PrintWindow with SacredBild's d3d9 backend, so first copy what the
+        // desktop shows at the client area (the game window has to be in front), then fall back to the other ways.
+        if (GetForegroundWindow() != w)
+        {
+            // A Win32 process may only take the foreground right after input; a synthetic Alt press allows it.
+            keybd_event(VK_MENU, 0, 0, 0);
+            keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
+            ShowWindow(w, SW_SHOW);
+            SetForegroundWindow(w);
+            Sleep(150);
+        }
+        POINT origin{0, 0};
+        ClientToScreen(w, &origin);
+        HDC desktop = GetDC(nullptr);
+        ok = desktop && BitBlt(mem, 0, 0, width, height, desktop, origin.x, origin.y, SRCCOPY | CAPTUREBLT);
+        if (desktop)
+        {
+            ReleaseDC(nullptr, desktop);
+        }
+        ok = ok || PrintWindow(w, mem, PW_CLIENTONLY | 2) || BitBlt(mem, 0, 0, width, height, screen, 0, 0, SRCCOPY);
         GdiFlush();
         SelectObject(mem, old);
     }

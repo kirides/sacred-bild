@@ -26,6 +26,10 @@ namespace Automation
         bool enabled = false;
         int loadSlot = -1;                  // -1: none
         std::vector<std::string> mods;      // empty: all
+        // -gear-shared-input (SACREDGEAR_SHARED_INPUT=1): the game also takes the player's real mouse and keyboard
+        // and may come to the front. Off by default: automation is isolated, the game only sees injected input and
+        // never takes the focus, so the player keeps using the PC while a test runs.
+        bool sharedInput = false;
     };
 
     // From the command line and the environment; the same every call.

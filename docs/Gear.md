@@ -187,9 +187,16 @@ The mods load in the main menu and get the `idle` event there. Mods with `automa
 | `screenshot(name)`, `write(name, text)` | Files in `<game>\GearAutomation` (name: letters, digits, `_ - .`). |
 | `quit(code)` | Ends the game at once with that exit code. |
 
-Input reaches the game like a player's: messages to its window, the cursor through its `GetCursorPos` (a virtual
-cursor until the real mouse moves), held keys through `GetAsyncKeyState`. With SacredBild, which ignores the keyboard
-while the game is in the background, keep the game window in front.
+Automation is isolated by default, so a test can run while you keep using the PC: the game never comes to the front
+or takes the focus (its window calls to `SetForegroundWindow`, `SetFocus`, `SetCapture`, `ShowWindow`,
+`SetWindowPos` and so on are turned into non-activating ones), it ignores the real mouse and keyboard (their window
+messages are dropped, `GetCursorPos`, `GetAsyncKeyState`, `GetKeyState` and `GetKeyboardState` report only the
+injected input, `SetCursorPos` and `ClipCursor` never touch the real cursor, low level input hooks are not installed),
+and it believes it is the foreground window and active (it never sees itself deactivated, so it does not pause). Injected input reaches it through its own message queue. Run the game in
+a window (for example with SacredBild's windowed mode): an exclusive fullscreen display takes the screen whatever
+Gear does. `-gear-shared-input` (`SACREDGEAR_SHARED_INPUT=1`) turns the isolation off: the game then takes real
+input too and the cursor is virtual only until the real mouse moves. These hooks are import hooks on `sacred.exe`
+only; other DLLs in the process (SacredBild among them) still see the real foreground window and keys.
 
 Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest`, then read
 `GearAutomation\selftest.json` and the exit code.
@@ -197,8 +204,9 @@ Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest`,
 ## Compatibility
 
 - No mods: Sacred Gear installs one hook (the engine's per-frame zoom update, which it calls unchanged) and does
-  nothing else. Savegames, multiplayer and the game's behavior are the vanilla ones. Automation adds two import hooks
-  (`GetCursorPos`, `GetAsyncKeyState`) and only when it is on.
+  nothing else. Savegames, multiplayer and the game's behavior are the vanilla ones. Automation adds import hooks on
+  `sacred.exe`'s input and window functions (see Automation) and a message hook on the game window, only when it
+  is on.
 - Sacred Gear never stores anything in the game's savegames. State that mods will keep per savegame (a later
   milestone) goes into files of their own next to the savegame, so removing a mod never breaks a save.
 - SacredBild and Sacred Gear never patch the same bytes: `tools/check_gear_overlap.py` checks every signature window
