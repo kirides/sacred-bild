@@ -156,6 +156,11 @@ namespace
                 {
                     ensureParents(out);
                 }
+                if (count)
+                {
+                    std::lock_guard guard(g_servedLock);
+                    ++g_served[rel];
+                }
                 return true;
             }
         }
