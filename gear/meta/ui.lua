@@ -201,7 +201,7 @@ function GearUi.state() end
 ---@return number bottom
 function GearUi.screen() end
 
---- The cursor in layout coordinates.
+--- The cursor in layout coordinates. In a tick with a button press or release over a region: where that happened.
 ---@return number x
 ---@return number y
 function GearUi.mouse() end

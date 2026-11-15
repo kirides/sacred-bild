@@ -1133,7 +1133,7 @@ The screen's edges in layout coordinates.
 
 #### `gear.ui.mouse() -> number, number`
 
-The cursor in layout coordinates.
+The cursor in layout coordinates. In a tick with a button press or release over a region: where that happened.
 
 - returns `x` `number`
 - returns `y` `number`
