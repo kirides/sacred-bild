@@ -51,6 +51,12 @@ namespace LuaHost
     // event `bonus.constant`: the number the item bonus code pushes at site `index` (`vanilla` the engine's own).
     Answer bonusConstant(int index, double vanilla, int address, double& out);
 
+    // event `skillslot.select`: a digit key selected a skill slot (`index` the place in the handler); Value when a mod ran.
+    Answer skillSlot(int index);
+
+    // gear.game.cursor_click(): the UI gets a click at the cursor (ReBorn's quick cast). False if the UI or the cursor is not there.
+    bool cursorClick();
+
     // event `damage`: the final damage of a hit; `victimType` / `attackerType` -1 for none. The answer is not yet clamped.
     Answer damage(int damage, int victimType, int attackerType, int index, int& out);
 

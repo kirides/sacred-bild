@@ -119,6 +119,19 @@ BONUS_SITES = [
 ]
 
 
+# Skill slot sites (ENG 006E1BC0, the event handler of the skill slot window): a digit key chose a slot (a `call 006E1A20` that selects it).
+# Gear tells the mods with the event `skillslot.select` (index) right after the selection ran. kind 'copy': the 5 byte instruction after the
+# call (`mov byte [esp+0x13], 1`) is copied into the stub; 'call': the call itself (rel32) is re-made.
+SLOT_FUNCTION = ('skillSlotFn', 0x006E1BC0)
+SLOT_SITES = [
+    ('copy', 0x006E21E7),
+    ('copy', 0x006E2219),
+    ('copy', 0x006E2247),
+    ('copy', 0x006E2275),
+    ('call', 0x006E229E),
+]
+
+
 def functions():
     seen = {}
     for _, name, va, _, _, _ in SITES:
@@ -128,4 +141,5 @@ def functions():
     seen[ABILITY_FUNCTION[0]] = ABILITY_FUNCTION[1]
     seen[EFFECT_FUNCTION[0]] = EFFECT_FUNCTION[1]
     seen[BONUS_FUNCTION[0]] = BONUS_FUNCTION[1]
+    seen[SLOT_FUNCTION[0]] = SLOT_FUNCTION[1]
     return seen

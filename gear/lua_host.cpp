@@ -499,7 +499,8 @@ namespace
         lua_pushnumber(L, r.effectCounter);
         lua_pushnumber(L, r.bonusInt);
         lua_pushnumber(L, r.bonusFloat);
-        return 14;
+        lua_pushnumber(L, r.slotByte);
+        return 15;
     }
 
     // native.difficulty() -> the running game's difficulty level (0 .. 4) | nil
@@ -511,6 +512,20 @@ namespace
             return 1;
         }
         lua_pushnumber(L, *Gear::Addr::g_difficulty);
+        return 1;
+    }
+
+    // native.skillslot_active(bool): whether some mod handles `skillslot.select`
+    int nativeSkillSlotActive(lua_State* L)
+    {
+        SiteHook::setSkillSlotActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.cursor_click() -> sent
+    int nativeCursorClick(lua_State* L)
+    {
+        lua_pushboolean(L, LuaHost::cursorClick());
         return 1;
     }
 
@@ -553,7 +568,7 @@ namespace
     int nativeSiteHooks(lua_State* L)
     {
         const char* which = luaL_optstring(L, 1, "level.factor");
-        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : std::strcmp(which, "effect.add") == 0 ? SiteHook::effectStats() : std::strcmp(which, "bonus.constant") == 0 ? SiteHook::bonusStats() : SiteHook::levelFactorStats();
+        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : std::strcmp(which, "effect.add") == 0 ? SiteHook::effectStats() : std::strcmp(which, "bonus.constant") == 0 ? SiteHook::bonusStats() : std::strcmp(which, "skillslot.select") == 0 ? SiteHook::skillSlotStats() : SiteHook::levelFactorStats();
         lua_pushnumber(L, s.calls);
         lua_pushnumber(L, s.answered);
         lua_pushnumber(L, s.busy);
@@ -1976,6 +1991,8 @@ namespace
             {"damage_active", nativeDamageActive},
             {"effect_active", nativeEffectActive},
             {"bonus_active", nativeBonusActive},
+            {"skillslot_active", nativeSkillSlotActive},
+            {"cursor_click", nativeCursorClick},
             {"site_hook_sites", nativeSiteHookSites},
             {"site_selftest_start", nativeSiteSelfTestStart},
             {"site_selftest_result", nativeSiteSelfTestResult},
@@ -2434,6 +2451,64 @@ LuaHost::Answer LuaHost::bonusConstant(int index, double vanilla, int address, d
     }
     lua_pop(L, 1);
     return answer;
+}
+
+LuaHost::Answer LuaHost::skillSlot(int index)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "skillslot_select");
+    lua_remove(L, -2);
+    lua_pushnumber(L, index);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 1, 0, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.skillslot_select failed: {}", msg ? msg : "(no message)");
+        lua_pop(L, 1);
+        return Answer::None;
+    }
+    return Answer::Value;
+}
+
+bool LuaHost::cursorClick()
+{
+    if (!Gear::Addr::cWindow_handleEventInner || !Gear::Addr::g_uiEventTarget || !Gear::Addr::g_clickEventVtable || !Gear::Addr::g_cursorX ||
+        !Gear::Addr::g_cursorY)
+    {
+        return false;
+    }
+    uint8_t* target = *Gear::Addr::g_uiEventTarget;
+    if (!target)
+    {
+        return false;
+    }
+    // the event as ReBorn's cave sends it: the mouse event class, type 2, the cursor; the rest of the object is zero
+    alignas(4) uint32_t event[0x20] = {};
+    event[0] = static_cast<uint32_t>(Gear::Addr::g_clickEventVtable.address);
+    event[1] = 2;
+    event[2] = static_cast<uint32_t>(*Gear::Addr::g_cursorX);
+    event[3] = static_cast<uint32_t>(*Gear::Addr::g_cursorY);
+    using HandleEvent = void(__thiscall*)(void* target, void* event, int flag);
+    reinterpret_cast<HandleEvent>(Gear::Addr::cWindow_handleEventInner - 0x30)(target, event, 0);
+    return true;
 }
 
 unsigned long long LuaHost::lastFrameTime()

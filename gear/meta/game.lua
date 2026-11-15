@@ -17,6 +17,11 @@ local GearGame = {}
 ---@return integer?
 function GearGame.difficulty() end
 
+--- Sends the game's UI a click at the current cursor position, as ReBorn's quick cast does after a skill slot was chosen: the chosen
+--- skill is used where the cursor is. False if the UI is not there.
+---@return boolean sent
+function GearGame.cursor_click() end
+
 --- Whether a save may start now: a living hero in a single player game, the game itself shown (no cinematic, no
 --- window drawn alone, no escape menu or message box), no save or load pending.
 ---@return boolean ok

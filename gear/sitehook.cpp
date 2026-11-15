@@ -717,6 +717,73 @@ namespace
         return base;
     }
 
+    // --- skillslot.select sites -----------------------------------------------------------------------------------------
+
+    std::atomic<bool> g_slotActive{false};
+    std::atomic<unsigned> g_slotCalls{0}, g_slotAnswered{0}, g_slotBusy{0};
+    std::atomic<unsigned> g_slotSiteCalls[std::size(kSlotSites)];
+
+    extern "C" void __cdecl slotHandler(int site)
+    {
+        g_slotCalls.fetch_add(1, std::memory_order_relaxed);
+        if (site >= 0 && site < static_cast<int>(std::size(kSlotSites)))
+        {
+            g_slotSiteCalls[site].fetch_add(1, std::memory_order_relaxed);
+        }
+        if (!g_slotActive.load(std::memory_order_relaxed))
+        {
+            return;
+        }
+        switch (LuaHost::skillSlot(site))
+        {
+        case LuaHost::Answer::Value:
+            g_slotAnswered.fetch_add(1, std::memory_order_relaxed);
+            break;
+        case LuaHost::Answer::Busy:
+            g_slotBusy.fetch_add(1, std::memory_order_relaxed);
+            break;
+        default:
+            break;
+        }
+    }
+
+    // The stub: the displaced instruction (copied, or the call re-made), then the registers and flags kept around the handler.
+    uintptr_t buildSlotStub(uintptr_t site, const AbilitySiteSpec& spec)
+    {
+        std::vector<uint8_t> code;
+        void* memory = VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!memory)
+        {
+            return 0;
+        }
+        const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(site);
+        if (spec.kind == 0)
+        {
+            code.insert(code.end(), b, b + 5);
+        }
+        else
+        {
+            int32_t rel = 0;
+            std::memcpy(&rel, b + 1, 4);
+            emit(code, {0xE8});
+            emit32(code, static_cast<uint32_t>((site + 5 + rel) - (base + code.size() + 4)));
+        }
+        emit(code, {0x9C, 0x60});                                   // pushfd; pushad
+        emit(code, {0x68});                                         // push site index
+        emit32(code, static_cast<uint32_t>(spec.index));
+        emit(code, {0xB8});                                         // mov eax, handler
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&slotHandler)));
+        emit(code, {0xFF, 0xD0});                                   // call eax
+        emit(code, {0x83, 0xC4, 0x04});                             // add esp, 4
+        emit(code, {0x61, 0x9D});                                   // popad; popfd
+        emit(code, {0xE9});
+        emit32(code, static_cast<uint32_t>((site + 5) - (base + code.size() + 4)));
+        std::memcpy(memory, code.data(), code.size());
+        FlushInstructionCache(GetCurrentProcess(), memory, code.size());
+        return base;
+    }
+
     // The stub for one site (see the header). Returns its address, 0 if no memory could be had.
     uintptr_t buildStub(uintptr_t site, const SiteSpec& spec, int index)
     {
@@ -1027,10 +1094,40 @@ size_t SiteHook::install()
             ++bonuses;
         }
     }
+    size_t slots = 0;
+    for (const AbilitySiteSpec& spec : kSlotSites)
+    {
+        if (!*spec.function)
+        {
+            continue;
+        }
+        const uintptr_t address = *spec.function + spec.offset;
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(address);
+        static const uint8_t expectCopy[5] = {0xC6, 0x44, 0x24, 0x13, 0x01};
+        const bool ok = spec.kind == 0 ? std::memcmp(b, expectCopy, 5) == 0 : b[0] == 0xE8;
+        if (!ok)
+        {
+            LOG("Site hook skillslot.select[{}] at {:08x}: the code is not the expected instruction: not installed", spec.index, address);
+            continue;
+        }
+        const uintptr_t stub = buildSlotStub(address, spec);
+        if (!stub)
+        {
+            continue;
+        }
+        uint8_t bytes[5] = {0xE9, 0, 0, 0, 0};
+        const uint32_t jump = static_cast<uint32_t>(stub - (address + 5));
+        std::memcpy(bytes + 1, &jump, 4);
+        if (Patch::write(address, bytes, sizeof(bytes)))
+        {
+            ++slots;
+        }
+    }
     LOG("Site hooks: {} of {} level sites, {} of {} constant sites, {} of {} creature.ability sites, {} of {} damage sites, {} of {} effect.add sites, "
-        "{} of {} bonus.constant sites installed", installed, std::size(kSites), constants, std::size(kConstSites), abilities,
-        std::size(kAbilitySites), damages, std::size(kDamageSites), effects, std::size(kEffectSites), bonuses, std::size(kBonusSites));
-    return installed + constants + abilities + damages + effects + bonuses;
+        "{} of {} bonus.constant sites, {} of {} skillslot.select sites installed", installed, std::size(kSites), constants,
+        std::size(kConstSites), abilities, std::size(kAbilitySites), damages, std::size(kDamageSites), effects, std::size(kEffectSites), bonuses,
+        std::size(kBonusSites), slots, std::size(kSlotSites));
+    return installed + constants + abilities + damages + effects + bonuses + slots;
 }
 
 void SiteHook::setLevelFactorActive(bool active)
@@ -1388,6 +1485,37 @@ namespace
         r.bonusFloat = f;
     }
 
+    uintptr_t g_slotBlob = 0;
+    AbilitySiteSpec g_slotTestSpec = {};
+
+    // sub esp, 0x20; <mov byte [esp+0x13], 1>; movzx eax, byte [esp+0x13]; mov [r0], eax; add esp, 0x20; ret   -- the site is the mov
+    void runSlotTest(SiteHook::SelfTest& r)
+    {
+        if (!g_slotBlob)
+        {
+            std::vector<uint8_t> code;
+            emit(code, {0x83, 0xEC, 0x20});
+            const size_t site = code.size();
+            emit(code, {0xC6, 0x44, 0x24, 0x13, 0x01});
+            emit(code, {0x0F, 0xB6, 0x44, 0x24, 0x13, 0xA3});
+            emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_regs[0])));
+            emit(code, {0x83, 0xC4, 0x20, 0xC3});
+            void* memory = VirtualAlloc(nullptr, code.size() + 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+            std::memcpy(memory, code.data(), code.size());
+            g_slotBlob = reinterpret_cast<uintptr_t>(memory);
+            static uintptr_t holder;
+            holder = g_slotBlob;
+            g_slotTestSpec = {static_cast<int>(std::size(kSlotSites)), &holder, 0, 0};
+            const uintptr_t stub = buildSlotStub(g_slotBlob + site, g_slotTestSpec);
+            uint8_t bytes[5] = {0xE9, 0, 0, 0, 0};
+            const uint32_t jump = static_cast<uint32_t>(stub - (g_slotBlob + site + 5));
+            std::memcpy(bytes + 1, &jump, 4);
+            std::memcpy(reinterpret_cast<void*>(g_slotBlob + site), bytes, 5);
+        }
+        runBlob(g_slotBlob);
+        r.slotByte = static_cast<int>(g_regs[0]);
+    }
+
     void selfTestThread()
     {
         Sleep(150);     // Lua is not running now
@@ -1419,6 +1547,7 @@ namespace
         runDamageTest(r);
         runEffectTest(r);
         runBonusTest(r);
+        runSlotTest(r);
         g_selfResult = r;
         g_selfState = 2;
     }
@@ -1458,6 +1587,11 @@ std::vector<SiteHook::SiteInfo> SiteHook::sites()
     {
         const uintptr_t fn = *kConstSites[i].function;
         out.push_back({kConstSites[i].name, kConstSites[i].index, fn ? fn + kConstSites[i].offset : 0, g_constSiteCalls[i].load()});
+    }
+    for (size_t i = 0; i < std::size(kSlotSites); ++i)
+    {
+        const uintptr_t fn = *kSlotSites[i].function;
+        out.push_back({"skillslot.select", kSlotSites[i].index, fn ? fn + kSlotSites[i].offset : 0, g_slotSiteCalls[i].load()});
     }
     for (size_t i = 0; i < std::size(kBonusSites); ++i)
     {
@@ -1515,6 +1649,16 @@ void SiteHook::setBonusActive(bool active)
 SiteHook::Stats SiteHook::bonusStats()
 {
     return {g_bonusCalls.load(), g_bonusAnswered.load(), g_bonusBusy.load()};
+}
+
+void SiteHook::setSkillSlotActive(bool active)
+{
+    g_slotActive.store(active);
+}
+
+SiteHook::Stats SiteHook::skillSlotStats()
+{
+    return {g_slotCalls.load(), g_slotAnswered.load(), g_slotBusy.load()};
 }
 
 SiteHook::Stats SiteHook::abilityStats()

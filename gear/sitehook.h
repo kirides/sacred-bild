@@ -54,6 +54,10 @@ namespace SiteHook
 
     // bonus.constant: the numbers pushed as arguments of the item bonus rolls (event `bonus.constant`: index, vanilla value, address).
     void setBonusActive(bool active);
+
+    // skillslot.select: a digit key selected a skill slot (event `skillslot.select`: the place among the five).
+    void setSkillSlotActive(bool active);
+    Stats skillSlotStats();
     Stats bonusStats();
     Stats effectStats();
     Stats damageStats();
@@ -78,6 +82,8 @@ namespace SiteHook
         // bonus.constant stubs on functions built in memory: `push 5` (vanilla 5) and `push 3.5f`
         int bonusInt = 0;
         float bonusFloat = 0;
+        // skillslot.select stub on a function built in memory: the displaced `mov byte [esp+0x13], 1` must still have run (1)
+        int slotByte = 0;
     };
     bool selfTestStart();
     bool selfTestResult(SelfTest& out);

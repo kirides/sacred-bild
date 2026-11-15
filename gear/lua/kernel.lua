@@ -1790,7 +1790,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true, ['effect.add'] = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -2037,10 +2037,10 @@ local function make_auto()
     -- the handlers of `combat.constant` may answer for `selftest.fmul` / `selftest.fld`.
     function auto.site_hook_selftest_start() return native.site_selftest_start() end
     function auto.site_hook_selftest_result()
-        local fmul, fld, regs, store, add, edx, kept, damage, exit_, e0, e1, counter, bonus_int, bonus_float = native.site_selftest_result()
+        local fmul, fld, regs, store, add, edx, kept, damage, exit_, e0, e1, counter, bonus_int, bonus_float, slot_byte = native.site_selftest_result()
         if fmul == nil then return nil end
         return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept, damage = damage,
-                effect_exit = exit_, effect_entry0 = e0, effect_entry1 = e1, effect_counter = counter, bonus_int = bonus_int, bonus_float = bonus_float}
+                effect_exit = exit_, effect_entry0 = e0, effect_entry1 = e1, effect_counter = counter, bonus_int = bonus_int, bonus_float = bonus_float, slot_byte = slot_byte}
     end
     function auto.quit(code)
         native.auto_release()
@@ -2647,7 +2647,7 @@ local function make_env(mod)
         -- Counters of the engine hooks that ask the mods for a value (gear/sitehook.cpp).
         hooks = {
             stats = function(name)
-                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage' or name == 'effect.add' or name == 'bonus.constant', "the hook must be 'level.factor', 'combat.constant', 'creature.ability', 'damage', 'effect.add' or 'bonus.constant'")
+                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage' or name == 'effect.add' or name == 'bonus.constant' or name == 'skillslot.select', "the hook must be 'level.factor', 'combat.constant', 'creature.ability', 'damage', 'effect.add', 'bonus.constant' or 'skillslot.select'")
                 local calls, answered, busy = native.site_hooks(name)
                 return {calls = calls, answered = answered, busy = busy}
             end,
@@ -2700,6 +2700,7 @@ local function make_env(mod)
     gear.game = {
         -- difficulty() -> 0..4: the difficulty level of the running game.
         difficulty = function() return native.difficulty() end,
+        cursor_click = function() return native.cursor_click() end,
         -- can_save() -> true | false, reason: whether a save may start now.
         can_save = function()
             local why = native.save_blocked()
@@ -2742,6 +2743,7 @@ local function make_env(mod)
         if event == 'damage' then native.damage_active(true) end
         if event == 'effect.add' then native.effect_active(true) end
         if event == 'bonus.constant' then native.bonus_active(true) end
+        if event == 'skillslot.select' then native.skillslot_active(true) end
         return h
     end
     function gear.off(h)
@@ -2756,6 +2758,7 @@ local function make_env(mod)
         if h.event == 'damage' and #list == 0 then native.damage_active(false) end
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
         if h.event == 'bonus.constant' and #list == 0 then native.bonus_active(false) end
+        if h.event == 'skillslot.select' and #list == 0 then native.skillslot_active(false) end
     end
     env.gear = gear
     return env
@@ -3270,6 +3273,16 @@ function kernel.creature_ability(type_id, vanilla, index, address)
         end
     end
     return nil
+end
+
+-- `skillslot.select`: a digit key selected a skill slot (the skill slot window of the HUD); `index` is the place among the five hooks.
+function kernel.skillslot_select(index)
+    local list = handlers['skillslot.select']
+    if not list then return end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then call(h.mod, 'skillslot.select', h.fn, index) end
+    end
 end
 
 -- `bonus.constant`: a number the item bonus code (`FUN_00571710`) pushes as the argument of a random roll or a text lookup, `index` the

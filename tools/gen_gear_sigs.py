@@ -33,6 +33,14 @@ GEAR = [
     ('g_pUiManager', 0x017EEBBC, 'data'),
     ('g_pNetPlayers', 0x0182EBE8, 'data'),
     ('cMouse_instance', 0x00654F60, 'func'),
+    # Quick cast: a synthetic click event sent to the UI like ReBorn's SR_QUICK_CAST does (event class vtable, the object the engine hands
+    # its events to, the cursor, the event handler).
+    ('g_clickEventVtable', 0x00899248, 'data'),
+    ('g_uiEventTarget', 0x00AD6EF8, 'data'),
+    ('g_cursorX', 0x0182EE18, 'data'),
+    ('g_cursorY', 0x0182EE1C, 'data'),
+    # SacredBild detours the handler's first bytes (cEngine_worldMouse): Gear finds it by a window 0x30 bytes inside and calls it from there.
+    ('cWindow_handleEventInner', 0x006172F0, 'code'),
     # Mod drawing (gear/ui.cpp), all inside cUI_Manager_render (0x758ED0, which SacredBild hooks): the popup pass
     # (thiscall (manager, device, flag), ret 8) for the "hud" layer; the in-game branch's call of the party arrows
     # (0x6D01F0, cdecl (device)) right after the world, before any window, for the "world" layer; and, after the
@@ -145,6 +153,12 @@ def main():
         fnname, fn = gear_sites.BONUS_FUNCTION
         code = {'int8': 0, 'int32': 1, 'float': 2}[kind]
         lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {code}, 0x{vanilla:X}u}}, // {site:08X} {kind}')
+    lines.append('};')
+    lines.append('static const AbilitySiteSpec kSlotSites[] = {')
+    for i, (kind, site) in enumerate(gear_sites.SLOT_SITES):
+        fnname, fn = gear_sites.SLOT_FUNCTION
+        code = {'copy': 0, 'call': 1}[kind]
+        lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {code}}}, // {site:08X} {kind}')
     lines.append('};')
     with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sites.inc'), 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')

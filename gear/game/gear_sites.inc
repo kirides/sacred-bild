@@ -73,3 +73,10 @@ static const PushSiteSpec kBonusSites[] = {
     {8, &Gear::Addr::bonusFn, 0x765D, 2, 0x3E19999Au}, // 00578D6D float
     {9, &Gear::Addr::bonusFn, 0x7686, 2, 0x3E19999Au}, // 00578D96 float
 };
+static const AbilitySiteSpec kSlotSites[] = {
+    {0, &Gear::Addr::skillSlotFn, 0x627, 0}, // 006E21E7 copy
+    {1, &Gear::Addr::skillSlotFn, 0x659, 0}, // 006E2219 copy
+    {2, &Gear::Addr::skillSlotFn, 0x687, 0}, // 006E2247 copy
+    {3, &Gear::Addr::skillSlotFn, 0x6B5, 0}, // 006E2275 copy
+    {4, &Gear::Addr::skillSlotFn, 0x6DE, 1}, // 006E229E call
+};

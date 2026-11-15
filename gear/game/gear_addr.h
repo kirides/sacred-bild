@@ -148,6 +148,15 @@ namespace Gear::Addr
     inline uintptr_t effectAddFn{};
     // The item bonus roller (ENG 00571710).
     inline uintptr_t bonusFn{};
+    // The event handler of the skill slot window (ENG 006E1BC0), with the places where a digit key selected a slot.
+    inline uintptr_t skillSlotFn{};
+    // Quick cast. ENG 00899248: the vtable of the UI's mouse event class; 00AD6EF8: the object the UI events go to; 0182EE18 / 0182EE1C: the
+    // cursor; 006172C0: the window event handler (thiscall (target, event, 0)).
+    inline Sacred::Global<uint8_t> g_clickEventVtable{};
+    inline Sacred::Global<uint8_t*> g_uiEventTarget{};
+    inline Sacred::Global<int32_t> g_cursorX{};
+    inline Sacred::Global<int32_t> g_cursorY{};
+    inline uintptr_t cWindow_handleEventInner{};     // the handler is 0x30 bytes before this
     inline uintptr_t siteFn5038F0{};
     inline uintptr_t siteFn506770{};
     inline uintptr_t siteFn50AC00{};
