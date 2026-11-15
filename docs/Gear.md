@@ -333,7 +333,7 @@ layout keeps its places when the resolution changes. The game's own windows are 
 
 | | |
 |---|---|
-| `edit_mode()`, `set_edit_mode(on)` | The edit mode: a flag for every mod (panels get a highlighted frame); a layout editor turns it on and draws its overlays (`gear/examples/layout`, F7). |
+| `edit_mode()`, `set_edit_mode(on)` | The edit mode: a flag for every mod (panels get a highlighted frame); a layout editor turns it on and draws its overlays (`gear/examples/layout`, its "Edit layout" button while Alt is held). |
 | `panels()` | The panels of every mod drawn this tick (those not drawn yet: as of the last tick): `{key, mod, id, title, x, y, w, h, resizable, min_width, min_height, layer}`. |
 | `set_panel_rect(key, x, y, w, h)` | Puts any mod's panel at (x, y) of the canvas and, if it is resizable, makes it w x h (`nil`: the size stays; never below its minimum); kept in the layout, taken the next time its mod draws it. False for an unknown panel. |
 | `reset_panel(key)` | That panel back to the place and size its mod gives it. |
@@ -399,7 +399,7 @@ switches it on". To reset one mod's settings use the **Reset to defaults** butto
 setting); **Default** beside a key restores its default. A key that two mods use shows a conflict on both mods' rows
 and in the Keys page (both still fire; rebind one).
 
-Default hotkeys of the mods in this repository and the examples: F11 the Mods screen, F7 the layout editor, F5 the loot
+Default hotkeys of the mods in this repository and the examples: F11 the Mods screen, F5 the loot
 filter's panel, F4 the widget gallery of `uidemo`; in `sacred-gear-mods`: F6 the autosave panel, F10 the shared stash.
 None is a key of the game: the screen marks a bind that is also one of the game's own hotkeys (digits, Q W E R B, A, I, F,
 C, L, M, Tab, O, S, H, N, P, Space, Esc, + and -, F8 quick load, F9 quick save; the game reacts to them with any modifiers held) as
@@ -495,7 +495,7 @@ faults returns nil and a message instead of crashing the game.
 | `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
 | `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F4) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
 | `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices; filtered items' labels are dimmed; an overlay shows the rules; the rules are declared settings (the Mods screen shows them) and a panel of its own (F5 or the overlay's button) changes the same values. An old `settings.json` is migrated once. Self test with `-gear-auto`. |
-| `layout` | A layout editor in the manner of an MMO's edit mode (F7 or its button): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
+| `layout` | A layout editor in the manner of an MMO's edit mode (its "Edit layout" button, top left while Alt shows the game's labels; Done ends it; no key binding): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
 | `itemicontest` | `gear.ui.item_icon`: a row of weapon and armour models by type id and a row from live items; checks that nothing is left behind. |
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
 | `tooltiptest` | An automation run: tooltips of buttons at the screen's edges and corners, with screenshots (`gear.ui.tooltip_rect`). |
