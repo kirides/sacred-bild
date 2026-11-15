@@ -1113,6 +1113,16 @@ void Automation::key(int vk, bool down)
     }
 }
 
+bool Automation::keyHeld(int vk)
+{
+    return heldState(vk) != 0;
+}
+
+bool Automation::isolatedInput()
+{
+    return isolated();
+}
+
 void Automation::character(wchar_t ch)
 {
     post(window(), WM_CHAR, ch, 1);

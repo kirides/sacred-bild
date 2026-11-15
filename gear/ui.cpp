@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "automation.h"
 #include "log.h"
 #include "patch.h"
 #include "game/gear_addr.h"
@@ -790,7 +791,16 @@ std::vector<Ui::InputEvent> Ui::takeEvents()
 
 bool Ui::keyDown(int vk)
 {
-    return vk > 0 && vk < 256 && gameHasFocus() && (GetAsyncKeyState(vk) & 0x8000) != 0;
+    // Automation's keys count like the game's own key queries see them (Gear's GetAsyncKeyState is not hooked).
+    if (vk <= 0 || vk >= 256)
+    {
+        return false;
+    }
+    if (Automation::keyHeld(vk))
+    {
+        return true;
+    }
+    return !Automation::isolatedInput() && gameHasFocus() && (GetAsyncKeyState(vk) & 0x8000) != 0;
 }
 
 bool Ui::add(Command&& command)

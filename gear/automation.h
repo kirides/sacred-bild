@@ -79,6 +79,10 @@ namespace Automation
     void button(int vk, bool down);         // VK_LBUTTON, VK_RBUTTON, VK_MBUTTON at the current position
     void key(int vk, bool down);
     void character(wchar_t ch);             // WM_CHAR (typing into edit fields)
+    // Whether automation holds key `vk` down (its own key state, which the game's key queries see too), and whether
+    // the real input is shut out (isolated automation).
+    bool keyHeld(int vk);
+    bool isolatedInput();
     void releaseAll();
 
     // Loads savegame `slot` (0 the quicksave); false if the game is not ready for it.

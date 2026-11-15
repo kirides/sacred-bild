@@ -197,6 +197,9 @@ files.w = {
             if ch then widgets.checked = v; widgets.changes = (widgets.changes or 0) + 1 end
             local dc, i = ui.dropdown('dd', 10, 40, 100, {'one', 'two', 'three'}, widgets.index)
             if dc then widgets.index = i end
+            widgets.ui = ui
+            widgets.panel = ui.panel('p', 'Panel', 400, 400, 200, 100, {resizable = true, min_width = 150})
+            widgets.panels = ui.panels()
         end)
     ]],
 }
@@ -339,6 +342,23 @@ ok(widgets.index == 2, 'dropdown picks the second entry (' .. tostring(widgets.i
 click(15, 15)
 ok(widgets.checked == false and widgets.changes == 2, 'checkbox toggles back')
 ok(moved_windows[1] and moved_windows[1][1] == 512 and moved_windows[1][2] == 192 - 388, 'stored game window placed (' .. tostring(moved_windows[1] and moved_windows[1][1]) .. ')')
+local listed = false
+for _, p in ipairs(widgets.panels or {}) do
+    if p.key == 'w:p' and p.title == 'Panel' and p.resizable and p.w == 200 then listed = true end
+end
+ok(listed, 'ui.panels lists the panels of the tick')
+ok(widgets.ui.set_panel_rect('w:p', 300, 200, 100, 150), 'set_panel_rect on a drawn panel')
+kernel.tick(0.016)
+local pn = widgets.panel
+ok(pn and math.abs(pn.x - 300) < 0.01 and math.abs(pn.y - 200) < 0.01 and math.abs(pn.w - 150) < 0.01 and math.abs(pn.h - 150) < 0.01,
+   'the panel takes the place and size (min width kept): ' .. tostring(pn and pn.x) .. ',' .. tostring(pn and pn.w))
+ok(not widgets.ui.set_panel_rect('w:nope', 0, 0), 'set_panel_rect on an unknown panel')
+widgets.ui.reset_panel('w:p')
+kernel.tick(0.016)
+ok(widgets.panel.x == 400 and widgets.panel.w == 200, 'reset_panel: its own place again')
+keys_held[0x25] = true
+ok(widgets.ui.key_down('left') and not widgets.ui.key_down('right'), 'key_down')
+keys_held[0x25] = nil
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

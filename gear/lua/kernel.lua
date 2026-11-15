@@ -769,6 +769,8 @@ local ui_tooltip = nil      -- {text, mod} to draw at the end of the tick
 local ui_hover_since = {}   -- handle -> time the cursor came over it
 local ui_dropdown = nil     -- the open dropdown's handle
 local ui_keys = {}          -- mod -> vk -> held at the last query
+local ui_panel_list = {}    -- the panels of all mods drawn this tick, in order: {key, title, x, y, w, h, ...}
+local ui_panel_prev = {}    -- the last tick's
 
 local function ui_handle(mod, id)
     local key = mod.id .. '\0' .. tostring(id)
@@ -786,6 +788,7 @@ local function ui_begin_tick()
     ui_counts = {}
     ui_slots = nil
     ui_prev_regions, ui_regions = ui_regions, {}
+    ui_panel_prev, ui_panel_list = ui_panel_list, {}
     ui_tooltip = nil
     ui_tick_state = native.ui_state()
     ui_mouse.x, ui_mouse.y = ui_tick_state.mouse_x or 0, ui_tick_state.mouse_y or 0
@@ -1223,9 +1226,6 @@ local function make_ui(mod)
         ui.frame(x, y, w, h, ui_edit and C.accent or C.edge, ui_edit and 2 or 1, o)
         ui.rect(x + 1, y + 1, w - 2, 20, C.title, o)
         ui.text(title, x + 8, y + 3, {font = 7, color = C.accent, layer = opts.layer})
-        if ui_edit then
-            ui.text(key, x, y - 16, {font = 7, color = C.accent, background = 0xC0000000, padding = 2, layer = opts.layer})
-        end
         region(tostring(id) .. '#body', x, y, w, h, o)
         local function store()
             local vx, vy = to_virtual(x, y)
@@ -1265,6 +1265,9 @@ local function make_ui(mod)
                 color = cr.hover and 0xFFFF8080 or C.text, layer = opts.layer})
             if cr.clicked then p.closed = true end
         end
+        ui_panel_list[#ui_panel_list + 1] = {key = key, mod = mod.id, id = id, title = tostring(title), x = x, y = y,
+            w = w, h = h, resizable = opts.resizable and true or false, min_width = min_w, min_height = min_h,
+            layer = opts.layer or 'hud'}
         return {open = true, key = key, x = x, y = y, w = w, h = h, content_x = x + 8, content_y = y + 28,
             content_w = w - 16, content_h = h - 36}
     end
@@ -1274,6 +1277,57 @@ local function make_ui(mod)
     function ui.edit_mode() return ui_edit end
     function ui.set_edit_mode(on) ui_edit = on and true or false end
     function ui.can_move_windows() return native.ui_can_move_windows() end
+    -- The panels of every mod drawn this tick (those not drawn yet: as of the last tick), in draw order:
+    -- {key, mod, id, title, x, y, w, h, resizable, min_width, min_height, layer}.
+    local function find_panel(key)
+        for _, list in ipairs({ui_panel_list, ui_panel_prev}) do
+            for _, e in ipairs(list) do
+                if e.key == key then return e end
+            end
+        end
+    end
+    function ui.panels()
+        local out, seen = {}, {}
+        for _, list in ipairs({ui_panel_prev, ui_panel_list}) do
+            for _, e in ipairs(list) do
+                if not seen[e.key] then
+                    seen[e.key] = #out + 1
+                    out[#out + 1] = copy(e)
+                else
+                    out[seen[e.key]] = copy(e)      -- this tick's place wins
+                end
+            end
+        end
+        return out
+    end
+    -- Puts panel `key` ("mod_id:panel_id", any mod's) at (x, y) of the canvas, and, if it is resizable, makes it w x h
+    -- (w, h nil: its size stays); kept in the layout. The panel takes it the next time its mod draws it.
+    function ui.set_panel_rect(key, x, y, w, h)
+        local e = find_panel(key)
+        if not e then return false end
+        local vx, vy = to_virtual(x, y)
+        local entry = {x = vx, y = vy}
+        if e.resizable then
+            w = math.max(w or e.w, e.min_width)
+            h = math.max(h or e.h, e.min_height)
+            entry.w, entry.h = size_to_virtual(w, h)
+        end
+        layout_set(key, entry)
+        e.x, e.y = x, y
+        if e.resizable then e.w, e.h = w, h end
+        return true
+    end
+    -- Panel `key` back to the place (and size) its mod gives it.
+    function ui.reset_panel(key)
+        if layout_get()[key] then layout_set(key, nil) end
+        return find_panel(key) ~= nil
+    end
+    -- ui.key_down(name): whether the key is held (while the game has the focus).
+    function ui.key_down(name)
+        local vk = type(name) == 'number' and name or UI_VK[tostring(name):lower()]
+        if not vk then error('unknown key ' .. tostring(name), 2) end
+        return native.key_down(vk)
+    end
     -- The game window `name` (a control name) with its top-left corner at (x, y) of the canvas; kept in the layout.
     function ui.set_window_position(name, x, y)
         for _, w in ipairs(native.ui_windows()) do
