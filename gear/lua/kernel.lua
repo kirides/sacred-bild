@@ -1134,6 +1134,28 @@ local function make_ui(mod)
         ui_count(mod)
         return native.ui_image(layer, slot, id, x, y, w or 0, h or 0, ui_color(opts.color, 0xFFFFFFFF), fit)
     end
+    -- ui.item_icon(item_or_type, x, y, w, h, {layer, window}): what the inventory shows for an item (its own 3D model),
+    -- as large as fits the box, centered in it. `item_or_type`: an item table (gear.world.item, gear.inv container
+    -- items: its object is drawn), a type id or a type name (an item of that type is made for the frame).
+    function ui.item_icon(item, x, y, w, h, opts)
+        opts = opts or {}
+        local layer, slot = ui_target(opts)
+        if not layer then return false end
+        local id, kind = 0, 0
+        if type(item) == 'table' then
+            id, kind = item.id or 0, item.type or 0
+        elseif type(item) == 'number' then
+            kind = item
+        elseif type(item) == 'string' then
+            kind = data.object_types:find(item) or error('no item type named ' .. item, 2)
+        else
+            error('item_icon wants an item, a type id or a type name', 2)
+        end
+        assert(type(x) == 'number' and type(y) == 'number' and type(w) == 'number' and type(h) == 'number',
+            'x, y, w and h must be numbers')
+        ui_count(mod)
+        return native.ui_item_icon(layer, slot, x, y, w, h, id, kind)
+    end
     function ui.image_info(id)
         local info = type(id) == 'number' and native.ui_image_info(id)
         if info then info.id = id end

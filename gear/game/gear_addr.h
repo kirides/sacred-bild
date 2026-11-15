@@ -101,6 +101,19 @@ namespace Gear::Addr
     // ENG 005DA630: takes item `id` out of this container (the cells are cleared; the item object stays); 1 if it
     // was in it. ret 8.
     inline Sacred::Thiscall<uint32_t(void* container, uint32_t id, int notify)> cInventory_remove{};
+    // Item icons (gear/itemicon.cpp), ENG 00640640: thiscall (item), loads the item's model resources (the inventory
+    // does it for every item it draws that is not loaded yet); 00401660: cdecl (), the model renderer's singleton;
+    // 0040E9C0: thiscall (renderer, device, model0, model1, x, y, type, scale, 0, flags, 0, 0), ret 0x2C: draws the
+    // item model of `type` centered at (x, y) of the 1024x768 layout, `scale` 1 for the inventory's size, `model0/1` the
+    // two dwords at item +0x40 (its Granny model instance); 00643110 / 00643430: the render flags' instance and set
+    // (thiscall (flag, on)), see docs/RE_NOTES.md.
+    inline Sacred::Thiscall<void(void* item)> cItem_loadResources{};
+    inline Sacred::Cdecl<void*()> modelRenderer_instance{};
+    inline Sacred::Thiscall<void(void* renderer, void* device, uint32_t model0, uint32_t model1, int x, int y,
+                                 uint32_t type, float scale, int a8, uint32_t flags, int a10, int a11)>
+        modelRenderer_drawItem{};
+    inline Sacred::Cdecl<void*()> renderFlags_instance{};
+    inline Sacred::Thiscall<uint32_t(void* flags, uint32_t flag, uint32_t on)> renderFlags_set{};
     // ENG 00428D60 (stdcall (type, uint16* w, uint16* h), no `this`): the size in cells of an item type.
     inline Sacred::Thiscall<uint32_t(void* unused, uint32_t type, uint16_t* w, uint16_t* h)> cItemType_size{};
     // ENG 005FBDB0 ("cObjectManager::destroy"): destroys object `id`; the engine calls it with (id, 1, 0, 0) after

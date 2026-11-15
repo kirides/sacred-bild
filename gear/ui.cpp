@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "itemicon.h"
 #include "text.h"
 #include "automation.h"
 #include "log.h"
@@ -689,6 +690,10 @@ namespace
             case Kind::Image: drawImage(device, state, c); break;
             case Kind::Text: c.vector ? drawVectorText(device, state, c) : drawText(device, state, c); break;
             case Kind::Region: break;
+            case Kind::ItemIcon:
+                state.restore();     // the model renderer sets what it needs through the game's own state cache
+                ItemIcon::draw(device, {c.region, c.image, c.x, c.y, c.w, c.h});
+                break;
             }
             return true;
         }
@@ -755,6 +760,7 @@ namespace
         {
             g_popFrame();
         }
+        ItemIcon::endPass();
     }
 
     // ---- The hooks ----

@@ -85,6 +85,7 @@ local native = {
     ui_rect = function(...) ui_recording[#ui_recording + 1] = {'rect', ...}; return true end,
     ui_text = function(...) ui_recording[#ui_recording + 1] = {'text', ...}; return true end,
     ui_image = function(...) ui_recording[#ui_recording + 1] = {'image', ...}; return true end,
+    ui_item_icon = function(...) ui_recording[#ui_recording + 1] = {'item_icon', ...}; return true end,
     ui_commit = function() ui_published = ui_recording; ui_recording = {} end,
     ui_image_count = function() return 3 end,
     ui_image_info = function(id) if id > 0 and id < 3 then return {sheet = 'GUI_spell0' .. id .. '.TGA', width = 64, height = 64, loaded = true} end end,
@@ -638,6 +639,20 @@ ok(adm.capture() == nil, 'capture: nothing pressed')
 press({CTRL, 0x4C}, true)
 ok(adm.capture() == 'ctrl+l', 'capture builds the binding')
 press({CTRL, 0x4C}, false)
+-- item icons: an item table, a type id and a type name queue a native draw
+do
+    local ui2 = srec2.gear.ui
+    ok(ui2.item_icon({id = 50, type = 2}, 4, 5, 64, 32) == true, 'item_icon with an item table')
+    ok(ui2.item_icon(2, 0, 0, 32, 32, {layer = 'top'}) == true, 'item_icon with a type id')
+    ok(ui2.item_icon('goblin', 0, 0, 32, 32) == true, 'item_icon with a type name')
+    ok(not pcall(ui2.item_icon, 'no such type', 0, 0, 1, 1), 'item_icon with an unknown name errors')
+    ok(not pcall(ui2.item_icon, nil, 0, 0, 1, 1), 'item_icon with nothing errors')
+    kernel.tick(0.016)
+    local icons = {}
+    for _, c in ipairs(ui_published) do if c[1] == 'item_icon' then icons[#icons + 1] = c end end
+    ok(#icons == 3 and icons[1][8] == 50 and icons[1][9] == 2 and icons[2][9] == 2 and icons[2][8] == 0 and icons[3][9] == 2,
+       'the item icons reach the native side with item id and type (' .. #icons .. ')')
+end
 -- the game's own hotkeys count as conflicts
 ok(adm.set_binding('s', 'open', 'ctrl+l') == true, 'bind a key the game uses')
 do

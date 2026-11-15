@@ -3,6 +3,7 @@
 #include "gear.h"
 #include "instance.h"
 #include "inventory.h"
+#include "itemicon.h"
 #include "keyblock.h"
 #include "log.h"
 #include "pickup.h"
@@ -736,6 +737,20 @@ namespace
         c.image = id;
         c.color = toColor(luaL_checknumber(L, 8));
         c.fit = static_cast<Ui::Fit>(static_cast<int>(fit));
+        lua_pushboolean(L, ok && Ui::add(std::move(c)));
+        return 1;
+    }
+
+    // native.ui_item_icon(layer, slot, x, y, w, h, item id (0: none), type) -> bool
+    int nativeUiItemIcon(lua_State* L)
+    {
+        Ui::Command c;
+        c.kind = Ui::Kind::ItemIcon;
+        const lua_Number item = luaL_checknumber(L, 7), type = luaL_checknumber(L, 8);
+        bool ok = uiCommon(L, c, 1) && uiBox(L, c, 3) && item >= 0 && item < 4294967296.0 && type >= 0 && type < 65536 &&
+                  (item > 0 || type > 0);
+        c.region = ok ? static_cast<uint32_t>(item) : 0;
+        c.image = ok ? static_cast<uint32_t>(type) : 0;
         lua_pushboolean(L, ok && Ui::add(std::move(c)));
         return 1;
     }
@@ -1681,6 +1696,7 @@ namespace
             {"ui_rect", nativeUiRect},
             {"ui_text", nativeUiText},
             {"ui_image", nativeUiImage},
+            {"ui_item_icon", nativeUiItemIcon},
             {"ui_commit", nativeUiCommit},
             {"ui_image_count", nativeUiImageCount},
             {"ui_image_info", nativeUiImageInfo},

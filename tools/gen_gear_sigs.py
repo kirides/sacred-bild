@@ -55,6 +55,15 @@ GEAR = [
     ('cCreature_pickupItem', 0x00558080, 'func'),
     ('cCreature_collectFilter', 0x004EC330, 'func'),
     ('cItem_labelColor', 0x005C13C0, 'func'),
+    # Item icons (gear/itemicon.cpp): what the inventory windows do to draw an item (cInventoryEntry_render 0x5DC430,
+    # per item): load the item's model resources (0x640640, thiscall (item)), take the model state pointer
+    # (0x44FC30) and draw the item's Granny model through the model renderer: its singleton (0x401660, cdecl ()) and
+    # 0x40E9C0 (thiscall (renderer, device, model0, model1, x, y, type, scale, 0, flags, 0, 0), ret 0x2C).
+    ('cItem_loadResources', 0x00640640, 'func'),
+    ('modelRenderer_instance', 0x00401660, 'func'),
+    ('modelRenderer_drawItem', 0x0040E9C0, 'func'),
+    ('renderFlags_instance', 0x00643110, 'func'),
+    ('renderFlags_set', 0x00643430, 'func'),
     # Mod UI input (gear/ui.cpp): cUI_Manager::receiveEvent (vtable slot 0, thiscall (manager, cEvent*) -> bool,
     # ret 4; cEngine_receiveEvent hands it every mouse and key event before the world) and the two mouse button
     # event classes (button at +4, x / y at +8 / +0xC in UI layout coordinates).

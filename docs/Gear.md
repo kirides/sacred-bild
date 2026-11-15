@@ -209,6 +209,7 @@ Positions and sizes are the UI's **1024x768 layout**, the space the game lays it
 | `frame(x, y, w, h, color, thickness, opts)` | An outline (default thickness 1) inside the box. |
 | `text(text, x, y, opts)` | Text. By default in a vector UI font (Segoe UI) rasterized for the screen's pixels, so it stays sharp however far the UI is scaled: `size` (the em height in layout units, default 13), `face` (a Windows font name), `bold`, `italic`, `shadow` / `outline` (1 pixel, dark). `font = 'game1'` .. `'game7'` (or a number: 1..7 the UI's fonts, 0 a debug font) draws in the game's own bitmap font instead, scaled with the UI like the game's text. `color` (default white), `width` / `height` (the box: `align = 'left' \| 'center' \| 'right'` aligns in its width, `valign = 'top' \| 'middle' \| 'bottom'` in its height; `'middle'` puts the capitals' middle on the box's, on whole pixels; `'baseline'`: y is the first line's baseline), `background` (a color: a rectangle behind the text, sized to it) and `padding` around it, `markup = true` (game fonts: pass their backslash codes through; otherwise a `\` shows as `/`). Lines break at `\n`. UTF-8. |
 | `image(id, x, y, w, h, opts)` | A UI image; `w`, `h` default to its own size. `opts.fit`: `'stretch'` (default: fills the box), `'contain'` (the whole image, aspect kept, centered in the box), `'cover'` (fills the box, aspect kept, the overhang cut off); `opts.color` tints it (white: as is; the alpha makes it translucent). |
+| `item_icon(item_or_type, x, y, w, h, opts)` | What the inventory shows for an item: its own 3D model, drawn by the game's model renderer as large as fits the box (x, y, w, h), centered in it, with the same `layer` / `window` options as the other draws. `item_or_type`: an item table (from `gear.world.item` or a container's `items()`: the live object is drawn with its own state and rarity tint), or a type id or type name (what a stored item such as the shared stash's has left): then an item of that type is made for the frame and destroyed after it. See [Item icons](#item-icons). |
 | `images(filter)` | The UI images whose sheet name contains `filter` (any case): `{id, sheet, width, height, loaded}`. Ids are the game's image indices (stable for a build). |
 | `image_info(id)` | One of those, or nil. |
 | `fonts()` | The number of the game's UI fonts. |
@@ -234,6 +235,31 @@ the layout is the screen and the same holds at scale 1.
   the canvas and may reach beyond it to the screen's edges (see `screen()`).
 
 A mod may issue 2000 draw commands per tick (widgets count their rectangles and texts).
+
+#### Item icons
+
+`gear.ui.item_icon` draws an item the way the inventory windows do: the game's `cInventoryEntry_render` (0x5DC430) hands the
+item's Granny model to the model renderer (singleton 0x401660, draw 0x40E9C0: `device, model0, model1, x, y, type, scale,
+0, flags, 0, 0`, centered at (x, y) of the 1024x768 layout, scale 1 for the inventory's 32 units a cell). Gear calls the same
+code inside its UI pass with the game's states, so it works with the vanilla ddraw and with SacredBild's backend, layers
+and `window` anchoring included; the device states, transforms, viewport and the render flags are read before and put
+back after.
+
+- **A live item** (`item.id` is an item object, in the world or in a container): its own model state is used (made on
+  first use, as the inventory does) and its flags (`+0xB0 & 0xF00000`: the rarity tint). Cheap.
+- **A type id or name**: no object exists, and the model renderer needs one (the model instance lives in the item at
+  `+0x40`). Gear makes one for the frame: `cObjectManager::create` at the hero's feet, at once `cInventory::put` into
+  container 31 (an inventory container the game does not use: so the item is never in the world for the world pass and
+  the sector lists forget it), draws, takes it out and destroys it after the layer's commands. Single player only
+  (`gear.world.can_change()`), at most 48 types a frame, a few tenths of a millisecond per type and frame: draw a stash
+  list's visible part only, and prefer live items where there are some. The item is created like any new item (random
+  properties may use the game's random numbers); nothing is broadcast and nothing stays behind (the self test draws
+  thousands of frames and checks that no item is left in the container or the world). Destroying such an item while it
+  is still in the world crashes the game a moment later, which is why it goes through the container.
+- Nothing is drawn when the type is no item or has no model, in a network game (for types), without a hero, or when the
+  addresses were not found (the log says so at start).
+
+Self test: `gear/examples/itemicontest` draws a row by type id and a row from live items.
 
 #### Widgets and input
 
@@ -443,6 +469,7 @@ faults returns nil and a message instead of crashing the game.
 | `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F4) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
 | `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices; filtered items' labels are dimmed; an overlay shows the rules; the rules are declared settings (the Mods screen shows them) and a panel of its own (F5 or the overlay's button) changes the same values. An old `settings.json` is migrated once. Self test with `-gear-auto`. |
 | `layout` | A layout editor in the manner of an MMO's edit mode (F7 or its button): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
+| `itemicontest` | `gear.ui.item_icon`: a row of weapon and armour models by type id and a row from live items; checks that nothing is left behind. |
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 | `shared-stash` (in the sacred-gear-mods repository) | A stash shared by all heroes of the player, in a panel beside the chest window, built on `gear.inv`: items are copied to `stash.json` in the mod's folder and back, the file written first on a deposit and last on a withdrawal. |
@@ -574,6 +601,8 @@ search) from the `sacred_core` library (`src/fmt.*`, `log.*`, `patch.*`, `sig.*`
 | `gear/pipe.*` | Named pipe clients, each on a thread of its own |
 | `gear/automation.*` | Automation: options, input, UI state, savegame loading, screenshots |
 | `gear/pickup.*` | Pickup rules: the hooks on the game's pickup, the collect filter and the item label colour |
+| `gear/itemicon.*` | Item icons: the model renderer call for a live item or a temporary item of a type, with the device state saved and restored |
+| `gear/keyblock.*` | The keyboard kept from the game while a screen captures it (`gear.ui.capture_keys`) |
 | `gear/ui.*` | Mod drawing: the draw commands, the hooks in the UI pass, Direct3D 7 quads with the game's states saved and restored, the game's fonts and UI images, window and UI state queries |
 | `gear/tests/kernel_test.lua` | Tests of the kernel with the native side mocked: `luajit gear/tests/kernel_test.lua` |
 | `gear/lua_host.*` | The LuaJIT state on the engine thread, native functions for the kernel, time budget |
