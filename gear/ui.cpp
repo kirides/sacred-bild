@@ -1087,6 +1087,31 @@ bool Ui::window(const std::string& name, WindowInfo& out)
     return false;
 }
 
+namespace
+{
+    std::atomic<uintptr_t> g_engine{0};
+
+    // cWorldView_drawOverheadLabels (ENG 00627180) sets bit 0x4000 of the world view's flags (+0x10) each frame
+    // from GetAsyncKeyState(VK_MENU) and draws the item and object labels while it is set: the game's "show text".
+    // The view is views[viewIndex] of the engine (+0x08, 8 pointers; index uint16 at +0x48).
+    bool showText()
+    {
+        const uintptr_t engine = g_engine.load(std::memory_order_relaxed);
+        if (!engine)
+        {
+            return false;
+        }
+        const uint16_t index = readOr<uint16_t>(engine + 0x48, 0xFFFF);
+        const uintptr_t view = index < 8 ? readOr<uintptr_t>(engine + 0x08 + 4 * index, 0) : 0;
+        return view && (readOr<uint32_t>(view + 0x10, 0) & 0x4000) != 0;
+    }
+}
+
+void Ui::setEngine(void* engine)
+{
+    g_engine.store(reinterpret_cast<uintptr_t>(engine), std::memory_order_relaxed);
+}
+
 Ui::State Ui::state()
 {
     State s;
@@ -1115,6 +1140,7 @@ Ui::State Ui::state()
     }
     s.escapeMenu = visible(windowAt(m, kEscapeMenuSlot));
     s.messageBox = visible(readOr<uintptr_t>(m + 0x144, 0));
+    s.showText = std::strcmp(s.mode, "game") == 0 && showText();
     if (Gear::Addr::cMouse_instance)
     {
         if (const uint8_t* mouse = Gear::Addr::cMouse_instance())

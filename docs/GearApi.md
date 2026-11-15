@@ -1701,6 +1701,7 @@ The state of the UI, also the argument of `draw` handlers.
 | `escape_menu` | `boolean` |  |
 | `message_box` | `boolean` |  |
 | `help` | `boolean` |  |
+| `show_text` | `boolean` | The game shows its item and object labels ("show text": Alt held), in game; as of the last frame drawn. |
 | `mouse_x` | `number` | The cursor in layout coordinates. |
 | `mouse_y` | `number` |  |
 | `screen_left` | `number` | The screen's edges in layout coordinates (beyond 0..1024 x 0..768 when SacredBild's canvas leaves room around it). |

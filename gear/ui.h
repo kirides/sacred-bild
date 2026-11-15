@@ -124,8 +124,11 @@ namespace Ui
         const char* mode = "none";  // "game", "menus", "cinematic", "none"
         std::string exclusive;      // the window drawn alone in game, empty if none
         bool escapeMenu = false, messageBox = false, help = false;
+        bool showText = false;      // the game shows its overhead labels (Alt held; in game)
         int mouseX = 0, mouseY = 0;
         float screenLeft = 0, screenTop = 0, screenRight = 1024, screenBottom = 768;   // the whole screen, layout units
     };
     State state();
+    // The engine of the running game (cEngine_updateZoom's this, each frame), for its world view's flags.
+    void setEngine(void* engine);
 }

@@ -184,6 +184,7 @@ function GearUi.text_size(text, font) end
 ---@field escape_menu boolean
 ---@field message_box boolean
 ---@field help boolean
+---@field show_text boolean The game shows its item and object labels ("show text": Alt held), in game; as of the last frame drawn.
 ---@field mouse_x number The cursor in layout coordinates.
 ---@field mouse_y number
 ---@field screen_left number The screen's edges in layout coordinates (beyond 0..1024 x 0..768 when SacredBild's canvas leaves room around it).
