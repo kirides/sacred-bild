@@ -98,6 +98,12 @@ def main():
     for name, index, fnname, fn, site, op, addr, vanilla in gear_sites.CONSTANT_SITES:
         lines.append(f'    {{"{name}", {index}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {1 if op == "fmul" else 0}, 0x{addr:08X}}}, // {site:08X} in {fn:08X}')
     lines.append('};')
+    lines.append('static const AbilitySiteSpec kAbilitySites[] = {')
+    for i, (kind, site) in enumerate(gear_sites.ABILITY_SITES):
+        fnname, fn = gear_sites.ABILITY_FUNCTION
+        code = {'store': 0, 'add': 1, 'edx': 2}[kind]
+        lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {code}}}, // {site:08X} {kind}')
+    lines.append('};')
     with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sites.inc'), 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     if failed:

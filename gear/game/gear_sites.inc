@@ -26,3 +26,31 @@ static const ConstSiteSpec kConstSites[] = {
     {"scale.559BF0", 1, &Gear::Addr::siteFn559BF0, 0x559, 1, 0x00890CB0}, // 0055A149 in 00559BF0
     {"scale.559BF0", 2, &Gear::Addr::siteFn559BF0, 0x658, 1, 0x00890CB0}, // 0055A248 in 00559BF0
 };
+static const AbilitySiteSpec kAbilitySites[] = {
+    {0, &Gear::Addr::abilityAiFn, 0x4FA, 0}, // 004D534A store
+    {1, &Gear::Addr::abilityAiFn, 0x885, 0}, // 004D56D5 store
+    {2, &Gear::Addr::abilityAiFn, 0x8A3, 0}, // 004D56F3 store
+    {3, &Gear::Addr::abilityAiFn, 0x8D2, 0}, // 004D5722 store
+    {4, &Gear::Addr::abilityAiFn, 0x8E3, 0}, // 004D5733 store
+    {5, &Gear::Addr::abilityAiFn, 0x8F2, 0}, // 004D5742 store
+    {6, &Gear::Addr::abilityAiFn, 0x904, 0}, // 004D5754 store
+    {7, &Gear::Addr::abilityAiFn, 0x910, 0}, // 004D5760 store
+    {8, &Gear::Addr::abilityAiFn, 0xF27, 0}, // 004D5D77 store
+    {9, &Gear::Addr::abilityAiFn, 0x129D, 0}, // 004D60ED store
+    {10, &Gear::Addr::abilityAiFn, 0x2602, 0}, // 004D7452 store
+    {11, &Gear::Addr::abilityAiFn, 0x2B66, 0}, // 004D79B6 store
+    {12, &Gear::Addr::abilityAiFn, 0x2D0E, 0}, // 004D7B5E store
+    {13, &Gear::Addr::abilityAiFn, 0x325F, 0}, // 004D80AF store
+    {14, &Gear::Addr::abilityAiFn, 0x3719, 0}, // 004D8569 store
+    {15, &Gear::Addr::abilityAiFn, 0x3A7C, 0}, // 004D88CC store
+    {16, &Gear::Addr::abilityAiFn, 0x4009, 0}, // 004D8E59 store
+    {17, &Gear::Addr::abilityAiFn, 0x46E1, 0}, // 004D9531 store
+    {18, &Gear::Addr::abilityAiFn, 0x48EF, 0}, // 004D973F store
+    {19, &Gear::Addr::abilityAiFn, 0x57B0, 0}, // 004DA600 store
+    {20, &Gear::Addr::abilityAiFn, 0x5B78, 0}, // 004DA9C8 store
+    {21, &Gear::Addr::abilityAiFn, 0x5CE5, 0}, // 004DAB35 store
+    {22, &Gear::Addr::abilityAiFn, 0x6085, 0}, // 004DAED5 store
+    {23, &Gear::Addr::abilityAiFn, 0x62CB, 0}, // 004DB11B store
+    {24, &Gear::Addr::abilityAiFn, 0x328D, 1}, // 004D80DD add
+    {25, &Gear::Addr::abilityAiFn, 0x1018, 2}, // 004D5E68 edx
+};

@@ -19,6 +19,7 @@ local objects = {}
 local pipe_events = {}
 local sent = {}
 local ability_store = {}
+local ability_active
 local level_active, constant_active
 local ui_recording, ui_published = {}, {}
 local pickup_published
@@ -74,6 +75,7 @@ local native = {
     overlay_resolve = function(path) return 'mapped:' .. path end,
     level_factor_active = function(v) level_active = v end,
     combat_constant_active = function(v) constant_active = v end,
+    creature_ability_active = function(v) ability_active = v end,
     difficulty = function() return 2 end,
     site_hooks = function() return 7, 5, 1 end,
     site_hook_sites = function() return {{hook = 'level.factor', index = 0, address = 5, calls = 2}} end,
@@ -252,6 +254,7 @@ files.ab = {
         abil.setting = gear.settings.get('SR_HD_WIDTH')
         abil.no_setting = gear.settings.get('NOPE')
         -- the level.factor site hook: tiers of 12 levels, and no answer above 40
+        gear.on('creature.ability', function(t, vanilla, index) if t == 7 then return vanilla + 1 end end)
         gear.on('level.factor', function(level, site)
             if level > 40 then return nil end
             return 1 + (level > 12 and 1 or 0) + (level > 24 and 1 or 0) + (level > 36 and 1 or 0)
@@ -378,6 +381,8 @@ ok(level_active == true, 'registering level.factor tells the host')
 ok(kernel.level_factor(5, 0) == 1 and kernel.level_factor(13, 1) == 2 and kernel.level_factor(30, 2) == 3
    and kernel.level_factor(37, 3) == 4, 'level.factor answers with the handler')
 ok(kernel.level_factor(50, 4) == nil, 'level.factor: no number, no answer')
+ok(ability_active == true, 'registering creature.ability tells the host')
+ok(kernel.creature_ability(7, 25, 0, 0) == 26 and kernel.creature_ability(8, 25, 0, 0) == nil, 'creature.ability answers with the handler')
 ok(abil.emit_level and abil.emit_constant, 'mods cannot emit level.factor or combat.constant')
 ok(abil.difficulty == 2, 'gear.game.difficulty')
 ok(constant_active == true, 'registering combat.constant tells the host')

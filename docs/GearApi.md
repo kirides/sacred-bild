@@ -106,6 +106,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'session.start'` | A game with a hero runs. |
 | `'session.stop'` | That hero is gone. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
+| `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
 | `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
 
 ### GearHandler
@@ -170,6 +171,7 @@ Forms:
 - `fun(event: 'session.start', fn: fun(hero: Creature)): GearHandler`
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
+- `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
 - `fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler`
 
 - `event`: `string`
@@ -627,7 +629,7 @@ The engine hooks that ask mods for a value inside the game's own code (see the e
 
 The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
 
-- `name`: `'level.factor'|'combat.constant'`
+- `name`: `'level.factor'|'combat.constant'|'creature.ability'`
 - returns `GearHookStats`
 
 #### `gear.hooks.sites() -> GearHookSite[]`

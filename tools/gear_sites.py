@@ -47,10 +47,46 @@ CONSTANT_SITES = [
 ]
 
 
+# Creature AI sites (ENG 004D4E50, the AI step): where the engine stores the ability the creature will use in [creature + 0x120]. Gear
+# answers them with the event `creature.ability` (creature type, vanilla value, index, address): the vanilla value when no mod does.
+# kind 'store': `mov dword [esi+0x120], imm32` (10 bytes); 'add': `add eax, imm32` (5): the base of an id the code adds 0 or 1 to; 'edx': the
+# block `neg edx; sbb edx,edx; xor ecx,ecx; add edx,0x32` (9) that leaves 0x31 or 0x32 in edx.
+ABILITY_FUNCTION = ('abilityAiFn', 0x004D4E50)
+ABILITY_SITES = [
+    ('store', 0x004D534A),
+    ('store', 0x004D56D5),
+    ('store', 0x004D56F3),
+    ('store', 0x004D5722),
+    ('store', 0x004D5733),
+    ('store', 0x004D5742),
+    ('store', 0x004D5754),
+    ('store', 0x004D5760),
+    ('store', 0x004D5D77),
+    ('store', 0x004D60ED),
+    ('store', 0x004D7452),
+    ('store', 0x004D79B6),
+    ('store', 0x004D7B5E),
+    ('store', 0x004D80AF),
+    ('store', 0x004D8569),
+    ('store', 0x004D88CC),
+    ('store', 0x004D8E59),
+    ('store', 0x004D9531),
+    ('store', 0x004D973F),
+    ('store', 0x004DA600),
+    ('store', 0x004DA9C8),
+    ('store', 0x004DAB35),
+    ('store', 0x004DAED5),
+    ('store', 0x004DB11B),
+    ('add', 0x004D80DD),
+    ('edx', 0x004D5E68),
+]
+
+
 def functions():
     seen = {}
     for _, name, va, _, _, _ in SITES:
         seen[name] = va
     for _, _, name, va, _, _, _, _ in CONSTANT_SITES:
         seen[name] = va
+    seen[ABILITY_FUNCTION[0]] = ABILITY_FUNCTION[1]
     return seen

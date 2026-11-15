@@ -32,6 +32,13 @@ namespace
         uint32_t constant;          // the pooled constant's address the instruction loads
     };
 
+    struct AbilitySiteSpec
+    {
+        int index;
+        const uintptr_t* function;
+        uint32_t offset;
+        uint8_t kind;               // 0 store, 1 add, 2 edx
+    };
 #include "game/gear_sites.inc"
 
     constexpr int kNoAnswer = static_cast<int>(0x80000000);   // the handler's "no mod answered"
@@ -173,6 +180,144 @@ namespace
         const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
         const uint32_t v = static_cast<uint32_t>((site + 6) - (base + fixup + 4));
         std::memcpy(&code[fixup], &v, 4);
+        std::memcpy(memory, code.data(), code.size());
+        FlushInstructionCache(GetCurrentProcess(), memory, code.size());
+        return base;
+    }
+
+    // --- creature.ability sites -----------------------------------------------------------------------------------------
+
+    std::atomic<bool> g_abilityActive{false};
+    std::atomic<unsigned> g_abilityCalls{0}, g_abilityAnswered{0}, g_abilityBusy{0};
+    std::atomic<unsigned> g_abilitySiteCalls[std::size(kAbilitySites)];
+    int g_abilityVanilla[std::size(kAbilitySites)];     // the immediate each site stores / adds (the original bytes)
+
+    int creatureType(uintptr_t creature)
+    {
+        __try
+        {
+            return *reinterpret_cast<const int*>(creature + 0x10);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    // Called by the stubs: the ability id for the creature (kNoAnswer: the site's own value).
+    extern "C" int __cdecl abilityHandler(int site, int vanilla, uintptr_t creature)
+    {
+        g_abilityCalls.fetch_add(1, std::memory_order_relaxed);
+        if (site >= 0 && site < static_cast<int>(std::size(kAbilitySites)))
+        {
+            g_abilitySiteCalls[site].fetch_add(1, std::memory_order_relaxed);
+        }
+        const bool unknownVanilla = kAbilitySites[site].kind == 2;
+        if (!g_abilityActive.load(std::memory_order_relaxed))
+        {
+            return unknownVanilla ? kNoAnswer : vanilla;
+        }
+        int result = 0;
+        const uintptr_t address = *kAbilitySites[site].function + kAbilitySites[site].offset;
+        switch (LuaHost::creatureAbility(creatureType(creature), unknownVanilla ? -1 : vanilla, site, static_cast<int>(address), result))
+        {
+        case LuaHost::Answer::Value:
+            g_abilityAnswered.fetch_add(1, std::memory_order_relaxed);
+            return result;
+        case LuaHost::Answer::Busy:
+            g_abilityBusy.fetch_add(1, std::memory_order_relaxed);
+            break;
+        default:
+            break;
+        }
+        return unknownVanilla ? kNoAnswer : vanilla;
+    }
+
+    // The stub of an ability site: registers and flags kept, the handler asked, the result stored the way the instruction would have.
+    uintptr_t buildAbilityStub(uintptr_t site, const AbilitySiteSpec& spec, int vanilla, size_t length)
+    {
+        std::vector<uint8_t> code;
+        const uint8_t* block = reinterpret_cast<const uint8_t*>(site);
+        // the temp cell: after the code, patched in below
+        const size_t tempCells = 1;
+        emit(code, {0x9C, 0x50, 0x51, 0x52});                       // pushfd; push eax; push ecx; push edx
+        emit(code, {0x56});                                         // push esi (the creature)
+        emit(code, {0x68});                                         // push vanilla
+        emit32(code, static_cast<uint32_t>(vanilla));
+        emit(code, {0x68});                                         // push site index
+        emit32(code, static_cast<uint32_t>(spec.index));
+        emit(code, {0xB8});                                         // mov eax, handler
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&abilityHandler)));
+        emit(code, {0xFF, 0xD0});                                   // call eax
+        emit(code, {0x83, 0xC4, 0x0C});                             // add esp, 12
+        std::vector<size_t> tempFixups;
+        auto tempRef = [&](std::initializer_list<uint8_t> opcode) {
+            emit(code, opcode);
+            tempFixups.push_back(code.size());
+            emit32(code, 0);
+        };
+        size_t jeFixup = 0, endFixup1 = 0, endFixup2 = 0;
+        if (spec.kind == 0)
+        {
+            emit(code, {0x89, 0x86, 0x20, 0x01, 0x00, 0x00});       // mov [esi + 0x120], eax
+            emit(code, {0x5A, 0x59, 0x58, 0x9D});                   // pop edx; pop ecx; pop eax; popfd
+            emit(code, {0xE9});
+            endFixup1 = code.size();
+            emit32(code, 0);
+        }
+        else if (spec.kind == 1)
+        {
+            tempRef({0xA3});                                        // mov [temp], eax
+            emit(code, {0x5A, 0x59, 0x58, 0x9D});                   // pop edx; pop ecx; pop eax; popfd
+            tempRef({0x03, 0x05});                                  // add eax, [temp]
+            emit(code, {0xE9});
+            endFixup1 = code.size();
+            emit32(code, 0);
+        }
+        else
+        {
+            tempRef({0xA3});                                        // mov [temp], eax
+            emit(code, {0x5A, 0x59, 0x58, 0x9D});                   // pop edx; pop ecx; pop eax; popfd
+            tempRef({0x81, 0x3D});                                  // cmp dword [temp], kNoAnswer
+            emit32(code, static_cast<uint32_t>(kNoAnswer));
+            emit(code, {0x0F, 0x84});                               // je fallback
+            jeFixup = code.size();
+            emit32(code, 0);
+            emit(code, {0x33, 0xC9});                               // xor ecx, ecx
+            tempRef({0x8B, 0x15});                                  // mov edx, [temp]
+            emit(code, {0xE9});
+            endFixup1 = code.size();
+            emit32(code, 0);
+            const size_t fallback = code.size();
+            code.insert(code.end(), block, block + length);        // the displaced block
+            emit(code, {0xE9});
+            endFixup2 = code.size();
+            emit32(code, 0);
+            const uint32_t rel = static_cast<uint32_t>(fallback - (jeFixup + 4));
+            std::memcpy(&code[jeFixup], &rel, 4);
+        }
+        const size_t tempOffset = (code.size() + 3) & ~size_t(3);
+        void* memory = VirtualAlloc(nullptr, tempOffset + tempCells * 4 + 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!memory)
+        {
+            return 0;
+        }
+        const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
+        const uintptr_t end = site + length;
+        for (size_t at : tempFixups)
+        {
+            const uint32_t v = static_cast<uint32_t>(base + tempOffset);
+            std::memcpy(&code[at], &v, 4);
+        }
+        auto rel = [&](size_t at, uintptr_t target) {
+            const uint32_t v = static_cast<uint32_t>(target - (base + at + 4));
+            std::memcpy(&code[at], &v, 4);
+        };
+        rel(endFixup1, end);
+        if (endFixup2)
+        {
+            rel(endFixup2, end);
+        }
         std::memcpy(memory, code.data(), code.size());
         FlushInstructionCache(GetCurrentProcess(), memory, code.size());
         return base;
@@ -320,9 +465,59 @@ size_t SiteHook::install()
             ++constants;
         }
     }
-    LOG("Site hooks: {} of {} level sites, {} of {} constant sites installed", installed, std::size(kSites), constants,
-        std::size(kConstSites));
-    return installed + constants;
+    size_t abilities = 0;
+    for (const AbilitySiteSpec& spec : kAbilitySites)
+    {
+        if (!*spec.function)
+        {
+            continue;
+        }
+        const uintptr_t address = *spec.function + spec.offset;
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(address);
+        size_t length = 0;
+        int vanilla = 0;
+        bool ok = false;
+        if (spec.kind == 0)
+        {
+            length = 10;
+            ok = b[0] == 0xC7 && b[1] == 0x86 && b[2] == 0x20 && b[3] == 0x01 && b[4] == 0 && b[5] == 0;
+            std::memcpy(&vanilla, b + 6, 4);
+        }
+        else if (spec.kind == 1)
+        {
+            length = 5;
+            ok = b[0] == 0x05;
+            std::memcpy(&vanilla, b + 1, 4);
+        }
+        else
+        {
+            static const uint8_t expect[9] = {0xF7, 0xDA, 0x1B, 0xD2, 0x33, 0xC9, 0x83, 0xC2, 0x32};
+            length = 9;
+            ok = std::memcmp(b, expect, 9) == 0;
+        }
+        if (!ok)
+        {
+            LOG("Site hook creature.ability[{}] at {:08x}: the code is not the expected instruction: not installed", spec.index, address);
+            continue;
+        }
+        g_abilityVanilla[spec.index] = vanilla;
+        const uintptr_t stub = buildAbilityStub(address, spec, vanilla, length);
+        if (!stub)
+        {
+            continue;
+        }
+        std::vector<uint8_t> bytes(length, 0x90);
+        bytes[0] = 0xE9;
+        const uint32_t rel = static_cast<uint32_t>(stub - (address + 5));
+        std::memcpy(&bytes[1], &rel, 4);
+        if (Patch::write(address, bytes.data(), bytes.size()))
+        {
+            ++abilities;
+        }
+    }
+    LOG("Site hooks: {} of {} level sites, {} of {} constant sites, {} of {} creature.ability sites installed", installed, std::size(kSites),
+        constants, std::size(kConstSites), abilities, std::size(kAbilitySites));
+    return installed + constants + abilities;
 }
 
 void SiteHook::setLevelFactorActive(bool active)
@@ -453,7 +648,22 @@ std::vector<SiteHook::SiteInfo> SiteHook::sites()
         const uintptr_t fn = *kConstSites[i].function;
         out.push_back({kConstSites[i].name, kConstSites[i].index, fn ? fn + kConstSites[i].offset : 0, g_constSiteCalls[i].load()});
     }
+    for (size_t i = 0; i < std::size(kAbilitySites); ++i)
+    {
+        const uintptr_t fn = *kAbilitySites[i].function;
+        out.push_back({"creature.ability", kAbilitySites[i].index, fn ? fn + kAbilitySites[i].offset : 0, g_abilitySiteCalls[i].load()});
+    }
     return out;
+}
+
+void SiteHook::setAbilityActive(bool active)
+{
+    g_abilityActive.store(active);
+}
+
+SiteHook::Stats SiteHook::abilityStats()
+{
+    return {g_abilityCalls.load(), g_abilityAnswered.load(), g_abilityBusy.load()};
 }
 
 SiteHook::Stats SiteHook::levelFactorStats()

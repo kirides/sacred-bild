@@ -29,6 +29,9 @@ namespace LuaHost
     // event `combat.constant`: the value for the engine's constant `name` (`index` among its sites) from the mods.
     Answer combatConstant(const char* name, double vanilla, int index, double& out);
 
+    // event `creature.ability`: the ability id for a creature of `type` (the AI's vanilla id, -1 where the site has none), at site `index` / `address`.
+    Answer creatureAbility(int type, int vanilla, int index, int address, int& out);
+
     // GetTickCount64() of the last in-game frame, 0 before the first.
     unsigned long long lastFrameTime();
 }

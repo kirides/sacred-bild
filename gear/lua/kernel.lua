@@ -1634,7 +1634,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'level.', 'combat.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'level.', 'combat.', 'creature.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -1977,7 +1977,7 @@ local function make_env(mod)
         -- Counters of the engine hooks that ask the mods for a value (gear/sitehook.cpp).
         hooks = {
             stats = function(name)
-                assert(name == 'level.factor' or name == 'combat.constant', "the hook must be 'level.factor' or 'combat.constant'")
+                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability', "the hook must be 'level.factor', 'combat.constant' or 'creature.ability'")
                 local calls, answered, busy = native.site_hooks(name)
                 return {calls = calls, answered = answered, busy = busy}
             end,
@@ -2047,6 +2047,7 @@ local function make_env(mod)
         list[#list + 1] = h
         if event == 'level.factor' then native.level_factor_active(true) end
         if event == 'combat.constant' then native.combat_constant_active(true) end
+        if event == 'creature.ability' then native.creature_ability_active(true) end
         return h
     end
     function gear.off(h)
@@ -2057,6 +2058,7 @@ local function make_env(mod)
         end
         if h.event == 'level.factor' and #list == 0 then native.level_factor_active(false) end
         if h.event == 'combat.constant' and #list == 0 then native.combat_constant_active(false) end
+        if h.event == 'creature.ability' and #list == 0 then native.creature_ability_active(false) end
     end
     env.gear = gear
     return env
@@ -2270,6 +2272,21 @@ function kernel.combat_constant(name, vanilla, index)
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, 'combat.constant', h.fn, name, vanilla, index)
             if ok and type(result) == 'number' then return result end
+        end
+    end
+    return nil
+end
+
+-- `creature.ability`: the creature AI picks the ability (a skill or spell id) a creature of `type` will use; `vanilla` is the id the engine
+-- would pick (-1 where the code computes it and Lua only overrides), `index` and `address` name the place. A handler returns the id to use, or nil.
+function kernel.creature_ability(type_id, vanilla, index, address)
+    local list = handlers['creature.ability']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'creature.ability', h.fn, type_id, vanilla, index, address)
+            if ok and type(result) == 'number' then return math.floor(result) end
         end
     end
     return nil

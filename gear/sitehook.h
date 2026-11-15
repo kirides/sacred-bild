@@ -42,6 +42,10 @@ namespace SiteHook
     // may answer with another number (event `combat.constant`: name, vanilla value, index).
     void setConstantActive(bool active);
 
+    // creature.ability: the creature AI stores the ability a creature will use (event `creature.ability`: creature type, vanilla id, index, address).
+    void setAbilityActive(bool active);
+    Stats abilityStats();
+
     // Self test of the constant stubs, for automation: builds two small functions in memory (one with an `fmul dword [c]`, one with a
     // `fld dword [c]`), hooks them like a constant site named `selftest.fmul` / `selftest.fld` and calls them from a worker thread
     // (Lua is not running then, so the mods may answer): the results are st0 after the instruction, and whether eax, ecx and edx

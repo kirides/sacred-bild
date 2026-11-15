@@ -43,4 +43,5 @@ static const Sig::Entry kGearSigs[] = {
     {"siteFn50AC00", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 98 04 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn50AC00}, // 0050AC00, 0050AA40
     {"siteFn56B130", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 08 02 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn56B130}, // 0056B130, 0056AFF0
     {"siteFn559BF0", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC D8 07 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn559BF0}, // 00559BF0, 00559A30
+    {"abilityAiFn", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC 38 05 00 00", 0, Sig::Take::Match, &Gear::Addr::abilityAiFn}, // 004D4E50, 004D4C90
 };

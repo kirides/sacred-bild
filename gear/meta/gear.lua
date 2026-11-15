@@ -13,6 +13,7 @@
 ---| 'session.start' # A game with a hero runs.
 ---| 'session.stop' # That hero is gone.
 ---| 'combat.constant' # The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it.
+---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
 ---| 'level.factor' # The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers).
 
 --- A handler registered with `gear.on`; pass it to `gear.off` to remove it.
@@ -61,6 +62,7 @@ gear = {}
 ---@overload fun(event: 'session.start', fn: fun(hero: Creature)): GearHandler
 ---@overload fun(event: 'session.stop', fn: fun()): GearHandler
 ---@overload fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler
+---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler
 ---@overload fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler
 ---@param event string
 ---@param fn fun(...: any)

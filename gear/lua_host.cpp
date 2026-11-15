@@ -499,6 +499,13 @@ namespace
         return 1;
     }
 
+    // native.creature_ability_active(bool): whether some mod handles `creature.ability`
+    int nativeCreatureAbilityActive(lua_State* L)
+    {
+        SiteHook::setAbilityActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
     // native.combat_constant_active(bool): whether some mod handles `combat.constant`
     int nativeCombatConstantActive(lua_State* L)
     {
@@ -510,7 +517,7 @@ namespace
     int nativeSiteHooks(lua_State* L)
     {
         const char* which = luaL_optstring(L, 1, "level.factor");
-        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : SiteHook::levelFactorStats();
+        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : SiteHook::levelFactorStats();
         lua_pushnumber(L, s.calls);
         lua_pushnumber(L, s.answered);
         lua_pushnumber(L, s.busy);
@@ -1581,6 +1588,7 @@ namespace
             {"site_hooks", nativeSiteHooks},
             {"combat_constant_active", nativeCombatConstantActive},
             {"difficulty", nativeDifficulty},
+            {"creature_ability_active", nativeCreatureAbilityActive},
             {"site_hook_sites", nativeSiteHookSites},
             {"site_selftest_start", nativeSiteSelfTestStart},
             {"site_selftest_result", nativeSiteSelfTestResult},
@@ -1797,6 +1805,53 @@ LuaHost::Answer LuaHost::combatConstant(const char* name, double vanilla, int in
     {
         out = lua_tonumber(L, -1);
         answer = Answer::Value;
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::creatureAbility(int type, int vanilla, int index, int address, int& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "creature_ability");
+    lua_remove(L, -2);
+    lua_pushnumber(L, type);
+    lua_pushnumber(L, vanilla);
+    lua_pushnumber(L, index);
+    lua_pushnumber(L, address);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 4, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.creature_ability failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        const lua_Number v = lua_tonumber(L, -1);
+        if (v >= 0 && v < 65536)
+        {
+            out = static_cast<int>(v);
+            answer = Answer::Value;
+        }
     }
     lua_pop(L, 1);
     return answer;
