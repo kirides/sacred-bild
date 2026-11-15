@@ -6,6 +6,7 @@
 #include "pickup.h"
 #include "overlay.h"
 #include "pipe.h"
+#include "sitehook.h"
 #include "tables.h"
 #include "ui.h"
 #include "world.h"
@@ -36,6 +37,7 @@ namespace
     // Lua runs on whichever thread calls frame(): the engine's in-game loop, which a new game may run on a new
     // thread. Only one at a time, and never re-entered (a game function a mod calls could come back to the hook).
     std::mutex g_running;
+    thread_local bool t_inLua = false;     // this thread is inside a kernel call (a hook it triggers must not enter Lua again)
     std::atomic<ULONGLONG> g_lastFrame{0};
     int g_kernelRef = LUA_NOREF;
 
@@ -431,6 +433,23 @@ namespace
         const char* path = luaL_checklstring(L, 1, &n);
         lua_pushnumber(L, static_cast<lua_Number>(Overlay::served(std::string(path, n))));
         return 1;
+    }
+
+    // native.level_factor_active(bool): whether some mod handles `level.factor`
+    int nativeLevelFactorActive(lua_State* L)
+    {
+        SiteHook::setLevelFactorActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.site_hooks() -> calls, answered, busy: the counters of the level.factor site hooks
+    int nativeSiteHooks(lua_State* L)
+    {
+        const SiteHook::Stats s = SiteHook::levelFactorStats();
+        lua_pushnumber(L, s.calls);
+        lua_pushnumber(L, s.answered);
+        lua_pushnumber(L, s.busy);
+        return 3;
     }
 
     // An id argument: a whole number in 1..2^31-1, or 0 if it is none.
@@ -1397,7 +1416,9 @@ namespace
         lua_remove(L, -2);
         lua_insert(L, -(nargs + 1));
         setBudget(budget);
+        t_inLua = true;
         const int status = lua_pcall(L, nargs, 0, 0);
+        t_inLua = false;
         g_deadline = 0;
         if (status != 0)
         {
@@ -1408,6 +1429,8 @@ namespace
         }
         return true;
     }
+
+    constexpr double kHookBudget = 0.02;    // seconds for one answer to a site hook
 
     void start()
     {
@@ -1452,6 +1475,8 @@ namespace
             {"overlay_info", nativeOverlayInfo},
             {"overlay_resolve", nativeOverlayResolve},
             {"overlay_served", nativeOverlayServed},
+            {"level_factor_active", nativeLevelFactorActive},
+            {"site_hooks", nativeSiteHooks},
             {"hero", nativeHero},
             {"world_changes", nativeWorldChanges},
             {"object", nativeObject},
@@ -1579,6 +1604,51 @@ void LuaHost::idle()
         return;
     }
     callKernel("idle", 0, kFrameBudget);
+}
+
+LuaHost::Answer LuaHost::levelFactor(double level, int site, int& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "level_factor");
+    lua_remove(L, -2);
+    lua_pushnumber(L, level);
+    lua_pushnumber(L, site);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 2, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.level_factor failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        const lua_Number v = lua_tonumber(L, -1);
+        if (v >= 0 && v < 1e9)
+        {
+            out = static_cast<int>(v);
+            answer = Answer::Value;
+        }
+    }
+    lua_pop(L, 1);
+    return answer;
 }
 
 unsigned long long LuaHost::lastFrameTime()

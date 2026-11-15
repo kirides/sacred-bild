@@ -11,6 +11,7 @@
 # Usage: python tools/check_gear_overlap.py   (SACRED_ENG as for gen_sigs.py)
 import glob, os, re, sys
 sys.path.insert(0, os.path.dirname(__file__))
+import gear_sites
 import gen_sigs
 import sigs
 
@@ -74,9 +75,14 @@ def main():
         for b in against:
             if g[1] < b[2] and b[1] < g[2]:
                 clashes.append((g, b))
+    # Gear's site hooks (tools/gear_sites.py) write into the middle of functions: no SacredBild window may touch them
+    for hook, name, fn, site, length, prefix in gear_sites.SITES:
+        for b in bild_all:
+            if site < b[2] and b[1] < site + length:
+                clashes.append(((f'site {hook} {site:08X}', site, site + length), b))
     for g, b in clashes:
         print(f'overlap: Gear {g[0]} {g[1]:08X}-{g[2]:08X} and SacredBild {b[0]} {b[1]:08X}-{b[2]:08X}')
-    print(f'{len(gear)} Gear windows ({len(gear_patched)} patched names), {len(bild_all)} SacredBild windows '
+    print(f'{len(gear)} Gear windows ({len(gear_patched)} patched names, {len(gear_sites.SITES)} site hooks), {len(bild_all)} SacredBild windows '
           f'({len(bild_patch_windows)} patched), {len(clashes)} overlaps')
     sys.exit(1 if clashes else 0)
 

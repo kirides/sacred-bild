@@ -105,6 +105,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'idle'` | Automation only: every 50 ms in the menus. |
 | `'session.start'` | A game with a hero runs. |
 | `'session.stop'` | That hero is gone. |
+| `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
 
 ### GearHandler
 
@@ -147,6 +148,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `text` | `GearText` | The game's texts by id. |
 | `settings` | `GearSettings` | The game's Settings.cfg. |
 | `files` | `GearFiles` | The mod's file overlay. |
+| `hooks` | `GearHooks` | The engine hooks that ask mods for values. |
 | `json` | `GearJson` | JSON encoding and decoding. |
 | `pipe` | `GearPipeModule` | Named pipe clients. |
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
@@ -165,6 +167,7 @@ Forms:
 - `fun(event: 'idle', fn: fun()): GearHandler`
 - `fun(event: 'session.start', fn: fun(hero: Creature)): GearHandler`
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
+- `fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler`
 
 - `event`: `string`
 - `fn`: `fun(...: any)`
@@ -608,6 +611,29 @@ How many times the game opened `path` (relative to the game folder) and was serv
 |---|---|---|
 | `files` | `integer` | The number of file rules. |
 | `saves` | `string` | The mod's save folder (absolute) if the game's `Save\` folder is redirected to it. (optional) |
+
+## Engine hooks (gear.hooks)
+
+### GearHooks
+
+Reached as `gear.hooks`.
+
+The engine hooks that ask mods for a value inside the game's own code (see the events `level.factor`).
+
+#### `gear.hooks.stats(name) -> GearHookStats`
+
+The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
+
+- `name`: `'level.factor'`
+- returns `GearHookStats`
+
+### GearHookStats
+
+| Field | Type | |
+|---|---|---|
+| `calls` | `integer` |  |
+| `answered` | `integer` |  |
+| `busy` | `integer` |  |
 
 ## JSON (gear.json)
 

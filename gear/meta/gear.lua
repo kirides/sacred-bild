@@ -12,6 +12,7 @@
 ---| 'idle' # Automation only: every 50 ms in the menus.
 ---| 'session.start' # A game with a hero runs.
 ---| 'session.stop' # That hero is gone.
+---| 'level.factor' # The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers).
 
 --- A handler registered with `gear.on`; pass it to `gear.off` to remove it.
 ---@class GearHandler
@@ -41,6 +42,7 @@
 ---@field text GearText The game's texts by id.
 ---@field settings GearSettings The game's Settings.cfg.
 ---@field files GearFiles The mod's file overlay.
+---@field hooks GearHooks The engine hooks that ask mods for values.
 ---@field json GearJson JSON encoding and decoding.
 ---@field pipe GearPipeModule Named pipe clients.
 ---@field world GearWorld The world: hero, creatures, items, spawning, pickup rules.
@@ -56,6 +58,7 @@ gear = {}
 ---@overload fun(event: 'idle', fn: fun()): GearHandler
 ---@overload fun(event: 'session.start', fn: fun(hero: Creature)): GearHandler
 ---@overload fun(event: 'session.stop', fn: fun()): GearHandler
+---@overload fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler
 ---@param event string
 ---@param fn fun(...: any)
 ---@return GearHandler

@@ -208,6 +208,24 @@ function GearFiles.served(path) end
 ---@field files integer The number of file rules.
 ---@field saves string? The mod's save folder (absolute) if the game's `Save\` folder is redirected to it.
 
+-- ## Engine hooks (gear.hooks)
+
+-- path gear.hooks
+--- The engine hooks that ask mods for a value inside the game's own code (see the events `level.factor`).
+---@class GearHooks
+local GearHooks = {}
+
+--- The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often
+--- Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
+---@param name 'level.factor'
+---@return GearHookStats
+function GearHooks.stats(name) end
+
+---@class GearHookStats
+---@field calls integer
+---@field answered integer
+---@field busy integer
+
 -- ## JSON (gear.json)
 
 -- path gear.json

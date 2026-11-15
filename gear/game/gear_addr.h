@@ -85,6 +85,12 @@ namespace Gear::Addr
     // The ability tables (gear/tables.cpp), static arrays in .data: T1 (ENG 0094FE28..00952A38, 0x78-byte records, ids from
     // 1000, scanned by 004D1AF0) and T2 (ENG 00952ACC..00955344, 0x94-byte records, ids from 1, scanned by 004D2310). Each
     // is the address of the first record / one past the last (found in the lookups' own code).
+    // Site hooks (gear/sitehook.cpp, tools/gear_sites.py): the functions that hold a site, found by signature. The level to
+    // factor expression of ENG 0051CC30 (the whole function) and its inlined copies in 0050E6C0 and 005893B0.
+    inline uintptr_t levelFn51CC30{};
+    inline uintptr_t levelFn50E6C0{};
+    inline uintptr_t levelFn5893B0{};
+
     inline Sacred::Global<uint8_t> abilityTable1First{};
     inline Sacred::Global<uint8_t> abilityTable1End{};
     inline Sacred::Global<uint8_t> abilityTable2First{};

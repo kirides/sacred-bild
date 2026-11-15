@@ -135,6 +135,8 @@ def main():
     files_src = re.search(r'^\s{8}files = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.files', set(re.findall(r'^\s{12}(\w+) = function', files_src.group(1), re.M)) if files_src else set(),
             members('GearFiles'))
+    hooks_src = re.search(r'^\s{8}hooks = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
+    compare('gear.hooks', set(re.findall(r'^\s{12}(\w+) = function', hooks_src.group(1), re.M)) if hooks_src else set(), members('GearHooks'))
     settings_src = re.search(r'^\s{8}settings = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.settings', set(re.findall(r'^\s{12}(\w+) = function', settings_src.group(1), re.M)) if settings_src else set(),
             members('GearSettings'))
@@ -159,6 +161,7 @@ def main():
 
     # --- events
     events = set(re.findall(r"kernel\.dispatch\('([\w.]+)'", kernel))
+    events |= set(re.findall(r"handlers\['([\w.]+)'\]", kernel))      # events the host asks for (site hooks)
     meta_events = set()
     for fn in model.globals + [f for c in model.classes.values() for f in c.funcs]:
         if fn.name == 'on':

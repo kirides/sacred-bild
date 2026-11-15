@@ -2,6 +2,7 @@
 #include "lua_host.h"
 #include "patch.h"
 #include "pickup.h"
+#include "sitehook.h"
 #include "ui.h"
 #include "game/gear_addr.h"
 
@@ -24,5 +25,8 @@ bool Hooks::install()
     // Mod drawing is optional: without it the mods still run.
     Ui::install();
     Pickup::install();
-    return Patch::commit() && ok;
+    const bool committed = Patch::commit();
+    // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.
+    SiteHook::install();
+    return committed && ok;
 }

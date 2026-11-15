@@ -19,6 +19,7 @@ local objects = {}
 local pipe_events = {}
 local sent = {}
 local ability_store = {}
+local level_active
 local ui_recording, ui_published = {}, {}
 local pickup_published
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
@@ -71,6 +72,8 @@ local native = {
     end,
     overlay_info = function(id) if id == 'ab' then return 2, 'C:/mods/ab/save' end end,
     overlay_resolve = function(path) return 'mapped:' .. path end,
+    level_factor_active = function(v) level_active = v end,
+    site_hooks = function() return 7, 5, 1 end,
     overlay_served = function(path) return path == 'bin/balance.bin' and 3 or 0 end,
     text_get = function(id) if id == 8193 then return 'Ability name' end end,
     setting = function(key) if key == 'SR_HD_WIDTH' then return '2560' end end,
@@ -245,6 +248,13 @@ files.ab = {
         abil.served = {gear.files.served('bin/balance.bin'), gear.files.served('x')}
         abil.setting = gear.settings.get('SR_HD_WIDTH')
         abil.no_setting = gear.settings.get('NOPE')
+        -- the level.factor site hook: tiers of 12 levels, and no answer above 40
+        gear.on('level.factor', function(level, site)
+            if level > 40 then return nil end
+            return 1 + (level > 12 and 1 or 0) + (level > 24 and 1 or 0) + (level > 36 and 1 or 0)
+        end)
+        abil.stats = gear.hooks.stats('level.factor')
+        abil.emit_level = not pcall(gear.emit, 'level.factor', 1)
         -- writes that are not restored explicitly are undone when the mod is switched off
         A[1001].effect_base = 4
         gear.on('frame', function() error('off') end)
@@ -353,6 +363,12 @@ ok(abil.text == 'Ability name' and abil.no_text == nil, 'gear.text.get')
 ok(abil.overlay and abil.overlay.files == 2 and abil.overlay.saves == 'C:/mods/ab/save', 'gear.files.overlay')
 ok(abil.resolved == 'mapped:SRB/balance.bin', 'gear.files.resolve')
 ok(abil.served[1] == 3 and abil.served[2] == 0, 'gear.files.served')
+ok(level_active == true, 'registering level.factor tells the host')
+ok(kernel.level_factor(5, 0) == 1 and kernel.level_factor(13, 1) == 2 and kernel.level_factor(30, 2) == 3
+   and kernel.level_factor(37, 3) == 4, 'level.factor answers with the handler')
+ok(kernel.level_factor(50, 4) == nil, 'level.factor: no number, no answer')
+ok(abil.emit_level, 'mods cannot emit level.factor')
+ok(abil.stats.calls == 7 and abil.stats.answered == 5 and abil.stats.busy == 1, 'gear.hooks.stats')
 ok(abil.setting == '2560' and abil.no_setting == nil, 'gear.settings.get')
 
 -- Frames: session start, pipes, timers, tasks.

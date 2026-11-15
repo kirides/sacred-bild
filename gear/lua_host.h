@@ -18,6 +18,14 @@ namespace LuaHost
     // Automation only: a tick while no in-game frame runs (the menus). Starts the state the first time.
     void idle();
 
+    // The result of asking the mods for a value from a site hook (sitehook.h): Value (the integer is set), None (no mod
+    // answered or the mod's answer was no number), Busy (Lua is running on this or another thread: the engine goes on with its
+    // own value; this is also how a hook that Lua itself triggers stays out of a loop).
+    enum class Answer { None, Value, Busy };
+
+    // event `level.factor`: the factor for `level` from the mods; `site` is the hook site's index (tools/gear_sites.py).
+    Answer levelFactor(double level, int site, int& out);
+
     // GetTickCount64() of the last in-game frame, 0 before the first.
     unsigned long long lastFrameTime();
 }

@@ -1634,7 +1634,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'level.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -1955,6 +1955,14 @@ local function make_env(mod)
                 return native.overlay_served(path)
             end,
         },
+        -- Counters of the engine hooks that ask the mods for a value (gear/sitehook.cpp).
+        hooks = {
+            stats = function(name)
+                assert(name == 'level.factor', "the hook must be 'level.factor'")
+                local calls, answered, busy = native.site_hooks()
+                return {calls = calls, answered = answered, busy = busy}
+            end,
+        },
         -- Values of the game's Settings.cfg ("KEY : value" lines), as text.
         settings = {
             get = function(key)
@@ -2017,6 +2025,7 @@ local function make_env(mod)
         if not list then list = {}; handlers[event] = list end
         local h = {mod = mod, fn = fn, event = event}
         list[#list + 1] = h
+        if event == 'level.factor' then native.level_factor_active(true) end
         return h
     end
     function gear.off(h)
@@ -2025,6 +2034,7 @@ local function make_env(mod)
         for i = #list, 1, -1 do
             if list[i] == h then table.remove(list, i) end
         end
+        if h.event == 'level.factor' and #list == 0 then native.level_factor_active(false) end
     end
     env.gear = gear
     return env
@@ -2207,6 +2217,24 @@ function kernel.dispatch(event, ...)
             call(h.mod, event, h.fn, ...)
         end
     end
+end
+
+-- Site hooks (gear/sitehook.cpp): the engine asks for a value in the middle of its own code. `level.factor`: the first mod
+-- handler that returns a number answers (the integer factor for `level`); `site` says which of the engine's six places
+-- asked. Called by the host from the game's own code, never nested in a kernel call (the host refuses that).
+function kernel.level_factor(level, site)
+    local list = handlers['level.factor']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'level.factor', h.fn, level, site)
+            if ok and type(result) == 'number' then
+                return math.floor(result + 0.5)
+            end
+        end
+    end
+    return nil
 end
 
 -- The 'draw' handlers get the UI state (gear.ui.state()); read only when someone draws.
