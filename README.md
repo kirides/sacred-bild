@@ -15,6 +15,12 @@ Supported executables: the **English** GOG `Sacred.exe` (PE timestamp `0x452F85C
 fixed addresses, so other builds with the same code should work too; if a signature isn't found, it only passes
 ddraw calls through and logs which one.
 
+**Sacred ReBorn** (`SacredReborn.exe`, the German build with patched code) is supported too. It patches the
+game's resolution code itself (`SR_HD_WIDTH` / `SR_HD_HEIGHT` with `SR_HD_ENABLE`, or `SR_WIDTH` / `SR_HEIGHT`, in `Settings.cfg`, set by its config tool); SacredBild's
+`[Display] Width` / `Height` (default: the screen) is the size when those are unset, and the UI scaling and the
+other modules work on top of it. ReBorn loads the language files from disk, so there is no language import. Install into its folder like any
+other: `.\install.ps1 -GameDir "...\sacred gold ReBorn"`.
+
 ## What it does
 
 - **Any resolution and a scalable UI**: the world shows more at its original pixel density, the 1024x768 UI is

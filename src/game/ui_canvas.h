@@ -15,6 +15,8 @@ namespace UiCanvas
     // Hooks the cursor and the world's mouse reads; call inside a Patch transaction after Resolution::install.
     void install();
     bool enabled();
+    // The UI manager is in game (not in the menus or leaving them).
+    bool inGame();
 
     // Sacred Gear's cursor filter (export SacredBild_UiSetCursorFilter) says whether mod UI lies under the cursor.
     // While it does, the UI's own cursor reads see the cursor far off the screen (no hover or tooltip of a window
