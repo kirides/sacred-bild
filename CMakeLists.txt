@@ -165,11 +165,14 @@ if(SACREDGEAR)
     gear/hooks.cpp
     gear/lua_host.cpp
     gear/tables.cpp
+    gear/world.cpp
+    gear/pipe.cpp
+    gear/automation.cpp
     gear/gear.rc
   )
   target_include_directories(SacredGear PRIVATE gear ${LUAJIT_INCLUDE_DIRS}/luajit)
   set_source_files_properties(gear/gear.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kernel.lua)
-  target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY})
+  target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} shell32)
   target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})
   # SAFESEH off as for ddraw (Detours trampolines); /MAP for profiles.
   target_link_options(SacredGear PRIVATE /SAFESEH:NO /MAP)

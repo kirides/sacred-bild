@@ -1,3 +1,4 @@
+#include "automation.h"
 #include "gear.h"
 #include "hooks.h"
 #include "log.h"
@@ -96,9 +97,15 @@ namespace
         const std::wstring gameDir = directoryOf(exe);
         Log::init((gameDir + L"\\SacredGear.log").c_str());
         LOG("Sacred Gear {} " __DATE__ " " __TIME__, Gear::kVersion);
-        if (const size_t missing = Sig::resolve(kGearSigs))
+        const size_t missing = Sig::resolve(kGearSigs);
+        if (missing)
         {
-            LOG("{} of {} game addresses not found: Sacred Gear stays off", missing, std::size(kGearSigs));
+            LOG("{} of {} game addresses not found; the features that need them stay off", missing,
+                std::size(kGearSigs));
+        }
+        if (!Gear::Addr::cEngine_updateZoom)
+        {
+            LOG("The frame tick was not found: Sacred Gear stays off");
             if (wrappedExe())
             {
                 LOG("The exe is wrapped (Steam): its code may still be encoded when Sacred Gear loads; load it "
@@ -113,6 +120,7 @@ namespace
             return;
         }
         LOG("Hooks installed; mods load with the first in-game frame");
+        Automation::install(gameDir);
     }
 }
 

@@ -2,6 +2,7 @@
 #include "game/gear_addr.h"
 
 #include <windows.h>
+#include <algorithm>
 #include <cstring>
 
 namespace
@@ -67,8 +68,28 @@ namespace
         return true;
     }
 
+    // Object types: the type manager's first 0x7E60 records of 0x80 bytes, one per object type (creatures, items,
+    // effects, buildings), indexed by the type id every object keeps at +0x10 (00425EA0 returns manager + id *
+    // 0x80; record 0 is unused). +0x2E is the kind (item kinds 8, 0x14, 0x1A, 0x1C; creature kinds below 4,
+    // see 005FB530), +0x37 the internal name (0043CED0 shows it, "Bad Item" if empty).
+    constexpr size_t kObjectTypeStride = 0x80;
+    constexpr size_t kObjectTypeCount = 0x7E60;
+
+    bool locateObjectTypes(Span& out)
+    {
+        uintptr_t manager = 0;
+        if (!Gear::Addr::g_pTypeManager ||
+            !safeCopy(&manager, Gear::Addr::g_pTypeManager.get(), sizeof(manager)) || !manager)
+        {
+            return false;
+        }
+        out = {manager, kObjectTypeCount};
+        return true;
+    }
+
     constexpr Table kTables[] = {
         {"creature_types", kCreatureStride, &locateCreatureTypes},
+        {"object_types", kObjectTypeStride, &locateObjectTypes},
     };
 
     const Table* find(std::string_view name)
@@ -135,5 +156,23 @@ bool Tables::read(std::string_view name, size_t index, size_t offset, Kind kind,
     case Kind::I32: { int32_t v; std::memcpy(&v, bytes, 4); out = v; break; }
     case Kind::F32: { float v; std::memcpy(&v, bytes, 4); out = v; break; }
     }
+    return true;
+}
+
+bool Tables::readString(std::string_view name, size_t index, size_t offset, size_t maxLength, std::string& out)
+{
+    const Table* t = find(name);
+    Span span;
+    if (!t || offset >= t->stride || !t->locate(span) || index >= span.count)
+    {
+        return false;
+    }
+    char bytes[256] = {};
+    const size_t size = std::min({maxLength, t->stride - offset, sizeof(bytes)});
+    if (!safeCopy(bytes, reinterpret_cast<const void*>(span.first + index * t->stride + offset), size))
+    {
+        return false;
+    }
+    out.assign(bytes, strnlen(bytes, size));
     return true;
 }
