@@ -115,6 +115,8 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'combat.branch'` | A conditional jump in the hit handlers and a few other functions: a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`). |
 | `'skillslot.select'` | A digit key selected a skill slot of the HUD (`index`: which of the five places in the key handler). |
 | `'bonus.constant'` | A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another. |
+| `'drops.roll'` | A creature's loot function is about to run; a handler may change the rarity bonus or return false to cancel the roll. |
+| `'drops.select'` | The loot function asks the equipment type picker for an item; a handler may change the category, level or quality, or name the item type. |
 | `'effect.add'` | The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`). |
 | `'damage'` | The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534). |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
@@ -200,6 +202,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `json` | `GearJson` | JSON encoding and decoding. |
 | `pipe` | `GearPipeModule` | Named pipe clients. |
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
+| `drops` | `GearDrops` | Item drops: chance, rarity weights, the generator, the roll and select events. |
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
 | `game` | `GearGame` | The game itself: difficulty and saving. |
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
@@ -231,6 +234,8 @@ Forms:
 - `fun(event: 'combat.branch', fn: fun(name: string, vanilla: boolean, index: integer, eax: integer): boolean?): GearHandler`
 - `fun(event: 'skillslot.select', fn: fun(index: integer)): GearHandler`
 - `fun(event: 'bonus.constant', fn: fun(index: integer, vanilla: number, address: integer): number?): GearHandler`
+- `fun(event: 'drops.roll', fn: fun(ev: GearDropRoll): boolean?): GearHandler`
+- `fun(event: 'drops.select', fn: fun(ev: GearDropSelect)): GearHandler`
 - `fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler`
 - `fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
@@ -1099,6 +1104,135 @@ Moves the creature. Single player only.
 - `layer`: `integer` (optional) - Default: the current layer.
 - returns `ok` `boolean?`
 - returns `error` `string?`
+
+## Drops (gear.drops)
+
+### GearDropRoll
+
+The event table of `drops.roll`: a creature's loot function is about to run. Fields you set are read back; the others are for information.
+
+| Field | Type | |
+|---|---|---|
+| `creature` | `integer` | The dying creature's type (an index into `gear.data.object_types`). |
+| `level` | `integer` | Its level. |
+| `forced` | `integer` | The item type of an authored drop (the creature's drop list, a quest item ...), 0 for a random drop. |
+| `bonus` | `integer` | The rarity bonus the caller passes (it widens the weights of the rarer qualities; the loot code caps it at 700). Set it to change it. |
+| `killer` | `integer` | The killer's object id (a hero: 1 .. 16), 0 when unknown. |
+| `survival` | `number` | The caller's survival value (0 for most callers). |
+| `network` | `boolean` | True in a network game. |
+| `cancel` | `boolean` | Set by the kernel when a handler returned `false`: the roll does not run. (optional) |
+
+### GearDropSelect
+
+The event table of `drops.select`: the loot function asks the equipment type picker for an item. Change `category`, `level` or `quality` to change what the engine picks, or set `type` to use an item type of your own instead of its pick.
+
+| Field | Type | |
+|---|---|---|
+| `category` | `integer` | The equipment category the loot code chose: 5 weapon, 6 chest armour, 8 ring, 13 shield, 17 helmet, 18 boots, 19 belt, 20 amulet, 21 shoulders, 22 arms, 23 legs, 24 gloves, 25 wings, 29 horse equipment. |
+| `level` | `integer` | The level the item is picked for (the creature's level). |
+| `quality` | `integer` | The quality (0 plain, 1 .. 14 the rarer tiers; the rarity roll's result as `16 - id`). |
+| `hero_pref` | `integer` | The hero type the picker prefers (0 none), for information. |
+| `flags` | `integer` | The picker's flags (0, or 2 when the loot code prefers a class), for information. |
+| `creature` | `integer` | The dying creature's type. |
+| `type` | `integer` | Set it to an item type id (1 .. 0x1FFF) to use that item instead of the engine's pick. (optional) |
+
+### GearRarityRow
+
+A row of the game's rarity table.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | The table id (2 .. 15 are the qualities 14 .. 1, 16 is plain). |
+| `quality` | `integer` | The quality the id gives (`16 - id`, 0 for 16). |
+| `weight` | `integer` | The weight now (after the mods' multipliers). |
+| `vanilla` | `integer` | The weight as the game loaded it. |
+
+### GearDropStats
+
+Counters of the drop hooks since the start (or `reset_stats`).
+
+| Field | Type | |
+|---|---|---|
+| `rolls` | `integer` | Loot function runs (every creature death with loot, forced or random). |
+| `forced` | `integer` | Of them with an authored item type. |
+| `vetoed` | `integer` | Rolls a `drops.roll` handler cancelled. |
+| `picks` | `integer` | Equipment type picks inside loot rolls. |
+| `overridden` | `integer` | Picks a `drops.select` handler replaced with its own type. |
+| `rarity_draws` | `integer` | Draws of the rarity roll (1 .. 10000) of all five rarity paths. |
+| `rand_calls` | `integer` | Calls of the game's `rand` inside the loot function that the chosen generator answered. |
+| `lua_draws` | `integer` | Of them answered by a Lua generator. |
+| `quality` | `table<integer, integer>` | Picks by quality 0 .. 15, after the handlers. |
+| `category` | `table<integer, integer>` | Picks by category 0 .. 31. |
+
+### GearDrops
+
+Reached as `gear.drops`.
+
+Tuning what creatures drop. Nothing here changes the game until a mod calls it: with no mod the engine's own code runs. The settings of every mod are merged (multipliers multiply; the first mod in load order that chose a generator wins) and applied after each tick, so a setting reaches the next drop. The loot code runs in the host game (a single player game, or the player who owns the creature in a network game); GameServer.exe contains none of it. See `docs/GearDrops.md` for what the engine does and what each setting touches.
+
+#### `gear.drops.chance_scale(multiplier)`
+
+Multiplies the chance of every drop attempt of creatures (the loot code's `budget / 1000` per attempt; above 1000 it runs more passes). `nil` or 1: as the game has it. Authored drops (a creature's drop list) are not affected.
+
+- `multiplier`: `number` (optional) - 0 .. 1000
+
+#### `gear.drops.find_scale(multiplier)`
+
+Multiplies how strongly the rarity bonus ("magic find") widens the weights of the rarer qualities. `nil` or 1: as the game has it.
+
+- `multiplier`: `number` (optional) - 0 .. 1000
+
+#### `gear.drops.rarity_weights(weights)`
+
+Multiplies the weights of the rarity table by quality (replaces this mod's previous multipliers; `nil` clears them). Keys are the qualities 0 (plain, also `'normal'`) and 1 .. 14; a quality you leave out keeps its weight. The table feeds every path that rolls a rarity (creature loot, containers, the other equipment generators), and the plain weight does not grow with the rarity bonus while the others do. If the weights add up to less than 10000 the remainder is plain items; more than 10000 pushes the rarest qualities out of reach.
+
+- `weights`: `table<integer|string, number>` (optional)
+
+#### `gear.drops.rng(spec)`
+
+Chooses the generator of the loot rolls (the chances, the kind of item, the rarity roll): `'fair'` is PCG32 without modulo bias (the game's `rand() % 10000` for the rarity roll favours the first 27.7% of the range by a third), `{seed = n}` the same with a seed (the same rolls every run), a function returns a number in [0, 1) per draw (called a few dozen times per loot roll, keep it cheap), `nil` or `'game'` the game's own.
+
+- `spec`: `'fair'|'game'|{seed: number}|(fun(): number)|nil`
+
+#### `gear.drops.random(n) -> integer`
+
+A number 0 .. n - 1 from the fair generator, for your own rolls.
+
+- `n`: `number`
+- returns `integer`
+
+#### `gear.drops.rarity_table() -> GearRarityRow[]`
+
+The game's rarity table now (empty before the first game ran).
+
+- returns `GearRarityRow[]`
+
+#### `gear.drops.stats() -> GearDropStats`
+
+Counters of the drop hooks.
+
+- returns `GearDropStats`
+
+#### `gear.drops.reset_stats()`
+
+Sets the counters to zero.
+
+#### `gear.drops.simulate(creature, count, bonus) -> boolean?, string?`
+
+Makes the engine run the loot function `count` times for a creature (an object id), a few dozen per frame, through all hooks; the items lie in the world afterwards. A tuning and test aid: a single player game only.
+
+- `creature`: `integer`
+- `count`: `integer`
+- `bonus`: `integer` (optional) - The rarity bonus to roll with (default 0).
+- returns `ok` `boolean?`
+- returns `message` `string?`
+
+#### `gear.drops.simulation_progress() -> integer, integer`
+
+Rolls done and queued by `simulate`.
+
+- returns `done` `integer`
+- returns `queued` `integer`
 
 ## Saving (gear.game)
 
