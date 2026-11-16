@@ -109,6 +109,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'session.stop'` | That hero is gone. |
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'game.save_failed'` | It could not be written. |
+| `'kill'` | A kill the local computer sent to the game (a hero's kill: `(kill)`, see `GearKill`). |
 | `'realm.changed'` | `gear.realm.use` switched the online play server: `(realm)`. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'damage'` | The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534). |
@@ -171,6 +172,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
 | `game` | `GearGame` | The game itself: difficulty and saving. |
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
+| `mp` | `GearMp` | Players of a network game and the `kill` event. |
 | `settings` | `GearSettings` | This mod's settings (declared in `mod.lua`, changed by the player in the mod manager). |
 | `keys` | `GearKeys` | This mod's declared key binds. |
 | `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
@@ -193,6 +195,7 @@ Forms:
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
+- `fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler`
 - `fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
 - `fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler`
@@ -1180,6 +1183,70 @@ Chooses the realm for the next Closed or Open Internet and saves the choice. Rai
 - `id`: `string`
 - returns `ok` `boolean?`
 - returns `message` `string?` - Why not.
+
+## Multiplayer (gear.mp)
+
+In a network game every player is a hero object (slots 1 to 16 are the object ids of the heroes). A mod runs on every player's computer; the `kill` event runs on the computer of the player who made the kill. Design and what is still to come (chat, a channel between the mods, per-player storage, announcements): `docs/GearServerMods.md`.
+
+### GearPlayer
+
+A player of the game.
+
+| Field | Type | |
+|---|---|---|
+| `slot` | `integer` | The player's slot, 1 to 16; the same number as the hero's object id. |
+| `class` | `GearClassName` | The hero's class. (optional) |
+| `is_local` | `boolean` | This is the player at this computer. |
+
+#### `GearPlayer:hero() -> Creature`
+
+The player's hero.
+
+- returns `Creature`
+
+### GearMp
+
+Reached as `gear.mp`.
+
+Players of a network game.
+
+#### `gear.mp.players() -> GearPlayer[]`
+
+The players whose heroes are in the game, by slot. Empty before a game runs.
+
+- returns `GearPlayer[]`
+
+#### `gear.mp.player(slot) -> GearPlayer?`
+
+The player in `slot` (1 to 16), or nil.
+
+- `slot`: `integer`
+- returns `GearPlayer?`
+
+#### `gear.mp.local_player() -> GearPlayer?`
+
+The player at this computer, or nil.
+
+- returns `GearPlayer?`
+
+#### `gear.mp.active() -> boolean`
+
+Whether the heroes of other players are in the game (a network game with more than the local player).
+
+- returns `boolean`
+
+### GearKill
+
+What the `kill` event gets.
+
+| Field | Type | |
+|---|---|---|
+| `victim` | `Creature` | The creature that died (it is retired a moment later; read what you need at once). |
+| `type` | `integer` | Its creature type (nil if the object is already gone). (optional) |
+| `type_name` | `string` | The name of that type. (optional) |
+| `killer` | `GearPlayer` | The player who killed it; nil if a creature or something else did. (optional) |
+| `award` | `integer` | Experience the killer got. |
+| `by_local` | `boolean` | The local hero killed it. |
 
 ## Settings, key binds and the mod manager
 

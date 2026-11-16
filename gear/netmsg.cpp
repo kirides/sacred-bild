@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
+#include <mutex>
 
 namespace
 {
@@ -17,6 +19,54 @@ namespace
 
     std::atomic<uint32_t> g_count[kIds];
     decltype(Gear::Addr::cNet_queueMessage)::Ptr g_orig = nullptr;
+    bool g_trace = false;
+
+    constexpr uint16_t kAward = 0x127;      // {hero id, experience}
+    constexpr uint16_t kDeath = 0x17D;      // {victim id, 1, 1}
+    constexpr DWORD kPairMs = 250;          // an award belongs to the death that follows within this time
+
+    std::mutex g_lock;
+    std::deque<NetMsg::Kill> g_kills;
+    uint32_t g_awardHero = 0, g_awardAmount = 0;
+    DWORD g_awardAt = 0;
+
+    void note(uint16_t id, const uint8_t* payload, uint32_t size)
+    {
+        if (id != kAward && id != kDeath)
+        {
+            return;
+        }
+        uint32_t a = 0, b = 0;
+        if (size >= 4)
+        {
+            std::memcpy(&a, payload, 4);
+        }
+        if (size >= 8)
+        {
+            std::memcpy(&b, payload + 4, 4);
+        }
+        std::lock_guard lock(g_lock);
+        const DWORD now = GetTickCount();
+        if (id == kAward)
+        {
+            g_awardHero = a;
+            g_awardAmount = b;
+            g_awardAt = now;
+            return;
+        }
+        NetMsg::Kill k;
+        k.victim = a;
+        if (g_awardHero && now - g_awardAt <= kPairMs)
+        {
+            k.killer = g_awardHero;
+            k.award = g_awardAmount;
+        }
+        g_awardHero = 0;
+        if (g_kills.size() < 256)
+        {
+            g_kills.push_back(k);
+        }
+    }
 
     void trace(const uint32_t* message)
     {
@@ -63,15 +113,27 @@ namespace
 bool NetMsg::install()
 {
     const char* on = std::getenv("GEAR_NETTRACE");
-    if (!on || on[0] != '1')
-    {
-        return true;
-    }
+    g_trace = on && on[0] == '1';
     if (!Gear::Addr::cNet_queueMessage)
     {
-        LOG("NetMsg: the send queue was not found: net trace is off");
+        LOG("NetMsg: the send queue was not found: no kill events{}", g_trace ? ", no net trace" : "");
         return false;
     }
-    LOG("NetMsg: tracing the messages this client sends (GEAR_NETTRACE=1)");
+    if (g_trace)
+    {
+        LOG("NetMsg: tracing the messages this client sends (GEAR_NETTRACE=1)");
+    }
     return Patch::hook(g_orig, Gear::Addr::cNet_queueMessage, hookQueue, "cNet_queueMessage");
+}
+
+bool NetMsg::takeKill(Kill& out)
+{
+    std::lock_guard lock(g_lock);
+    if (g_kills.empty())
+    {
+        return false;
+    }
+    out = g_kills.front();
+    g_kills.pop_front();
+    return true;
 }
