@@ -300,17 +300,16 @@ back after.
 
 - **A live item** (`item.id` is an item object, in the world or in a container): its own model state is used (made on
   first use, as the inventory does) and its flags (`+0xB0 & 0xF00000`: the rarity tint). Cheap.
-- **A type id or name**: no object exists, and the model renderer needs one (the model instance lives in the item at
-  `+0x40`). Gear makes one for the frame: `cObjectManager::create` at the hero's feet, at once `cInventory::put` into
-  container 31 (an inventory container the game does not use: so the item is never in the world for the world pass and
-  the sector lists forget it), draws, takes it out and destroys it after the layer's commands. In a network game it is local-only: created without broadcast (the engine takes its id from the
-  pool the server granted this client, as for its own local objects), put into and taken out of the container without the
-  announcing flag and destroyed through the engine's local path (`0x005FBDB0 (id, 0, 0, 0)`: no 0x167, the id goes back to
-  the pool), so nothing about it reaches the peers or the server (`Inventory::LocalOnly`). At most 48 types a frame, a few tenths of a millisecond per type and frame: draw a stash
-  list's visible part only, and prefer live items where there are some. The item is created like any new item (random
-  properties may use the game's random numbers); nothing is broadcast and nothing stays behind (the self test draws
-  thousands of frames and checks that no item is left in the container or the world). Destroying such an item while it
-  is still in the world crashes the game a moment later, which is why it goes through the container.
+- **A type id or name** (a stored item): no item object is made at all. The icon takes the type's model pair from the
+  model loader (`0x004115D0` singleton, `0x00412590 (loader, name, out[2], description)` with the type's model name and
+  description from `0x00426250` / `0x004262B0`), the same call the item's own model state makes, and hands it to the model
+  renderer; the pairs are cached per type while icons ask for them and given back (`0x00403E10`) a few seconds after the last
+  request, at most 160 types. No object manager, no id, no network, in every game kind; there is no rarity tint (that comes
+  from the live item's flags). A type the loader cannot load falls back to a temporary item: made at the hero's feet, at once put into
+  container 31 (never in the world), drawn, taken out and destroyed after the layer's commands; in a network game made
+  local-only (no broadcast, no announcing flag, destroyed through the engine's local path `0x005FBDB0 (id, 0, 0, 0)`), at
+  most 48 types a frame, a few tenths of a millisecond per type and frame: draw a stash list's visible
+  part only, and prefer live items where there are some.
 - Nothing is drawn when the type is no item or has no model, without a hero, or when the
   addresses were not found (the log says so at start).
 

@@ -127,7 +127,7 @@ function GearUi.image(id, x, y, w, h, opts) end
 --- fits the box (x, y, w, h) and centered in it (the inventory's own size is 32 units a cell). Give an item (a table from
 --- `gear.world.item` or a container's `items()`: the live object is drawn, with its own state), or a type id or name:
 --- then a temporary item of that type is made at the hero's feet for the frame and destroyed after the layer's drawing
---- (local-only in a network game: nothing reaches the peers; nothing is drawn without a hero; at most 48 different types a frame).
+--- (a type id or name needs no item object: its model pair comes from the model loader; no tint).
 --- Same `layer` and `window` options as the other draws.
 ---@param item GearItem|integer|string An item, a type id or a type name.
 ---@param x number

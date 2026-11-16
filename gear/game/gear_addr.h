@@ -140,6 +140,16 @@ namespace Gear::Addr
     // 005FB530's next step): no id (+0x0C stays 0), no sector list, nothing the network sees. Items are 0x1E4 bytes. The
     // object's own virtual destructor (slot 0, flag 1: delete and free) takes it down again.
     inline Sacred::Thiscall<void*(void* unused, uint32_t kind, uint32_t type, uint32_t id)> cObjectFactory_create{};
+    // The model loader behind an item's model state (cItemBase +0x40 / +0x44, made by 0x0044C330): `0x004115D0` is its
+    // singleton (cdecl), `0x00412590` (thiscall (loader, name, out[2], description) ret 0xC, true if loaded) fills the two
+    // dwords the model renderer takes, `0x00426250` / `0x004262B0` (thiscall (type manager, type) ret 4) are the model name
+    // and description of a type, `0x00403E10` (thiscall (renderer, model0, model1) ret 8) gives a pair back. Gear draws an
+    // item's icon from these alone, with no item object at all.
+    inline Sacred::Cdecl<void*()> modelLoader_instance{};
+    inline Sacred::Thiscall<uint8_t(void* loader, const char* name, uint32_t* out, void* description)> modelLoader_load{};
+    inline Sacred::Thiscall<const char*(void* typeManager, uint32_t type)> cTypeManager_modelName{};
+    inline Sacred::Thiscall<void*(void* typeManager, uint32_t type)> cTypeManager_modelDescription{};
+    inline Sacred::Thiscall<void(void* renderer, uint32_t model0, uint32_t model1)> modelRenderer_free{};
     // ENG 005CF2D0: cWeapon3D's network read / write (vtable slot 8, thiscall (stream, write, code), ret 0xC). Gear
     // only compares an item's slot 8 with it to tell weapons, which keep four more dwords (+0x19C, +0x1AC, +0x1A0,
     // +0x1BC) that the engine's save and network code copy after the common item data.

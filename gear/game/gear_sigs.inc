@@ -52,6 +52,11 @@ static const Sig::Entry kGearSigs[] = {
     {"engine_free", "8B 4C 24 04 85 C9 74 23 8B 44 24 08", 0, Sig::Take::Match, &Gear::Addr::engine_free}, // 0041D3B0, 0041D390
     {"cItem_setRecord", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 8B 44 24 10 64 89 25 00 00 00 00 81 EC 88 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_setRecord}, // 005C0810, 005C0780
     {"cObjectFactory_create", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 53 8B 5C 24 14", 0, Sig::Take::Match, &Gear::Addr::cObjectFactory_create}, // 00451300, 004514D0
+    {"modelLoader_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 44 68 38 A3 01 00", 0, Sig::Take::Match, &Gear::Addr::modelLoader_instance}, // 004115D0, 00411610
+    {"modelLoader_load", "A0 ?? ?? ?? ?? 83 EC 20 84 C0 53 56 8B F1 B3 01", 0, Sig::Take::Match, &Gear::Addr::modelLoader_load}, // 00412590, 004125D0
+    {"cTypeManager_modelName", "8B 44 24 04 85 C0 74 11 3D 60 7E 00 00", 0, Sig::Take::Match, &Gear::Addr::cTypeManager_modelName}, // 00426250, 00426120
+    {"cTypeManager_modelDescription", "8B 44 24 04 85 C0 7E 11 3D 60 7E 00 00 7D 0A C1 E0 07 8B 44 08 08", 0, Sig::Take::Match, &Gear::Addr::cTypeManager_modelDescription}, // 004262B0, 00426180
+    {"modelRenderer_free", "51 8B 44 24 08 56 85 C0 8B F1 74 7A", 0, Sig::Take::Match, &Gear::Addr::modelRenderer_free}, // 00403E10, 00403E10
     {"cWeapon3D_netIO", "51 53 55 56 8B 74 24 14 57 8B F9 8B 06 8B CE FF 50 14 8B 6C 24 20 8B 5C 24 1C 55 53 56 8B CF 89 44 24 1C C7 44 24 24 0D F0 AD BA", 0, Sig::Take::Match, &Gear::Addr::cWeapon3D_netIO}, // 005CF2D0, 005CF240
     {"cSaveEvent_vtable", "8B F1 8B 46 20 C7 06 ?? ?? ?? ?? 85 C0 74 09 50", 7, Sig::Take::Abs32, &Gear::Addr::cSaveEvent_vtable}, // 00890B38, 0088EB38
     {"abilityTable1First", "B8 ?? ?? ?? ?? 66 39 10 74 0E 83 C0 78 41 3D ?? ?? ?? ?? 72 F0", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1First}, // 0094FE28, 0094DE28

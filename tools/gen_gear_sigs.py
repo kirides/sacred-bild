@@ -99,6 +99,12 @@ GEAR = [
     ('cItem_setRecord', 0x005C0810, 'func'),
     # The object factory: an unregistered, constructed object (scratch items for tooltips).
     ('cObjectFactory_create', 0x00451300, 'func'),
+    # The model loader and the type's model name / description: an item's icon without an item object.
+    ('modelLoader_instance', 0x004115D0, 'func'),
+    ('modelLoader_load', 0x00412590, 'func'),
+    ('cTypeManager_modelName', 0x00426250, 'func'),
+    ('cTypeManager_modelDescription', 0x004262B0, 'func'),
+    ('modelRenderer_free', 0x00403E10, 'func'),
     # cWeapon3D's network read / write (vtable slot 8): tells weapons from other items (their four extra dwords).
     ('cWeapon3D_netIO', 0x005CF2D0, 'func'),
     # Saving (gear/save.cpp). The savegame window's event (code 0xF, sub 2; its class is made by the factory 0x8080A0

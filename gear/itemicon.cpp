@@ -1,6 +1,7 @@
 #include "itemicon.h"
 #include "game/gear_addr.h"
 #include "inventory.h"
+#include "log.h"
 #include "world.h"
 
 #include <ddraw.h>
@@ -20,6 +21,19 @@ namespace
     constexpr uint32_t kModelStateFlag = 1u << 26, kResourcesLoaded = 0x80, kRendererFlagsMask = 0xF00000;
     constexpr uintptr_t kRenderFlagsWord = 0x04;
     constexpr float kCellUnits = 32.0f;
+
+    // The model pairs of item types drawn without an item object: loaded through the model loader, kept while icons of the
+    // type keep being asked for, given back to the renderer after kModelIdlePasses passes without one.
+    struct ModelPair
+    {
+        uint32_t model0 = 0, model1 = 0;
+        bool ok = false;
+        uint32_t lastPass = 0;
+    };
+    std::map<uint32_t, ModelPair> g_models;
+    uint32_t g_pass = 0;
+    constexpr uint32_t kModelIdlePasses = 2400;     // a few seconds without a request
+    constexpr uint32_t kMaxModels = 160;
 
     std::map<uint32_t, uint32_t> g_temporary;       // type -> the item made for this pass
     uint32_t g_madeThisPass = 0;
@@ -133,6 +147,76 @@ namespace
         }
     };
 
+    // 1 loaded, 0 not loadable, -1 fault.
+    int callLoadModels(uint32_t type, uint32_t* out)
+    {
+        __try
+        {
+            void* tm = Addr::g_pTypeManager ? *reinterpret_cast<void**>(Addr::g_pTypeManager.address) : nullptr;
+            void* loader = Addr::modelLoader_instance ? Addr::modelLoader_instance() : nullptr;
+            if (!tm || !loader || type == 0 || type >= 0x7E60)
+            {
+                return 0;
+            }
+            const char* name = Addr::cTypeManager_modelName(tm, type);
+            void* description = Addr::cTypeManager_modelDescription(tm, type);
+            if (!name || !name[0])
+            {
+                return 0;
+            }
+            out[0] = out[1] = 0;
+            return (Addr::modelLoader_load(loader, name, out, description) & 0xFF) && out[0] ? 1 : 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    bool callFreeModels(uint32_t m0, uint32_t m1)
+    {
+        __try
+        {
+            void* renderer = Addr::modelRenderer_instance ? Addr::modelRenderer_instance() : nullptr;
+            if (renderer && Addr::modelRenderer_free)
+            {
+                Addr::modelRenderer_free(renderer, m0, m1);
+            }
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    // The model pair of an item type, loaded once; false if the type has none.
+    bool modelsFor(uint32_t type, uint32_t& m0, uint32_t& m1)
+    {
+        auto found = g_models.find(type);
+        if (found == g_models.end())
+        {
+            if (g_models.size() >= kMaxModels)
+            {
+                return false;
+            }
+            ModelPair pair;
+            uint32_t out[2] = {};
+            pair.ok = callLoadModels(type, out) > 0;
+            pair.model0 = out[0];
+            pair.model1 = out[1];
+            if (!pair.ok)
+            {
+                LOG("ItemIcon: no model pair for item type {} through the loader: the temporary item path draws it", type);
+            }
+            found = g_models.emplace(type, pair).first;
+        }
+        found->second.lastPass = g_pass;
+        m0 = found->second.model0;
+        m1 = found->second.model1;
+        return found->second.ok;
+    }
+
     // The temporary item of `type` for this pass: made at the hero's feet, at once moved into a container nobody uses
     // (so it is never in the world for the world pass to see), drawn, taken out and destroyed in endPass(). Destroying
     // an item that is still in the world after its model state was made crashes the game a moment later.
@@ -188,26 +272,39 @@ bool ItemIcon::draw(void* device, const Request& request)
         return false;
     }
     uintptr_t object = request.itemId ? World::itemObject(request.itemId) : 0;
+    uint32_t type = request.type, model0 = 0, model1 = 0, rendererFlags = 0;
+    bool haveModels = false;
     if (!object && request.type)
     {
-        object = temporaryItem(request.type);
+        // An item that is not in the game (a stored one): its icon needs no item object, only the type's model pair.
+        haveModels = modelsFor(request.type, model0, model1);
+        if (!haveModels)
+        {
+            object = temporaryItem(request.type);     // not loadable that way: the old path
+        }
     }
-    if (!object)
+    if (!object && !haveModels)
     {
         return false;
     }
-    void* item = reinterpret_cast<void*>(object);
-    const uint32_t type = at<uint32_t>(object, kType);
-    // As the inventory does before it draws an item: its resources, then its model state.
-    if (!(at<uint8_t>(object, kResources) & kResourcesLoaded))
+    if (object)
     {
-        Addr::cItem_loadResources(item);
-    }
-    if (!(at<uint32_t>(object, kFlags) & kModelStateFlag))
-    {
-        using ModelStateFn = void(__thiscall*)(void* self, int a);
-        const void* const* vtable = *reinterpret_cast<const void* const* const*>(item);
-        reinterpret_cast<ModelStateFn>(const_cast<void*>(vtable[0x28 / 4]))(item, 1);
+        void* item = reinterpret_cast<void*>(object);
+        type = at<uint32_t>(object, kType);
+        // As the inventory does before it draws an item: its resources, then its model state.
+        if (!(at<uint8_t>(object, kResources) & kResourcesLoaded))
+        {
+            Addr::cItem_loadResources(item);
+        }
+        if (!(at<uint32_t>(object, kFlags) & kModelStateFlag))
+        {
+            using ModelStateFn = void(__thiscall*)(void* self, int a);
+            const void* const* vtable = *reinterpret_cast<const void* const* const*>(item);
+            reinterpret_cast<ModelStateFn>(const_cast<void*>(vtable[0x28 / 4]))(item, 1);
+        }
+        model0 = at<uint32_t>(object, kModel);
+        model1 = at<uint32_t>(object, kModel + 4);
+        rendererFlags = at<uint32_t>(object, kItemFlags) & kRendererFlagsMask;
     }
     uint16_t cells[2] = {1, 1};
     Addr::cItemType_size(nullptr, type, &cells[0], &cells[1]);
@@ -223,8 +320,7 @@ bool ItemIcon::draw(void* device, const Request& request)
     {
         return false;
     }
-    Addr::modelRenderer_drawItem(renderer, device, at<uint32_t>(object, kModel), at<uint32_t>(object, kModel + 4), cx, cy, type,
-                                 scale, 0, at<uint32_t>(object, kItemFlags) & kRendererFlagsMask, 0, 0);
+    Addr::modelRenderer_drawItem(renderer, device, model0, model1, cx, cy, type, scale, 0, rendererFlags, 0, 0);
     return true;
 }
 
@@ -239,4 +335,21 @@ void ItemIcon::endPass()
     }
     g_temporary.clear();
     g_madeThisPass = 0;
+    // Model pairs no icon has asked for lately go back to the renderer.
+    ++g_pass;
+    for (auto it = g_models.begin(); it != g_models.end();)
+    {
+        if (g_pass - it->second.lastPass > kModelIdlePasses)
+        {
+            if (it->second.ok)
+            {
+                callFreeModels(it->second.model0, it->second.model1);
+            }
+            it = g_models.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }

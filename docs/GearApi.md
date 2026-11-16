@@ -1703,7 +1703,7 @@ A UI image; `w`, `h` default to its own size. Images are filtered linearly.
 
 #### `gear.ui.item_icon(item, x, y, w, h, opts) -> boolean`
 
-What the game's inventory windows show for an item, its own 3D model, drawn by the game's model renderer as large as fits the box (x, y, w, h) and centered in it (the inventory's own size is 32 units a cell). Give an item (a table from `gear.world.item` or a container's `items()`: the live object is drawn, with its own state), or a type id or name: then a temporary item of that type is made at the hero's feet for the frame and destroyed after the layer's drawing (local-only in a network game: nothing reaches the peers; nothing is drawn without a hero; at most 48 different types a frame). Same `layer` and `window` options as the other draws.
+What the game's inventory windows show for an item, its own 3D model, drawn by the game's model renderer as large as fits the box (x, y, w, h) and centered in it (the inventory's own size is 32 units a cell). Give an item (a table from `gear.world.item` or a container's `items()`: the live object is drawn, with its own state), or a type id or name: then a temporary item of that type is made at the hero's feet for the frame and destroyed after the layer's drawing (a type id or name needs no item object: its model pair comes from the model loader; no tint). Same `layer` and `window` options as the other draws.
 
 - `item`: `GearItem|integer|string` - An item, a type id or a type name.
 - `x`: `number`
