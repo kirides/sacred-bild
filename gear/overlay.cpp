@@ -4,6 +4,7 @@
 
 #include <windows.h>
 #include <lua.hpp>
+#include <map>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -191,6 +192,164 @@ namespace
         return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
     }
 
+    // A text table (scripts\<lang>\global.res): u32 count; count entries {u32 id, u32 offset (from the file start + 4), u32 flags, u32 length}
+    // ascending by id; then the texts, one after the other, UTF-16LE. The patch's `set` gives texts by id (UTF-8, or {text|hex, flags}), `remove` ids.
+    bool applyTextPatch(lua_State* L, int patch, const std::vector<unsigned char>& original, std::vector<unsigned char>& out, std::string& why)
+    {
+        struct Entry
+        {
+            uint32_t flags = 0;
+            std::vector<unsigned char> text;
+        };
+        std::map<uint32_t, Entry> entries;
+        auto u32 = [&](size_t at) {
+            uint32_t v = 0;
+            std::memcpy(&v, original.data() + at, 4);
+            return v;
+        };
+        if (original.size() < 4)
+        {
+            why = "the text table is too small";
+            return false;
+        }
+        const uint32_t count = u32(0);
+        if (4 + static_cast<uint64_t>(count) * 16 > original.size())
+        {
+            why = "the text table is damaged";
+            return false;
+        }
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const size_t e = 4 + static_cast<size_t>(i) * 16;
+            const uint64_t from = static_cast<uint64_t>(u32(e + 4)) + 4, length = u32(e + 12);
+            if (from + length > original.size())
+            {
+                why = "the text table is damaged";
+                return false;
+            }
+            Entry& entry = entries[u32(e)];
+            entry.flags = u32(e + 8);
+            entry.text.assign(original.begin() + static_cast<size_t>(from), original.begin() + static_cast<size_t>(from + length));
+        }
+        lua_getfield(L, patch, "remove");
+        if (lua_istable(L, -1))
+        {
+            const int n = static_cast<int>(lua_objlen(L, -1));
+            for (int i = 1; i <= n; ++i)
+            {
+                lua_rawgeti(L, -1, i);
+                if (lua_isnumber(L, -1))
+                {
+                    entries.erase(static_cast<uint32_t>(lua_tonumber(L, -1)));
+                }
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, patch, "set");
+        if (lua_istable(L, -1))
+        {
+            lua_pushnil(L);
+            while (lua_next(L, -2) != 0)
+            {
+                if (!lua_isnumber(L, -2))
+                {
+                    why = "a text id is not a number";
+                    return false;
+                }
+                const uint32_t id = static_cast<uint32_t>(lua_tonumber(L, -2));
+                Entry& entry = entries[id];
+                std::string utf8;
+                bool haveText = false;
+                std::vector<unsigned char> raw;
+                if (lua_isstring(L, -1) && lua_type(L, -1) == LUA_TSTRING)
+                {
+                    size_t n = 0;
+                    const char* s = lua_tolstring(L, -1, &n);
+                    utf8.assign(s, n);
+                    haveText = true;
+                }
+                else if (lua_istable(L, -1))
+                {
+                    lua_getfield(L, -1, "flags");
+                    if (lua_isnumber(L, -1))
+                    {
+                        entry.flags = static_cast<uint32_t>(lua_tonumber(L, -1));
+                    }
+                    lua_pop(L, 1);
+                    lua_getfield(L, -1, "text");
+                    if (lua_type(L, -1) == LUA_TSTRING)
+                    {
+                        size_t n = 0;
+                        const char* s = lua_tolstring(L, -1, &n);
+                        utf8.assign(s, n);
+                        haveText = true;
+                    }
+                    lua_pop(L, 1);
+                    if (!haveText)
+                    {
+                        lua_getfield(L, -1, "hex");
+                        if (lua_type(L, -1) == LUA_TSTRING)
+                        {
+                            size_t n = 0;
+                            const char* s = lua_tolstring(L, -1, &n);
+                            for (size_t k = 0; k + 1 < n; k += 2)
+                            {
+                                const int hi = hexValue(s[k]), lo = hexValue(s[k + 1]);
+                                if (hi < 0 || lo < 0)
+                                {
+                                    why = "bad hex in a text";
+                                    return false;
+                                }
+                                raw.push_back(static_cast<unsigned char>(hi * 16 + lo));
+                            }
+                            entry.text = raw;
+                        }
+                        else
+                        {
+                            why = "a text has neither text nor hex";
+                            return false;
+                        }
+                        lua_pop(L, 1);
+                    }
+                }
+                if (haveText)
+                {
+                    const int wide = utf8.empty() ? 0 : MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
+                    std::wstring w(static_cast<size_t>(wide), L'\0');
+                    if (wide)
+                    {
+                        MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), w.data(), wide);
+                    }
+                    entry.text.assign(reinterpret_cast<const unsigned char*>(w.data()), reinterpret_cast<const unsigned char*>(w.data()) + w.size() * 2);
+                }
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
+        out.clear();
+        const uint32_t total = static_cast<uint32_t>(entries.size());
+        auto put = [&](uint32_t v) {
+            const unsigned char* p = reinterpret_cast<const unsigned char*>(&v);
+            out.insert(out.end(), p, p + 4);
+        };
+        put(total);
+        uint32_t offset = total * 16;
+        for (const auto& [id, entry] : entries)
+        {
+            put(id);
+            put(offset);
+            put(entry.flags);
+            put(static_cast<uint32_t>(entry.text.size()));
+            offset += static_cast<uint32_t>(entry.text.size());
+        }
+        for (const auto& [id, entry] : entries)
+        {
+            out.insert(out.end(), entry.text.begin(), entry.text.end());
+        }
+        return true;
+    }
+
     // Applies the patch file to `original` in memory; false (and a message) if it does not fit.
     bool applyPatch(const std::string& patchFile, const std::vector<unsigned char>& original, std::vector<unsigned char>& out, std::string& why)
     {
@@ -220,6 +379,13 @@ namespace
         {
             why = "the game's file is not the one the patch was made for (size or crc32 differs)";
             return false;
+        }
+        lua_getfield(L, -1, "kind");
+        const bool texts = lua_isstring(L, -1) && std::strcmp(lua_tostring(L, -1), "texts") == 0;
+        lua_pop(L, 1);
+        if (texts)
+        {
+            return applyTextPatch(L, lua_gettop(L), original, out, why);
         }
         lua_getfield(L, -1, "ops");
         if (!lua_istable(L, -1))
