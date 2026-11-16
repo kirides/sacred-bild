@@ -535,7 +535,7 @@ namespace
     // native.cursor_click() -> sent
     int nativeCursorClick(lua_State* L)
     {
-        lua_pushboolean(L, LuaHost::cursorClick());
+        lua_pushboolean(L, LuaHost::cursorClick(lua_toboolean(L, 1) != 0));
         return 1;
     }
 
@@ -2499,7 +2499,7 @@ LuaHost::Answer LuaHost::skillSlot(int index)
     return Answer::Value;
 }
 
-bool LuaHost::cursorClick()
+bool LuaHost::cursorClick(bool down)
 {
     if (!Gear::Addr::cWindow_handleEventInner || !Gear::Addr::g_uiEventTarget || !Gear::Addr::g_clickEventVtable || !Gear::Addr::g_cursorX ||
         !Gear::Addr::g_cursorY)
@@ -2513,7 +2513,7 @@ bool LuaHost::cursorClick()
     }
     // the event as ReBorn's cave sends it: the mouse event class, type 2, the cursor; the rest of the object is zero
     alignas(4) uint32_t event[0x20] = {};
-    event[0] = static_cast<uint32_t>(Gear::Addr::g_clickEventVtable.address);
+    event[0] = static_cast<uint32_t>(down ? Gear::Addr::g_clickDownEventVtable.address : Gear::Addr::g_clickEventVtable.address);
     event[1] = 2;
     event[2] = static_cast<uint32_t>(*Gear::Addr::g_cursorX);
     event[3] = static_cast<uint32_t>(*Gear::Addr::g_cursorY);

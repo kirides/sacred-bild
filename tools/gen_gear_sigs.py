@@ -36,6 +36,7 @@ GEAR = [
     # Quick cast: a synthetic click event sent to the UI like ReBorn's SR_QUICK_CAST does (event class vtable, the object the engine hands
     # its events to, the cursor, the event handler).
     ('g_clickEventVtable', 0x00899248, 'data'),
+    ('g_clickDownEventVtable', 0x0089704C, 'data'),
     ('g_uiEventTarget', 0x00AD6EF8, 'data'),
     ('g_cursorX', 0x0182EE18, 'data'),
     ('g_cursorY', 0x0182EE1C, 'data'),

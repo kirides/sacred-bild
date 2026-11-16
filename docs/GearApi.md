@@ -1109,10 +1109,11 @@ The difficulty level of the running game: 0 (bronze) to 4 (niobium); nil if the 
 
 - returns `integer?`
 
-#### `gear.game.cursor_click() -> boolean`
+#### `gear.game.cursor_click(down) -> boolean`
 
 Sends the game's UI a click at the current cursor position, as ReBorn's quick cast does after a skill slot was chosen: the chosen skill is used where the cursor is. False if the UI is not there.
 
+- `down`: `boolean` (optional) - true (default): a mouse button down event, the class ReBorn's cave sends; false: a button up event.
 - returns `sent` `boolean`
 
 #### `gear.game.can_save() -> boolean, string?`

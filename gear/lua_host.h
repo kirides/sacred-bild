@@ -54,8 +54,8 @@ namespace LuaHost
     // event `skillslot.select`: a digit key selected a skill slot (`index` the place in the handler); Value when a mod ran.
     Answer skillSlot(int index);
 
-    // gear.game.cursor_click(): the UI gets a click at the cursor (ReBorn's quick cast). False if the UI or the cursor is not there.
-    bool cursorClick();
+    // gear.game.cursor_click(down): the UI gets a mouse event at the cursor (ReBorn's quick cast sends a button down). False if the UI or the cursor is not there.
+    bool cursorClick(bool down);
 
     // event `combat.branch`: whether a conditional jump is taken (`vanilla`: the engine's own condition).
     Answer branch(const char* name, int index, bool vanilla, int eax, bool& take);

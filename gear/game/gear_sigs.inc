@@ -15,6 +15,7 @@ static const Sig::Entry kGearSigs[] = {
     {"g_pNetPlayers", "A1 ?? ?? ?? ?? 55 3B C3 56 75 47 68 D0 3A 00 00", 1, Sig::Take::Abs32, &Gear::Addr::g_pNetPlayers}, // 0182EBE8, 0182CB68
     {"cMouse_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 70", 0, Sig::Take::Match, &Gear::Addr::cMouse_instance}, // 00654F60, 006550F0
     {"g_clickEventVtable", "C7 00 ?? ?? ?? ?? 5E C3 33 C0 5E C3 90 90 90 56", 2, Sig::Take::Abs32, &Gear::Addr::g_clickEventVtable}, // 00899248, 00897248
+    {"g_clickDownEventVtable", "C6 44 24 3A 00 8B 0C A8 C7 44 24 28 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::g_clickDownEventVtable}, // 0089704C, 008950A8
     {"g_uiEventTarget", "6A 01 FF 50 04 C7 05 ?? ?? ?? ?? 00 00 00 00 C3", 7, Sig::Take::Abs32, &Gear::Addr::g_uiEventTarget}, // 00AD6EF8, 00AD4E78
     {"g_cursorX", "A1 ?? ?? ?? ?? 53 53 52 50 53 8D 8C 24 10 01 00 00", 1, Sig::Take::Abs32, &Gear::Addr::g_cursorX}, // 0182EE18, 0182CD98
     {"g_cursorY", "A1 ?? ?? ?? ?? C7 84 24 B4 00 00 00 02 00 00 00", 1, Sig::Take::Abs32, &Gear::Addr::g_cursorY}, // 0182EE1C, 0182CD9C

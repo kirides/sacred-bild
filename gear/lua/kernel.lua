@@ -2701,7 +2701,7 @@ local function make_env(mod)
     gear.game = {
         -- difficulty() -> 0..4: the difficulty level of the running game.
         difficulty = function() return native.difficulty() end,
-        cursor_click = function() return native.cursor_click() end,
+        cursor_click = function(down) return native.cursor_click(down ~= false) end,
         -- can_save() -> true | false, reason: whether a save may start now.
         can_save = function()
             local why = native.save_blocked()

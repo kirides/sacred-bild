@@ -153,6 +153,7 @@ namespace Gear::Addr
     // Quick cast. ENG 00899248: the vtable of the UI's mouse event class; 00AD6EF8: the object the UI events go to; 0182EE18 / 0182EE1C: the
     // cursor; 006172C0: the window event handler (thiscall (target, event, 0)).
     inline Sacred::Global<uint8_t> g_clickEventVtable{};
+    inline Sacred::Global<uint8_t> g_clickDownEventVtable{};     // ENG 0089704C: the mouse button down event class
     inline Sacred::Global<uint8_t*> g_uiEventTarget{};
     inline Sacred::Global<int32_t> g_cursorX{};
     inline Sacred::Global<int32_t> g_cursorY{};
