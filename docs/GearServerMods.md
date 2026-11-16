@@ -33,7 +33,13 @@ needed a 900 s decompile, output in `long/`). All addresses below are GameServer
 - **Kills:** the death command is `0x17D` (u32 object id of the dying creature, u32 "player word"), health `0x128`
   (id, signed hp), and the experience award `0x127` (hero object id, signed amount) reaches the killer. The death
   message has no killer id we know of; credit comes from the matching `0x127` for a hero right after the death.
-  The 0x127 and 0x17D numbers are SacredEngineRemake's, to be confirmed with the net trace.
+  **Confirmed by a net trace (2026-11-16, client sends, `GEAR_NETTRACE=1`):** a kill is `0x17C` (attack), then within
+  a millisecond `0x127` with payload `{hero id (u32), exp award (u32)}` (hero 1 got 2, 3, 2) and `0x17D` with
+  `{victim object id, 1, 1}` (victims 0x3BA, 0x3BC, 0x3B8), both sent by the killer's client. So a client knows its
+  own kills exactly: the award's hero id is the killer, the death's id the victim (look the victim up for its type
+  before it is retired). A creature killed by another creature produces no award. The first dword of a message
+  header has the sender slot in bits 27..31 (the trace showed 33 = slot 1 with flag bits 22..26 = 1); the earlier
+  note "slot bits <<22" in the Gear trace code was wrong and is fixed.
 - **Grants:** a client changes its own hero's gold/inventory locally and the engine broadcasts it; Gear's
   `add_gold`, inventory calls and spawn work this way but are refused in network games (`world.can_change()`).
 - **Gear today:** only runs in `sacred.exe` (refuses `gameserver.exe`); mods have no multiplayer support, and

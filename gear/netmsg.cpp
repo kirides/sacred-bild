@@ -34,7 +34,8 @@ namespace
         std::memcpy(&word0, head, 4);
         std::memcpy(&id, head + 0xE, 2);
         const uint32_t size = word0 & 0x3FFFFF;
-        const uint32_t slot = word0 >> 22;
+        const uint32_t slot = word0 >> 27;           // bits 27..31; 0 is the server
+        const uint32_t flags = (word0 >> 22) & 0x1F; // bits 22..26
         const uint32_t n = g_count[id % kIds].fetch_add(1) + 1;
         if (n > kLogPerId && n % 2000 != 0)
         {
@@ -46,7 +47,7 @@ namespace
         {
             std::snprintf(hex + i * 3, 4, "%02X ", head[16 + i]);
         }
-        LOG("NetMsg: id 0x{:X} size {} slot {} #{} payload {}", id, size, slot, n, hex);
+        LOG("NetMsg: id 0x{:X} size {} slot {} flags {} #{} payload {}", id, size, slot, flags, n, hex);
     }
 
     uint32_t __fastcall hookQueue(void* net, void* edx, uint32_t* message, uint8_t flush)
