@@ -4,6 +4,7 @@
 #include "instance.h"
 
 #include <windows.h>
+#include <detours/detours.h>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -30,6 +31,8 @@ namespace
     std::unordered_map<std::string, unsigned> g_served;     // game path (lower case) -> opens served from a mod
     std::string g_gameDir;                                      // lower case, no trailing backslash
     bool g_installed = false;
+    bool g_server = false;      // inside gameserver.exe: the client's mods' file rules only (no saves, no CreateProcess hook)
+    constexpr const char* kHandoff = "SACREDGEAR_OVERLAY_MODS";
 
     std::string narrow(const std::wstring& s)
     {
@@ -136,7 +139,10 @@ namespace
                 if (count)
                 {
                     std::lock_guard guard(g_servedLock);
-                    ++g_served[rel];
+                    if (++g_served[rel] == 1 && g_server)
+                    {
+                        LOG("Overlay: the gameserver opened {} -> {} (mod {})", rel, out, r.id);
+                    }
                 }
                 return true;
             }
@@ -346,6 +352,67 @@ namespace
         return true;
     }
 
+    using CreateProcessAFn = BOOL(WINAPI*)(LPCSTR, LPSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD,
+                                           LPVOID, LPCSTR, LPSTARTUPINFOA, LPPROCESS_INFORMATION);
+    CreateProcessAFn g_createProcess = nullptr;
+    std::string g_handoff;      // the mods with file rules, comma separated
+
+    // The gameserver that sacred.exe starts for a LAN game or a hosted game reads the data files itself (balance.bin,
+    // the scripts): it must see the same ones as the client. Gear gets into it as SacredBild does, by Detours, and
+    // hands it the ids of the mods the client overlays through the environment (the child inherits it).
+    BOOL WINAPI hookCreateProcessA(LPCSTR app, LPSTR cmd, LPSECURITY_ATTRIBUTES processAttr, LPSECURITY_ATTRIBUTES threadAttr,
+                                   BOOL inherit, DWORD flags, LPVOID env, LPCSTR dir, LPSTARTUPINFOA startup,
+                                   LPPROCESS_INFORMATION info)
+    {
+        const char* name = app ? std::strrchr(app, '\\') : nullptr;
+        if (app && _stricmp(name ? name + 1 : app, "GameServer.exe") == 0)
+        {
+            if (env)
+            {
+                LOG("Overlay: the gameserver gets its own environment: the mods' files are not handed to it");
+            }
+            else
+            {
+                SetEnvironmentVariableA(kHandoff, g_handoff.c_str());
+                HMODULE self = nullptr;
+                char dll[MAX_PATH] = {};
+                GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   reinterpret_cast<LPCSTR>(&hookCreateProcessA), &self);
+                GetModuleFileNameA(self, dll, MAX_PATH);
+                if (DetourCreateProcessWithDllExA(app, cmd, processAttr, threadAttr, inherit, flags, env, dir, startup, info,
+                                                  dll, g_createProcess))
+                {
+                    LOG("Overlay: {} started with Sacred Gear, mods: {}", app, g_handoff);
+                    return TRUE;
+                }
+                LOG("Overlay: starting {} with Sacred Gear failed ({}); starting it without", app, GetLastError());
+            }
+        }
+        return g_createProcess(app, cmd, processAttr, threadAttr, inherit, flags, env, dir, startup, info);
+    }
+
+    void hookServerLaunch()
+    {
+        g_handoff.clear();
+        for (const ModRules& r : g_rules)
+        {
+            if (!r.files.empty())
+            {
+                g_handoff += (g_handoff.empty() ? "" : ",") + r.id;
+            }
+        }
+        if (g_handoff.empty())
+        {
+            return;
+        }
+        g_createProcess = reinterpret_cast<CreateProcessAFn>(
+            Patch::iat("KERNEL32.dll", "CreateProcessA", reinterpret_cast<void*>(&hookCreateProcessA)));
+        if (!g_createProcess)
+        {
+            LOG("Overlay: CreateProcessA is not imported: a gameserver will not get the mods' files");
+        }
+    }
+
     // The mods the run uses: `-gear-mods=a,b` on the command line, else all.
     std::vector<std::string> selectedMods()
     {
@@ -410,6 +477,10 @@ namespace
             }
             if (lower(key) == "saves")
             {
+                if (g_server)
+                {
+                    continue;       // the gameserver has no savegames
+                }
                 rules.saves = true;
                 rules.savesRoot = dir + "\\" + backslashes(value);
                 while (!rules.savesRoot.empty() && rules.savesRoot.back() == '\\')
@@ -444,7 +515,27 @@ bool Overlay::install(const std::wstring& gameDir)
     {
         g_gameDir.pop_back();
     }
-    const std::vector<std::string> selected = selectedMods();
+    std::vector<std::string> selected = selectedMods();
+    if (g_server)
+    {
+        // The client decided which mods apply (the ones it overlays itself): the same ids, read from the same folder.
+        selected.clear();
+        char list[2048] = {};
+        GetEnvironmentVariableA(kHandoff, list, sizeof(list) - 1);
+        std::stringstream ss(list);
+        std::string item;
+        while (std::getline(ss, item, ','))
+        {
+            if (!item.empty())
+            {
+                selected.push_back(item);
+            }
+        }
+        if (selected.empty())
+        {
+            return false;
+        }
+    }
     WIN32_FIND_DATAW fd;
     const HANDLE h = FindFirstFileW((gameDir + L"\\mods\\*").c_str(), &fd);
     if (h != INVALID_HANDLE_VALUE)
@@ -461,13 +552,13 @@ bool Overlay::install(const std::wstring& gameDir)
             {
                 continue;
             }
-            if (!modEnabled(gameDir, gameDir + L"\\mods\\" + name, id))
+            if (!g_server && !modEnabled(gameDir, gameDir + L"\\mods\\" + name, id))
             {
                 LOG("Overlay: mod {} is switched off: no file rules, saves untouched", id);
                 continue;
             }
             ModRules rules;
-            if (readRules(gameDir + L"\\mods\\" + name, id, rules))
+            if (readRules(gameDir + L"\\mods\\" + name, id, rules) && !(g_server && rules.files.empty()))
             {
                 LOG("Overlay: mod {}: {} file rule(s){}", id, rules.files.size(),
                     rules.saves ? ", saves in " + rules.savesRoot : std::string{});
@@ -484,7 +575,7 @@ bool Overlay::install(const std::wstring& gameDir)
     auto hook = [](const char* name, void* replacement) {
         void* previous = Patch::iat("KERNEL32.dll", name, replacement);
         // SacredBild reads the language files with these two
-        if (std::strcmp(name, "CreateFileA") == 0 || std::strcmp(name, "GetFileAttributesA") == 0)
+        if (!g_server && (std::strcmp(name, "CreateFileA") == 0 || std::strcmp(name, "GetFileAttributesA") == 0))
         {
             Patch::iat("ddraw.dll", "KERNEL32.dll", name, replacement);
         }
@@ -498,15 +589,51 @@ bool Overlay::install(const std::wstring& gameDir)
     g_deleteFile = reinterpret_cast<DeleteFileAFn>(hook("DeleteFileA", reinterpret_cast<void*>(&hookDeleteFileA)));
     g_createDirectory = reinterpret_cast<CreateDirectoryAFn>(hook("CreateDirectoryA", reinterpret_cast<void*>(&hookCreateDirectoryA)));
     g_setAttributes = reinterpret_cast<SetFileAttributesAFn>(hook("SetFileAttributesA", reinterpret_cast<void*>(&hookSetFileAttributesA)));
-    g_installed = g_createFile && g_getAttributes && g_findFirst;
+    // gameserver.exe imports only CreateFileA, FindFirstFileA and DeleteFileA of these: it needs just the open.
+    g_installed = g_createFile && (g_server || (g_getAttributes && g_findFirst));
     if (!g_installed)
     {
         LOG("Overlay: the game's file functions are not imported as expected: overlay off");
         g_rules.clear();
         return false;
     }
-    LOG("Overlay: the game's file functions are hooked ({} mod(s))", g_rules.size());
+    LOG("Overlay: the {} file functions are hooked ({} mod(s))", g_server ? "gameserver's" : "game's", g_rules.size());
+    if (!g_server)
+    {
+        hookServerLaunch();
+    }
     return true;
+}
+
+DWORD Overlay::startGameServerForTest(int seconds)
+{
+    char exe[MAX_PATH] = {};
+    GetModuleFileNameA(nullptr, exe, MAX_PATH);
+    std::string app = exe;
+    app.erase(app.find_last_of('\\') + 1);
+    app += "GameServer.exe";
+    std::string dir = app.substr(0, app.find_last_of('\\'));
+    STARTUPINFOA startup = {sizeof(startup)};
+    PROCESS_INFORMATION info = {};
+    // As the game starts it: through the import's hook when the overlay installed one, else the plain call.
+    const BOOL ok = g_createProcess
+        ? hookCreateProcessA(app.c_str(), nullptr, nullptr, nullptr, FALSE, 0, nullptr, dir.c_str(), &startup, &info)
+        : CreateProcessA(app.c_str(), nullptr, nullptr, nullptr, FALSE, 0, nullptr, dir.c_str(), &startup, &info);
+    if (!ok)
+    {
+        return 0;
+    }
+    WaitForSingleObject(info.hProcess, static_cast<DWORD>(seconds) * 1000);
+    TerminateProcess(info.hProcess, 0);
+    CloseHandle(info.hThread);
+    CloseHandle(info.hProcess);
+    return info.dwProcessId;
+}
+
+bool Overlay::installServer(const std::wstring& gameDir)
+{
+    g_server = true;
+    return install(gameDir);
 }
 
 unsigned Overlay::served(const std::string& path)

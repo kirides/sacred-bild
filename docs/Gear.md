@@ -142,6 +142,16 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
   it changes nothing: LAN games need the client and the gameserver to read the same `balance.bin`, and the gameserver is not
   overlaid; a mod that overlays `balance.bin` is for singleplayer). `gear.files.overlay()`, `gear.files.resolve(path)` and `gear.files.served(path)` show what applies and
   what the game really opened through it.
+  **The gameserver.** A hosted or LAN game runs `GameServer.exe`, which reads `binalance.bin` and the scripts itself and
+  compares them with the client's. Sacred Gear hooks the game's `CreateProcessA`: when it starts `GameServer.exe` (and some
+  enabled mod has file rules) it starts it with `SacredGear.dll` injected (Detours, as SacredBild does for its own network
+  patches; both can be injected at once) and hands it the ids of the mods the client overlays in the environment variable
+  `SACREDGEAR_OVERLAY_MODS`. In the server Sacred Gear is headless: it only installs the same file rules of those mods
+  (not the saves redirect: the server has no savegames) and logs `Overlay: the gameserver opened ...` the first time it
+  gets a mod's file (`SacredGear-server.log`, in the game folder). A mod that is off, or no mod with file rules, means no
+  injection at all; a `GameServer.exe` Sacred Gear was not asked to take part in (no handoff variable) is left alone. The
+  server sees the very files the client does, so a mod's balance works for LAN and hosted games. Test:
+  `tools\server-overlay-test.ps1 -GameDir <copy of the game folder>`.
 
 #### World
 

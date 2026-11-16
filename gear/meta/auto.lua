@@ -154,6 +154,12 @@ function GearAuto.site_hook_selftest_result() end
 ---@return boolean? ok
 function GearAuto.write(name, text) end
 
+---Starts GameServer.exe the way the game does for a hosted LAN game (with Sacred Gear injected when mods overlay files),
+---lets it run `seconds` (default 8) and ends it. Its logs are in the game folder (SacredGear-server.log, SacredBild-server.log).
+---@param seconds? number
+---@return integer pid 0 if it did not start
+function GearAuto.start_gameserver(seconds) end
+
 --- Ends the game at once with that exit code.
 ---@param code? integer Default 0.
 function GearAuto.quit(code) end

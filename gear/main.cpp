@@ -10,6 +10,7 @@
 #include "game/gear_addr.h"
 
 #include <windows.h>
+#include <detours/detours.h>
 #include <cstring>
 #include <cwchar>
 #include <string>
@@ -41,6 +42,12 @@ namespace
         const size_t slash = exe.find_last_of(L"\\/");
         const wchar_t* name = exe.c_str() + (slash == std::wstring::npos ? 0 : slash + 1);
         return _wcsicmp(name, L"sacred.exe") == 0 || _wcsicmp(name, L"SacredReborn.exe") == 0;
+    }
+
+    bool isGameServer(const std::wstring& exe)
+    {
+        const size_t slash = exe.find_last_of(L"\\/");
+        return _wcsicmp(exe.c_str() + (slash == std::wstring::npos ? 0 : slash + 1), L"gameserver.exe") == 0;
     }
 
     // One Sacred Gear per process: with an ASI loader and SacredBild both present, SacredGear.asi and
@@ -85,9 +92,39 @@ namespace
         return false;
     }
 
+    // gameserver.exe, which the game's Sacred Gear starts with itself injected (Overlay's CreateProcessA hook) and with
+    // the ids of the mods whose data files it overlays: headless, only the file overlay, so the server reads the same
+    // balance.bin and scripts as the client. Without that handoff (an injector reached it) it does nothing.
+    void startServer(HMODULE module, const std::wstring& exe)
+    {
+        wchar_t mods[8] = {};
+        if (!GetEnvironmentVariableW(L"SACREDGEAR_OVERLAY_MODS", mods, static_cast<DWORD>(std::size(mods))) &&
+            GetLastError() == ERROR_ENVVAR_NOT_FOUND)
+        {
+            return;
+        }
+        if (!claimProcess(module))
+        {
+            return;
+        }
+        DetourRestoreAfterWith();
+        const std::wstring gameDir = directoryOf(exe);
+        Log::init(Instance::logPath(gameDir, L"SacredGear-server.log").c_str());
+        LOG("Sacred Gear {} " __DATE__ " " __TIME__ " in gameserver.exe", Gear::kVersion);
+        if (!Overlay::installServer(gameDir))
+        {
+            LOG("Server: no mod files to overlay");
+        }
+    }
+
     void start(HMODULE module)
     {
         const std::wstring exe = exePath();
+        if (isGameServer(exe))
+        {
+            startServer(module, exe);
+            return;
+        }
         if (!isGame(exe))
         {
             return;

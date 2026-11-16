@@ -2026,6 +2026,12 @@ namespace
         return 1;
     }
 
+    int nativeAutoStartGameServer(lua_State* L)
+    {
+        lua_pushnumber(L, Overlay::startGameServerForTest(static_cast<int>(luaL_optnumber(L, 1, 8))));
+        return 1;
+    }
+
     int nativeAutoQuit(lua_State* L)
     {
         Automation::quit(static_cast<int>(luaL_optnumber(L, 1, 0)));
@@ -2240,6 +2246,7 @@ namespace
                 {"auto_screenshot", nativeAutoScreenshot},
                 {"auto_write", nativeAutoWrite},
                 {"auto_quit", nativeAutoQuit},
+                {"auto_start_gameserver", nativeAutoStartGameServer},
                 {nullptr, nullptr},
             };
             for (const luaL_Reg* r = kAutomation; r->name; ++r)

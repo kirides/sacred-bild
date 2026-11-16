@@ -2515,6 +2515,13 @@ Writes a file into `GearAutomation\<instance>`.
 - `text`: `string`
 - returns `ok` `boolean?`
 
+#### `gear.auto.start_gameserver(seconds) -> integer`
+
+Starts GameServer.exe the way the game does for a hosted LAN game (with Sacred Gear injected when mods overlay files), lets it run `seconds` (default 8) and ends it. Its logs are in the game folder (SacredGear-server.log, SacredBild-server.log).
+
+- `seconds`: `number` (optional)
+- returns `pid` `integer` - 0 if it did not start
+
 #### `gear.auto.quit(code)`
 
 Ends the game at once with that exit code.

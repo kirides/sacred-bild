@@ -2491,6 +2491,9 @@ local function make_auto()
         if fmul == nil then return nil end
         return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept, damage = damage}
     end
+    function auto.start_gameserver(seconds)
+        return native.auto_start_gameserver(seconds or 8)
+    end
     function auto.quit(code)
         native.auto_release()
         native.auto_quit(code or 0)
