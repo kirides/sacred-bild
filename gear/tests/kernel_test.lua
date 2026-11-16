@@ -146,7 +146,7 @@ local native = {
     drops_rarity = function(t) drops_pub.rarity = t end,
     drops_rng = function(mode, seeded, seed) drops_pub.rng = {mode, seeded, seed}; drops_pub.rng_pushes = (drops_pub.rng_pushes or 0) + 1 end,
     drops_handlers = function(r, s, rn) drops_pub.handlers = {r, s, rn} end,
-    drops_rarity_table = function() return {{id = 2, weight = 4, vanilla = 4}, {id = 15, weight = 100, vanilla = 100}, {id = 16, weight = 800, vanilla = 800}} end,
+    drops_rarity_table = function() return {{id = 2, weight = 4, vanilla = 4}, {id = 15, weight = 100, vanilla = 100}, {id = 16, weight = 800, vanilla = 800}, {id = 1, weight = 9, vanilla = 9}} end,
     drops_stats = function()
         local q, c = {}, {}
         for i = 1, 16 do q[i] = i == 3 and 7 or 0 end
@@ -154,7 +154,7 @@ local native = {
         return {rolls = 3, forced = 1, vetoed = 0, picks = 7, overridden = 0, rarity_draws = 2, rand_calls = 0, lua_draws = 0, quality = q, category = c}
     end,
     drops_stats_reset = function() drops_pub.reset = true end,
-    drops_test_roll = function(id, n, bonus) drops_pub.sim = {id, n, bonus}; return id == 77 end,
+    drops_test_roll = function(id, n, bonus, forced) drops_pub.sim = {id, n, bonus, forced}; return id == 77 end,
     drops_test_progress = function() return 5, 10 end,
     drops_random = function(n) return n - 1 end,    ui_region = function(...) ui_recording[#ui_recording + 1] = {'region', ...}; return true end,
     ui_events = function() local e = ui_events_queue; ui_events_queue = {}; return e end,
@@ -1118,12 +1118,12 @@ do
         'drops: the game generator and no handlers by default')
     drops.chance_scale(2)
     drops.find_scale(1.5)
-    drops.rarity_weights({[14] = 0.5, [0] = 1.25, normal = 2})
+    drops.rarity_weights({[14] = 0.5, special1 = 2})
     kernel.tick(0.016)
     ok(drops_pub.chance == 2 and drops_pub.find == 1.5, 'drops: scales pushed')
-    ok(drops_pub.rarity[2] == 0.5 and drops_pub.rarity[16] == 2, 'drops: quality 14 is table id 2, quality 0 / "normal" id 16 (the later key wins in a table)')
-    ok(not pcall(drops.chance_scale, -1) and not pcall(drops.rarity_weights, {[15] = 1}) and not pcall(drops.rarity_weights, {[3] = 'x'}),
-        'drops: bad numbers are refused')
+    ok(drops_pub.rarity[2] == 0.5 and drops_pub.rarity[1] == 2, 'drops: quality 14 is table id 2, special1 id 1')
+    ok(not pcall(drops.chance_scale, -1) and not pcall(drops.rarity_weights, {[15] = 1}) and not pcall(drops.rarity_weights, {[0] = 1})
+        and not pcall(drops.rarity_weights, {normal = 1}) and not pcall(drops.rarity_weights, {[3] = 'x'}), 'drops: bad numbers and keys are refused')
     drops.rarity_weights(nil)
     drops.chance_scale(nil)
     kernel.tick(0.016)
@@ -1135,6 +1135,10 @@ do
     drops.rng({seed = 42})
     kernel.tick(0.016)
     ok(drops_pub.rng[1] == 1 and drops_pub.rng[2] == true and drops_pub.rng[3] == 42, 'drops: rng seeded')
+    local before_again = drops_pub.rng_pushes
+    drops.rng({seed = 42})
+    kernel.tick(0.016)
+    ok(drops_pub.rng_pushes == before_again + 1, 'drops: the same seed set again is applied again (a reseed)')
     local pushes = drops_pub.rng_pushes
     drops.chance_scale(3)
     kernel.tick(0.016)
@@ -1174,7 +1178,8 @@ do
     ok(drops_pub.handlers[1] == false and drops_pub.handlers[2] == false and kernel.drops_roll({}) == nil, 'drops: handlers removed')
     -- data views
     local t = drops.rarity_table()
-    ok(#t == 3 and t[1].quality == 14 and t[2].quality == 1 and t[3].quality == 0 and t[1].weight == 4, 'drops.rarity_table: ids map to qualities')
+    ok(#t == 4 and t[1].quality == 14 and t[2].quality == 1 and t[3].quality == 0 and t[1].weight == 4 and t[1].kind == 'quality'
+        and t[3].kind == 'plain' and t[4].kind == 'special', 'drops.rarity_table: ids map to qualities and kinds')
     local s = drops.stats()
     ok(s.rolls == 3 and s.quality[2] == 7 and s.quality[0] == 0 and s.category[31] == 0, 'drops.stats: counters, indexed from 0')
     drops.reset_stats()
@@ -1183,8 +1188,8 @@ do
     local saved_hero = hero_id
     ok(drops.simulate(77, 10, 5) == nil, 'drops.simulate: refused without a game')
     hero_id = 1
-    local good = drops.simulate(77, 10, 5)
-    ok(good == true and drops_pub.sim[1] == 77 and drops_pub.sim[2] == 10 and drops_pub.sim[3] == 5, 'drops.simulate asks the host')
+    local good = drops.simulate(77, 10, 5, 5169)
+    ok(good == true and drops_pub.sim[1] == 77 and drops_pub.sim[2] == 10 and drops_pub.sim[3] == 5 and drops_pub.sim[4] == 5169, 'drops.simulate asks the host')
     ok(drops.simulate(78, 10) == nil, 'drops.simulate: unknown creature')
     hero_id = saved_hero
     local done, queued = drops.simulation_progress()

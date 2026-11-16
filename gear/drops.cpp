@@ -320,6 +320,7 @@ namespace
     decltype(A::cItem_pickType)::Ptr g_origPick = nullptr;
     thread_local int t_loot = 0;
     thread_local uint32_t t_lootType = 0;
+    thread_local bool t_forced = false;     // inside a loot roll for an authored drop (a forced item type): the chance scale leaves it alone
 
     bool readU32(const void* base, uintptr_t offset, uint32_t& out)
     {
@@ -371,8 +372,11 @@ namespace
         }
         ++t_loot;
         const uint32_t outer = t_lootType;
+        const bool outerForced = t_forced;
         t_lootType = type;
+        t_forced = forced != 0;
         int* result = g_origLoot(self, edx, forced, bonus, survival, killer);
+        t_forced = outerForced;
         t_lootType = outer;
         --t_loot;
         return result;
@@ -390,7 +394,7 @@ namespace
         {
             LuaHost::DropSelect info;
             info.category = category;
-            info.level = level;
+            info.level = level & 0xFFFF;    // the loot code pushes `cx`: the upper half is whatever ecx held
             info.heroPref = heroPref;
             info.flags = flags;
             info.quality = quality;
@@ -404,7 +408,7 @@ namespace
                 }
                 if (answer.hasLevel)
                 {
-                    level = answer.level;
+                    level = answer.level & 0xFFFF;
                 }
                 if (answer.hasQuality)
                 {
@@ -430,7 +434,7 @@ namespace
     // --- self test ------------------------------------------------------------------------------------------------------------
 
     std::mutex g_testLock;
-    uint32_t g_testObject = 0, g_testBonus = 0;
+    uint32_t g_testObject = 0, g_testBonus = 0, g_testForced = 0;
     int g_testQueued = 0, g_testDone = 0;
 }
 
@@ -502,7 +506,9 @@ void Drops::setScales(double chance, double find)
 
 double Drops::chanceScale()
 {
-    return g_chanceScale.load(std::memory_order_relaxed);
+    // An authored drop (forced item type) is not a chance: with a scale of 0 the loot function would end before it, with a big one it could run
+    // more passes and make the item again.
+    return t_forced ? 1.0 : g_chanceScale.load(std::memory_order_relaxed);
 }
 
 double Drops::findScale()
@@ -591,7 +597,7 @@ void Drops::resetStats()
     }
 }
 
-bool Drops::testRoll(uint32_t objectId, int count, uint32_t bonus)
+bool Drops::testRoll(uint32_t objectId, int count, uint32_t bonus, uint32_t forced)
 {
     std::lock_guard lock(g_testLock);
     if (g_testDone < g_testQueued || !g_origLoot || count <= 0 || count > 100000 || !World::objectAddress(objectId))
@@ -600,6 +606,7 @@ bool Drops::testRoll(uint32_t objectId, int count, uint32_t bonus)
     }
     g_testObject = objectId;
     g_testBonus = bonus;
+    g_testForced = forced;
     g_testQueued = count;
     g_testDone = 0;
     return true;
@@ -613,13 +620,14 @@ std::pair<int, int> Drops::testProgress()
 
 void Drops::frame()
 {
-    uint32_t object = 0, bonus = 0;
+    uint32_t object = 0, bonus = 0, forced = 0;
     int todo = 0;
     {
         std::lock_guard lock(g_testLock);
         todo = std::min(g_testQueued - g_testDone, 40);
         object = g_testObject;
         bonus = g_testBonus;
+        forced = g_testForced;
     }
     if (todo <= 0)
     {
@@ -634,7 +642,7 @@ void Drops::frame()
     }
     for (int i = 0; i < todo; ++i)
     {
-        hookLoot(reinterpret_cast<void*>(self), nullptr, 0, bonus, 0, 0);
+        hookLoot(reinterpret_cast<void*>(self), nullptr, static_cast<int>(forced), bonus, 0, 0);
     }
     std::lock_guard lock(g_testLock);
     g_testDone += todo;

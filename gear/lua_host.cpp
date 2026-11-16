@@ -1897,7 +1897,7 @@ namespace
 
     // Drops (gear/drops.h). native.drops_handlers(roll, select, random); native.drops_scales(chance, find); native.drops_rng(mode, seeded, seed);
     // native.drops_rarity({[table id] = multiplier}); native.drops_rarity_table() -> {{id, weight, vanilla}}; native.drops_stats() -> table;
-    // native.drops_stats_reset(); native.drops_test_roll(object id, count, bonus) -> bool; native.drops_test_progress() -> done, queued;
+    // native.drops_stats_reset(); native.drops_test_roll(object id, count, bonus, forced type) -> bool; native.drops_test_progress() -> done, queued;
     // native.drops_random(n) -> 0 .. n - 1 from the fair generator.
     int nativeDropsHandlers(lua_State* L)
     {
@@ -1996,7 +1996,7 @@ namespace
     int nativeDropsTestRoll(lua_State* L)
     {
         lua_pushboolean(L, Drops::testRoll(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<int>(luaL_checknumber(L, 2)),
-                                           static_cast<uint32_t>(luaL_optnumber(L, 3, 0))));
+                                           static_cast<uint32_t>(luaL_optnumber(L, 3, 0)), static_cast<uint32_t>(luaL_optnumber(L, 4, 0))));
         return 1;
     }
 

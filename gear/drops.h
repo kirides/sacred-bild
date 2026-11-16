@@ -73,9 +73,9 @@ namespace Drops
     Stats stats();
     void resetStats();
 
-    // Self test (automation): `count` loot rolls of the creature `objectId` at the next frames, outside Lua, so that the events work. The
+    // Self test (automation): `count` loot rolls of the creature `objectId` (with the authored item type `forced` if not 0) at the next frames, outside Lua, so that the events work. The
     // items they make stay in the world. Returns false if one is already running or something is missing.
-    bool testRoll(uint32_t objectId, int count, uint32_t bonus);
+    bool testRoll(uint32_t objectId, int count, uint32_t bonus, uint32_t forced);
     // Rolls done / queued.
     std::pair<int, int> testProgress();
 

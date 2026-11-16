@@ -1142,8 +1142,9 @@ A row of the game's rarity table.
 
 | Field | Type | |
 |---|---|---|
-| `id` | `integer` | The table id (2 .. 15 are the qualities 14 .. 1, 16 is plain). |
-| `quality` | `integer` | The quality the id gives (`16 - id`, 0 for 16). |
+| `id` | `integer` | The table id (2 .. 15 are the qualities 14 .. 1; 0 and 1 hand the roll to the special resource selection; 16 and 17 are plain). |
+| `quality` | `integer` | The quality the id gives (`16 - id` for 2 .. 15, 0 otherwise). |
+| `kind` | `'quality'\|'special'\|'plain'` | What the row is. |
 | `weight` | `integer` | The weight now (after the mods' multipliers). |
 | `vanilla` | `integer` | The weight as the game loaded it. |
 
@@ -1184,9 +1185,7 @@ Multiplies how strongly the rarity bonus ("magic find") widens the weights of th
 
 #### `gear.drops.rarity_weights(weights)`
 
-Multiplies the weights of the rarity table by quality (replaces this mod's previous multipliers; `nil` clears them). Keys are the qualities 0 (plain, also `'normal'`) and 1 .. 14; a quality you leave out keeps its weight. The table feeds every path that rolls a rarity (creature loot, containers, the other equipment generators), and the plain weight does not grow with the rarity bonus while the others do. If the weights add up to less than 10000 the remainder is plain items; more than 10000 pushes the rarest qualities out of reach.
-
-- `weights`: `table<integer|string, number>` (optional)
+Multiplies the weights of the rarity table (replaces this mod's previous multipliers; `nil` clears them). Keys are the qualities 1 .. 14 and `'special0'` / `'special1'`, the two rows that hand the roll to the special resource selection; a key you leave out keeps its weight. The table feeds every path that rolls a rarity (creature loot, containers, the other equipment generators). The roll is 1 .. 10000 against the running sum of the weights (times the level factor and, except for the plain rows, the rarity bonus): the rows are tried in table order (`special0`, `special1`, then quality 14 down to 1, then the plain rows) and the first row whose running sum exceeds the roll wins; a roll that no row catches is plain. So plain items are what is left over and their weights change nothing, and weights that add up to more than 10000 push the later rows (the commoner qualities) out of reach.---@param weights table<integer|string, number>?
 
 #### `gear.drops.rng(spec)`
 
@@ -1224,6 +1223,7 @@ Makes the engine run the loot function `count` times for a creature (an object i
 - `creature`: `integer`
 - `count`: `integer`
 - `bonus`: `integer` (optional) - The rarity bonus to roll with (default 0).
+- `forced`: `integer` (optional) - An item type id: roll as for an authored drop of that item (default 0: a random drop).
 - returns `ok` `boolean?`
 - returns `message` `string?`
 

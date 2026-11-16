@@ -3261,7 +3261,7 @@ function D.publish()
     native.drops_scales(chance, find)
     native.drops_rarity(rarity)
     D.rng_fn = rng and rng.fn or nil
-    local key = rng and (rng.mode .. ':' .. tostring(rng.seed) .. ':' .. tostring(rng.fn)) or ''
+    local key = rng and (rng.mode .. ':' .. tostring(rng.seed) .. ':' .. tostring(rng.fn) .. ':' .. tostring(rng.nonce)) or ''
     if key ~= D.pushed then
         D.pushed = key
         native.drops_rng(rng and (rng.mode == 'lua' and 2 or 1) or 0, rng ~= nil and rng.seed ~= nil, rng and rng.seed or 0)
@@ -3269,12 +3269,14 @@ function D.publish()
     native.drops_handlers(D.has('drops.roll'), D.has('drops.select'), rng ~= nil and rng.mode == 'lua')
 end
 
--- The rarity table's id for an item quality: 16 - quality for 1 .. 14, the id 16 for 0 (a plain item).
+-- The rarity table's id for a weight key: 16 - quality for the qualities 1 .. 14, 0 and 1 for 'special0' and 'special1' (the rows that hand the
+-- roll to the special resource selection). The rows 16 and 17 (plain items) are what is left when no rarer row is hit: their weights change nothing.
 function D.id_of(quality)
-    if quality == 'normal' then quality = 0 end
-    assert(type(quality) == 'number' and quality >= 0 and quality <= 14 and quality == math.floor(quality),
-        'a quality is an integer 0 .. 14 (or "normal")')
-    return quality == 0 and 16 or 16 - quality
+    if quality == 'special0' then return 0 end
+    if quality == 'special1' then return 1 end
+    assert(type(quality) == 'number' and quality >= 1 and quality <= 14 and quality == math.floor(quality),
+        "a weight key is a quality 1 .. 14, 'special0' or 'special1' (plain items are what is left over: their weight changes nothing)")
+    return 16 - quality
 end
 
 function D.make(mod)
@@ -3293,7 +3295,7 @@ function D.make(mod)
         D.config(mod).find = mult
         D.dirty = true
     end
-    -- rarity_weights({[quality] = multiplier} | nil): this mod's multipliers of the quality weights (replaces its previous ones).
+    -- rarity_weights({[quality | 'special0' | 'special1'] = multiplier} | nil): this mod's multipliers of the rarity weights (replaces its previous ones).
     function d.rarity_weights(weights)
         local c = D.config(mod)
         c.rarity = {}
@@ -3310,15 +3312,16 @@ function D.make(mod)
     -- returning a number in [0, 1) per draw, or nil / 'game' for the game's own.
     function d.rng(spec)
         local c = D.config(mod)
+        D.nonce = (D.nonce or 0) + 1      -- every call counts as a new choice: a seed is applied again
         if spec == nil or spec == 'game' then
             c.rng = nil
         elseif spec == 'fair' then
-            c.rng = {mode = 'fair'}
+            c.rng = {mode = 'fair', nonce = D.nonce}
         elseif type(spec) == 'table' then
             assert(spec.seed == nil or type(spec.seed) == 'number', 'seed must be a number')
-            c.rng = {mode = 'fair', seed = spec.seed}
+            c.rng = {mode = 'fair', seed = spec.seed, nonce = D.nonce}
         elseif type(spec) == 'function' then
-            c.rng = {mode = 'lua', fn = spec, owner = mod}
+            c.rng = {mode = 'lua', fn = spec, owner = mod, nonce = D.nonce}
         else
             error("the generator must be 'fair', 'game', {seed = n} or a function", 2)
         end
@@ -3333,7 +3336,8 @@ function D.make(mod)
     function d.rarity_table()
         local out = {}
         for i, e in ipairs(native.drops_rarity_table()) do
-            out[i] = {id = e.id, quality = (e.id >= 2 and e.id <= 15) and (16 - e.id) or 0, weight = e.weight, vanilla = e.vanilla}
+            out[i] = {id = e.id, quality = (e.id >= 2 and e.id <= 15) and (16 - e.id) or 0, weight = e.weight, vanilla = e.vanilla,
+                kind = e.id <= 1 and 'special' or e.id <= 15 and 'quality' or 'plain'}
         end
         return out
     end
@@ -3349,10 +3353,11 @@ function D.make(mod)
     function d.reset_stats() native.drops_stats_reset() end
     -- simulate(creature, count, bonus?) -> true | nil, message: makes the engine run the loot function `count` times for the creature (an object
     -- id), a few per frame, through all hooks; the items it makes lie in the world. For tuning and tests; single player only.
-    function d.simulate(creature, count, bonus)
+    function d.simulate(creature, count, bonus, forced)
         assert(type(creature) == 'number' and type(count) == 'number', 'creature and count must be numbers')
+        assert(forced == nil or type(forced) == 'number', 'forced must be an item type id')
         if not world.can_change() then return nil, 'world changes are not allowed now (network game, or no game running)' end
-        if not native.drops_test_roll(creature, count, bonus or 0) then return nil, 'no such creature, or a simulation is running' end
+        if not native.drops_test_roll(creature, count, bonus or 0, forced or 0) then return nil, 'no such creature, or a simulation is running' end
         return true
     end
     -- simulation_progress() -> done, queued
