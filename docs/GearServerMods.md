@@ -26,12 +26,28 @@ needed a 900 s decompile, output in `long/`). All addresses below are GameServer
   ambient NPCs). Experience, gold and death are decided by the owner's `sacred.exe` and sent as messages; the
   server mirrors them. So a kill is visible in three places: the killing player's client, the owner's client and
   the server's object copy.
-- **Chat / messages to a client:** not yet mapped (needs the message type of the chat line; the client's UI chat
-  code is the entry point, then the server handler for that type).
+- **Chat / messages to a client (wire facts, from the SacredEngineRemake catalog, see below):** public chat is
+  message `0x005`, team `0x004`, private `0x003`: four skipped bytes, then NUL-terminated UTF-16 text, the speaker is
+  the message header's slot and **slot 0 is the server** (a system message). `0x032` is the long form (u32 speaker,
+  i32 recipient, 256-byte UTF-16 name area at +8, text at +264).
+- **Kills:** the death command is `0x17D` (u32 object id of the dying creature, u32 "player word"), health `0x128`
+  (id, signed hp), and the experience award `0x127` (hero object id, signed amount) reaches the killer. The death
+  message has no killer id we know of; credit comes from the matching `0x127` for a hero right after the death.
+  The 0x127 and 0x17D numbers are SacredEngineRemake's, to be confirmed with the net trace.
 - **Grants:** a client changes its own hero's gold/inventory locally and the engine broadcasts it; Gear's
   `add_gold`, inventory calls and spawn work this way but are refused in network games (`world.can_change()`).
 - **Gear today:** only runs in `sacred.exe` (refuses `gameserver.exe`); mods have no multiplayer support, and
   there is a planned handshake that checks that all peers run the same mod set (`mod set` hash).
+
+## Wire facts from SacredEngineRemake
+
+[SacredEngineRemake](https://github.com/Aytackydln/SacredEngineRemake) (`Sacred.Network`, C#, no licence: facts only,
+no copied code) has a tested catalog of Sacred Gold's message ids and layouts
+(`Sacred.Network.Tests/Contracts/PacketCatalog.cs`, codecs in `Sacred.Network/Gameplay`, framing in
+`Protocol/GoldMessageCodec.cs`). Useful for us: chat `0x003/0x004/0x005/0x032`, death `0x17D`, experience `0x127`,
+health `0x128`, damage `0x17A`, attack `0x17C`, item pickup `0x143`, local inventory insert `0x145`, trade `0x198`,
+counter HUD message `0x19E`, quest progress/insert `0x1B8/0x1B9`, game settings `0x00C`, session notice `0x002`.
+Its ids use the same numbering as the server's dispatch table (message type at header +0xE).
 
 ## Decision (from John, 2026-11-16)
 
