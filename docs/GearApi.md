@@ -1216,7 +1216,7 @@ Counters of the drop hooks.
 
 Sets the counters to zero.
 
-#### `gear.drops.simulate(creature, count, bonus) -> boolean?, string?`
+#### `gear.drops.simulate(creature, count, bonus, forced) -> boolean?, string?`
 
 Makes the engine run the loot function `count` times for a creature (an object id), a few dozen per frame, through all hooks; the items lie in the world afterwards. A tuning and test aid: a single player game only.
 

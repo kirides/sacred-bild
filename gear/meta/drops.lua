@@ -102,7 +102,7 @@ function GearDrops.reset_stats() end
 ---@param forced? integer An item type id: roll as for an authored drop of that item (default 0: a random drop).
 ---@return boolean? ok
 ---@return string? message
-function GearDrops.simulate(creature, count, bonus) end
+function GearDrops.simulate(creature, count, bonus, forced) end
 
 --- Rolls done and queued by `simulate`.
 ---@return integer done
