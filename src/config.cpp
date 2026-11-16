@@ -174,6 +174,15 @@ void ConfigFile::load(const std::wstring& gameDir)
     Config::display.vsync = readInt(ini, L"Display", L"VSync", Config::display.vsync) != 0;
     Config::display.maxFrameLatency = readInt(ini, L"Display", L"MaxFrameLatency", Config::display.maxFrameLatency);
     Config::ui.scale = static_cast<float>(_wtof(readString(ini, L"UI", L"Scale", L"0").c_str()));
+    // Automation runs only: -gear-ui-scale=N overrides [UI] Scale (self tests at a fixed scale, the ini untouched).
+    if (Instance::automation())
+    {
+        const std::wstring scale = commandLineValue(L"-gear-ui-scale=");
+        if (!scale.empty())
+        {
+            Config::ui.scale = static_cast<float>(_wtof(scale.c_str()));
+        }
+    }
     Config::ui.scaleMenus = _wcsicmp(readString(ini, L"UI", L"ScaleMode", L"InGame").c_str(), L"Full") == 0;
     Config::ui.linearFilter = readInt(ini, L"UI", L"LinearFilter", Config::ui.linearFilter) != 0;
     Config::ui.anchor = readInt(ini, L"UI", L"Anchor", Config::ui.anchor) != 0;
