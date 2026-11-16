@@ -13,7 +13,7 @@ gear.task(function()
     A.screenshot('lan-2-lan')
     -- px (1600x900 shot, UI area x 200..1400) -> UI layout (1024x768)
     local function px(x, y) return (x - 200) / 1.1719, y / 1.1719 end
-    A.ui_click(px(820, 400))     -- the second hero
+    A.ui_click(px(gear.config.hero_x, gear.config.hero_y))     -- the hero (default: the second one)
     gear.wait(2)
     A.ui_click(px(910, 838))     -- Weiter
     gear.wait(3)

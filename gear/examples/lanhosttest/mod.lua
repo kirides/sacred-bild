@@ -7,5 +7,7 @@ return {
     automation = true,
     config = {
         steps = 'shots',
+        hero_x = 820,
+        hero_y = 400,
     },
 }

@@ -7,7 +7,7 @@
   loads the world; SacredGear-server.log in the game folder shows the server opening the mod's balance.bin. Screenshots go to
   out\<Instance>-*.png (step 5 shows the result). Takes the game lock. Needs a hero in the copy's Save folder.
 #>
-param([Parameter(Mandatory = $true)][string]$GameDir, [string]$Instance = 'lan-host', [switch]$Patch)
+param([Parameter(Mandatory = $true)][string]$GameDir, [string]$Instance = 'lan-host', [switch]$Patch, [int]$HeroX = 820, [int]$HeroY = 400)
 $inst = $Instance; $mods = 'lanhosttest'; $patch = $Patch
 $g = $GameDir
 Copy-Item $PSScriptRoot\..\gear\examples\lanhosttest "$g\mods\" -Recurse -Force
@@ -15,6 +15,8 @@ New-Item -ItemType Directory -Force "$g\mods\lanhosttest\data" | Out-Null
 $b = [IO.File]::ReadAllBytes("$g\bin\Balance.bin")
 if ($patch) { $b[1000] = $b[1000] -bxor 1 }
 [IO.File]::WriteAllBytes("$g\mods\lanhosttest\data\balance.bin", $b)
+$modLua = "$g\mods\lanhosttest\mod.lua"
+(Get-Content $modLua -Raw) -replace 'hero_x = \d+', "hero_x = $HeroX" -replace 'hero_y = \d+', "hero_y = $HeroY" | Set-Content $modLua
 Remove-Item "$g\SacredGear-server.log" -ErrorAction SilentlyContinue
 $lock = Join-Path $PSScriptRoot 'game-lock.ps1'
 & $lock acquire -Id lanhost | Out-Null
