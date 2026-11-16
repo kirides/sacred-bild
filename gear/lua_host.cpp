@@ -2032,6 +2032,16 @@ namespace
         return 1;
     }
 
+    // native.auto_show_window(name, shown) -> bool
+    int nativeAutoShowWindow(lua_State* L)
+    {
+        size_t n = 0;
+        const char* name = luaL_checklstring(L, 1, &n);
+        const bool shown = lua_toboolean(L, 2) != 0;
+        lua_pushboolean(L, Ui::setWindowShown(std::string(name, n), shown));
+        return 1;
+    }
+
     int nativeAutoQuit(lua_State* L)
     {
         Automation::quit(static_cast<int>(luaL_optnumber(L, 1, 0)));
@@ -2245,6 +2255,7 @@ namespace
                 {"auto_load", nativeAutoLoad},
                 {"auto_screenshot", nativeAutoScreenshot},
                 {"auto_write", nativeAutoWrite},
+                {"auto_show_window", nativeAutoShowWindow},
                 {"auto_quit", nativeAutoQuit},
                 {"auto_start_gameserver", nativeAutoStartGameServer},
                 {nullptr, nullptr},

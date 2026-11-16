@@ -202,6 +202,9 @@ namespace Gear::Addr
     inline uintptr_t cUI_Popup_setTextBody{};
     inline Sacred::Thiscall<void(void* popup, uint32_t a, void* text, uint8_t b)> cUI_Popup_setText(){ return {cUI_Popup_setTextBody - 0x36}; }
     inline Sacred::Thiscall<void(void* popup, uint32_t flag)> cUI_Popup_show{};
+    // ENG 007325C0: the counterpart of 00732550 (any cUI_Control2: flags |= bits there, flags &= ~bits here; bit 1 is
+    // "visible": the window's vtable +0x24 is told). ret 4. The automation helper that shows or hides a window uses both.
+    inline Sacred::Thiscall<void(void* control, uint32_t bits)> cUI_Control_clearFlags{};
     inline Sacred::Thiscall<void(void* popup, uint32_t itemId)> cUI_Popup_setOwner{};
     inline Sacred::Cdecl<void*(uint32_t bytes)> engine_alloc{};
     inline Sacred::Thiscall<void(void* unused, void* ptr, uint32_t count)> engine_free{};

@@ -46,6 +46,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cUI_Popup_addFlags", "8B 44 24 04 8B 91 54 01 00 00 0B D0", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_addFlags}, // 006E8860, 006E84A0
     {"cUI_Popup_setTextBody", "8A 44 24 1C 84 C0 74 0F 8B 85 54 01 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_setTextBody}, // 006E6ED6, 006E6B16
     {"cUI_Popup_show", "53 8B 5C 24 08 56 8B F1 F6 46 10 01", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_show}, // 00732550, 00731E70
+    {"cUI_Control_clearFlags", "53 8B 5C 24 08 56 8B F1 F6 C3 30 74 3E", 0, Sig::Take::Match, &Gear::Addr::cUI_Control_clearFlags}, // 007325C0, 00731EE0
     {"cUI_Popup_setOwner", "8B 44 24 04 85 C0 89 81 D0 21 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_setOwner}, // 006E81C0, 006E7E00
     {"engine_alloc", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 08 8B 44 24 18 53 48", 0, Sig::Take::Match, &Gear::Addr::engine_alloc}, // 008321A0, 00830F60
     {"engine_free", "8B 4C 24 04 85 C9 74 23 8B 44 24 08", 0, Sig::Take::Match, &Gear::Addr::engine_free}, // 0041D3B0, 0041D390

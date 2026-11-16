@@ -125,6 +125,11 @@ namespace Ui
     };
     bool window(const std::string& name, WindowInfo& out);
 
+    // Automation self tests: shows or hides an in-game window (the window's own `show`, vtable +0x24) without the
+    // events that normally open it (the chest window opens when the hero uses a chest). False if there is no such
+    // window or the game faulted.
+    bool setWindowShown(const std::string& name, bool shown);
+
     // Moves in-game window slot into a frame of its own at (x, y) against the canvas (layout units); set false:
     // back to its own place. Through SacredBild's UI frames: false without them (no SacredBild, its canvas off) and
     // for the windows the game draws alone.

@@ -160,6 +160,14 @@ function GearAuto.write(name, text) end
 ---@return integer pid 0 if it did not start
 function GearAuto.start_gameserver(seconds) end
 
+--- Shows or hides an in-game window by its control name (`UI_WND_CHEST` ...) through the window's own `show`, without the
+--- events that normally open it (the chest window opens when the hero uses a chest). For self tests; false if there is
+--- no such window.
+---@param name string
+---@param shown boolean
+---@return boolean ok
+function GearAuto.show_window(name, shown) end
+
 --- Ends the game at once with that exit code.
 ---@param code? integer Default 0.
 function GearAuto.quit(code) end

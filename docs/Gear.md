@@ -562,6 +562,7 @@ The mods load in the main menu and get the `idle` event there. Mods with `automa
 | In a task: `wait_for_menu(timeout)`, `wait_for_game(timeout)` | Until the main menu is up / a hero exists. |
 | `instance` | The run's name (a string). |
 | `screenshot(name)`, `write(name, text)` | Files in `<game>\GearAutomation\<instance>` (name: letters, digits, `_ - .`). |
+| `show_window(name, shown)` | Shows or hides an in-game window by its control name (`UI_WND_CHEST` ...) through the window's own `show`, without the events that normally open it; for self tests. |
 | `quit(code)` | Ends the game at once with that exit code. |
 
 Automation is isolated by default, so a test can run while you keep using the PC: the game never comes to the front

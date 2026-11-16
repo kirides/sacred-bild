@@ -1244,6 +1244,47 @@ bool Ui::window(const std::string& name, WindowInfo& out)
 
 namespace
 {
+    bool callShow(uintptr_t window, bool shown)
+    {
+        __try
+        {
+            // The visible bit (1) of the control's flags, set and cleared as the engine does (00732550 / 007325C0), which
+            // also tell the window (vtable +0x24).
+            if (!Gear::Addr::cUI_Popup_show || !Gear::Addr::cUI_Control_clearFlags)
+            {
+                return false;
+            }
+            if (shown)
+            {
+                Gear::Addr::cUI_Popup_show(reinterpret_cast<void*>(window), 1);
+            }
+            else
+            {
+                Gear::Addr::cUI_Control_clearFlags(reinterpret_cast<void*>(window), 1);
+            }
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+}
+
+bool Ui::setWindowShown(const std::string& name, bool shown)
+{
+    WindowInfo info;
+    const uintptr_t m = manager();
+    if (!window(name, info))
+    {
+        return false;
+    }
+    const uintptr_t w = windowAt(m, info.slot);
+    return w && callShow(w, shown);
+}
+
+namespace
+{
     std::atomic<uintptr_t> g_engine{0};
 
     // cWorldView_drawOverheadLabels (ENG 00627180) sets bit 0x4000 of the world view's flags (+0x10) each frame

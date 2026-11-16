@@ -2494,6 +2494,12 @@ local function make_auto()
     function auto.start_gameserver(seconds)
         return native.auto_start_gameserver(seconds or 8)
     end
+    -- auto.show_window(name, shown) -> bool: shows or hides an in-game window by its control name (UI_WND_CHEST ...)
+    -- through the window's own show, without the events that normally open it. For self tests.
+    function auto.show_window(name, shown)
+        assert(type(name) == 'string', 'name must be a string')
+        return native.auto_show_window(name, shown and true or false)
+    end
     function auto.quit(code)
         native.auto_release()
         native.auto_quit(code or 0)

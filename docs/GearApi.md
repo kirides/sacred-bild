@@ -2522,6 +2522,14 @@ Starts GameServer.exe the way the game does for a hosted LAN game (with Sacred G
 - `seconds`: `number` (optional)
 - returns `pid` `integer` - 0 if it did not start
 
+#### `gear.auto.show_window(name, shown) -> boolean`
+
+Shows or hides an in-game window by its control name (`UI_WND_CHEST` ...) through the window's own `show`, without the events that normally open it (the chest window opens when the hero uses a chest). For self tests; false if there is no such window.
+
+- `name`: `string`
+- `shown`: `boolean`
+- returns `ok` `boolean`
+
 #### `gear.auto.quit(code)`
 
 Ends the game at once with that exit code.

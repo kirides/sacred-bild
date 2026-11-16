@@ -91,6 +91,7 @@ GEAR = [
     # signature is taken further in (0x6E6ED6, `mov al, [esp + 0x1C]`): the function is that address minus 0x36.
     ('cUI_Popup_setTextBody', 0x006E6ED6, 'code'),
     ('cUI_Popup_show', 0x00732550, 'func'),
+    ('cUI_Control_clearFlags', 0x007325C0, 'func'),
     ('cUI_Popup_setOwner', 0x006E81C0, 'func'),
     ('engine_alloc', 0x008321A0, 'func'),
     ('engine_free', 0x0041D3B0, 'func'),
