@@ -174,7 +174,10 @@ two-client capture.
 - Grants: the host **drops the item at the player's feet** (no client-side sync). `player:give_item` spawns the item
   on the ground at the hero's position on the host (the engine broadcasts world objects); `give_gold` drops a gold
   pile (types 0x140C-0x140F) the same way. This replaces "routed to that player's client" above.
-- Player key: not answered; the proposal stays at hero name + class lower-cased until John says otherwise.
+- Player key: hero name + class lower-cased is fine for now.
+- Later idea: hook into the game's "online play" register/login and add a mod that lets players choose a "Realm" at
+  runtime. Not designed yet; the player key would then become a realm account id, so keep `GearPlayer.key` an
+  opaque string that mods must not parse.
 
 ## Open questions for John (answered ones above)
 
