@@ -1541,6 +1541,13 @@ local function make_ui(mod)
         if type(item) ~= 'number' and type(item) ~= 'string' then error('item_tooltip wants an item, an id or an export', 2) end
         return native.item_tooltip(item, x, y)
     end
+    -- ui.item_tooltip_text(item) -> text | nil, message: the words of the game's item tooltip (UTF-8, with the game's
+    -- colour codes) instead of a popup; same arguments as item_tooltip.
+    function ui.item_tooltip_text(item)
+        if type(item) == 'table' then item = item.id end
+        if type(item) ~= 'number' and type(item) ~= 'string' then error('item_tooltip_text wants an item, an id or an export', 2) end
+        return native.item_tooltip_text(item)
+    end
     function ui.image_info(id)
         local info = type(id) == 'number' and native.ui_image_info(id)
         if info then info.id = id end

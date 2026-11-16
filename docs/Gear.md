@@ -229,6 +229,14 @@ values. Checked in game with armour holding one and two runes and a unique sword
 deposit and a withdrawal in another savegame and process. What is not copied is where an item was: the engine owns that. Gear exposes no
 inventory events yet, so a mod looks at the containers when it needs them (the stash panel refreshes 4 times a second).
 
+`gear.ui.item_tooltip_text(item)` returns its words instead (UTF-8 with the game's colour codes).
+An export's tooltip needs no registered object: the engine's object factory (`0x00451300`, stdcall (kind, type, id), kind = the
+type record's +0x2E) constructs an item without registering it (no id, no object manager, no sector list, nothing sent to the
+network), Gear fills it with the export's entries, record, weapon extras and name id, asks its virtual function 17 for the text
+and deletes it with its own destructor (vtable slot 0, flag 1). Checked on all 55 items of a backpack: the words are identical
+to those of the live items, sockets and unique names included. The export carries the item's own name id (object +0x3C) since
+then: before, a rare or unique item came back from the stash with its type's plain name.
+
 `gear.ui.item_tooltip(item, x, y)` shows the game's own tooltip popup for an item (the display name in its rarity
 colour, price, protection or damage, level, bonus lines, socket count, in the game's framed style): an item table, an
 item id, or an `export` string (a temporary item is made to read the text from). `x`, `y` are the popup's top-left

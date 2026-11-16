@@ -12,6 +12,10 @@ namespace ItemTip
     // `width` / `height`: the popup's size as of its last layout (the previous tooltip it showed), 0 before the first.
     bool show(uint32_t id, int x, int y, int& width, int& height, const char*& error);
 
+    // The tooltip's text (with the game's colour codes) instead of a popup: of an item, or of exported bytes.
+    bool text(uint32_t id, std::wstring& out, const char*& error);
+    bool textExported(const std::string& bytes, std::wstring& out, const char*& error);
+
     // The same for an exported item.
     bool showExported(const std::string& bytes, int x, int y, int& width, int& height, const char*& error);
 }

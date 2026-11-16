@@ -28,6 +28,12 @@ namespace
     // and network code (005CF1A0, 005CF2D0): exported as a 16-byte trailer after the record.
     constexpr uintptr_t kWeaponExtra[4] = {0x19C, 0x1AC, 0x1A0, 0x1BC};
     constexpr size_t kWeaponExtraSize = 16;
+    // The text id of the item's own name (rare and unique names; object +0x3C, the engine's name override 0x44A250),
+    // saved after the weapon extras. Exports made before it was kept lack it and show the type's name.
+    constexpr uintptr_t kItemName = 0x3C;
+    constexpr size_t kNameSize = 4;
+    // The sizes an export can have after its record: nothing, the name, a weapon's extras, both.
+    bool tailOk(size_t tail) { return tail == 0 || tail == kNameSize || tail == kWeaponExtraSize || tail == kWeaponExtraSize + kNameSize; }
 
     bool safeCopy(void* dst, const void* src, size_t size)
     {
@@ -536,7 +542,7 @@ bool Inventory::exportItem(uint32_t id, std::string& bytes, const char*& error)
     }
     const uint16_t n = static_cast<uint16_t>((end - begin) / kEntrySize);
     const bool weapon = isWeapon(o);
-    std::string out(4 + 2 + n * kEntrySize + kEntrySize + (weapon ? kWeaponExtraSize : 0), '\0');
+    std::string out(4 + 2 + n * kEntrySize + kEntrySize + (weapon ? kWeaponExtraSize : 0) + kNameSize, '\0');
     std::memcpy(&out[0], &type, 4);
     std::memcpy(&out[4], &n, 2);
     if ((n && !safeCopy(&out[6], reinterpret_cast<const void*>(begin), n * kEntrySize)) ||
@@ -550,7 +556,63 @@ bool Inventory::exportItem(uint32_t id, std::string& bytes, const char*& error)
         error = "cannot read the weapon";
         return false;
     }
+    uint32_t name = 0;
+    readAt(o, kItemName, name);
+    std::memcpy(&out[6 + n * kEntrySize + kEntrySize + (weapon ? kWeaponExtraSize : 0)], &name, kNameSize);
     bytes = std::move(out);
+    return true;
+}
+
+uint32_t Inventory::exportedType(const std::string& bytes)
+{
+    uint32_t type = 0;
+    if (bytes.size() < 6 + kEntrySize)
+    {
+        return 0;
+    }
+    std::memcpy(&type, bytes.data(), 4);
+    return type;
+}
+
+bool Inventory::fillObject(uintptr_t object, const std::string& bytes, const char*& error)
+{
+    uint16_t n = 0;
+    if (!object || bytes.size() < 6 + kEntrySize)
+    {
+        error = "the item data is too short";
+        return false;
+    }
+    std::memcpy(&n, bytes.data() + 4, 2);
+    const size_t base = 6 + n * kEntrySize + kEntrySize;
+    if (n > kMaxEntries || bytes.size() < base || !tailOk(bytes.size() - base))
+    {
+        error = "the item data has the wrong size";
+        return false;
+    }
+    const size_t tail = bytes.size() - base;
+    const bool hasWeapon = tail == kWeaponExtraSize || tail == kWeaponExtraSize + kNameSize;
+    const bool hasName = tail == kNameSize || tail == kWeaponExtraSize + kNameSize;
+    const auto* data = reinterpret_cast<const uint8_t*>(bytes.data());
+    int r = callApply(object, data + 6, n, data + 6 + n * kEntrySize);
+    if (r > 0 && hasWeapon)
+    {
+        // Saved from a weapon: its four extra dwords. Blobs of weapons saved before they were kept have none and
+        // leave the new weapon's own values.
+        uint8_t extra[kWeaponExtraSize];
+        std::memcpy(extra, data + base, sizeof(extra));
+        r = isWeapon(object) ? callWeaponExtra(object, extra, true) : 0;
+    }
+    if (r > 0 && hasName)
+    {
+        uint32_t name = 0;
+        std::memcpy(&name, data + base + (hasWeapon ? kWeaponExtraSize : 0), kNameSize);
+        r = safeCopy(reinterpret_cast<void*>(object + kItemName), &name, kNameSize) ? 1 : -1;
+    }
+    if (r <= 0)
+    {
+        error = r < 0 ? "the game faulted while giving the item its data" : "the item data was refused";
+        return false;
+    }
     return true;
 }
 
@@ -583,7 +645,7 @@ uint32_t Inventory::importItem(const std::string& bytes, const char*& error, boo
     std::memcpy(&type, bytes.data(), 4);
     std::memcpy(&n, bytes.data() + 4, 2);
     const size_t base = 6 + n * kEntrySize + kEntrySize;
-    if (n > kMaxEntries || (bytes.size() != base && bytes.size() != base + kWeaponExtraSize))
+    if (n > kMaxEntries || bytes.size() < base || !tailOk(bytes.size() - base))
     {
         error = "the item data has the wrong size";
         return 0;
@@ -603,16 +665,8 @@ uint32_t Inventory::importItem(const std::string& bytes, const char*& error, boo
         return 0;
     }
     const uintptr_t o = World::itemObject(id);
-    const auto* data = reinterpret_cast<const uint8_t*>(bytes.data());
-    int r = o ? callApply(o, data + 6, n, data + 6 + n * kEntrySize) : 0;
-    if (r > 0 && bytes.size() == base + kWeaponExtraSize)
-    {
-        // Saved from a weapon: its four extra dwords. Blobs of weapons saved before they were kept have none and
-        // leave the new weapon's own values.
-        uint8_t extra[kWeaponExtraSize];
-        std::memcpy(extra, data + base, sizeof(extra));
-        r = isWeapon(o) ? callWeaponExtra(o, extra, true) : 0;
-    }
+    const char* fillError = nullptr;
+    int r = o && fillObject(o, bytes, fillError) ? 1 : 0;
     if (r > 0 && net)
     {
         r = callAnnounce(o);

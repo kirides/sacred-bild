@@ -135,6 +135,11 @@ namespace Gear::Addr
     // the number at its +8 and, in a network game with notify, announces the whole item (its entries and record, as
     // the engine does after socketing or repairing: message 0x16C) to the peers.
     inline Sacred::Thiscall<void(void* item, void* record, uint32_t notify)> cItem_setRecord{};
+    // ENG 00451300 ("cObjectFactory::create", stdcall (kind, type, id) -> object, ret 0xC): allocates and constructs an object
+    // of the class `kind` (the type record's +0x2E) and returns it WITHOUT registering it with the object manager (that is
+    // 005FB530's next step): no id (+0x0C stays 0), no sector list, nothing the network sees. Items are 0x1E4 bytes. The
+    // object's own virtual destructor (slot 0, flag 1: delete and free) takes it down again.
+    inline Sacred::Thiscall<void*(void* unused, uint32_t kind, uint32_t type, uint32_t id)> cObjectFactory_create{};
     // ENG 005CF2D0: cWeapon3D's network read / write (vtable slot 8, thiscall (stream, write, code), ret 0xC). Gear
     // only compares an item's slot 8 with it to tell weapons, which keep four more dwords (+0x19C, +0x1AC, +0x1A0,
     // +0x1BC) that the engine's save and network code copy after the common item data.

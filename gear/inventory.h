@@ -78,6 +78,13 @@ namespace Inventory
 
     // Makes an item from those bytes at the hero's feet (a new object of the same type with the saved data); its
     // id, or 0 with `error`. The caller puts it into a container.
+    // The type id inside exported bytes (0 if they are no export).
+    uint32_t exportedType(const std::string& bytes);
+
+    // Gives a constructed item object, registered or not (a scratch object made by the object factory), the data of an
+    // export: its entries, its record (and the hash), and a weapon's extra dwords. The object must be of the export's type.
+    bool fillObject(uintptr_t object, const std::string& bytes, const char*& error);
+
     // `temporary`: only to read something from it and destroy it at once (tooltips): made local-only in a network game.
     // In a network game the item is made and announced with the engine's own network calls (0x16F, then 0x16C with its
     // data) and put into the local hero's backpack or the chest with the engine's announcing calls.

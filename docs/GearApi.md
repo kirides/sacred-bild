@@ -1724,6 +1724,14 @@ The game's own tooltip popup for an item, as the inventory windows show it (fram
 - returns `width_or_error` `number|string?` - The popup's width in layout units, or the message when `ok` is nil.
 - returns `height` `number?`
 
+#### `gear.ui.item_tooltip_text(item) -> string?, string?`
+
+The words of the game's item tooltip (UTF-8, with the game's colour codes such as `\c...`) instead of a popup, for the same arguments as `item_tooltip`. Reading an export needs no registered object: a scratch item the object factory makes is filled with the data, asked and deleted, with no object id, no object manager and nothing sent to the network.
+
+- `item`: `GearItem|integer|string`
+- returns `text` `string?`
+- returns `error` `string?`
+
 #### `gear.ui.images(filter) -> GearImageInfo[]`
 
 The UI images whose sheet name contains `filter` (any case), all of them without a filter.

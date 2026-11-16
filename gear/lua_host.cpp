@@ -1749,6 +1749,33 @@ namespace
         return pushFailure(L, error);
     }
 
+    // native.item_tooltip_text(item id | exported bytes) -> text (UTF-8, with the game's colour codes) | nil, message
+    int nativeItemTooltipText(lua_State* L)
+    {
+        const char* error = "bad arguments";
+        std::wstring text;
+        bool ok = false;
+        if (lua_type(L, 1) == LUA_TSTRING)
+        {
+            size_t n = 0;
+            const char* data = lua_tolstring(L, 1, &n);
+            ok = n <= 65536 && ItemTip::textExported(std::string(data, n), text, error);
+        }
+        else
+        {
+            const uint32_t id = checkId(L, 1);
+            ok = id && ItemTip::text(id, text, error);
+        }
+        if (!ok)
+        {
+            return pushFailure(L, error);
+        }
+        char utf8[16384];
+        const int n = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), utf8, sizeof(utf8), nullptr, nullptr);
+        lua_pushlstring(L, utf8, n > 0 ? n : 0);
+        return 1;
+    }
+
     // native.inv_export(item id) -> bytes | nil, message
     int nativeInvExport(lua_State* L)
     {
@@ -2240,6 +2267,7 @@ namespace
             {"inv_destroy", nativeInvDestroy},
             {"inv_socket", nativeInvSocket},
             {"item_tooltip", nativeItemTooltip},
+            {"item_tooltip_text", nativeItemTooltipText},
             {"inv_export", nativeInvExport},
             {"inv_import", nativeInvImport},
             {"realm_get", nativeRealmGet},

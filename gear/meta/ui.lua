@@ -153,6 +153,14 @@ function GearUi.item_icon(item, x, y, w, h, opts) end
 ---@return number? height
 function GearUi.item_tooltip(item, x, y) end
 
+--- The words of the game's item tooltip (UTF-8, with the game's colour codes such as `\c...`) instead of a popup, for the
+--- same arguments as `item_tooltip`. Reading an export needs no registered object: a scratch item the object factory makes
+--- is filled with the data, asked and deleted, with no object id, no object manager and nothing sent to the network.
+---@param item GearItem|integer|string
+---@return string? text
+---@return string? error
+function GearUi.item_tooltip_text(item) end
+
 --- The UI images whose sheet name contains `filter` (any case), all of them without a filter.
 ---@param filter? string
 ---@return GearImageInfo[]

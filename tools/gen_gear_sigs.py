@@ -97,6 +97,8 @@ GEAR = [
     ('engine_free', 0x0041D3B0, 'func'),
     # An item's record set and announced to the peers (0x16C) in a network game.
     ('cItem_setRecord', 0x005C0810, 'func'),
+    # The object factory: an unregistered, constructed object (scratch items for tooltips).
+    ('cObjectFactory_create', 0x00451300, 'func'),
     # cWeapon3D's network read / write (vtable slot 8): tells weapons from other items (their four extra dwords).
     ('cWeapon3D_netIO', 0x005CF2D0, 'func'),
     # Saving (gear/save.cpp). The savegame window's event (code 0xF, sub 2; its class is made by the factory 0x8080A0
