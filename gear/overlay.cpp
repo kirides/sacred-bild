@@ -193,15 +193,91 @@ namespace
     }
 
     // A text table (scripts\<lang>\global.res): u32 count; count entries {u32 id, u32 offset (from the file start + 4), u32 flags, u32 length}
-    // ascending by id; then the texts, one after the other, UTF-16LE. The patch's `set` gives texts by id (UTF-8, or {text|hex, flags}), `remove` ids.
+    // ascending by id; then the texts, one after the other, UTF-16LE. An id can have several entries (in file order). The patch's `set` gives
+    // texts by id (UTF-8, or {text|hex, flags}, or {list = {entry, ...}} for several), `remove` ids.
+    struct TextEntry
+    {
+        uint32_t flags = 0;
+        std::vector<unsigned char> text;
+    };
+
+    // One entry from the Lua value on top of the stack (a string, or {text|hex, flags}); `current` supplies the default flags.
+    bool readTextEntry(lua_State* L, const TextEntry& current, TextEntry& entry, std::string& why)
+    {
+        entry = current;
+        std::string utf8;
+        bool haveText = false;
+        if (lua_type(L, -1) == LUA_TSTRING)
+        {
+            size_t n = 0;
+            const char* s = lua_tolstring(L, -1, &n);
+            utf8.assign(s, n);
+            haveText = true;
+        }
+        else if (lua_istable(L, -1))
+        {
+            lua_getfield(L, -1, "flags");
+            if (lua_isnumber(L, -1))
+            {
+                entry.flags = static_cast<uint32_t>(lua_tonumber(L, -1));
+            }
+            lua_pop(L, 1);
+            lua_getfield(L, -1, "text");
+            if (lua_type(L, -1) == LUA_TSTRING)
+            {
+                size_t n = 0;
+                const char* s = lua_tolstring(L, -1, &n);
+                utf8.assign(s, n);
+                haveText = true;
+            }
+            lua_pop(L, 1);
+            if (!haveText)
+            {
+                lua_getfield(L, -1, "hex");
+                if (lua_type(L, -1) != LUA_TSTRING)
+                {
+                    lua_pop(L, 1);
+                    why = "a text has neither text nor hex";
+                    return false;
+                }
+                size_t n = 0;
+                const char* s = lua_tolstring(L, -1, &n);
+                entry.text.clear();
+                for (size_t k = 0; k + 1 < n; k += 2)
+                {
+                    const int hi = hexValue(s[k]), lo = hexValue(s[k + 1]);
+                    if (hi < 0 || lo < 0)
+                    {
+                        lua_pop(L, 1);
+                        why = "bad hex in a text";
+                        return false;
+                    }
+                    entry.text.push_back(static_cast<unsigned char>(hi * 16 + lo));
+                }
+                lua_pop(L, 1);
+            }
+        }
+        else
+        {
+            why = "a text is neither a string nor a table";
+            return false;
+        }
+        if (haveText)
+        {
+            const int wide = utf8.empty() ? 0 : MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
+            std::wstring w(static_cast<size_t>(wide), L'\0');
+            if (wide)
+            {
+                MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), w.data(), wide);
+            }
+            entry.text.assign(reinterpret_cast<const unsigned char*>(w.data()), reinterpret_cast<const unsigned char*>(w.data()) + w.size() * 2);
+        }
+        return true;
+    }
+
     bool applyTextPatch(lua_State* L, int patch, const std::vector<unsigned char>& original, std::vector<unsigned char>& out, std::string& why)
     {
-        struct Entry
-        {
-            uint32_t flags = 0;
-            std::vector<unsigned char> text;
-        };
-        std::map<uint32_t, Entry> entries;
+        std::map<uint32_t, std::vector<TextEntry>> entries;
         auto u32 = [&](size_t at) {
             uint32_t v = 0;
             std::memcpy(&v, original.data() + at, 4);
@@ -227,9 +303,10 @@ namespace
                 why = "the text table is damaged";
                 return false;
             }
-            Entry& entry = entries[u32(e)];
+            TextEntry entry;
             entry.flags = u32(e + 8);
             entry.text.assign(original.begin() + static_cast<size_t>(from), original.begin() + static_cast<size_t>(from + length));
+            entries[u32(e)].push_back(std::move(entry));
         }
         lua_getfield(L, patch, "remove");
         if (lua_istable(L, -1))
@@ -258,94 +335,73 @@ namespace
                     return false;
                 }
                 const uint32_t id = static_cast<uint32_t>(lua_tonumber(L, -2));
-                Entry& entry = entries[id];
-                std::string utf8;
-                bool haveText = false;
-                std::vector<unsigned char> raw;
-                if (lua_isstring(L, -1) && lua_type(L, -1) == LUA_TSTRING)
+                const TextEntry current = entries.count(id) && !entries[id].empty() ? entries[id].front() : TextEntry{};
+                std::vector<TextEntry> list;
+                bool multiple = false;
+                if (lua_istable(L, -1))
                 {
-                    size_t n = 0;
-                    const char* s = lua_tolstring(L, -1, &n);
-                    utf8.assign(s, n);
-                    haveText = true;
-                }
-                else if (lua_istable(L, -1))
-                {
-                    lua_getfield(L, -1, "flags");
-                    if (lua_isnumber(L, -1))
+                    lua_getfield(L, -1, "list");
+                    multiple = lua_istable(L, -1);
+                    if (multiple)
                     {
-                        entry.flags = static_cast<uint32_t>(lua_tonumber(L, -1));
-                    }
-                    lua_pop(L, 1);
-                    lua_getfield(L, -1, "text");
-                    if (lua_type(L, -1) == LUA_TSTRING)
-                    {
-                        size_t n = 0;
-                        const char* s = lua_tolstring(L, -1, &n);
-                        utf8.assign(s, n);
-                        haveText = true;
-                    }
-                    lua_pop(L, 1);
-                    if (!haveText)
-                    {
-                        lua_getfield(L, -1, "hex");
-                        if (lua_type(L, -1) == LUA_TSTRING)
+                        const int n = static_cast<int>(lua_objlen(L, -1));
+                        for (int k = 1; k <= n; ++k)
                         {
-                            size_t n = 0;
-                            const char* s = lua_tolstring(L, -1, &n);
-                            for (size_t k = 0; k + 1 < n; k += 2)
+                            lua_rawgeti(L, -1, k);
+                            TextEntry entry;
+                            if (!readTextEntry(L, TextEntry{}, entry, why))
                             {
-                                const int hi = hexValue(s[k]), lo = hexValue(s[k + 1]);
-                                if (hi < 0 || lo < 0)
-                                {
-                                    why = "bad hex in a text";
-                                    return false;
-                                }
-                                raw.push_back(static_cast<unsigned char>(hi * 16 + lo));
+                                return false;
                             }
-                            entry.text = raw;
+                            list.push_back(std::move(entry));
+                            lua_pop(L, 1);
                         }
-                        else
-                        {
-                            why = "a text has neither text nor hex";
-                            return false;
-                        }
-                        lua_pop(L, 1);
                     }
+                    lua_pop(L, 1);
                 }
-                if (haveText)
+                if (!multiple)
                 {
-                    const int wide = utf8.empty() ? 0 : MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
-                    std::wstring w(static_cast<size_t>(wide), L'\0');
-                    if (wide)
+                    TextEntry entry;
+                    if (!readTextEntry(L, current, entry, why))
                     {
-                        MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), w.data(), wide);
+                        return false;
                     }
-                    entry.text.assign(reinterpret_cast<const unsigned char*>(w.data()), reinterpret_cast<const unsigned char*>(w.data()) + w.size() * 2);
+                    list.push_back(std::move(entry));
                 }
+                entries[id] = std::move(list);
                 lua_pop(L, 1);
             }
         }
         lua_pop(L, 1);
         out.clear();
-        const uint32_t total = static_cast<uint32_t>(entries.size());
+        uint32_t total = 0;
+        for (const auto& [id, list] : entries)
+        {
+            total += static_cast<uint32_t>(list.size());
+        }
         auto put = [&](uint32_t v) {
             const unsigned char* p = reinterpret_cast<const unsigned char*>(&v);
             out.insert(out.end(), p, p + 4);
         };
         put(total);
         uint32_t offset = total * 16;
-        for (const auto& [id, entry] : entries)
+        for (const auto& [id, list] : entries)
         {
-            put(id);
-            put(offset);
-            put(entry.flags);
-            put(static_cast<uint32_t>(entry.text.size()));
-            offset += static_cast<uint32_t>(entry.text.size());
+            for (const TextEntry& entry : list)
+            {
+                put(id);
+                put(offset);
+                put(entry.flags);
+                put(static_cast<uint32_t>(entry.text.size()));
+                offset += static_cast<uint32_t>(entry.text.size());
+            }
         }
-        for (const auto& [id, entry] : entries)
+        for (const auto& [id, list] : entries)
         {
-            out.insert(out.end(), entry.text.begin(), entry.text.end());
+            for (const TextEntry& entry : list)
+            {
+                out.insert(out.end(), entry.text.begin(), entry.text.end());
+            }
         }
         return true;
     }
