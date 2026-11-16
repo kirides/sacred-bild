@@ -150,6 +150,15 @@ BRANCH_SITES = [
 BRANCH_EXTRA = {0x004D7068: 8, 0x0051DA04: 3, 0x004DEF0B: 4}
 
 
+# Skill slot key routing (ENG 006E1BC0): the `jb 006E2819` after `cmp ax, 0x30` of the character key handler. Gear lets the mods route a character
+# (event `skillslot.key`): to the "full" case of a slot (as the digit keys do: the page choice, the COMBINE_SLOTS check, then the selection), to its
+# "select" half (the selection only), or nowhere. KEY_FULL / KEY_SELECT are the start of those blocks per slot (0 .. 4), KEY_END the end of the handler.
+KEY_SITE = 0x006E2197
+KEY_FULL = [0x006E21BF, 0x006E21F1, 0x006E2223, 0x006E2251, 0x006E227F]
+KEY_SELECT = [0x006E21DC, 0x006E220E, 0x006E223C, 0x006E226A, 0x006E2298]
+KEY_END = 0x006E2819
+
+
 def functions():
     seen = {}
     for _, name, va, _, _, _ in SITES:

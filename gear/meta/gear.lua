@@ -17,6 +17,7 @@
 ---| 'game.saved' # A save `gear.game.save` asked for is written.
 ---| 'game.save_failed' # It could not be written.
 ---| 'combat.constant' # The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it.
+---| 'skillslot.key' # A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it.
 ---| 'combat.branch' # A conditional jump in the hit handlers and a few other functions: a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`).
 ---| 'skillslot.select' # A digit key selected a skill slot of the HUD (`index`: which of the five places in the key handler).
 ---| 'bonus.constant' # A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another.
@@ -104,6 +105,7 @@ gear = {}
 ---@overload fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler
 ---@overload fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler
 ---@overload fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler
+---@overload fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler
 ---@overload fun(event: 'combat.branch', fn: fun(name: string, vanilla: boolean, index: integer, eax: integer): boolean?): GearHandler
 ---@overload fun(event: 'skillslot.select', fn: fun(index: integer)): GearHandler
 ---@overload fun(event: 'bonus.constant', fn: fun(index: integer, vanilla: number, address: integer): number?): GearHandler

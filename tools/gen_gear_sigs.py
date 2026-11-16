@@ -166,6 +166,10 @@ def main():
         extra = gear_sites.BRANCH_EXTRA.get(site, 0)
         lines.append(f'    {{"{name}", {index}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {extra}}}, // {site:08X} in {fn:08X}')
     lines.append('};')
+    fnname, fn = gear_sites.SLOT_FUNCTION
+    lines.append(f'static const uint32_t kKeySite = 0x{gear_sites.KEY_SITE - fn:X}, kKeyEnd = 0x{gear_sites.KEY_END - fn:X};')
+    lines.append('static const uint32_t kKeyFull[5] = {' + ', '.join(f'0x{a - fn:X}' for a in gear_sites.KEY_FULL) + '};')
+    lines.append('static const uint32_t kKeySelect[5] = {' + ', '.join(f'0x{a - fn:X}' for a in gear_sites.KEY_SELECT) + '};')
     with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sites.inc'), 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     if failed:

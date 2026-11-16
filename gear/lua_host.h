@@ -54,6 +54,10 @@ namespace LuaHost
     // event `skillslot.select`: a digit key selected a skill slot (`index` the place in the handler); Value when a mod ran.
     Answer skillSlot(int index);
 
+    // event `skillslot.key`: the routing of a character key: slot 0 .. 4 and mode 0 (the whole case: page, COMBINE_SLOTS check, selection) or 1 (the
+    // selection only), slot -1 ignores the key. Value when a mod answered.
+    Answer skillSlotKey(int character, int& slot, int& mode);
+
     // gear.game.cursor_click(down): the UI gets a mouse event at the cursor (ReBorn's quick cast sends a button down). False if the UI or the cursor is not there.
     bool cursorClick(bool down);
 

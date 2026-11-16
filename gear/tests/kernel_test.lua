@@ -19,7 +19,7 @@ local objects = {}
 local pipe_events = {}
 local sent = {}
 local ability_store = {}
-local ability_active, damage_active, effect_active, bonus_active, slot_active, branch_active
+local ability_active, damage_active, effect_active, bonus_active, slot_active, branch_active, key_active
 local clicks = 0
 local level_active, constant_active
 local ui_recording, ui_published = {}, {}
@@ -83,6 +83,7 @@ local native = {
     effect_active = function(v) effect_active = v end,
     bonus_active = function(v) bonus_active = v end,
     skillslot_active = function(v) slot_active = v end,
+    skillkey_active = function(v) key_active = v end,
     branch_active = function(v) branch_active = v end,
     cursor_click = function() clicks = clicks + 1; return true end,
     difficulty = function() return 2 end,
@@ -284,6 +285,7 @@ files.ab = {
         abil.no_setting = gear.settings.get('NOPE')
         -- the level.factor site hook: tiers of 12 levels, and no answer above 40
         gear.on('creature.ability', function(t, vanilla, index) if t == 7 then return vanilla + 1 end end)
+        gear.on('skillslot.key', function(c) if c == 0x36 then return {0, 'select'} elseif c == 0x39 then return false elseif c == 0x31 then return 2 end end)
         gear.on('combat.branch', function(name, vanilla, index) if name == 'hit.secondary' then return true end end)
         gear.on('skillslot.select', function(index) if index == 2 then gear.game.cursor_click() end end)
         gear.on('bonus.constant', function(index, vanilla) if index == 2 then return vanilla + 1 end end)
@@ -461,6 +463,13 @@ ok(level_active == true, 'registering level.factor tells the host')
 ok(kernel.level_factor(5, 0) == 1 and kernel.level_factor(13, 1) == 2 and kernel.level_factor(30, 2) == 3
    and kernel.level_factor(37, 3) == 4, 'level.factor answers with the handler')
 ok(kernel.level_factor(50, 4) == nil, 'level.factor: no number, no answer')
+ok(key_active == true, 'registering skillslot.key tells the host')
+do
+    local sl, md = kernel.skillslot_key(0x36)
+    local s2, m2 = kernel.skillslot_key(0x39)
+    local s3, m3 = kernel.skillslot_key(0x31)
+    ok(sl == 0 and md == 1 and s2 == -1 and s3 == 2 and m3 == 0 and kernel.skillslot_key(0x41) == nil, 'skillslot.key routes: select half, ignore, full case, engine default')
+end
 ok(branch_active == true, 'registering combat.branch tells the host')
 ok(kernel.combat_branch('hit.secondary', false, 1) == true and kernel.combat_branch('hit.condition', true, 0) == nil, 'combat.branch answers with the handler')
 ok(slot_active == true, 'registering skillslot.select tells the host')

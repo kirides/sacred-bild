@@ -2648,7 +2648,7 @@ local function make_env(mod)
         -- Counters of the engine hooks that ask the mods for a value (gear/sitehook.cpp).
         hooks = {
             stats = function(name)
-                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage' or name == 'effect.add' or name == 'bonus.constant' or name == 'skillslot.select' or name == 'combat.branch', "the hook must be 'level.factor', 'combat.constant', 'creature.ability', 'damage', 'effect.add', 'bonus.constant', 'skillslot.select' or 'combat.branch'")
+                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage' or name == 'effect.add' or name == 'bonus.constant' or name == 'skillslot.select' or name == 'combat.branch' or name == 'skillslot.key', "the hook must be 'level.factor', 'combat.constant', 'creature.ability', 'damage', 'effect.add', 'bonus.constant', 'skillslot.select', 'combat.branch' or 'skillslot.key'")
                 local calls, answered, busy = native.site_hooks(name)
                 return {calls = calls, answered = answered, busy = busy}
             end,
@@ -2745,6 +2745,7 @@ local function make_env(mod)
         if event == 'effect.add' then native.effect_active(true) end
         if event == 'bonus.constant' then native.bonus_active(true) end
         if event == 'skillslot.select' then native.skillslot_active(true) end
+        if event == 'skillslot.key' then native.skillkey_active(true) end
         if event == 'combat.branch' then native.branch_active(true) end
         return h
     end
@@ -2761,6 +2762,7 @@ local function make_env(mod)
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
         if h.event == 'bonus.constant' and #list == 0 then native.bonus_active(false) end
         if h.event == 'skillslot.select' and #list == 0 then native.skillslot_active(false) end
+        if h.event == 'skillslot.key' and #list == 0 then native.skillkey_active(false) end
         if h.event == 'combat.branch' and #list == 0 then native.branch_active(false) end
     end
     env.gear = gear
@@ -3273,6 +3275,24 @@ function kernel.creature_ability(type_id, vanilla, index, address)
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, 'creature.ability', h.fn, type_id, vanilla, index, address)
             if ok and type(result) == 'number' then return math.floor(result) end
+        end
+    end
+    return nil
+end
+
+-- `skillslot.key`: a character key reached the skill slot window's key handler; a handler gets the character code and returns a slot 0 .. 4
+-- (the whole case of the digit keys: page choice, COMBINE_SLOTS check, selection) or `{slot, 'select'}` (the selection only), or
+-- `false` to ignore the key, or nil for the engine's own routing (digits 1..5 and 6..0 as the engine maps them).
+function kernel.skillslot_key(character)
+    local list = handlers['skillslot.key']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, r = call(h.mod, 'skillslot.key', h.fn, character)
+            if ok and r == false then return -1, 0 end
+            if ok and type(r) == 'number' then return r, 0 end
+            if ok and type(r) == 'table' and type(r[1]) == 'number' then return r[1], r[2] == 'select' and 1 or 0 end
         end
     end
     return nil

@@ -904,6 +904,79 @@ namespace
         return base;
     }
 
+    // --- skillslot.key: the routing of a character key in the skill slot window --------------------------------------------
+
+    std::atomic<bool> g_keyActive{false};
+    std::atomic<unsigned> g_keyCalls{0}, g_keyAnswered{0}, g_keyBusy{0};
+
+    // Returns where the stub goes on: `orig` (the engine's own jb) without an answer, else the block the mod chose.
+    extern "C" uintptr_t __cdecl keyHandler(uint32_t ax, uintptr_t orig)
+    {
+        g_keyCalls.fetch_add(1, std::memory_order_relaxed);
+        if (!g_keyActive.load(std::memory_order_relaxed) || !Gear::Addr::skillSlotFn)
+        {
+            return orig;
+        }
+        int slot = -1, mode = 0;
+        switch (LuaHost::skillSlotKey(static_cast<int>(ax & 0xFFFF), slot, mode))
+        {
+        case LuaHost::Answer::Value:
+            g_keyAnswered.fetch_add(1, std::memory_order_relaxed);
+            if (slot < 0 || slot > 4)
+            {
+                return Gear::Addr::skillSlotFn + kKeyEnd;
+            }
+            return Gear::Addr::skillSlotFn + (mode == 1 ? kKeySelect[slot] : kKeyFull[slot]);
+        case LuaHost::Answer::Busy:
+            g_keyBusy.fetch_add(1, std::memory_order_relaxed);
+            break;
+        default:
+            break;
+        }
+        return orig;
+    }
+
+    uintptr_t buildKeyStub(uintptr_t site)
+    {
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(site);
+        int32_t rel = 0;
+        std::memcpy(&rel, b + 2, 4);
+        const uintptr_t target = site + 6 + rel;
+        std::vector<uint8_t> code;
+        void* memory = VirtualAlloc(nullptr, 128, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!memory)
+        {
+            return 0;
+        }
+        const uintptr_t base = reinterpret_cast<uintptr_t>(memory);
+        const uintptr_t destCell = base + 120;
+        emit(code, {0x9C, 0x60});                                   // pushfd; pushad
+        emit(code, {0x68});
+        const size_t origPatch = code.size();
+        emit32(code, 0);                                            // push orig (patched below)
+        emit(code, {0x0F, 0xB7, 0x44, 0x24, 0x20});                 // movzx eax, word [esp + 0x20]   (ax of the pushad block, one push since)
+        emit(code, {0x50});                                         // push eax
+        emit(code, {0xB8});
+        emit32(code, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&keyHandler)));
+        emit(code, {0xFF, 0xD0});                                   // call eax
+        emit(code, {0x83, 0xC4, 0x08});                             // add esp, 8
+        emit(code, {0xA3});                                         // mov [dest], eax
+        emit32(code, static_cast<uint32_t>(destCell));
+        emit(code, {0x61, 0x9D});                                   // popad; popfd
+        emit(code, {0xFF, 0x25});                                   // jmp dword [dest]
+        emit32(code, static_cast<uint32_t>(destCell));
+        const uintptr_t orig = base + code.size();                  // the engine's own `jb`, then the instruction after it
+        emit(code, {0x0F, 0x82});
+        emit32(code, static_cast<uint32_t>(target - (base + code.size() + 4)));
+        emit(code, {0xE9});
+        emit32(code, static_cast<uint32_t>((site + 6) - (base + code.size() + 4)));
+        const uint32_t origValue = static_cast<uint32_t>(orig);
+        std::memcpy(&code[origPatch], &origValue, 4);
+        std::memcpy(memory, code.data(), code.size());
+        FlushInstructionCache(GetCurrentProcess(), memory, code.size());
+        return base;
+    }
+
     // The stub for one site (see the header). Returns its address, 0 if no memory could be had.
     uintptr_t buildStub(uintptr_t site, const SiteSpec& spec, int index)
     {
@@ -1274,11 +1347,33 @@ size_t SiteHook::install()
             ++branches;
         }
     }
+    size_t keys = 0;
+    if (Gear::Addr::skillSlotFn)
+    {
+        const uintptr_t address = Gear::Addr::skillSlotFn + kKeySite;
+        const uint8_t* b = reinterpret_cast<const uint8_t*>(address);
+        // `jb rel32`
+        if (b[0] == 0x0F && b[1] == 0x82)
+        {
+            const uintptr_t stub = buildKeyStub(address);
+            uint8_t bytes[6] = {0xE9, 0, 0, 0, 0, 0x90};
+            const uint32_t jump = static_cast<uint32_t>(stub - (address + 5));
+            std::memcpy(bytes + 1, &jump, 4);
+            if (stub && Patch::write(address, bytes, sizeof(bytes)))
+            {
+                ++keys;
+            }
+        }
+        else
+        {
+            LOG("Site hook skillslot.key at {:08x}: the code is not the expected jb: not installed", address);
+        }
+    }
     LOG("Site hooks: {} of {} level sites, {} of {} constant sites, {} of {} creature.ability sites, {} of {} damage sites, {} of {} effect.add sites, "
-        "{} of {} bonus.constant sites, {} of {} skillslot.select sites, {} of {} combat.branch sites installed", installed, std::size(kSites),
-        constants, std::size(kConstSites), abilities, std::size(kAbilitySites), damages, std::size(kDamageSites), effects, std::size(kEffectSites),
-        bonuses, std::size(kBonusSites), slots, std::size(kSlotSites), branches, std::size(kBranchSites));
-    return installed + constants + abilities + damages + effects + bonuses + slots + branches;
+        "{} of {} bonus.constant sites, {} of {} skillslot.select sites, {} of {} combat.branch sites, {} of 1 skillslot.key sites installed",
+        installed, std::size(kSites), constants, std::size(kConstSites), abilities, std::size(kAbilitySites), damages, std::size(kDamageSites), effects,
+        std::size(kEffectSites), bonuses, std::size(kBonusSites), slots, std::size(kSlotSites), branches, std::size(kBranchSites), keys);
+    return installed + constants + abilities + damages + effects + bonuses + slots + branches + keys;
 }
 
 void SiteHook::setLevelFactorActive(bool active)
@@ -1898,6 +1993,16 @@ void SiteHook::setBranchActive(bool active)
 SiteHook::Stats SiteHook::branchStats()
 {
     return {g_branchCalls.load(), g_branchAnswered.load(), g_branchBusy.load()};
+}
+
+void SiteHook::setSkillKeyActive(bool active)
+{
+    g_keyActive.store(active);
+}
+
+SiteHook::Stats SiteHook::skillKeyStats()
+{
+    return {g_keyCalls.load(), g_keyAnswered.load(), g_keyBusy.load()};
 }
 
 SiteHook::Stats SiteHook::abilityStats()

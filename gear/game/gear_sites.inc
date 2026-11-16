@@ -90,3 +90,6 @@ static const BranchSiteSpec kBranchSites[] = {
     {"ability.dispatch", 0, &Gear::Addr::siteFn51D840, 0x1C4, 3}, // 0051DA04 in 0051D840
     {"color.clamp", 0, &Gear::Addr::siteFnColor, 0x238B, 4}, // 004DEF0B in 004DCB80
 };
+static const uint32_t kKeySite = 0x5D7, kKeyEnd = 0xC59;
+static const uint32_t kKeyFull[5] = {0x5FF, 0x631, 0x663, 0x691, 0x6BF};
+static const uint32_t kKeySelect[5] = {0x61C, 0x64E, 0x67C, 0x6AA, 0x6D8};

@@ -58,6 +58,10 @@ namespace SiteHook
     // skillslot.select: a digit key selected a skill slot (event `skillslot.select`: the place among the five).
     void setSkillSlotActive(bool active);
 
+    // skillslot.key: the character key handler of the skill slot window (event `skillslot.key`: the character) lets the mods route a key.
+    void setSkillKeyActive(bool active);
+    Stats skillKeyStats();
+
     // combat.branch: the outcome of some conditional jumps of the hit handlers (event `combat.branch`: name, whether the engine takes the jump, index).
     void setBranchActive(bool active);
     Stats branchStats();

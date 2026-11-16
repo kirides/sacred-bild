@@ -525,6 +525,13 @@ namespace
         return 0;
     }
 
+    // native.skillkey_active(bool): whether some mod handles `skillslot.key`
+    int nativeSkillKeyActive(lua_State* L)
+    {
+        SiteHook::setSkillKeyActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
     // native.skillslot_active(bool): whether some mod handles `skillslot.select`
     int nativeSkillSlotActive(lua_State* L)
     {
@@ -578,7 +585,7 @@ namespace
     int nativeSiteHooks(lua_State* L)
     {
         const char* which = luaL_optstring(L, 1, "level.factor");
-        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : std::strcmp(which, "effect.add") == 0 ? SiteHook::effectStats() : std::strcmp(which, "bonus.constant") == 0 ? SiteHook::bonusStats() : std::strcmp(which, "skillslot.select") == 0 ? SiteHook::skillSlotStats() : std::strcmp(which, "combat.branch") == 0 ? SiteHook::branchStats() : SiteHook::levelFactorStats();
+        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : std::strcmp(which, "effect.add") == 0 ? SiteHook::effectStats() : std::strcmp(which, "bonus.constant") == 0 ? SiteHook::bonusStats() : std::strcmp(which, "skillslot.select") == 0 ? SiteHook::skillSlotStats() : std::strcmp(which, "combat.branch") == 0 ? SiteHook::branchStats() : std::strcmp(which, "skillslot.key") == 0 ? SiteHook::skillKeyStats() : SiteHook::levelFactorStats();
         lua_pushnumber(L, s.calls);
         lua_pushnumber(L, s.answered);
         lua_pushnumber(L, s.busy);
@@ -2002,6 +2009,7 @@ namespace
             {"effect_active", nativeEffectActive},
             {"bonus_active", nativeBonusActive},
             {"skillslot_active", nativeSkillSlotActive},
+            {"skillkey_active", nativeSkillKeyActive},
             {"branch_active", nativeBranchActive},
             {"cursor_click", nativeCursorClick},
             {"site_hook_sites", nativeSiteHookSites},
@@ -2562,6 +2570,49 @@ LuaHost::Answer LuaHost::branch(const char* name, int index, bool vanilla, int e
         answer = Answer::Value;
     }
     lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::skillSlotKey(int character, int& slot, int& mode)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "skillslot_key");
+    lua_remove(L, -2);
+    lua_pushnumber(L, character);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 1, 2, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.skillslot_key failed: {}", msg ? msg : "(no message)");
+        lua_pop(L, 1);
+        return Answer::None;
+    }
+    if (lua_isnumber(L, -2))
+    {
+        slot = static_cast<int>(lua_tonumber(L, -2));
+        mode = lua_isnumber(L, -1) ? static_cast<int>(lua_tonumber(L, -1)) : 0;
+        answer = Answer::Value;
+    }
+    lua_pop(L, 2);
     return answer;
 }
 

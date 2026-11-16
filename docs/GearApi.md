@@ -110,6 +110,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'game.save_failed'` | It could not be written. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
+| `'skillslot.key'` | A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it. |
 | `'combat.branch'` | A conditional jump in the hit handlers and a few other functions: a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`). |
 | `'skillslot.select'` | A digit key selected a skill slot of the HUD (`index`: which of the five places in the key handler). |
 | `'bonus.constant'` | A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another. |
@@ -223,6 +224,7 @@ Forms:
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
+- `fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler`
 - `fun(event: 'combat.branch', fn: fun(name: string, vanilla: boolean, index: integer, eax: integer): boolean?): GearHandler`
 - `fun(event: 'skillslot.select', fn: fun(index: integer)): GearHandler`
 - `fun(event: 'bonus.constant', fn: fun(index: integer, vanilla: number, address: integer): number?): GearHandler`
@@ -675,7 +677,7 @@ The engine hooks that ask mods for a value inside the game's own code (see the e
 
 The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
 
-- `name`: `'level.factor'|'combat.constant'|'creature.ability'|'damage'|'effect.add'|'bonus.constant'|'skillslot.select'|'combat.branch'`
+- `name`: `'level.factor'|'combat.constant'|'creature.ability'|'damage'|'effect.add'|'bonus.constant'|'skillslot.select'|'combat.branch'|'skillslot.key'`
 - returns `GearHookStats`
 
 #### `gear.hooks.sites() -> GearHookSite[]`
