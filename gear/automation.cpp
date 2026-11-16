@@ -1003,7 +1003,7 @@ namespace
 
 void Automation::installInstance(const std::wstring& gameDir)
 {
-    if (!options().enabled)
+    if (!options().enabled && !Instance::active())
     {
         return;
     }
@@ -1017,6 +1017,11 @@ void Automation::installInstance(const std::wstring& gameDir)
         Patch::iat("KERNEL32.dll", "OpenMutexA", reinterpret_cast<void*>(&hookOpenMutexA)));
     g_origExitProcess = reinterpret_cast<ExitProcessFn>(
         Patch::iat("KERNEL32.dll", "ExitProcess", reinterpret_cast<void*>(&hookExitProcess)));
+    if (!options().enabled)
+    {
+        // A manual instance: only the title suffix; no isolation, no automation.
+        hookImport(g_origCreateWindowExA, "CreateWindowExA", &hookCreateWindowExA);
+    }
     LOG("Automation instance {} (pid {}): {}", g_options.instance, GetCurrentProcessId(),
         g_origCreateMutexA ? "the game's mutex is named after it" : "the game does not import CreateMutexA");
 }

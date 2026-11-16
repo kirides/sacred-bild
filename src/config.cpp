@@ -112,11 +112,12 @@ namespace
     // (at least 1024x768, the smallest canvas the UI layout works with).
     void applyAutomationWindow()
     {
-        if (!Instance::automation())
+        std::wstring spec = commandLineValue(L"-gear-window=");
+        // A manual instance (-gear-instance without -gear-auto) keeps its ini window unless -gear-window is given.
+        if (!Instance::automation() && !(Instance::active() && !spec.empty()))
         {
             return;
         }
-        std::wstring spec = commandLineValue(L"-gear-window=");
         if (spec.empty())
         {
             wchar_t env[128] = {};

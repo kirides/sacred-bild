@@ -584,8 +584,18 @@ Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest -
 
 Every automation run is an *instance* with a name: `-gear-instance=NAME` (`SACREDGEAR_INSTANCE`; letters, digits,
 `_ - .`, at most 48 characters, anything else becomes `_`; default `pid<PID>`, so even runs without a name never meet).
-A normal launch (without `-gear-auto`) has no instance and keeps every vanilla behaviour, the single-instance check
-included. What a name changes:
+A normal launch (without `-gear-auto` or `-gear-instance`) has no instance and keeps every vanilla behaviour, the
+single-instance check included. What a name changes:
+
+**A second game by hand (manual instance).** `-gear-instance=NAME` without `-gear-auto` makes a *manual instance*, for
+testing LAN or online play with two clients on one PC: `sacred.exe -gear-instance=two -gear-window=1600x900` (or
+`tools\second-instance.ps1 -Game <folder>`). It gets the single-instance mutex, the window title suffix, and its own log
+and `run.json` folder below, and nothing else: no input isolation (it takes the focus and the real mouse like a
+normal game), no automation, the player's own `gear_mods.json` and mod switches. With SacredBild `-gear-window=WxH[+X+Y]`
+opens a framed window of that size so the two games fit side by side; without it the `.ini` window is used. Start the
+first game normally, the second with a name. Both share the game folder, so a savegame and `Settings.cfg` are shared too.
+
+What a name changes:
 
 - **The single-instance check.** The game's start-up (`0x817B30`) creates the mutex `SACRED_INSTANCE`, and a second
   `sacred.exe` that finds it exists shows "ERROR: Sacred is already running" and exits. In an automation run Sacred Gear
