@@ -89,6 +89,9 @@ namespace Gear::Addr
     // creature +0x4CF, so the next update sends message 0x11B, refreshes the checked copy), then a new snapshot.
     // ENG 00461B74: a `call 00580110` (after `lea ecx, [ebp + 0x3A8]`) the setter is read from (gear/world.cpp).
     inline uintptr_t cStats_setGoldCall{};
+    // ENG 0061CD00 ("SAVEHERO"): writes the hero file, cdecl (path) -> bool. A network game calls it through 0x7F38E0
+    // (Save\HeroNN.pax: every 300 s from the receive loop, when the player leaves, at merchants); the network menu too.
+    inline Sacred::Cdecl<uint8_t(const char* path)> heroSave{};
     inline Sacred::Global<uint8_t*> g_pNet{};
     inline uintptr_t netDispatchSwitch{};
 

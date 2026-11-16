@@ -84,6 +84,9 @@ GEAR = [
     # it keeps the anti-cheat copy in step and marks the values for the next 0x11B update, also in network games.
     # No signature of its own (its body is nearly addGold's): found through a call (0x461B74: lea ecx, [ebp + 0x3A8]; fstp; call).
     ('cStats_setGoldCall', 0x00461B74, 'code'),
+    # The hero file writer ("SAVEHERO", cdecl bool (path), the network game's Save\HeroNN.pax every 300 s, on leaving and
+    # at merchants): Gear raises game.hero_saved after it.
+    ('heroSave', 0x0061CD00, 'func'),
     ('modelRenderer_instance', 0x00401660, 'func'),
     ('modelRenderer_drawItem', 0x0040E9C0, 'func'),
     ('renderFlags_instance', 0x00643110, 'func'),

@@ -188,6 +188,48 @@ namespace
         return true;
     }
 
+    decltype(Gear::Addr::heroSave)::Ptr g_heroSave = nullptr;
+    std::deque<NetMsg::HeroSaved> g_heroSaves;     // under g_lock
+
+    // The NN of ...HeroNN.pax, 0 if none.
+    uint32_t heroSlotOf(const char* path)
+    {
+        uint32_t slot = 0;
+        __try
+        {
+            for (const char* p = path; p && *p; ++p)
+            {
+                if ((p[0] == 'H' || p[0] == 'h') && (p[1] == 'e' || p[1] == 'E') && (p[2] == 'r' || p[2] == 'R') &&
+                    (p[3] == 'o' || p[3] == 'O') && p[4] >= '0' && p[4] <= '9' && p[5] >= '0' && p[5] <= '9')
+                {
+                    slot = static_cast<uint32_t>((p[4] - '0') * 10 + (p[5] - '0'));
+                }
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            slot = 0;
+        }
+        return slot;
+    }
+
+    uint8_t __cdecl hookHeroSave(const char* path)
+    {
+        const uint8_t ok = g_heroSave(path);
+        if (ok)
+        {
+            NetMsg::HeroSaved h;
+            h.network = NetMsg::host().network;
+            h.slot = heroSlotOf(path);
+            std::lock_guard lock(g_lock);
+            if (g_heroSaves.size() < 64)
+            {
+                g_heroSaves.push_back(h);
+            }
+        }
+        return ok;
+    }
+
     void trace(const uint32_t* message)
     {
         uint8_t head[16 + 24] = {};
@@ -233,6 +275,14 @@ namespace
 bool NetMsg::install()
 {
     g_channel = installChannel();
+    if (Gear::Addr::heroSave)
+    {
+        Patch::hook(g_heroSave, Gear::Addr::heroSave, hookHeroSave, "heroSave");
+    }
+    else
+    {
+        LOG("NetMsg: the hero writer was not found: no game.hero_saved");
+    }
     const char* on = std::getenv("GEAR_NETTRACE");
     g_trace = on && on[0] == '1';
     if (!Gear::Addr::cNet_queueMessage)
@@ -418,6 +468,18 @@ std::wstring NetMsg::heroName(uint32_t slot)
         return {buf, n};
     }
     return {};
+}
+
+bool NetMsg::takeHeroSaved(HeroSaved& out)
+{
+    std::lock_guard lock(g_lock);
+    if (g_heroSaves.empty())
+    {
+        return false;
+    }
+    out = g_heroSaves.front();
+    g_heroSaves.pop_front();
+    return true;
 }
 
 bool NetMsg::takeKill(Kill& out)

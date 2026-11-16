@@ -811,6 +811,20 @@ namespace
         return 1;
     }
 
+    // native.hero_saved() -> slot, network | nil: a hero file the game wrote.
+    int nativeHeroSaved(lua_State* L)
+    {
+        NetMsg::HeroSaved h;
+        if (!NetMsg::takeHeroSaved(h))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, h.slot);
+        lua_pushboolean(L, h.network);
+        return 2;
+    }
+
     // native.mp_info() -> {network, is_host, host_slot (nil if unknown)}
     int nativeMpInfo(lua_State* L)
     {
@@ -2489,6 +2503,7 @@ namespace
             {"mp_send_frame", nativeMpSendFrame},
             {"mp_take_frame", nativeMpTakeFrame},
             {"mp_info", nativeMpInfo},
+            {"hero_saved", nativeHeroSaved},
             {"hero_name", nativeHeroName},
             {"object", nativeObject},
             {"creatures_near", nativeCreaturesNear},

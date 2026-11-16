@@ -4534,6 +4534,11 @@ end
 
 -- The finished saves (gear.game.save) as 'game.saved' (slot, info) and 'game.save_failed' (slot, message).
 local function poll_saves()
+    while native.hero_saved do
+        local slot, network = native.hero_saved()
+        if not slot then break end
+        kernel.dispatch('game.hero_saved', slot, network)
+    end
     while true do
         local r = native.save_poll()
         if not r then return end

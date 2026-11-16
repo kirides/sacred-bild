@@ -51,4 +51,13 @@ namespace NetMsg
     Host host();
     // The hero's name in `slot` (1 to 16) as UTF-16; empty if the game has none.
     std::wstring heroName(uint32_t slot);
+
+    // A hero file the game wrote (the hook on its hero writer): the save slot from the file name (HeroNN.pax, 0 if
+    // the name has none) and whether a network game ran.
+    struct HeroSaved
+    {
+        uint32_t slot = 0;
+        bool network = false;
+    };
+    bool takeHeroSaved(HeroSaved& out);
 }

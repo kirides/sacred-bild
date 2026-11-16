@@ -29,6 +29,7 @@ local pickup_published
 local drops_pub = {sim = nil}
 save_block, save_calls, save_results = nil, {}, {}
 net_kills = {}
+hero_saves = {}
 mp_info_mock, hero_names, net_sent, net_frames, net_send_ok = {network = false}, {[1] = 'Aria'}, {}, {}, true
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
 state_file, state_bak, state_writes = nil, nil, 0
@@ -198,6 +199,7 @@ local native = {
     save_poll = function() return table.remove(save_results, 1) end,
     net_kill = function() return table.remove(net_kills, 1) end,
     mp_info = function() return mp_info_mock end,
+    hero_saved = function() local h = table.remove(hero_saves, 1); if h then return h[1], h[2] end end,
     hero_name = function(id) return hero_names[id] end,
     mp_send_frame = function(slot, s) net_sent[#net_sent + 1] = {slot, s}; return net_send_ok end,
     mp_take_frame = function() local f = table.remove(net_frames, 1); if f then return f[1], f[2] end end,
@@ -1277,6 +1279,12 @@ do
     local got = {}
     gear_a.on('mp_message', function(from, channel, payload) got[#got + 1] = {from = from, channel = channel, payload = payload} end)
     local function ticks(n) for _ = 1, n do kernel.tick(0.016) end end
+    -- game.hero_saved
+    local hs = {}
+    gear_a.on('game.hero_saved', function(slot, network) hs[#hs + 1] = {slot, network} end)
+    hero_saves[1] = {3, true}
+    ticks(1)
+    ok(#hs == 1 and hs[1][1] == 3 and hs[1][2] == true, 'game.hero_saved: slot and network')
     -- identity, single player
     mp_info_mock = {network = false}
     local me = mp.local_player()
