@@ -144,6 +144,8 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
   (offsets in the original, ascending; the hex bytes replace `replaced` bytes, default as many as there are). The first open of the file builds the
   patched copy in the mod's `cache\` folder (rebuilt when the patch or the original changed) and serves that; a game file of another size or
   crc32 than the patch was made for is served unpatched and logged. The file is read by a plain Lua state without libraries, so it can only be data.
+  Two more kinds: `kind = 'words'` (`ops = {{first word index, {value, ...}}, ...}`, a value is an unsigned integer or `{f = float}`; for tables of 32 bit
+  words like `balance.bin`) and `kind = 'texts'` (`set = {[text id] = 'text'}`, `remove = {ids}`; for a language's `global.res`).
 
 #### World
 

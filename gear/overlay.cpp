@@ -350,6 +350,69 @@ namespace
         return true;
     }
 
+    // A table of 32 bit words (balance.bin, sets.bin ...): `ops = {{first word index, {value, ...}}, ...}`, a value is an unsigned integer or {f = float}.
+    bool applyWordPatch(lua_State* L, int patch, const std::vector<unsigned char>& original, std::vector<unsigned char>& out, std::string& why)
+    {
+        if (original.size() % 4)
+        {
+            why = "the file is not a table of 32 bit words";
+            return false;
+        }
+        out = original;
+        lua_getfield(L, patch, "ops");
+        if (!lua_istable(L, -1))
+        {
+            why = "the patch has no ops";
+            return false;
+        }
+        const int count = static_cast<int>(lua_objlen(L, -1));
+        for (int i = 1; i <= count; ++i)
+        {
+            lua_rawgeti(L, -1, i);
+            lua_rawgeti(L, -1, 1);
+            const double first = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : -1;
+            lua_pop(L, 1);
+            lua_rawgeti(L, -1, 2);
+            if (first < 0 || !lua_istable(L, -1))
+            {
+                why = "bad op " + std::to_string(i);
+                return false;
+            }
+            const int n = static_cast<int>(lua_objlen(L, -1));
+            if ((static_cast<size_t>(first) + static_cast<size_t>(n)) * 4 > out.size())
+            {
+                why = "op " + std::to_string(i) + " is past the end of the file";
+                return false;
+            }
+            for (int k = 1; k <= n; ++k)
+            {
+                lua_rawgeti(L, -1, k);
+                uint32_t word = 0;
+                if (lua_isnumber(L, -1))
+                {
+                    word = static_cast<uint32_t>(static_cast<int64_t>(lua_tonumber(L, -1)));
+                }
+                else if (lua_istable(L, -1))
+                {
+                    lua_getfield(L, -1, "f");
+                    const float f = static_cast<float>(lua_isnumber(L, -1) ? lua_tonumber(L, -1) : 0.0);
+                    lua_pop(L, 1);
+                    std::memcpy(&word, &f, 4);
+                }
+                else
+                {
+                    why = "bad value in op " + std::to_string(i);
+                    return false;
+                }
+                lua_pop(L, 1);
+                std::memcpy(out.data() + (static_cast<size_t>(first) + static_cast<size_t>(k) - 1) * 4, &word, 4);
+            }
+            lua_pop(L, 2);
+        }
+        lua_pop(L, 1);
+        return true;
+    }
+
     // Applies the patch file to `original` in memory; false (and a message) if it does not fit.
     bool applyPatch(const std::string& patchFile, const std::vector<unsigned char>& original, std::vector<unsigned char>& out, std::string& why)
     {
@@ -381,11 +444,15 @@ namespace
             return false;
         }
         lua_getfield(L, -1, "kind");
-        const bool texts = lua_isstring(L, -1) && std::strcmp(lua_tostring(L, -1), "texts") == 0;
+        const std::string kind = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
         lua_pop(L, 1);
-        if (texts)
+        if (kind == "texts")
         {
             return applyTextPatch(L, lua_gettop(L), original, out, why);
+        }
+        if (kind == "words")
+        {
+            return applyWordPatch(L, lua_gettop(L), original, out, why);
         }
         lua_getfield(L, -1, "ops");
         if (!lua_istable(L, -1))
