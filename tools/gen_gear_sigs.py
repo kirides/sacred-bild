@@ -61,6 +61,9 @@ GEAR = [
     # (0x44FC30) and draw the item's Granny model through the model renderer: its singleton (0x401660, cdecl ()) and
     # 0x40E9C0 (thiscall (renderer, device, model0, model1, x, y, type, scale, 0, flags, 0, 0), ret 0x2C).
     ('cItem_loadResources', 0x00640640, 'func'),
+    # Net trace (gear/netmsg.cpp): the client's send queue (thiscall (cGCclass* net, message*, flush), ret 8): a
+    # message is a 16-byte header (u32 size | slot << 22, +0xE u16 message id) and its payload.
+    ('cNet_queueMessage', 0x007D4860, 'func'),
     ('modelRenderer_instance', 0x00401660, 'func'),
     ('modelRenderer_drawItem', 0x0040E9C0, 'func'),
     ('renderFlags_instance', 0x00643110, 'func'),
