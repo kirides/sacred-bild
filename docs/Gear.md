@@ -151,7 +151,7 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
   gets a mod's file (`SacredGear-server.log`, in the game folder). A mod that is off, or no mod with file rules, means no
   injection at all; a `GameServer.exe` Sacred Gear was not asked to take part in (no handoff variable) is left alone. The
   server sees the very files the client does, so a mod's balance works for LAN and hosted games. Test:
-  `tools\server-overlay-test.ps1 -GameDir <copy of the game folder>`.
+  `tools\server-overlay-test.ps1 -GameDir <copy of the game folder>` starts the server alone; `tools\lan-host-test.ps1 -GameDir <copy> -Patch` hosts a real LAN game through the menus with a changed balance.bin (without the server overlay the game shows "IP: Kann nicht verbinden! CODE -10021"). Two clients joining one server is not covered by these tests.
 
 #### World
 
