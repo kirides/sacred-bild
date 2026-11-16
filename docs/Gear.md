@@ -135,11 +135,15 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
   mod is switched off. `abilities:apply({[id] = {field = value}})` checks everything first and then writes it. `gear.text.get(text_id)`
   gives the game's text for a name or description id; `gear.settings.get(key)` a value of `Settings.cfg`.
 - The file overlay serves a mod's own data where the game opens the original files. `mods/<id>/overlay.txt` has one rule per line
-  (`#` comments): `binalance.bin = dataalance.bin` (the game's open of that path, relative to the game folder, gets the mod's file
-  if it exists) and `saves = save` (the game's `Save\` folder is the mod's `save\` folder; the vanilla saves are neither read nor
-  written). The rules are read when Sacred Gear starts, because the game opens its data files before any Lua runs, for the mods the
-  run uses (`-gear-mods=a,b`, else all). `gear.files.overlay()`, `gear.files.resolve(path)` and `gear.files.served(path)` show what applies and
-  what the game really opened through it.
+  (`#` comments): `bin\balance.bin = data\balance.bin` (the game's open of that path, relative to the game folder, gets the mod's file
+  if it exists), `bin\balance.bin = patch:patches\balance.lua` (a delta patch, below) and `saves = save` (the game's `Save\` folder is
+  the mod's `save\` folder; the vanilla saves are neither read nor written). The rules are read when Sacred Gear starts, because the game
+  opens its data files before any Lua runs, for the mods the run uses (`-gear-mods=a,b`, else all). `gear.files.overlay()`,
+  `gear.files.resolve(path)` and `gear.files.served(path)` show what applies and what the game really opened through it.
+- A `patch:` rule ships only what differs from the game's own file: a Lua data file `return {size = n, crc32 = 0x..., ops = {{offset, 'hex'[, replaced]}, ...}}`
+  (offsets in the original, ascending; the hex bytes replace `replaced` bytes, default as many as there are). The first open of the file builds the
+  patched copy in the mod's `cache\` folder (rebuilt when the patch or the original changed) and serves that; a game file of another size or
+  crc32 than the patch was made for is served unpatched and logged. The file is read by a plain Lua state without libraries, so it can only be data.
 
 #### World
 

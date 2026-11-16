@@ -3,6 +3,7 @@
 #include "patch.h"
 
 #include <windows.h>
+#include <lua.hpp>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -20,6 +21,7 @@ namespace
         std::string id;
         std::wstring dir;                                       // the mod's folder
         std::unordered_map<std::string, std::string> files;     // game path (lower case, relative) -> absolute path
+        std::unordered_map<std::string, std::string> patches;   // game path -> the patch file (absolute) of a `patch:` rule
         bool saves = false;
         std::string savesRoot;                                  // absolute, no trailing backslash
     };
@@ -114,6 +116,208 @@ namespace
         }
     }
 
+    // --- delta patches: `game\path = patch:file.lua` ------------------------------------------------------------------------
+    // The mod ships only what differs from the game's own file: a Lua data file `return {size = n, crc32 = c, ops = {{offset, 'hex'[, replaced]}, ...}}`
+    // (offsets in the original, ascending; `hex` replaces `replaced` bytes, default as many as it has). The first open of the file builds the patched
+    // copy in the mod's `cache\` folder (rebuilt when the patch file or the original changed) and serves that; an original of another size or crc32
+    // than the patch was made for is served unpatched (logged once).
+
+    std::string g_gameDirReal;                          // as given, no trailing backslash
+
+    uint32_t crc32Of(const unsigned char* data, size_t n)
+    {
+        static uint32_t table[256];
+        static bool ready = false;
+        if (!ready)
+        {
+            for (uint32_t i = 0; i < 256; ++i)
+            {
+                uint32_t c = i;
+                for (int k = 0; k < 8; ++k)
+                {
+                    c = (c & 1) ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+                }
+                table[i] = c;
+            }
+            ready = true;
+        }
+        uint32_t c = 0xFFFFFFFFu;
+        for (size_t i = 0; i < n; ++i)
+        {
+            c = table[(c ^ data[i]) & 0xFF] ^ (c >> 8);
+        }
+        return c ^ 0xFFFFFFFFu;
+    }
+
+    bool readAll(const std::string& path, std::vector<unsigned char>& out)
+    {
+        const HANDLE h = CreateFileW(widen(path).c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                                     FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE)
+        {
+            return false;
+        }
+        LARGE_INTEGER size{};
+        GetFileSizeEx(h, &size);
+        out.resize(static_cast<size_t>(size.QuadPart));
+        DWORD got = 0;
+        const bool ok = out.empty() || (ReadFile(h, out.data(), static_cast<DWORD>(out.size()), &got, nullptr) && got == out.size());
+        CloseHandle(h);
+        return ok;
+    }
+
+    bool writeAll(const std::string& path, const std::vector<unsigned char>& data)
+    {
+        ensureParents(path);
+        const std::string temp = path + ".tmp";
+        const HANDLE h = CreateFileW(widen(temp).c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE)
+        {
+            return false;
+        }
+        DWORD put = 0;
+        const bool ok = data.empty() || (WriteFile(h, data.data(), static_cast<DWORD>(data.size()), &put, nullptr) && put == data.size());
+        CloseHandle(h);
+        if (!ok)
+        {
+            DeleteFileW(widen(temp).c_str());
+            return false;
+        }
+        return MoveFileExW(widen(temp).c_str(), widen(path).c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+    }
+
+    int hexValue(char c)
+    {
+        return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+    }
+
+    // Applies the patch file to `original` in memory; false (and a message) if it does not fit.
+    bool applyPatch(const std::string& patchFile, const std::vector<unsigned char>& original, std::vector<unsigned char>& out, std::string& why)
+    {
+        lua_State* L = luaL_newstate();      // no libraries: the file is data
+        if (!L)
+        {
+            why = "no Lua state";
+            return false;
+        }
+        struct Closer
+        {
+            lua_State* L;
+            ~Closer() { lua_close(L); }
+        } closer{L};
+        if (luaL_loadfile(L, patchFile.c_str()) != 0 || lua_pcall(L, 0, 1, 0) != 0 || !lua_istable(L, -1))
+        {
+            why = std::string("cannot read the patch: ") + (lua_isstring(L, -1) ? lua_tostring(L, -1) : "no table");
+            return false;
+        }
+        lua_getfield(L, -1, "size");
+        const double size = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : -1;
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "crc32");
+        const double crc = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : -1;
+        lua_pop(L, 1);
+        if (size != static_cast<double>(original.size()) || (crc >= 0 && static_cast<uint32_t>(crc) != crc32Of(original.data(), original.size())))
+        {
+            why = "the game's file is not the one the patch was made for (size or crc32 differs)";
+            return false;
+        }
+        lua_getfield(L, -1, "ops");
+        if (!lua_istable(L, -1))
+        {
+            why = "the patch has no ops";
+            return false;
+        }
+        out.clear();
+        out.reserve(original.size() + 4096);
+        size_t at = 0;
+        const int count = static_cast<int>(lua_objlen(L, -1));
+        for (int i = 1; i <= count; ++i)
+        {
+            lua_rawgeti(L, -1, i);
+            lua_rawgeti(L, -1, 1);
+            lua_rawgeti(L, -1 - 1, 2);
+            lua_rawgeti(L, -3, 3);
+            const double off = lua_isnumber(L, -3) ? lua_tonumber(L, -3) : -1;
+            size_t hexLen = 0;
+            const char* hex = lua_isstring(L, -2) ? lua_tolstring(L, -2, &hexLen) : nullptr;
+            const size_t replaced = lua_isnumber(L, -1) ? static_cast<size_t>(lua_tonumber(L, -1)) : hexLen / 2;
+            if (off < 0 || !hex || (hexLen & 1) || static_cast<size_t>(off) < at || static_cast<size_t>(off) + replaced > original.size())
+            {
+                why = "bad op " + std::to_string(i);
+                return false;
+            }
+            out.insert(out.end(), original.begin() + at, original.begin() + static_cast<size_t>(off));
+            for (size_t k = 0; k + 1 < hexLen + 1 && k < hexLen; k += 2)
+            {
+                const int hi = hexValue(hex[k]), lo = hexValue(hex[k + 1]);
+                if (hi < 0 || lo < 0)
+                {
+                    why = "bad hex in op " + std::to_string(i);
+                    return false;
+                }
+                out.push_back(static_cast<unsigned char>(hi * 16 + lo));
+            }
+            at = static_cast<size_t>(off) + replaced;
+            lua_pop(L, 4);
+        }
+        out.insert(out.end(), original.begin() + at, original.end());
+        return true;
+    }
+
+    std::mutex g_patchLock;
+    std::unordered_map<std::string, bool> g_patchDone;      // cache path -> built (or fell back)
+
+    // Makes sure the patched copy of `rel` exists (building it); false if the original should be served instead.
+    bool ensurePatched(const ModRules& r, const std::string& rel, const std::string& patchFile, const std::string& cache)
+    {
+        std::lock_guard guard(g_patchLock);
+        const auto done = g_patchDone.find(cache);
+        if (done != g_patchDone.end())
+        {
+            return done->second;
+        }
+        bool ok = false;
+        std::vector<unsigned char> original, patchText;
+        const std::string originalPath = g_gameDirReal + "\\" + rel;
+        if (!readAll(originalPath, original) || !readAll(patchFile, patchText))
+        {
+            LOG("Overlay: {}: patch {}: cannot read the original or the patch", r.id, rel);
+        }
+        else
+        {
+            // the cache stays valid while the patch file and the original are the same
+            char key[64];
+            std::snprintf(key, sizeof(key), "%08x-%08x-%zu", crc32Of(patchText.data(), patchText.size()), crc32Of(original.data(), original.size()), original.size());
+            std::vector<unsigned char> stored;
+            const std::string keyFile = cache + ".key";
+            if (exists(cache) && readAll(keyFile, stored) && std::string(stored.begin(), stored.end()) == key)
+            {
+                ok = true;
+            }
+            else
+            {
+                std::vector<unsigned char> patched;
+                std::string why;
+                if (!applyPatch(patchFile, original, patched, why))
+                {
+                    LOG("Overlay: {}: patch {} not applied: {}", r.id, rel, why);
+                }
+                else if (!writeAll(cache, patched))
+                {
+                    LOG("Overlay: {}: patch {}: cannot write {}", r.id, rel, cache);
+                }
+                else
+                {
+                    writeAll(keyFile, std::vector<unsigned char>(key, key + std::strlen(key)));
+                    LOG("Overlay: {}: patched {} ({} -> {} bytes)", r.id, rel, original.size(), patched.size());
+                    ok = true;
+                }
+            }
+        }
+        g_patchDone[cache] = ok;
+        return ok;
+    }
+
     // The mod path a game path maps to; false if no rule applies. `write`: the call may create the file.
     bool map(const char* path, std::string& out, bool write, bool count = true)
     {
@@ -129,6 +333,14 @@ namespace
         for (const ModRules& r : g_rules)
         {
             const auto it = r.files.find(rel);
+            if (it != r.files.end() && !write)
+            {
+                const auto patch = r.patches.find(rel);
+                if (patch != r.patches.end() && !ensurePatched(r, rel, patch->second, it->second))
+                {
+                    continue;       // the original is served
+                }
+            }
             if (it != r.files.end() && (write || exists(it->second)))
             {
                 out = it->second;
@@ -327,7 +539,17 @@ namespace
                 {
                     game.erase(0, 2);
                 }
-                rules.files[game] = dir + "\\" + backslashes(value);
+                if (lower(value).rfind("patch:", 0) == 0)
+                {
+                    // a delta patch: the patch file is in the mod, the patched copy is made in cache\<game path>
+                    const std::string patchFile = trim(value.substr(6));
+                    rules.patches[game] = dir + "\\" + backslashes(patchFile);
+                    rules.files[game] = dir + "\\cache\\" + game;
+                }
+                else
+                {
+                    rules.files[game] = dir + "\\" + backslashes(value);
+                }
             }
         }
         return !rules.files.empty() || rules.saves;
@@ -339,6 +561,11 @@ bool Overlay::install(const std::wstring& gameDir)
     if (g_installed)
     {
         return true;
+    }
+    g_gameDirReal = narrow(gameDir);
+    while (!g_gameDirReal.empty() && g_gameDirReal.back() == '\\')
+    {
+        g_gameDirReal.pop_back();
     }
     g_gameDir = lower(narrow(gameDir));
     while (!g_gameDir.empty() && g_gameDir.back() == '\\')
