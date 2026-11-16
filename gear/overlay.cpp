@@ -473,8 +473,234 @@ namespace
         return true;
     }
 
+    // Compiled script files (FunkCode.bin, StartCode.bin): a stream of instructions `u16 opcode, u16 length (including these 4 bytes), operands`.
+    // FunkCode.bin is cut into functions by the table of Vectoren.bin next to it (u32 count, then 84 byte records: char name[64], i32 start,
+    // i32 length, ...). The patch (`kind = 'script'`, `file = 'funk' | 'start'`) lists edits {fn (funk), ins (from 1), op, then either
+    // `spawn = {old = {{a, b, c}, ...}, new = ...}` (the sector spawn table: the last operands of a FillSector instruction, 13 bytes each: tag 0x19 and
+    // three int32, after a 40 byte header) or `at`, `old`, `new` (hex: a byte range in the instruction)}. Every edit is checked (the function is
+    // unique, the instruction has that opcode, `old` is what the file holds) before it is written.
+    struct ScriptInstruction
+    {
+        size_t offset;
+        unsigned opcode;
+        size_t length;
+    };
+
+    bool scriptInstruction(const std::vector<unsigned char>& data, size_t begin, size_t end, size_t number, ScriptInstruction& out)
+    {
+        size_t at = begin;
+        for (size_t n = 1; at + 4 <= end && at + 4 <= data.size(); ++n)
+        {
+            const unsigned opcode = data[at] | (data[at + 1] << 8);
+            const size_t length = data[at + 2] | (data[at + 3] << 8);
+            if (length < 4 || at + length > end)
+            {
+                return false;
+            }
+            if (n == number)
+            {
+                out = {at, opcode, length};
+                return true;
+            }
+            at += length;
+        }
+        return false;
+    }
+
+    int32_t le32(const unsigned char* p)
+    {
+        return static_cast<int32_t>(p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<uint32_t>(p[3]) << 24));
+    }
+
+    // The bytes of a spawn table field (`old` or `new`) of an edit on the stack top-most edit table: tag 0x19 and three int32 per entry.
+    bool spawnBytes(lua_State* L, int edit, const char* field, std::vector<unsigned char>& out, std::string& why)
+    {
+        out.clear();
+        lua_getfield(L, edit, "spawn");
+        if (!lua_istable(L, -1))
+        {
+            lua_pop(L, 1);
+            why = "no spawn table";
+            return false;
+        }
+        lua_getfield(L, -1, field);
+        if (!lua_istable(L, -1))
+        {
+            lua_pop(L, 2);
+            why = std::string("spawn.") + field + " is not a table";
+            return false;
+        }
+        const int count = static_cast<int>(lua_objlen(L, -1));
+        for (int i = 1; i <= count; ++i)
+        {
+            lua_rawgeti(L, -1, i);
+            out.push_back(0x19);
+            for (int k = 1; k <= 3; ++k)
+            {
+                lua_rawgeti(L, -1, k);
+                if (!lua_isnumber(L, -1))
+                {
+                    lua_pop(L, 4);
+                    why = "a spawn entry is not three numbers";
+                    return false;
+                }
+                const uint32_t v = static_cast<uint32_t>(static_cast<int64_t>(lua_tonumber(L, -1)));
+                out.insert(out.end(), {static_cast<unsigned char>(v), static_cast<unsigned char>(v >> 8), static_cast<unsigned char>(v >> 16),
+                                       static_cast<unsigned char>(v >> 24)});
+                lua_pop(L, 1);
+            }
+            lua_pop(L, 1);
+        }
+        lua_pop(L, 2);
+        return true;
+    }
+
+    bool hexField(lua_State* L, int edit, const char* field, std::vector<unsigned char>& out)
+    {
+        out.clear();
+        lua_getfield(L, edit, field);
+        size_t n = 0;
+        const char* hex = lua_isstring(L, -1) ? lua_tolstring(L, -1, &n) : nullptr;
+        bool ok = hex && !(n & 1);
+        for (size_t k = 0; ok && k < n; k += 2)
+        {
+            const int hi = hexValue(hex[k]), lo = hexValue(hex[k + 1]);
+            ok = hi >= 0 && lo >= 0;
+            out.push_back(static_cast<unsigned char>(hi * 16 + lo));
+        }
+        lua_pop(L, 1);
+        return ok;
+    }
+
+    bool applyScriptPatch(lua_State* L, int patch, const std::vector<unsigned char>& original, const std::string& originalPath,
+                          std::vector<unsigned char>& out, std::string& why)
+    {
+        out = original;
+        lua_getfield(L, patch, "file");
+        const std::string file = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
+        lua_pop(L, 1);
+        const bool funk = file == "funk";
+        if (!funk && file != "start")
+        {
+            why = "a script patch needs file = 'funk' or 'start'";
+            return false;
+        }
+        struct Function
+        {
+            size_t start, length;
+        };
+        std::unordered_multimap<std::string, Function> functions;
+        if (funk)
+        {
+            std::vector<unsigned char> table;
+            const std::string path = originalPath.substr(0, originalPath.find_last_of('\\') + 1) + "Vectoren.bin";
+            if (!readAll(path, table) || table.size() < 4)
+            {
+                why = "cannot read Vectoren.bin next to the file";
+                return false;
+            }
+            const size_t count = static_cast<size_t>(le32(table.data()));
+            if (4 + count * 84 > table.size())
+            {
+                why = "Vectoren.bin is shorter than its function count";
+                return false;
+            }
+            for (size_t i = 0; i < count; ++i)
+            {
+                const unsigned char* rec = table.data() + 4 + i * 84;
+                const std::string name(reinterpret_cast<const char*>(rec), strnlen(reinterpret_cast<const char*>(rec), 64));
+                functions.emplace(name, Function{static_cast<size_t>(le32(rec + 64)), static_cast<size_t>(le32(rec + 68))});
+            }
+        }
+        lua_getfield(L, patch, "edits");
+        if (!lua_istable(L, -1))
+        {
+            why = "the patch has no edits";
+            return false;
+        }
+        const int count = static_cast<int>(lua_objlen(L, -1));
+        for (int i = 1; i <= count; ++i)
+        {
+            lua_rawgeti(L, -1, i);
+            const int edit = lua_gettop(L);
+            auto number = [&](const char* field) {
+                lua_getfield(L, edit, field);
+                const double v = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : -1;
+                lua_pop(L, 1);
+                return v;
+            };
+            const std::string label = "edit " + std::to_string(i);
+            size_t begin = 0, end = original.size();
+            if (funk)
+            {
+                lua_getfield(L, edit, "fn");
+                const std::string name = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
+                lua_pop(L, 1);
+                if (functions.count(name) != 1)
+                {
+                    why = label + ": function " + name + " found " + std::to_string(functions.count(name)) + " times";
+                    return false;
+                }
+                const Function f = functions.find(name)->second;
+                begin = f.start;
+                end = f.start + f.length;
+                if (f.start > original.size() || end > original.size())
+                {
+                    why = label + ": function " + name + " is past the end of the file";
+                    return false;
+                }
+            }
+            ScriptInstruction ins{};
+            if (number("ins") < 1 || !scriptInstruction(original, begin, end, static_cast<size_t>(number("ins")), ins) ||
+                ins.opcode != static_cast<unsigned>(number("op")))
+            {
+                why = label + ": the instruction is not there or has another opcode";
+                return false;
+            }
+            std::vector<unsigned char> oldBytes, newBytes;
+            size_t at = 0;
+            lua_getfield(L, edit, "spawn");
+            const bool spawn = lua_istable(L, -1);
+            lua_pop(L, 1);
+            if (spawn)
+            {
+                at = 40;
+                if (!spawnBytes(L, edit, "old", oldBytes, why) || !spawnBytes(L, edit, "new", newBytes, why))
+                {
+                    why = label + ": " + why;
+                    return false;
+                }
+                if (ins.length < at || ins.length - at != oldBytes.size())
+                {
+                    why = label + ": the spawn table has another size in the file";
+                    return false;
+                }
+            }
+            else
+            {
+                at = static_cast<size_t>(number("at"));
+                if (!hexField(L, edit, "old", oldBytes) || !hexField(L, edit, "new", newBytes))
+                {
+                    why = label + ": bad hex";
+                    return false;
+                }
+            }
+            if (oldBytes.size() != newBytes.size() || at + oldBytes.size() > ins.length ||
+                std::memcmp(original.data() + ins.offset + at, oldBytes.data(), oldBytes.size()) != 0)
+            {
+                why = label + ": the file has other bytes than the edit expects";
+                return false;
+            }
+            std::memcpy(out.data() + ins.offset + at, newBytes.data(), newBytes.size());
+            lua_pop(L, 1);
+        }
+        lua_pop(L, 1);
+        return true;
+    }
+
     // Applies the patch file to `original` in memory; false (and a message) if it does not fit.
-    bool applyPatch(const std::string& patchFile, const std::vector<unsigned char>& original, std::vector<unsigned char>& out, std::string& why)
+    bool applyPatch(const std::string& patchFile, const std::string& originalPath, const std::vector<unsigned char>& original, std::vector<unsigned char>& out,
+                    std::string& why)
     {
         lua_State* L = luaL_newstate();      // no libraries: the file is data
         if (!L)
@@ -491,6 +717,14 @@ namespace
         {
             why = std::string("cannot read the patch: ") + (lua_isstring(L, -1) ? lua_tostring(L, -1) : "no table");
             return false;
+        }
+        lua_getfield(L, -1, "kind");
+        const std::string patchKind = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
+        lua_pop(L, 1);
+        if (patchKind == "script")
+        {
+            // no size or crc32: every edit is checked against the bytes it replaces
+            return applyScriptPatch(L, lua_gettop(L), original, originalPath, out, why);
         }
         lua_getfield(L, -1, "size");
         const double size = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : -1;
@@ -591,7 +825,7 @@ namespace
             {
                 std::vector<unsigned char> patched;
                 std::string why;
-                if (!applyPatch(patchFile, original, patched, why))
+                if (!applyPatch(patchFile, originalPath, original, patched, why))
                 {
                     LOG("Overlay: {}: patch {} not applied: {}", r.id, rel, why);
                 }

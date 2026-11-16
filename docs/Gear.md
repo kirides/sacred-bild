@@ -158,6 +158,14 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
   crc32 than the patch was made for is served unpatched and logged. The file is read by a plain Lua state without libraries, so it can only be data.
   Two more kinds: `kind = 'words'` (`ops = {{first word index, {value, ...}}, ...}`, a value is an unsigned integer or `{f = float}`; for tables of 32 bit
   words like `balance.bin`) and `kind = 'texts'` (`set = {[text id] = 'text'}`, `remove = {ids}`; for a language's `global.res`).
+  And `kind = 'script'` for the compiled script files `FunkCode.bin` / `StartCode.bin` (streams of instructions `u16 opcode, u16 length, operands`;
+  FunkCode.bin is cut into named functions by the `Vectoren.bin` next to it, a table of 84 byte records `char name[64], i32 start, i32 length, ...`):
+  `file = 'funk' | 'start'`, `edits = {...}` and no `size`/`crc32`. An edit is `{fn = 'FunctionName', ins = n, op = opcode, ...}` (`fn` only for funk; `ins` counts
+  from 1 inside the function, or in the file for start) with either `spawn = {old = {{type, weight, group}, ...}, new = {...}}` (the spawn table that ends a
+  `FillSector` instruction: 13 bytes per entry, tag 0x19 and three int32, after a 40 byte header) or `at`, `old`, `new` (hex bytes inside the instruction).
+  The function must be unique, the instruction must have that opcode and `old` must be what the file holds, or the whole file is served unpatched and the
+  reason is logged. One patch file can serve many game files (all hero types share the same library code). Format notes in sacred-gear-reborn-decomp's
+  `docs/file-formats.md`.
 
 #### World
 
