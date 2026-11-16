@@ -573,7 +573,8 @@ bool Overlay::install(const std::wstring& gameDir)
     }
     // The exe's imports, and SacredBild's (ddraw.dll reads the language files itself): the same kernel32 functions.
     auto hook = [](const char* name, void* replacement) {
-        void* previous = Patch::iat("KERNEL32.dll", name, replacement);
+        // gameserver.exe lacks most of these imports: not worth a log line there
+        void* previous = Patch::iat("KERNEL32.dll", name, replacement, g_server);
         // SacredBild reads the language files with these two
         if (!g_server && (std::strcmp(name, "CreateFileA") == 0 || std::strcmp(name, "GetFileAttributesA") == 0))
         {
