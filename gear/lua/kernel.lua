@@ -770,16 +770,48 @@ local CLASSES = {
     {id = 5, name = 'woodelf', bit = 0x10}, {id = 6, name = 'vampiress', bit = 0x20},
     {id = 8, name = 'dwarf', bit = 0x400000}, {id = 9, name = 'daemon', bit = 0x800000},
 }
-local CLASS_BY_ID, CLASS_BY_NAME = {}, {}
-for _, c in ipairs(CLASSES) do CLASS_BY_ID[c.id] = c; CLASS_BY_NAME[c.name] = c end
-local ALL_CLASSES = 0xC0003F
+local CLASS_INFO = {by_id = {}, all = 0xC0003F}   -- one local: the main chunk is at Lua's 200-locals limit
+for _, c in ipairs(CLASSES) do CLASS_INFO.by_id[c.id] = c end
 world.CLASSES = CLASSES
 
 -- The hero's class: name ('darkelf' ...) and id, nil for other creatures.
 function creature_mt:class()
     local id = native.hero_class(self.id)
-    local c = id and CLASS_BY_ID[id]
+    local c = id and CLASS_INFO.by_id[id]
     if c then return c.name, c.id end
+end
+
+-- Multiplayer (gear.mp). A player is a hero object: slots 1..16 are the heroes' object ids. See docs/GearServerMods.md.
+local mp = {}
+do
+local player_mt = {}
+player_mt.__index = player_mt
+local function make_player(id)
+    local o = native.object(id)
+    if not (o and o.creature) then return nil end
+    local cname = creature_mt.class({id = id})
+    return setmetatable({slot = id, class = cname, is_local = native.hero() == id}, player_mt)
+end
+function player_mt:hero() return wrap(self.slot) end
+function mp.players()
+    local out = {}
+    for id = 1, 16 do
+        local p = make_player(id)
+        if p then out[#out + 1] = p end
+    end
+    return out
+end
+function mp.player(slot)
+    assert(type(slot) == 'number', 'slot must be a number')
+    if slot < 1 or slot > 16 then return nil end
+    return make_player(math.floor(slot))
+end
+function mp.local_player()
+    local id = native.hero()
+    return id and make_player(id) or nil
+end
+-- Whether other players' heroes are in the game (a network game with more than the local player).
+function mp.active() return #mp.players() > 1 end
 end
 
 -- Items. The kind (the type record's +0x2E) -> category; quality from the rarity (as the label colours).
@@ -828,7 +860,7 @@ function world.item(id)
     it.quality_rank = QUALITY_RANK[it.quality]
     it.class_mask = it.classes
     local classes = {}
-    if it.class_mask ~= 0 and bit.band(it.class_mask, ALL_CLASSES) ~= ALL_CLASSES then
+    if it.class_mask ~= 0 and bit.band(it.class_mask, CLASS_INFO.all) ~= CLASS_INFO.all then
         for _, c in ipairs(CLASSES) do
             if bit.band(it.class_mask, c.bit) ~= 0 then classes[#classes + 1] = c.name end
         end
@@ -3518,7 +3550,9 @@ local function make_env(mod)
         end
         pickup_dirty = true
     end
-    w.pickup_refused = function() return native.pickup_refused() end    gear.world = w
+    w.pickup_refused = function() return native.pickup_refused() end
+    gear.world = w
+    gear.mp = mp
     gear.game = {
         -- difficulty() -> 0..4: the difficulty level of the running game.
         difficulty = function() return native.difficulty() end,
@@ -4247,6 +4281,26 @@ local function poll_saves()
     end
 end
 
+-- The kills this client sent (gear/netmsg.cpp) as the event 'kill' (ev): killer (a player, nil if a creature killed
+-- it), victim (a creature handle), type, type_name (nil if the object is already gone), award (experience),
+-- by_local (the local hero killed it).
+function kernel.poll_kills()
+    while true do
+        local k = native.net_kill and native.net_kill()
+        if not k then return end
+        local o = native.object(k.victim)
+        local ev = {
+            victim = wrap(k.victim),
+            type = o and o.type,
+            type_name = o and data.object_types:name(o.type) or nil,
+            award = k.award,
+            by_local = k.killer ~= 0 and k.killer == native.hero(),
+        }
+        if k.killer ~= 0 then ev.killer = mp.player(k.killer) end
+        kernel.dispatch('kill', ev)
+    end
+end
+
 -- One in-game frame: sessions, pipes, timers, the frame handlers, then the draw handlers; the frame's drawing is
 -- published at the end.
 function kernel.tick(dt)
@@ -4254,6 +4308,7 @@ function kernel.tick(dt)
     check_session()
     poll_keys()
     poll_saves()
+    kernel.poll_kills()
     poll_pipes()
     run_timers()
     ui_begin_tick()

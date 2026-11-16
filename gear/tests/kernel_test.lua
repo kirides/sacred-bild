@@ -28,6 +28,7 @@ local pad_queue = {0, 0, 0}
 local pickup_published
 local drops_pub = {sim = nil}
 save_block, save_calls, save_results = nil, {}, {}
+net_kills = {}
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
 state_file, state_bak, state_writes = nil, nil, 0
 realm_file, realm_bak, realm_writes, realm_client, realm_selected = nil, nil, 0, nil, nil
@@ -194,6 +195,7 @@ local native = {
     save_pending = function() return false end,
     save_info = function(slot) if slot <= 509 then return {exists = slot == 97, size = 5, mtime = 100} end end,
     save_poll = function() return table.remove(save_results, 1) end,
+    net_kill = function() return table.remove(net_kills, 1) end,
     builtin = function(name) if name == 'modmanager' then return "adm = admin; gear.on('frame', function() end)" end end,
     write_file = function(dir, rel, text) files[dir] = files[dir] or {}; files[dir][rel] = text; return true end,
     -- automation
@@ -1195,6 +1197,55 @@ do
     local done, queued = drops.simulation_progress()
     ok(done == 5 and queued == 10, 'drops.simulation_progress')
 end
+
+-- gear.mp: players are the heroes 1..16; the kill event comes from the native queue.
+do
+    local gear_a
+    do
+        local i = 1
+        while true do
+            local name, value = debug.getupvalue(kernel.dispatch, i)
+            if not name then break end
+            if name == 'handlers' then
+                for _, h in ipairs(value['frame']) do
+                    local env = getfenv(h.fn)
+                    if env.record and env.gear then gear_a = env.gear end
+                end
+            end
+            i = i + 1
+        end
+    end
+    local kills = {}
+    local saved_hero, saved1, saved2 = hero_id, objects[1], objects[2]
+    hero_id = 1
+    objects[1] = {id = 1, type = 5, x = 0, y = 0, layer = 0, creature = true, hp = 50, max_hp = 100, gold = 0, level = 1}
+    objects[2] = nil
+    local mpapi = gear_a
+    ok(mpapi ~= nil, 'mp: test hook for the gear table')
+    if mpapi then
+        local mp = mpapi.mp
+        ok(#mp.players() == 1 and mp.players()[1].slot == 1 and mp.players()[1].is_local, 'mp: one local player')
+        ok(mp.active() == false, 'mp: not active with one player')
+        ok(mp.local_player() and mp.local_player().slot == 1 and mp.local_player():hero().id == 1, 'mp: local player and hero')
+        ok(mp.player(0) == nil and mp.player(17) == nil and mp.player(2) == nil, 'mp: no such player')
+        objects[2] = {id = 2, type = 6, x = 5, y = 5, layer = 0, creature = true, hp = 10, max_hp = 10}
+        ok(#mp.players() == 2 and mp.active() == true and mp.player(2).is_local == false, 'mp: a second player makes it active')
+        mpapi.on('kill', function(ev) kills[#kills + 1] = ev end)
+        objects[900] = {id = 900, type = 2, x = 1, y = 1, layer = 0, creature = true, hp = 0, max_hp = 10}
+        net_kills[1] = {victim = 900, killer = 2, award = 7}
+        net_kills[2] = {victim = 901, killer = 0, award = 0}
+        kernel.tick(0.016)
+        ok(#kills == 2, 'mp: two kill events')
+        ok(kills[1] and kills[1].victim.id == 900 and kills[1].type == 2 and kills[1].award == 7
+            and kills[1].killer and kills[1].killer.slot == 2 and kills[1].by_local == false, 'mp: kill by another player')
+        ok(kills[2] and kills[2].killer == nil and kills[2].type == nil and kills[2].by_local == false, 'mp: kill by a creature, victim gone')
+        net_kills[1] = {victim = 900, killer = 1, award = 3}
+        kernel.tick(0.016)
+        ok(kills[3] and kills[3].by_local == true and kills[3].killer.slot == 1, 'mp: kill by the local hero')
+    end
+    hero_id, objects[1], objects[2], objects[900] = saved_hero, saved1, saved2, nil
+end
+
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

@@ -8,6 +8,7 @@
 #include "itemicon.h"
 #include "keyblock.h"
 #include "log.h"
+#include "netmsg.h"
 #include "pickup.h"
 #include "realm.h"
 #include "overlay.h"
@@ -397,7 +398,7 @@ namespace
                     ++begin;
                 }
                 size_t last = line.size();
-                while (last > begin && (line[last - 1] == '' || line[last - 1] == ' ' || line[last - 1] == '	'))
+                while (last > begin && (line[last - 1] == '\r' || line[last - 1] == ' ' || line[last - 1] == '	'))
                 {
                     --last;
                 }
@@ -769,6 +770,26 @@ namespace
         lua_setfield(L, -2, "message");
         pushFileInfo(L, r.info);
         lua_setfield(L, -2, "info");
+        return 1;
+    }
+
+    // native.net_kill() -> nil | {victim, killer, award}: the next kill this client sent (gear/netmsg.cpp); killer
+    // is the hero object id that got the experience, 0 for none.
+    int nativeNetKill(lua_State* L)
+    {
+        NetMsg::Kill k;
+        if (!NetMsg::takeKill(k))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 3);
+        lua_pushnumber(L, k.victim);
+        lua_setfield(L, -2, "victim");
+        lua_pushnumber(L, k.killer);
+        lua_setfield(L, -2, "killer");
+        lua_pushnumber(L, k.award);
+        lua_setfield(L, -2, "award");
         return 1;
     }
 
@@ -2393,6 +2414,7 @@ namespace
             {"save_pending", nativeSavePending},
             {"save_info", nativeSaveInfo},
             {"save_poll", nativeSavePoll},
+            {"net_kill", nativeNetKill},
             {"object", nativeObject},
             {"creatures_near", nativeCreaturesNear},
             {"spawn", nativeSpawn},

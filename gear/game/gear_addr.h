@@ -74,6 +74,10 @@ namespace Gear::Addr
     // ENG 005C13C0: the item's label colour (ARGB) from its data (`record`, nullptr: the item's own at +0x118).
     inline Sacred::Thiscall<uint32_t(void* item, void* record)> cItem_labelColor{};
 
+    // Net trace (gear/netmsg.cpp). ENG 007D4860: the client's send queue, thiscall (net, message*, flush), ret 8. A
+    // message is a 16-byte header (u32 size | slot << 22 in the low 22 / high bits, +0xE u16 message id) and its payload.
+    inline Sacred::Thiscall<uint32_t(void* net, uint32_t* message, uint8_t flush)> cNet_queueMessage{};
+
     // Mod UI input (gear/ui.cpp). ENG 00757840: cUI_Manager::receiveEvent (vtable slot 0); cEngine_receiveEvent
     // (00618090) gives it every mouse and key event first, and the world gets a mouse event only if it returns
     // false. ENG 0089704C / 00899248: the vtables of the mouse button down / up events (+4 button, +8 / +0xC x, y

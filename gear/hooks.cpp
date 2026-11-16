@@ -1,6 +1,7 @@
 #include "hooks.h"
 #include "drops.h"
 #include "lua_host.h"
+#include "netmsg.h"
 #include "patch.h"
 #include "pickup.h"
 #include "realm.h"
@@ -33,6 +34,7 @@ bool Hooks::install()
     Pickup::install();
     Realm::install(LuaHost::stateFilePath(L"gear_realm.txt"));
     Drops::install();
+    NetMsg::install();
     const bool committed = Patch::commit();
     // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.
     SiteHook::install();

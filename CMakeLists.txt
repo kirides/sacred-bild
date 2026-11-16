@@ -179,6 +179,7 @@ if(SACREDGEAR)
     gear/text.cpp
     gear/pickup.cpp
     gear/drops.cpp
+    gear/netmsg.cpp
     gear/inventory.cpp
     gear/itemtip.cpp
     gear/save.cpp
