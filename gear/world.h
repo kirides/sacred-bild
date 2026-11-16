@@ -48,6 +48,15 @@ namespace World
     // the engine would announce the changes to peers that do not know the objects) and the local hero is the only one.
     bool changesAllowed();
 
+    // Whether the local hero's inventory may be changed through the engine's own item calls: single player as
+    // changesAllowed(), and in a network game too (LAN, open net) because Gear's inventory code then takes the engine's
+    // networked variants, which tell the peers (gear/inventory.cpp). False without a hero.
+    bool inventoryChangesAllowed();
+
+    // Creates an object of `type` at `at` with the engine's own create call, whatever the game kind: `broadcast` makes the
+    // engine announce it to the peers in a network game (message 0x16F). The caller has checked that it may.
+    uint32_t createObject(uint32_t type, const Position& at, bool broadcast, const char*& error);
+
     // Automation self tests only: sets or clears the network flag (nothing else runs in between: the mod code runs on
     // the engine's thread), to test that the guards refuse in a network game.
     bool setNetworkFlagForTest(bool on);

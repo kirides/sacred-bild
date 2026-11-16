@@ -111,11 +111,11 @@ namespace
         }
     }
 
-    int callPut(uintptr_t c, uint32_t slot, uint32_t id, uint32_t w, uint32_t h)
+    int callPut(uintptr_t c, uint32_t slot, uint32_t id, uint32_t w, uint32_t h, int notify)
     {
         __try
         {
-            Addr::cInventory_put(reinterpret_cast<void*>(c), slot, id, w, h, 0);
+            Addr::cInventory_put(reinterpret_cast<void*>(c), slot, id, w, h, notify);
             return 1;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -124,11 +124,11 @@ namespace
         }
     }
 
-    int callRemove(uintptr_t c, uint32_t id)
+    int callRemove(uintptr_t c, uint32_t id, int notify)
     {
         __try
         {
-            return Addr::cInventory_remove(reinterpret_cast<void*>(c), id, 0) & 0xFF ? 1 : 0;
+            return Addr::cInventory_remove(reinterpret_cast<void*>(c), id, notify) & 0xFF ? 1 : 0;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
@@ -216,6 +216,28 @@ namespace
         {
             return -1;
         }
+    }
+
+    // Tells the peers about an item the engine has already announced as created (message 0x16F) but whose data we
+    // changed afterwards: the engine's own "set record and announce" (message 0x16C, the whole item). 1 done, -1 fault.
+    int callAnnounce(uintptr_t item)
+    {
+        __try
+        {
+            Addr::cItem_setRecord(reinterpret_cast<void*>(item), reinterpret_cast<void*>(item + kItemRecord), 1);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    // In a network game only the local hero's backpack and the chest may be touched: those are the containers the
+    // engine's own item calls announce to the peers for this player.
+    bool containerAllowed(uint32_t index)
+    {
+        return !World::networkGame() || index == Inventory::kChest || index == World::hero();
     }
 
     // Whether item object `o` is a weapon: its vtable's slot 8 is cWeapon3D's.
@@ -352,9 +374,14 @@ bool Inventory::put(uint32_t index, uint32_t id, uint32_t x, uint32_t y, const c
 {
     const uintptr_t c = containerAddress(index);
     uint32_t columns = 0, rows = 0, w = 0, h = 0;
-    if (!World::changesAllowed())
+    if (!World::inventoryChangesAllowed())
     {
-        error = "inventory changes are not possible now (no single player game)";
+        error = "inventory changes are not possible now (no hero, or the game does not allow it)";
+        return false;
+    }
+    if (!containerAllowed(index))
+    {
+        error = "in a network game only your own backpack and the chest can be changed";
         return false;
     }
     if (!c || !readGeometry(c, columns, rows))
@@ -373,7 +400,7 @@ bool Inventory::put(uint32_t index, uint32_t id, uint32_t x, uint32_t y, const c
         return false;
     }
     const uint32_t slot = y * columns + x;
-    if (callPut(c, slot, id, w, h) < 0)
+    if (callPut(c, slot, id, w, h, World::networkGame() ? 1 : 0) < 0)
     {
         LOG("Inventory: putting item {} into container {} faulted", id, index);
         error = "the game faulted while putting the item in";
@@ -391,9 +418,14 @@ bool Inventory::put(uint32_t index, uint32_t id, uint32_t x, uint32_t y, const c
 bool Inventory::remove(uint32_t index, uint32_t id, const char*& error)
 {
     const uintptr_t c = containerAddress(index);
-    if (!World::changesAllowed())
+    if (!World::inventoryChangesAllowed())
     {
-        error = "inventory changes are not possible now (no single player game)";
+        error = "inventory changes are not possible now (no hero, or the game does not allow it)";
+        return false;
+    }
+    if (!containerAllowed(index))
+    {
+        error = "in a network game only your own backpack and the chest can be changed";
         return false;
     }
     if (!c)
@@ -401,7 +433,7 @@ bool Inventory::remove(uint32_t index, uint32_t id, const char*& error)
         error = "no such container";
         return false;
     }
-    const int r = callRemove(c, id);
+    const int r = callRemove(c, id, World::networkGame() ? 1 : 0);
     if (r < 0)
     {
         LOG("Inventory: taking item {} out of container {} faulted", id, index);
@@ -419,7 +451,7 @@ bool Inventory::remove(uint32_t index, uint32_t id, const char*& error)
 bool Inventory::destroy(uint32_t id, const char*& error)
 {
     void* m = objectManager();
-    if (!World::changesAllowed() || !m || !Addr::cObjectManager_destroy)
+    if (!World::inventoryChangesAllowed() || !m || !Addr::cObjectManager_destroy)
     {
         error = "world changes are not possible now";
         return false;
@@ -452,7 +484,7 @@ bool Inventory::destroy(uint32_t id, const char*& error)
 bool Inventory::socket(uint32_t itemId, uint32_t upgradeId, const char*& error)
 {
     const uintptr_t item = World::itemObject(itemId);
-    if (!World::changesAllowed() || !Addr::cItem_insertUpgrade)
+    if (!World::inventoryChangesAllowed() || !Addr::cItem_insertUpgrade)
     {
         error = "inventory changes are not possible now (no single player game)";
         return false;
@@ -512,8 +544,19 @@ bool Inventory::exportItem(uint32_t id, std::string& bytes, const char*& error)
     return true;
 }
 
-uint32_t Inventory::importItem(const std::string& bytes, const char*& error)
+uint32_t Inventory::importItem(const std::string& bytes, const char*& error, bool temporary)
 {
+    const bool net = World::networkGame();
+    if (net && temporary)
+    {
+        error = "temporary items are not made in a network game";
+        return 0;
+    }
+    if (!World::inventoryChangesAllowed())
+    {
+        error = "inventory changes are not possible now (no hero, or the game does not allow it)";
+        return 0;
+    }
     if (!Addr::cItem_entriesInsert || !Addr::cItem_dataHash)
     {
         error = "the item functions were not found";
@@ -541,7 +584,9 @@ uint32_t Inventory::importItem(const std::string& bytes, const char*& error)
         error = "there is no hero";
         return 0;
     }
-    const uint32_t id = World::spawn(type, hero.position, error);
+    // In a network game the engine announces the new item (message 0x16F: id, type, position, default data) when it
+    // is made with broadcast; the data we give it follows as the engine's own item update (0x16C).
+    const uint32_t id = World::createObject(type, hero.position, net, error);
     if (!id)
     {
         return 0;
@@ -556,6 +601,10 @@ uint32_t Inventory::importItem(const std::string& bytes, const char*& error)
         uint8_t extra[kWeaponExtraSize];
         std::memcpy(extra, data + base, sizeof(extra));
         r = isWeapon(o) ? callWeaponExtra(o, extra, true) : 0;
+    }
+    if (r > 0 && net)
+    {
+        r = callAnnounce(o);
     }
     if (r <= 0)
     {

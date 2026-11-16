@@ -1456,6 +1456,13 @@ A container: `'chest'`, `'backpack'` (the local hero's) or its number (0..31). N
 - `which`: `'chest'|'backpack'|integer`
 - returns `GearContainer?`
 
+#### `gear.inv.can_change() -> boolean, boolean`
+
+Whether the local hero's inventory may be changed now, and whether a network game runs. Single player: as `gear.world.can_change()`. In a network game (LAN, open net) the changes go through the engine's own announcing calls (an item made is announced as created and updated, put in and taken out as inventory moves, destroyed as a destruction) and only the hero's own backpack and the chest may be changed there; spawning and the temporary items of icons and tooltips stay refused.
+
+- returns `allowed` `boolean`
+- returns `network` `boolean`
+
 #### `gear.inv.size(item_id) -> integer?, integer?`
 
 The size of an item in cells, or nil.

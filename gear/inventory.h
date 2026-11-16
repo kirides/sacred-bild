@@ -63,5 +63,8 @@ namespace Inventory
 
     // Makes an item from those bytes at the hero's feet (a new object of the same type with the saved data); its
     // id, or 0 with `error`. The caller puts it into a container.
-    uint32_t importItem(const std::string& bytes, const char*& error);
+    // `temporary`: only to read something from it and destroy it at once (tooltips): never in a network game.
+    // In a network game the item is made and announced with the engine's own network calls (0x16F, then 0x16C with its
+    // data) and put into the local hero's backpack or the chest with the engine's announcing calls.
+    uint32_t importItem(const std::string& bytes, const char*& error, bool temporary = false);
 }

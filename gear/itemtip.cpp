@@ -95,7 +95,7 @@ bool ItemTip::show(uint32_t id, int x, int y, int& width, int& height, const cha
 
 bool ItemTip::showExported(const std::string& bytes, int x, int y, int& width, int& height, const char*& error)
 {
-    const uint32_t id = Inventory::importItem(bytes, error);
+    const uint32_t id = Inventory::importItem(bytes, error, true);
     if (!id)
     {
         return false;

@@ -61,6 +61,15 @@ local GearInv = {}
 ---@return GearContainer?
 function GearInv.container(which) end
 
+--- Whether the local hero's inventory may be changed now, and whether a network game runs. Single player: as
+--- `gear.world.can_change()`. In a network game (LAN, open net) the changes go through the engine's own announcing calls
+--- (an item made is announced as created and updated, put in and taken out as inventory moves, destroyed as a
+--- destruction) and only the hero's own backpack and the chest may be changed there; spawning and the temporary items
+--- of icons and tooltips stay refused.
+---@return boolean allowed
+---@return boolean network
+function GearInv.can_change() end
+
 --- The size of an item in cells, or nil.
 ---@param item_id integer
 ---@return integer? w

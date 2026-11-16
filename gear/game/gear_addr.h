@@ -131,6 +131,10 @@ namespace Gear::Addr
     // left: the item's record +0x124..+0x12B counts the sockets), its bonuses are added to the item's record (+0x12C
     // ...), its own 0x82-byte record is appended to the item's entries and the upgrade item is destroyed.
     inline Sacred::Thiscall<uint8_t(void* item, uint32_t upgradeId, uint32_t socket)> cItem_insertUpgrade{};
+    // ENG 005C0810: thiscall (item, record*, notify) ret 8: copies the 0x82-byte record into the item (+0x118), makes
+    // the number at its +8 and, in a network game with notify, announces the whole item (its entries and record, as
+    // the engine does after socketing or repairing: message 0x16C) to the peers.
+    inline Sacred::Thiscall<void(void* item, void* record, uint32_t notify)> cItem_setRecord{};
     // ENG 005CF2D0: cWeapon3D's network read / write (vtable slot 8, thiscall (stream, write, code), ret 0xC). Gear
     // only compares an item's slot 8 with it to tell weapons, which keep four more dwords (+0x19C, +0x1AC, +0x1A0,
     // +0x1BC) that the engine's save and network code copy after the common item data.

@@ -911,6 +911,13 @@ function Container:take(item_id)
     return native.inv_remove(self.index, item_id)
 end
 
+-- inv.can_change() -> allowed, network: whether the local hero's inventory may be changed now (single player as
+-- world.can_change; in a network game too, through the engine's announcing calls, for the hero's own backpack and the
+-- chest), and whether a network game runs.
+function inv.can_change()
+    return native.inv_can_change()
+end
+
 -- inv.size(item_id) -> w, h | nil: the size in cells.
 function inv.size(item_id)
     return native.inv_size(item_id)

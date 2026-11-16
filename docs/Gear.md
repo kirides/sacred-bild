@@ -212,8 +212,14 @@ and compares the file before and after. See `autosave` in the sacred-gear-mods r
 | `gear.inv.socket(id, upgrade_id)` | Puts an upgrade item (a rune, made with `create` or lying in the world) into a free socket of an item, as the blacksmith does (the item gains its bonuses and an entry, the rune is consumed). |
 | `gear.inv.remove(c, id)`, `gear.inv.destroy(id)` | Takes an item out of the container, destroys it and returns its export; deletes an item that is in no container. |
 
-All of it works in single player only (`gear.world.can_change()`) and goes through the engine's own inventory and
-object code, under the fault guard. An exported item made again is byte for byte the same (type, entries, data):
+All of it goes through the engine's own inventory and object code, under the fault guard. In single player it works as
+`gear.world.can_change()` says; in a network game (LAN, open net; `gear.inv.can_change()` returns `true, true`) only the
+local hero's own backpack and the chest may be changed, and Gear then takes the engine's announcing variants: an item
+made is announced as created (message 0x16F, `create` with broadcast) and then updated with its data (0x16C, the
+engine's `0x005C0810`), put into and taken out of a container with the announcing flag (0x13F / 0x13E) and destroyed
+with `0x005FBDB0 (id, 1, 0, 0)` (0x167), the sequence the engine's own loot generation and inventory use, so the other
+players and the game server see the same objects. Spawning and the temporary items of item icons and tooltips for stored
+items stay single player only. Not tested against a second PC; closed online servers that check items are out of scope. An exported item made again is byte for byte the same (type, entries, data):
 the self test of `shared-stash` and the probe that found the format moved 55 backpack items through the chest and
 back with equal exports. An export holds everything that makes an item what it is: its type, its entries (the random properties, and one entry
 for every rune socketed into it: a socketed item is 6 + 130 * entries + 130 bytes) and its record (the bonuses, which a

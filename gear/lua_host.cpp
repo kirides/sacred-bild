@@ -1581,6 +1581,14 @@ namespace
         return 2;
     }
 
+    // native.inv_can_change() -> bool, network
+    int nativeInvCanChange(lua_State* L)
+    {
+        lua_pushboolean(L, World::inventoryChangesAllowed());
+        lua_pushboolean(L, World::networkGame());
+        return 2;
+    }
+
     // native.inv_container(index) -> {columns, rows} | nil
     int nativeInvContainer(lua_State* L)
     {
@@ -2222,6 +2230,7 @@ namespace
             {"hero_class", nativeHeroClass},
             {"pickup_rules", nativePickupRules},
             {"pickup_refused", nativePickupRefused},
+            {"inv_can_change", nativeInvCanChange},
             {"inv_container", nativeInvContainer},
             {"inv_items", nativeInvItems},
             {"inv_size", nativeInvSize},
