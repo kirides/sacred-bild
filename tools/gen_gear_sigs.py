@@ -111,6 +111,19 @@ GEAR = [
     ('abilityTable2End', 0x00955344, 'data', 0x004D232A),
     ('textResources_instance', 0x006725E0, 'func'),
     ('textResources_get', 0x00672C90, 'func'),
+    # Realms (gear/realm.cpp). The network object (g_pNetPlayers, 0x7D7A70) holds the lobby fields: +0x38 an IP override,
+    # +0x3C the port and +0x39E4 the host (a string of three pointers begin / end / capacity); the login and register
+    # calls copy the host each time. The network menu runs 0x7D8560 (thiscall (net, flag), ret 4) when a network
+    # screen opens: it reads Settings.cfg into the object with 0x7EDEA0 (thiscall (net)) and then makes the game
+    # client's network and the lobby connection (0x7D2BD0 -> 0x7CCBE0), which read the port with 0x81E400 (thiscall (config) -> port) at 0x7CCD28. The object writes itself back to Settings.cfg with 0x7EE780 (thiscall (net), fastcall in the exe).
+    # The lobby connection (0x182EBD0; +8 / +0x10 tell that it is connected) and the string's assign (thiscall
+    # (string*, first, last, allocator*), ret 0xC) the engine itself copies NETWORK_LOBBY in with.
+    ('g_pLobby', 0x0182EBD0, 'data'),
+    ('cString_assign', 0x00415BD0, 'func'),
+    ('cNet_openScreen', 0x007D8560, 'func'),
+    ('cNet_loadSettings', 0x007EDEA0, 'func'),
+    ('cNet_saveSettings', 0x007EE780, 'func'),
+    ('lobbyPortCall', 0x007CCD28, 'code'),
     # The difficulty level of the running game (0 .. 4): the engine's own code indexes tables with it (ReBorn's appended code too).
     ('g_difficulty', 0x0182EE44, 'data'),
 ]

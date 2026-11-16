@@ -57,6 +57,12 @@ static const Sig::Entry kGearSigs[] = {
     {"abilityTable2End", "3D ?? ?? ?? ?? 72 EE 33 C0 C3 8D 04 C9 8D 0C 81", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable2End}, // 00955344, 00953344
     {"textResources_instance", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A1 ?? ?? ?? ?? 64 89 25 00 00 00 00 83 EC 0C", 0, Sig::Take::Match, &Gear::Addr::textResources_instance}, // 006725E0, 006728C0
     {"textResources_get", "8B 44 24 04 56 83 F8 FF 8B F1 74 4A", 0, Sig::Take::Match, &Gear::Addr::textResources_get}, // 00672C90, 00672F70
+    {"g_pLobby", "C7 84 24 E8 01 00 00 FF FF FF FF A3 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::g_pLobby}, // 0182EBD0, 0182CB50
+    {"cString_assign", "8B 44 24 04 53 55 56 57 8B F9 8B 4C 24 18", 0, Sig::Take::Match, &Gear::Addr::cString_assign}, // 00415BD0, 00415BE0
+    {"cNet_openScreen", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 56 57 8B F1", 0, Sig::Take::Match, &Gear::Addr::cNet_openScreen}, // 007D8560, 007D7D00
+    {"cNet_loadSettings", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 54 53 55 56 57 8B F1", 0, Sig::Take::Match, &Gear::Addr::cNet_loadSettings}, // 007EDEA0, 007ED430
+    {"cNet_saveSettings", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 50 53 55 33 ED", 0, Sig::Take::Match, &Gear::Addr::cNet_saveSettings}, // 007EE780, 007EDC70
+    {"lobbyPortCall", "8B 11 FF 52 4C B9 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 4E 40 6A 01", 10, Sig::Take::Match, &Gear::Addr::lobbyPortCall}, // 007CCD28, 007CC548
     {"g_difficulty", "8B 4C 24 68 8B 54 24 2C A1 ?? ?? ?? ?? 83 F8 04", 9, Sig::Take::Abs32, &Gear::Addr::g_difficulty}, // 0182EE44, 0182CDC4
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500

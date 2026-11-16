@@ -159,6 +159,22 @@ namespace Gear::Addr
     inline uintptr_t siteFn559BF0{};
     inline uintptr_t siteFn56B130{};
 
+    // Realms (gear/realm.cpp). The network object (g_pNetPlayers) keeps the lobby fields: +0x38 the IP override (0 =
+    // none), +0x3C the port, +0x39E4 the host (a string: begin, end, capacity pointers). ENG 007D8560: what the
+    // network menu runs when a network screen opens, thiscall (net, flag), ret 4; it calls 007EDEA0 (thiscall (net):
+    // Settings.cfg into the object) and then makes the game client's network and the lobby connection, which read
+    // the port with 0081E400 (thiscall (config) -> NETWORK_LOBBYPORT) at 007CCD28. ENG 0182EBD0: the lobby connection (nullptr until then).
+    // ENG 00415BD0: the string's assign, thiscall (string*, first, last, allocator*), ret 0xC: the call the engine's
+    // own settings reader copies NETWORK_LOBBY in with.
+    inline Sacred::Global<uint8_t*> g_pLobby{};
+    inline Sacred::Thiscall<void(void* net, uint32_t flag)> cNet_openScreen{};
+    inline Sacred::Thiscall<void(void* net)> cNet_loadSettings{};
+    // ENG 007EE780: the object's lobby fields back into Settings.cfg (thiscall (net)); the login and register calls and
+    // 007D8560 run it.
+    inline Sacred::Thiscall<void(void* net)> cNet_saveSettings{};
+    inline uintptr_t lobbyPortCall{};     // ENG 007CCD28: `mov ecx, 0182EE78; call 0081E400` in the lobby connection's constructor
+    inline Sacred::Thiscall<void*(void* string, const char* first, const char* last, void* allocator)> cString_assign{};
+
     // ENG 0182EE44: the difficulty level of the running game (0 .. 4).
     inline Sacred::Global<int32_t> g_difficulty{};
     inline Sacred::Global<uint8_t> abilityTable1First{};

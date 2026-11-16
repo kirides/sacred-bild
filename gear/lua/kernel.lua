@@ -2234,7 +2234,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'settings.', 'level.', 'combat.', 'creature.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -2578,6 +2578,171 @@ local function state_flush()
     if not native.state_write(json.encode({version = 1, mods = out})) then
         log('gear_mods.json: the file cannot be written')
     end
+end
+
+-- Realms ----------------------------------------------------------------------------------------------------------
+-- The online play (register / login) server. The choice itself is native (native.realm_select: the game's network menu
+-- takes the host and the lobby port from it when Closed or Open Internet opens, see gear/realm.h); this keeps the
+-- list and the active realm in mods\gear_realms.json. The built-in realm 'default' is what Settings.cfg says.
+local realm_api, realm_poll, realm_flush   -- (the rest is local to the block below: the chunk's 200 locals)
+do
+    local store = nil          -- {default_host, realms = {{id, name, host, port?}}, active}
+    local synced = false       -- the saved choice was handed to the native side
+    local dirty = false
+    local ID_PATTERN = '^[%w_%-]+$'
+
+    local function load_store()
+        if store then return store end
+        store = {realms = {}, active = 'default'}
+        local text = native.state_read('realms')
+        if text then
+            local v, err = json.decode(text)
+            if is_table(v) then
+                if type(v.default_host) == 'string' and native.realm_valid_host(v.default_host) then
+                    store.default_host = v.default_host
+                end
+                for _, r in ipairs(is_table(v.realms) and v.realms or {}) do
+                    if is_table(r) and type(r.id) == 'string' and r.id:match(ID_PATTERN) and r.id ~= 'default'
+                        and type(r.host) == 'string' and native.realm_valid_host(r.host) then
+                        store.realms[#store.realms + 1] = {
+                            id = r.id, name = type(r.name) == 'string' and r.name or r.id, host = r.host,
+                            port = type(r.port) == 'number' and r.port or nil,
+                        }
+                    end
+                end
+                if type(v.active) == 'string' then store.active = v.active end
+            else
+                log('gear_realms.json cannot be read (%s): it is kept as gear_realms.json.bak, the defaults apply',
+                    tostring(err or 'not an object'))
+                native.state_write(text, true, 'realms')
+            end
+        end
+        return store
+    end
+
+    function realm_flush()
+        if not dirty then return end
+        dirty = false
+        local st = load_store()
+        local out = {}
+        for _, r in ipairs(st.realms) do out[#out + 1] = {id = r.id, name = r.name, host = r.host, port = r.port} end
+        if not native.state_write(json.encode({version = 1, default_host = st.default_host, realms = out, active = st.active}),
+            false, 'realms') then
+            log('gear_realms.json: the file cannot be written')
+        end
+    end
+
+    local function copy(r)
+        return {id = r.id, name = r.name, host = r.host, port = r.port, builtin = r.id == 'default' or nil}
+    end
+
+    local function default_realm()
+        return {id = 'default', name = 'Default (Settings.cfg)', host = load_store().default_host or ''}
+    end
+
+    local function find(id)
+        if id == 'default' then return default_realm() end
+        for _, r in ipairs(load_store().realms) do
+            if r.id == id then return r end
+        end
+    end
+
+    -- Hands the saved choice to the native side (once) and remembers the game's own host when it shows (the network
+    -- object exists after the first network menu; until then the default realm has no host to show).
+    function realm_poll()
+        local st = load_store()
+        if not synced then
+            synced = true
+            local r = find(st.active)
+            if not r then
+                st.active = 'default'
+                dirty = true
+                native.realm_select(nil)
+            elseif st.active == 'default' then
+                native.realm_select(nil)
+            else
+                native.realm_select(r.host, r.port)
+            end
+        end
+        if not st.default_host then
+            local now = native.realm_get()
+            if now and now.game_host and now.game_host ~= '' then
+                st.default_host = now.game_host
+                dirty = true
+            end
+        end
+    end
+
+    realm_api = {
+        -- list() -> Realm[]: the built-in 'default' first, then the added ones.
+        list = function()
+            realm_poll()
+            local out = {copy(default_realm())}
+            for _, r in ipairs(load_store().realms) do out[#out + 1] = copy(r) end
+            return out
+        end,
+        -- current() -> Realm: the chosen realm.
+        current = function()
+            realm_poll()
+            return copy(find(load_store().active) or default_realm())
+        end,
+        -- add(def) -> true | nil, message: def {id, name?, host, port?}; an existing id is replaced.
+        add = function(def)
+            assert(type(def) == 'table', 'add wants a table {id, name, host, port?}')
+            local id, host = def.id, def.host
+            if type(id) ~= 'string' or not id:match(ID_PATTERN) or #id > 32 then
+                return nil, 'id: 1 to 32 letters, digits, "_" or "-"'
+            end
+            if id == 'default' then return nil, 'the id "default" is the built-in realm' end
+            if type(host) ~= 'string' or not native.realm_valid_host(host) then return nil, 'host: not a valid host name' end
+            local port = def.port
+            if port ~= nil and (type(port) ~= 'number' or port ~= math.floor(port) or port < 1 or port > 65535) then
+                return nil, 'port: a number from 1 to 65535'
+            end
+            local entry = {id = id, name = type(def.name) == 'string' and def.name ~= '' and def.name or id, host = host, port = port}
+            local st = load_store()
+            for i, r in ipairs(st.realms) do
+                if r.id == id then
+                    st.realms[i] = entry
+                    dirty = true
+                    if st.active == id then native.realm_select(host, port) end
+                    return true
+                end
+            end
+            st.realms[#st.realms + 1] = entry
+            dirty = true
+            return true
+        end,
+        -- remove(id) -> true | nil, message: the active realm cannot be removed (switch first).
+        remove = function(id)
+            assert(type(id) == 'string', 'remove wants a realm id')
+            local st = load_store()
+            if id == 'default' then return nil, 'the built-in realm cannot be removed' end
+            if st.active == id then return nil, 'this realm is in use: switch to another first' end
+            for i, r in ipairs(st.realms) do
+                if r.id == id then table.remove(st.realms, i); dirty = true; return true end
+            end
+            return nil, 'no such realm'
+        end,
+        -- use(id) -> true | nil, message: the next Closed or Open Internet the player opens in the multiplayer menu uses
+        -- this realm's host (and port). Raises 'realm.changed' when the realm changed.
+        use = function(id)
+            assert(type(id) == 'string', 'use wants a realm id')
+            realm_poll()
+            local r = find(id)
+            if not r then return nil, 'no such realm' end
+            local ok, err
+            if id == 'default' then ok, err = native.realm_select(nil) else ok, err = native.realm_select(r.host, r.port) end
+            if not ok then return nil, err end
+            local st = load_store()
+            local changed = st.active ~= id
+            st.active = id
+            dirty = true
+            log('Realm: %s (%s)%s', id, r.host, current and ' by ' .. current.id or '')
+            if changed then kernel.dispatch('realm.changed', copy(r)) end
+            return true
+        end,
+    }
 end
 
 -- Settings ------------------------------------------------------------------------------------------------------
@@ -3170,6 +3335,7 @@ local function make_env(mod)
         end,
     }
     gear.inv = inv
+    gear.realm = realm_api
     gear.settings = make_settings_api(mod)
     gear.keys = make_keys_api(mod)
     gear.mods = make_mods_api(mod)
@@ -3799,6 +3965,8 @@ function kernel.tick(dt)
     native.ui_commit()
     save_layout()
     publish_pickup_rules()
+    realm_poll()
+    realm_flush()
     state_flush()
     native.ui_block_keys(next(key_capture) ~= nil)
 end
@@ -3819,6 +3987,8 @@ function kernel.idle()
     native.ui_commit()
     save_layout()
     publish_pickup_rules()
+    realm_poll()
+    realm_flush()
     state_flush()
     native.ui_block_keys(next(key_capture) ~= nil)
 end
@@ -3826,6 +3996,7 @@ end
 -- The mod whose code was running when the host had to stop it (time budget), for the log.
 -- Writes gear_mods.json if something changed (the tick does it too).
 function kernel.flush()
+    realm_flush()
     state_flush()
 end
 

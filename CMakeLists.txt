@@ -183,6 +183,7 @@ if(SACREDGEAR)
     gear/save.cpp
     gear/keyblock.cpp
     gear/itemicon.cpp
+    gear/realm.cpp
     gear/gear.rc
   )
   target_include_directories(SacredGear PRIVATE gear ${LUAJIT_INCLUDE_DIRS}/luajit)

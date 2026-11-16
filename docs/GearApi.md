@@ -109,6 +109,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'session.stop'` | That hero is gone. |
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'game.save_failed'` | It could not be written. |
+| `'realm.changed'` | `gear.realm.use` switched the online play server: `(realm)`. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'damage'` | The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534). |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
@@ -169,6 +170,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
 | `game` | `GearGame` | The game itself: difficulty and saving. |
+| `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
 | `settings` | `GearSettings` | This mod's settings (declared in `mod.lua`, changed by the player in the mod manager). |
 | `keys` | `GearKeys` | This mod's declared key binds. |
 | `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
@@ -191,6 +193,7 @@ Forms:
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
+- `fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
 - `fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
@@ -1121,6 +1124,62 @@ The savegame file of `slot`: nil for a slot outside 0..509, else a table whose `
 
 - `slot`: `integer`
 - returns `GearSaveInfo?`
+
+## Realms (gear.realm)
+
+### GearRealm
+
+An online play (register / login) server the game can talk to.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | Short name for scripts: letters, digits, `_` and `-` (the built-in one is `'default'`). |
+| `name` | `string` | What the player reads. |
+| `host` | `string` | The server's host name or IPv4 address (the built-in realm: the host of Settings.cfg once known, else empty). |
+| `port` | `integer` | The lobby port (omitted: the game's own, NETWORK_LOBBYPORT). (optional) |
+| `builtin` | `boolean` | The realm the game started with (from Settings.cfg); it cannot be removed. (optional) |
+
+### GearRealmApi
+
+Reached as `gear.realm`.
+
+Choosing the server of the game's online play (register and login). The game reads the lobby host and port when the multiplayer menu opens Closed or Open Internet (LAN is not touched), so a chosen realm applies from the next time the player opens one of those; an open lobby connection keeps its server until the player leaves. The choice is native (`mods\gear_realm.txt`, applied before any mod loads); the list and the active realm are kept in `mods\gear_realms.json`. A realm names the server the player's password goes to: add realms only from sources you trust.
+
+#### `gear.realm.list() -> GearRealm[]`
+
+The realms: the built-in one first, then the added ones.
+
+- returns `GearRealm[]`
+
+#### `gear.realm.current() -> GearRealm`
+
+The chosen realm.
+
+- returns `GearRealm`
+
+#### `gear.realm.add(def) -> boolean?, string?`
+
+Adds a realm, or replaces the one with that id. `id` is 1 to 32 letters, digits, `_` or `-` and is not `'default'`; `host` is a valid host name or IPv4 address (letters, digits, `.`, `-`, `_`); `port` 1 to 65535 (omitted: the game's NETWORK_LOBBYPORT).
+
+- `def`: `{id: string, name?: string, host: string, port?: integer}`
+- returns `ok` `boolean?`
+- returns `message` `string?` - Why not.
+
+#### `gear.realm.remove(id) -> boolean?, string?`
+
+Removes a realm; not the built-in one and not the one in use.
+
+- `id`: `string`
+- returns `ok` `boolean?`
+- returns `message` `string?` - Why not.
+
+#### `gear.realm.use(id) -> boolean?, string?`
+
+Chooses the realm for the next Closed or Open Internet and saves the choice. Raises the event `realm.changed` when the realm changed.
+
+- `id`: `string`
+- returns `ok` `boolean?`
+- returns `message` `string?` - Why not.
 
 ## Settings, key binds and the mod manager
 

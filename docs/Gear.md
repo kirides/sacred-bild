@@ -482,6 +482,21 @@ Self test of the screen: `gear/examples/modmanagertest` (see its header) clicks 
 checks the results; `gear/tests/kernel_test.lua` covers the kernel side (persistence, broken files, switching mods live,
 dependencies, key binds and conflicts) and drives the screen against a mocked UI.
 
+### Realms
+
+`gear.realm` chooses the server of the game's online play (register and login), so that several servers (a private
+realm, for example) can be used without editing `Settings.cfg`. The game reads the lobby host and port when the
+multiplayer menu opens **Closed Internet** or **Open Internet**; Sacred Gear hooks those steps (`gear/realm.*`) and
+puts the chosen realm's host (and its port, if it names one) in place of `NETWORK_LOBBY` / `NETWORK_LOBBYPORT`. LAN is
+not touched, and `Settings.cfg` keeps the game's own values (the hook on the object's write-back swaps them for the
+moment), so choosing the default realm is the game's setting again. The choice is saved in `mods\gear_realm.txt` (read
+by the native side at start, before any mod loads); the list of realms and the active id are in `mods\gear_realms.json`
+(`{"realms": [{"id", "name", "host", "port"}], "active": ...}`, also written by `gear.realm.add`). A realm applies from
+the next opening of Closed or Open Internet, not to a lobby connection that is already open. The `realms` example mod
+shows the choice as a page of the mod manager (F11 in game, or the pad's mod menu); Sacred Gear itself runs only once a
+game has started, so the choice is made in game or by editing the files, not in the menus. A realm decides where the
+player's password goes: use only realms you trust.
+
 ### Errors
 
 An error in a mod's code is logged with its traceback and does not reach the game. A mod whose handlers raised ten
@@ -501,6 +516,7 @@ faults returns nil and a message instead of crashing the game.
 | `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
 | `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F4) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
 | `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices; filtered items' labels are dimmed; an overlay shows the rules; the rules are declared settings (the Mods screen shows them) and a panel of its own (F5 or the overlay's button) changes the same values. An old `settings.json` is migrated once. Self test with `-gear-auto`. |
+| `realms` | The realm picker: a page in the mod manager (Mods > Realm > More) that chooses the online play server for Closed / Open Internet. `realmtest` is its self test: it chooses a realm and drives the menus (`mode = 'lan'` in its `config.lua` opens LAN instead). See [Realms](#realms). |
 | `layout` | A layout editor in the manner of an MMO's edit mode (its "Edit layout" button, top left while Alt shows the game's labels; Done ends it; no key binding): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
 | `itemicontest` | `gear.ui.item_icon`: a row of weapon and armour models by type id and a row from live items; checks that nothing is left behind. |
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
@@ -635,6 +651,7 @@ search) from the `sacred_core` library (`src/fmt.*`, `log.*`, `patch.*`, `sig.*`
 | `gear/world.*` | Objects through the game's object manager: hero, creatures, spawn, teleport, health, gold |
 | `gear/pipe.*` | Named pipe clients, each on a thread of its own |
 | `gear/automation.*` | Automation: options, input, UI state, savegame loading, screenshots |
+| `gear/realm.*` | Realms: the hooks on the network menu's lobby host and port, and `Settings.cfg`'s write-back |
 | `gear/pickup.*` | Pickup rules: the hooks on the game's pickup, the collect filter and the item label colour |
 | `gear/itemicon.*` | Item icons: the model renderer call for a live item or a temporary item of a type, with the device state saved and restored |
 | `gear/keyblock.*` | The keyboard kept from the game while a screen captures it (`gear.ui.capture_keys`) |

@@ -28,6 +28,7 @@ local pickup_published
 save_block, save_calls, save_results = nil, {}, {}
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
 state_file, state_bak, state_writes = nil, nil, 0
+realm_file, realm_bak, realm_writes, realm_client, realm_selected = nil, nil, 0, nil, nil
 layout_file, moved_windows = '{"game:UI_WND_INVENTORY":{"x":2048,"y":1024}}', {}
 
 local native = {
@@ -138,11 +139,25 @@ local native = {
     ui_nav = function(stops, flags) nav_published = {stops = stops, flags = flags}; return true end,
     ui_pad = function() local p = pad_queue; pad_queue = {0, 0, 0}; return p[1], p[2], p[3] end,
     key_down = function(vk) return keys_held[vk] == true end,
-    state_read = function() return state_file end,
-    state_write = function(text, backup)
+    state_read = function(which) if which == 'realms' then return realm_file end return state_file end,
+    state_write = function(text, backup, which)
+        if which == 'realms' then
+            if backup then realm_bak = text else realm_file = text; realm_writes = realm_writes + 1 end
+            return true
+        end
         if backup then state_bak = text else state_file = text; state_writes = state_writes + 1 end
         return true
     end,
+    realm_get = function()
+        if not realm_client then return nil end
+        return {host = realm_client.host, port = realm_client.port, connected = false, overridden = realm_client.overridden == true, game_host = realm_client.game_host}
+    end,
+    realm_select = function(host, port)
+        realm_selected = {host = host, port = port}
+        if realm_client then realm_client.overridden = host ~= nil end
+        return true
+    end,
+    realm_valid_host = function(h) return #h >= 1 and #h <= 120 and h:match('^[%w%.%-_]+$') ~= nil end,
     layout_read = function() return layout_file end,
     layout_write = function(text) layout_file = text; return true end,
     ui_block_keys = function(on) keys_blocked_by_native = on end,
@@ -984,6 +999,55 @@ do
     ok(math.abs(m.from_thumb(pos, 2000, 400, 376, size) - 800) < 0.01, 'thumb place back to the offset')
     ok(m.from_thumb(-50, 2000, 400, 376, size) == 0 and m.from_thumb(9999, 2000, 400, 376, size) == 1600,
         'thumb dragged past the ends')
+end
+
+-- Realms: the list, choosing, persistence, refusals and the event (the native side is mocked).
+do
+    local gear_a
+    do
+        local i = 1
+        while true do
+            local name, value = debug.getupvalue(kernel.dispatch, i)
+            if not name then break end
+            if name == 'handlers' then
+                for _, h in ipairs(value['frame']) do
+                    local env = getfenv(h.fn)
+                    if env.record and env.gear then gear_a = env.gear end
+                end
+            end
+            i = i + 1
+        end
+    end
+    local realm = gear_a.realm
+    ok(realm_selected and realm_selected.host == nil, 'realm: the native side is told at start: no realm')
+    local l = realm.list()
+    ok(#l == 1 and l[1].id == 'default' and l[1].builtin and l[1].host == '', 'realm: only the default, host unknown yet')
+    realm_client = {host = 'lobby.example.com', port = 7066, game_host = 'lobby.example.com'}
+    kernel.tick(0.016)
+    ok(realm.list()[1].host == 'lobby.example.com', 'realm: the default host is remembered once the network object exists')
+    ok(realm.current().id == 'default', 'realm: current is the default')
+    ok(realm.add({id = 'private', name = 'Private', host = 'realm.test', port = 7100}) == true, 'realm: add')
+    ok(realm.add({id = 'bad id', host = 'x.test'}) == nil, 'realm: a bad id is refused')
+    ok(realm.add({id = 'bad', host = 'x y'}) == nil, 'realm: a bad host is refused')
+    ok(realm.add({id = 'default', host = 'x.test'}) == nil, 'realm: the default id is reserved')
+    ok(realm.add({id = 'p2', host = 'x.test', port = 70000}) == nil, 'realm: a bad port is refused')
+    local changed
+    gear_a.on('realm.changed', function(r) changed = r end)
+    ok(realm.use('private') == true, 'realm: use')
+    ok(realm_selected.host == 'realm.test' and realm_selected.port == 7100, 'realm: host and port go to the native side')
+    ok(changed and changed.id == 'private', 'realm: the event')
+    ok(realm.current().id == 'private', 'realm: current follows')
+    ok(select(2, realm.remove('private')) ~= nil, 'realm: the active realm cannot be removed')
+    ok(realm.use('nope') == nil, 'realm: unknown id')
+    changed = nil
+    ok(realm.use('private') == true and changed == nil, 'realm: no event when nothing changed')
+    ok(realm.use('default') == true and realm_selected.host == nil, 'realm: back to the default clears the choice')
+    kernel.flush()
+    ok(realm_file and realm_file:find('"active":"default"', 1, true) and realm_file:find('realm.test', 1, true)
+        and realm_file:find('lobby.example.com', 1, true), 'realm: saved with the default host')
+    ok(realm.remove('private') == true and #realm.list() == 1, 'realm: remove')
+    -- (A restart cannot be tested here: the kernel changes the string metatable once per Lua state; the game test
+    -- gear/examples/realmtest checks that the saved realm is applied at start.)
 end
 
 print(('%d passed, %d failed'):format(passes, failures))

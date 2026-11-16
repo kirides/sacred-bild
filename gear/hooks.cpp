@@ -2,6 +2,7 @@
 #include "lua_host.h"
 #include "patch.h"
 #include "pickup.h"
+#include "realm.h"
 #include "save.h"
 #include "sitehook.h"
 #include "ui.h"
@@ -28,6 +29,7 @@ bool Hooks::install()
     // Mod drawing is optional: without it the mods still run.
     Ui::install();
     Pickup::install();
+    Realm::install(LuaHost::stateFilePath(L"gear_realm.txt"));
     const bool committed = Patch::commit();
     // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.
     SiteHook::install();

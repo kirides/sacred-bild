@@ -145,6 +145,8 @@ def main():
             members('GearFiles'))
     game_src = re.search(r'^    gear\.game = \{(.*?)^    \}', kernel, re.M | re.S)
     compare('gear.game', set(re.findall(r'^\s{8}(\w+) = function', game_src.group(1), re.M)) if game_src else set(), members('GearGame'))
+    realm_src = re.search(r'^    realm_api = \{(.*?)^    \}', kernel, re.M | re.S)
+    compare('gear.realm', set(re.findall(r'^        (\w+) = function', realm_src.group(1), re.M)) if realm_src else set(), members('GearRealmApi'))
     hooks_src = re.search(r'^\s{8}hooks = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.hooks', set(re.findall(r'^\s{12}(\w+) = function', hooks_src.group(1), re.M)) if hooks_src else set(), members('GearHooks'))
     view = set(re.findall(r'^\s*function view:(\w+)\(', kernel, re.M))
