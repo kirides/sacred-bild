@@ -410,6 +410,121 @@ namespace
         return true;
     }
 
+    // A word table of records with named fields: `records = {first = word index of record 0, words = words per record, fields = {name = word in the
+    // record, ...}}` and `edits = {{record = n | records = {from, to}, <field> = value, ...}, ...}` (a value is an unsigned integer or {f = float};
+    // names from constants/*.lua are numbers by then). Every field of an edit is written in the record(s) it names.
+    bool wordValue(lua_State* L, int index, uint32_t& word)
+    {
+        if (lua_isnumber(L, index))
+        {
+            word = static_cast<uint32_t>(static_cast<int64_t>(lua_tonumber(L, index)));
+            return true;
+        }
+        if (lua_istable(L, index))
+        {
+            lua_getfield(L, index, "f");
+            const bool ok = lua_isnumber(L, -1);
+            const float f = static_cast<float>(ok ? lua_tonumber(L, -1) : 0.0);
+            lua_pop(L, 1);
+            std::memcpy(&word, &f, 4);
+            return ok;
+        }
+        return false;
+    }
+
+    bool hasWords(lua_State* L, int patch)         // a patch made of `sections` only
+    {
+        lua_getfield(L, patch, "sections");
+        const bool has = lua_istable(L, -1);
+        lua_pop(L, 1);
+        return has;
+    }
+
+    bool applyWordRecords(lua_State* L, int patch, std::vector<unsigned char>& out, std::string& why)       // `patch`: the patch or one of its `sections`
+    {
+        lua_getfield(L, patch, "records");
+        if (!lua_istable(L, -1))
+        {
+            why = "a patch with edits needs a records layout";
+            return false;
+        }
+        const int layout = lua_gettop(L);
+        auto layoutNumber = [&](const char* field) {
+            lua_getfield(L, layout, field);
+            const double v = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : -1;
+            lua_pop(L, 1);
+            return v;
+        };
+        const double first = layoutNumber("first"), words = layoutNumber("words");
+        lua_getfield(L, layout, "fields");
+        if (first < 0 || words < 1 || !lua_istable(L, -1))
+        {
+            why = "bad records layout";
+            return false;
+        }
+        const int fields = lua_gettop(L);
+        lua_getfield(L, patch, "edits");
+        const int count = static_cast<int>(lua_objlen(L, -1));
+        for (int i = 1; i <= count; ++i)
+        {
+            lua_rawgeti(L, -1, i);
+            const int edit = lua_gettop(L);
+            double from = -1, to = -1;
+            lua_getfield(L, edit, "record");
+            if (lua_isnumber(L, -1))
+            {
+                from = to = lua_tonumber(L, -1);
+            }
+            lua_pop(L, 1);
+            lua_getfield(L, edit, "records");
+            if (lua_istable(L, -1))
+            {
+                lua_rawgeti(L, -1, 1);
+                lua_rawgeti(L, -2, 2);
+                from = lua_isnumber(L, -2) ? lua_tonumber(L, -2) : -1;
+                to = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : -1;
+                lua_pop(L, 2);
+            }
+            lua_pop(L, 1);
+            if (from < 0 || to < from)
+            {
+                why = "edit " + std::to_string(i) + ": no record";
+                return false;
+            }
+            lua_pushnil(L);
+            while (lua_next(L, edit) != 0)
+            {
+                const char* key = lua_type(L, -2) == LUA_TSTRING ? lua_tostring(L, -2) : "";
+                if (std::strcmp(key, "record") != 0 && std::strcmp(key, "records") != 0)
+                {
+                    lua_getfield(L, fields, key);
+                    const double field = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : -1;
+                    lua_pop(L, 1);
+                    uint32_t word = 0;
+                    if (field < 0 || !wordValue(L, lua_gettop(L), word))
+                    {
+                        why = "edit " + std::to_string(i) + ": the field " + key + " is not in the layout or its value is not a number";
+                        return false;
+                    }
+                    for (double r = from; r <= to; r += 1)
+                    {
+                        const size_t at = static_cast<size_t>(first + r * words + field) * 4;
+                        if (at + 4 > out.size())
+                        {
+                            why = "edit " + std::to_string(i) + " is past the end of the file";
+                            return false;
+                        }
+                        std::memcpy(out.data() + at, &word, 4);
+                    }
+                }
+                lua_pop(L, 1);
+            }
+            lua_pop(L, 1);
+        }
+        lua_pop(L, 3);
+        return true;
+    }
+
     // A table of 32 bit words (balance.bin, sets.bin ...): `ops = {{first word index, {value, ...}}, ...}`, a value is an unsigned integer or {f = float}.
     bool applyWordPatch(lua_State* L, int patch, const std::vector<unsigned char>& original, std::vector<unsigned char>& out, std::string& why)
     {
@@ -419,7 +534,34 @@ namespace
             return false;
         }
         out = original;
+        lua_getfield(L, patch, "edits");
+        const bool records = lua_istable(L, -1);
+        lua_pop(L, 1);
+        if (records && !applyWordRecords(L, patch, out, why))
+        {
+            return false;
+        }
+        lua_getfield(L, patch, "sections");
+        if (lua_istable(L, -1))
+        {
+            const int sections = static_cast<int>(lua_objlen(L, -1));
+            for (int k = 1; k <= sections; ++k)
+            {
+                lua_rawgeti(L, -1, k);
+                if (!applyWordRecords(L, lua_gettop(L), out, why))
+                {
+                    return false;
+                }
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
         lua_getfield(L, patch, "ops");
+        if (!lua_istable(L, -1) && (records || hasWords(L, patch)))
+        {
+            lua_pop(L, 1);
+            return true;
+        }
         if (!lua_istable(L, -1))
         {
             why = "the patch has no ops";
@@ -475,10 +617,13 @@ namespace
 
     // Compiled script files (FunkCode.bin, StartCode.bin): a stream of instructions `u16 opcode, u16 length (including these 4 bytes), operands`.
     // FunkCode.bin is cut into functions by the table of Vectoren.bin next to it (u32 count, then 84 byte records: char name[64], i32 start,
-    // i32 length, ...). The patch (`kind = 'script'`, `file = 'funk' | 'start'`) lists edits {fn (funk), ins (from 1), op, then either
-    // `spawn = {old = {{a, b, c}, ...}, new = ...}` (the sector spawn table: the last operands of a FillSector instruction, 13 bytes each: tag 0x19 and
-    // three int32, after a 40 byte header) or `at`, `old`, `new` (hex: a byte range in the instruction)}. Every edit is checked (the function is
-    // unique, the instruction has that opcode, `old` is what the file holds) before it is written.
+    // i32 length, ...). The patch (`kind = 'script'`, `file = 'funk' | 'start'`) lists edits; the names in them (CREATURE.X, OPCODE.X) come from the
+    // mod's `constants/*.lua` (see loadConstants). Every edit is checked (function unique, opcode, the old bytes) before it is written:
+    //   {fn, op, sector = {x, y}, [set_sector = {x, y}], [spawn = {old = {{creature, weight, group}, ...}, new = {...}}]}
+    //       the FillSector instruction of the function for that sector (0x34 operand): its spawn table (the last operands, 13 bytes per entry: tag 0x19
+    //       and three int32, after a 40 byte header) and/or the sector it fills;
+    //   {op, var = 'Name', old = n, new = n}   the SetVar instruction `01 name\0 0B int32` of that variable;
+    //   {fn, op, ins = n, at, old = 'hex', new = 'hex'}   a byte range in the n-th instruction.
     struct ScriptInstruction
     {
         size_t offset;
@@ -486,25 +631,26 @@ namespace
         size_t length;
     };
 
-    bool scriptInstruction(const std::vector<unsigned char>& data, size_t begin, size_t end, size_t number, ScriptInstruction& out)
+    bool scriptInstructions(const std::vector<unsigned char>& data, size_t begin, size_t end, std::vector<ScriptInstruction>& out)
     {
+        out.clear();
         size_t at = begin;
-        for (size_t n = 1; at + 4 <= end && at + 4 <= data.size(); ++n)
+        while (at < end)
         {
+            if (at + 4 > end || at + 4 > data.size())
+            {
+                return false;
+            }
             const unsigned opcode = data[at] | (data[at + 1] << 8);
             const size_t length = data[at + 2] | (data[at + 3] << 8);
             if (length < 4 || at + length > end)
             {
                 return false;
             }
-            if (n == number)
-            {
-                out = {at, opcode, length};
-                return true;
-            }
+            out.push_back({at, opcode, length});
             at += length;
         }
-        return false;
+        return true;
     }
 
     int32_t le32(const unsigned char* p)
@@ -512,7 +658,52 @@ namespace
         return static_cast<int32_t>(p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<uint32_t>(p[3]) << 24));
     }
 
-    // The bytes of a spawn table field (`old` or `new`) of an edit on the stack top-most edit table: tag 0x19 and three int32 per entry.
+    void putLe32(std::vector<unsigned char>& out, int32_t value)
+    {
+        const uint32_t v = static_cast<uint32_t>(value);
+        out.insert(out.end(), {static_cast<unsigned char>(v), static_cast<unsigned char>(v >> 8), static_cast<unsigned char>(v >> 16),
+                               static_cast<unsigned char>(v >> 24)});
+    }
+
+    constexpr size_t kFillSectorHeader = 40;
+    constexpr size_t kSectorAt = 10;
+    constexpr size_t kSpawnEntry = 13;
+
+    // A FillSector instruction with a spawn table: its sector.
+    bool fillSectorOf(const std::vector<unsigned char>& data, const ScriptInstruction& ins, int32_t& x, int32_t& y)
+    {
+        if (ins.length <= kFillSectorHeader || (ins.length - kFillSectorHeader) % kSpawnEntry || data[ins.offset + 9] != 0x34 ||
+            data[ins.offset + 18] != 0x35)
+        {
+            return false;
+        }
+        x = le32(data.data() + ins.offset + kSectorAt);
+        y = le32(data.data() + ins.offset + kSectorAt + 4);
+        return true;
+    }
+
+    // A SetVar instruction `01 name\0 0B int32`: its name and where the int32 is.
+    bool setVarOf(const std::vector<unsigned char>& data, const ScriptInstruction& ins, std::string& name, size_t& valueAt)
+    {
+        if (ins.length < 11 || data[ins.offset + 4] != 0x01)
+        {
+            return false;
+        }
+        size_t z = ins.offset + 5;
+        while (z < ins.offset + ins.length && data[z] != 0)
+        {
+            ++z;
+        }
+        if (z + 6 != ins.offset + ins.length || data[z + 1] != 0x0B)
+        {
+            return false;
+        }
+        name.assign(reinterpret_cast<const char*>(data.data()) + ins.offset + 5, z - (ins.offset + 5));
+        valueAt = z + 2;
+        return true;
+    }
+
+    // The bytes of the spawn table `field` (`old` / `new`) of the edit at the stack top: entries {creature, weight, group} (names or numbers).
     bool spawnBytes(lua_State* L, int edit, const char* field, std::vector<unsigned char>& out, std::string& why)
     {
         out.clear();
@@ -535,24 +726,47 @@ namespace
         {
             lua_rawgeti(L, -1, i);
             out.push_back(0x19);
-            for (int k = 1; k <= 3; ++k)
+            for (const char* key : {"creature", "weight", "group"})
             {
-                lua_rawgeti(L, -1, k);
+                lua_getfield(L, -1, key);
                 if (!lua_isnumber(L, -1))
                 {
                     lua_pop(L, 4);
-                    why = "a spawn entry is not three numbers";
+                    why = std::string("a spawn entry has no number for ") + key + " (a name that is not in constants?)";
                     return false;
                 }
-                const uint32_t v = static_cast<uint32_t>(static_cast<int64_t>(lua_tonumber(L, -1)));
-                out.insert(out.end(), {static_cast<unsigned char>(v), static_cast<unsigned char>(v >> 8), static_cast<unsigned char>(v >> 16),
-                                       static_cast<unsigned char>(v >> 24)});
+                putLe32(out, static_cast<int32_t>(lua_tonumber(L, -1)));
                 lua_pop(L, 1);
             }
             lua_pop(L, 1);
         }
         lua_pop(L, 2);
         return true;
+    }
+
+    bool pairField(lua_State* L, int edit, const char* field, int32_t& a, int32_t& b)
+    {
+        lua_getfield(L, edit, field);
+        bool ok = lua_istable(L, -1);
+        if (ok)
+        {
+            lua_rawgeti(L, -1, 1);
+            lua_rawgeti(L, -2, 2);
+            ok = lua_isnumber(L, -2) && lua_isnumber(L, -1);
+            a = static_cast<int32_t>(ok ? lua_tonumber(L, -2) : 0);
+            b = static_cast<int32_t>(ok ? lua_tonumber(L, -1) : 0);
+            lua_pop(L, 2);
+        }
+        lua_pop(L, 1);
+        return ok;
+    }
+
+    bool hasField(lua_State* L, int edit, const char* field)
+    {
+        lua_getfield(L, edit, field);
+        const bool has = !lua_isnil(L, -1);
+        lua_pop(L, 1);
+        return has;
     }
 
     bool hexField(lua_State* L, int edit, const char* field, std::vector<unsigned char>& out)
@@ -570,6 +784,24 @@ namespace
         }
         lua_pop(L, 1);
         return ok;
+    }
+
+    // Checks that `original` holds `expect` at `at` and writes `replacement` there (equal sizes, inside [begin, end)).
+    bool replaceBytes(const std::vector<unsigned char>& original, std::vector<unsigned char>& out, size_t at, size_t limit,
+                      const std::vector<unsigned char>& expect, const std::vector<unsigned char>& replacement, std::string& why)
+    {
+        if (expect.size() != replacement.size() || at + expect.size() > limit)
+        {
+            why = "the edit does not fit in the instruction";
+            return false;
+        }
+        if (std::memcmp(original.data() + at, expect.data(), expect.size()) != 0)
+        {
+            why = "the file has other bytes than the edit expects";
+            return false;
+        }
+        std::memcpy(out.data() + at, replacement.data(), replacement.size());
+        return true;
     }
 
     bool applyScriptPatch(lua_State* L, int patch, const std::vector<unsigned char>& original, const std::string& originalPath,
@@ -612,6 +844,12 @@ namespace
                 functions.emplace(name, Function{static_cast<size_t>(le32(rec + 64)), static_cast<size_t>(le32(rec + 68))});
             }
         }
+        std::vector<ScriptInstruction> wholeFile;       // StartCode.bin: one stream
+        if (!funk && !scriptInstructions(original, 0, original.size(), wholeFile))
+        {
+            why = "the file is not a stream of instructions";
+            return false;
+        }
         lua_getfield(L, patch, "edits");
         if (!lua_istable(L, -1))
         {
@@ -623,14 +861,15 @@ namespace
         {
             lua_rawgeti(L, -1, i);
             const int edit = lua_gettop(L);
+            const std::string label = "edit " + std::to_string(i);
             auto number = [&](const char* field) {
                 lua_getfield(L, edit, field);
                 const double v = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : -1;
                 lua_pop(L, 1);
                 return v;
             };
-            const std::string label = "edit " + std::to_string(i);
-            size_t begin = 0, end = original.size();
+            std::vector<ScriptInstruction> list;
+            const std::vector<ScriptInstruction>* instructions = &wholeFile;
             if (funk)
             {
                 lua_getfield(L, edit, "fn");
@@ -642,65 +881,193 @@ namespace
                     return false;
                 }
                 const Function f = functions.find(name)->second;
-                begin = f.start;
-                end = f.start + f.length;
-                if (f.start > original.size() || end > original.size())
+                if (f.start > original.size() || f.start + f.length > original.size() || !scriptInstructions(original, f.start, f.start + f.length, list))
                 {
-                    why = label + ": function " + name + " is past the end of the file";
+                    why = label + ": function " + name + " is not a run of instructions";
                     return false;
                 }
+                instructions = &list;
             }
-            ScriptInstruction ins{};
-            if (number("ins") < 1 || !scriptInstruction(original, begin, end, static_cast<size_t>(number("ins")), ins) ||
-                ins.opcode != static_cast<unsigned>(number("op")))
+            const unsigned op = static_cast<unsigned>(number("op"));
+            std::string problem;
+            if (hasField(L, edit, "sector"))
             {
-                why = label + ": the instruction is not there or has another opcode";
-                return false;
-            }
-            std::vector<unsigned char> oldBytes, newBytes;
-            size_t at = 0;
-            lua_getfield(L, edit, "spawn");
-            const bool spawn = lua_istable(L, -1);
-            lua_pop(L, 1);
-            if (spawn)
-            {
-                at = 40;
-                if (!spawnBytes(L, edit, "old", oldBytes, why) || !spawnBytes(L, edit, "new", newBytes, why))
+                int32_t x = 0, y = 0;
+                if (!pairField(L, edit, "sector", x, y))
                 {
-                    why = label + ": " + why;
+                    why = label + ": bad sector";
                     return false;
                 }
-                if (ins.length < at || ins.length - at != oldBytes.size())
+                const double ins = number("ins");
+                size_t found = 0, index = 0;
+                for (size_t k = 0; k < instructions->size(); ++k)
                 {
-                    why = label + ": the spawn table has another size in the file";
+                    int32_t sx = 0, sy = 0;
+                    const ScriptInstruction& s = (*instructions)[k];
+                    if (s.opcode == op && fillSectorOf(original, s, sx, sy) && sx == x && sy == y && (ins < 1 || static_cast<size_t>(ins) == k + 1))
+                    {
+                        ++found;
+                        index = k;
+                    }
+                }
+                if (found != 1)
+                {
+                    why = label + ": sector " + std::to_string(x) + "/" + std::to_string(y) + " found " + std::to_string(found) + " times";
+                    return false;
+                }
+                const ScriptInstruction& s = (*instructions)[index];
+                if (hasField(L, edit, "spawn"))
+                {
+                    std::vector<unsigned char> oldBytes, newBytes;
+                    if (!spawnBytes(L, edit, "old", oldBytes, why) || !spawnBytes(L, edit, "new", newBytes, why))
+                    {
+                        why = label + ": " + why;
+                        return false;
+                    }
+                    if (s.length - kFillSectorHeader != oldBytes.size() ||
+                        !replaceBytes(original, out, s.offset + kFillSectorHeader, s.offset + s.length, oldBytes, newBytes, problem))
+                    {
+                        why = label + ": the spawn table: " + (problem.empty() ? "another size in the file" : problem);
+                        return false;
+                    }
+                }
+                int32_t nx = 0, ny = 0;
+                if (hasField(L, edit, "set_sector"))
+                {
+                    std::vector<unsigned char> oldBytes, newBytes;
+                    putLe32(oldBytes, x);
+                    putLe32(oldBytes, y);
+                    if (!pairField(L, edit, "set_sector", nx, ny))
+                    {
+                        why = label + ": bad set_sector";
+                        return false;
+                    }
+                    putLe32(newBytes, nx);
+                    putLe32(newBytes, ny);
+                    if (!replaceBytes(original, out, s.offset + kSectorAt, s.offset + s.length, oldBytes, newBytes, problem))
+                    {
+                        why = label + ": the sector: " + problem;
+                        return false;
+                    }
+                }
+            }
+            else if (hasField(L, edit, "var"))
+            {
+                lua_getfield(L, edit, "var");
+                const std::string var = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
+                lua_pop(L, 1);
+                size_t found = 0, index = 0, valueAt = 0;
+                for (size_t k = 0; k < instructions->size(); ++k)
+                {
+                    std::string name;
+                    size_t at = 0;
+                    if ((*instructions)[k].opcode == op && setVarOf(original, (*instructions)[k], name, at) && name == var)
+                    {
+                        ++found;
+                        index = k;
+                        valueAt = at;
+                    }
+                }
+                if (found != 1 || number("old") < -2147483648.0 || number("new") < -2147483648.0)
+                {
+                    why = label + ": SetVar " + var + " found " + std::to_string(found) + " times";
+                    return false;
+                }
+                std::vector<unsigned char> oldBytes, newBytes;
+                putLe32(oldBytes, static_cast<int32_t>(number("old")));
+                putLe32(newBytes, static_cast<int32_t>(number("new")));
+                const ScriptInstruction& s = (*instructions)[index];
+                if (!replaceBytes(original, out, valueAt, s.offset + s.length, oldBytes, newBytes, problem))
+                {
+                    why = label + ": the value of " + var + ": " + problem;
                     return false;
                 }
             }
             else
             {
-                at = static_cast<size_t>(number("at"));
+                const double ins = number("ins"), at = number("at");
+                if (ins < 1 || at < 0 || static_cast<size_t>(ins) > instructions->size() || (*instructions)[static_cast<size_t>(ins) - 1].opcode != op)
+                {
+                    why = label + ": the instruction is not there or has another opcode";
+                    return false;
+                }
+                const ScriptInstruction& s = (*instructions)[static_cast<size_t>(ins) - 1];
+                std::vector<unsigned char> oldBytes, newBytes;
                 if (!hexField(L, edit, "old", oldBytes) || !hexField(L, edit, "new", newBytes))
                 {
                     why = label + ": bad hex";
                     return false;
                 }
+                if (!replaceBytes(original, out, s.offset + static_cast<size_t>(at), s.offset + s.length, oldBytes, newBytes, problem))
+                {
+                    why = label + ": " + problem;
+                    return false;
+                }
             }
-            if (oldBytes.size() != newBytes.size() || at + oldBytes.size() > ins.length ||
-                std::memcmp(original.data() + ins.offset + at, oldBytes.data(), oldBytes.size()) != 0)
-            {
-                why = label + ": the file has other bytes than the edit expects";
-                return false;
-            }
-            std::memcpy(out.data() + ins.offset + at, newBytes.data(), newBytes.size());
             lua_pop(L, 1);
         }
         lua_pop(L, 1);
         return true;
     }
 
+    // The mod's `constants/*.lua`: each file returns a table of names to numbers and becomes the global of its upper case name (creature.lua ->
+    // CREATURE) for the patch files. They are plain data too (no libraries).
+    std::vector<unsigned char> constantsFiles(const std::string& modDir)
+    {
+        std::vector<unsigned char> all;
+        WIN32_FIND_DATAW fd;
+        const HANDLE h = FindFirstFileW(widen(modDir + "\\constants\\*.lua").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE)
+        {
+            return all;
+        }
+        do
+        {
+            std::vector<unsigned char> text;
+            if (readAll(modDir + "\\constants\\" + narrow(fd.cFileName), text))
+            {
+                const std::string name = narrow(fd.cFileName);
+                all.insert(all.end(), name.begin(), name.end());
+                all.insert(all.end(), text.begin(), text.end());
+            }
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+        return all;
+    }
+
+    bool loadConstants(lua_State* L, const std::string& modDir, std::string& why)
+    {
+        WIN32_FIND_DATAW fd;
+        const HANDLE h = FindFirstFileW(widen(modDir + "\\constants\\*.lua").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE)
+        {
+            return true;
+        }
+        bool ok = true;
+        do
+        {
+            std::string name = narrow(fd.cFileName);
+            const std::string path = modDir + "\\constants\\" + name;
+            name.erase(name.size() - 4);
+            for (char& c : name)
+            {
+                c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            }
+            if (luaL_loadfile(L, path.c_str()) != 0 || lua_pcall(L, 0, 1, 0) != 0 || !lua_istable(L, -1))
+            {
+                why = "cannot read constants\\" + narrow(fd.cFileName) + ": " + (lua_isstring(L, -1) ? lua_tostring(L, -1) : "no table");
+                ok = false;
+                break;
+            }
+            lua_setglobal(L, name.c_str());
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+        return ok;
+    }
+
     // Applies the patch file to `original` in memory; false (and a message) if it does not fit.
-    bool applyPatch(const std::string& patchFile, const std::string& originalPath, const std::vector<unsigned char>& original, std::vector<unsigned char>& out,
-                    std::string& why)
+    bool applyPatch(const std::string& patchFile, const std::string& originalPath, const std::string& modDir, const std::vector<unsigned char>& original,
+                    std::vector<unsigned char>& out, std::string& why)
     {
         lua_State* L = luaL_newstate();      // no libraries: the file is data
         if (!L)
@@ -713,6 +1080,10 @@ namespace
             lua_State* L;
             ~Closer() { lua_close(L); }
         } closer{L};
+        if (!loadConstants(L, modDir, why))
+        {
+            return false;
+        }
         if (luaL_loadfile(L, patchFile.c_str()) != 0 || lua_pcall(L, 0, 1, 0) != 0 || !lua_istable(L, -1))
         {
             why = std::string("cannot read the patch: ") + (lua_isstring(L, -1) ? lua_tostring(L, -1) : "no table");
@@ -813,8 +1184,10 @@ namespace
         else
         {
             // the cache stays valid while the patch file and the original are the same
-            char key[64];
-            std::snprintf(key, sizeof(key), "%08x-%08x-%zu", crc32Of(patchText.data(), patchText.size()), crc32Of(original.data(), original.size()), original.size());
+            char key[96];
+            const std::vector<unsigned char> constants = constantsFiles(narrow(r.dir));
+            std::snprintf(key, sizeof(key), "%08x-%08x-%zu-%08x", crc32Of(patchText.data(), patchText.size()), crc32Of(original.data(), original.size()),
+                          original.size(), crc32Of(constants.data(), constants.size()));
             std::vector<unsigned char> stored;
             const std::string keyFile = cache + ".key";
             if (exists(cache) && readAll(keyFile, stored) && std::string(stored.begin(), stored.end()) == key)
@@ -825,7 +1198,7 @@ namespace
             {
                 std::vector<unsigned char> patched;
                 std::string why;
-                if (!applyPatch(patchFile, originalPath, original, patched, why))
+                if (!applyPatch(patchFile, originalPath, narrow(r.dir), original, patched, why))
                 {
                     LOG("Overlay: {}: patch {} not applied: {}", r.id, rel, why);
                 }

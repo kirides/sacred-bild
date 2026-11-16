@@ -158,14 +158,20 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
   crc32 than the patch was made for is served unpatched and logged. The file is read by a plain Lua state without libraries, so it can only be data.
   Two more kinds: `kind = 'words'` (`ops = {{first word index, {value, ...}}, ...}`, a value is an unsigned integer or `{f = float}`; for tables of 32 bit
   words like `balance.bin`) and `kind = 'texts'` (`set = {[text id] = 'text'}`, `remove = {ids}`; for a language's `global.res`).
+  Names: every `.lua` file in the mod's `constants/` folder returns a table of names to numbers and is a global of its upper case name in the
+  patch files (`constants/creature.lua` -> `CREATURE.WOLF`, `ITEM`, `OPCODE`); the cache is rebuilt when they change.
+  `kind = 'words'` has `ops` (`{first word, {values}}`) and, for tables with records, `records = {first = word index of record 0, words = words per
+  record, fields = {name = word in the record}}` with `edits = {{record = n | records = {from, to}, field = value, ...}}` (also as `sections = {{records,
+  edits}, ...}` next to `ops`).
   And `kind = 'script'` for the compiled script files `FunkCode.bin` / `StartCode.bin` (streams of instructions `u16 opcode, u16 length, operands`;
   FunkCode.bin is cut into named functions by the `Vectoren.bin` next to it, a table of 84 byte records `char name[64], i32 start, i32 length, ...`):
-  `file = 'funk' | 'start'`, `edits = {...}` and no `size`/`crc32`. An edit is `{fn = 'FunctionName', ins = n, op = opcode, ...}` (`fn` only for funk; `ins` counts
-  from 1 inside the function, or in the file for start) with either `spawn = {old = {{type, weight, group}, ...}, new = {...}}` (the spawn table that ends a
-  `FillSector` instruction: 13 bytes per entry, tag 0x19 and three int32, after a 40 byte header) or `at`, `old`, `new` (hex bytes inside the instruction).
-  The function must be unique, the instruction must have that opcode and `old` must be what the file holds, or the whole file is served unpatched and the
-  reason is logged. One patch file can serve many game files (all hero types share the same library code). Format notes in sacred-gear-reborn-decomp's
-  `docs/file-formats.md`.
+  `file = 'funk' | 'start'`, `edits = {...}` and no `size`/`crc32`. Edits find their instruction themselves:
+  `{fn = 'Sector88067Enter', op = OPCODE.FILL_SECTOR, sector = {88, 67}, [set_sector = {x, y},] spawn = {old = {{creature = CREATURE.X, weight = 10, group = 1}, ...}, new = {...}}}`
+  (the `FillSector` instruction of that function for that sector: the spawn table that ends it, 13 bytes per entry after a 40 byte header, and/or the
+  sector it fills; `ins = n` only if the sector alone is not unique), `{op = OPCODE.SET_VAR, var = 'Name', old = n, new = n}` (the `SetVar` instruction of
+  that variable, StartCode.bin) and `{fn, op, ins = n, at, old = 'hex', new = 'hex'}` (a byte range in the n-th instruction). The function and the instruction
+  must be unique, the opcode must match and `old` must be what the file holds, or the whole file is served unpatched and the reason is logged. One patch file
+  can serve many game files (all hero types share the same library code). Format notes in sacred-gear-reborn-decomp's `docs/file-formats.md`.
 
 #### World
 
