@@ -2247,8 +2247,8 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
-local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.'}
+local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true, ['effect.add'] = true}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -2501,9 +2501,11 @@ local function make_auto()
     -- the handlers of `combat.constant` may answer for `selftest.fmul` / `selftest.fld`.
     function auto.site_hook_selftest_start() return native.site_selftest_start() end
     function auto.site_hook_selftest_result()
-        local fmul, fld, regs, store, add, edx, kept, damage = native.site_selftest_result()
+        local fmul, fld, regs, store, add, edx, kept, damage, exit_, e0, e1, counter, bonus_int, bonus_float, slot_byte, branch_taken, branch2_path, branch2_eax = native.site_selftest_result()
         if fmul == nil then return nil end
-        return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept, damage = damage}
+        return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept, damage = damage,
+                effect_exit = exit_, effect_entry0 = e0, effect_entry1 = e1, effect_counter = counter, bonus_int = bonus_int, bonus_float = bonus_float, slot_byte = slot_byte, branch_taken = branch_taken,
+                branch2_path = branch2_path, branch2_eax = branch2_eax}
     end
     function auto.start_gameserver(seconds)
         return native.auto_start_gameserver(seconds or 8)
@@ -3289,7 +3291,7 @@ local function make_env(mod)
         -- Counters of the engine hooks that ask the mods for a value (gear/sitehook.cpp).
         hooks = {
             stats = function(name)
-                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage', "the hook must be 'level.factor', 'combat.constant', 'creature.ability' or 'damage'")
+                assert(name == 'level.factor' or name == 'combat.constant' or name == 'creature.ability' or name == 'damage' or name == 'effect.add' or name == 'bonus.constant' or name == 'skillslot.select' or name == 'combat.branch' or name == 'skillslot.key', "the hook must be 'level.factor', 'combat.constant', 'creature.ability', 'damage', 'effect.add', 'bonus.constant', 'skillslot.select', 'combat.branch' or 'skillslot.key'")
                 local calls, answered, busy = native.site_hooks(name)
                 return {calls = calls, answered = answered, busy = busy}
             end,
@@ -3342,6 +3344,7 @@ local function make_env(mod)
     gear.game = {
         -- difficulty() -> 0..4: the difficulty level of the running game.
         difficulty = function() return native.difficulty() end,
+        cursor_click = function(down) return native.cursor_click(down ~= false) end,
         -- can_save() -> true | false, reason: whether a save may start now.
         can_save = function()
             local why = native.save_blocked()
@@ -3383,6 +3386,11 @@ local function make_env(mod)
         if event == 'combat.constant' then native.combat_constant_active(true) end
         if event == 'creature.ability' then native.creature_ability_active(true) end
         if event == 'damage' then native.damage_active(true) end
+        if event == 'effect.add' then native.effect_active(true) end
+        if event == 'bonus.constant' then native.bonus_active(true) end
+        if event == 'skillslot.select' then native.skillslot_active(true) end
+        if event == 'skillslot.key' then native.skillkey_active(true) end
+        if event == 'combat.branch' then native.branch_active(true) end
         return h
     end
     function gear.off(h)
@@ -3395,6 +3403,11 @@ local function make_env(mod)
         if h.event == 'combat.constant' and #list == 0 then native.combat_constant_active(false) end
         if h.event == 'creature.ability' and #list == 0 then native.creature_ability_active(false) end
         if h.event == 'damage' and #list == 0 then native.damage_active(false) end
+        if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
+        if h.event == 'bonus.constant' and #list == 0 then native.bonus_active(false) end
+        if h.event == 'skillslot.select' and #list == 0 then native.skillslot_active(false) end
+        if h.event == 'skillslot.key' and #list == 0 then native.skillkey_active(false) end
+        if h.event == 'combat.branch' and #list == 0 then native.branch_active(false) end
     end
     env.gear = gear
     return env
@@ -3935,6 +3948,82 @@ function kernel.creature_ability(type_id, vanilla, index, address)
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, 'creature.ability', h.fn, type_id, vanilla, index, address)
             if ok and type(result) == 'number' then return math.floor(result) end
+        end
+    end
+    return nil
+end
+
+-- `skillslot.key`: a character key reached the skill slot window's key handler; a handler gets the character code and returns a slot 0 .. 4
+-- (the whole case of the digit keys: page choice, COMBINE_SLOTS check, selection) or `{slot, 'select'}` (the selection only), or
+-- `false` to ignore the key, or nil for the engine's own routing (digits 1..5 and 6..0 as the engine maps them).
+function kernel.skillslot_key(character)
+    local list = handlers['skillslot.key']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, r = call(h.mod, 'skillslot.key', h.fn, character)
+            if ok and r == false then return -1, 0 end
+            if ok and type(r) == 'number' then return r, 0 end
+            if ok and type(r) == 'table' and type(r[1]) == 'number' then return r[1], r[2] == 'select' and 1 or 0 end
+        end
+    end
+    return nil
+end
+
+-- `combat.branch`: a conditional jump in the hit handlers and a few other functions; a handler gets `(name, vanilla, index, eax)` (`vanilla`:
+-- whether the engine's own condition takes the jump, `eax` the register the compare before it used) and returns true (jump) or false (fall through), nil keeps the engine's. The first boolean answers.
+function kernel.combat_branch(name, vanilla, index, eax)
+    local list = handlers['combat.branch']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'combat.branch', h.fn, name, vanilla, index, eax)
+            if ok and type(result) == 'boolean' then return result end
+        end
+    end
+    return nil
+end
+
+-- `skillslot.select`: a digit key selected a skill slot (the skill slot window of the HUD); `index` is the place among the five hooks.
+function kernel.skillslot_select(index)
+    local list = handlers['skillslot.select']
+    if not list then return end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then call(h.mod, 'skillslot.select', h.fn, index) end
+    end
+end
+
+-- `bonus.constant`: a number the item bonus code (`FUN_00571710`) pushes as the argument of a random roll or a text lookup, `index` the
+-- place among the sites, `vanilla` the engine's own value, `address` where it is. A handler returns the number to use (an integer, or for the
+-- amplitude sites a float) or nil.
+function kernel.bonus_constant(index, vanilla, address)
+    local list = handlers['bonus.constant']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'bonus.constant', h.fn, index, vanilla, address)
+            if ok and type(result) == 'number' then return result end
+        end
+    end
+    return nil
+end
+
+-- `effect.add`: the engine adds a value to a creature's effect entry (`FUN_00562330`'s loop, over every entry). A handler gets
+-- `e = {creature, ability, effect, flags, counter, value, max, current}` (the creature's id, the ability it is using, the entry's effect id,
+-- the creature's flags, its effect counter, the new sum, the entry's maximum and current value) and returns nil (the engine's own store) or
+-- a table `{value = sum | nil (do not store), effect = entry to change instead, clamp = true, finish = false, stack = 'set' | 'inc'}`.
+function kernel.effect_add(e)
+    local list = handlers['effect.add']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'effect.add', h.fn, e)
+            if ok and type(result) == 'table' then return result end
         end
     end
     return nil

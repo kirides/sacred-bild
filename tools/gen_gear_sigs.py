@@ -33,6 +33,15 @@ GEAR = [
     ('g_pUiManager', 0x017EEBBC, 'data'),
     ('g_pNetPlayers', 0x0182EBE8, 'data'),
     ('cMouse_instance', 0x00654F60, 'func'),
+    # Quick cast: a synthetic click event sent to the UI like ReBorn's SR_QUICK_CAST does (event class vtable, the object the engine hands
+    # its events to, the cursor, the event handler).
+    ('g_clickEventVtable', 0x00899248, 'data'),
+    ('g_clickDownEventVtable', 0x0089704C, 'data'),
+    ('g_uiEventTarget', 0x00AD6EF8, 'data'),
+    ('g_cursorX', 0x0182EE18, 'data'),
+    ('g_cursorY', 0x0182EE1C, 'data'),
+    # SacredBild detours the handler's first bytes (cEngine_worldMouse): Gear finds it by a window 0x30 bytes inside and calls it from there.
+    ('cWindow_handleEventInner', 0x006172F0, 'code'),
     # Mod drawing (gear/ui.cpp), all inside cUI_Manager_render (0x758ED0, which SacredBild hooks): the popup pass
     # (thiscall (manager, device, flag), ret 8) for the "hud" layer; the in-game branch's call of the party arrows
     # (0x6D01F0, cdecl (device)) right after the world, before any window, for the "world" layer; and, after the
@@ -172,6 +181,33 @@ def main():
         fnname, fn = gear_sites.DAMAGE_FUNCTION
         lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}}}, // {site:08X}')
     lines.append('};')
+    lines.append('static const DamageSiteSpec kEffectSites[] = {')
+    for i, site in enumerate(gear_sites.EFFECT_SITES):
+        fnname, fn = gear_sites.EFFECT_FUNCTION
+        lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}}}, // {site:08X}')
+    lines.append('};')
+    lines.append(f'static const uintptr_t kEffectAiLow = 0x{gear_sites.EFFECT_AI_CALLERS[0]:X}, kEffectAiHigh = 0x{gear_sites.EFFECT_AI_CALLERS[1]:X};')
+    lines.append('static const PushSiteSpec kBonusSites[] = {')
+    for i, (kind, site, vanilla) in enumerate(gear_sites.BONUS_SITES):
+        fnname, fn = gear_sites.BONUS_FUNCTION
+        code = {'int8': 0, 'int32': 1, 'float': 2}[kind]
+        lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {code}, 0x{vanilla:X}u}}, // {site:08X} {kind}')
+    lines.append('};')
+    lines.append('static const AbilitySiteSpec kSlotSites[] = {')
+    for i, (kind, site) in enumerate(gear_sites.SLOT_SITES):
+        fnname, fn = gear_sites.SLOT_FUNCTION
+        code = {'copy': 0, 'call': 1}[kind]
+        lines.append(f'    {{{i}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {code}}}, // {site:08X} {kind}')
+    lines.append('};')
+    lines.append('static const BranchSiteSpec kBranchSites[] = {')
+    for name, index, fnname, fn, site in gear_sites.BRANCH_SITES:
+        extra = gear_sites.BRANCH_EXTRA.get(site, 0)
+        lines.append(f'    {{"{name}", {index}, &Gear::Addr::{fnname}, 0x{site - fn:X}, {extra}}}, // {site:08X} in {fn:08X}')
+    lines.append('};')
+    fnname, fn = gear_sites.SLOT_FUNCTION
+    lines.append(f'static const uint32_t kKeySite = 0x{gear_sites.KEY_SITE - fn:X}, kKeyEnd = 0x{gear_sites.KEY_END - fn:X};')
+    lines.append('static const uint32_t kKeyFull[5] = {' + ', '.join(f'0x{a - fn:X}' for a in gear_sites.KEY_FULL) + '};')
+    lines.append('static const uint32_t kKeySelect[5] = {' + ', '.join(f'0x{a - fn:X}' for a in gear_sites.KEY_SELECT) + '};')
     with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sites.inc'), 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
     if failed:

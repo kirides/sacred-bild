@@ -496,7 +496,17 @@ namespace
         lua_pushnumber(L, r.abilityEdx);
         lua_pushboolean(L, r.abilityKept);
         lua_pushnumber(L, r.damage);
-        return 8;
+        lua_pushnumber(L, r.effectExit);
+        lua_pushnumber(L, r.effectEntry0);
+        lua_pushnumber(L, r.effectEntry1);
+        lua_pushnumber(L, r.effectCounter);
+        lua_pushnumber(L, r.bonusInt);
+        lua_pushnumber(L, r.bonusFloat);
+        lua_pushnumber(L, r.slotByte);
+        lua_pushnumber(L, r.branchTaken);
+        lua_pushnumber(L, r.branch2Path);
+        lua_pushnumber(L, r.branch2Eax);
+        return 18;
     }
 
     // native.difficulty() -> the running game's difficulty level (0 .. 4) | nil
@@ -509,6 +519,48 @@ namespace
         }
         lua_pushnumber(L, *Gear::Addr::g_difficulty);
         return 1;
+    }
+
+    // native.branch_active(bool): whether some mod handles `combat.branch`
+    int nativeBranchActive(lua_State* L)
+    {
+        SiteHook::setBranchActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.skillkey_active(bool): whether some mod handles `skillslot.key`
+    int nativeSkillKeyActive(lua_State* L)
+    {
+        SiteHook::setSkillKeyActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.skillslot_active(bool): whether some mod handles `skillslot.select`
+    int nativeSkillSlotActive(lua_State* L)
+    {
+        SiteHook::setSkillSlotActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.cursor_click() -> sent
+    int nativeCursorClick(lua_State* L)
+    {
+        lua_pushboolean(L, LuaHost::cursorClick(lua_toboolean(L, 1) != 0));
+        return 1;
+    }
+
+    // native.bonus_active(bool): whether some mod handles `bonus.constant`
+    int nativeBonusActive(lua_State* L)
+    {
+        SiteHook::setBonusActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.effect_active(bool): whether some mod handles `effect.add`
+    int nativeEffectActive(lua_State* L)
+    {
+        SiteHook::setEffectActive(lua_toboolean(L, 1) != 0);
+        return 0;
     }
 
     // native.damage_active(bool): whether some mod handles `damage`
@@ -536,7 +588,7 @@ namespace
     int nativeSiteHooks(lua_State* L)
     {
         const char* which = luaL_optstring(L, 1, "level.factor");
-        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : SiteHook::levelFactorStats();
+        const SiteHook::Stats s = std::strcmp(which, "combat.constant") == 0 ? SiteHook::constantStats() : std::strcmp(which, "creature.ability") == 0 ? SiteHook::abilityStats() : std::strcmp(which, "damage") == 0 ? SiteHook::damageStats() : std::strcmp(which, "effect.add") == 0 ? SiteHook::effectStats() : std::strcmp(which, "bonus.constant") == 0 ? SiteHook::bonusStats() : std::strcmp(which, "skillslot.select") == 0 ? SiteHook::skillSlotStats() : std::strcmp(which, "combat.branch") == 0 ? SiteHook::branchStats() : std::strcmp(which, "skillslot.key") == 0 ? SiteHook::skillKeyStats() : SiteHook::levelFactorStats();
         lua_pushnumber(L, s.calls);
         lua_pushnumber(L, s.answered);
         lua_pushnumber(L, s.busy);
@@ -2202,6 +2254,12 @@ namespace
             {"difficulty", nativeDifficulty},
             {"creature_ability_active", nativeCreatureAbilityActive},
             {"damage_active", nativeDamageActive},
+            {"effect_active", nativeEffectActive},
+            {"bonus_active", nativeBonusActive},
+            {"skillslot_active", nativeSkillSlotActive},
+            {"skillkey_active", nativeSkillKeyActive},
+            {"branch_active", nativeBranchActive},
+            {"cursor_click", nativeCursorClick},
             {"site_hook_sites", nativeSiteHookSites},
             {"site_selftest_start", nativeSiteSelfTestStart},
             {"site_selftest_result", nativeSiteSelfTestResult},
@@ -2548,13 +2606,283 @@ LuaHost::Answer LuaHost::damage(int damage, int victimType, int attackerType, in
     else if (lua_isnumber(L, -1))
     {
         const lua_Number v = lua_tonumber(L, -1);
-        if (v > -1e9 && v < 1e9)
+        if (v == v)     // not NaN; anything outside 0 .. 65534 saturates in the stub (no wrap around)
         {
-            out = static_cast<int>(v);
+            out = v >= 65535 ? 65534 : v <= 0 ? 0 : static_cast<int>(v);
             answer = Answer::Value;
         }
     }
     lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::effectAdd(const EffectInfo& info, EffectAnswer& answer)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "effect_add");
+    lua_remove(L, -2);
+    lua_createtable(L, 0, 8);
+    const auto num = [L](const char* key, double v) {
+        lua_pushnumber(L, v);
+        lua_setfield(L, -2, key);
+    };
+    num("creature", info.creature);
+    num("ability", info.ability);
+    num("effect", info.effect);
+    num("flags", info.flags);
+    num("counter", info.counter);
+    num("value", info.value);
+    num("max", info.max);
+    num("current", info.current);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 1, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer result = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.effect_add failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_istable(L, -1))
+    {
+        result = Answer::Value;
+        lua_getfield(L, -1, "value");
+        if (lua_isnumber(L, -1))
+        {
+            answer.hasValue = true;
+            answer.value = lua_tonumber(L, -1);
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "effect");
+        if (lua_isnumber(L, -1))
+        {
+            answer.effect = static_cast<int>(lua_tonumber(L, -1));
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "clamp");
+        if (lua_isboolean(L, -1))
+        {
+            answer.clamp = lua_toboolean(L, -1) != 0;
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "finish");
+        answer.finish = lua_toboolean(L, -1) != 0;
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "stack");
+        if (lua_isstring(L, -1))
+        {
+            const char* mode = lua_tostring(L, -1);
+            answer.stack = std::strcmp(mode, "set") == 0 ? 1 : std::strcmp(mode, "inc") == 0 ? 2 : 0;
+        }
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+    return result;
+}
+
+LuaHost::Answer LuaHost::bonusConstant(int index, double vanilla, int address, double& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "bonus_constant");
+    lua_remove(L, -2);
+    lua_pushnumber(L, index);
+    lua_pushnumber(L, vanilla);
+    lua_pushnumber(L, address);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 3, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.bonus_constant failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        const lua_Number v = lua_tonumber(L, -1);
+        if (v > -1e9 && v < 1e9)
+        {
+            out = v;
+            answer = Answer::Value;
+        }
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::skillSlot(int index)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "skillslot_select");
+    lua_remove(L, -2);
+    lua_pushnumber(L, index);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 1, 0, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.skillslot_select failed: {}", msg ? msg : "(no message)");
+        lua_pop(L, 1);
+        return Answer::None;
+    }
+    return Answer::Value;
+}
+
+bool LuaHost::cursorClick(bool down)
+{
+    if (!Gear::Addr::cWindow_handleEventInner || !Gear::Addr::g_uiEventTarget || !Gear::Addr::g_clickEventVtable || !Gear::Addr::g_cursorX ||
+        !Gear::Addr::g_cursorY)
+    {
+        return false;
+    }
+    uint8_t* target = *Gear::Addr::g_uiEventTarget;
+    if (!target)
+    {
+        return false;
+    }
+    // the event as ReBorn's cave sends it: the mouse event class, type 2, the cursor; the rest of the object is zero
+    alignas(4) uint32_t event[0x20] = {};
+    event[0] = static_cast<uint32_t>(down ? Gear::Addr::g_clickDownEventVtable.address : Gear::Addr::g_clickEventVtable.address);
+    event[1] = 2;
+    event[2] = static_cast<uint32_t>(*Gear::Addr::g_cursorX);
+    event[3] = static_cast<uint32_t>(*Gear::Addr::g_cursorY);
+    using HandleEvent = void(__thiscall*)(void* target, void* event, int flag);
+    reinterpret_cast<HandleEvent>(Gear::Addr::cWindow_handleEventInner - 0x30)(target, event, 0);
+    return true;
+}
+
+LuaHost::Answer LuaHost::branch(const char* name, int index, bool vanilla, int eax, bool& take)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "combat_branch");
+    lua_remove(L, -2);
+    lua_pushstring(L, name);
+    lua_pushboolean(L, vanilla ? 1 : 0);
+    lua_pushnumber(L, index);
+    lua_pushnumber(L, eax);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 4, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.combat_branch failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isboolean(L, -1))
+    {
+        take = lua_toboolean(L, -1) != 0;
+        answer = Answer::Value;
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::skillSlotKey(int character, int& slot, int& mode)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "skillslot_key");
+    lua_remove(L, -2);
+    lua_pushnumber(L, character);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 1, 2, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.skillslot_key failed: {}", msg ? msg : "(no message)");
+        lua_pop(L, 1);
+        return Answer::None;
+    }
+    if (lua_isnumber(L, -2))
+    {
+        slot = static_cast<int>(lua_tonumber(L, -2));
+        mode = lua_isnumber(L, -1) ? static_cast<int>(lua_tonumber(L, -1)) : 0;
+        answer = Answer::Value;
+    }
+    lua_pop(L, 2);
     return answer;
 }
 

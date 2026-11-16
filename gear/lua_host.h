@@ -35,6 +35,38 @@ namespace LuaHost
     // event `creature.ability`: the ability id for a creature of `type` (the AI's vanilla id, -1 where the site has none), at site `index` / `address`.
     Answer creatureAbility(int type, int vanilla, int index, int address, int& out);
 
+    // event `effect.add`: the engine adds a value to a creature's effect entry. `info` is what it is about to do, `answer` what the mod wants.
+    struct EffectInfo
+    {
+        int creature = 0, ability = 0, effect = 0, flags = 0, counter = 0;
+        double value = 0;
+        float max = 0, current = 0;
+    };
+    struct EffectAnswer
+    {
+        bool hasValue = false, clamp = true, finish = false;
+        double value = 0;
+        int effect = -1;        // -1: the entry the engine is at
+        int stack = 0;          // 1 the creature's effect counter becomes 1, 2 it grows by one
+    };
+    Answer effectAdd(const EffectInfo& info, EffectAnswer& answer);
+
+    // event `bonus.constant`: the number the item bonus code pushes at site `index` (`vanilla` the engine's own).
+    Answer bonusConstant(int index, double vanilla, int address, double& out);
+
+    // event `skillslot.select`: a digit key selected a skill slot (`index` the place in the handler); Value when a mod ran.
+    Answer skillSlot(int index);
+
+    // event `skillslot.key`: the routing of a character key: slot 0 .. 4 and mode 0 (the whole case: page, COMBINE_SLOTS check, selection) or 1 (the
+    // selection only), slot -1 ignores the key. Value when a mod answered.
+    Answer skillSlotKey(int character, int& slot, int& mode);
+
+    // gear.game.cursor_click(down): the UI gets a mouse event at the cursor (ReBorn's quick cast sends a button down). False if the UI or the cursor is not there.
+    bool cursorClick(bool down);
+
+    // event `combat.branch`: whether a conditional jump is taken (`vanilla`: the engine's own condition).
+    Answer branch(const char* name, int index, bool vanilla, int eax, bool& take);
+
     // event `damage`: the final damage of a hit; `victimType` / `attackerType` -1 for none. The answer is not yet clamped.
     Answer damage(int damage, int victimType, int attackerType, int index, int& out);
 

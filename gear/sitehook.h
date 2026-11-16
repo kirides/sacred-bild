@@ -48,6 +48,26 @@ namespace SiteHook
 
     // damage: the final damage of a hit (event `damage`: the damage, the victim's and the attacker's creature types).
     void setDamageActive(bool active);
+
+    // effect.add: the engine adds a value to a creature's effect entry (event `effect.add`).
+    void setEffectActive(bool active);
+
+    // bonus.constant: the numbers pushed as arguments of the item bonus rolls (event `bonus.constant`: index, vanilla value, address).
+    void setBonusActive(bool active);
+
+    // skillslot.select: a digit key selected a skill slot (event `skillslot.select`: the place among the five).
+    void setSkillSlotActive(bool active);
+
+    // skillslot.key: the character key handler of the skill slot window (event `skillslot.key`: the character) lets the mods route a key.
+    void setSkillKeyActive(bool active);
+    Stats skillKeyStats();
+
+    // combat.branch: the outcome of some conditional jumps of the hit handlers (event `combat.branch`: name, whether the engine takes the jump, index).
+    void setBranchActive(bool active);
+    Stats branchStats();
+    Stats skillSlotStats();
+    Stats bonusStats();
+    Stats effectStats();
     Stats damageStats();
 
     // Self test of the constant stubs, for automation: builds two small functions in memory (one with an `fmul dword [c]`, one with a
@@ -64,6 +84,18 @@ namespace SiteHook
         bool abilityKept = false;
         // damage stub on a function built in memory (damage 12.4 rounds to 12; a handler of the fake attacker of type 77 answers)
         int damage = 0;
+        // effect.add stub on a function built in memory (the sum 3.5 for entry 0): the exit taken (1 engine path, 2 next entry, 3 leave),
+        // the two entries' values times 100 and the creature's effect counter (4 before).
+        int effectExit = 0, effectEntry0 = 0, effectEntry1 = 0, effectCounter = 0;
+        // bonus.constant stubs on functions built in memory: `push 5` (vanilla 5) and `push 3.5f`
+        int bonusInt = 0;
+        float bonusFloat = 0;
+        // skillslot.select stub on a function built in memory: the displaced `mov byte [esp+0x13], 1` must still have run (1)
+        int slotByte = 0;
+        // combat.branch stub on a function built in memory (an equal compare, then `je`): 2 when the jump was taken, 1 when it fell through
+        int branchTaken = 0;
+        // the same with a `jcc rel8` and a displaced `add eax, -2` (eax = 0x28 at the compare): path (2 jump taken, 1 fell through) and eax afterwards
+        int branch2Path = 0, branch2Eax = 0;
     };
     bool selfTestStart();
     bool selfTestResult(SelfTest& out);

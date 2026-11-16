@@ -18,6 +18,11 @@
 ---| 'game.save_failed' # It could not be written.
 ---| 'realm.changed' # `gear.realm.use` switched the online play server: `(realm)`.
 ---| 'combat.constant' # The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it.
+---| 'skillslot.key' # A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it.
+---| 'combat.branch' # A conditional jump in the hit handlers and a few other functions: a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`).
+---| 'skillslot.select' # A digit key selected a skill slot of the HUD (`index`: which of the five places in the key handler).
+---| 'bonus.constant' # A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another.
+---| 'effect.add' # The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`).
 ---| 'damage' # The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534).
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
 ---| 'level.factor' # The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers).
@@ -29,6 +34,25 @@
 ---@field victim_type integer Creature type of the one that is hit (-1: unknown).
 ---@field attacker_type integer Creature type of the attacker (-1: none, e.g. a trap or an effect).
 ---@field site integer Which damage hook site (0: the damage resolution of the hit handlers).
+
+--- What the `effect.add` event gets: the engine is adding to one entry of a creature's effect list.
+---@class GearEffectAdd
+---@field creature integer The creature's id.
+---@field ability integer The ability the creature is using (its current skill or spell id).
+---@field effect integer The effect id of the entry the engine is at.
+---@field flags integer The creature's flag word (bits 0x4000000 and 0x20000000 mark stacking effects).
+---@field counter integer The creature's effect counter.
+---@field value number The new sum (the entry's value plus what is added).
+---@field max number The entry's maximum.
+---@field current number The entry's value now.
+
+--- What a handler of `effect.add` answers; nil means the engine does its own store and clamps.
+---@class GearEffectAnswer
+---@field value? number Store this in the entry; without it nothing is stored.
+---@field effect? integer Change the next entry (from this one on) with this effect id instead of the engine's.
+---@field clamp? boolean Apply the engine's clamps (default true): above the maximum becomes the maximum, below its floor becomes 0.
+---@field finish? boolean Leave the function after this entry (default false: go on with the next).
+---@field stack? 'set'|'inc' The creature's effect counter becomes 1 / grows by one.
 
 ---@class GearHandler
 ---@field event string The event the handler listens to.
@@ -84,6 +108,11 @@ gear = {}
 ---@overload fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler
 ---@overload fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler
 ---@overload fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler
+---@overload fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler
+---@overload fun(event: 'combat.branch', fn: fun(name: string, vanilla: boolean, index: integer, eax: integer): boolean?): GearHandler
+---@overload fun(event: 'skillslot.select', fn: fun(index: integer)): GearHandler
+---@overload fun(event: 'bonus.constant', fn: fun(index: integer, vanilla: number, address: integer): number?): GearHandler
+---@overload fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler
 ---@overload fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler
 ---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler
 ---@overload fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler

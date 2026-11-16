@@ -152,6 +152,26 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
   injection at all; a `GameServer.exe` Sacred Gear was not asked to take part in (no handoff variable) is left alone. The
   server sees the very files the client does, so a mod's balance works for LAN and hosted games. Test:
   `tools\server-overlay-test.ps1 -GameDir <copy of the game folder>` starts the server alone; `tools\lan-host-test.ps1 -GameDir <copy> -Patch` hosts a real LAN game through the menus with a changed balance.bin (without the server overlay the game shows "IP: Kann nicht verbinden! CODE -10021"). Two clients joining one server is not covered by these tests.
+- A `patch:` rule ships only what differs from the game's own file: a Lua data file `return {size = n, crc32 = 0x..., ops = {{offset, 'hex'[, replaced]}, ...}}`
+  (offsets in the original, ascending; the hex bytes replace `replaced` bytes, default as many as there are). The first open of the file builds the
+  patched copy in the mod's `cache\` folder (rebuilt when the patch or the original changed) and serves that; a game file of another size or
+  crc32 than the patch was made for is served unpatched and logged. The file is read by a plain Lua state without libraries, so it can only be data.
+  Two more kinds: `kind = 'words'` (`ops = {{first word index, {value, ...}}, ...}`, a value is an unsigned integer or `{f = float}`; for tables of 32 bit
+  words like `balance.bin`) and `kind = 'texts'` (`set = {[text id] = 'text'}`, `remove = {ids}`; for a language's `global.res`).
+  Names: every `.lua` file in the mod's `constants/` folder returns a table of names to numbers and is a global of its upper case name in the
+  patch files (`constants/creature.lua` -> `CREATURE.WOLF`, `ITEM`, `OPCODE`); the cache is rebuilt when they change.
+  `kind = 'words'` has `ops` (`{first word, {values}}`) and, for tables with records, `records = {first = word index of record 0, words = words per
+  record, fields = {name = word in the record}}` with `edits = {{record = n | records = {from, to}, field = value, ...}}` (also as `sections = {{records,
+  edits}, ...}` next to `ops`).
+  And `kind = 'script'` for the compiled script files `FunkCode.bin` / `StartCode.bin` (streams of instructions `u16 opcode, u16 length, operands`;
+  FunkCode.bin is cut into named functions by the `Vectoren.bin` next to it, a table of 84 byte records `char name[64], i32 start, i32 length, ...`):
+  `file = 'funk' | 'start'`, `edits = {...}` and no `size`/`crc32`. Edits find their instruction themselves:
+  `{fn = 'Sector88067Enter', op = OPCODE.FILL_SECTOR, sector = {88, 67}, [set_sector = {x, y},] spawn = {old = {{creature = CREATURE.X, weight = 10, group = 1}, ...}, new = {...}}}`
+  (the `FillSector` instruction of that function for that sector: the spawn table that ends it, 13 bytes per entry after a 40 byte header, and/or the
+  sector it fills; `ins = n` only if the sector alone is not unique), `{op = OPCODE.SET_VAR, var = 'Name', old = n, new = n}` (the `SetVar` instruction of
+  that variable, StartCode.bin) and `{fn, op, ins = n, at, old = 'hex', new = 'hex'}` (a byte range in the n-th instruction). The function and the instruction
+  must be unique, the opcode must match and `old` must be what the file holds, or the whole file is served unpatched and the reason is logged. One patch file
+  can serve many game files (all hero types share the same library code). Format notes in sacred-gear-reborn-decomp's `docs/file-formats.md`.
 
 #### World
 

@@ -57,3 +57,39 @@ static const AbilitySiteSpec kAbilitySites[] = {
 static const DamageSiteSpec kDamageSites[] = {
     {0, &Gear::Addr::siteFn56B130, 0x297B}, // 0056DAAB
 };
+static const DamageSiteSpec kEffectSites[] = {
+    {0, &Gear::Addr::effectAddFn, 0xFD}, // 0056256D
+};
+static const uintptr_t kEffectAiLow = 0x4DA04B, kEffectAiHigh = 0x4DA23C;
+static const PushSiteSpec kBonusSites[] = {
+    {0, &Gear::Addr::bonusFn, 0x74E0, 0, 0x5u}, // 00578BF0 int8
+    {1, &Gear::Addr::bonusFn, 0x756A, 0, 0xFu}, // 00578C7A int8
+    {2, &Gear::Addr::bonusFn, 0x7577, 1, 0x482u}, // 00578C87 int32
+    {3, &Gear::Addr::bonusFn, 0x75B4, 0, 0xFu}, // 00578CC4 int8
+    {4, &Gear::Addr::bonusFn, 0x75F7, 0, 0x5u}, // 00578D07 int8
+    {5, &Gear::Addr::bonusFn, 0x7621, 2, 0x3E19999Au}, // 00578D31 float
+    {6, &Gear::Addr::bonusFn, 0x7631, 2, 0x3E19999Au}, // 00578D41 float
+    {7, &Gear::Addr::bonusFn, 0x7647, 2, 0x3E19999Au}, // 00578D57 float
+    {8, &Gear::Addr::bonusFn, 0x765D, 2, 0x3E19999Au}, // 00578D6D float
+    {9, &Gear::Addr::bonusFn, 0x7686, 2, 0x3E19999Au}, // 00578D96 float
+};
+static const AbilitySiteSpec kSlotSites[] = {
+    {0, &Gear::Addr::skillSlotFn, 0x627, 0}, // 006E21E7 copy
+    {1, &Gear::Addr::skillSlotFn, 0x659, 0}, // 006E2219 copy
+    {2, &Gear::Addr::skillSlotFn, 0x687, 0}, // 006E2247 copy
+    {3, &Gear::Addr::skillSlotFn, 0x6B5, 0}, // 006E2275 copy
+    {4, &Gear::Addr::skillSlotFn, 0x6DE, 1}, // 006E229E call
+};
+static const BranchSiteSpec kBranchSites[] = {
+    {"hit.condition", 0, &Gear::Addr::siteFn5038F0, 0x1940, 0}, // 00505230 in 005038F0
+    {"hit.secondary", 0, &Gear::Addr::siteFn5038F0, 0x1AA5, 0}, // 00505395 in 005038F0
+    {"hit.secondary", 1, &Gear::Addr::siteFn506770, 0xD77, 0}, // 005074E7 in 00506770
+    {"hit.secondary", 2, &Gear::Addr::siteFn50AC00, 0xE2A, 0}, // 0050BA2A in 0050AC00
+    {"hit.secondary", 3, &Gear::Addr::levelFn50E6C0, 0xBBC, 0}, // 0050F27C in 0050E6C0
+    {"ai.timer", 0, &Gear::Addr::abilityAiFn, 0x2218, 8}, // 004D7068 in 004D4E50
+    {"ability.dispatch", 0, &Gear::Addr::siteFn51D840, 0x1C4, 3}, // 0051DA04 in 0051D840
+    {"color.clamp", 0, &Gear::Addr::siteFnColor, 0x238B, 4}, // 004DEF0B in 004DCB80
+};
+static const uint32_t kKeySite = 0x5D7, kKeyEnd = 0xC59;
+static const uint32_t kKeyFull[5] = {0x5FF, 0x631, 0x663, 0x691, 0x6BF};
+static const uint32_t kKeySelect[5] = {0x61C, 0x64E, 0x67C, 0x6AA, 0x6D8};

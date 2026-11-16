@@ -91,6 +91,74 @@ DAMAGE_SITES = [
 ]
 
 
+# Effect site (ENG 00562470, "add a value to the creature's effect entries, clamp to their maximum"): the store of the new sum into the entry,
+# `fstp [ecx+0x12]; fld [ecx+0x12]`. Gear answers it with the event `effect.add`; the AI's own calls (EFFECT_AI_CALLERS, return addresses in
+# 004DA04B .. 004DA23C) always keep the engine's behaviour (ReBorn keeps a vanilla copy of the function for them).
+EFFECT_FUNCTION = ('effectAddFn', 0x00562470)
+EFFECT_SITES = [
+    0x0056256D,
+]
+EFFECT_AI_CALLERS = (0x004DA04B, 0x004DA23C)
+
+
+# Bonus sites (ENG 00571710, the function that rolls and applies item bonuses): `push imm` of the arguments of its random rolls (the upper limit
+# of a `rand(n)` or of a random float) and of a text id. Gear answers them with the event `bonus.constant` (index, vanilla value, address): kind
+# 'int8' is `push imm8` (2 bytes), 'int32' `push imm32` (5), 'float' `push imm32` that holds a float (5).
+BONUS_FUNCTION = ('bonusFn', 0x00571710)
+BONUS_SITES = [
+    ('int8', 0x00578BF0, 5),
+    ('int8', 0x00578C7A, 0xF),
+    ('int32', 0x00578C87, 0x482),
+    ('int8', 0x00578CC4, 0xF),
+    ('int8', 0x00578D07, 5),
+    ('float', 0x00578D31, 0x3E19999A),
+    ('float', 0x00578D41, 0x3E19999A),
+    ('float', 0x00578D57, 0x3E19999A),
+    ('float', 0x00578D6D, 0x3E19999A),
+    ('float', 0x00578D96, 0x3E19999A),
+]
+
+
+# Skill slot sites (ENG 006E1BC0, the event handler of the skill slot window): a digit key chose a slot (a `call 006E1A20` that selects it).
+# Gear tells the mods with the event `skillslot.select` (index) right after the selection ran. kind 'copy': the 5 byte instruction after the
+# call (`mov byte [esp+0x13], 1`) is copied into the stub; 'call': the call itself (rel32) is re-made.
+SLOT_FUNCTION = ('skillSlotFn', 0x006E1BC0)
+SLOT_SITES = [
+    ('copy', 0x006E21E7),
+    ('copy', 0x006E2219),
+    ('copy', 0x006E2247),
+    ('copy', 0x006E2275),
+    ('call', 0x006E229E),
+]
+
+
+# Branch sites (the four hit handlers): a conditional `jcc rel32` (6 bytes) whose outcome Gear lets the mods decide: the event
+# `combat.branch` (name, whether the engine's own condition takes the jump, index) returns true (jump) or false (fall through). 'hit.condition'
+# is `cmp word [ebp], 0x3FC; jne` of the combat art handler (the art id 0x3FC); 'hit.secondary' is the `je` after the creation of an effect
+# object (types 0x34B, 0x360, 0x35C, 0x35E): taken when the object could not be made, the code after it adds the secondary effect.
+BRANCH_SITES = [
+    ('hit.condition', 0, 'siteFn5038F0', 0x005038F0, 0x00505230),
+    ('hit.secondary', 0, 'siteFn5038F0', 0x005038F0, 0x00505395),
+    ('hit.secondary', 1, 'siteFn506770', 0x00506770, 0x005074E7),
+    ('hit.secondary', 2, 'siteFn50AC00', 0x0050AC00, 0x0050BA2A),
+    ('hit.secondary', 3, 'levelFn50E6C0', 0x0050E6C0, 0x0050F27C),
+    # `jcc rel8` (two bytes): the next instruction(s) (the last number: how many bytes) are copied into the stub with it
+    ('ai.timer', 0, 'abilityAiFn', 0x004D4E50, 0x004D7068),         # cmp eax, 0xB7 (the creature type); jne
+    ('ability.dispatch', 0, 'siteFn51D840', 0x0051D840, 0x0051DA04), # cmp eax, 0x28 (the ability id); jge
+    ('color.clamp', 0, 'siteFnColor', 0x004DCB80, 0x004DEF0B),       # cmp word [esp+0x30], 0xFF; jbe
+]
+BRANCH_EXTRA = {0x004D7068: 8, 0x0051DA04: 3, 0x004DEF0B: 4}
+
+
+# Skill slot key routing (ENG 006E1BC0): the `jb 006E2819` after `cmp ax, 0x30` of the character key handler. Gear lets the mods route a character
+# (event `skillslot.key`): to the "full" case of a slot (as the digit keys do: the page choice, the COMBINE_SLOTS check, then the selection), to its
+# "select" half (the selection only), or nowhere. KEY_FULL / KEY_SELECT are the start of those blocks per slot (0 .. 4), KEY_END the end of the handler.
+KEY_SITE = 0x006E2197
+KEY_FULL = [0x006E21BF, 0x006E21F1, 0x006E2223, 0x006E2251, 0x006E227F]
+KEY_SELECT = [0x006E21DC, 0x006E220E, 0x006E223C, 0x006E226A, 0x006E2298]
+KEY_END = 0x006E2819
+
+
 def functions():
     seen = {}
     for _, name, va, _, _, _ in SITES:
@@ -98,4 +166,9 @@ def functions():
     for _, _, name, va, _, _, _, _ in CONSTANT_SITES:
         seen[name] = va
     seen[ABILITY_FUNCTION[0]] = ABILITY_FUNCTION[1]
+    seen[EFFECT_FUNCTION[0]] = EFFECT_FUNCTION[1]
+    seen[BONUS_FUNCTION[0]] = BONUS_FUNCTION[1]
+    seen[SLOT_FUNCTION[0]] = SLOT_FUNCTION[1]
+    for _, _, fnname, fn, _ in BRANCH_SITES:
+        seen[fnname] = fn
     return seen

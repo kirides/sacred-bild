@@ -14,6 +14,12 @@ static const Sig::Entry kGearSigs[] = {
     {"g_pUiManager", "6A 01 C7 05 ?? ?? ?? ?? 00 00 00 00 FF 50 04 C3", 4, Sig::Take::Abs32, &Gear::Addr::g_pUiManager}, // 017EEBBC, 017ECB3C
     {"g_pNetPlayers", "A1 ?? ?? ?? ?? 55 3B C3 56 75 47 68 D0 3A 00 00", 1, Sig::Take::Abs32, &Gear::Addr::g_pNetPlayers}, // 0182EBE8, 0182CB68
     {"cMouse_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 70", 0, Sig::Take::Match, &Gear::Addr::cMouse_instance}, // 00654F60, 006550F0
+    {"g_clickEventVtable", "C7 00 ?? ?? ?? ?? 5E C3 33 C0 5E C3 90 90 90 56", 2, Sig::Take::Abs32, &Gear::Addr::g_clickEventVtable}, // 00899248, 00897248
+    {"g_clickDownEventVtable", "C6 44 24 3A 00 8B 0C A8 C7 44 24 28 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::g_clickDownEventVtable}, // 0089704C, 008950A8
+    {"g_uiEventTarget", "6A 01 FF 50 04 C7 05 ?? ?? ?? ?? 00 00 00 00 C3", 7, Sig::Take::Abs32, &Gear::Addr::g_uiEventTarget}, // 00AD6EF8, 00AD4E78
+    {"g_cursorX", "A1 ?? ?? ?? ?? 53 53 52 50 53 8D 8C 24 10 01 00 00", 1, Sig::Take::Abs32, &Gear::Addr::g_cursorX}, // 0182EE18, 0182CD98
+    {"g_cursorY", "A1 ?? ?? ?? ?? C7 84 24 B4 00 00 00 02 00 00 00", 1, Sig::Take::Abs32, &Gear::Addr::g_cursorY}, // 0182EE1C, 0182CD9C
+    {"cWindow_handleEventInner", "F6 05 ?? ?? ?? ?? 02 0F 85 ?? ?? ?? ?? 8B 86 3C 01 00 00 8B 0D ?? ?? ?? ??", 3, Sig::Take::Match, &Gear::Addr::cWindow_handleEventInner}, // 006172F0, 00617390
     {"cUI_Manager_renderPopups", "53 55 56 8B F1 57 8B 46 08 F6 C4 01", 0, Sig::Take::Match, &Gear::Addr::cUI_Manager_renderPopups}, // 00758DC0, 007586A0
     {"uiRenderWorldCall", "E8 ?? ?? ?? ?? 8B 8D AC 00 00 00 83 C4 04 F6 41 10 01", 0, Sig::Take::Match, &Gear::Addr::uiRenderWorldCall}, // 0075934F, 00758C2F
     {"uiRenderTopCall", "E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? 8B F0 3B F7 0F 84 ?? ?? ?? ?? 8D 4C 24 58", 0, Sig::Take::Match, &Gear::Addr::uiRenderTopCall}, // 00759585, 00758E65
@@ -81,4 +87,9 @@ static const Sig::Entry kGearSigs[] = {
     {"siteFn56B130", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 08 02 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn56B130}, // 0056B130, 0056AFF0
     {"siteFn559BF0", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC D8 07 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFn559BF0}, // 00559BF0, 00559A30
     {"abilityAiFn", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC 38 05 00 00", 0, Sig::Take::Match, &Gear::Addr::abilityAiFn}, // 004D4E50, 004D4C90
+    {"effectAddFn", "83 EC 18 53 55 56 8B F1 57 8B 46 04", 0, Sig::Take::Match, &Gear::Addr::effectAddFn}, // 00562470, 00562330
+    {"bonusFn", "81 EC 34 08 00 00 53 55 56 57 8B 3D ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::bonusFn}, // 00571710, 005715D0
+    {"skillSlotFn", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC C8 00 00 00 53 8B 9C 24 DC 00 00 00", 0, Sig::Take::Match, &Gear::Addr::skillSlotFn}, // 006E1BC0, 006E1970
+    {"siteFn51D840", "8A 44 24 08 83 EC 44 53 55 8B 6C 24 50", 0, Sig::Take::Match, &Gear::Addr::siteFn51D840}, // 0051D840, 0051D680
+    {"siteFnColor", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 48 07 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFnColor}, // 004DCB80, 004DC9C0
 };

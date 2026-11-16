@@ -111,6 +111,11 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'game.save_failed'` | It could not be written. |
 | `'realm.changed'` | `gear.realm.use` switched the online play server: `(realm)`. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
+| `'skillslot.key'` | A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it. |
+| `'combat.branch'` | A conditional jump in the hit handlers and a few other functions: a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`). |
+| `'skillslot.select'` | A digit key selected a skill slot of the HUD (`index`: which of the five places in the key handler). |
+| `'bonus.constant'` | A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another. |
+| `'effect.add'` | The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`). |
 | `'damage'` | The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534). |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
 | `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
@@ -125,6 +130,33 @@ A handler registered with `gear.on`; pass it to `gear.off` to remove it. What th
 | `victim_type` | `integer` | Creature type of the one that is hit (-1: unknown). |
 | `attacker_type` | `integer` | Creature type of the attacker (-1: none, e.g. a trap or an effect). |
 | `site` | `integer` | Which damage hook site (0: the damage resolution of the hit handlers). |
+
+### GearEffectAdd
+
+What the `effect.add` event gets: the engine is adding to one entry of a creature's effect list.
+
+| Field | Type | |
+|---|---|---|
+| `creature` | `integer` | The creature's id. |
+| `ability` | `integer` | The ability the creature is using (its current skill or spell id). |
+| `effect` | `integer` | The effect id of the entry the engine is at. |
+| `flags` | `integer` | The creature's flag word (bits 0x4000000 and 0x20000000 mark stacking effects). |
+| `counter` | `integer` | The creature's effect counter. |
+| `value` | `number` | The new sum (the entry's value plus what is added). |
+| `max` | `number` | The entry's maximum. |
+| `current` | `number` | The entry's value now. |
+
+### GearEffectAnswer
+
+What a handler of `effect.add` answers; nil means the engine does its own store and clamps.
+
+| Field | Type | |
+|---|---|---|
+| `value` | `number` | Store this in the entry; without it nothing is stored. (optional) |
+| `effect` | `integer` | Change the next entry (from this one on) with this effect id instead of the engine's. (optional) |
+| `clamp` | `boolean` | Apply the engine's clamps (default true): above the maximum becomes the maximum, below its floor becomes 0. (optional) |
+| `finish` | `boolean` | Leave the function after this entry (default false: go on with the next). (optional) |
+| `stack` | `'set'\|'inc'` | The creature's effect counter becomes 1 / grows by one. (optional) |
 
 ### GearHandler
 
@@ -195,6 +227,11 @@ Forms:
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
 - `fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
+- `fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler`
+- `fun(event: 'combat.branch', fn: fun(name: string, vanilla: boolean, index: integer, eax: integer): boolean?): GearHandler`
+- `fun(event: 'skillslot.select', fn: fun(index: integer)): GearHandler`
+- `fun(event: 'bonus.constant', fn: fun(index: integer, vanilla: number, address: integer): number?): GearHandler`
+- `fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler`
 - `fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
 - `fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler`
@@ -643,7 +680,7 @@ The engine hooks that ask mods for a value inside the game's own code (see the e
 
 The counters of a hook since the game started: how often the engine asked, how often a mod answered, and how often Lua could not take the question (busy: it was running on this or another thread, so the engine kept its own value).
 
-- `name`: `'level.factor'|'combat.constant'|'creature.ability'|'damage'`
+- `name`: `'level.factor'|'combat.constant'|'creature.ability'|'damage'|'effect.add'|'bonus.constant'|'skillslot.select'|'combat.branch'|'skillslot.key'`
 - returns `GearHookStats`
 
 #### `gear.hooks.sites() -> GearHookSite[]`
@@ -1076,6 +1113,13 @@ Saving the game through the engine's own save request, the one the savegame wind
 The difficulty level of the running game: 0 (bronze) to 4 (niobium); nil if the game is not running.
 
 - returns `integer?`
+
+#### `gear.game.cursor_click(down) -> boolean`
+
+Sends the game's UI a click at the current cursor position, as ReBorn's quick cast does after a skill slot was chosen: the chosen skill is used where the cursor is. False if the UI is not there.
+
+- `down`: `boolean` (optional) - true (default): a mouse button down event, the class ReBorn's cave sends; false: a button up event.
+- returns `sent` `boolean`
 
 #### `gear.game.can_save() -> boolean, string?`
 
@@ -2516,11 +2560,11 @@ Tests the stubs of the constant site hooks on two functions built in memory (`fm
 
 - returns `started` `boolean` - false if a test is running.
 
-#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer}?`
+#### `gear.auto.site_hook_selftest_result() -> {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer, bonus_int: integer, bonus_float: number, slot_byte: integer, branch_taken: integer, branch2_path: integer, branch2_eax: integer}?`
 
-The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. The `ability_*` fields test the `creature.ability` stubs on three functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived. `damage` is the result of the `damage` stub on a function built in memory (12.4 rounds to 12 without an answer). nil until it is done.
+The result of the test: `fmul` and `fld` are st0 after the instruction (the answer of the mods, else vanilla 0.2 and 0.2 times 1.0), `registers_kept` whether eax, ecx and edx survived the stub. The `ability_*` fields test the `creature.ability` stubs on three functions built in memory (a store of 100, an add of 1000 and the computed block; a fake creature of type 77): the stored id, the amount added and edx after the block (vanilla 100, 1000 and 50 without an answer), `ability_kept` whether the registers survived. `damage` is the result of the `damage` stub on a function built in memory (12.4 rounds to 12 without an answer). The `effect_*` fields test the `effect.add` stub on a function built in memory with a fake effect list (the sum 3.5 for entry 0, the creature's counter 4): the exit taken (1 engine path, 2 next entry, 3 leave), both entries' values times 100 and the counter. `bonus_int` / `bonus_float` are what the `bonus.constant` stubs push on functions built in memory (`push 5` and `push 3.5`). `slot_byte` is 1 when the `skillslot.select` stub kept the displaced instruction working on a function built in memory. `branch_taken` is 2 when the `combat.branch` stub took the jump of a function built in memory (1: fell through). `branch2_path` / `branch2_eax`: the same for a `jcc rel8` whose next instruction (`add eax, -2`, eax = 0x28) is displaced with it. nil until it is done.
 
-- returns `{fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer}?`
+- returns `{fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer, bonus_int: integer, bonus_float: number, slot_byte: integer, branch_taken: integer, branch2_path: integer, branch2_eax: integer}?`
 
 #### `gear.auto.write(name, text) -> boolean?`
 
