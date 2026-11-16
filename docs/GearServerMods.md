@@ -40,6 +40,10 @@ needed a 900 s decompile, output in `long/`). All addresses below are GameServer
   before it is retired). A creature killed by another creature produces no award. The first dword of a message
   header has the sender slot in bits 27..31 (the trace showed 33 = slot 1 with flag bits 22..26 = 1); the earlier
   note "slot bits <<22" in the Gear trace code was wrong and is fixed.
+- **Chat confirmed (net trace, 2026-11-16):** typing "asdf" and "Hello ..." in game sent message `0x005`, 276 bytes:
+  16-byte header, 4 zero bytes, then UTF-16 text in a 256-byte area (so the text is at payload +4, at most 127
+  characters). Item pickup by the local hero is `0x141` {item id, float} followed by `0x13F` {item id, 0x8F, 1}.
+  `0x12` right after joining carries the UTF-16 text "1234" (probably the join password).
 - **Grants:** a client changes its own hero's gold/inventory locally and the engine broadcasts it; Gear's
   `add_gold`, inventory calls and spawn work this way but are refused in network games (`world.can_change()`).
 - **Gear today:** only runs in `sacred.exe` (refuses `gameserver.exe`); mods have no multiplayer support, and
