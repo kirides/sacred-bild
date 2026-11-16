@@ -2500,6 +2500,11 @@ local function make_auto()
         assert(type(name) == 'string', 'name must be a string')
         return native.auto_show_window(name, shown and true or false)
     end
+    -- auto.network_flag(on) -> bool: sets or clears the engine's network-game flag, to test that the guards (can_change,
+    -- inventory and spawn) refuse in a network game. Set it, test, clear it in the same tick.
+    function auto.network_flag(on)
+        return native.auto_network_flag(on and true or false)
+    end
     function auto.quit(code)
         native.auto_release()
         native.auto_quit(code or 0)

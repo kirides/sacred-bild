@@ -168,6 +168,13 @@ function GearAuto.start_gameserver(seconds) end
 ---@return boolean ok
 function GearAuto.show_window(name, shown) end
 
+--- Sets or clears the engine's network-game flag (the byte the engine's own object and inventory code test), to test that
+--- the guards (`world.can_change`, inventory changes, `spawn`) refuse in a network game. Set it, test and clear it in the
+--- same tick: nothing else runs in between.
+---@param on boolean
+---@return boolean ok
+function GearAuto.network_flag(on) end
+
 --- Ends the game at once with that exit code.
 ---@param code? integer Default 0.
 function GearAuto.quit(code) end

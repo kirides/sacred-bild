@@ -157,7 +157,7 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
 
 Positions are world units (`gear.world.TILE`, about 53.7, is one tile; the screen shows about 534 x 400 around the
 hero) and a layer (0 outdoors; dungeons have their own). The functions that change the world work only in single
-player (`gear.world.can_change()`); in a network game they return nil and a message.
+player (`gear.world.can_change()`); in a network game (also a host nobody has joined yet: the engine tells the peers about every created or destroyed object, and they do not know the ones a mod makes) they return nil and a message. `can_change()` reads the engine's own network flag (the byte at 0x0182EBEC that its object and inventory code test), not the number of heroes.
 
 | | |
 |---|---|
@@ -562,6 +562,7 @@ The mods load in the main menu and get the `idle` event there. Mods with `automa
 | In a task: `wait_for_menu(timeout)`, `wait_for_game(timeout)` | Until the main menu is up / a hero exists. |
 | `instance` | The run's name (a string). |
 | `screenshot(name)`, `write(name, text)` | Files in `<game>\GearAutomation\<instance>` (name: letters, digits, `_ - .`). |
+| `network_flag(on)` | Sets or clears the engine's network-game flag, to test that the guards refuse in a network game (set it, test, clear it in the same tick). |
 | `show_window(name, shown)` | Shows or hides an in-game window by its control name (`UI_WND_CHEST` ...) through the window's own `show`, without the events that normally open it; for self tests. |
 | `quit(code)` | Ends the game at once with that exit code. |
 

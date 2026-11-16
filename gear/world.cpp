@@ -209,10 +209,24 @@ bool World::available()
            Addr::cObject_typeDescriptor && Addr::cCreature_typeDescriptor && manager();
 }
 
+bool World::networkGame()
+{
+    // 0x0182EBEC is the byte after the variable the signature finds (0x0182EBE8). Unknown: treat as a network game.
+    uint8_t flag = 1;
+    return !Addr::g_pNetPlayers || !safeCopy(&flag, reinterpret_cast<const void*>(Addr::g_pNetPlayers.address + 4), 1) ||
+           flag != 0;
+}
+
+bool World::setNetworkFlagForTest(bool on)
+{
+    const uint8_t flag = on ? 1 : 0;
+    return Addr::g_pNetPlayers && safeStore(reinterpret_cast<void*>(Addr::g_pNetPlayers.address + 4), &flag, 1);
+}
+
 bool World::changesAllowed()
 {
     void* m = manager();
-    if (!available() || !hero())
+    if (!available() || !hero() || networkGame())
     {
         return false;
     }

@@ -2530,6 +2530,13 @@ Shows or hides an in-game window by its control name (`UI_WND_CHEST` ...) throug
 - `shown`: `boolean`
 - returns `ok` `boolean`
 
+#### `gear.auto.network_flag(on) -> boolean`
+
+Sets or clears the engine's network-game flag (the byte the engine's own object and inventory code test), to test that the guards (`world.can_change`, inventory changes, `spawn`) refuse in a network game. Set it, test and clear it in the same tick: nothing else runs in between.
+
+- `on`: `boolean`
+- returns `ok` `boolean`
+
 #### `gear.auto.quit(code)`
 
 Ends the game at once with that exit code.

@@ -2032,6 +2032,13 @@ namespace
         return 1;
     }
 
+    // native.auto_network_flag(on) -> bool
+    int nativeAutoNetworkFlag(lua_State* L)
+    {
+        lua_pushboolean(L, World::setNetworkFlagForTest(lua_toboolean(L, 1) != 0));
+        return 1;
+    }
+
     // native.auto_show_window(name, shown) -> bool
     int nativeAutoShowWindow(lua_State* L)
     {
@@ -2256,6 +2263,7 @@ namespace
                 {"auto_screenshot", nativeAutoScreenshot},
                 {"auto_write", nativeAutoWrite},
                 {"auto_show_window", nativeAutoShowWindow},
+                {"auto_network_flag", nativeAutoNetworkFlag},
                 {"auto_quit", nativeAutoQuit},
                 {"auto_start_gameserver", nativeAutoStartGameServer},
                 {nullptr, nullptr},

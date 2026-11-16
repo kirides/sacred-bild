@@ -39,8 +39,18 @@ namespace World
     // False before a game ran, or if the addresses were not found.
     bool available();
 
-    // Whether world changes are allowed now: a game runs and it is not a network game.
+    // Whether a network game (hosting, joined, LAN, any) is running: the engine's flag byte at 0x0182EBEC (ENG), the
+    // byte after the players pointer, which its own object and inventory code test before it tells the peers (0x005FBDB0,
+    // 0x005D9F00 ...). Single player: 0.
+    bool networkGame();
+
+    // Whether world changes are allowed now: a game runs, it is not a network game (not even a host nobody has joined:
+    // the engine would announce the changes to peers that do not know the objects) and the local hero is the only one.
     bool changesAllowed();
+
+    // Automation self tests only: sets or clears the network flag (nothing else runs in between: the mod code runs on
+    // the engine's thread), to test that the guards refuse in a network game.
+    bool setNetworkFlagForTest(bool on);
 
     // The local hero's id, 0 if there is none.
     uint32_t hero();
