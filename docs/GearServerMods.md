@@ -168,7 +168,15 @@ slot. Same `gear.mp` API; `side = 'host'` mods run there. The game has no extra 
 line; that needs the type map of the 183 handlers, which is a few hours of work with the decompile and a live
 two-client capture.
 
-## Open questions for John
+## Decisions so far (John, 2026-11-16)
+
+- Phase 1 may require the mod on every client.
+- Grants: the host **drops the item at the player's feet** (no client-side sync). `player:give_item` spawns the item
+  on the ground at the hero's position on the host (the engine broadcasts world objects); `give_gold` drops a gold
+  pile (types 0x140C-0x140F) the same way. This replaces "routed to that player's client" above.
+- Player key: not answered; the proposal stays at hero name + class lower-cased until John says otherwise.
+
+## Open questions for John (answered ones above)
 
 1. Is "everyone installs the mod" acceptable for phase 1 (client-reported kills), or must it work with unmodded
    clients (then only phase 2)?
