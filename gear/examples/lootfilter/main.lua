@@ -118,8 +118,15 @@ local function line(text, x, y, color)
     ui.text(text, x, y, {color = color or 0xFFE0E0E0, size = 11})
 end
 
+-- Only while the game shows its labels (Alt held), like the game's own text; the settings panel stays open on its own.
+local overlay_shown = false
+local show_text_until = 0       -- gear.time() until which the overlay stays after Alt was released
 local function overlay(state)
-    if not cfg.overlay or state.mode ~= 'game' or state.exclusive then return end
+    overlay_shown = false
+    -- It stays a moment after Alt is released, so a click made just before still lands on its button.
+    if state.show_text then show_text_until = gear.time() + 0.4 end
+    if not cfg.overlay or state.mode ~= 'game' or state.exclusive or gear.time() >= show_text_until then return end
+    overlay_shown = true
     local x, y = cfg.overlay_x, cfg.overlay_y
     local rows = 7 + #CATEGORIES
     local h = 18 + rows * 13
@@ -414,10 +421,24 @@ gear.task(function()
         local it = s and W.item(s.id)
         if it then swords[#swords + 1] = it; print('sample: ' .. describe(it)) end
     end
+    check('no overlay without Alt', not overlay_shown)
+    A.screenshot('showtext-off')
     A.key_down('alt')
     gear.wait(0.5)
+    check('overlay with Alt', overlay_shown and ui.state().show_text)
     A.screenshot('lootfilter-samples')
+    A.screenshot('showtext-on')
     A.key_up('alt')
+    -- "Show overlay" off in the mod's settings: not even with Alt.
+    S.set('overlay', false)
+    gear.wait(0.3)
+    A.key_down('alt')
+    gear.wait(0.5)
+    check('overlay off: not shown with Alt', not overlay_shown and ui.state().show_text)
+    A.screenshot('showtext-overlay-off')
+    A.key_up('alt')
+    S.set('overlay', true)
+    gear.wait(0.3)
     cfg.enabled = true
 
     -- Two items at the hero's feet: a health potion (kept) and a weapon, refused by a test rule.
@@ -465,9 +486,17 @@ gear.task(function()
 
     -- The settings panel: opened from the overlay's button, a quality picked, a potion unticked, saved.
     local oh = 18 + (7 + #CATEGORIES) * 13
+    A.key_down('alt')                           -- the overlay and its button show with the labels
+    for _ = 1, 20 do
+        if overlay_shown then break end
+        gear.wait(0.1)
+    end
+    gear.wait(0.2)
     A.ui_click(cfg.overlay_x + 90, cfg.overlay_y + oh + 14)
+    A.key_up('alt')
     gear.wait(0.5)
     check('settings panel opens', ui.panel_open('settings'))
+    check('it stays open without Alt', ui.panel_open('settings') and not overlay_shown)
     A.screenshot('lootfilter-settings')
     local px, py = 248, 98 + 26 + 90           -- content (248, 98); the quality row
     A.ui_click(px + 190, py + 9)                -- the lowest quality dropdown

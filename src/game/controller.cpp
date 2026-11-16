@@ -2,6 +2,7 @@
 #include "game/aim_assist.h"
 #include "game/focus.h"
 #include "game/frame_hooks.h"
+#include "game/gear_nav.h"
 #include "game/hero_move.h"
 #include "game/resolution.h"
 #include "game/ui_canvas.h"
@@ -264,8 +265,22 @@ namespace
     // it, B (Esc) cancels.
     cUI_Window2* g_modal = nullptr;
 
+    bool g_gearModal = false;
+
     void snapToModal()
     {
+        // A mod screen that just opened gets the cursor on its first widget.
+        const bool gear = GearNav::modal();
+        if (gear != g_gearModal)
+        {
+            g_gearModal = gear;
+            float x, y;
+            if (gear && GearNav::home(x, y))
+            {
+                setCursor(x, y);
+                return;
+            }
+        }
         cUI_Window2* m = UiNav::modal();
         if (m == g_modal)
         {
@@ -310,7 +325,7 @@ namespace
     // A window that takes the cursor is shown (not the HUD: taskbar, minimap, overview map, chat, party portraits).
     bool windowOpen()
     {
-        return UiState::cursorWindowShown() || UiNav::modal() != nullptr;
+        return UiState::cursorWindowShown() || UiNav::modal() != nullptr || GearNav::windowOpen();
     }
 
     Context detect()
@@ -330,6 +345,10 @@ namespace
             return Context::None;   // loading
         }
         const bool inGame = (flags & cUI_Manager::inGame) && !(flags & cUI_Manager::inMenus);
+        if (GearNav::modal())
+        {
+            return Context::Ui;     // a mod screen (the mod manager, the mod menu) has the pad
+        }
         if (inGame && UiNav::npcDialogOpen() && !UiNav::modal())
         {
             return Context::Dialog;
@@ -435,6 +454,27 @@ namespace
         const float dx = button == Gamepad::Left ? -1.0f : button == Gamepad::Right ? 1.0f : 0.0f;
         const float dy = button == Gamepad::Up ? -1.0f : button == Gamepad::Down ? 1.0f : 0.0f;
         float x, y;
+        // Left / right on a mod's slider changes its value (the cursor stays).
+        if (dx != 0.0f && GearNav::onSlider(g_x, g_y))
+        {
+            GearNav::postNudge(static_cast<int>(dx));
+            return;
+        }
+        // Up / down in a mod's scroll area: to the next widget inside it, else it scrolls (Sacred Gear).
+        GearNav::Stop area;
+        if (dy != 0.0f && GearNav::scrollAreaAt(g_x, g_y, area))
+        {
+            if (UiNav::next(g_x, g_y, dx, dy, x, y) && x >= area.left && x < area.right && y >= area.top && y < area.bottom &&
+                !(x == area.x && y == area.y))
+            {
+                setCursor(x, y);
+            }
+            else
+            {
+                GearNav::postScroll(static_cast<int>(dy));
+            }
+            return;
+        }
         // Up / down in the savegame list: row by row, scrolling it at its ends; the row is selected.
         int row, scrollTo;
         if (dy != 0.0f && UiNav::savegameStep(g_x, g_y, static_cast<int>(dy), row, scrollTo))
@@ -540,7 +580,11 @@ namespace
         {
             // A message box's Cancel (Esc cancels few of them), else Esc.
             float x, y;
-            if (UiNav::cancelButton(x, y))
+            if (GearNav::windowOpen())
+            {
+                GearNav::postBack();    // a mod screen or window closes (or steps back)
+            }
+            else if (UiNav::cancelButton(x, y))
             {
                 click(x, y);
             }
@@ -1237,6 +1281,10 @@ void Controller::onFrame()
     if (pressed[static_cast<int>(Action::Cursor)])
     {
         g_cursorMode = !g_cursorMode;
+    }
+    if (pressed[static_cast<int>(Action::ModMenu)])
+    {
+        GearNav::postMenu();
     }
     if (cUI_Manager* manager = cUI_Manager::instance())
     {

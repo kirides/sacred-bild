@@ -23,10 +23,13 @@ local ability_active, damage_active, effect_active, bonus_active, slot_active, b
 local clicks = 0
 local level_active, constant_active
 local ui_recording, ui_published = {}, {}
+local nav_published
+local pad_queue = {0, 0, 0}
 local pickup_published
 save_block, save_calls, save_results = nil, {}, {}
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
 state_file, state_bak, state_writes = nil, nil, 0
+realm_file, realm_bak, realm_writes, realm_client, realm_selected = nil, nil, 0, nil, nil
 layout_file, moved_windows = '{"game:UI_WND_INVENTORY":{"x":2048,"y":1024}}', {}
 
 local native = {
@@ -140,12 +143,28 @@ local native = {
     pickup_refused = function() return 0 end,
     ui_region = function(...) ui_recording[#ui_recording + 1] = {'region', ...}; return true end,
     ui_events = function() local e = ui_events_queue; ui_events_queue = {}; return e end,
+    ui_nav = function(stops, flags) nav_published = {stops = stops, flags = flags}; return true end,
+    ui_pad = function() local p = pad_queue; pad_queue = {0, 0, 0}; return p[1], p[2], p[3] end,
     key_down = function(vk) return keys_held[vk] == true end,
-    state_read = function() return state_file end,
-    state_write = function(text, backup)
+    state_read = function(which) if which == 'realms' then return realm_file end return state_file end,
+    state_write = function(text, backup, which)
+        if which == 'realms' then
+            if backup then realm_bak = text else realm_file = text; realm_writes = realm_writes + 1 end
+            return true
+        end
         if backup then state_bak = text else state_file = text; state_writes = state_writes + 1 end
         return true
     end,
+    realm_get = function()
+        if not realm_client then return nil end
+        return {host = realm_client.host, port = realm_client.port, connected = false, overridden = realm_client.overridden == true, game_host = realm_client.game_host}
+    end,
+    realm_select = function(host, port)
+        realm_selected = {host = host, port = port}
+        if realm_client then realm_client.overridden = host ~= nil end
+        return true
+    end,
+    realm_valid_host = function(h) return #h >= 1 and #h <= 120 and h:match('^[%w%.%-_]+$') ~= nil end,
     layout_read = function() return layout_file end,
     layout_write = function(text) layout_file = text; return true end,
     ui_block_keys = function(on) keys_blocked_by_native = on end,
@@ -579,6 +598,16 @@ click(20, 40 + 18 + 18 + 5) -- the list's second entry
 ok(widgets.index == 2, 'dropdown picks the second entry (' .. tostring(widgets.index) .. ')')
 click(15, 15)
 ok(widgets.checked == false and widgets.changes == 2, 'checkbox toggles back')
+-- The controller: widgets are reported as stops; an open dropdown's list is all there is; B closes it.
+kernel.tick(0.016)
+ok(nav_published and #nav_published.stops >= 2 and nav_published.flags % 2 == 0, 'widgets are reported as pad stops')
+click(15, 45)               -- opens the dropdown
+kernel.tick(0.016)
+ok(nav_published.flags % 2 == 1 and #nav_published.stops == 3, 'an open dropdown has only its entries as stops (' .. #nav_published.stops .. ')')
+pad_queue = {0, 1, 0}
+kernel.tick(0.016)
+kernel.tick(0.016)
+ok(nav_published.flags % 2 == 0 and #nav_published.stops >= 2, 'B closes the dropdown')
 ok(moved_windows[1] and moved_windows[1][1] == 512 and moved_windows[1][2] == 192 - 388, 'stored game window placed (' .. tostring(moved_windows[1] and moved_windows[1][1]) .. ')')
 local listed = false
 for _, p in ipairs(widgets.panels or {}) do
@@ -597,6 +626,38 @@ ok(widgets.panel.x == 400 and widgets.panel.w == 200, 'reset_panel: its own plac
 keys_held[0x25] = true
 ok(widgets.ui.key_down('left') and not widgets.ui.key_down('right'), 'key_down')
 keys_held[0x25] = nil
+-- tooltip placement: clear of the cursor sprite, flipped at the screen's edges
+do
+    local tr = widgets.ui.tooltip_rect
+    local function clear(x, y, w, h, mx, my)
+        return x >= mx + 30 or x + w <= mx or y >= my + 38 or y + h <= my
+    end
+    local x, y = tr(100, 20, {x = 500, y = 300})
+    ok(x == 504 and y == 342, 'tooltip: below and right of the cursor tip (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 1000, y = 300})
+    ok(x == 896 and y == 342, 'tooltip: flips left at the right edge (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 500, y = 760})
+    ok(x == 504 and y == 736, 'tooltip: flips above at the bottom edge (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 1020, y = 760})
+    ok(x == 916 and y == 736, 'tooltip: flips left and above in the bottom right corner (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 0, y = 0})
+    ok(x == 4 and y == 42, 'tooltip: top left corner (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 200, y = 40, bounds = {0, 0, 400, 100}})
+    ok(x == 204 and y == 16 and clear(x, y, 100, 20, 200, 40), 'tooltip: inside a small area it goes above (' .. x .. ',' .. y .. ')')
+    x, y = tr(100, 20, {x = 500, y = 300, cursor = false})
+    ok(x == 504 and y == 304, 'tooltip: only a gap where the point has no cursor (' .. x .. ',' .. y .. ')')
+    -- every cursor place of a grid: inside the screen and clear of the sprite
+    local bad
+    for mx = 0, 1024, 64 do
+        for my = 0, 768, 64 do
+            local px, py = tr(180, 20, {x = mx, y = my})
+            if px < 0 or py < 0 or px + 180 > 1024 or py + 20 > 768 or not clear(px, py, 180, 20, mx, my) then bad = {mx, my, px, py} end
+        end
+    end
+    ok(bad == nil, 'tooltip: inside the screen and clear of the cursor everywhere' .. (bad and (' at ' .. table.concat(bad, ',')) or ''))
+    ok(not pcall(tr, 'x', 20), 'tooltip_rect: bad arguments error')
+end
+
 -- mod ab raised errors in every frame and was switched off: the write it made last is undone
 ok(math.abs(ability_store['ability_t1:1:80'] - 0.8) < 1e-9, 'switching a mod off undoes its ability writes')
 
@@ -948,6 +1009,73 @@ do
         if logs[i]:find('%[gear%-mods%] error') or logs[i]:find('error in key') then ok(false, 'manager error: ' .. logs[i]:sub(1, 300)) end
     end
     native.builtin = saved_builtin
+end
+
+-- Scroll math: the offset is clamped to 0..content-view; the thumb's size follows view/content (at least 16) and
+-- its place the offset; a thumb position maps back to the offset.
+do
+    local m = kernel.scroll_math
+    local o, max = m.clamp(50, 2000, 400)
+    ok(o == 50 and max == 1600, 'scroll clamp inside')
+    ok(m.clamp(-10, 2000, 400) == 0 and m.clamp(9999, 2000, 400) == 1600, 'scroll clamp at the ends')
+    ok(m.clamp(30, 300, 400) == 0, 'content shorter than the view: no scrolling')
+    -- 100 lines of 20: 2000; a 400 view, three wheel notches of 3 lines each scroll 180
+    ok(m.clamp(0 + 3 * 3 * 20, 2000, 400) == 180, 'three notches: 180')
+    local size, pos = m.thumb(800, 2000, 400, 376)
+    ok(math.abs(size - 75.2) < 0.01 and math.abs(pos - (376 - 75.2) * 0.5) < 0.01, 'thumb size and place')
+    ok(m.thumb(0, 100000, 400, 376) == 16, 'thumb at least 16')
+    ok(math.abs(m.from_thumb(pos, 2000, 400, 376, size) - 800) < 0.01, 'thumb place back to the offset')
+    ok(m.from_thumb(-50, 2000, 400, 376, size) == 0 and m.from_thumb(9999, 2000, 400, 376, size) == 1600,
+        'thumb dragged past the ends')
+end
+
+-- Realms: the list, choosing, persistence, refusals and the event (the native side is mocked).
+do
+    local gear_a
+    do
+        local i = 1
+        while true do
+            local name, value = debug.getupvalue(kernel.dispatch, i)
+            if not name then break end
+            if name == 'handlers' then
+                for _, h in ipairs(value['frame']) do
+                    local env = getfenv(h.fn)
+                    if env.record and env.gear then gear_a = env.gear end
+                end
+            end
+            i = i + 1
+        end
+    end
+    local realm = gear_a.realm
+    ok(realm_selected and realm_selected.host == nil, 'realm: the native side is told at start: no realm')
+    local l = realm.list()
+    ok(#l == 1 and l[1].id == 'default' and l[1].builtin and l[1].host == '', 'realm: only the default, host unknown yet')
+    realm_client = {host = 'lobby.example.com', port = 7066, game_host = 'lobby.example.com'}
+    kernel.tick(0.016)
+    ok(realm.list()[1].host == 'lobby.example.com', 'realm: the default host is remembered once the network object exists')
+    ok(realm.current().id == 'default', 'realm: current is the default')
+    ok(realm.add({id = 'private', name = 'Private', host = 'realm.test', port = 7100}) == true, 'realm: add')
+    ok(realm.add({id = 'bad id', host = 'x.test'}) == nil, 'realm: a bad id is refused')
+    ok(realm.add({id = 'bad', host = 'x y'}) == nil, 'realm: a bad host is refused')
+    ok(realm.add({id = 'default', host = 'x.test'}) == nil, 'realm: the default id is reserved')
+    ok(realm.add({id = 'p2', host = 'x.test', port = 70000}) == nil, 'realm: a bad port is refused')
+    local changed
+    gear_a.on('realm.changed', function(r) changed = r end)
+    ok(realm.use('private') == true, 'realm: use')
+    ok(realm_selected.host == 'realm.test' and realm_selected.port == 7100, 'realm: host and port go to the native side')
+    ok(changed and changed.id == 'private', 'realm: the event')
+    ok(realm.current().id == 'private', 'realm: current follows')
+    ok(select(2, realm.remove('private')) ~= nil, 'realm: the active realm cannot be removed')
+    ok(realm.use('nope') == nil, 'realm: unknown id')
+    changed = nil
+    ok(realm.use('private') == true and changed == nil, 'realm: no event when nothing changed')
+    ok(realm.use('default') == true and realm_selected.host == nil, 'realm: back to the default clears the choice')
+    kernel.flush()
+    ok(realm_file and realm_file:find('"active":"default"', 1, true) and realm_file:find('realm.test', 1, true)
+        and realm_file:find('lobby.example.com', 1, true), 'realm: saved with the default host')
+    ok(realm.remove('private') == true and #realm.list() == 1, 'realm: remove')
+    -- (A restart cannot be tested here: the kernel changes the string metatable once per Lua state; the game test
+    -- gear/examples/realmtest checks that the saved realm is applied at start.)
 end
 
 print(('%d passed, %d failed'):format(passes, failures))

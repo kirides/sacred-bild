@@ -49,6 +49,7 @@ namespace
     struct State
     {
         bool automation = false;
+        bool active = false;    // automation, or a name given with -gear-instance
         std::string name;
     };
 
@@ -69,7 +70,8 @@ namespace
                 requested = args[i].substr(15);
             }
         }
-        if (!s.automation)
+        s.active = s.automation || !requested.empty();
+        if (!s.active)
         {
             return s;
         }
@@ -105,6 +107,11 @@ bool Instance::automation()
     return state().automation;
 }
 
+bool Instance::active()
+{
+    return state().active;
+}
+
 const std::string& Instance::name()
 {
     return state().name;
@@ -112,7 +119,7 @@ const std::string& Instance::name()
 
 std::wstring Instance::directory(const std::wstring& gameDir)
 {
-    if (!automation())
+    if (!active())
     {
         return {};
     }
@@ -125,5 +132,5 @@ std::wstring Instance::directory(const std::wstring& gameDir)
 
 std::wstring Instance::logPath(const std::wstring& gameDir, const wchar_t* file)
 {
-    return (automation() ? directory(gameDir) : gameDir) + L"\\" + file;
+    return (active() ? directory(gameDir) : gameDir) + L"\\" + file;
 }

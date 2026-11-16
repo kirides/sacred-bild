@@ -37,6 +37,7 @@ Default layout ("LT+" = with LT held):
 | D-pad up / down / left / right | Healing potion / heal hirelings / antidote / concentration | Undead Death / Mentor / zoom out / zoom in |
 | Start / Back | Game menu (Esc) / inventory | Options / world map |
 | L3 / R3 | Show names (Alt) / overview map (Tab) | Collect all / cursor mode on and off |
+| LB | Stand still (Ctrl) | Mod menu (Sacred Gear) |
 
 ## Menus and windows
 
@@ -53,6 +54,25 @@ The log book (L) has no cursor: LB / RB switch the tabs across the top, the D-pa
 left edge; the left stick picks an entry of the list (up / down) and turns the list's pages (left / right), the
 right stick turns the right page's (right or down: the next); B closes it. In cursor mode it works with the cursor
 instead.
+
+## Sacred Gear mods
+
+Sacred Gear's mod UI (buttons, check boxes, radio buttons, dropdowns, sliders, panels) works with the pad the same
+way: its widgets are D-pad stops next to the game's controls, A clicks, the cursor shows the hover.
+
+- **Mod menu** (LT + LB): a list of what the mods offer, as buttons: the Mod manager, every hotkey a mod declares
+  (e.g. the loot filter settings) and the mods' own tools (e.g. Edit layout, which the keyboard reaches by holding
+  Alt). A runs one, B closes the menu.
+- A mod screen (the mod manager, the mod menu, the layout editor) takes the pad alone while it is open: the D-pad
+  stays among its widgets, the cursor starts on the first, B steps back (out of a mod's page, then closes it).
+- A mod window (a panel with an X, e.g. the shared stash) switches the pad to the cursor as a game window does; B
+  closes the topmost one.
+- On a slider, D-pad left / right changes the value (a fiftieth of its range a step); up / down move on. An open
+  dropdown keeps the D-pad in its list, B closes it.
+- Text settings and key binds in the mod manager have a **Kbd** / **Pick** button: an on-screen keyboard to type
+  with, or a list of keys (with Ctrl / Shift / Alt) to bind.
+- The layout editor: the D-pad goes between the frames and the toolbar, A held with the left stick drags the frame
+  under the cursor, B is Done.
 
 ## Button prompts
 

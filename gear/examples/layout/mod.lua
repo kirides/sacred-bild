@@ -10,7 +10,4 @@ return {
         {id = 'snap', type = 'bool', label = 'Snap to edges and frames', default = true,
          tooltip = 'Hold Shift while dragging to move freely'},
     },
-    keys = {
-        {id = 'edit', label = 'Toggle the layout edit mode', default = 'f7'},
-    },
 }

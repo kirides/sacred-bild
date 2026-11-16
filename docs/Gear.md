@@ -135,11 +135,23 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
   mod is switched off. `abilities:apply({[id] = {field = value}})` checks everything first and then writes it. `gear.text.get(text_id)`
   gives the game's text for a name or description id; `gear.settings.get(key)` a value of `Settings.cfg`.
 - The file overlay serves a mod's own data where the game opens the original files. `mods/<id>/overlay.txt` has one rule per line
-  (`#` comments): `bin\balance.bin = data\balance.bin` (the game's open of that path, relative to the game folder, gets the mod's file
-  if it exists), `bin\balance.bin = patch:patches\balance.lua` (a delta patch, below) and `saves = save` (the game's `Save\` folder is
-  the mod's `save\` folder; the vanilla saves are neither read nor written). The rules are read when Sacred Gear starts, because the game
-  opens its data files before any Lua runs, for the mods the run uses (`-gear-mods=a,b`, else all). `gear.files.overlay()`,
-  `gear.files.resolve(path)` and `gear.files.served(path)` show what applies and what the game really opened through it.
+  (`#` comments): `binalance.bin = dataalance.bin` (the game's open of that path, relative to the game folder, gets the mod's file
+  if it exists) and `saves = save` (the game's `Save\` folder is the mod's `save\` folder; the vanilla saves are neither read nor
+  written). The rules are read when Sacred Gear starts, because the game opens its data files before any Lua runs, for the mods the
+  run uses (`-gear-mods=a,b`, else all) and that are switched on (a mod that is off gets no rules and no save redirect, so
+  it changes nothing: LAN games need the client and the gameserver to read the same `balance.bin`, and the gameserver is not
+  overlaid; a mod that overlays `balance.bin` is for singleplayer). `gear.files.overlay()`, `gear.files.resolve(path)` and `gear.files.served(path)` show what applies and
+  what the game really opened through it.
+  **The gameserver.** A hosted or LAN game runs `GameServer.exe`, which reads `binalance.bin` and the scripts itself and
+  compares them with the client's. Sacred Gear hooks the game's `CreateProcessA`: when it starts `GameServer.exe` (and some
+  enabled mod has file rules) it starts it with `SacredGear.dll` injected (Detours, as SacredBild does for its own network
+  patches; both can be injected at once) and hands it the ids of the mods the client overlays in the environment variable
+  `SACREDGEAR_OVERLAY_MODS`. In the server Sacred Gear is headless: it only installs the same file rules of those mods
+  (not the saves redirect: the server has no savegames) and logs `Overlay: the gameserver opened ...` the first time it
+  gets a mod's file (`SacredGear-server.log`, in the game folder). A mod that is off, or no mod with file rules, means no
+  injection at all; a `GameServer.exe` Sacred Gear was not asked to take part in (no handoff variable) is left alone. The
+  server sees the very files the client does, so a mod's balance works for LAN and hosted games. Test:
+  `tools\server-overlay-test.ps1 -GameDir <copy of the game folder>` starts the server alone; `tools\lan-host-test.ps1 -GameDir <copy> -Patch` hosts a real LAN game through the menus with a changed balance.bin (without the server overlay the game shows "IP: Kann nicht verbinden! CODE -10021"). Two clients joining one server is not covered by these tests.
 - A `patch:` rule ships only what differs from the game's own file: a Lua data file `return {size = n, crc32 = 0x..., ops = {{offset, 'hex'[, replaced]}, ...}}`
   (offsets in the original, ascending; the hex bytes replace `replaced` bytes, default as many as there are). The first open of the file builds the
   patched copy in the mod's `cache\` folder (rebuilt when the patch or the original changed) and serves that; a game file of another size or
@@ -151,7 +163,7 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
 
 Positions are world units (`gear.world.TILE`, about 53.7, is one tile; the screen shows about 534 x 400 around the
 hero) and a layer (0 outdoors; dungeons have their own). The functions that change the world work only in single
-player (`gear.world.can_change()`); in a network game they return nil and a message.
+player (`gear.world.can_change()`); in a network game (also a host nobody has joined yet: the engine tells the peers about every created or destroyed object, and they do not know the ones a mod makes) they return nil and a message. `can_change()` reads the engine's own network flag (the byte at 0x0182EBEC that its object and inventory code test), not the number of heroes.
 
 | | |
 |---|---|
@@ -203,13 +215,31 @@ and compares the file before and after. See `autosave` in the sacred-gear-mods r
 | `c:free_spot(w, h)`, `c:put(id, col, row)`, `c:take(id)` | Room for a w x h item; puts an item at a cell; takes one out (the object stays). |
 | `gear.inv.export(id)` | The item's type and own data (its random properties) as a binary string. `gear.inv.hex(bytes)` and `gear.inv.unhex(text)` make it text for JSON. |
 | `gear.inv.create(bytes)`, `gear.inv.add(c, bytes)` | A new item from those bytes, at the hero's feet, or straight into the container's first free spot (nothing changes if it fails). |
+| `gear.inv.socket(id, upgrade_id)` | Puts an upgrade item (a rune, made with `create` or lying in the world) into a free socket of an item, as the blacksmith does (the item gains its bonuses and an entry, the rune is consumed). |
 | `gear.inv.remove(c, id)`, `gear.inv.destroy(id)` | Takes an item out of the container, destroys it and returns its export; deletes an item that is in no container. |
 
-All of it works in single player only (`gear.world.can_change()`) and goes through the engine's own inventory and
-object code, under the fault guard. An exported item made again is byte for byte the same (type, entries, data):
+All of it goes through the engine's own inventory and object code, under the fault guard. In single player it works as
+`gear.world.can_change()` says; in a network game (LAN, open net; `gear.inv.can_change()` returns `true, true`) only the
+local hero's own backpack and the chest may be changed, and Gear then takes the engine's announcing variants: an item
+made is announced as created (message 0x16F, `create` with broadcast) and then updated with its data (0x16C, the
+engine's `0x005C0810`), put into and taken out of a container with the announcing flag (0x13F / 0x13E) and destroyed
+with `0x005FBDB0 (id, 1, 0, 0)` (0x167), the sequence the engine's own loot generation and inventory use, so the other
+players and the game server see the same objects. Spawning and the temporary items of item icons and tooltips for stored
+items stay single player only. Not tested against a second PC; closed online servers that check items are out of scope. An exported item made again is byte for byte the same (type, entries, data):
 the self test of `shared-stash` and the probe that found the format moved 55 backpack items through the chest and
-back with equal exports. What is not copied is where an item was: the engine owns that. Gear exposes no
+back with equal exports. An export holds everything that makes an item what it is: its type, its entries (the random properties, and one entry
+for every rune socketed into it: a socketed item is 6 + 130 * entries + 130 bytes) and its record (the bonuses, which a
+socketing has already added), and for weapons 16 more bytes (four dwords the weapon class keeps, copied as the engine's
+own save does). Blobs exported before weapons kept those 16 bytes still create fine; the new weapon keeps its default
+values. Checked in game with armour holding one and two runes and a unique sword with a rune: exports equal after a
+deposit and a withdrawal in another savegame and process. What is not copied is where an item was: the engine owns that. Gear exposes no
 inventory events yet, so a mod looks at the containers when it needs them (the stash panel refreshes 4 times a second).
+
+`gear.ui.item_tooltip(item, x, y)` shows the game's own tooltip popup for an item (the display name in its rarity
+colour, price, protection or damage, level, bonus lines, socket count, in the game's framed style): an item table, an
+item id, or an `export` string (a temporary item is made to read the text from). `x`, `y` are the popup's top-left
+corner (it keeps itself on the screen); call it each frame it should show. It returns the popup's size as of its last
+layout, so a mod can put the next one beside a region. See the Engine notes ("Item tooltips").
 
 #### UI drawing
 
@@ -235,8 +265,9 @@ Positions and sizes are the UI's **1024x768 layout**, the space the game lays it
 | `fonts()` | The number of the game's UI fonts. |
 | `text_size(text, font)` | Width and height of the text in the layout, or nil. `font`: a game font (`'game1'`, a number), or a table of `text`'s font options (`{size = 16, bold = true}`); nil: the default UI font. Game fonts in game only (measuring may add glyphs to the font). |
 | `window(name)`, `windows()` | The game's in-game windows by control name (`UI_WND_INVENTORY`, `UI_WND_TASKBAR`, ...; see `docs/UI_SYSTEM.md`): `{name, slot, x, y, width, height, visible, drawn}` in the window's own layout coordinates; `drawn`: open and drawn this frame (not hidden behind a window the game draws alone). |
-| `state()` | `{available, mode, exclusive, escape_menu, message_box, help, mouse_x, mouse_y, screen_left, screen_top, screen_right, screen_bottom}`: `mode` is `'game'`, `'menus'`, `'cinematic'` or `'none'`; `exclusive` the control name of the window the game draws alone (options, save, character, world map), if any; the cursor in layout coordinates; the screen's edges in layout coordinates (beyond 0..1024 x 0..768 when SacredBild's canvas leaves room around it). |
+| `state()` | `{available, mode, exclusive, escape_menu, message_box, help, show_text, mouse_x, mouse_y, screen_left, screen_top, screen_right, screen_bottom}`: `show_text` whether the game shows its item and object labels (Alt held; the flag its label pass sets, ENG 00627180); `mode` is `'game'`, `'menus'`, `'cinematic'` or `'none'`; `exclusive` the control name of the window the game draws alone (options, save, character, world map), if any; the cursor in layout coordinates; the screen's edges in layout coordinates (beyond 0..1024 x 0..768 when SacredBild's canvas leaves room around it). |
 | `screen()` | Those four edges. |
+| `tooltip_rect(w, h, opts)` | Where to put a `w` x `h` tooltip (or any popup beside the cursor): below and right of the cursor's tip, clear of the game's cursor sprite (about 30 x 38 layout units); flips to the left / above at the screen's edges (or `opts.bounds = {left, top, right, bottom}`), clamped as a last resort. Returns `x, y`. `opts.x`, `opts.y` give another point to keep clear, `opts.cursor = false` keeps only a small gap. The widgets' `tooltip` option uses it. |
 | `WIDTH`, `HEIGHT` | 1024, 768. |
 
 Rectangles, frames and images snap their edges to the screen's pixels (a 1-unit line is equally wide everywhere);
@@ -294,16 +325,22 @@ Every widget takes `opts.tooltip` (shown after the cursor rests on it for 0.4 s)
 | `checkbox(id, x, y, text, checked, opts)` | `changed, checked`. |
 | `radio(id, x, y, text, selected, opts)` | true when clicked. |
 | `radio_group(id, x, y, options, index, opts)` | `changed, index`; `opts.horizontal`, `opts.spacing`, `opts.tooltips` (one per option). |
-| `dropdown(id, x, y, w, options, index, opts)` | `changed, index`. The open list lies on the top layer; a click beside it closes it. |
+| `dropdown(id, x, y, w, options, index, opts)` | `changed, index`. The open list is drawn after every mod's draw handlers, over all panels and text on the top layer, and takes the mouse first (nothing under it reacts); it shows at most `opts.max_rows` (12) entries and scrolls like a scroll area, the selected one in view; a click beside it closes it. |
 | `slider(id, x, y, w, min, max, value, opts)` | `changed, value` while dragged; `opts.step` (default 1), `opts.format` (`'%g'`; false: no number). |
 | `label(id, text, x, y, opts)` | Text in the widgets' look (the UI font; `size`, `font`, `height` / `valign` as for `text`), with a tooltip if `opts.tooltip`. |
 | `panel(id, title, x, y, w, h, opts)` | A window: `{open, x, y, w, h, content_x, content_y}`. Its title bar drags it (the position is kept for the session), its X closes it (`open` false); `show_panel(id, open)` and `panel_open(id)`. `opts.closable`, `opts.draggable` (default true). |
+| `scroll_begin(id, x, y, w, h, opts)`, `scroll_end(content_height)` | A vertically scrollable area. `scroll_begin` returns `{x, y, w, h, offset, max, content_x, content_y}` (the viewport, less the scrollbar when it shows); draw the content at `content_y` plus its own y, then `scroll_end(content_height)` (returns `offset, max`) draws the scrollbar: arrows (held: repeat), the track (a click pages), the thumb (drag it). Until `scroll_end` everything drawn is clipped to the viewport (rects, images and the UI font's text are cut; the game's fonts and item models show only when wholly inside) and regions are cut to it, so a widget scrolled out of sight takes no click. The wheel scrolls the area under the cursor (3 lines of `opts.step`, default 20, a notch); Up, Down, PageUp, PageDown, Home, End the one under the cursor or clicked last; with SacredBild the controller's D-pad the one its cursor is in (once no widget lies further that way inside it) and the right stick as a wheel. The offset is kept per id for the session; `scroll_to(id, offset)`, `scroll_offset(id)` -> `offset, max`. Areas nest. |
+| `wheel()` | The wheel's notches over mod UI this tick (+ away from the player), and whether a scroll area took them. |
+| `text_wrap(text, width, opts)` | `lines, height`: the text broken into lines that fit `width` in `text`'s font options (at spaces, `
+` too), and their height; cached. |
 | `region(id, x, y, w, h, opts)` | A rectangle that takes the mouse, for widgets of a mod's own: `{hover, pressed, released, clicked, held}`. |
 | `mouse()` | The cursor in layout coordinates. |
 | `capture_keys(on)` | While on, the keyboard does not reach the game (its key and character messages are dropped, its key state queries see nothing held); the mod's own `key_pressed` / `key_down` still work. For a screen that types or binds keys (the mod manager uses it while it is open); ends when the mod unloads. |
 | `key_pressed(name)` | True once per press of a key (`'f9'`, `'a'`, `'escape'` ...), read while the game's window has the focus. |
 | `key_down(name)` | Whether the key is held. Both see the keys [automation](#automation) holds; isolated automation sees only those. |
 | `COLORS` | The widgets' colours. |
+
+The mouse wheel over a mod's region is the mod's: the game does not get it (no zoom under a panel). It comes through SacredBild's window procedure (the player's wheel and the controller's right stick), or without SacredBild through a message hook Gear sets on the game window's thread.
 
 Input: a left click (press and release) over a mod's region is taken from the game: the UI manager's event handler
 (0x00757840) reports it handled, so neither the game's windows nor the world see it, and the release that follows
@@ -326,7 +363,7 @@ layout keeps its places when the resolution changes. The game's own windows are 
 
 | | |
 |---|---|
-| `edit_mode()`, `set_edit_mode(on)` | The edit mode: a flag for every mod (panels get a highlighted frame); a layout editor turns it on and draws its overlays (`gear/examples/layout`, F7). |
+| `edit_mode()`, `set_edit_mode(on)` | The edit mode: a flag for every mod (panels get a highlighted frame); a layout editor turns it on and draws its overlays (`gear/examples/layout`, its "Edit layout" button while Alt is held). |
 | `panels()` | The panels of every mod drawn this tick (those not drawn yet: as of the last tick): `{key, mod, id, title, x, y, w, h, resizable, min_width, min_height, layer}`. |
 | `set_panel_rect(key, x, y, w, h)` | Puts any mod's panel at (x, y) of the canvas and, if it is resizable, makes it w x h (`nil`: the size stays; never below its minimum); kept in the layout, taken the next time its mod draws it. False for an unknown panel. |
 | `reset_panel(key)` | That panel back to the place and size its mod gives it. |
@@ -392,7 +429,7 @@ switches it on". To reset one mod's settings use the **Reset to defaults** butto
 setting); **Default** beside a key restores its default. A key that two mods use shows a conflict on both mods' rows
 and in the Keys page (both still fire; rebind one).
 
-Default hotkeys of the mods in this repository and the examples: F11 the Mods screen, F7 the layout editor, F5 the loot
+Default hotkeys of the mods in this repository and the examples: F11 the Mods screen, F5 the loot
 filter's panel, F4 the widget gallery of `uidemo`; in `sacred-gear-mods`: F6 the autosave panel, F10 the shared stash.
 None is a key of the game: the screen marks a bind that is also one of the game's own hotkeys (digits, Q W E R B, A, I, F,
 C, L, M, Tab, O, S, H, N, P, Space, Esc, + and -, F8 quick load, F9 quick save; the game reacts to them with any modifiers held) as
@@ -469,6 +506,21 @@ Self test of the screen: `gear/examples/modmanagertest` (see its header) clicks 
 checks the results; `gear/tests/kernel_test.lua` covers the kernel side (persistence, broken files, switching mods live,
 dependencies, key binds and conflicts) and drives the screen against a mocked UI.
 
+### Realms
+
+`gear.realm` chooses the server of the game's online play (register and login), so that several servers (a private
+realm, for example) can be used without editing `Settings.cfg`. The game reads the lobby host and port when the
+multiplayer menu opens **Closed Internet** or **Open Internet**; Sacred Gear hooks those steps (`gear/realm.*`) and
+puts the chosen realm's host (and its port, if it names one) in place of `NETWORK_LOBBY` / `NETWORK_LOBBYPORT`. LAN is
+not touched, and `Settings.cfg` keeps the game's own values (the hook on the object's write-back swaps them for the
+moment), so choosing the default realm is the game's setting again. The choice is saved in `mods\gear_realm.txt` (read
+by the native side at start, before any mod loads); the list of realms and the active id are in `mods\gear_realms.json`
+(`{"realms": [{"id", "name", "host", "port"}], "active": ...}`, also written by `gear.realm.add`). A realm applies from
+the next opening of Closed or Open Internet, not to a lobby connection that is already open. The `realms` example mod
+shows the choice as a page of the mod manager (F11 in game, or the pad's mod menu); Sacred Gear itself runs only once a
+game has started, so the choice is made in game or by editing the files, not in the menus. A realm decides where the
+player's password goes: use only realms you trust.
+
 ### Errors
 
 An error in a mod's code is logged with its traceback and does not reach the game. A mod whose handlers raised ten
@@ -488,9 +540,12 @@ faults returns nil and a message instead of crashing the game.
 | `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
 | `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F4) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
 | `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices; filtered items' labels are dimmed; an overlay shows the rules; the rules are declared settings (the Mods screen shows them) and a panel of its own (F5 or the overlay's button) changes the same values. An old `settings.json` is migrated once. Self test with `-gear-auto`. |
-| `layout` | A layout editor in the manner of an MMO's edit mode (F7 or its button): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
+| `realms` | The realm picker: a page in the mod manager (Mods > Realm > More) that chooses the online play server for Closed / Open Internet. `realmtest` is its self test: it chooses a realm and drives the menus (`mode = 'lan'` in its `config.lua` opens LAN instead). See [Realms](#realms). |
+| `layout` | A layout editor in the manner of an MMO's edit mode (its "Edit layout" button, top left while Alt shows the game's labels; Done ends it; no key binding): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
 | `itemicontest` | `gear.ui.item_icon`: a row of weapon and armour models by type id and a row from live items; checks that nothing is left behind. |
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
+| `scrolltest` | An automation run: a scroll area of 100 lines (wheel, a line scrolled out of sight takes no click, thumb drag) and a dropdown of 30 entries whose open list lies over text and a button drawn after it (`-gear-mods=scrolltest`). |
+| `tooltiptest` | An automation run: tooltips of buttons at the screen's edges and corners, with screenshots (`gear.ui.tooltip_rect`). |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 | `shared-stash` (in the sacred-gear-mods repository) | A stash shared by all heroes of the player, in a panel beside the chest window, built on `gear.inv`: items are copied to `stash.json` in the mod's folder and back, the file written first on a deposit and last on a withdrawal. |
 
@@ -501,7 +556,7 @@ For self tests and scripted runs without a player. Off unless the game starts wi
 
 | Option | |
 |---|---|
-| `-gear-load=N` (`SACREDGEAR_LOAD`) | Loads savegame N (`Save\GAMEnn.PAK`, 0 the quicksave) as soon as the main menu is up, the way the menu's savegame window does it. |
+| `-gear-load=N` (`SACREDGEAR_LOAD`) | Loads savegame N (`Save\GAMEnn.PAK`, 0 the quicksave) as soon as the main menu is up, the way the menu's savegame window does it. The file is looked up through the file overlay (a mod's save folder counts); if it does not exist the run logs `Automation: cannot load savegame` and ends with exit code 4 (the game itself crashes on a missing savegame). |
 | `-gear-mods=a,b` (`SACREDGEAR_MODS`) | Loads only these mods. |
 | `-gear-instance=NAME` (`SACREDGEAR_INSTANCE`) | Names the run, default `pid<PID>`. See "Parallel runs". |
 | `-gear-window=WxH[+X+Y]` (`SACREDGEAR_WINDOW`) | SacredBild only: the size of the game window, default 1600x900, at least 1024x768 (smaller values are raised to it). See below. |
@@ -512,13 +567,15 @@ The mods load in the main menu and get the `idle` event there. Mods with `automa
 |---|---|
 | `state()` | `{ui, menus, in_game, cinematic, help, dialog, window, width, height, mouse_x, mouse_y}`: the UI manager's state, the client size, the game's cursor in UI layout coordinates. |
 | `ui()` | The visible UI: menus, in-game windows, the message box and their visible children, each `{group, index, parent, vtable, flags, x, y, width, height}` in UI layout coordinates (`parent` indexes the list, 0 top level). |
-| `move(x, y)`, `down(button)`, `up(button)`, `key_down(key)`, `key_up(key)`, `release()` | Raw input; positions in client pixels; buttons `'lbutton'`, `'rbutton'`, `'mbutton'`; keys by name (`'escape'`, `'enter'`, `'f5'`, `'a'`, ...) or virtual key code. |
+| `move(x, y)`, `down(button)`, `up(button)`, `key_down(key)`, `key_up(key)`, `release()`, `wheel(notches)` | Raw input; positions in client pixels; buttons `'lbutton'`, `'rbutton'`, `'mbutton'`; keys by name (`'escape'`, `'enter'`, `'f5'`, `'a'`, ...) or virtual key code; `wheel`: + away from the player (scrolls up). |
 | In a task: `click(x, y, button)`, `press(key)`, `type(text)` | As a player would, with short pauses. |
 | In a task: `ui_click(x, y)` or `ui_click(node)` | Clicks a point in UI layout coordinates (or a node's center); the mapping to pixels is measured once by moving the cursor, so it works with SacredBild's scaled UI too. |
 | `load_save(n)` | Loads savegame n from the menus. |
 | In a task: `wait_for_menu(timeout)`, `wait_for_game(timeout)` | Until the main menu is up / a hero exists. |
 | `instance` | The run's name (a string). |
 | `screenshot(name)`, `write(name, text)` | Files in `<game>\GearAutomation\<instance>` (name: letters, digits, `_ - .`). |
+| `network_flag(on)` | Sets or clears the engine's network-game flag, to test that the guards refuse in a network game (set it, test, clear it in the same tick). |
+| `show_window(name, shown)` | Shows or hides an in-game window by its control name (`UI_WND_CHEST` ...) through the window's own `show`, without the events that normally open it; for self tests. |
 | `quit(code)` | Ends the game at once with that exit code. |
 
 Automation is isolated by default, so a test can run while you keep using the PC: the game never comes to the front
@@ -551,8 +608,18 @@ Example, from a shell: `Sacred.exe -gear-auto -gear-load=1 -gear-mods=selftest -
 
 Every automation run is an *instance* with a name: `-gear-instance=NAME` (`SACREDGEAR_INSTANCE`; letters, digits,
 `_ - .`, at most 48 characters, anything else becomes `_`; default `pid<PID>`, so even runs without a name never meet).
-A normal launch (without `-gear-auto`) has no instance and keeps every vanilla behaviour, the single-instance check
-included. What a name changes:
+A normal launch (without `-gear-auto` or `-gear-instance`) has no instance and keeps every vanilla behaviour, the
+single-instance check included. What a name changes:
+
+**A second game by hand (manual instance).** `-gear-instance=NAME` without `-gear-auto` makes a *manual instance*, for
+testing LAN or online play with two clients on one PC: `sacred.exe -gear-instance=two -gear-window=1600x900` (or
+`tools\second-instance.ps1 -Game <folder>`). It gets the single-instance mutex, the window title suffix, and its own log
+and `run.json` folder below, and nothing else: no input isolation (it takes the focus and the real mouse like a
+normal game), no automation, the player's own `gear_mods.json` and mod switches. With SacredBild `-gear-window=WxH[+X+Y]`
+opens a framed window of that size so the two games fit side by side; without it the `.ini` window is used. Start the
+first game normally, the second with a name. Both share the game folder, so a savegame and `Settings.cfg` are shared too.
+
+What a name changes:
 
 - **The single-instance check.** The game's start-up (`0x817B30`) creates the mutex `SACRED_INSTANCE`, and a second
   `sacred.exe` that finds it exists shows "ERROR: Sacred is already running" and exits. In an automation run Sacred Gear
@@ -620,6 +687,7 @@ search) from the `sacred_core` library (`src/fmt.*`, `log.*`, `patch.*`, `sig.*`
 | `gear/world.*` | Objects through the game's object manager: hero, creatures, spawn, teleport, health, gold |
 | `gear/pipe.*` | Named pipe clients, each on a thread of its own |
 | `gear/automation.*` | Automation: options, input, UI state, savegame loading, screenshots |
+| `gear/realm.*` | Realms: the hooks on the network menu's lobby host and port, and `Settings.cfg`'s write-back |
 | `gear/pickup.*` | Pickup rules: the hooks on the game's pickup, the collect filter and the item label colour |
 | `gear/itemicon.*` | Item icons: the model renderer call for a live item or a temporary item of a type, with the device state saved and restored |
 | `gear/keyblock.*` | The keyboard kept from the game while a screen captures it (`gear.ui.capture_keys`) |
@@ -656,6 +724,7 @@ What Sacred Gear relies on, English GOG addresses:
 | Object types | `*0x00AAB5E4` + id * 0x80 (0 < id < 0x7E60): +0x2E kind, +0x37 name. |
 | Saving | The savegame window (0x0071CC90 action 2) sends a 0x24-byte event (vtable 0x00890B38, +4 code 0xF, +8 sub 2, +0xC slot, +0x10 stored in the header, +0x14 capture the picture first, +0x18 check that no trade or chest window blocks (the engine logs AUTOSAVE and refuses otherwise), +0x20 the display name, copied into the engine's 64 bytes at +0x6A) to `cEngine::receiveEvent` (0x00618090, thiscall (event)). It stores the slot at engine +0x68 and sets 0x40 in the engine's flags (+0x54), unless that bit is already set. The render thread loop (0x0060E350) writes `SAVE\GAME%02d.PAK` (0x00619BF0) when `flags & 0xC0` and clears them; 0x200 is a queued load. Byte `*0x0182EBE8` +4 is 0 in single player. |
 | Inventories | `*0x00AD4448`: the inventory manager (made by 0x005DEBC0), 32 containers of 0x1180 bytes (0x005DEC90 (index) returns one). Container: +0x18 + cell * 12 the cells, +0x115C columns, +0x115E rows, +0x1160 its number; cell = row * columns + column: dword item id on an item's top-left cell (0 on its other cells), byte +4 flags (bit 0 taken), +5 / +6 the item's width / height there, on its other cells the column / row of its top-left cell. Container n (1..16) is the backpack of the hero with object id n; 17 the chest (`UI_WND_CHEST`, 20 x 10, made by 0x006ACB40); 18, 25..27 are small grids (3 x 5, 3 x 5, 7 x 5, 7 x 5) whose use is not examined; 20..22 hold the shops' stock in the test savegame. `0x005DABA0` (thiscall (w, h, slot*, byRow) -> bool) finds room, `0x005D9F00` (slot, id, w, h, notify) puts an item in (takes it out of the world: flag 2 at +0x14; tells the item its owner), `0x005DA630` (id, notify) takes it out of the container (the object stays), `0x00428D60` (stdcall (type, w*, h*)) is a type's size in cells, `0x005FBDB0` (id, 1, 0, 0) destroys an object (the engine does this after taking an item out, e.g. on using a potion, 0x005BFF60). An item (cItemBase) keeps its own state in a vector of 0x82-byte entries (+0x100 begin, +0x104 end, +0x108 capacity), 0x82 bytes at +0x118 (the record copy: class mask and rarity at +0x11C) and a number made from them at +0x120 (0x0042BF20 (record) -> hash, set after reading an item, 0x005C7690); the network read of an item (vtable slot 8, 0x005C7A50) restores exactly the entries and the record. Gear copies those to bytes (type, count, entries, record) and rebuilds an item by creating one of the type (0x005FBA40) and overwriting them (growing the vector with 0x005C9230). |
+| Item tooltips | The equipment window's hover (0x006B7700) takes the UI manager's reserved popup (u16 at manager +0x54, `0x0075B1E0` (index) -> cUI_Popup*), builds the text with the item's virtual function 17 (thiscall (std::vector<wchar_t>* out, record or 0, 0, 0x5F), ret 0x10; the vector's buffer comes from `0x008321A0` and is freed with `0x0041D3B0` (ptr, count)), then `0x006E8860` (0xA: clamp to the screen and `x` / `y` are the top-left corner), `x` / `y` at popup +0x24 / +0x28, `0x006E6EA0` (0, vector*, 0) sets the text (SacredBild detours its first five bytes: Gear finds it by its body and calls entry = body - 0x36), `0x00732550` (1) shows it. The popup's size from its last layout is at +0x2C / +0x2E. Weapons (cWeapon3D, slot 8 = `0x005CF2D0`) write four dwords (+0x19C, +0x1AC, +0x1A0, +0x1BC) after the common item data; socketing is `0x005BFF60` (item, upgrade id, socket) -> bool. |
 | Loading a savegame | The menu (0x0071CC90 action 6) sets the players object's (`*0x0182EBE8`) +0x14 to 1 and posts message 0x8002 (wParam 1, lParam the savegame number) to the game window (`*0x00CDCA1C` +0xB0) (0x007561E0). |
 | UI manager | `*0x017EEBBC`: +0x08 flags (1 menus, 4 in game, 0x10 cinematic, 0x200 help), +0x80 the in-game windows, +0x130 the five menu screens, +0x144 the message box. |
 | UI pass (mod drawing) | `cUI_Manager_render` (0x00758ED0, arg: the IDirect3DDevice7 the UI draws with; SacredBild hooks it) draws pretransformed FVF 0x1C4 quads in the 1024x768 layout. Gear draws from: the popup pass 0x00758DC0 (thiscall (device, flag), "hud", before the original), the call at 0x0075934F (the party arrows 0x006D01F0, cdecl (device), "world", before the original; reached in game only) and the call at 0x00759585 (`call 0x649BE0`, after the escape menu and the message box in every mode, EBX = device; "top"). Every render state, texture stage state and the stage 0 texture it changes are read before and set back after, so the game's state cache (0x00643430) and SacredBild's state shadow stay right; text runs through the game's font with the game's states. |

@@ -109,6 +109,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'session.stop'` | That hero is gone. |
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'game.save_failed'` | It could not be written. |
+| `'realm.changed'` | `gear.realm.use` switched the online play server: `(realm)`. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'skillslot.key'` | A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it. |
 | `'combat.branch'` | A conditional jump in the hit handlers and a few other functions: a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`). |
@@ -201,6 +202,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
 | `game` | `GearGame` | The game itself: difficulty and saving. |
+| `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
 | `settings` | `GearSettings` | This mod's settings (declared in `mod.lua`, changed by the player in the mod manager). |
 | `keys` | `GearKeys` | This mod's declared key binds. |
 | `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
@@ -223,6 +225,7 @@ Forms:
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
+- `fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
 - `fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler`
 - `fun(event: 'combat.branch', fn: fun(name: string, vanilla: boolean, index: integer, eax: integer): boolean?): GearHandler`
@@ -1166,6 +1169,62 @@ The savegame file of `slot`: nil for a slot outside 0..509, else a table whose `
 - `slot`: `integer`
 - returns `GearSaveInfo?`
 
+## Realms (gear.realm)
+
+### GearRealm
+
+An online play (register / login) server the game can talk to.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | Short name for scripts: letters, digits, `_` and `-` (the built-in one is `'default'`). |
+| `name` | `string` | What the player reads. |
+| `host` | `string` | The server's host name or IPv4 address (the built-in realm: the host of Settings.cfg once known, else empty). |
+| `port` | `integer` | The lobby port (omitted: the game's own, NETWORK_LOBBYPORT). (optional) |
+| `builtin` | `boolean` | The realm the game started with (from Settings.cfg); it cannot be removed. (optional) |
+
+### GearRealmApi
+
+Reached as `gear.realm`.
+
+Choosing the server of the game's online play (register and login). The game reads the lobby host and port when the multiplayer menu opens Closed or Open Internet (LAN is not touched), so a chosen realm applies from the next time the player opens one of those; an open lobby connection keeps its server until the player leaves. The choice is native (`mods\gear_realm.txt`, applied before any mod loads); the list and the active realm are kept in `mods\gear_realms.json`. A realm names the server the player's password goes to: add realms only from sources you trust.
+
+#### `gear.realm.list() -> GearRealm[]`
+
+The realms: the built-in one first, then the added ones.
+
+- returns `GearRealm[]`
+
+#### `gear.realm.current() -> GearRealm`
+
+The chosen realm.
+
+- returns `GearRealm`
+
+#### `gear.realm.add(def) -> boolean?, string?`
+
+Adds a realm, or replaces the one with that id. `id` is 1 to 32 letters, digits, `_` or `-` and is not `'default'`; `host` is a valid host name or IPv4 address (letters, digits, `.`, `-`, `_`); `port` 1 to 65535 (omitted: the game's NETWORK_LOBBYPORT).
+
+- `def`: `{id: string, name?: string, host: string, port?: integer}`
+- returns `ok` `boolean?`
+- returns `message` `string?` - Why not.
+
+#### `gear.realm.remove(id) -> boolean?, string?`
+
+Removes a realm; not the built-in one and not the one in use.
+
+- `id`: `string`
+- returns `ok` `boolean?`
+- returns `message` `string?` - Why not.
+
+#### `gear.realm.use(id) -> boolean?, string?`
+
+Chooses the realm for the next Closed or Open Internet and saves the choice. Raises the event `realm.changed` when the realm changed.
+
+- `id`: `string`
+- returns `ok` `boolean?`
+- returns `message` `string?` - Why not.
+
 ## Settings, key binds and the mod manager
 
 A mod declares its settings and key binds in `mod.lua` (`settings`, `keys`); the player changes them, switches the mod on and off and rebinds keys in the **Mods** screen (F11, or the "Mods" button beside the escape menu), and Sacred Gear keeps everything in `mods\gear_mods.json`. The mod reads its values with `gear.settings`, hears changes as `settings.changed`, and gets declared keys through `gear.keys`. A mod switched off in the screen is unloaded at once: it gets `unload`, then its handlers, timers, tasks, pipes, key binds, pickup rules and open widgets are dropped (what it did to the world stays). Switching it on loads it again with a fresh environment (`load`, and `session.start` when a game runs); mods it requires are switched on with it, and mods that require it are off while it is.
@@ -1441,6 +1500,13 @@ A container: `'chest'`, `'backpack'` (the local hero's) or its number (0..31). N
 - `which`: `'chest'|'backpack'|integer`
 - returns `GearContainer?`
 
+#### `gear.inv.can_change() -> boolean, boolean`
+
+Whether the local hero's inventory may be changed now, and whether a network game runs. Single player: as `gear.world.can_change()`. In a network game (LAN, open net) the changes go through the engine's own announcing calls (an item made is announced as created and updated, put in and taken out as inventory moves, destroyed as a destruction) and only the hero's own backpack and the chest may be changed there; spawning and the temporary items of icons and tooltips stay refused.
+
+- returns `allowed` `boolean`
+- returns `network` `boolean`
+
 #### `gear.inv.size(item_id) -> integer?, integer?`
 
 The size of an item in cells, or nil.
@@ -1448,6 +1514,15 @@ The size of an item in cells, or nil.
 - `item_id`: `integer`
 - returns `w` `integer?`
 - returns `h` `integer?`
+
+#### `gear.inv.socket(item_id, upgrade_id) -> boolean?, string?`
+
+Puts an upgrade item (a rune lying in the world, e.g. made with `create`, or in no container) into a free socket of an item, as the blacksmith does: the item gains the rune's bonuses and an entry, the rune is consumed. Single player only.
+
+- `item_id`: `integer`
+- `upgrade_id`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
 
 #### `gear.inv.export(item_id) -> string?, string?`
 
@@ -1682,6 +1757,17 @@ What the game's inventory windows show for an item, its own 3D model, drawn by t
 - `opts`: `GearDrawOpts` (optional)
 - returns `drawn` `boolean` - False when it could not be queued (a bad window or layer); whether the model really draws is known to the game's renderer only.
 
+#### `gear.ui.item_tooltip(item, x, y) -> boolean?, number|string?, number?`
+
+The game's own tooltip popup for an item, as the inventory windows show it (framed, the name in the rarity colour, price, protection, level, bonus lines), centered on (x, y) of the 1024x768 layout and kept on the screen. `item` is an item (a table from `gear.world.item` or a container's `items()`), an item id, or the string `gear.inv.export` made (a temporary item is made to read the text from and destroyed at once; single player only). Call it every frame the tooltip should be shown; it is drawn by the game's popup pass. `x`, `y` are the popup's top-left corner. It also returns the popup's size as of its last layout (what the previous tooltip it showed took; 0 at first), so a mod can place the next one beside a region.
+
+- `item`: `GearItem|integer|string`
+- `x`: `number`
+- `y`: `number`
+- returns `ok` `boolean?`
+- returns `width_or_error` `number|string?` - The popup's width in layout units, or the message when `ok` is nil.
+- returns `height` `number?`
+
 #### `gear.ui.images(filter) -> GearImageInfo[]`
 
 The UI images whose sheet name contains `filter` (any case), all of them without a filter.
@@ -1725,6 +1811,7 @@ The state of the UI, also the argument of `draw` handlers.
 | `escape_menu` | `boolean` |  |
 | `message_box` | `boolean` |  |
 | `help` | `boolean` |  |
+| `show_text` | `boolean` | The game shows its item and object labels ("show text": Alt held), in game; as of the last frame drawn. |
 | `mouse_x` | `number` | The cursor in layout coordinates. |
 | `mouse_y` | `number` |  |
 | `screen_left` | `number` | The screen's edges in layout coordinates (beyond 0..1024 x 0..768 when SacredBild's canvas leaves room around it). |
@@ -1830,6 +1917,7 @@ Options every widget takes.
 | `tooltip` | `string` | Shown after the cursor rests on the widget for 0.4 s. (optional) |
 | `layer` | `GearLayer` | Default `'hud'`. (optional) |
 | `enabled` | `boolean` | `false`: greyed out, no clicks. (optional) |
+| `nav` | `boolean` | Default true (regions and every widget): a stop of the controller's D-pad. `false` for rectangles that only take the mouse (backgrounds, blockers). (optional) |
 
 ### GearLabelOpts
 
@@ -1864,6 +1952,37 @@ Includes everything of `GearWidgetOpts`.
 | `spacing` | `number` | Between the options (default 18 vertical, 8 horizontal). (optional) |
 | `tooltips` | `string[]` | One per option. (optional) |
 
+### GearDropdownOpts
+
+Includes everything of `GearWidgetOpts`.
+
+| Field | Type | |
+|---|---|---|
+| `max_rows` | `integer` | The open list shows at most this many entries and scrolls (default 12). (optional) |
+
+### GearScrollOpts
+
+| Field | Type | |
+|---|---|---|
+| `step` | `number` | One line: Up / Down, an arrow button and the D-pad move it, a wheel notch three (default 20). (optional) |
+| `layer` | `GearLayer` | Default `'hud'`. (optional) |
+| `nav` | `boolean` | `false`: the area is no stop of the controller's D-pad. (optional) |
+
+### GearScrollArea
+
+What `scroll_begin` returns: the viewport (without the scrollbar) and where the content starts.
+
+| Field | Type | |
+|---|---|---|
+| `x` | `number` |  |
+| `y` | `number` |  |
+| `w` | `number` | The viewport's width (the area's, less the scrollbar when it shows). |
+| `h` | `number` |  |
+| `offset` | `number` | How far the content is scrolled (0 .. max). |
+| `max` | `number` |  |
+| `content_x` | `number` | Where the content's top-left lies: draw at `content_y + its own y`. |
+| `content_y` | `number` |  |
+
 ### GearSliderOpts
 
 Includes everything of `GearWidgetOpts`.
@@ -1885,6 +2004,8 @@ Includes everything of `GearWidgetOpts`.
 | `min_width` | `number` | Default 120. (optional) |
 | `min_height` | `number` | Default 60. (optional) |
 | `background` | `GearColor` |  (optional) |
+| `back` | `boolean` | Default true: the controller's B closes the panel while it is the topmost closable one; `false`: the mod handles B itself (`ui.back_pressed`). (optional) |
+| `passive` | `boolean` | A closable panel that should not take the controller (no cursor, B not caught): a HUD-like panel. (optional) |
 
 ### GearRegionState
 
@@ -1926,6 +2047,27 @@ A rectangle that takes the mouse, for widgets of a mod's own. A left click (pres
 - `h`: `number`
 - `opts`: `GearWidgetOpts` (optional)
 - returns `GearRegionState`
+
+### GearTooltipRectOpts
+
+Options of `tooltip_rect`.
+
+| Field | Type | |
+|---|---|---|
+| `x` | `number` | The point to keep clear (default: the cursor's hotspot). (optional) |
+| `y` | `number` |  (optional) |
+| `bounds` | `number[]` | `{left, top, right, bottom}` the tooltip must stay inside (default: the screen); pass a panel's rectangle to keep it in that panel. (optional) |
+| `cursor` | `boolean` | `false`: the point has no cursor sprite below and right of it, so only a small gap is kept (default true). (optional) |
+
+#### `gear.ui.tooltip_rect(w, h, opts) -> number, number`
+
+Where to put a `w` x `h` tooltip, or any popup beside the cursor, so that it never lies under the game's cursor sprite (an arrow reaching about 30 x 38 layout units right and down of the hotspot) and stays inside the screen. The default place is below the cursor's tip, to its right; when that leaves `bounds` it flips to below-left, above-right, above-left, then beside the cursor, and as a last resort is clamped and pushed off the sprite. The widgets' `tooltip` option already uses it. Returns the top-left corner.
+
+- `w`: `number`
+- `h`: `number`
+- `opts`: `GearTooltipRectOpts` (optional)
+- returns `x` `number`
+- returns `y` `number`
 
 #### `gear.ui.label(id, text, x, y, opts) -> boolean`
 
@@ -1987,7 +2129,7 @@ True when clicked.
 
 #### `gear.ui.dropdown(id, x, y, w, options, index, opts) -> boolean, integer`
 
-The open list lies on the top layer; a click beside it closes it.
+The open list is drawn after every draw handler, over all panels and text, on the top layer, and takes the mouse first; it shows at most `opts.max_rows` (12) entries and scrolls (wheel, scrollbar, keys, D-pad), the selected one in view when it opens. A click beside it closes it.
 
 - `id`: `string|integer`
 - `x`: `number`
@@ -1995,9 +2137,61 @@ The open list lies on the top layer; a click beside it closes it.
 - `w`: `number`
 - `options`: `string[]`
 - `index`: `integer` - The selected option (1-based).
-- `opts`: `GearWidgetOpts` (optional)
+- `opts`: `GearDropdownOpts` (optional)
 - returns `changed` `boolean`
 - returns `index` `integer`
+
+#### `gear.ui.scroll_begin(id, x, y, w, h, opts) -> GearScrollArea`
+
+Starts a vertically scrollable area: until `scroll_end`, what is drawn is clipped to its viewport (rects, images, the UI font's text; the game's fonts and item models only when wholly inside) and regions are cut to it, so a widget scrolled out of sight takes no click. Draw the content at `content_y + its own y`. The wheel scrolls the area under the cursor (3 lines a notch), Up / Down / PageUp / PageDown / Home / End the one under the cursor or clicked last, the controller's D-pad (SacredBild) the one its cursor is in, once no widget lies further that way inside it, and the right stick as a wheel. The offset is kept per id for the session. Areas nest.
+
+- `id`: `string|integer`
+- `x`: `number`
+- `y`: `number`
+- `w`: `number`
+- `h`: `number`
+- `opts`: `GearScrollOpts` (optional)
+- returns `area` `GearScrollArea`
+
+#### `gear.ui.scroll_end(content_height) -> number, number`
+
+Ends the innermost scroll area and draws its scrollbar (arrows, track: a click pages, thumb: drag it) when the content is taller than the viewport.
+
+- `content_height`: `number` (optional) - The content's height (default: the last one given).
+- returns `offset` `number`
+- returns `max` `number`
+
+#### `gear.ui.scroll_to(id, offset)`
+
+Sets a scroll area's offset (clamped when it is drawn next).
+
+- `id`: `string|integer`
+- `offset`: `number`
+
+#### `gear.ui.scroll_offset(id) -> number, number`
+
+A scroll area's offset and its largest offset (as of its last frame); 0, 0 for an unknown id.
+
+- `id`: `string|integer`
+- returns `offset` `number`
+- returns `max` `number`
+
+#### `gear.ui.wheel() -> number, boolean`
+
+The mouse wheel's notches over mod UI this tick (+ away from the player, as Windows counts them; 0: none; a notch is 1), and whether a scroll area already took them. Over a mod's widget the game does not get the wheel.
+
+- returns `notches` `number`
+- returns `taken` `boolean`
+
+#### `gear.ui.text_wrap(text, width, opts) -> string[], number`
+
+The text broken into lines that fit `width` (at spaces; a word longer than the width gets a line of its own; `\n` breaks too), in the font of `opts` (as `text` takes it), and the lines' total height. Cached per text, width and font.
+
+- `text`: `string`
+- `width`: `number`
+- `opts`: `GearTextOpts` (optional)
+- returns `lines` `string[]`
+- returns `height` `number`
 
 #### `gear.ui.slider(id, x, y, w, min, max, value, opts) -> boolean, number`
 
@@ -2024,6 +2218,26 @@ A window: its title bar drags it (the position is kept in the layout), its X clo
 - `h`: `number`
 - `opts`: `GearPanelOpts` (optional)
 - returns `GearPanel`
+
+#### `gear.ui.nav_modal(on)`
+
+The controller: while on, the mod's screen has the pad alone. Only its widgets are D-pad stops (the game's controls and other mods' are not), the cursor starts on its first widget, and B is `back_pressed()`. Switch it off when the screen closes (it is also dropped when the mod unloads).
+
+- `on`: `boolean`
+
+#### `gear.ui.back_pressed() -> boolean`
+
+The controller's B was pressed: true once per press (consumed). B closes an open dropdown and the topmost closable panel by itself; a `nav_modal` screen or a panel with `back = false` asks here.
+
+- returns `boolean`
+
+#### `gear.ui.menu_item(id, label, fn)`
+
+An entry of the controller's mod menu (Sacred Gear's mod menu button, LT + LB by default): for a tool a player would otherwise reach with a hotkey, Alt or a small button. The keys a mod declares in mod.lua are listed there by themselves; calling it again with the same id changes the entry.
+
+- `id`: `string`
+- `label`: `string`
+- `fn`: `fun()`
 
 #### `gear.ui.show_panel(id, open)`
 
@@ -2233,6 +2447,12 @@ Moves the game's cursor; client pixels.
 
 - `button`: `GearMouseButton` (optional) - Default `'lbutton'`.
 
+#### `gear.auto.wheel(notches)`
+
+The mouse wheel at the cursor, as `WM_MOUSEWHEEL`: + away from the player (scrolls up), - towards.
+
+- `notches`: `number` (optional) - Default 1.
+
 #### `gear.auto.key_down(key)`
 
 - `key`: `GearAutoKey`
@@ -2244,6 +2464,21 @@ Moves the game's cursor; client pixels.
 #### `gear.auto.release()`
 
 Releases everything held.
+
+#### `gear.auto.pad(nudge, back, menu)`
+
+The controller without one: posts pad events as SacredBild's controller does (D-pad steps on a slider, B presses, mod menu button presses).
+
+- `nudge`: `integer` (optional)
+- `back`: `integer` (optional)
+- `menu`: `integer` (optional)
+
+#### `gear.auto.nav() -> integer, integer`
+
+The stops SacredBild holds for the controller: their count (-1 stale, -2 no SacredBild) and flags (1 modal, 2 a mod window is open).
+
+- returns `count` `integer`
+- returns `flags` `integer`
 
 #### `gear.auto.click(x, y, button)`
 
@@ -2330,6 +2565,28 @@ Writes a file into `GearAutomation\<instance>`.
 - `name`: `string`
 - `text`: `string`
 - returns `ok` `boolean?`
+
+#### `gear.auto.start_gameserver(seconds) -> integer`
+
+Starts GameServer.exe the way the game does for a hosted LAN game (with Sacred Gear injected when mods overlay files), lets it run `seconds` (default 8) and ends it. Its logs are in the game folder (SacredGear-server.log, SacredBild-server.log).
+
+- `seconds`: `number` (optional)
+- returns `pid` `integer` - 0 if it did not start
+
+#### `gear.auto.show_window(name, shown) -> boolean`
+
+Shows or hides an in-game window by its control name (`UI_WND_CHEST` ...) through the window's own `show`, without the events that normally open it (the chest window opens when the hero uses a chest). For self tests; false if there is no such window.
+
+- `name`: `string`
+- `shown`: `boolean`
+- returns `ok` `boolean`
+
+#### `gear.auto.network_flag(on) -> boolean`
+
+Sets or clears the engine's network-game flag (the byte the engine's own object and inventory code test), to test that the guards (`world.can_change`, inventory changes, `spawn`) refuse in a network game. Set it, test and clear it in the same tick: nothing else runs in between.
+
+- `on`: `boolean`
+- returns `ok` `boolean`
 
 #### `gear.auto.quit(code)`
 

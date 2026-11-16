@@ -375,6 +375,8 @@ namespace
     };
     constexpr DWORD kFvf = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1;
 
+    thread_local const float* t_clip = nullptr;
+
     struct Quad
     {
         int page;
@@ -534,7 +536,45 @@ void Text::draw(IDirect3DDevice7* device, const Placement& placement, const Styl
                 set = true;
             }
             TLVertex strip[4] = {q.v[0], q.v[1], q.v[2], q.v[4]};
+            if (t_clip)
+            {
+                float x0 = strip[0].x, y0 = strip[0].y, x1 = strip[3].x, y1 = strip[3].y;
+                float u0 = strip[0].u, v0 = strip[0].v, u1 = strip[3].u, v1 = strip[3].v;
+                if (!Text::clipQuad(t_clip, x0, y0, x1, y1, u0, v0, u1, v1))
+                {
+                    continue;
+                }
+                strip[0].x = strip[2].x = x0;
+                strip[1].x = strip[3].x = x1;
+                strip[0].y = strip[1].y = y0;
+                strip[2].y = strip[3].y = y1;
+                strip[0].u = strip[2].u = u0;
+                strip[1].u = strip[3].u = u1;
+                strip[0].v = strip[1].v = v0;
+                strip[2].v = strip[3].v = v1;
+            }
             device->DrawPrimitive(D3DPT_TRIANGLESTRIP, kFvf, strip, 4, 0);
         }
     }
+}
+
+void Text::setClip(const float* rect)
+{
+    t_clip = rect;
+}
+
+bool Text::clipQuad(const float* clip, float& x0, float& y0, float& x1, float& y1, float& u0, float& v0, float& u1,
+                    float& v1)
+{
+    const float cx0 = clip[0], cy0 = clip[1], cx1 = clip[0] + clip[2], cy1 = clip[1] + clip[3];
+    if (x1 <= cx0 || x0 >= cx1 || y1 <= cy0 || y0 >= cy1 || x1 <= x0 || y1 <= y0)
+    {
+        return false;
+    }
+    const float du = (u1 - u0) / (x1 - x0), dv = (v1 - v0) / (y1 - y0);
+    if (x0 < cx0) { u0 += (cx0 - x0) * du; x0 = cx0; }
+    if (x1 > cx1) { u1 -= (x1 - cx1) * du; x1 = cx1; }
+    if (y0 < cy0) { v0 += (cy0 - y0) * dv; y0 = cy0; }
+    if (y1 > cy1) { v1 -= (y1 - cy1) * dv; y1 = cy1; }
+    return x1 > x0 && y1 > y0;
 }

@@ -94,6 +94,7 @@ set(DDRAW_SOURCES
   src/game/click_walk.cpp
   src/game/options_screen.cpp
   src/game/ui_nav.cpp
+  src/game/gear_nav.cpp
   src/game/ui_state.cpp
   src/game/ui_windows.cpp
   src/game/movie.cpp
@@ -174,15 +175,18 @@ if(SACREDGEAR)
     gear/pipe.cpp
     gear/automation.cpp
     gear/ui.cpp
+    gear/padnav.cpp
     gear/text.cpp
     gear/pickup.cpp
     gear/inventory.cpp
+    gear/itemtip.cpp
     gear/save.cpp
     gear/keyblock.cpp
     gear/itemicon.cpp
+    gear/realm.cpp
     gear/gear.rc
   )
-  target_include_directories(SacredGear PRIVATE gear ${LUAJIT_INCLUDE_DIRS}/luajit)
+  target_include_directories(SacredGear PRIVATE gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS})
   set_source_files_properties(gear/gear.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kernel.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.lua")
   target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} shell32)
   target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})

@@ -61,11 +61,29 @@ local GearInv = {}
 ---@return GearContainer?
 function GearInv.container(which) end
 
+--- Whether the local hero's inventory may be changed now, and whether a network game runs. Single player: as
+--- `gear.world.can_change()`. In a network game (LAN, open net) the changes go through the engine's own announcing calls
+--- (an item made is announced as created and updated, put in and taken out as inventory moves, destroyed as a
+--- destruction) and only the hero's own backpack and the chest may be changed there; spawning and the temporary items
+--- of icons and tooltips stay refused.
+---@return boolean allowed
+---@return boolean network
+function GearInv.can_change() end
+
 --- The size of an item in cells, or nil.
 ---@param item_id integer
 ---@return integer? w
 ---@return integer? h
 function GearInv.size(item_id) end
+
+--- Puts an upgrade item (a rune lying in the world, e.g. made with `create`, or in no container) into a free socket of
+--- an item, as the blacksmith does: the item gains the rune's bonuses and an entry, the rune is consumed. Single
+--- player only.
+---@param item_id integer
+---@param upgrade_id integer
+---@return boolean? ok
+---@return string? error
+function GearInv.socket(item_id, upgrade_id) end
 
 --- Copies an item to a binary string: its type and its own data, not where it is. `hex` makes it text for JSON.
 ---@param item_id integer

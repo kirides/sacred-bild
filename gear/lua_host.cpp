@@ -3,11 +3,14 @@
 #include "gear.h"
 #include "instance.h"
 #include "inventory.h"
+#include "itemtip.h"
 #include "itemicon.h"
 #include "keyblock.h"
 #include "log.h"
 #include "pickup.h"
+#include "realm.h"
 #include "overlay.h"
+#include "padnav.h"
 #include "pipe.h"
 #include "save.h"
 #include "sitehook.h"
@@ -1190,7 +1193,7 @@ namespace
         return 1;
     }
 
-    // native.ui_state() -> {available, mode, exclusive, escape_menu, message_box, help, mouse_x, mouse_y,
+    // native.ui_state() -> {available, mode, exclusive, escape_menu, message_box, help, show_text, mouse_x, mouse_y,
     // screen_left, screen_top, screen_right, screen_bottom}
     int nativeUiState(lua_State* L)
     {
@@ -1209,6 +1212,7 @@ namespace
         flag("escape_menu", s.escapeMenu);
         flag("message_box", s.messageBox);
         flag("help", s.help);
+        flag("show_text", s.showText);
         num("mouse_x", s.mouseX);
         num("mouse_y", s.mouseY);
         num("screen_left", s.screenLeft);
@@ -1275,24 +1279,80 @@ namespace
 
     // mods\gear_mods.json: the mod manager's file (enabled flags, settings, key binds of all mods). An automation run
     // with an instance name keeps its own copy in GearAutomation\<instance>, so tests never touch the player's file.
-    std::wstring statePath()
+    std::wstring statePath(const wchar_t* file = L"gear_mods.json")
     {
         if (Automation::options().enabled)
         {
             const std::wstring dir = Instance::directory(g_modsDir.substr(0, g_modsDir.size() - 5));
             if (!dir.empty())
             {
-                return dir + L"\\gear_mods.json";
+                return dir + L"\\" + file;
             }
         }
-        return g_modsDir + L"\\gear_mods.json";
+        return g_modsDir + L"\\" + file;
     }
 
-    // native.state_read() -> text | nil
+    // The file a state call means: its argument 'realms' is mods\gear_realms.json.
+    std::wstring stateFile(lua_State* L, int arg)
+    {
+        const char* name = lua_isstring(L, arg) ? lua_tostring(L, arg) : nullptr;
+        return statePath(name && std::strcmp(name, "realms") == 0 ? L"gear_realms.json" : L"gear_mods.json");
+    }
+
+    // native.realm_get() -> {host, port, connected, overridden, game_host} | nil (the game has not made its network object yet)
+    int nativeRealmGet(lua_State* L)
+    {
+        const Realm::State s = Realm::read();
+        if (!s.available)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 5);
+        lua_pushlstring(L, s.host.data(), s.host.size());
+        lua_setfield(L, -2, "host");
+        lua_pushnumber(L, s.port);
+        lua_setfield(L, -2, "port");
+        lua_pushboolean(L, s.connected);
+        lua_setfield(L, -2, "connected");
+        lua_pushboolean(L, s.overridden);
+        lua_setfield(L, -2, "overridden");
+        lua_pushlstring(L, s.gameHost.data(), s.gameHost.size());
+        lua_setfield(L, -2, "game_host");
+        return 1;
+    }
+
+    // native.realm_select(host?, port?) -> true | nil, message. No host: the game's own (Settings.cfg) applies again.
+    int nativeRealmSelect(lua_State* L)
+    {
+        size_t n = 0;
+        const char* host = lua_isstring(L, 1) ? lua_tolstring(L, 1, &n) : "";
+        const lua_Number port = lua_isnumber(L, 2) ? lua_tonumber(L, 2) : 0;
+        const char* error = nullptr;
+        if (port >= 0 && port <= 65535 && Realm::select(std::string(host, n), static_cast<uint32_t>(port), error))
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        lua_pushnil(L);
+        lua_pushstring(L, error ? error : "port: 1 to 65535");
+        return 2;
+    }
+
+    // native.realm_valid_host(host) -> bool
+    int nativeRealmValidHost(lua_State* L)
+    {
+        size_t n = 0;
+        const char* host = luaL_checklstring(L, 1, &n);
+        lua_pushboolean(L, Realm::validHost(std::string(host, n)));
+        return 1;
+    }
+
+    // native.state_read(which?) -> text | nil. `which` 'realms' reads gear_realms.json (default: gear_mods.json).
     int nativeStateRead(lua_State* L)
     {
         std::string text;
-        if (!readFile(statePath(), text))
+        if (!readFile(stateFile(L, 1), text))
         {
             lua_pushnil(L);
             return 1;
@@ -1311,7 +1371,7 @@ namespace
         bool ok = false;
         if (n <= 1024 * 1024)
         {
-            const std::wstring path = statePath() + (backup ? L".bak" : L"");
+            const std::wstring path = stateFile(L, 3) + (backup ? L".bak" : L"");
             const std::wstring temp = path + L".tmp";
             HANDLE f = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
             DWORD written = 0;
@@ -1344,6 +1404,64 @@ namespace
         c.region = ok ? static_cast<uint32_t>(handle) : 0;
         lua_pushboolean(L, ok && Ui::add(std::move(c)));
         return 1;
+    }
+
+    // native.ui_nav(stops, flags) -> bool: tells SacredBild the widgets the controller can point at. `stops`: a list of
+    // {x, y, left, top, width, height, kind}; flags: 1 a modal screen (only these are stops), 2 a window is open.
+    int nativeUiNav(lua_State* L)
+    {
+        luaL_checktype(L, 1, LUA_TTABLE);
+        const int flags = static_cast<int>(luaL_checknumber(L, 2));
+        std::vector<PadNav::Stop> stops;
+        const int n = static_cast<int>(lua_objlen(L, 1));
+        stops.reserve(static_cast<size_t>(n));
+        const auto field = [&](const char* name) {
+            lua_getfield(L, -1, name);
+            const float v = static_cast<float>(lua_tonumber(L, -1));
+            lua_pop(L, 1);
+            return v;
+        };
+        for (int i = 1; i <= n; ++i)
+        {
+            lua_rawgeti(L, 1, i);
+            if (lua_istable(L, -1))
+            {
+                stops.push_back({field("x"), field("y"), field("left"), field("top"), field("width"),
+                                 field("height"), static_cast<int>(field("kind"))});
+            }
+            lua_pop(L, 1);
+        }
+        lua_pushboolean(L, PadNav::setStops(stops, flags));
+        return 1;
+    }
+
+    // native.ui_pad() -> nudge, back, menu: what the controller did since the last call (slider steps, B presses,
+    // mod menu button presses).
+    int nativeUiPad(lua_State* L)
+    {
+        const PadNav::Events e = PadNav::take();
+        lua_pushnumber(L, e.nudge);
+        lua_pushnumber(L, e.back);
+        lua_pushnumber(L, e.menu);
+        return 3;
+    }
+
+    // native.auto_pad(nudge, back, menu): automation posts pad events; native.auto_nav() -> stops, flags as SacredBild
+    // holds them (stops -1: stale, -2: no SacredBild).
+    int nativeAutoPad(lua_State* L)
+    {
+        PadNav::post(static_cast<int>(luaL_optnumber(L, 1, 0)), static_cast<int>(luaL_optnumber(L, 2, 0)),
+                     static_cast<int>(luaL_optnumber(L, 3, 0)));
+        return 0;
+    }
+
+    int nativeAutoNav(lua_State* L)
+    {
+        int flags = 0;
+        const int count = PadNav::navState(flags);
+        lua_pushnumber(L, count);
+        lua_pushnumber(L, flags);
+        return 2;
     }
 
     // native.ui_events() -> {{down, button, x, y, region}, ...}
@@ -1515,6 +1633,14 @@ namespace
         return 2;
     }
 
+    // native.inv_can_change() -> bool, network
+    int nativeInvCanChange(lua_State* L)
+    {
+        lua_pushboolean(L, World::inventoryChangesAllowed());
+        lua_pushboolean(L, World::networkGame());
+        return 2;
+    }
+
     // native.inv_container(index) -> {columns, rows} | nil
     int nativeInvContainer(lua_State* L)
     {
@@ -1627,6 +1753,50 @@ namespace
         {
             lua_pushboolean(L, 1);
             return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.inv_socket(item id, upgrade id) -> true | nil, message
+    int nativeInvSocket(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1), upgrade = checkId(L, 2);
+        const char* error = "bad arguments";
+        if (id && upgrade && Inventory::socket(id, upgrade, error))
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.item_tooltip(item id | exported bytes, x, y) -> true, width, height | nil, message
+    int nativeItemTooltip(lua_State* L)
+    {
+        const lua_Number x = luaL_checknumber(L, 2), y = luaL_checknumber(L, 3);
+        const char* error = "bad arguments";
+        bool ok = false;
+        int w = 0, h = 0;
+        if (x > -4096 && x < 4096 && y > -4096 && y < 4096)
+        {
+            if (lua_type(L, 1) == LUA_TSTRING)
+            {
+                size_t n = 0;
+                const char* data = lua_tolstring(L, 1, &n);
+                ok = n <= 65536 && ItemTip::showExported(std::string(data, n), static_cast<int>(x), static_cast<int>(y), w, h, error);
+            }
+            else
+            {
+                const uint32_t id = checkId(L, 1);
+                ok = id && ItemTip::show(id, static_cast<int>(x), static_cast<int>(y), w, h, error);
+            }
+        }
+        if (ok)
+        {
+            lua_pushboolean(L, 1);
+            lua_pushnumber(L, w);
+            lua_pushnumber(L, h);
+            return 3;
         }
         return pushFailure(L, error);
     }
@@ -1784,6 +1954,34 @@ namespace
         return 0;
     }
 
+    // native.auto_wheel(delta)
+    int nativeAutoWheel(lua_State* L)
+    {
+        Automation::wheel(static_cast<int>(luaL_checknumber(L, 1)));
+        return 0;
+    }
+
+    // native.ui_clip(x, y, w, h) sets the clip for what is recorded next; native.ui_clip() clears it.
+    int nativeUiClip(lua_State* L)
+    {
+        if (lua_isnoneornil(L, 1))
+        {
+            Ui::setClip(false);
+            return 0;
+        }
+        Ui::setClip(true, static_cast<float>(luaL_checknumber(L, 1)), static_cast<float>(luaL_checknumber(L, 2)),
+                    static_cast<float>(luaL_checknumber(L, 3)), static_cast<float>(luaL_checknumber(L, 4)));
+        return 0;
+    }
+
+    // native.ui_wheel() -> delta (WM_MOUSEWHEEL units over mod UI since the last call), pad scroll lines (+ down)
+    int nativeUiWheel(lua_State* L)
+    {
+        lua_pushnumber(L, Ui::takeWheel());
+        lua_pushnumber(L, Ui::takePadScroll());
+        return 2;
+    }
+
     int nativeAutoKey(lua_State* L)
     {
         const int vk = static_cast<int>(luaL_checknumber(L, 1));
@@ -1885,6 +2083,29 @@ namespace
             return pushFailure(L, "cannot write the file");
         }
         lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    int nativeAutoStartGameServer(lua_State* L)
+    {
+        lua_pushnumber(L, Overlay::startGameServerForTest(static_cast<int>(luaL_optnumber(L, 1, 8))));
+        return 1;
+    }
+
+    // native.auto_network_flag(on) -> bool
+    int nativeAutoNetworkFlag(lua_State* L)
+    {
+        lua_pushboolean(L, World::setNetworkFlagForTest(lua_toboolean(L, 1) != 0));
+        return 1;
+    }
+
+    // native.auto_show_window(name, shown) -> bool
+    int nativeAutoShowWindow(lua_State* L)
+    {
+        size_t n = 0;
+        const char* name = luaL_checklstring(L, 1, &n);
+        const bool shown = lua_toboolean(L, 2) != 0;
+        lua_pushboolean(L, Ui::setWindowShown(std::string(name, n), shown));
         return 1;
     }
 
@@ -2056,6 +2277,10 @@ namespace
             {"state_write", nativeStateWrite},
             {"builtin", nativeBuiltin},
             {"ui_events", nativeUiEvents},
+            {"ui_nav", nativeUiNav},
+            {"ui_pad", nativeUiPad},
+            {"ui_clip", nativeUiClip},
+            {"ui_wheel", nativeUiWheel},
             {"key_down", nativeKeyDown},
             {"ui_block_keys", nativeUiBlockKeys},
             {"write_file", nativeWriteFile},
@@ -2063,6 +2288,7 @@ namespace
             {"hero_class", nativeHeroClass},
             {"pickup_rules", nativePickupRules},
             {"pickup_refused", nativePickupRefused},
+            {"inv_can_change", nativeInvCanChange},
             {"inv_container", nativeInvContainer},
             {"inv_items", nativeInvItems},
             {"inv_size", nativeInvSize},
@@ -2070,8 +2296,13 @@ namespace
             {"inv_put", nativeInvPut},
             {"inv_remove", nativeInvRemove},
             {"inv_destroy", nativeInvDestroy},
+            {"inv_socket", nativeInvSocket},
+            {"item_tooltip", nativeItemTooltip},
             {"inv_export", nativeInvExport},
             {"inv_import", nativeInvImport},
+            {"realm_get", nativeRealmGet},
+            {"realm_select", nativeRealmSelect},
+            {"realm_valid_host", nativeRealmValidHost},
             {nullptr, nullptr},
         };
         lua_newtable(L);
@@ -2089,13 +2320,19 @@ namespace
                 {"auto_ui", nativeAutoUi},
                 {"auto_move", nativeAutoMove},
                 {"auto_button", nativeAutoButton},
+                {"auto_wheel", nativeAutoWheel},
                 {"auto_key", nativeAutoKey},
+                {"auto_pad", nativeAutoPad},
+                {"auto_nav", nativeAutoNav},
                 {"auto_char", nativeAutoChar},
                 {"auto_release", nativeAutoRelease},
                 {"auto_load", nativeAutoLoad},
                 {"auto_screenshot", nativeAutoScreenshot},
                 {"auto_write", nativeAutoWrite},
+                {"auto_show_window", nativeAutoShowWindow},
+                {"auto_network_flag", nativeAutoNetworkFlag},
                 {"auto_quit", nativeAutoQuit},
+                {"auto_start_gameserver", nativeAutoStartGameServer},
                 {nullptr, nullptr},
             };
             for (const luaL_Reg* r = kAutomation; r->name; ++r)
@@ -2118,6 +2355,11 @@ namespace
         LOG("Lua: {} ready, mods from {}", LUAJIT_VERSION, narrow(g_modsDir));
         callKernel("load", 0, kLoadBudget);
     }
+}
+
+std::wstring LuaHost::stateFilePath(const wchar_t* file)
+{
+    return statePath(file);
 }
 
 void LuaHost::configure(HMODULE module, const std::wstring& gameDir)

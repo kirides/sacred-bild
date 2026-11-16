@@ -16,6 +16,7 @@
 ---| 'session.stop' # That hero is gone.
 ---| 'game.saved' # A save `gear.game.save` asked for is written.
 ---| 'game.save_failed' # It could not be written.
+---| 'realm.changed' # `gear.realm.use` switched the online play server: `(realm)`.
 ---| 'combat.constant' # The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it.
 ---| 'skillslot.key' # A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it.
 ---| 'combat.branch' # A conditional jump in the hit handlers and a few other functions: a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`).
@@ -85,6 +86,7 @@
 ---@field world GearWorld The world: hero, creatures, items, spawning, pickup rules.
 ---@field inv GearInv Inventories: containers, items, export and import of items.
 ---@field game GearGame The game itself: difficulty and saving.
+---@field realm GearRealmApi The online play server (realms): list, switch, add.
 ---@field settings GearSettings This mod's settings (declared in `mod.lua`, changed by the player in the mod manager).
 ---@field keys GearKeys This mod's declared key binds.
 ---@field mods GearMods The installed mods; a page of this mod's own in the mod manager.
@@ -104,6 +106,7 @@ gear = {}
 ---@overload fun(event: 'session.stop', fn: fun()): GearHandler
 ---@overload fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler
 ---@overload fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler
+---@overload fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler
 ---@overload fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler
 ---@overload fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler
 ---@overload fun(event: 'combat.branch', fn: fun(name: string, vanilla: boolean, index: integer, eax: integer): boolean?): GearHandler

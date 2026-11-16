@@ -1,4 +1,5 @@
 #include "input/inject.h"
+#include "game/gear_nav.h"
 
 #include <atomic>
 #include <cstdint>
@@ -184,6 +185,12 @@ bool Inject::unwrap(HWND window, UINT message, WPARAM wParam, LPARAM lParam, WND
         LPARAM position = MAKELPARAM(p.x, p.y);
         if (wParam == WM_MOUSEWHEEL)
         {
+            // The controller's wheel (right stick) scrolls a mod's widget under the cursor first (Sacred Gear).
+            if (GearNav::wheel(static_cast<SHORT>(HIWORD(static_cast<DWORD>(lParam)))))
+            {
+                result = 0;
+                return true;
+            }
             ClientToScreen(window, &p);
             position = MAKELPARAM(p.x, p.y);
         }

@@ -63,9 +63,9 @@ bool Patch::redirectCall(uintptr_t callSite, const void* target)
     return write(callSite + 1, &rel, 4);
 }
 
-void* Patch::iat(const char* dll, const char* function, void* replacement)
+void* Patch::iat(const char* dll, const char* function, void* replacement, bool quiet)
 {
-    return iat(nullptr, dll, function, replacement);
+    return iat(nullptr, dll, function, replacement, quiet);
 }
 
 namespace
@@ -98,7 +98,7 @@ namespace
     }
 }
 
-void* Patch::iat(const char* importer, const char* dll, const char* function, void* replacement)
+void* Patch::iat(const char* importer, const char* dll, const char* function, void* replacement, bool quiet)
 {
     auto* base = reinterpret_cast<uint8_t*>(GetModuleHandleA(importer));
     if (!base)
@@ -135,7 +135,10 @@ void* Patch::iat(const char* importer, const char* dll, const char* function, vo
             }
         }
     }
-    LOG("Patch: import {}!{} not found", dll, function);
+    if (!quiet)
+    {
+        LOG("Patch: import {}!{} not found", dll, function);
+    }
     return nullptr;
 }
 

@@ -166,6 +166,11 @@ namespace
     using SetCursorFilterFn = int(__cdecl*)(CursorFilterFn filter);
     using PlacementFn = int(__cdecl*)(float* out);
     PlacementFn g_placement = nullptr;
+    using WheelFn = int(__cdecl*)(int delta);
+    using SetWheelFn = void(__cdecl*)(WheelFn fn);
+    using TakeScrollFn = int(__cdecl*)();
+    SetWheelFn g_setWheel = nullptr;
+    TakeScrollFn g_takeScroll = nullptr;
     SetWindowFrameFn g_setWindowFrame = nullptr;
     WindowBoundsFn g_windowBounds = nullptr;
     SetCursorFilterFn g_setCursorFilter = nullptr;
@@ -197,6 +202,8 @@ namespace
             g_windowBounds = reinterpret_cast<WindowBoundsFn>(GetProcAddress(bild, "SacredBild_UiGetWindowBounds"));
             g_setCursorFilter = reinterpret_cast<SetCursorFilterFn>(GetProcAddress(bild, "SacredBild_UiSetCursorFilter"));
             g_placement = reinterpret_cast<PlacementFn>(GetProcAddress(bild, "SacredBild_UiPlacement"));
+            g_setWheel = reinterpret_cast<SetWheelFn>(GetProcAddress(bild, "SacredBild_UiSetWheelHandler"));
+            g_takeScroll = reinterpret_cast<TakeScrollFn>(GetProcAddress(bild, "SacredBild_UiTakeScroll"));
         });
     }
 
@@ -482,9 +489,15 @@ namespace
         IDirectDrawSurface7* m_currentTexture = nullptr;
     };
 
+    thread_local const float* t_clip = nullptr;    // the clip of the command being drawn (layout units)
+
     void quad(IDirect3DDevice7* device, float x0, float y0, float x1, float y1, uint32_t color,
               float u0 = 0, float v0 = 0, float u1 = 1, float v1 = 1)
     {
+        if (t_clip && !Text::clipQuad(t_clip, x0, y0, x1, y1, u0, v0, u1, v1))
+        {
+            return;
+        }
         TLVertex v[4] = {
             {x0, y0, 0.0f, 1.0f, color, 0, u0, v0},
             {x1, y0, 0.0f, 1.0f, color, 0, u1, v0},
@@ -682,6 +695,27 @@ namespace
     // A command that faults (a font or texture the game freed meanwhile) is skipped; the rest still draw.
     bool drawGuarded(IDirect3DDevice7* device, StateGuard& state, const Command& c)
     {
+        t_clip = c.clipped ? c.clip : nullptr;
+        Text::setClip(t_clip);
+        if (t_clip && (c.kind == Kind::ItemIcon || (c.kind == Kind::Text && !c.vector)))
+        {
+            // Drawn by the game: only when the whole box lies inside (the game's text: its rect, measured if unset).
+            float w = c.w, h = c.h;
+            if (c.kind == Kind::Text && (w <= 0 || h <= 0))
+            {
+                int tw = 0, th = 0;
+                void* font = fontById(c.font);
+                if (font && measure(font, c.text.c_str(), tw, th))
+                {
+                    w = w > 0 ? w : static_cast<float>(tw);
+                    h = h > 0 ? h : static_cast<float>(th);
+                }
+            }
+            if (c.x < t_clip[0] || c.y < t_clip[1] || c.x + w > t_clip[0] + t_clip[2] || c.y + h > t_clip[1] + t_clip[3])
+            {
+                return true;
+            }
+        }
         __try
         {
             switch (c.kind)
@@ -892,6 +926,55 @@ namespace
         return regionAt(m, x, y) != 0;
     }
 
+    // ---- The mouse wheel ----
+
+    std::atomic<int> g_wheel{0};        // over mod UI, since the last takeWheel
+    HHOOK g_wheelHook = nullptr;        // Gear's own, when SacredBild does not hand the wheel over
+    std::once_flag g_wheelOnce;
+
+    // The wheel turned by `delta`: Gear's when the cursor is over a mod's region (the game then does not get it).
+    int __cdecl wheelHandler(int delta)
+    {
+        const uint8_t* mouse = Gear::Addr::cMouse_instance ? Gear::Addr::cMouse_instance() : nullptr;
+        if (!mouse || !delta)
+        {
+            return 0;
+        }
+        const int x = readOr<int32_t>(reinterpret_cast<uintptr_t>(mouse) + 4, 0);
+        const int y = readOr<int32_t>(reinterpret_cast<uintptr_t>(mouse) + 8, 0);
+        if (!cursorOverModUi(x, y))
+        {
+            return 0;
+        }
+        g_wheel += delta;
+        return 1;
+    }
+
+    // Without SacredBild: WM_MOUSEWHEEL as the game's thread takes it from its queue (a taken one becomes WM_NULL).
+    LRESULT CALLBACK wheelHook(int code, WPARAM wParam, LPARAM lParam)
+    {
+        auto* msg = reinterpret_cast<MSG*>(lParam);
+        if (code == HC_ACTION && wParam == PM_REMOVE && msg && msg->message == WM_MOUSEWHEEL &&
+            wheelHandler(GET_WHEEL_DELTA_WPARAM(msg->wParam)))
+        {
+            msg->message = WM_NULL;
+        }
+        return CallNextHookEx(nullptr, code, wParam, lParam);
+    }
+
+    BOOL CALLBACK findGameWindow(HWND window, LPARAM out)
+    {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(window, &pid);
+        wchar_t cls[16] = {};
+        if (pid == GetCurrentProcessId() && GetClassNameW(window, cls, 16) && wcscmp(cls, L"Sacred") == 0)
+        {
+            *reinterpret_cast<HWND*>(out) = window;
+            return FALSE;
+        }
+        return TRUE;
+    }
+
     // Whether the foreground window belongs to the game.
     bool gameHasFocus()
     {
@@ -927,6 +1010,51 @@ bool Ui::keyDown(int vk)
     return !Automation::isolatedInput() && gameHasFocus() && (GetAsyncKeyState(vk) & 0x8000) != 0;
 }
 
+namespace
+{
+    // The clip the Lua thread records commands with (Ui::setClip).
+    bool g_clipOn = false;
+    float g_clipRect[4] = {};
+}
+
+void Ui::setClip(bool on, float x, float y, float w, float h)
+{
+    std::scoped_lock lock(g_lock);
+    g_clipOn = on;
+    g_clipRect[0] = x;
+    g_clipRect[1] = y;
+    g_clipRect[2] = std::max(0.0f, w);
+    g_clipRect[3] = std::max(0.0f, h);
+}
+
+int Ui::takeWheel()
+{
+    findBild();
+    if (!g_setWheel && !g_wheelHook)
+    {
+        // Without SacredBild: a message hook on the game window's thread, once the window exists.
+        HWND window = nullptr;
+        EnumWindows(&findGameWindow, reinterpret_cast<LPARAM>(&window));
+        if (window)
+        {
+            std::call_once(g_wheelOnce, [window] {
+                HMODULE self = nullptr;
+                GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   reinterpret_cast<LPCWSTR>(&wheelHook), &self);
+                g_wheelHook = SetWindowsHookExW(WH_GETMESSAGE, &wheelHook, self, GetWindowThreadProcessId(window, nullptr));
+                LOG("UI: the mouse wheel over mod UI through Gear's message hook: {}", g_wheelHook ? "on" : "failed");
+            });
+        }
+    }
+    return g_wheel.exchange(0);
+}
+
+int Ui::takePadScroll()
+{
+    findBild();
+    return g_takeScroll ? g_takeScroll() : 0;
+}
+
 bool Ui::add(Command&& command)
 {
     if (command.layer >= Layer::Count)
@@ -934,6 +1062,28 @@ bool Ui::add(Command&& command)
         return false;
     }
     std::scoped_lock lock(g_lock);
+    if (g_clipOn && command.window < 0)
+    {
+        if (command.kind == Kind::Region)
+        {
+            const float x0 = std::max(command.x, g_clipRect[0]), y0 = std::max(command.y, g_clipRect[1]);
+            const float x1 = std::min(command.x + command.w, g_clipRect[0] + g_clipRect[2]);
+            const float y1 = std::min(command.y + command.h, g_clipRect[1] + g_clipRect[3]);
+            if (x1 <= x0 || y1 <= y0)
+            {
+                return true;    // hidden: it takes no mouse
+            }
+            command.x = x0;
+            command.y = y0;
+            command.w = x1 - x0;
+            command.h = y1 - y0;
+        }
+        else
+        {
+            command.clipped = true;
+            std::copy(std::begin(g_clipRect), std::end(g_clipRect), std::begin(command.clip));
+        }
+    }
     if (g_recorded >= kMaxCommands)
     {
         return false;
@@ -1000,6 +1150,11 @@ bool Ui::install()
     if (g_setCursorFilter && g_setCursorFilter(&cursorOverModUi))
     {
         LOG("UI: the game's windows and the world do not see the cursor over mod UI");
+    }
+    if (g_setWheel)
+    {
+        g_setWheel(&wheelHandler);
+        LOG("UI: the mouse wheel over mod UI comes from SacredBild");
     }
     return ok;
 }
@@ -1087,6 +1242,72 @@ bool Ui::window(const std::string& name, WindowInfo& out)
     return false;
 }
 
+namespace
+{
+    bool callShow(uintptr_t window, bool shown)
+    {
+        __try
+        {
+            // The visible bit (1) of the control's flags, set and cleared as the engine does (00732550 / 007325C0), which
+            // also tell the window (vtable +0x24).
+            if (!Gear::Addr::cUI_Popup_show || !Gear::Addr::cUI_Control_clearFlags)
+            {
+                return false;
+            }
+            if (shown)
+            {
+                Gear::Addr::cUI_Popup_show(reinterpret_cast<void*>(window), 1);
+            }
+            else
+            {
+                Gear::Addr::cUI_Control_clearFlags(reinterpret_cast<void*>(window), 1);
+            }
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+}
+
+bool Ui::setWindowShown(const std::string& name, bool shown)
+{
+    WindowInfo info;
+    const uintptr_t m = manager();
+    if (!window(name, info))
+    {
+        return false;
+    }
+    const uintptr_t w = windowAt(m, info.slot);
+    return w && callShow(w, shown);
+}
+
+namespace
+{
+    std::atomic<uintptr_t> g_engine{0};
+
+    // cWorldView_drawOverheadLabels (ENG 00627180) sets bit 0x4000 of the world view's flags (+0x10) each frame
+    // from GetAsyncKeyState(VK_MENU) and draws the item and object labels while it is set: the game's "show text".
+    // The view is views[viewIndex] of the engine (+0x08, 8 pointers; index uint16 at +0x48).
+    bool showText()
+    {
+        const uintptr_t engine = g_engine.load(std::memory_order_relaxed);
+        if (!engine)
+        {
+            return false;
+        }
+        const uint16_t index = readOr<uint16_t>(engine + 0x48, 0xFFFF);
+        const uintptr_t view = index < 8 ? readOr<uintptr_t>(engine + 0x08 + 4 * index, 0) : 0;
+        return view && (readOr<uint32_t>(view + 0x10, 0) & 0x4000) != 0;
+    }
+}
+
+void Ui::setEngine(void* engine)
+{
+    g_engine.store(reinterpret_cast<uintptr_t>(engine), std::memory_order_relaxed);
+}
+
 Ui::State Ui::state()
 {
     State s;
@@ -1115,6 +1336,7 @@ Ui::State Ui::state()
     }
     s.escapeMenu = visible(windowAt(m, kEscapeMenuSlot));
     s.messageBox = visible(readOr<uintptr_t>(m + 0x144, 0));
+    s.showText = std::strcmp(s.mode, "game") == 0 && showText();
     if (Gear::Addr::cMouse_instance)
     {
         if (const uint8_t* mouse = Gear::Addr::cMouse_instance())

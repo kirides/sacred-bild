@@ -96,6 +96,33 @@ local function gallery()
     ui.label('hover', 'Rest the cursor here for a tooltip', x, y + 76,
         {tooltip = 'Tooltips work on every widget', color = 0xFFB0B0B0})
 end
+-- A scroll area: a wrapped paragraph and 100 lines (every tenth a button) in a resizable panel; the wheel, the
+-- scrollbar, the keys (Up, Down, PageUp, PageDown, Home, End) and the D-pad scroll it.
+local LINES = {}
+for i = 1, 100 do LINES[i] = ('Line %d of 100'):format(i) end
+local INTRO = 'A scroll area clips what lies outside it, and what is clipped takes no clicks. Wrapped with '
+    .. 'ui.text_wrap, which measures the text in its font.'
+local function scroll_demo()
+    local p = ui.panel('scroll', 'Scroll area', 16, 400, 260, 280, {resizable = true, min_width = 200, min_height = 160})
+    if not p.open then return end
+    local x, y = p.content_x, p.content_y
+    local w, h = p.x + p.w - 8 - x, p.y + p.h - 8 - y
+    local area = ui.scroll_begin('list', x, y, w, h, {step = 20})
+    local lines, th = ui.text_wrap(INTRO, area.w - 6, {})
+    local cy = area.content_y
+    for i, line in ipairs(lines) do ui.text(line, x + 2, cy + (i - 1) * (th / #lines), {color = 0xFFB0B0B0}) end
+    cy = cy + th + 6
+    for i, line in ipairs(LINES) do
+        local ly = cy + (i - 1) * 20
+        if i % 10 == 0 then
+            if ui.button('line' .. i, x + 2, ly, area.w - 8, 18, line .. ' (a button)') then G.clicks = G.clicks + 1 end
+        else
+            ui.text(line, x + 4, ly, {height = 20, valign = 'middle'})
+        end
+    end
+    ui.scroll_end(cy - area.content_y + #LINES * 20)
+end
+
 local function inventory_note(state)
     local inv = ui.window('UI_WND_INVENTORY')
     if inv and inv.drawn then
@@ -122,7 +149,7 @@ gear.on('draw', function(state)
     if not state or state.mode ~= 'game' or state.exclusive then return end
     local hero = gear.world.hero()
     if gear.settings.get('panel') then panel(hero) end
-    if gear.settings.get('images') then gallery() end
+    if gear.settings.get('images') then gallery(); scroll_demo() end
     if gear.settings.get('inventory') then inventory_note(state) end
     if gear.settings.get('fonts') then fonts() end
     -- The top layer lies over the escape menu and message boxes too.

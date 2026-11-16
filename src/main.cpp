@@ -183,7 +183,7 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
         Log::init(Instance::logPath(gameDir, L"SacredBild.log").c_str());
         LOG("SacredBild " __DATE__ " " __TIME__);
         ConfigFile::load(gameDir);
-        CrashDump::install(Instance::automation() ? Instance::directory(gameDir) : gameDir, L"SacredBild-crash");
+        CrashDump::install(Instance::active() ? Instance::directory(gameDir) : gameDir, L"SacredBild-crash");
         enableDpiAwareness();
 
         // `reserved` is null when the game loads ddraw.dll with LoadLibrary, after its entry point.

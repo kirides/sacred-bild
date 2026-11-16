@@ -96,11 +96,11 @@ namespace
     }
 
     // 1: created (id in `id`), 0: the game returned 0, -1: fault.
-    int callCreate(void* m, uint32_t type, WorldPos* pos, uint32_t& id)
+    int callCreate(void* m, uint32_t type, WorldPos* pos, bool broadcast, uint32_t& id)
     {
         __try
         {
-            id = Addr::cObjectManager_create(m, type, pos, 0, 0, 0);
+            id = Addr::cObjectManager_create(m, type, pos, 0, broadcast ? 1 : 0, 0);
             return id ? 1 : 0;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -209,10 +209,24 @@ bool World::available()
            Addr::cObject_typeDescriptor && Addr::cCreature_typeDescriptor && manager();
 }
 
+bool World::networkGame()
+{
+    // 0x0182EBEC is the byte after the variable the signature finds (0x0182EBE8). Unknown: treat as a network game.
+    uint8_t flag = 1;
+    return !Addr::g_pNetPlayers || !safeCopy(&flag, reinterpret_cast<const void*>(Addr::g_pNetPlayers.address + 4), 1) ||
+           flag != 0;
+}
+
+bool World::setNetworkFlagForTest(bool on)
+{
+    const uint8_t flag = on ? 1 : 0;
+    return Addr::g_pNetPlayers && safeStore(reinterpret_cast<void*>(Addr::g_pNetPlayers.address + 4), &flag, 1);
+}
+
 bool World::changesAllowed()
 {
     void* m = manager();
-    if (!available() || !hero())
+    if (!available() || !hero() || networkGame())
     {
         return false;
     }
@@ -301,10 +315,25 @@ std::vector<uint32_t> World::creaturesNear(const Position& at, double radius, si
 
 uint32_t World::spawn(uint32_t type, const Position& at, const char*& error)
 {
-    void* m = manager();
     if (!Addr::cObjectManager_create || !changesAllowed())
     {
         error = "world changes are not possible now (no single player game, or the address was not found)";
+        return 0;
+    }
+    return createObject(type, at, false, error);
+}
+
+bool World::inventoryChangesAllowed()
+{
+    return available() && hero() && (networkGame() || changesAllowed());
+}
+
+uint32_t World::createObject(uint32_t type, const Position& at, bool broadcast, const char*& error)
+{
+    void* m = manager();
+    if (!Addr::cObjectManager_create || !available())
+    {
+        error = "the object functions were not found";
         return 0;
     }
     if (type == 0 || type >= kTypeCount)
@@ -322,7 +351,7 @@ uint32_t World::spawn(uint32_t type, const Position& at, const char*& error)
     pos.y = at.y;
     pos.layer = at.layer;
     uint32_t id = 0;
-    const int result = callCreate(m, type, &pos, id);
+    const int result = callCreate(m, type, &pos, broadcast, id);
     if (result < 0)
     {
         LOG("World: creating type {} at {},{} faulted", type, at.x, at.y);

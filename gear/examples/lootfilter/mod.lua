@@ -34,7 +34,8 @@ return {
     },
     settings = {
         {id = 'enabled', type = 'bool', label = 'Filter on', default = true, section = 'General', tooltip = 'Off: the hero picks up everything'},
-        {id = 'overlay', type = 'bool', label = 'Show the rules overlay', default = true, section = 'General'},
+        {id = 'overlay', type = 'bool', label = 'Show overlay', default = true, section = 'General',
+            tooltip = 'The rules overlay, shown while Alt shows the labels. Off: never (the panel stays on its key)'},
         {id = 'radius', type = 'number', label = 'Look around the hero (tiles)', min = 5, max = 100, step = 5, default = 40, section = 'General'},
         {id = 'dim_alpha', type = 'number', label = 'Dim filtered labels', min = 0, max = 255, step = 5, default = 70, section = 'General',
             tooltip = 'Alpha of the labels of filtered items (255: not dimmed)'},

@@ -91,6 +91,23 @@ GEAR = [
     ('cObjectManager_destroy', 0x005FBDB0, 'func'),
     ('cItem_dataHash', 0x0042BF20, 'func'),
     ('cItem_entriesInsert', 0x005C9230, 'func'),
+    # Socketing: the engine's "insert upgrade" (thiscall (item, upgrade id, socket) -> bool, ret 8).
+    ('cItem_insertUpgrade', 0x005BFF60, 'func'),
+    # Item tooltips (gear/itemtip.cpp): the reserved popup of the UI manager and the calls the inventory's hover uses.
+    ('cUI_Manager_getPopup', 0x0075B1E0, 'func'),
+    ('cUI_Popup_addFlags', 0x006E8860, 'func'),
+    # SacredBild detours the start of this one and its own signature window covers the first 0x1B bytes, so the
+    # signature is taken further in (0x6E6ED6, `mov al, [esp + 0x1C]`): the function is that address minus 0x36.
+    ('cUI_Popup_setTextBody', 0x006E6ED6, 'code'),
+    ('cUI_Popup_show', 0x00732550, 'func'),
+    ('cUI_Control_clearFlags', 0x007325C0, 'func'),
+    ('cUI_Popup_setOwner', 0x006E81C0, 'func'),
+    ('engine_alloc', 0x008321A0, 'func'),
+    ('engine_free', 0x0041D3B0, 'func'),
+    # An item's record set and announced to the peers (0x16C) in a network game.
+    ('cItem_setRecord', 0x005C0810, 'func'),
+    # cWeapon3D's network read / write (vtable slot 8): tells weapons from other items (their four extra dwords).
+    ('cWeapon3D_netIO', 0x005CF2D0, 'func'),
     # Saving (gear/save.cpp). The savegame window's event (code 0xF, sub 2; its class is made by the factory 0x8080A0
     # as `*p = &vtable`, 0x24 bytes) goes to cEngine::receiveEvent (0x618090, vtable slot 0 of the engine): it records
     # the slot and sets bit 0x40 of the engine's flags (+0x54), which the render thread loop turns into the write of
@@ -106,6 +123,19 @@ GEAR = [
     ('abilityTable2End', 0x00955344, 'data', 0x004D232A),
     ('textResources_instance', 0x006725E0, 'func'),
     ('textResources_get', 0x00672C90, 'func'),
+    # Realms (gear/realm.cpp). The network object (g_pNetPlayers, 0x7D7A70) holds the lobby fields: +0x38 an IP override,
+    # +0x3C the port and +0x39E4 the host (a string of three pointers begin / end / capacity); the login and register
+    # calls copy the host each time. The network menu runs 0x7D8560 (thiscall (net, flag), ret 4) when a network
+    # screen opens: it reads Settings.cfg into the object with 0x7EDEA0 (thiscall (net)) and then makes the game
+    # client's network and the lobby connection (0x7D2BD0 -> 0x7CCBE0), which read the port with 0x81E400 (thiscall (config) -> port) at 0x7CCD28. The object writes itself back to Settings.cfg with 0x7EE780 (thiscall (net), fastcall in the exe).
+    # The lobby connection (0x182EBD0; +8 / +0x10 tell that it is connected) and the string's assign (thiscall
+    # (string*, first, last, allocator*), ret 0xC) the engine itself copies NETWORK_LOBBY in with.
+    ('g_pLobby', 0x0182EBD0, 'data'),
+    ('cString_assign', 0x00415BD0, 'func'),
+    ('cNet_openScreen', 0x007D8560, 'func'),
+    ('cNet_loadSettings', 0x007EDEA0, 'func'),
+    ('cNet_saveSettings', 0x007EE780, 'func'),
+    ('lobbyPortCall', 0x007CCD28, 'code'),
     # The difficulty level of the running game (0 .. 4): the engine's own code indexes tables with it (ReBorn's appended code too).
     ('g_difficulty', 0x0182EE44, 'data'),
 ]

@@ -59,6 +59,10 @@ function GearAuto.down(button) end
 ---@param button? GearMouseButton Default `'lbutton'`.
 function GearAuto.up(button) end
 
+--- The mouse wheel at the cursor, as `WM_MOUSEWHEEL`: + away from the player (scrolls up), - towards.
+---@param notches? number Default 1.
+function GearAuto.wheel(notches) end
+
 ---@param key GearAutoKey
 function GearAuto.key_down(key) end
 
@@ -67,6 +71,19 @@ function GearAuto.key_up(key) end
 
 --- Releases everything held.
 function GearAuto.release() end
+
+--- The controller without one: posts pad events as SacredBild's controller does (D-pad steps on a slider, B presses,
+--- mod menu button presses).
+---@param nudge? integer
+---@param back? integer
+---@param menu? integer
+function GearAuto.pad(nudge, back, menu) end
+
+--- The stops SacredBild holds for the controller: their count (-1 stale, -2 no SacredBild) and flags (1 modal, 2 a
+--- mod window is open).
+---@return integer count
+---@return integer flags
+function GearAuto.nav() end
 
 --- In a task: moves, presses and releases with short pauses, as a player would. Client pixels.
 ---@param x number
@@ -142,6 +159,27 @@ function GearAuto.site_hook_selftest_result() end
 ---@param text string
 ---@return boolean? ok
 function GearAuto.write(name, text) end
+
+---Starts GameServer.exe the way the game does for a hosted LAN game (with Sacred Gear injected when mods overlay files),
+---lets it run `seconds` (default 8) and ends it. Its logs are in the game folder (SacredGear-server.log, SacredBild-server.log).
+---@param seconds? number
+---@return integer pid 0 if it did not start
+function GearAuto.start_gameserver(seconds) end
+
+--- Shows or hides an in-game window by its control name (`UI_WND_CHEST` ...) through the window's own `show`, without the
+--- events that normally open it (the chest window opens when the hero uses a chest). For self tests; false if there is
+--- no such window.
+---@param name string
+---@param shown boolean
+---@return boolean ok
+function GearAuto.show_window(name, shown) end
+
+--- Sets or clears the engine's network-game flag (the byte the engine's own object and inventory code test), to test that
+--- the guards (`world.can_change`, inventory changes, `spawn`) refuse in a network game. Set it, test and clear it in the
+--- same tick: nothing else runs in between.
+---@param on boolean
+---@return boolean ok
+function GearAuto.network_flag(on) end
 
 --- Ends the game at once with that exit code.
 ---@param code? integer Default 0.

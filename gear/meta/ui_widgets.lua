@@ -12,6 +12,7 @@
 ---@field tooltip? string Shown after the cursor rests on the widget for 0.4 s.
 ---@field layer? GearLayer Default `'hud'`.
 ---@field enabled? boolean `false`: greyed out, no clicks.
+---@field nav? boolean Default true (regions and every widget): a stop of the controller's D-pad. `false` for rectangles that only take the mouse (backgrounds, blockers).
 
 ---@class GearLabelOpts : GearWidgetOpts
 ---@field font? 'ui'|'game1'|'game2'|'game3'|'game4'|'game5'|'game6'|'game7'|integer
@@ -31,6 +32,25 @@
 ---@field spacing? number Between the options (default 18 vertical, 8 horizontal).
 ---@field tooltips? string[] One per option.
 
+---@class GearDropdownOpts : GearWidgetOpts
+---@field max_rows? integer The open list shows at most this many entries and scrolls (default 12).
+
+---@class GearScrollOpts
+---@field step? number One line: Up / Down, an arrow button and the D-pad move it, a wheel notch three (default 20).
+---@field layer? GearLayer Default `'hud'`.
+---@field nav? boolean `false`: the area is no stop of the controller's D-pad.
+
+--- What `scroll_begin` returns: the viewport (without the scrollbar) and where the content starts.
+---@class GearScrollArea
+---@field x number
+---@field y number
+---@field w number The viewport's width (the area's, less the scrollbar when it shows).
+---@field h number
+---@field offset number How far the content is scrolled (0 .. max).
+---@field max number
+---@field content_x number Where the content's top-left lies: draw at `content_y + its own y`.
+---@field content_y number
+
 ---@class GearSliderOpts : GearWidgetOpts
 ---@field step? number Default 1.
 ---@field format? string|false A `string.format` format for the number shown (default `'%g'`); false: no number.
@@ -42,6 +62,8 @@
 ---@field min_width? number Default 120.
 ---@field min_height? number Default 60.
 ---@field background? GearColor
+---@field back? boolean Default true: the controller's B closes the panel while it is the topmost closable one; `false`: the mod handles B itself (`ui.back_pressed`).
+---@field passive? boolean A closable panel that should not take the controller (no cursor, B not caught): a HUD-like panel.
 
 --- What `gear.ui.region` reports.
 ---@class GearRegionState
@@ -78,6 +100,25 @@ local GearUi = {}
 ---@param opts? GearWidgetOpts
 ---@return GearRegionState
 function GearUi.region(id, x, y, w, h, opts) end
+
+--- Options of `tooltip_rect`.
+---@class GearTooltipRectOpts
+---@field x? number The point to keep clear (default: the cursor's hotspot).
+---@field y? number
+---@field bounds? number[] `{left, top, right, bottom}` the tooltip must stay inside (default: the screen); pass a panel's rectangle to keep it in that panel.
+---@field cursor? boolean `false`: the point has no cursor sprite below and right of it, so only a small gap is kept (default true).
+
+--- Where to put a `w` x `h` tooltip, or any popup beside the cursor, so that it never lies under the game's cursor
+--- sprite (an arrow reaching about 30 x 38 layout units right and down of the hotspot) and stays inside the screen.
+--- The default place is below the cursor's tip, to its right; when that leaves `bounds` it flips to below-left,
+--- above-right, above-left, then beside the cursor, and as a last resort is clamped and pushed off the sprite. The
+--- widgets' `tooltip` option already uses it. Returns the top-left corner.
+---@param w number
+---@param h number
+---@param opts? GearTooltipRectOpts
+---@return number x
+---@return number y
+function GearUi.tooltip_rect(w, h, opts) end
 
 --- Text in the widgets' look (the UI font), with a tooltip if `opts.tooltip`.
 ---@param id string|integer
@@ -129,17 +170,68 @@ function GearUi.radio(id, x, y, text, selected, opts) end
 ---@return integer index
 function GearUi.radio_group(id, x, y, options, index, opts) end
 
---- The open list lies on the top layer; a click beside it closes it.
+--- The open list is drawn after every draw handler, over all panels and text, on the top layer, and takes the mouse
+--- first; it shows at most `opts.max_rows` (12) entries and scrolls (wheel, scrollbar, keys, D-pad), the selected one
+--- in view when it opens. A click beside it closes it.
 ---@param id string|integer
 ---@param x number
 ---@param y number
 ---@param w number
 ---@param options string[]
 ---@param index integer The selected option (1-based).
----@param opts? GearWidgetOpts
+---@param opts? GearDropdownOpts
 ---@return boolean changed
 ---@return integer index
 function GearUi.dropdown(id, x, y, w, options, index, opts) end
+
+--- Starts a vertically scrollable area: until `scroll_end`, what is drawn is clipped to its viewport (rects, images,
+--- the UI font's text; the game's fonts and item models only when wholly inside) and regions are cut to it, so a
+--- widget scrolled out of sight takes no click. Draw the content at `content_y + its own y`. The wheel scrolls the
+--- area under the cursor (3 lines a notch), Up / Down / PageUp / PageDown / Home / End the one under the cursor or
+--- clicked last, the controller's D-pad (SacredBild) the one its cursor is in, once no widget lies further that way
+--- inside it, and the right stick as a wheel. The offset is kept per id for the session. Areas nest.
+---@param id string|integer
+---@param x number
+---@param y number
+---@param w number
+---@param h number
+---@param opts? GearScrollOpts
+---@return GearScrollArea area
+function GearUi.scroll_begin(id, x, y, w, h, opts) end
+
+--- Ends the innermost scroll area and draws its scrollbar (arrows, track: a click pages, thumb: drag it) when the
+--- content is taller than the viewport.
+---@param content_height? number The content's height (default: the last one given).
+---@return number offset
+---@return number max
+function GearUi.scroll_end(content_height) end
+
+--- Sets a scroll area's offset (clamped when it is drawn next).
+---@param id string|integer
+---@param offset number
+function GearUi.scroll_to(id, offset) end
+
+--- A scroll area's offset and its largest offset (as of its last frame); 0, 0 for an unknown id.
+---@param id string|integer
+---@return number offset
+---@return number max
+function GearUi.scroll_offset(id) end
+
+--- The mouse wheel's notches over mod UI this tick (+ away from the player, as Windows counts them; 0: none; a
+--- notch is 1), and whether a scroll area already took them. Over a mod's widget the game does not get the wheel.
+---@return number notches
+---@return boolean taken
+function GearUi.wheel() end
+
+--- The text broken into lines that fit `width` (at spaces; a word longer than the width gets a line of its own;
+--- `\n` breaks too), in the font of `opts` (as `text` takes it), and the lines' total height. Cached per text, width
+--- and font.
+---@param text string
+---@param width number
+---@param opts? GearTextOpts
+---@return string[] lines
+---@return number height
+function GearUi.text_wrap(text, width, opts) end
 
 ---@param id string|integer
 ---@param x number
@@ -164,6 +256,25 @@ function GearUi.slider(id, x, y, w, min, max, value, opts) end
 ---@param opts? GearPanelOpts
 ---@return GearPanel
 function GearUi.panel(id, title, x, y, w, h, opts) end
+
+--- The controller: while on, the mod's screen has the pad alone. Only its widgets are D-pad stops (the game's controls
+--- and other mods' are not), the cursor starts on its first widget, and B is `back_pressed()`. Switch it off when the
+--- screen closes (it is also dropped when the mod unloads).
+---@param on boolean
+function GearUi.nav_modal(on) end
+
+--- The controller's B was pressed: true once per press (consumed). B closes an open dropdown and the topmost closable
+--- panel by itself; a `nav_modal` screen or a panel with `back = false` asks here.
+---@return boolean
+function GearUi.back_pressed() end
+
+--- An entry of the controller's mod menu (Sacred Gear's mod menu button, LT + LB by default): for a tool a player
+--- would otherwise reach with a hotkey, Alt or a small button. The keys a mod declares in mod.lua are listed there
+--- by themselves; calling it again with the same id changes the entry.
+---@param id string
+---@param label string
+---@param fn fun()
+function GearUi.menu_item(id, label, fn) end
 
 --- Opens or closes a panel.
 ---@param id string|integer

@@ -3,6 +3,7 @@
 #include "instance.h"
 #include "log.h"
 #include "lua_host.h"
+#include "overlay.h"
 #include "patch.h"
 
 #include <ddraw.h>
@@ -845,6 +846,8 @@ namespace
                     else
                     {
                         LOG("Automation: cannot load savegame {}: {}", g_options.loadSlot, error);
+                        // A run that was asked to load a savegame has nothing to do without it: end it cleanly.
+                        Automation::quit(4, "load failed");
                     }
                     loadDone = true;
                 }
@@ -1000,7 +1003,7 @@ namespace
 
 void Automation::installInstance(const std::wstring& gameDir)
 {
-    if (!options().enabled)
+    if (!options().enabled && !Instance::active())
     {
         return;
     }
@@ -1014,6 +1017,11 @@ void Automation::installInstance(const std::wstring& gameDir)
         Patch::iat("KERNEL32.dll", "OpenMutexA", reinterpret_cast<void*>(&hookOpenMutexA)));
     g_origExitProcess = reinterpret_cast<ExitProcessFn>(
         Patch::iat("KERNEL32.dll", "ExitProcess", reinterpret_cast<void*>(&hookExitProcess)));
+    if (!options().enabled)
+    {
+        // A manual instance: only the title suffix; no isolation, no automation.
+        hookImport(g_origCreateWindowExA, "CreateWindowExA", &hookCreateWindowExA);
+    }
     LOG("Automation instance {} (pid {}): {}", g_options.instance, GetCurrentProcessId(),
         g_origCreateMutexA ? "the game's mutex is named after it" : "the game does not import CreateMutexA");
 }
@@ -1253,6 +1261,25 @@ void Automation::button(int vk, bool down)
     post(w, message, state, pos);
 }
 
+void Automation::wheel(int delta)
+{
+    HWND w = window();
+    WPARAM state;
+    LPARAM pos;
+    {
+        std::lock_guard guard(g_inputLock);
+        state = buttonState();
+        pos = cursorParam();
+    }
+    // The wheel's position is in screen coordinates.
+    POINT p = {static_cast<SHORT>(LOWORD(pos)), static_cast<SHORT>(HIWORD(pos))};
+    if (w)
+    {
+        ClientToScreen(w, &p);
+    }
+    post(w, WM_MOUSEWHEEL, MAKEWPARAM(LOWORD(state), static_cast<WORD>(static_cast<SHORT>(delta))), MAKELPARAM(p.x, p.y));
+}
+
 void Automation::key(int vk, bool down)
 {
     if (vk <= 0 || vk > 0xFE)
@@ -1333,6 +1360,21 @@ bool Automation::loadSave(int slot, const char*& error)
     {
         error = "only from the menus";
         return false;
+    }
+    // The game opens the file through the same path resolution, so a mod's save folder (the overlay's `saves`
+    // rule) counts. A missing savegame must not reach the game: it crashes in the loader (Sacred.exe+20DD99).
+    {
+        char name[32];
+        snprintf(name, sizeof(name), "Save\\GAME%02d.PAK", slot);
+        const std::string resolved = Overlay::resolve(name);
+        const DWORD attributes = GetFileAttributesA(resolved.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY))
+        {
+            static std::string message;
+            message = "the savegame file does not exist: " + resolved;
+            error = message.c_str();
+            return false;
+        }
     }
     // As the savegame window does in single player (0071CC90 action 6): the local hero is id 1, then the message.
     const uint32_t one = 1;

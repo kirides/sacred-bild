@@ -87,6 +87,7 @@ namespace Automation
     // Input. Positions in client pixels.
     void mouseMove(int x, int y);
     void button(int vk, bool down);         // VK_LBUTTON, VK_RBUTTON, VK_MBUTTON at the current position
+    void wheel(int delta);                  // WM_MOUSEWHEEL at the current position (120 a notch, + away)
     void key(int vk, bool down);
     void character(wchar_t ch);             // WM_CHAR (typing into edit fields)
     // Whether automation holds key `vk` down (its own key state, which the game's key queries see too), and whether

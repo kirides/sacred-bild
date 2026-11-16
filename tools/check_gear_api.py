@@ -145,6 +145,8 @@ def main():
             members('GearFiles'))
     game_src = re.search(r'^    gear\.game = \{(.*?)^    \}', kernel, re.M | re.S)
     compare('gear.game', set(re.findall(r'^\s{8}(\w+) = function', game_src.group(1), re.M)) if game_src else set(), members('GearGame'))
+    realm_src = re.search(r'^    realm_api = \{(.*?)^    \}', kernel, re.M | re.S)
+    compare('gear.realm', set(re.findall(r'^        (\w+) = function', realm_src.group(1), re.M)) if realm_src else set(), members('GearRealmApi'))
     hooks_src = re.search(r'^\s{8}hooks = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.hooks', set(re.findall(r'^\s{12}(\w+) = function', hooks_src.group(1), re.M)) if hooks_src else set(), members('GearHooks'))
     view = set(re.findall(r'^\s*function view:(\w+)\(', kernel, re.M))
@@ -197,7 +199,7 @@ def main():
     for name, c in model.classes.items():
         if name.endswith('Opts'):
             opt_fields |= {f.name for f in c.fields}
-    for n in sorted(set(re.findall(r'\bopts\.(\w+)', kernel)) - opt_fields):
+    for n in sorted({n for n in re.findall(r'\bopts\.(\w+)', kernel) if not n.startswith('_')} - opt_fields):
         problems.append(f'opts: "{n}" is read by kernel.lua but is a field of no *Opts class')
     rules = set(re.findall(r'\brules\.(\w+)', kernel))
     compare('pickup rules', rules, fields('GearPickupRules'))

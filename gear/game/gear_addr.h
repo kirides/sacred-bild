@@ -126,6 +126,19 @@ namespace Gear::Addr
     // entries (begin / end / capacity pointers at +0x100 / +0x104 / +0x108 of the item; `this` is item + 0x100).
     // ret 0xC.
     inline Sacred::Thiscall<void(void* vector, void* pos, uint32_t count, const void* fill)> cItem_entriesInsert{};
+    // ENG 005BFF60 ("insert upgrade"): thiscall (item, upgrade item id, socket) -> 1 if it went in, ret 8. The
+    // blacksmith's socket window calls it (006A2660): the upgrade item (a rune) is checked (cItemBase, free socket
+    // left: the item's record +0x124..+0x12B counts the sockets), its bonuses are added to the item's record (+0x12C
+    // ...), its own 0x82-byte record is appended to the item's entries and the upgrade item is destroyed.
+    inline Sacred::Thiscall<uint8_t(void* item, uint32_t upgradeId, uint32_t socket)> cItem_insertUpgrade{};
+    // ENG 005C0810: thiscall (item, record*, notify) ret 8: copies the 0x82-byte record into the item (+0x118), makes
+    // the number at its +8 and, in a network game with notify, announces the whole item (its entries and record, as
+    // the engine does after socketing or repairing: message 0x16C) to the peers.
+    inline Sacred::Thiscall<void(void* item, void* record, uint32_t notify)> cItem_setRecord{};
+    // ENG 005CF2D0: cWeapon3D's network read / write (vtable slot 8, thiscall (stream, write, code), ret 0xC). Gear
+    // only compares an item's slot 8 with it to tell weapons, which keep four more dwords (+0x19C, +0x1AC, +0x1A0,
+    // +0x1BC) that the engine's save and network code copy after the common item data.
+    inline Sacred::Thiscall<uint32_t(void* weapon, void* stream, int write, uint32_t code)> cWeapon3D_netIO{};
 
     // Saving (gear/save.cpp). ENG 00890B38: the vtable of the savegame window's event (0x24 bytes; slot 1 returns the
     // code, 0xF). The event goes to cEngine::receiveEvent (ENG 00618090, vtable slot 0 of the engine object, thiscall
@@ -166,6 +179,22 @@ namespace Gear::Addr
     inline uintptr_t siteFn559BF0{};
     inline uintptr_t siteFn56B130{};
 
+    // Realms (gear/realm.cpp). The network object (g_pNetPlayers) keeps the lobby fields: +0x38 the IP override (0 =
+    // none), +0x3C the port, +0x39E4 the host (a string: begin, end, capacity pointers). ENG 007D8560: what the
+    // network menu runs when a network screen opens, thiscall (net, flag), ret 4; it calls 007EDEA0 (thiscall (net):
+    // Settings.cfg into the object) and then makes the game client's network and the lobby connection, which read
+    // the port with 0081E400 (thiscall (config) -> NETWORK_LOBBYPORT) at 007CCD28. ENG 0182EBD0: the lobby connection (nullptr until then).
+    // ENG 00415BD0: the string's assign, thiscall (string*, first, last, allocator*), ret 0xC: the call the engine's
+    // own settings reader copies NETWORK_LOBBY in with.
+    inline Sacred::Global<uint8_t*> g_pLobby{};
+    inline Sacred::Thiscall<void(void* net, uint32_t flag)> cNet_openScreen{};
+    inline Sacred::Thiscall<void(void* net)> cNet_loadSettings{};
+    // ENG 007EE780: the object's lobby fields back into Settings.cfg (thiscall (net)); the login and register calls and
+    // 007D8560 run it.
+    inline Sacred::Thiscall<void(void* net)> cNet_saveSettings{};
+    inline uintptr_t lobbyPortCall{};     // ENG 007CCD28: `mov ecx, 0182EE78; call 0081E400` in the lobby connection's constructor
+    inline Sacred::Thiscall<void*(void* string, const char* first, const char* last, void* allocator)> cString_assign{};
+
     // ENG 0182EE44: the difficulty level of the running game (0 .. 4).
     inline Sacred::Global<int32_t> g_difficulty{};
     inline Sacred::Global<uint8_t> abilityTable1First{};
@@ -177,4 +206,26 @@ namespace Gear::Addr
     // tables hold (not the keys of global.res).
     inline Sacred::Cdecl<void*()> textResources_instance{};
     inline Sacred::Thiscall<const wchar_t* const*(void* self, uint32_t id)> textResources_get{};
+
+
+    // Item tooltips (gear/itemtip.cpp): what the inventory windows do when the cursor rests on an item. The equipment
+    // window's hover (006B7700) takes the UI manager's reserved popup (u16 at manager +0x54, ENG 0075B1E0 (index) ->
+    // cUI_Popup*), builds the item's text with its virtual function 17 (thiscall (std::vector<wchar_t>* out, record or
+    // 0, 0, 0x5F) ret 0x10: name in the rarity colour, price, protection, level and the bonus lines as colour codes),
+    // sets the popup's flags (006E8860 (0xA): clamp to the screen), its x / y (+0x24 / +0x28: the popup is centered on
+    // them in the 1024x768 layout), its text (006E6EA0 (0, vector*, 0) ret 0xC), shows it (00732550 (1)) and ties it
+    // to the item (006E81C0 (item id)). The vector's buffer comes from the engine's allocator (008321A0 (bytes), cdecl)
+    // and is freed with 0041D3B0 (stdcall (ptr, count)).
+    inline Sacred::Thiscall<void*(void* manager, uint32_t index)> cUI_Manager_getPopup{};
+    inline Sacred::Thiscall<void(void* popup, uint32_t flags)> cUI_Popup_addFlags{};
+    // ENG 006E6EA0 (ret 0xC): found by its body (see gen_gear_sigs.py), the entry is 0x36 bytes before.
+    inline uintptr_t cUI_Popup_setTextBody{};
+    inline Sacred::Thiscall<void(void* popup, uint32_t a, void* text, uint8_t b)> cUI_Popup_setText(){ return {cUI_Popup_setTextBody - 0x36}; }
+    inline Sacred::Thiscall<void(void* popup, uint32_t flag)> cUI_Popup_show{};
+    // ENG 007325C0: the counterpart of 00732550 (any cUI_Control2: flags |= bits there, flags &= ~bits here; bit 1 is
+    // "visible": the window's vtable +0x24 is told). ret 4. The automation helper that shows or hides a window uses both.
+    inline Sacred::Thiscall<void(void* control, uint32_t bits)> cUI_Control_clearFlags{};
+    inline Sacred::Thiscall<void(void* popup, uint32_t itemId)> cUI_Popup_setOwner{};
+    inline Sacred::Cdecl<void*(uint32_t bytes)> engine_alloc{};
+    inline Sacred::Thiscall<void(void* unused, void* ptr, uint32_t count)> engine_free{};
 }

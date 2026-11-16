@@ -12,6 +12,9 @@ namespace LuaHost
     // Before the first frame: the module (for the embedded kernel) and the game folder (mods\ is in it).
     void configure(HMODULE module, const std::wstring& gameDir);
 
+    // A file next to the mod manager's: mods\<file> (the run's own folder in an automation run).
+    std::wstring stateFilePath(const wchar_t* file);
+
     // One in-game frame on the engine thread; `dt` in seconds. Starts the state and loads the mods the first time.
     void frame(float dt);
 

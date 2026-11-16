@@ -911,9 +911,22 @@ function Container:take(item_id)
     return native.inv_remove(self.index, item_id)
 end
 
+-- inv.can_change() -> allowed, network: whether the local hero's inventory may be changed now (single player as
+-- world.can_change; in a network game too, through the engine's announcing calls, for the hero's own backpack and the
+-- chest), and whether a network game runs.
+function inv.can_change()
+    return native.inv_can_change()
+end
+
 -- inv.size(item_id) -> w, h | nil: the size in cells.
 function inv.size(item_id)
     return native.inv_size(item_id)
+end
+
+-- inv.socket(item_id, upgrade_id) -> true | nil, message: puts the upgrade item (a rune) into a free socket of the
+-- item, as the blacksmith does; the rune is consumed.
+function inv.socket(item_id, upgrade_id)
+    return native.inv_socket(item_id, upgrade_id)
 end
 
 -- inv.export(item_id) -> bytes | nil, message: the item's type and own data as a binary string (not where it is).
@@ -1104,6 +1117,54 @@ local ui_keys = {}          -- mod -> vk -> held at the last query
 local key_capture = {}      -- mod -> true: the mod keeps the keyboard from the game (ui.capture_keys)
 local ui_panel_list = {}    -- the panels of all mods drawn this tick, in order: {key, title, x, y, w, h, ...}
 local ui_panel_prev = {}    -- the last tick's
+-- The controller (SacredBild's D-pad): the widgets' rectangles are reported as stops each tick; the pad's events
+-- (slider nudges, B, the mod menu button) come back.
+local ui_nav = {}           -- this tick's stops: {mod, x, y, w, h, layer, kind, ax, ay, drop}
+local ui_nav_modal = nil    -- the mod whose screen takes the pad alone (ui.nav_modal)
+local ui_window_open = false    -- a closable panel is up this tick
+local ui_pad = {nudge = 0, back = 0, menu = 0}
+local ui_menu_items = {}    -- mod -> {{id, label, fn}} (ui.menu_item)
+-- Clipping and scrolling: a scroll area clips what is drawn inside it (and the regions: a widget scrolled out of
+-- sight takes no mouse); things that must lie over everything (an open dropdown's list) are drawn after all draw
+-- handlers (uis.defer).
+local uis = {}            -- the scroll areas' and deferred drawing's state (one local: the main chunk has few left)
+uis.clip_stack = {}    -- this tick's open clips {x, y, w, h}, innermost last
+uis.deferred = {}      -- functions run after every mod's draw handlers, in order
+uis.wheel = 0          -- wheel notches over mod UI this tick (+ away from the player, as WM_MOUSEWHEEL)
+uis.wheel_taken = false
+uis.pad_scroll = 0     -- D-pad lines in a scroll area this tick (+ down)
+uis.scroll_now = {}    -- this tick's scroll areas {key, x, y, w, h, layer}
+uis.scroll_prev = {}
+uis.scroll_hot = nil   -- the key of the topmost scroll area under the cursor (last tick's)
+uis.scroll_focus = nil -- the key of the scroll area clicked last (its keys work while the cursor is elsewhere)
+uis.SCROLLBAR = 12     -- the scrollbar's width
+
+function uis.defer(fn)
+    uis.deferred[#uis.deferred + 1] = fn
+end
+
+function uis.set_clip(c)
+    if not native.ui_clip then return end
+    if c then native.ui_clip(c.x, c.y, c.w, c.h) else native.ui_clip() end
+end
+
+-- Scroll math (also for the kernel tests): the offset clamped to 0..max, the thumb's size and place in a track.
+function uis.scroll_clamp(offset, content, view)
+    local max = math.max(0, content - view)
+    return math.max(0, math.min(max, offset)), max
+end
+function uis.scroll_thumb(offset, content, view, track)
+    local max = math.max(0, content - view)
+    local size = math.max(16, math.min(track, track * view / math.max(content, 1)))
+    local pos = max > 0 and (track - size) * offset / max or 0
+    return size, pos
+end
+function uis.scroll_from_thumb(pos, content, view, track, size)
+    local max = math.max(0, content - view)
+    if track - size <= 0 then return 0 end
+    return math.max(0, math.min(max, pos / (track - size) * max))
+end
+kernel.scroll_math = {clamp = uis.scroll_clamp, thumb = uis.scroll_thumb, from_thumb = uis.scroll_from_thumb}
 
 local function ui_handle(mod, id)
     local key = mod.id .. '\0' .. tostring(id)
@@ -1123,8 +1184,37 @@ local function ui_begin_tick()
     ui_prev_regions, ui_regions = ui_regions, {}
     ui_panel_prev, ui_panel_list = ui_panel_list, {}
     ui_tooltip = nil
+    ui_nav, ui_window_open = {}, false
+    do
+        local nudge, back, menu = native.ui_pad()
+        ui_pad = {nudge = nudge or 0, back = back or 0, menu = menu or 0}
+        -- B closes an open dropdown first.
+        if ui_pad.back > 0 and ui_dropdown then
+            ui_dropdown = nil
+            ui_pad.back = ui_pad.back - 1
+        end
+    end
+    uis.clip_stack, uis.deferred = {}, {}
+    uis.set_clip(nil)
+    do
+        local wheel, pad = 0, 0
+        if native.ui_wheel then wheel, pad = native.ui_wheel() end
+        uis.wheel, uis.pad_scroll, uis.wheel_taken = (wheel or 0) / 120, pad or 0, false
+    end
+    uis.scroll_prev, uis.scroll_now = uis.scroll_now, {}
     ui_tick_state = native.ui_state()
     ui_mouse.x, ui_mouse.y = ui_tick_state.mouse_x or 0, ui_tick_state.mouse_y or 0
+    -- The topmost scroll area under the cursor takes the wheel (layers in draw order, then the order drawn).
+    uis.scroll_hot = nil
+    do
+        local best = -1
+        for i, a in ipairs(uis.scroll_prev) do
+            local rank = a.layer * 100000 + i
+            if rank > best and ui_mouse.x >= a.x and ui_mouse.y >= a.y and ui_mouse.x < a.x + a.w and ui_mouse.y < a.y + a.h then
+                uis.scroll_hot, best = a.key, rank
+            end
+        end
+    end
     -- The topmost region of the last frame under the cursor (layers in draw order, then the order registered).
     ui_hot = nil
     local best = -1
@@ -1190,13 +1280,90 @@ end
 
 -- The tooltip of the widget hovered long enough, drawn last on the top layer beside the cursor.
 local UI_TOOLTIP_DELAY = 0.4
+-- The game's cursor sprite (an arrow whose tip is the hotspot) reaches this far right and down of the hotspot, in layout
+-- units (measured at the 1024 x 768 layout; the sprite is smaller in layout units at higher resolutions).
+local UI_CURSOR_W, UI_CURSOR_H = 30, 38
+
+-- Where a w x h tooltip goes for a cursor at (mx, my): the first of below-right, below-left, above-right, above-left,
+-- right of and left of the cursor that lies inside `bounds` ({left, top, right, bottom}) and clear of the cursor
+-- sprite (cw x ch from the hotspot); if none does, the first clamped into the bounds and pushed off the sprite.
+local function tooltip_place(w, h, mx, my, bounds, cw, ch, gap)
+    local l, t, r, b = bounds[1], bounds[2], bounds[3], bounds[4]
+    local function inside(x, y) return x >= l and y >= t and x + w <= r and y + h <= b end
+    -- candidates: below / above the sprite, left or right aligned to the hotspot; beside it, level with the hotspot
+    local cands = {
+        {mx + gap, my + ch + gap},
+        {mx - w - gap, my + ch + gap},
+        {mx + gap, my - h - gap},
+        {mx - w - gap, my - h - gap},
+        {mx + cw + gap, my},
+        {mx - w - gap, my},
+    }
+    for _, c in ipairs(cands) do
+        if inside(c[1], c[2]) then return c[1], c[2] end
+    end
+    -- last resort: clamp the preferred place, then move it off the sprite (up, else right, else left)
+    local x = math.max(l, math.min(cands[1][1], r - w))
+    local y = math.max(t, math.min(cands[1][2], b - h))
+    if x < mx + cw and x + w > mx and y < my + ch and y + h > my then
+        if my - h - gap >= t then y = my - h - gap
+        elseif mx + cw + gap + w <= r then x = mx + cw + gap
+        else x = math.max(l, mx - w - gap) end
+    end
+    return x, y
+end
+-- Tells SacredBild which widgets the pad can point at. An open dropdown's list, or the screen of a mod that asked
+-- (ui.nav_modal), is all there is; else every widget, only those of the top layer while the game's menu or a
+-- message box is up.
+local function ui_push_nav()
+    local s = ui_tick_state or {}
+    local list, flags = {}, 0
+    local drop = {}
+    for _, n in ipairs(ui_nav) do
+        if n.drop then drop[#drop + 1] = n end
+    end
+    if #drop > 0 then
+        list, flags = drop, 1
+    elseif ui_nav_modal then
+        for _, n in ipairs(ui_nav) do
+            if n.mod == ui_nav_modal then list[#list + 1] = n end
+        end
+        flags = 1
+    else
+        local top_only = s.escape_menu or s.message_box
+        for _, n in ipairs(ui_nav) do
+            if not top_only or n.layer == 2 then list[#list + 1] = n end
+        end
+        if ui_window_open then flags = 2 end
+    end
+    local out = {}
+    for i, n in ipairs(list) do
+        if i > 400 then break end
+        out[i] = {x = n.ax or (n.x + n.w / 2), y = n.ay or (n.y + n.h / 2), left = n.x, top = n.y, width = n.w,
+            height = n.h, kind = n.kind or 0}
+    end
+    native.ui_nav(out, flags)
+end
+
 local function ui_end_tick()
+    -- What must lie over everything: open dropdown lists, drawn after all draw handlers, outside any clip.
+    uis.clip_stack = {}
+    uis.set_clip(nil)
+    local deferred = uis.deferred
+    uis.deferred = {}
+    for _, fn in ipairs(deferred) do
+        local ok, err = pcall(fn)
+        if not ok then log('UI: a deferred draw failed: %s', tostring(err)) end
+        uis.clip_stack = {}
+        uis.set_clip(nil)
+    end
+    ui_push_nav()
     local t = ui_tooltip
     if not t then return end
-    local x, y = ui_mouse.x + 18, ui_mouse.y + 20
     local w = (ui_measure(t.text, {}) or (#t.text * 6)) + 12
     local s = ui_tick_state or {}
-    if s.screen_right and x + w > s.screen_right then x = ui_mouse.x - w - 4 end
+    local x, y = tooltip_place(w, 20, ui_mouse.x, ui_mouse.y,
+        {s.screen_left or 0, s.screen_top or 0, s.screen_right or 1024, s.screen_bottom or 768}, UI_CURSOR_W, UI_CURSOR_H, 4)
     native.ui_rect(2, -1, x, y, w, 20, 0xE0101018)
     native.ui_rect(2, -1, x, y, w, 1, 0xFFC8AA5A)
     native.ui_rect(2, -1, x, y + 19, w, 1, 0xFFC8AA5A)
@@ -1364,6 +1531,16 @@ local function make_ui(mod)
         ui_count(mod)
         return native.ui_item_icon(layer, slot, x, y, w, h, id, kind)
     end
+    -- ui.item_tooltip(item, x, y) -> true | nil, message: the game's own tooltip popup for an item (framed, name in the
+    -- rarity colour, price, protection, level, bonuses) with its top-left corner at (x, y) of the 1024x768 layout, kept on the
+    -- screen. `item`: an item table (gear.world.item, container:items()), an item id, or an export string
+    -- (gear.inv.export: a temporary item is made to read the text from). Call it every frame the tooltip should show.
+    function ui.item_tooltip(item, x, y)
+        assert(type(x) == 'number' and type(y) == 'number', 'x and y must be numbers')
+        if type(item) == 'table' then item = item.id end
+        if type(item) ~= 'number' and type(item) ~= 'string' then error('item_tooltip wants an item, an id or an export', 2) end
+        return native.item_tooltip(item, x, y)
+    end
     function ui.image_info(id)
         local info = type(id) == 'number' and native.ui_image_info(id)
         if info then info.id = id end
@@ -1402,9 +1579,23 @@ local function make_ui(mod)
         local layer = UI_LAYERS[opts.layer or 'hud']
         if not layer then error('layer is "world", "hud" or "top"', 2) end
         local handle = ui_handle(mod, id)
+        local c = uis.clip_stack[#uis.clip_stack]
+        if c then
+            -- Inside a scroll area: only the visible part takes the mouse; nothing if it is scrolled out of sight.
+            local x0, y0 = math.max(x, c.x), math.max(y, c.y)
+            local x1, y1 = math.min(x + w, c.x + c.w), math.min(y + h, c.y + c.h)
+            if x1 <= x0 or y1 <= y0 then
+                return {hover = false, pressed = false, released = false, clicked = false, held = false, hidden = true}
+            end
+            x, y, w, h = x0, y0, x1 - x0, y1 - y0
+        end
         ui_count(mod)
         native.ui_region(layer, x, y, w, h, handle)
         ui_regions[#ui_regions + 1] = {handle = handle, layer = layer, x = x, y = y, w = w, h = h}
+        if opts.nav ~= false and opts.enabled ~= false then
+            ui_nav[#ui_nav + 1] = {mod = mod, x = x, y = y, w = w, h = h, layer = layer, kind = opts._nav_kind,
+                ax = opts._nav_x, ay = opts._nav_y, drop = opts._nav_drop}
+        end
         local s = ui_input[handle] or {}
         local enabled = opts.enabled ~= false
         local r = {
@@ -1436,6 +1627,7 @@ local function make_ui(mod)
         return down and not was
     end
 
+    local scrolls = {}      -- scroll area id -> {offset, content, ...} (ui.scroll_begin), for the session
     local function box(x, y, w, h, fill, edge, opts)
         ui.rect(x, y, w, h, fill, opts)
         ui.frame(x, y, w, h, edge, 1, opts)
@@ -1446,7 +1638,7 @@ local function make_ui(mod)
     function ui.label(id, text, x, y, opts)
         opts = opts or {}
         local w, h = ui_measure(tostring(text), opts)
-        if opts.tooltip then region(id, x, y, w or 60, h or 14, opts) end
+        if opts.tooltip then region(id, x, y, w or 60, h or 14, {tooltip = opts.tooltip, layer = opts.layer, nav = false}) end
         return ui.text(text, x, y, {font = opts.font, size = opts.size, face = opts.face, bold = opts.bold,
             italic = opts.italic, height = opts.height, valign = opts.valign, color = label_color(opts),
             layer = opts.layer})
@@ -1518,7 +1710,171 @@ local function make_ui(mod)
         return changed, index
     end
 
-    -- ui.dropdown(id, x, y, w, options, index, opts) -> changed, index. The open list lies on the top layer; a
+
+    -- Scroll areas. ui.scroll_begin(id, x, y, w, h, opts{step, layer, nav}) -> area {x, y, w, h, offset, max,
+    -- content_x, content_y}; draw the content at content_y + its own y (what lies outside the viewport is clipped and
+    -- takes no mouse), then ui.scroll_end(content_height) -> offset, max. The scrollbar (arrows, track, thumb) shows
+    -- when the content is taller than the area; the wheel scrolls the area under the cursor, the keys (Up, Down,
+    -- PageUp, PageDown, Home, End) the one under the cursor or clicked last, the D-pad (SacredBild) the one the
+    -- pad's cursor is in. The offset is kept per id for the session; ui.scroll_to(id, offset) sets it.
+    local scroll_stack = {}
+    local function scroll_key_pressed(st, name)
+        local vk = UI_VK[name]
+        local down = native.key_down(vk)
+        st.keys = st.keys or {}
+        local was = st.keys[name]
+        st.keys[name] = down
+        return down and not was
+    end
+    function ui.scroll_begin(id, x, y, w, h, opts)
+        opts = opts or {}
+        local key = mod.id .. '\0' .. tostring(id)
+        local st = scrolls[id] or {offset = 0, content = 0}
+        scrolls[id] = st
+        local layer = UI_LAYERS[opts.layer or 'hud']
+        if not layer then error('layer is "world", "hud" or "top"', 2) end
+        local step = opts.step or 20
+        local bar = st.content > h and uis.SCROLLBAR or 0
+        -- The body takes clicks on empty space (they focus the area) and is the pad's stop for it.
+        local body = region(tostring(id) .. '#body', x, y, w, h, {layer = opts.layer, nav = opts.nav, _nav_kind = 2})
+        if body.pressed then uis.scroll_focus = key end
+        local delta = 0
+        local hot = uis.scroll_hot == key
+        if hot and uis.wheel ~= 0 and not uis.wheel_taken then
+            delta = delta - uis.wheel * step * 3
+            uis.wheel_taken = true
+        end
+        if (hot or uis.scroll_focus == key) and uis.pad_scroll ~= 0 then
+            delta = delta + uis.pad_scroll * step
+            uis.pad_scroll = 0
+        end
+        if hot or uis.scroll_focus == key then
+            if scroll_key_pressed(st, 'down') then delta = delta + step end
+            if scroll_key_pressed(st, 'up') then delta = delta - step end
+            if scroll_key_pressed(st, 'pagedown') then delta = delta + h - step end
+            if scroll_key_pressed(st, 'pageup') then delta = delta - h + step end
+            if scroll_key_pressed(st, 'home') then delta = -math.huge end
+            if scroll_key_pressed(st, 'end') then delta = math.huge end
+        end
+        local max
+        st.offset, max = uis.scroll_clamp(st.offset + delta, st.content, h)
+        uis.scroll_now[#uis.scroll_now + 1] = {key = key, x = x, y = y, w = w, h = h, layer = layer}
+        local view = {x = x, y = y, w = w - bar, h = h}
+        local outer = uis.clip_stack[#uis.clip_stack]
+        local c = view
+        if outer then
+            local x0, y0 = math.max(view.x, outer.x), math.max(view.y, outer.y)
+            local x1, y1 = math.min(view.x + view.w, outer.x + outer.w), math.min(view.y + view.h, outer.y + outer.h)
+            c = {x = x0, y = y0, w = math.max(0, x1 - x0), h = math.max(0, y1 - y0)}
+        end
+        uis.clip_stack[#uis.clip_stack + 1] = c
+        uis.set_clip(c)
+        st.view, st.step, st.layer_name, st.id, st.full_w = view, step, opts.layer, id, w
+        scroll_stack[#scroll_stack + 1] = st
+        return {x = x, y = y, w = view.w, h = h, offset = st.offset, max = max, content_x = x, content_y = y - st.offset}
+    end
+    function ui.scroll_end(content_height)
+        local st = table.remove(scroll_stack)
+        if not st then error('scroll_end without scroll_begin', 2) end
+        table.remove(uis.clip_stack)
+        uis.set_clip(uis.clip_stack[#uis.clip_stack])
+        if content_height then st.content = math.max(0, content_height) end
+        local v = st.view
+        local max
+        st.offset, max = uis.scroll_clamp(st.offset, st.content, v.h)
+        if max <= 0 then return st.offset, max end
+        local o = {layer = st.layer_name}
+        local id = tostring(st.id)
+        local bx, bw = v.x + st.full_w - uis.SCROLLBAR + 1, uis.SCROLLBAR - 1
+        local track_y, track_h = v.y + bw, v.h - 2 * bw
+        local up = region(id .. '#up', bx, v.y, bw, bw, o)
+        local down = region(id .. '#down', bx, v.y + v.h - bw, bw, bw, o)
+        local track = region(id .. '#track', bx, track_y, bw, track_h, {layer = st.layer_name, nav = false})
+        local size, pos = uis.scroll_thumb(st.offset, st.content, v.h, track_h)
+        local thumb = region(id .. '#thumb', bx, track_y + pos, bw, size, {layer = st.layer_name, nav = false})
+        local now = native.time()
+        local function repeating(r)
+            if r.pressed then st.repeat_at = now + 0.4; return true end
+            if r.held and st.repeat_at and now >= st.repeat_at then st.repeat_at = now + 0.06; return true end
+            return false
+        end
+        local offset = st.offset
+        if repeating(up) then offset = offset - st.step end
+        if repeating(down) then offset = offset + st.step end
+        if thumb.pressed then st.grab = ui_mouse.y - (track_y + pos) end
+        if thumb.held and st.grab then
+            offset = uis.scroll_from_thumb(ui_mouse.y - st.grab - track_y, st.content, v.h, track_h, size)
+        elseif not thumb.held then
+            st.grab = nil
+        end
+        if track.clicked then offset = offset + (ui_mouse.y < track_y + pos and -v.h or v.h) end
+        st.offset = uis.scroll_clamp(offset, st.content, v.h)
+        size, pos = uis.scroll_thumb(st.offset, st.content, v.h, track_h)
+        ui.rect(bx, v.y, bw, v.h, 0xC00C0C14, o)
+        box(bx, track_y + pos, bw, size, (thumb.hover or thumb.held) and C.bg_down or C.bg_hover, C.edge, o)
+        for _, a in ipairs({{up, v.y, -1}, {down, v.y + v.h - bw, 1}}) do
+            local r, ay, dir = a[1], a[2], a[3]
+            box(bx, ay, bw, bw, (r.hover or r.held) and C.bg_hover or C.bg, C.edge_dim, o)
+            for i = 0, 2 do
+                local row = dir < 0 and (2 - i) or i
+                ui.rect(bx + 2 + i, ay + 4 + row, bw - 4 - 2 * i, 1, C.accent, o)
+            end
+        end
+        return st.offset, max
+    end
+    function ui.scroll_to(id, offset)
+        local st = scrolls[id] or {offset = 0, content = 0}
+        scrolls[id] = st
+        st.offset = math.max(0, offset or 0)
+    end
+    function ui.scroll_offset(id)
+        local st = scrolls[id]
+        return st and st.offset or 0, st and math.max(0, st.content - (st.view and st.view.h or 0)) or 0
+    end
+
+    -- ui.wheel(): wheel notches over mod UI this tick (+ away from the player, as Windows has it; 0 if none), and
+    -- whether a scroll area already took them.
+    function ui.wheel() return uis.wheel, uis.wheel_taken end
+
+    -- ui.text_wrap(text, width, opts) -> lines, height: the text broken into lines that fit `width` (at spaces; a
+    -- word longer than the width gets a line of its own; \n breaks too), and their height, in the font of `opts`
+    -- (ui.text's). Cached per text, width and font.
+    local wrap_cache = setmetatable({}, {__mode = 'k'})
+    local wrap_count = 0
+    function ui.text_wrap(text, width, opts)
+        opts = opts or {}
+        text = tostring(text)
+        local fkey = table.concat({tostring(opts.font), tostring(opts.size), tostring(opts.face), tostring(opts.bold),
+            tostring(opts.italic)}, '|')
+        local key = text .. '\0' .. width .. '\0' .. fkey
+        local hit = wrap_cache[key]
+        if hit then return hit.lines, hit.height end
+        local _, line_h = ui_measure('Ag', opts)
+        line_h = line_h or 16
+        local lines = {}
+        for para in (text .. '\n'):gmatch('(.-)\n') do
+            local line = nil
+            for word in para:gmatch('%S+') do
+                local try = line and (line .. ' ' .. word) or word
+                local tw = ui_measure(try, opts) or (#try * 7)
+                if tw <= width or not line then
+                    line = try
+                else
+                    lines[#lines + 1] = line
+                    line = word
+                end
+            end
+            lines[#lines + 1] = line or ''
+        end
+        local height = #lines * line_h
+        wrap_count = wrap_count + 1
+        if wrap_count > 2000 then wrap_cache, wrap_count = setmetatable({}, {__mode = 'k'}), 0 end
+        wrap_cache[key] = {lines = lines, height = height}
+        return lines, height
+    end
+
+    -- ui.dropdown(id, x, y, w, options, index, opts{max_rows}) -> changed, index. The open list is drawn after every
+    -- draw handler, over all panels and text, on the top layer; it shows at most max_rows (12) entries and scrolls; a
     -- click anywhere else closes it.
     function ui.dropdown(id, x, y, w, options, index, opts)
         opts = opts or {}
@@ -1535,29 +1891,54 @@ local function make_ui(mod)
             open = not open
             ui_dropdown = open and handle or nil
         end
+        local n = #options
+        local rows = math.max(1, math.min(n, opts.max_rows or 12))
+        local list_id = tostring(id) .. '#list'
+        if r.clicked and open then
+            -- Opened: the selected entry in the middle of the list (when it has to scroll).
+            local off = uis.scroll_clamp((index - 1) * 18 - (rows * 18 - 18) / 2, n * 18, rows * 18)
+            scrolls[list_id] = {offset = off, content = n * 18}
+        end
         local changed = false
         if open then
-            local s = ui_tick_state or {}
-            local top = {layer = 'top'}
-            -- Behind the list: the whole screen, so a click beside it closes it (and goes nowhere else).
-            local away = region(tostring(id) .. '#away', s.screen_left or 0, s.screen_top or 0,
-                (s.screen_right or 1024) - (s.screen_left or 0), (s.screen_bottom or 768) - (s.screen_top or 0), top)
-            local ly = y + h
-            box(x, ly, w, #options * 18 + 2, 0xF0141420, C.edge, top)
-            for i, text in ipairs(options) do
-                local ir = region(tostring(id) .. '#' .. i, x + 1, ly + 1 + (i - 1) * 18, w - 2, 18, top)
-                if ir.hover or i == index then
-                    ui.rect(x + 1, ly + 1 + (i - 1) * 18, w - 2, 18, ir.hover and 0xFF4A3C28 or 0xFF2A2418, top)
-                end
-                ui.text(tostring(text), x + 6, ly + 1 + (i - 1) * 18, {height = 18, valign = 'middle', layer = 'top',
-                    color = i == index and C.accent or C.text})
-                if ir.clicked then
+            -- The list's clicks (its regions were drawn last tick), so the new index is returned now.
+            for i = 1, n do
+                local st = ui_input[ui_handle(mod, tostring(id) .. '#' .. i)]
+                if st and st.clicked then
                     changed = i ~= index
                     index = i
                     ui_dropdown = nil
                 end
             end
-            if away.clicked then ui_dropdown = nil end
+            local away = ui_input[ui_handle(mod, tostring(id) .. '#away')]
+            if away and away.clicked then ui_dropdown = nil end
+        end
+        if open and ui_dropdown == handle then
+            -- The list itself after every draw handler: over all panels and text, and it takes the mouse first.
+            local sel = index
+            uis.defer(function()
+                local s = ui_tick_state or {}
+                local top = {layer = 'top'}
+                local sl, st_, sr, sb = s.screen_left or 0, s.screen_top or 0, s.screen_right or 1024, s.screen_bottom or 768
+                -- Behind the list: the whole screen, so a click beside it closes it (and goes nowhere else).
+                region(tostring(id) .. '#away', sl, st_, sr - sl, sb - st_, {layer = 'top', nav = false})
+                local lh = rows * 18 + 2
+                local ly = y + h
+                if ly + lh > sb and y - lh >= st_ then ly = y - lh end     -- no room below: above the box
+                box(x, ly, w, lh, 0xF0141420, C.edge, top)
+                local area = ui.scroll_begin(list_id, x + 1, ly + 1, w - 2, rows * 18, {layer = 'top', step = 18, nav = false})
+                local first = math.max(1, math.floor(area.offset / 18) + 1)
+                for i = first, math.min(n, first + rows) do
+                    local iy = area.content_y + (i - 1) * 18
+                    local ir = region(tostring(id) .. '#' .. i, x + 1, iy, area.w, 18, {layer = 'top', _nav_drop = true})
+                    if ir.hover or i == sel then
+                        ui.rect(x + 1, iy, area.w, 18, ir.hover and 0xFF4A3C28 or 0xFF2A2418, top)
+                    end
+                    ui.text(tostring(options[i]), x + 6, iy, {height = 18, valign = 'middle', layer = 'top',
+                        color = i == sel and C.accent or C.text})
+                end
+                ui.scroll_end(n * 18)
+            end)
         end
         return changed, index
     end
@@ -1565,10 +1946,20 @@ local function make_ui(mod)
     -- ui.slider(id, x, y, w, min, max, value, opts{step, format}) -> changed, value
     function ui.slider(id, x, y, w, min, max, value, opts)
         opts = opts or {}
-        local r = region(id, x, y, w, 16, opts)
-        ui.rect(x, y + 7, w, 2, C.edge_dim, opts)
         local function at(v) return x + (w - 10) * ((v - min) / math.max(max - min, 1e-9)) end
+        local r = region(id, x, y, w, 16, {layer = opts.layer, tooltip = opts.tooltip, enabled = opts.enabled,
+            _nav_kind = 1, _nav_x = at(value) + 5, _nav_y = y + 8})
+        ui.rect(x, y + 7, w, 2, C.edge_dim, opts)
         local changed = false
+        if ui_hot == ui_handle(mod, id) and ui_pad.nudge ~= 0 and opts.enabled ~= false then
+            -- The pad: D-pad left / right on the slider, a fiftieth of its range (at least one step) at a time.
+            local step = opts.step or 1
+            local jump = math.max(step, math.floor((max - min) / 50 / step + 0.5) * step)
+            local v = math.max(min, math.min(max, value + ui_pad.nudge * jump))
+            v = math.floor(v / step + 0.5) * step
+            if v ~= value then value, changed = v, true end
+            ui_pad.nudge = 0
+        end
         if r.held or r.pressed then
             local t = math.max(0, math.min(1, (ui_mouse.x - x - 5) / math.max(w - 10, 1)))
             local v = min + t * (max - min)
@@ -1619,7 +2010,7 @@ local function make_ui(mod)
         ui.frame(x, y, w, h, ui_edit and C.accent or C.edge, ui_edit and 2 or 1, o)
         ui.rect(x + 1, y + 1, w - 2, 20, C.title, o)
         ui.text(title, x + 8, y + 1, {height = 20, valign = 'middle', color = C.accent, layer = opts.layer})
-        region(tostring(id) .. '#body', x, y, w, h, o)
+        region(tostring(id) .. '#body', x, y, w, h, {layer = opts.layer, nav = false})
         local function store()
             local vx, vy = to_virtual(x, y)
             local e = {x = vx, y = vy}
@@ -1627,7 +2018,7 @@ local function make_ui(mod)
             layout_set(key, e)
         end
         if opts.draggable ~= false then
-            local bar = region(tostring(id) .. '#bar', x, y, w - 24, 21, {layer = opts.layer, tooltip = opts.tooltip})
+            local bar = region(tostring(id) .. '#bar', x, y, w - 24, 21, {layer = opts.layer, tooltip = opts.tooltip, nav = false})
             if bar.pressed then p.grab_x, p.grab_y = ui_mouse.x - x, ui_mouse.y - y end
             if bar.held and p.grab_x then
                 p.x, p.y = ui_mouse.x - p.grab_x, ui_mouse.y - p.grab_y
@@ -1638,7 +2029,7 @@ local function make_ui(mod)
             end
         end
         if opts.resizable then
-            local grip = region(tostring(id) .. '#grip', x + w - 14, y + h - 14, 14, 14, {layer = opts.layer, tooltip = 'Resize'})
+            local grip = region(tostring(id) .. '#grip', x + w - 14, y + h - 14, 14, 14, {layer = opts.layer, tooltip = 'Resize', nav = ui_edit})
             for i = 0, 2 do
                 ui.rect(x + w - 4 - i * 4, y + h - 4, 2, 2, grip.hover and C.accent or C.edge, o)
                 ui.rect(x + w - 4, y + h - 4 - i * 4, 2, 2, grip.hover and C.accent or C.edge, o)
@@ -1657,9 +2048,24 @@ local function make_ui(mod)
             ui.text('x', x + w - 21, y + 2, {width = 18, height = 18, align = 'center', valign = 'middle',
                 color = cr.hover and 0xFFFF8080 or C.text, layer = opts.layer})
             if cr.clicked then p.closed = true end
+            -- The pad's B closes the topmost closable panel (opts.back == false: the mod handles B itself).
+            if opts.back ~= false and not opts.passive then
+                ui_window_open = true
+                if ui_pad.back > 0 then
+                    local top = nil
+                    for _, q in ipairs(ui_panel_prev) do
+                        if q.closable and q.back then top = q.key end
+                    end
+                    if top == key or (top == nil) then
+                        p.closed = true
+                        ui_pad.back = ui_pad.back - 1
+                    end
+                end
+            end
         end
         ui_panel_list[#ui_panel_list + 1] = {key = key, mod = mod.id, id = id, title = tostring(title), x = x, y = y,
-            w = w, h = h, resizable = opts.resizable and true or false, min_width = min_w, min_height = min_h,
+            w = w, h = h, closable = opts.closable ~= false, back = opts.back ~= false and not opts.passive,
+            resizable = opts.resizable and true or false, min_width = min_w, min_height = min_h,
             layer = opts.layer or 'hud'}
         return {open = true, key = key, x = x, y = y, w = w, h = h, content_x = x + 8, content_y = y + 28,
             content_w = w - 16, content_h = h - 36}
@@ -1667,6 +2073,31 @@ local function make_ui(mod)
 
     -- Layout editing (like an "edit mode" in other games): the panels of every mod show their ids and their resize
     -- grips while it is on; a layout editor (gear/examples/layout) moves the game's windows too.
+    -- ui.nav_modal(on): the mod's screen takes the controller alone while on: the pad's D-pad only reaches its
+    -- widgets (and nothing else), B is ui.back_pressed(), and the mod menu button is not offered.
+    function ui.nav_modal(on)
+        if on then ui_nav_modal = mod elseif ui_nav_modal == mod then ui_nav_modal = nil end
+    end
+    -- ui.back_pressed() -> bool: the controller's B was pressed (consumed: true once per press). Mods with a
+    -- nav_modal screen or a panel with `back = false` close or step back with it.
+    function ui.back_pressed()
+        if ui_pad.back > 0 then
+            ui_pad.back = ui_pad.back - 1
+            return true
+        end
+        return false
+    end
+    -- ui.menu_item(id, label, fn): an entry of the controller's mod menu (the pad button reaches it where a mod's
+    -- tool needs a hotkey, ALT or a click on a tiny button). Declared keys (mod.lua) are listed there on their own.
+    function ui.menu_item(id, label, fn)
+        assert(type(fn) == 'function', 'menu_item wants a function')
+        local items = ui_menu_items[mod] or {}
+        ui_menu_items[mod] = items
+        for _, it in ipairs(items) do
+            if it.id == id then it.label, it.fn = tostring(label), fn return end
+        end
+        items[#items + 1] = {id = id, label = tostring(label), fn = fn}
+    end
     function ui.edit_mode() return ui_edit end
     function ui.set_edit_mode(on) ui_edit = on and true or false end
     function ui.can_move_windows() return native.ui_can_move_windows() end
@@ -1779,6 +2210,26 @@ local function make_ui(mod)
         return nil
     end
     function ui.state() return native.ui_state() end
+    -- ui.tooltip_rect(w, h, opts) -> x, y: where to put a w x h tooltip (or any popup beside the cursor) so that it is
+    -- clear of the game's cursor sprite and inside the screen. opts: x, y (the point to avoid, default the cursor),
+    -- bounds {left, top, right, bottom} (default the screen), cursor = false (the point has no sprite: only the gap).
+    function ui.tooltip_rect(w, h, opts)
+        assert(type(w) == 'number' and type(h) == 'number', 'w and h must be numbers')
+        opts = opts or {}
+        assert(type(opts) == 'table', 'opts must be a table')
+        local s = native.ui_state()
+        local b = opts.bounds
+        if b ~= nil then
+            assert(type(b) == 'table' and #b == 4, 'bounds must be {left, top, right, bottom}')
+        else
+            b = {s.screen_left or 0, s.screen_top or 0, s.screen_right or 1024, s.screen_bottom or 768}
+        end
+        local mx = opts.x or ui_mouse.x
+        local my = opts.y or ui_mouse.y
+        local cw, ch = UI_CURSOR_W, UI_CURSOR_H
+        if opts.cursor == false then cw, ch = 0, 0 end
+        return tooltip_place(w, h, mx, my, b, cw, ch, 4)
+    end
     function ui.screen()
         local s = native.ui_state()
         return s.screen_left, s.screen_top, s.screen_right, s.screen_bottom
@@ -1790,7 +2241,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true, ['effect.add'] = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -1955,10 +2406,16 @@ local function make_auto()
         native.auto_move(math.floor(x), math.floor(y))
     end
     function auto.down(button) native.auto_button(vk_of(button or 'lbutton'), true) end
+    -- auto.wheel(notches): the mouse wheel at the cursor (+ away from the player: scrolls up), as WM_MOUSEWHEEL.
+    function auto.wheel(notches) native.auto_wheel(math.floor((notches or 1) * 120 + 0.5)) end
     function auto.up(button) native.auto_button(vk_of(button or 'lbutton'), false) end
     function auto.key_down(key) native.auto_key(vk_of(key), true) end
     function auto.key_up(key) native.auto_key(vk_of(key), false) end
     function auto.release() native.auto_release() end
+    -- The controller, without one: pad events as SacredBild posts them (slider steps, B, the mod menu button), and
+    -- the stops SacredBild holds (count, flags; count -1 stale, -2 no SacredBild).
+    function auto.pad(nudge, back, menu) native.auto_pad(nudge or 0, back or 0, menu or 0) end
+    function auto.nav() return native.auto_nav() end
     -- In a task: press and release with a short pause, as a player would.
     function auto.click(x, y, button)
         auto.move(x, y)
@@ -2042,6 +2499,20 @@ local function make_auto()
         return {fmul = fmul, fld = fld, registers_kept = regs, ability_store = store, ability_add = add, ability_edx = edx, ability_kept = kept, damage = damage,
                 effect_exit = exit_, effect_entry0 = e0, effect_entry1 = e1, effect_counter = counter, bonus_int = bonus_int, bonus_float = bonus_float, slot_byte = slot_byte, branch_taken = branch_taken,
                 branch2_path = branch2_path, branch2_eax = branch2_eax}
+    end
+    function auto.start_gameserver(seconds)
+        return native.auto_start_gameserver(seconds or 8)
+    end
+    -- auto.show_window(name, shown) -> bool: shows or hides an in-game window by its control name (UI_WND_CHEST ...)
+    -- through the window's own show, without the events that normally open it. For self tests.
+    function auto.show_window(name, shown)
+        assert(type(name) == 'string', 'name must be a string')
+        return native.auto_show_window(name, shown and true or false)
+    end
+    -- auto.network_flag(on) -> bool: sets or clears the engine's network-game flag, to test that the guards (can_change,
+    -- inventory and spawn) refuse in a network game. Set it, test, clear it in the same tick.
+    function auto.network_flag(on)
+        return native.auto_network_flag(on and true or false)
     end
     function auto.quit(code)
         native.auto_release()
@@ -2130,6 +2601,171 @@ local function state_flush()
     if not native.state_write(json.encode({version = 1, mods = out})) then
         log('gear_mods.json: the file cannot be written')
     end
+end
+
+-- Realms ----------------------------------------------------------------------------------------------------------
+-- The online play (register / login) server. The choice itself is native (native.realm_select: the game's network menu
+-- takes the host and the lobby port from it when Closed or Open Internet opens, see gear/realm.h); this keeps the
+-- list and the active realm in mods\gear_realms.json. The built-in realm 'default' is what Settings.cfg says.
+local realm_api, realm_poll, realm_flush   -- (the rest is local to the block below: the chunk's 200 locals)
+do
+    local store = nil          -- {default_host, realms = {{id, name, host, port?}}, active}
+    local synced = false       -- the saved choice was handed to the native side
+    local dirty = false
+    local ID_PATTERN = '^[%w_%-]+$'
+
+    local function load_store()
+        if store then return store end
+        store = {realms = {}, active = 'default'}
+        local text = native.state_read('realms')
+        if text then
+            local v, err = json.decode(text)
+            if is_table(v) then
+                if type(v.default_host) == 'string' and native.realm_valid_host(v.default_host) then
+                    store.default_host = v.default_host
+                end
+                for _, r in ipairs(is_table(v.realms) and v.realms or {}) do
+                    if is_table(r) and type(r.id) == 'string' and r.id:match(ID_PATTERN) and r.id ~= 'default'
+                        and type(r.host) == 'string' and native.realm_valid_host(r.host) then
+                        store.realms[#store.realms + 1] = {
+                            id = r.id, name = type(r.name) == 'string' and r.name or r.id, host = r.host,
+                            port = type(r.port) == 'number' and r.port or nil,
+                        }
+                    end
+                end
+                if type(v.active) == 'string' then store.active = v.active end
+            else
+                log('gear_realms.json cannot be read (%s): it is kept as gear_realms.json.bak, the defaults apply',
+                    tostring(err or 'not an object'))
+                native.state_write(text, true, 'realms')
+            end
+        end
+        return store
+    end
+
+    function realm_flush()
+        if not dirty then return end
+        dirty = false
+        local st = load_store()
+        local out = {}
+        for _, r in ipairs(st.realms) do out[#out + 1] = {id = r.id, name = r.name, host = r.host, port = r.port} end
+        if not native.state_write(json.encode({version = 1, default_host = st.default_host, realms = out, active = st.active}),
+            false, 'realms') then
+            log('gear_realms.json: the file cannot be written')
+        end
+    end
+
+    local function copy(r)
+        return {id = r.id, name = r.name, host = r.host, port = r.port, builtin = r.id == 'default' or nil}
+    end
+
+    local function default_realm()
+        return {id = 'default', name = 'Default (Settings.cfg)', host = load_store().default_host or ''}
+    end
+
+    local function find(id)
+        if id == 'default' then return default_realm() end
+        for _, r in ipairs(load_store().realms) do
+            if r.id == id then return r end
+        end
+    end
+
+    -- Hands the saved choice to the native side (once) and remembers the game's own host when it shows (the network
+    -- object exists after the first network menu; until then the default realm has no host to show).
+    function realm_poll()
+        local st = load_store()
+        if not synced then
+            synced = true
+            local r = find(st.active)
+            if not r then
+                st.active = 'default'
+                dirty = true
+                native.realm_select(nil)
+            elseif st.active == 'default' then
+                native.realm_select(nil)
+            else
+                native.realm_select(r.host, r.port)
+            end
+        end
+        if not st.default_host then
+            local now = native.realm_get()
+            if now and now.game_host and now.game_host ~= '' then
+                st.default_host = now.game_host
+                dirty = true
+            end
+        end
+    end
+
+    realm_api = {
+        -- list() -> Realm[]: the built-in 'default' first, then the added ones.
+        list = function()
+            realm_poll()
+            local out = {copy(default_realm())}
+            for _, r in ipairs(load_store().realms) do out[#out + 1] = copy(r) end
+            return out
+        end,
+        -- current() -> Realm: the chosen realm.
+        current = function()
+            realm_poll()
+            return copy(find(load_store().active) or default_realm())
+        end,
+        -- add(def) -> true | nil, message: def {id, name?, host, port?}; an existing id is replaced.
+        add = function(def)
+            assert(type(def) == 'table', 'add wants a table {id, name, host, port?}')
+            local id, host = def.id, def.host
+            if type(id) ~= 'string' or not id:match(ID_PATTERN) or #id > 32 then
+                return nil, 'id: 1 to 32 letters, digits, "_" or "-"'
+            end
+            if id == 'default' then return nil, 'the id "default" is the built-in realm' end
+            if type(host) ~= 'string' or not native.realm_valid_host(host) then return nil, 'host: not a valid host name' end
+            local port = def.port
+            if port ~= nil and (type(port) ~= 'number' or port ~= math.floor(port) or port < 1 or port > 65535) then
+                return nil, 'port: a number from 1 to 65535'
+            end
+            local entry = {id = id, name = type(def.name) == 'string' and def.name ~= '' and def.name or id, host = host, port = port}
+            local st = load_store()
+            for i, r in ipairs(st.realms) do
+                if r.id == id then
+                    st.realms[i] = entry
+                    dirty = true
+                    if st.active == id then native.realm_select(host, port) end
+                    return true
+                end
+            end
+            st.realms[#st.realms + 1] = entry
+            dirty = true
+            return true
+        end,
+        -- remove(id) -> true | nil, message: the active realm cannot be removed (switch first).
+        remove = function(id)
+            assert(type(id) == 'string', 'remove wants a realm id')
+            local st = load_store()
+            if id == 'default' then return nil, 'the built-in realm cannot be removed' end
+            if st.active == id then return nil, 'this realm is in use: switch to another first' end
+            for i, r in ipairs(st.realms) do
+                if r.id == id then table.remove(st.realms, i); dirty = true; return true end
+            end
+            return nil, 'no such realm'
+        end,
+        -- use(id) -> true | nil, message: the next Closed or Open Internet the player opens in the multiplayer menu uses
+        -- this realm's host (and port). Raises 'realm.changed' when the realm changed.
+        use = function(id)
+            assert(type(id) == 'string', 'use wants a realm id')
+            realm_poll()
+            local r = find(id)
+            if not r then return nil, 'no such realm' end
+            local ok, err
+            if id == 'default' then ok, err = native.realm_select(nil) else ok, err = native.realm_select(r.host, r.port) end
+            if not ok then return nil, err end
+            local st = load_store()
+            local changed = st.active ~= id
+            st.active = id
+            dirty = true
+            log('Realm: %s (%s)%s', id, r.host, current and ' by ' .. current.id or '')
+            if changed then kernel.dispatch('realm.changed', copy(r)) end
+            return true
+        end,
+    }
 end
 
 -- Settings ------------------------------------------------------------------------------------------------------
@@ -2723,6 +3359,7 @@ local function make_env(mod)
         end,
     }
     gear.inv = inv
+    gear.realm = realm_api
     gear.settings = make_settings_api(mod)
     gear.keys = make_keys_api(mod)
     gear.mods = make_mods_api(mod)
@@ -3183,6 +3820,35 @@ function admin.capture()
 end
 function admin.valid_binding(text) return normalize_binding(text) end
 
+-- The controller's mod menu: the pad button was pressed since the last call.
+function admin.menu_pressed()
+    if ui_pad.menu > 0 then
+        ui_pad.menu = 0
+        return true
+    end
+    return false
+end
+-- Its entries: {{label, mod, run = fn}}: the declared keys of the mods that run (with their binding in the label),
+-- then the mods' menu items.
+function admin.menu_entries()
+    local out = {}
+    for _, e in ipairs(catalog_list) do
+        if e.loaded and not e.m.disabled then
+            for _, h in ipairs(key_handlers) do
+                if h.mod == e.m and not (e.builtin and h.id == 'open') then
+                    local b = key_binding(e, h.def)
+                    local label = h.def.label .. (b ~= '' and ('  [' .. b .. ']') or '')
+                    out[#out + 1] = {label = label, mod = e.m.name, run = function() call(h.mod, 'key ' .. h.def.id, h.fn) end}
+                end
+            end
+            for _, it in ipairs(ui_menu_items[e.m] or {}) do
+                out[#out + 1] = {label = it.label, mod = e.m.name, run = function() call(e.m, 'menu ' .. it.id, it.fn) end}
+            end
+        end
+    end
+    return out
+end
+
 function kernel.load()
     state_load()
     discover()
@@ -3409,6 +4075,8 @@ function kernel.tick(dt)
     native.ui_commit()
     save_layout()
     publish_pickup_rules()
+    realm_poll()
+    realm_flush()
     state_flush()
     native.ui_block_keys(next(key_capture) ~= nil)
 end
@@ -3429,6 +4097,8 @@ function kernel.idle()
     native.ui_commit()
     save_layout()
     publish_pickup_rules()
+    realm_poll()
+    realm_flush()
     state_flush()
     native.ui_block_keys(next(key_capture) ~= nil)
 end
@@ -3436,6 +4106,7 @@ end
 -- The mod whose code was running when the host had to stop it (time budget), for the log.
 -- Writes gear_mods.json if something changed (the tick does it too).
 function kernel.flush()
+    realm_flush()
     state_flush()
 end
 

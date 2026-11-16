@@ -47,6 +47,17 @@ static const Sig::Entry kGearSigs[] = {
     {"cObjectManager_destroy", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A0 ?? ?? ?? ?? 64 89 25 00 00 00 00 81 EC 88 00 00 00 53 33 DB 55", 0, Sig::Take::Match, &Gear::Addr::cObjectManager_destroy}, // 005FBDB0, 005FBE10
     {"cItem_dataHash", "8B 44 24 04 6A 00 6A 00 50 E8 ?? ?? ?? ?? 83 C4 0C", 0, Sig::Take::Match, &Gear::Addr::cItem_dataHash}, // 0042BF20, 0042BDF0
     {"cItem_entriesInsert", "81 EC 8C 00 00 00 53 55 56 8B B4 24 A0 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_entriesInsert}, // 005C9230, 005C91A0
+    {"cItem_insertUpgrade", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 8C 00 00 00 8B 84 24 9C 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_insertUpgrade}, // 005BFF60, 005BFED0
+    {"cUI_Manager_getPopup", "8B 91 28 01 00 00 8B 44 24 04 56 8B B1 24 01 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Manager_getPopup}, // 0075B1E0, 0075AAC0
+    {"cUI_Popup_addFlags", "8B 44 24 04 8B 91 54 01 00 00 0B D0", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_addFlags}, // 006E8860, 006E84A0
+    {"cUI_Popup_setTextBody", "8A 44 24 1C 84 C0 74 0F 8B 85 54 01 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_setTextBody}, // 006E6ED6, 006E6B16
+    {"cUI_Popup_show", "53 8B 5C 24 08 56 8B F1 F6 46 10 01", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_show}, // 00732550, 00731E70
+    {"cUI_Control_clearFlags", "53 8B 5C 24 08 56 8B F1 F6 C3 30 74 3E", 0, Sig::Take::Match, &Gear::Addr::cUI_Control_clearFlags}, // 007325C0, 00731EE0
+    {"cUI_Popup_setOwner", "8B 44 24 04 85 C0 89 81 D0 21 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_setOwner}, // 006E81C0, 006E7E00
+    {"engine_alloc", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 08 8B 44 24 18 53 48", 0, Sig::Take::Match, &Gear::Addr::engine_alloc}, // 008321A0, 00830F60
+    {"engine_free", "8B 4C 24 04 85 C9 74 23 8B 44 24 08", 0, Sig::Take::Match, &Gear::Addr::engine_free}, // 0041D3B0, 0041D390
+    {"cItem_setRecord", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 8B 44 24 10 64 89 25 00 00 00 00 81 EC 88 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_setRecord}, // 005C0810, 005C0780
+    {"cWeapon3D_netIO", "51 53 55 56 8B 74 24 14 57 8B F9 8B 06 8B CE FF 50 14 8B 6C 24 20 8B 5C 24 1C 55 53 56 8B CF 89 44 24 1C C7 44 24 24 0D F0 AD BA", 0, Sig::Take::Match, &Gear::Addr::cWeapon3D_netIO}, // 005CF2D0, 005CF240
     {"cSaveEvent_vtable", "8B F1 8B 46 20 C7 06 ?? ?? ?? ?? 85 C0 74 09 50", 7, Sig::Take::Abs32, &Gear::Addr::cSaveEvent_vtable}, // 00890B38, 0088EB38
     {"abilityTable1First", "B8 ?? ?? ?? ?? 66 39 10 74 0E 83 C0 78 41 3D ?? ?? ?? ?? 72 F0", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1First}, // 0094FE28, 0094DE28
     {"abilityTable1End", "3D ?? ?? ?? ?? 72 F0 33 C0 C3 8D 04 49 8D 04 80", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1End}, // 00952A38, 00950A38
@@ -54,6 +65,12 @@ static const Sig::Entry kGearSigs[] = {
     {"abilityTable2End", "3D ?? ?? ?? ?? 72 EE 33 C0 C3 8D 04 C9 8D 0C 81", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable2End}, // 00955344, 00953344
     {"textResources_instance", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A1 ?? ?? ?? ?? 64 89 25 00 00 00 00 83 EC 0C", 0, Sig::Take::Match, &Gear::Addr::textResources_instance}, // 006725E0, 006728C0
     {"textResources_get", "8B 44 24 04 56 83 F8 FF 8B F1 74 4A", 0, Sig::Take::Match, &Gear::Addr::textResources_get}, // 00672C90, 00672F70
+    {"g_pLobby", "C7 84 24 E8 01 00 00 FF FF FF FF A3 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::g_pLobby}, // 0182EBD0, 0182CB50
+    {"cString_assign", "8B 44 24 04 53 55 56 57 8B F9 8B 4C 24 18", 0, Sig::Take::Match, &Gear::Addr::cString_assign}, // 00415BD0, 00415BE0
+    {"cNet_openScreen", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 56 57 8B F1", 0, Sig::Take::Match, &Gear::Addr::cNet_openScreen}, // 007D8560, 007D7D00
+    {"cNet_loadSettings", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 54 53 55 56 57 8B F1", 0, Sig::Take::Match, &Gear::Addr::cNet_loadSettings}, // 007EDEA0, 007ED430
+    {"cNet_saveSettings", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 50 53 55 33 ED", 0, Sig::Take::Match, &Gear::Addr::cNet_saveSettings}, // 007EE780, 007EDC70
+    {"lobbyPortCall", "8B 11 FF 52 4C B9 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 4E 40 6A 01", 10, Sig::Take::Match, &Gear::Addr::lobbyPortCall}, // 007CCD28, 007CC548
     {"g_difficulty", "8B 4C 24 68 8B 54 24 2C A1 ?? ?? ?? ?? 83 F8 04", 9, Sig::Take::Abs32, &Gear::Addr::g_difficulty}, // 0182EE44, 0182CDC4
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500

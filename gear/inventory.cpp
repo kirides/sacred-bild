@@ -23,6 +23,10 @@ namespace
     constexpr uintptr_t kItemType = 0x10, kItemEntries = 0x100, kItemRecord = 0x118, kItemHash = 0x120;
     constexpr size_t kEntrySize = 0x82;
     constexpr uint32_t kMaxEntries = 64;
+    // A weapon (cWeapon3D) keeps four more dwords after the common data, written in this order by the engine's save
+    // and network code (005CF1A0, 005CF2D0): exported as a 16-byte trailer after the record.
+    constexpr uintptr_t kWeaponExtra[4] = {0x19C, 0x1AC, 0x1A0, 0x1BC};
+    constexpr size_t kWeaponExtraSize = 16;
 
     bool safeCopy(void* dst, const void* src, size_t size)
     {
@@ -107,11 +111,11 @@ namespace
         }
     }
 
-    int callPut(uintptr_t c, uint32_t slot, uint32_t id, uint32_t w, uint32_t h)
+    int callPut(uintptr_t c, uint32_t slot, uint32_t id, uint32_t w, uint32_t h, int notify)
     {
         __try
         {
-            Addr::cInventory_put(reinterpret_cast<void*>(c), slot, id, w, h, 0);
+            Addr::cInventory_put(reinterpret_cast<void*>(c), slot, id, w, h, notify);
             return 1;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -120,11 +124,11 @@ namespace
         }
     }
 
-    int callRemove(uintptr_t c, uint32_t id)
+    int callRemove(uintptr_t c, uint32_t id, int notify)
     {
         __try
         {
-            return Addr::cInventory_remove(reinterpret_cast<void*>(c), id, 0) & 0xFF ? 1 : 0;
+            return Addr::cInventory_remove(reinterpret_cast<void*>(c), id, notify) & 0xFF ? 1 : 0;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
@@ -194,6 +198,73 @@ namespace
             std::memcpy(reinterpret_cast<void*>(o + kItemRecord), record, kEntrySize);
             *reinterpret_cast<uint32_t*>(o + kItemHash) =
                 Addr::cItem_dataHash(nullptr, reinterpret_cast<void*>(o + kItemRecord));
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    int callSocket(uintptr_t item, uint32_t upgradeId)
+    {
+        __try
+        {
+            return Addr::cItem_insertUpgrade(reinterpret_cast<void*>(item), upgradeId, 0) & 0xFF ? 1 : 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    // Tells the peers about an item the engine has already announced as created (message 0x16F) but whose data we
+    // changed afterwards: the engine's own "set record and announce" (message 0x16C, the whole item). 1 done, -1 fault.
+    int callAnnounce(uintptr_t item)
+    {
+        __try
+        {
+            Addr::cItem_setRecord(reinterpret_cast<void*>(item), reinterpret_cast<void*>(item + kItemRecord), 1);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    // In a network game only the local hero's backpack and the chest may be touched: those are the containers the
+    // engine's own item calls announce to the peers for this player.
+    bool containerAllowed(uint32_t index)
+    {
+        return !World::networkGame() || index == Inventory::kChest || index == World::hero();
+    }
+
+    // Whether item object `o` is a weapon: its vtable's slot 8 is cWeapon3D's.
+    bool isWeapon(uintptr_t o)
+    {
+        uintptr_t vtable = 0, slot8 = 0;
+        return Addr::cWeapon3D_netIO && readAt(o, 0, vtable) && readAt(vtable, 8 * 4, slot8) &&
+               slot8 == static_cast<uintptr_t>(Addr::cWeapon3D_netIO);
+    }
+
+    // The weapon's four extra dwords <-> 16 bytes. 1 done, -1 fault.
+    int callWeaponExtra(uintptr_t o, uint8_t* bytes, bool write)
+    {
+        __try
+        {
+            for (size_t i = 0; i < 4; ++i)
+            {
+                auto* field = reinterpret_cast<uint8_t*>(o + kWeaponExtra[i]);
+                if (write)
+                {
+                    std::memcpy(field, bytes + i * 4, 4);
+                }
+                else
+                {
+                    std::memcpy(bytes + i * 4, field, 4);
+                }
+            }
             return 1;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -303,9 +374,14 @@ bool Inventory::put(uint32_t index, uint32_t id, uint32_t x, uint32_t y, const c
 {
     const uintptr_t c = containerAddress(index);
     uint32_t columns = 0, rows = 0, w = 0, h = 0;
-    if (!World::changesAllowed())
+    if (!World::inventoryChangesAllowed())
     {
-        error = "inventory changes are not possible now (no single player game)";
+        error = "inventory changes are not possible now (no hero, or the game does not allow it)";
+        return false;
+    }
+    if (!containerAllowed(index))
+    {
+        error = "in a network game only your own backpack and the chest can be changed";
         return false;
     }
     if (!c || !readGeometry(c, columns, rows))
@@ -324,7 +400,7 @@ bool Inventory::put(uint32_t index, uint32_t id, uint32_t x, uint32_t y, const c
         return false;
     }
     const uint32_t slot = y * columns + x;
-    if (callPut(c, slot, id, w, h) < 0)
+    if (callPut(c, slot, id, w, h, World::networkGame() ? 1 : 0) < 0)
     {
         LOG("Inventory: putting item {} into container {} faulted", id, index);
         error = "the game faulted while putting the item in";
@@ -342,9 +418,14 @@ bool Inventory::put(uint32_t index, uint32_t id, uint32_t x, uint32_t y, const c
 bool Inventory::remove(uint32_t index, uint32_t id, const char*& error)
 {
     const uintptr_t c = containerAddress(index);
-    if (!World::changesAllowed())
+    if (!World::inventoryChangesAllowed())
     {
-        error = "inventory changes are not possible now (no single player game)";
+        error = "inventory changes are not possible now (no hero, or the game does not allow it)";
+        return false;
+    }
+    if (!containerAllowed(index))
+    {
+        error = "in a network game only your own backpack and the chest can be changed";
         return false;
     }
     if (!c)
@@ -352,7 +433,7 @@ bool Inventory::remove(uint32_t index, uint32_t id, const char*& error)
         error = "no such container";
         return false;
     }
-    const int r = callRemove(c, id);
+    const int r = callRemove(c, id, World::networkGame() ? 1 : 0);
     if (r < 0)
     {
         LOG("Inventory: taking item {} out of container {} faulted", id, index);
@@ -370,7 +451,7 @@ bool Inventory::remove(uint32_t index, uint32_t id, const char*& error)
 bool Inventory::destroy(uint32_t id, const char*& error)
 {
     void* m = objectManager();
-    if (!World::changesAllowed() || !m || !Addr::cObjectManager_destroy)
+    if (!World::inventoryChangesAllowed() || !m || !Addr::cObjectManager_destroy)
     {
         error = "world changes are not possible now";
         return false;
@@ -400,6 +481,34 @@ bool Inventory::destroy(uint32_t id, const char*& error)
     return true;
 }
 
+bool Inventory::socket(uint32_t itemId, uint32_t upgradeId, const char*& error)
+{
+    const uintptr_t item = World::itemObject(itemId);
+    if (!World::inventoryChangesAllowed() || !Addr::cItem_insertUpgrade)
+    {
+        error = "inventory changes are not possible now (no single player game)";
+        return false;
+    }
+    if (!item || !World::itemObject(upgradeId) || itemId == upgradeId)
+    {
+        error = "no such item";
+        return false;
+    }
+    const int r = callSocket(item, upgradeId);
+    if (r < 0)
+    {
+        LOG("Inventory: socketing {} into {} faulted", upgradeId, itemId);
+        error = "the game faulted while socketing";
+        return false;
+    }
+    if (!r)
+    {
+        error = "the item has no free socket, or the upgrade does not fit";
+        return false;
+    }
+    return true;
+}
+
 bool Inventory::exportItem(uint32_t id, std::string& bytes, const char*& error)
 {
     const uintptr_t o = World::itemObject(id);
@@ -416,7 +525,8 @@ bool Inventory::exportItem(uint32_t id, std::string& bytes, const char*& error)
         return false;
     }
     const uint16_t n = static_cast<uint16_t>((end - begin) / kEntrySize);
-    std::string out(4 + 2 + n * kEntrySize + kEntrySize, '\0');
+    const bool weapon = isWeapon(o);
+    std::string out(4 + 2 + n * kEntrySize + kEntrySize + (weapon ? kWeaponExtraSize : 0), '\0');
     std::memcpy(&out[0], &type, 4);
     std::memcpy(&out[4], &n, 2);
     if ((n && !safeCopy(&out[6], reinterpret_cast<const void*>(begin), n * kEntrySize)) ||
@@ -425,12 +535,28 @@ bool Inventory::exportItem(uint32_t id, std::string& bytes, const char*& error)
         error = "cannot read the item";
         return false;
     }
+    if (weapon && callWeaponExtra(o, reinterpret_cast<uint8_t*>(&out[6 + n * kEntrySize + kEntrySize]), false) < 0)
+    {
+        error = "cannot read the weapon";
+        return false;
+    }
     bytes = std::move(out);
     return true;
 }
 
-uint32_t Inventory::importItem(const std::string& bytes, const char*& error)
+uint32_t Inventory::importItem(const std::string& bytes, const char*& error, bool temporary)
 {
+    const bool net = World::networkGame();
+    if (net && temporary)
+    {
+        error = "temporary items are not made in a network game";
+        return 0;
+    }
+    if (!World::inventoryChangesAllowed())
+    {
+        error = "inventory changes are not possible now (no hero, or the game does not allow it)";
+        return 0;
+    }
     if (!Addr::cItem_entriesInsert || !Addr::cItem_dataHash)
     {
         error = "the item functions were not found";
@@ -445,7 +571,8 @@ uint32_t Inventory::importItem(const std::string& bytes, const char*& error)
     }
     std::memcpy(&type, bytes.data(), 4);
     std::memcpy(&n, bytes.data() + 4, 2);
-    if (n > kMaxEntries || bytes.size() != 6 + n * kEntrySize + kEntrySize)
+    const size_t base = 6 + n * kEntrySize + kEntrySize;
+    if (n > kMaxEntries || (bytes.size() != base && bytes.size() != base + kWeaponExtraSize))
     {
         error = "the item data has the wrong size";
         return 0;
@@ -457,14 +584,28 @@ uint32_t Inventory::importItem(const std::string& bytes, const char*& error)
         error = "there is no hero";
         return 0;
     }
-    const uint32_t id = World::spawn(type, hero.position, error);
+    // In a network game the engine announces the new item (message 0x16F: id, type, position, default data) when it
+    // is made with broadcast; the data we give it follows as the engine's own item update (0x16C).
+    const uint32_t id = World::createObject(type, hero.position, net, error);
     if (!id)
     {
         return 0;
     }
     const uintptr_t o = World::itemObject(id);
     const auto* data = reinterpret_cast<const uint8_t*>(bytes.data());
-    const int r = o ? callApply(o, data + 6, n, data + 6 + n * kEntrySize) : 0;
+    int r = o ? callApply(o, data + 6, n, data + 6 + n * kEntrySize) : 0;
+    if (r > 0 && bytes.size() == base + kWeaponExtraSize)
+    {
+        // Saved from a weapon: its four extra dwords. Blobs of weapons saved before they were kept have none and
+        // leave the new weapon's own values.
+        uint8_t extra[kWeaponExtraSize];
+        std::memcpy(extra, data + base, sizeof(extra));
+        r = isWeapon(o) ? callWeaponExtra(o, extra, true) : 0;
+    }
+    if (r > 0 && net)
+    {
+        r = callAnnounce(o);
+    }
     if (r <= 0)
     {
         LOG("Inventory: giving the new item {} (type {}) its data {}", id, type, r < 0 ? "faulted" : "was refused");
