@@ -3222,6 +3222,184 @@ local function make_mods_api(mod)
 end
 
 -- What a mod's code sees as its globals.
+-- Drops (gear.drops; native side gear/drops.cpp, docs/GearDrops.md). Each mod's settings are kept per mod, merged after every tick
+-- (multipliers multiply, the first mod in load order that chose a generator wins) and handed to the native side.
+-- (one table: the kernel's main chunk is near LuaJIT's limit of 200 locals)
+local D = {cfg = {}, dirty = true}   -- cfg: mod -> {chance, find, rarity = {[table id] = mult}, rng = {mode, seed, fn}}; pushed: the generator choice last pushed (so that a change elsewhere does not reseed it)
+
+function D.config(mod)
+    local c = D.cfg[mod]
+    if not c then
+        c = {chance = 1, find = 1, rarity = {}}
+        D.cfg[mod] = c
+    end
+    return c
+end
+
+function D.has(event)
+    local list = handlers[event]
+    if not list then return false end
+    for i = 1, #list do
+        if not list[i].mod.disabled then return true end
+    end
+    return false
+end
+
+function D.publish()
+    if not D.dirty then return end
+    D.dirty = false
+    local chance, find, rarity, rng = 1, 1, {}, nil
+    for _, m in ipairs(mods) do
+        local c = D.cfg[m]
+        if c and not m.disabled then
+            chance = chance * c.chance
+            find = find * c.find
+            for id, mult in pairs(c.rarity) do rarity[id] = (rarity[id] or 1) * mult end
+            if c.rng and not rng then rng = c.rng; D.rng_mod = m end
+        end
+    end
+    native.drops_scales(chance, find)
+    native.drops_rarity(rarity)
+    D.rng_fn = rng and rng.fn or nil
+    local key = rng and (rng.mode .. ':' .. tostring(rng.seed) .. ':' .. tostring(rng.fn) .. ':' .. tostring(rng.nonce)) or ''
+    if key ~= D.pushed then
+        D.pushed = key
+        native.drops_rng(rng and (rng.mode == 'lua' and 2 or 1) or 0, rng ~= nil and rng.seed ~= nil, rng and rng.seed or 0)
+    end
+    native.drops_handlers(D.has('drops.roll'), D.has('drops.select'), rng ~= nil and rng.mode == 'lua')
+end
+
+-- The rarity table's id for a weight key: 16 - quality for the qualities 1 .. 14, 0 and 1 for 'special0' and 'special1' (the rows that hand the
+-- roll to the special resource selection). The rows 16 and 17 (plain items) are what is left when no rarer row is hit: their weights change nothing.
+function D.id_of(quality)
+    if quality == 'special0' then return 0 end
+    if quality == 'special1' then return 1 end
+    assert(type(quality) == 'number' and quality >= 1 and quality <= 14 and quality == math.floor(quality),
+        "a weight key is a quality 1 .. 14, 'special0' or 'special1' (plain items are what is left over: their weight changes nothing)")
+    return 16 - quality
+end
+
+function D.make(mod)
+    local d = {}
+    -- chance_scale(mult | nil): multiplies the chance of every drop attempt of creatures (the loot budget).
+    function d.chance_scale(mult)
+        if mult == nil then mult = 1 end
+        assert(type(mult) == 'number' and mult >= 0 and mult <= 1000, 'the multiplier must be a number 0 .. 1000')
+        D.config(mod).chance = mult
+        D.dirty = true
+    end
+    -- find_scale(mult | nil): multiplies how much the rarity bonus (magic find) widens the weights of the rarer qualities.
+    function d.find_scale(mult)
+        if mult == nil then mult = 1 end
+        assert(type(mult) == 'number' and mult >= 0 and mult <= 1000, 'the multiplier must be a number 0 .. 1000')
+        D.config(mod).find = mult
+        D.dirty = true
+    end
+    -- rarity_weights({[quality | 'special0' | 'special1'] = multiplier} | nil): this mod's multipliers of the rarity weights (replaces its previous ones).
+    function d.rarity_weights(weights)
+        local c = D.config(mod)
+        c.rarity = {}
+        if weights ~= nil then
+            assert(type(weights) == 'table', 'weights must be a table {[quality] = multiplier}')
+            for quality, mult in pairs(weights) do
+                assert(type(mult) == 'number' and mult >= 0 and mult <= 1000, 'a weight multiplier must be a number 0 .. 1000')
+                c.rarity[D.id_of(quality)] = mult
+            end
+        end
+        D.dirty = true
+    end
+    -- rng(spec | nil): the generator of the loot rolls: 'fair' (PCG32 without modulo bias), {seed = n} (the same, reproducible), a function
+    -- returning a number in [0, 1) per draw, or nil / 'game' for the game's own.
+    function d.rng(spec)
+        local c = D.config(mod)
+        D.nonce = (D.nonce or 0) + 1      -- every call counts as a new choice: a seed is applied again
+        if spec == nil or spec == 'game' then
+            c.rng = nil
+        elseif spec == 'fair' then
+            c.rng = {mode = 'fair', nonce = D.nonce}
+        elseif type(spec) == 'table' then
+            assert(spec.seed == nil or type(spec.seed) == 'number', 'seed must be a number')
+            c.rng = {mode = 'fair', seed = spec.seed, nonce = D.nonce}
+        elseif type(spec) == 'function' then
+            c.rng = {mode = 'lua', fn = spec, owner = mod, nonce = D.nonce}
+        else
+            error("the generator must be 'fair', 'game', {seed = n} or a function", 2)
+        end
+        D.dirty = true
+    end
+    -- random(n) -> integer 0 .. n - 1 from the fair generator (the one 'fair' loot rolls use).
+    function d.random(n)
+        assert(type(n) == 'number' and n >= 1, 'n must be a number >= 1')
+        return native.drops_random(n)
+    end
+    -- rarity_table() -> { {id, quality, weight, vanilla} }: the game's rarity table now (empty before the first game).
+    function d.rarity_table()
+        local out = {}
+        for i, e in ipairs(native.drops_rarity_table()) do
+            out[i] = {id = e.id, quality = (e.id >= 2 and e.id <= 15) and (16 - e.id) or 0, weight = e.weight, vanilla = e.vanilla,
+                kind = e.id <= 1 and 'special' or e.id <= 15 and 'quality' or 'plain'}
+        end
+        return out
+    end
+    -- stats() -> counters of the drop hooks; quality / category are indexed from 0.
+    function d.stats()
+        local s = native.drops_stats()
+        local quality, category = {}, {}
+        for i = 1, #s.quality do quality[i - 1] = s.quality[i] end
+        for i = 1, #s.category do category[i - 1] = s.category[i] end
+        s.quality, s.category = quality, category
+        return s
+    end
+    function d.reset_stats() native.drops_stats_reset() end
+    -- simulate(creature, count, bonus?) -> true | nil, message: makes the engine run the loot function `count` times for the creature (an object
+    -- id), a few per frame, through all hooks; the items it makes lie in the world. For tuning and tests; single player only.
+    function d.simulate(creature, count, bonus, forced)
+        assert(type(creature) == 'number' and type(count) == 'number', 'creature and count must be numbers')
+        assert(forced == nil or type(forced) == 'number', 'forced must be an item type id')
+        if not world.can_change() then return nil, 'world changes are not allowed now (network game, or no game running)' end
+        if not native.drops_test_roll(creature, count, bonus or 0, forced or 0) then return nil, 'no such creature, or a simulation is running' end
+        return true
+    end
+    -- simulation_progress() -> done, queued
+    function d.simulation_progress() return native.drops_test_progress() end
+    return d
+end
+
+-- `drops.roll`: a creature's loot function is about to run (forced: the authored item type, 0 for a random drop). A handler gets the event
+-- table and may change `bonus` (the rarity bonus) or return false to cancel the roll.
+function kernel.drops_roll(ev)
+    local list = handlers['drops.roll']
+    if not list or #list == 0 then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'drops.roll', h.fn, ev)
+            if ok and result == false then ev.cancel = true; break end
+        end
+    end
+    return ev
+end
+
+-- `drops.select`: the loot function asks the type picker for an item: a handler may change category, level or quality, or set `type`
+-- (an item type id) to use instead of the engine's pick.
+function kernel.drops_select(ev)
+    local list = handlers['drops.select']
+    if not list or #list == 0 then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then call(h.mod, 'drops.select', h.fn, ev) end
+    end
+    return ev
+end
+
+-- A draw of the Lua generator.
+function kernel.drops_random()
+    local fn, mod = D.rng_fn, D.rng_mod
+    if not fn or not mod or mod.disabled then return nil end
+    local ok, result = call(mod, 'drops rng', fn)
+    if ok and type(result) == 'number' then return result end
+    return nil
+end
 local function make_env(mod)
     local env = {
         assert = assert, error = error, ipairs = ipairs, next = next, pairs = pairs, pcall = pcall,
@@ -3368,6 +3546,7 @@ local function make_env(mod)
     gear.inv = inv
     gear.realm = realm_api
     gear.settings = make_settings_api(mod)
+    gear.drops = D.make(mod)
     gear.keys = make_keys_api(mod)
     gear.mods = make_mods_api(mod)
     if mod.builtin then env.admin = admin end
@@ -3391,6 +3570,7 @@ local function make_env(mod)
         if event == 'skillslot.select' then native.skillslot_active(true) end
         if event == 'skillslot.key' then native.skillkey_active(true) end
         if event == 'combat.branch' then native.branch_active(true) end
+        if event == 'drops.roll' or event == 'drops.select' then D.dirty = true end
         return h
     end
     function gear.off(h)
@@ -3408,6 +3588,7 @@ local function make_env(mod)
         if h.event == 'skillslot.select' and #list == 0 then native.skillslot_active(false) end
         if h.event == 'skillslot.key' and #list == 0 then native.skillkey_active(false) end
         if h.event == 'combat.branch' and #list == 0 then native.branch_active(false) end
+        if h.event == 'drops.roll' or h.event == 'drops.select' then D.dirty = true end
     end
     env.gear = gear
     return env
@@ -3651,6 +3832,8 @@ local function unload_mod(e)
         if mods[i] == m then table.remove(mods, i) end
     end
     if pickup_rules[m] then pickup_rules[m] = nil; pickup_dirty = true end
+    if D.cfg[m] then D.cfg[m] = nil end
+    D.dirty = true
     ui_keys[m] = nil
     key_capture[m] = nil
     if ui_dropdown and (ui_handle_key[ui_dropdown] or ''):sub(1, #m.id + 1) == m.id .. '\0' then ui_dropdown = nil end
@@ -4082,6 +4265,7 @@ function kernel.tick(dt)
     native.ui_commit()
     save_layout()
     publish_pickup_rules()
+    D.publish()
     realm_poll()
     realm_flush()
     state_flush()
@@ -4104,6 +4288,7 @@ function kernel.idle()
     native.ui_commit()
     save_layout()
     publish_pickup_rules()
+    D.publish()
     realm_poll()
     realm_flush()
     state_flush()

@@ -26,6 +26,7 @@ local ui_recording, ui_published = {}, {}
 local nav_published
 local pad_queue = {0, 0, 0}
 local pickup_published
+local drops_pub = {sim = nil}
 save_block, save_calls, save_results = nil, {}, {}
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
 state_file, state_bak, state_writes = nil, nil, 0
@@ -141,7 +142,21 @@ local native = {
     hero_class = function(id) if id == 1 then return 4, 0x8 end end,
     pickup_rules = function(b, d, a) pickup_published = {block = b, dim = d, alpha = a} end,
     pickup_refused = function() return 0 end,
-    ui_region = function(...) ui_recording[#ui_recording + 1] = {'region', ...}; return true end,
+    drops_scales = function(c, f) drops_pub.chance, drops_pub.find = c, f end,
+    drops_rarity = function(t) drops_pub.rarity = t end,
+    drops_rng = function(mode, seeded, seed) drops_pub.rng = {mode, seeded, seed}; drops_pub.rng_pushes = (drops_pub.rng_pushes or 0) + 1 end,
+    drops_handlers = function(r, s, rn) drops_pub.handlers = {r, s, rn} end,
+    drops_rarity_table = function() return {{id = 2, weight = 4, vanilla = 4}, {id = 15, weight = 100, vanilla = 100}, {id = 16, weight = 800, vanilla = 800}, {id = 1, weight = 9, vanilla = 9}} end,
+    drops_stats = function()
+        local q, c = {}, {}
+        for i = 1, 16 do q[i] = i == 3 and 7 or 0 end
+        for i = 1, 32 do c[i] = 0 end
+        return {rolls = 3, forced = 1, vetoed = 0, picks = 7, overridden = 0, rarity_draws = 2, rand_calls = 0, lua_draws = 0, quality = q, category = c}
+    end,
+    drops_stats_reset = function() drops_pub.reset = true end,
+    drops_test_roll = function(id, n, bonus, forced) drops_pub.sim = {id, n, bonus, forced}; return id == 77 end,
+    drops_test_progress = function() return 5, 10 end,
+    drops_random = function(n) return n - 1 end,    ui_region = function(...) ui_recording[#ui_recording + 1] = {'region', ...}; return true end,
     ui_events = function() local e = ui_events_queue; ui_events_queue = {}; return e end,
     ui_nav = function(stops, flags) nav_published = {stops = stops, flags = flags}; return true end,
     ui_pad = function() local p = pad_queue; pad_queue = {0, 0, 0}; return p[1], p[2], p[3] end,
@@ -1078,6 +1093,108 @@ do
     -- gear/examples/realmtest checks that the saved realm is applied at start.)
 end
 
+-- Drops: the settings of the mods are merged and pushed to the native side, the events answer, the unload undoes them.
+do
+    local gear_a
+    do
+        local i = 1
+        while true do
+            local name, value = debug.getupvalue(kernel.dispatch, i)
+            if not name then break end
+            if name == 'handlers' then
+                for _, h in ipairs(value['frame']) do
+                    local env = getfenv(h.fn)
+                    if env.record and env.gear then gear_a = env.gear end
+                end
+            end
+            i = i + 1
+        end
+    end
+    local drops = gear_a.drops
+    ok(type(drops) == 'table' and drops.chance_scale and drops.rarity_weights and drops.rng and drops.stats, 'drops: the API is there')
+    kernel.tick(0.016)
+    ok(drops_pub.chance == 1 and drops_pub.find == 1 and next(drops_pub.rarity) == nil, 'drops: vanilla pushed when no mod asks for anything')
+    ok(drops_pub.rng[1] == 0 and drops_pub.handlers[1] == false and drops_pub.handlers[2] == false and drops_pub.handlers[3] == false,
+        'drops: the game generator and no handlers by default')
+    drops.chance_scale(2)
+    drops.find_scale(1.5)
+    drops.rarity_weights({[14] = 0.5, special1 = 2})
+    kernel.tick(0.016)
+    ok(drops_pub.chance == 2 and drops_pub.find == 1.5, 'drops: scales pushed')
+    ok(drops_pub.rarity[2] == 0.5 and drops_pub.rarity[1] == 2, 'drops: quality 14 is table id 2, special1 id 1')
+    ok(not pcall(drops.chance_scale, -1) and not pcall(drops.rarity_weights, {[15] = 1}) and not pcall(drops.rarity_weights, {[0] = 1})
+        and not pcall(drops.rarity_weights, {normal = 1}) and not pcall(drops.rarity_weights, {[3] = 'x'}), 'drops: bad numbers and keys are refused')
+    drops.rarity_weights(nil)
+    drops.chance_scale(nil)
+    kernel.tick(0.016)
+    ok(drops_pub.chance == 1 and next(drops_pub.rarity) == nil, 'drops: nil clears this mod\'s settings')
+    -- the generator
+    drops.rng('fair')
+    kernel.tick(0.016)
+    ok(drops_pub.rng[1] == 1 and drops_pub.rng[2] == false, 'drops: rng fair')
+    drops.rng({seed = 42})
+    kernel.tick(0.016)
+    ok(drops_pub.rng[1] == 1 and drops_pub.rng[2] == true and drops_pub.rng[3] == 42, 'drops: rng seeded')
+    local before_again = drops_pub.rng_pushes
+    drops.rng({seed = 42})
+    kernel.tick(0.016)
+    ok(drops_pub.rng_pushes == before_again + 1, 'drops: the same seed set again is applied again (a reseed)')
+    local pushes = drops_pub.rng_pushes
+    drops.chance_scale(3)
+    kernel.tick(0.016)
+    ok(drops_pub.rng_pushes == pushes, 'drops: another change does not reseed the generator')
+    local draws = 0
+    drops.rng(function() draws = draws + 1; return 0.25 end)
+    kernel.tick(0.016)
+    ok(drops_pub.rng[1] == 2 and drops_pub.handlers[3] == true, 'drops: a Lua generator is announced')
+    ok(kernel.drops_random() == 0.25 and draws == 1, 'drops: the kernel answers a draw from the Lua function')
+    drops.rng('game')
+    kernel.tick(0.016)
+    ok(drops_pub.rng[1] == 0 and kernel.drops_random() == nil, 'drops: back to the game generator')
+    drops.chance_scale(nil)
+    -- events
+    local seen
+    local h1 = gear_a.on('drops.roll', function(ev)
+        seen = ev.creature
+        ev.bonus = ev.bonus + 10
+        if ev.forced == 0 and ev.creature == 99 then return false end
+    end)
+    local h2 = gear_a.on('drops.select', function(ev)
+        if ev.category == 5 then ev.quality = 3; ev.type = 1234 end
+    end)
+    kernel.tick(0.016)
+    ok(drops_pub.handlers[1] == true and drops_pub.handlers[2] == true, 'drops: handlers announced')
+    local r = kernel.drops_roll({creature = 12, level = 5, forced = 0, bonus = 100, killer = 0})
+    ok(seen == 12 and r.bonus == 110 and not r.cancel, 'drops.roll: a handler changes the bonus')
+    r = kernel.drops_roll({creature = 99, level = 5, forced = 0, bonus = 100, killer = 0})
+    ok(r.cancel == true, 'drops.roll: returning false cancels')
+    r = kernel.drops_select({category = 5, level = 3, quality = 0})
+    ok(r.quality == 3 and r.type == 1234, 'drops.select: quality and replacement type')
+    r = kernel.drops_select({category = 6, level = 3, quality = 0})
+    ok(r.quality == 0 and r.type == nil, 'drops.select: other categories stay')
+    gear_a.off(h1)
+    gear_a.off(h2)
+    kernel.tick(0.016)
+    ok(drops_pub.handlers[1] == false and drops_pub.handlers[2] == false and kernel.drops_roll({}) == nil, 'drops: handlers removed')
+    -- data views
+    local t = drops.rarity_table()
+    ok(#t == 4 and t[1].quality == 14 and t[2].quality == 1 and t[3].quality == 0 and t[1].weight == 4 and t[1].kind == 'quality'
+        and t[3].kind == 'plain' and t[4].kind == 'special', 'drops.rarity_table: ids map to qualities and kinds')
+    local s = drops.stats()
+    ok(s.rolls == 3 and s.quality[2] == 7 and s.quality[0] == 0 and s.category[31] == 0, 'drops.stats: counters, indexed from 0')
+    drops.reset_stats()
+    ok(drops_pub.reset == true, 'drops.reset_stats')
+    ok(drops.random(10) == 9, 'drops.random goes to the fair generator')
+    local saved_hero = hero_id
+    ok(drops.simulate(77, 10, 5) == nil, 'drops.simulate: refused without a game')
+    hero_id = 1
+    local good = drops.simulate(77, 10, 5, 5169)
+    ok(good == true and drops_pub.sim[1] == 77 and drops_pub.sim[2] == 10 and drops_pub.sim[3] == 5 and drops_pub.sim[4] == 5169, 'drops.simulate asks the host')
+    ok(drops.simulate(78, 10) == nil, 'drops.simulate: unknown creature')
+    hero_id = saved_hero
+    local done, queued = drops.simulation_progress()
+    ok(done == 5 and queued == 10, 'drops.simulation_progress')
+end
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

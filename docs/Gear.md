@@ -427,6 +427,14 @@ The standard libraries a mod gets: `string`, `table`, `math`, `bit`, `coroutine`
 `date` and `difftime`. There is no `io`, `os.execute`, `debug`, `load`/`loadstring`/`dofile`, `jit` or `ffi`: a mod
 reads only its own files (through `require`) and cannot reach the rest of the computer. Each mod has its own globals.
 
+### Drops
+
+`gear.drops` tunes what creatures drop without touching the game's code unless a mod asks: `chance_scale` (how often), `rarity_weights` (per quality
+multipliers of the rarity table, also for set and unique drops), `find_scale` (how much the rarity bonus matters), `rng` (the game's own random numbers, a
+fair generator without the CRT `rand`'s modulo bias, a seeded one, or a Lua function) and the events `drops.roll` (veto a roll, change its rarity bonus) and
+`drops.select` (change or replace the item the loot code picks). The loot code runs in `sacred.exe` on the machine that owns the creature (GameServer.exe has none).
+What the engine does, what each call touches, the limits and the tests: [Gear drops](GearDrops.md); the calls: [reference](GearApi.md#drops-geardrops).
+
 ### Mod manager
 
 Sacred Gear has a **Mods** screen, a built-in part of it (`gear/lua/modmanager.lua`, shipped inside `SacredGear.dll` and
@@ -569,6 +577,7 @@ faults returns nil and a message instead of crashing the game.
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
 | `scrolltest` | An automation run: a scroll area of 100 lines (wheel, a line scrolled out of sight takes no click, thumb drag) and a dropdown of 30 entries whose open list lies over text and a button drawn after it (`-gear-mods=scrolltest`). |
 | `tooltiptest` | An automation run: tooltips of buttons at the screen's edges and corners, with screenshots (`gear.ui.tooltip_rect`). |
+| `droptest` | An automation run of the drop hooks (`gear.drops`): the engine's loot function is run a few hundred times per phase with vanilla settings, a doubled and a zero chance, rarity weights, a veto, a replaced item, the fair, a seeded and a Lua generator; 31 checks. Use a copy of the game folder: the items stay in the world. See [Gear drops](GearDrops.md). |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 | `shared-stash` (in the sacred-gear-mods repository) | A stash shared by all heroes of the player, in a panel beside the chest window, built on `gear.inv`: items are copied to `stash.json` in the mod's folder and back, the file written first on a deposit and last on a withdrawal. |
 

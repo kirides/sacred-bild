@@ -78,6 +78,10 @@ static const Sig::Entry kGearSigs[] = {
     {"cNet_saveSettings", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 50 53 55 33 ED", 0, Sig::Take::Match, &Gear::Addr::cNet_saveSettings}, // 007EE780, 007EDC70
     {"lobbyPortCall", "8B 11 FF 52 4C B9 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 4E 40 6A 01", 10, Sig::Take::Match, &Gear::Addr::lobbyPortCall}, // 007CCD28, 007CC548
     {"g_difficulty", "8B 4C 24 68 8B 54 24 2C A1 ?? ?? ?? ?? 83 F8 04", 9, Sig::Take::Abs32, &Gear::Addr::g_difficulty}, // 0182EE44, 0182CDC4
+    {"crtRand", "E8 ?? ?? ?? ?? 8B 48 14 69 C9 FD 43 03 00 81 C1 C3 9E 26 00", 0, Sig::Take::Match, &Gear::Addr::crtRand}, // 00849B40, 008488E0
+    {"rangeRand", "56 57 8B 7C 24 0C 85 FF 7D 02 33 FF", 0, Sig::Take::Match, &Gear::Addr::rangeRand}, // 00443B20, 004439F0
+    {"cItem_pickType", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 18 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_pickType}, // 005C7FA0, 005C7F10
+    {"g_rarityTable", "8B 35 ?? ?? ?? ?? 8B C8 83 C4 14 33 C0 D8 4C 24 18", 2, Sig::Take::Abs32, &Gear::Addr::g_rarityTable}, // 00AD4438, 00AD23B8
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
     {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270
@@ -92,4 +96,8 @@ static const Sig::Entry kGearSigs[] = {
     {"skillSlotFn", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC C8 00 00 00 53 8B 9C 24 DC 00 00 00", 0, Sig::Take::Match, &Gear::Addr::skillSlotFn}, // 006E1BC0, 006E1970
     {"siteFn51D840", "8A 44 24 08 83 EC 44 53 55 8B 6C 24 50", 0, Sig::Take::Match, &Gear::Addr::siteFn51D840}, // 0051D840, 0051D680
     {"siteFnColor", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 48 07 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFnColor}, // 004DCB80, 004DC9C0
+    {"lootRollFn", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC D8 07 00 00", 0, Sig::Take::Match, &Gear::Addr::lootRollFn}, // 00559BF0, 00559A30
+    {"rarityFn485C10", "6A FF 64 A1 00 00 00 00 68 ?? ?? ?? ?? 50 B8 14 23 00 00", 0, Sig::Take::Match, &Gear::Addr::rarityFn485C10}, // 00485C10, 00485F00
+    {"rarityFn4AC940", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 08 01 00 00 53 55 56 33 DB", 0, Sig::Take::Match, &Gear::Addr::rarityFn4AC940}, // 004AC940, 004ACC30
+    {"rarityFn5D57C0", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC AC 00 00 00 8B 0D ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::rarityFn5D57C0}, // 005D57C0, 005D5730
 };

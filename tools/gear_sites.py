@@ -159,6 +159,26 @@ KEY_SELECT = [0x006E21DC, 0x006E220E, 0x006E223C, 0x006E226A, 0x006E2298]
 KEY_END = 0x006E2819
 
 
+# Drop sites (gear/drops.cpp). The engine's creature loot function (ENG 00559BF0, thiscall (creature, forced type, rarity bonus, survival float,
+# killer id), ret 0x10) draws the chance of every drop attempt, the category of the item and its rarity with the CRT `rand` (ENG 00849B40, a 15 bit
+# LCG: `% 1000`, `% 10000` ...). Its calls of `rand` (offsets from the function start) are redirected so that a mod may swap the generator.
+LOOT_FUNCTION = ('lootRollFn', 0x00559BF0, 10709)
+LOOT_RAND_CALLS = [0xDE, 0xF0, 0x380, 0x7A1, 0x80D, 0x857, 0x902, 0x924, 0x942, 0x95C, 0x973, 0x9C0, 0x9E2, 0xA6D, 0xA86, 0xA9A, 0xB1A,
+                   0xB2E, 0xB74, 0xB8F, 0xBAA, 0xDC1, 0x1008, 0x12AD, 0x155B, 0x15FA, 0x17B1, 0x1AE0, 0x1B3A, 0x1C6C, 0x1C87, 0x1CA5,
+                   0x1CF2, 0x1D36, 0x1E44, 0x1E5F, 0x1E7D, 0x1EC1, 0x1EDE, 0x1EFF, 0x1F51, 0x1F91, 0x2033, 0x2050, 0x2071, 0x20BC,
+                   0x20FC, 0x25AF, 0x25CB, 0x25F2, 0x260E, 0x262A]
+# The rarity draws: a roll of 1 .. 10000 that is compared with the cumulative weights of the rarity table (ENG 00AD4438 .. 00AD443C, 8 byte entries of
+# a dword id and a word weight): `range` is `call 00443B20` with (1, 10000) (cdecl), `mod` is `call rand; cdq; idiv 10000`. (kind, function name,
+# function address, call address)
+RARITY_CALLS = [
+    ('range', 'lootRollFn', 0x00559BF0, 0x0055A0F5),
+    ('range', 'lootRollFn', 0x00559BF0, 0x0055A1F8),
+    ('range', 'rarityFn485C10', 0x00485C10, 0x00487DA8),
+    ('mod', 'rarityFn4AC940', 0x004AC940, 0x004AD4A4),
+    ('mod', 'rarityFn5D57C0', 0x005D57C0, 0x005D5B45),
+]
+
+
 def functions():
     seen = {}
     for _, name, va, _, _, _ in SITES:
@@ -171,4 +191,7 @@ def functions():
     seen[SLOT_FUNCTION[0]] = SLOT_FUNCTION[1]
     for _, _, fnname, fn, _ in BRANCH_SITES:
         seen[fnname] = fn
+    seen[LOOT_FUNCTION[0]] = LOOT_FUNCTION[1]
+    for _, name, va, _ in RARITY_CALLS:
+        seen[name] = va
     return seen

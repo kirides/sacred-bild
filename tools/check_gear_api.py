@@ -204,6 +204,18 @@ def main():
     rules = set(re.findall(r'\brules\.(\w+)', kernel))
     compare('pickup rules', rules, fields('GearPickupRules'))
 
+    # --- gear.drops and its events
+    drops_src = between(kernel, r'^function D\.make\(mod\)', r'^-- `drops\.roll`', 'D.make')
+    compare('gear.drops', set(re.findall(r'^\s*function d\.(\w+)\(', drops_src, re.M)), members('GearDrops'))
+
+    def top_level_keys(start, what):
+        body = between(host, start, r'^}\s*$', what)
+        return set(re.findall(r'\bnum\("(\w+)"', body)) | set(re.findall(r'lua_setfield\(L, -2, "(\w+)"\)', body))
+
+    compare('drops.roll event', top_level_keys(r'^LuaHost::Answer LuaHost::dropRoll\(', 'dropRoll') - {'cancel', 'bonus'} | {'bonus'},
+            fields('GearDropRoll') - {'cancel'})
+    compare('drops.select event', top_level_keys(r'^LuaHost::Answer LuaHost::dropSelect\(', 'dropSelect'), fields('GearDropSelect') - {'type'})
+    compare('drops stats', cpp_keys(host, r'^    int nativeDropsStats\(', 'nativeDropsStats'), fields('GearDropStats'))
     # --- tables the native side builds
     compare('ui state', cpp_keys(host, r'^    int nativeUiState\(', 'nativeUiState'), fields('GearUiState'))
     win = cpp_keys(host, r'^    void pushWindow\(', 'pushWindow') - {'w', 'h'} | {'bounds'}   # w, h: the bounds table's

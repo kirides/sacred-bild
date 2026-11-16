@@ -22,6 +22,8 @@
 ---| 'combat.branch' # A conditional jump in the hit handlers and a few other functions: a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`).
 ---| 'skillslot.select' # A digit key selected a skill slot of the HUD (`index`: which of the five places in the key handler).
 ---| 'bonus.constant' # A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another.
+---| 'drops.roll' # A creature's loot function is about to run; a handler may change the rarity bonus or return false to cancel the roll.
+---| 'drops.select' # The loot function asks the equipment type picker for an item; a handler may change the category, level or quality, or name the item type.
 ---| 'effect.add' # The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`).
 ---| 'damage' # The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534).
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
@@ -84,6 +86,7 @@
 ---@field json GearJson JSON encoding and decoding.
 ---@field pipe GearPipeModule Named pipe clients.
 ---@field world GearWorld The world: hero, creatures, items, spawning, pickup rules.
+---@field drops GearDrops Item drops: chance, rarity weights, the generator, the roll and select events.
 ---@field inv GearInv Inventories: containers, items, export and import of items.
 ---@field game GearGame The game itself: difficulty and saving.
 ---@field realm GearRealmApi The online play server (realms): list, switch, add.
@@ -112,6 +115,8 @@ gear = {}
 ---@overload fun(event: 'combat.branch', fn: fun(name: string, vanilla: boolean, index: integer, eax: integer): boolean?): GearHandler
 ---@overload fun(event: 'skillslot.select', fn: fun(index: integer)): GearHandler
 ---@overload fun(event: 'bonus.constant', fn: fun(index: integer, vanilla: number, address: integer): number?): GearHandler
+---@overload fun(event: 'drops.roll', fn: fun(ev: GearDropRoll): boolean?): GearHandler
+---@overload fun(event: 'drops.select', fn: fun(ev: GearDropSelect)): GearHandler
 ---@overload fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler
 ---@overload fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler
 ---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler
