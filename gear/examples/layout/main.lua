@@ -354,16 +354,19 @@ local sample_panel = gear.auto ~= nil
 
 -- The controller reaches the edit mode through the mod menu; there the pad drives the editor alone (D-pad between
 -- the frames and buttons, A held and the stick to drag, B is Done).
-ui.menu_item('edit', 'Edit layout', function() ui.set_edit_mode(not ui.edit_mode()) end)
+-- (ui.menu_item and nav_modal are newer than some SacredGear.dll builds: the mod still loads without them.)
+if ui.menu_item then
+    ui.menu_item('edit', 'Edit layout', function() ui.set_edit_mode(not ui.edit_mode()) end)
+end
 
 gear.on('draw', function(state)
     if not state or state.mode ~= 'game' or state.exclusive then
         drag = nil
-        ui.nav_modal(false)
+        if ui.nav_modal then ui.nav_modal(false) end
         return
     end
-    ui.nav_modal(ui.edit_mode() and not (state.escape_menu or state.message_box))
-    if ui.edit_mode() and ui.back_pressed() then ui.set_edit_mode(false) end
+    if ui.nav_modal then ui.nav_modal(ui.edit_mode() and not (state.escape_menu or state.message_box)) end
+    if ui.edit_mode() and ui.back_pressed and ui.back_pressed() then ui.set_edit_mode(false) end
     if sample_panel then
         local p = ui.panel('sample', 'Sample panel', 60, 120, 200, 110, {resizable = true, min_width = 140,
             min_height = 80, closable = false})
