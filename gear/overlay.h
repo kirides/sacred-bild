@@ -10,7 +10,8 @@
 //                                                vanilla saves are neither read nor written
 //
 // The rules are read when Sacred Gear starts (the game opens its data files before any Lua runs), for the mods the run
-// uses (all, or the ones in `-gear-mods=a,b`). The game's file functions (CreateFileA, GetFileAttributesA/ExA,
+// uses (all, or the ones in `-gear-mods=a,b`) and that are switched on: a mod the manager has off (`enabled:false` in
+// gear_mods.json, or mod.lua's `enabled = false` without a flag) gets no rules and no save redirect. The game's file functions (CreateFileA, GetFileAttributesA/ExA,
 // FindFirstFileA, CopyFileA, DeleteFileA, CreateDirectoryA, SetFileAttributesA) are hooked through the exe's imports.
 namespace Overlay
 {

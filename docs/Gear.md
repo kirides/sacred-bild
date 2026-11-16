@@ -138,7 +138,9 @@ byte offset: `:u8(off)`, `:i8`, `:u16`, `:i16`, `:u32`, `:i32`, `:f32`, `:str(of
   (`#` comments): `binalance.bin = dataalance.bin` (the game's open of that path, relative to the game folder, gets the mod's file
   if it exists) and `saves = save` (the game's `Save\` folder is the mod's `save\` folder; the vanilla saves are neither read nor
   written). The rules are read when Sacred Gear starts, because the game opens its data files before any Lua runs, for the mods the
-  run uses (`-gear-mods=a,b`, else all). `gear.files.overlay()`, `gear.files.resolve(path)` and `gear.files.served(path)` show what applies and
+  run uses (`-gear-mods=a,b`, else all) and that are switched on (a mod that is off gets no rules and no save redirect, so
+  it changes nothing: LAN games need the client and the gameserver to read the same `balance.bin`, and the gameserver is not
+  overlaid; a mod that overlays `balance.bin` is for singleplayer). `gear.files.overlay()`, `gear.files.resolve(path)` and `gear.files.served(path)` show what applies and
   what the game really opened through it.
 
 #### World

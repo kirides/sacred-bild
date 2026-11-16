@@ -1,6 +1,7 @@
 #include "overlay.h"
 #include "log.h"
 #include "patch.h"
+#include "instance.h"
 
 #include <windows.h>
 #include <algorithm>
@@ -247,6 +248,104 @@ namespace
         return b == std::string::npos ? std::string{} : s.substr(b, s.find_last_not_of(" \t\r") - b + 1);
     }
 
+    std::string readAll(const std::wstring& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        std::stringstream ss;
+        ss << file.rdbuf();
+        return ss.str();
+    }
+
+    // The player's flag for `id` in gear_mods.json (the run's own copy in an automation run): 1 on, 0 off, -1 none.
+    // A scan, not a JSON parser: finds "mods", then the object of `id`, then its own "enabled" (depth 1 of that object).
+    int stateFlag(const std::wstring& gameDir, const std::string& id)
+    {
+        const std::wstring path = Instance::automation()
+            ? Instance::directory(gameDir) + L"\\gear_mods.json"
+            : gameDir + L"\\mods\\gear_mods.json";
+        const std::string text = readAll(path);
+        size_t at = text.find("\"mods\"");
+        if (at == std::string::npos)
+        {
+            return -1;
+        }
+        at = text.find("\"" + id + "\"", at);
+        if (at == std::string::npos)
+        {
+            return -1;
+        }
+        at = text.find('{', at);
+        if (at == std::string::npos)
+        {
+            return -1;
+        }
+        int depth = 0;
+        for (size_t i = at; i < text.size(); ++i)
+        {
+            const char c = text[i];
+            if (c == '"')
+            {
+                const size_t end = [&] {
+                    size_t j = i + 1;
+                    while (j < text.size() && text[j] != '"')
+                    {
+                        j += text[j] == '\\' ? 2 : 1;
+                    }
+                    return j;
+                }();
+                if (depth == 1 && text.compare(i, 9, "\"enabled\"") == 0)
+                {
+                    const size_t colon = text.find(':', end);
+                    const size_t v = colon == std::string::npos ? colon : text.find_first_not_of(" \t\r\n", colon + 1);
+                    if (v != std::string::npos)
+                    {
+                        return text.compare(v, 4, "true") == 0 ? 1 : text.compare(v, 5, "false") == 0 ? 0 : -1;
+                    }
+                }
+                i = end;
+            }
+            else if (c == '{' || c == '[')
+            {
+                ++depth;
+            }
+            else if (c == '}' || c == ']')
+            {
+                if (--depth == 0)
+                {
+                    break;
+                }
+            }
+        }
+        return -1;
+    }
+
+    // Whether the mod is switched on, as the mod manager sees it: the player's flag, else mod.lua's top-level `enabled = false`.
+    // A mod that is off gets no overlay: its files are not served and its save folder is not used.
+    bool modEnabled(const std::wstring& gameDir, const std::wstring& modDir, const std::string& id)
+    {
+        const int flag = stateFlag(gameDir, id);
+        if (flag >= 0)
+        {
+            return flag == 1;
+        }
+        std::stringstream lines(readAll(modDir + L"\\mod.lua"));
+        std::string line;
+        while (std::getline(lines, line))
+        {
+            const size_t b = line.find_first_not_of(" \t");
+            if (b != std::string::npos && b <= 4 && line.compare(b, 7, "enabled") == 0)
+            {
+                const size_t eq = line.find('=', b + 7);
+                const size_t v = eq == std::string::npos ? eq : line.find_first_not_of(" \t", eq + 1);
+                if (v != std::string::npos && line.compare(v, 5, "false") == 0)
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     // The mods the run uses: `-gear-mods=a,b` on the command line, else all.
     std::vector<std::string> selectedMods()
     {
@@ -360,6 +459,11 @@ bool Overlay::install(const std::wstring& gameDir)
             const std::string id = narrow(name);
             if (!selected.empty() && std::find(selected.begin(), selected.end(), id) == selected.end())
             {
+                continue;
+            }
+            if (!modEnabled(gameDir, gameDir + L"\\mods\\" + name, id))
+            {
+                LOG("Overlay: mod {} is switched off: no file rules, saves untouched", id);
                 continue;
             }
             ModRules rules;
