@@ -211,6 +211,10 @@ function Creature:label() end
 ---@return integer? id
 function Creature:class() end
 
+--- A hero's name as the game shows it; nil for other creatures (and for a hero the game has no name for).
+---@return string?
+function Creature:name() end
+
 --- Sets the hit points (1..max: mods do not kill through it). Single player only.
 ---@param hp number
 ---@return boolean? ok

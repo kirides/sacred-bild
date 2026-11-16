@@ -793,6 +793,77 @@ namespace
         return 1;
     }
 
+    // native.mp_send_frame(slot, utf16le) -> bool: one frame of the mod channel (the kernel frames, paces, reassembles).
+    int nativeMpSendFrame(lua_State* L)
+    {
+        const lua_Number slot = luaL_checknumber(L, 1);
+        size_t n = 0;
+        const char* s = luaL_checklstring(L, 2, &n);
+        uint16_t units[NetMsg::kMaxFrameUnits];
+        const size_t count = n / 2;
+        bool ok = n % 2 == 0 && count >= 1 && count <= NetMsg::kMaxFrameUnits && slot >= 1 && slot <= 16;
+        if (ok)
+        {
+            std::memcpy(units, s, count * 2);
+            ok = NetMsg::sendFrame(static_cast<uint32_t>(slot), units, count);
+        }
+        lua_pushboolean(L, ok);
+        return 1;
+    }
+
+    // native.mp_info() -> {network, is_host, host_slot (nil if unknown)}
+    int nativeMpInfo(lua_State* L)
+    {
+        const NetMsg::Host h = NetMsg::host();
+        lua_createtable(L, 0, 3);
+        lua_pushboolean(L, h.network);
+        lua_setfield(L, -2, "network");
+        lua_pushboolean(L, h.isHost);
+        lua_setfield(L, -2, "is_host");
+        if (h.hostSlot)
+        {
+            lua_pushnumber(L, h.hostSlot);
+            lua_setfield(L, -2, "host_slot");
+        }
+        return 1;
+    }
+
+    // native.hero_name(slot) -> UTF-8 | nil
+    int nativeHeroName(lua_State* L)
+    {
+        const lua_Number slot = luaL_checknumber(L, 1);
+        if (!(slot >= 1 && slot <= 16))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        const std::wstring w = NetMsg::heroName(static_cast<uint32_t>(slot));
+        char utf8[512];
+        const int n = w.empty() ? 0 : WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), utf8, sizeof(utf8), nullptr, nullptr);
+        if (n <= 0)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushlstring(L, utf8, static_cast<size_t>(n));
+        return 1;
+    }
+
+    // native.mp_take_frame() -> slot, utf16le | nil: the oldest frame another client sent this one.
+    int nativeMpTakeFrame(lua_State* L)
+    {
+        uint32_t slot = 0;
+        std::vector<uint16_t> units;
+        if (!NetMsg::takeFrame(slot, units))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, slot);
+        lua_pushlstring(L, reinterpret_cast<const char*>(units.data()), units.size() * 2);
+        return 2;
+    }
+
     // native.object(id) -> {id, type, flags, x, y, layer, creature, hp, max_hp, gold, exp, level} | nil
     int nativeObject(lua_State* L)
     {
@@ -2415,6 +2486,10 @@ namespace
             {"save_info", nativeSaveInfo},
             {"save_poll", nativeSavePoll},
             {"net_kill", nativeNetKill},
+            {"mp_send_frame", nativeMpSendFrame},
+            {"mp_take_frame", nativeMpTakeFrame},
+            {"mp_info", nativeMpInfo},
+            {"hero_name", nativeHeroName},
             {"object", nativeObject},
             {"creatures_near", nativeCreaturesNear},
             {"spawn", nativeSpawn},

@@ -6,7 +6,12 @@
 // - trace: with the environment variable GEAR_NETTRACE=1 the first few messages of every id are logged (id, size,
 //   sender slot, start of the payload), to map messages (docs/GearServerMods.md).
 // The hook only looks at the messages; the game's call goes on unchanged.
+// - the mod channel (gear.mp.send): frames of UTF-16 units sent as private chat (0x003) to a slot, and the frames
+//   other clients sent this one, taken out of the receive dispatcher's chat case before the chat box sees them. A
+//   frame starts with the marker unit kFrameMarker; any other private chat goes on to the chat as before.
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace NetMsg
 {
@@ -22,4 +27,28 @@ namespace NetMsg
 
     // The oldest kill not taken yet. Engine thread (the Lua host's).
     bool takeKill(Kill& out);
+
+    constexpr uint16_t kFrameMarker = 0xE1A0;
+    constexpr size_t kMaxFrameUnits = 127;      // the 254 bytes of text the game server relays
+
+    // Whether frames can be sent and received (the hooks are in, a connection is up).
+    bool channelReady();
+    // Sends one frame (1 to 127 units, none of them 0) to `slot` (1 to 16) as private chat. Engine thread.
+    bool sendFrame(uint32_t slot, const uint16_t* units, size_t count);
+    // The oldest frame received and not taken yet: the sender's slot (0: the server) and its units.
+    bool takeFrame(uint32_t& slot, std::vector<uint16_t>& units);
+
+    // The players (the object at g_pNetPlayers, ENG 0x7D7A70: +0x01 "this computer hosts", +0x14 the local slot,
+    // +0x54 17 roster records of 0x342 bytes by slot: +0x00 occupied, +0x07 host, +0x16 the player name, +0x11E the
+    // hero's name, both UTF-16; +0x172 the local hero's name from its save preview).
+    struct Host
+    {
+        bool network = false;   // a LAN / Open Net / Closed Net game (the flag at 0x0182EBEC)
+        bool isHost = false;    // this computer hosts it
+        uint32_t hostSlot = 0;  // the host's slot, 0 if unknown (the game's 0x7F0C80)
+        uint32_t localSlot = 0;
+    };
+    Host host();
+    // The hero's name in `slot` (1 to 16) as UTF-16; empty if the game has none.
+    std::wstring heroName(uint32_t slot);
 }

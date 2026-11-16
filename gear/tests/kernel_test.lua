@@ -29,6 +29,7 @@ local pickup_published
 local drops_pub = {sim = nil}
 save_block, save_calls, save_results = nil, {}, {}
 net_kills = {}
+mp_info_mock, hero_names, net_sent, net_frames, net_send_ok = {network = false}, {[1] = 'Aria'}, {}, {}, true
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
 state_file, state_bak, state_writes = nil, nil, 0
 realm_file, realm_bak, realm_writes, realm_client, realm_selected = nil, nil, 0, nil, nil
@@ -196,6 +197,10 @@ local native = {
     save_info = function(slot) if slot <= 509 then return {exists = slot == 97, size = 5, mtime = 100} end end,
     save_poll = function() return table.remove(save_results, 1) end,
     net_kill = function() return table.remove(net_kills, 1) end,
+    mp_info = function() return mp_info_mock end,
+    hero_name = function(id) return hero_names[id] end,
+    mp_send_frame = function(slot, s) net_sent[#net_sent + 1] = {slot, s}; return net_send_ok end,
+    mp_take_frame = function() local f = table.remove(net_frames, 1); if f then return f[1], f[2] end end,
     builtin = function(name) if name == 'modmanager' then return "adm = admin; gear.on('frame', function() end)" end end,
     write_file = function(dir, rel, text) files[dir] = files[dir] or {}; files[dir][rel] = text; return true end,
     -- automation
@@ -1244,6 +1249,154 @@ do
         ok(kills[3] and kills[3].by_local == true and kills[3].killer.slot == 1, 'mp: kill by the local hero')
     end
     hero_id, objects[1], objects[2], objects[900] = saved_hero, saved1, saved2, nil
+end
+
+-- gear.mp: identity, host, the mod channel (framing, pacing, reassembly, loopback) with the native side mocked.
+do
+    local gear_a
+    do
+        local i = 1
+        while true do
+            local name, value = debug.getupvalue(kernel.dispatch, i)
+            if not name then break end
+            if name == 'handlers' then
+                for _, h in ipairs(value['frame']) do
+                    local env = getfenv(h.fn)
+                    if env.record and env.gear then gear_a = env.gear end
+                end
+            end
+            i = i + 1
+        end
+    end
+    local saved_hero, saved1, saved2, saved3 = hero_id, objects[1], objects[2], objects[3]
+    hero_id = 1
+    objects[1] = {id = 1, type = 5, x = 0, y = 0, layer = 0, creature = true, hp = 50, max_hp = 100, gold = 0, level = 1}
+    objects[2], objects[3] = nil, nil
+    local mp = gear_a.mp
+    local C = mp._channel
+    local got = {}
+    gear_a.on('mp_message', function(from, channel, payload) got[#got + 1] = {from = from, channel = channel, payload = payload} end)
+    local function ticks(n) for _ = 1, n do kernel.tick(0.016) end end
+    -- identity, single player
+    mp_info_mock = {network = false}
+    local me = mp.local_player()
+    ok(me.name == 'Aria' and me.key == 'aria:' .. tostring(me.class) and me.is_host == true, 'mp: name, key and host in single player')
+    ok(mp.is_host() == true and mp.host_slot() == 1 and mp.local_slot() == 1, 'mp: single player is the host, slot 1')
+    -- loopback in single player, on the next tick
+    ok(mp.send('t', {a = 1, s = 'x'}, 'host') == true and #got == 0, 'mp: loopback is not delivered at once')
+    ticks(1)
+    ok(#got == 1 and got[1].channel == 't' and got[1].payload.a == 1 and got[1].payload.s == 'x' and got[1].from.slot == 1
+        and got[1].from.is_local, 'mp: loopback on the next tick')
+    ok(#net_sent == 0, 'mp: loopback does not use the network')
+    ok(mp.send('t', 'plain', 'all') == true, 'mp: all in single player')
+    ticks(1)
+    ok(got[2] and got[2].payload == 'plain', 'mp: string payload')
+    ok(mp.send('bad channel!', 'x') == nil and mp.send('', 'x') == nil and mp.send(('c'):rep(33), 'x') == nil, 'mp: bad channel names')
+    ok(mp.send('t', ('x'):rep(65537)) == nil, 'mp: oversize refused')
+    ok(mp.send('t', function() end) == nil and mp.send('t', 'x', 2) == nil and mp.send('t', 'x', 'nobody') == nil, 'mp: bad payload and target')
+    -- framing round trips
+    local function roundtrip(len, number)
+        local body = {}
+        for i = 1, len do body[i] = string.char((i * 7 + len) % 256) end
+        body = table.concat(body)
+        local data = C.encode('rt', body)
+        local frames = C.frames(data, number or 5)
+        local units_ok = true
+        for _, f in ipairs(frames) do
+            if #f > 254 then units_ok = false end
+            for i = 1, #f - 1, 2 do
+                local u = f:byte(i) + f:byte(i + 1) * 256
+                if i > 1 and (u < 0x4000 or u > 0xBFFF) then units_ok = false end
+                if u == 0 then units_ok = false end
+            end
+        end
+        return body, frames, units_ok, #data
+    end
+    for _, len in ipairs({0, 1, 224, 225, 228, 229, 5000, 65536}) do
+        local body, frames, units_ok, dlen = roundtrip(len)
+        got = {}
+        for _, f in ipairs(frames) do C.receive(2, f) end
+        ok(units_ok and #frames == C.frame_count(dlen) and #got == 1 and got[1].payload == body,
+            ('mp: %d bytes in %d frames arrive intact'):format(len, #frames))
+    end
+    local function frames_of(n) local _, f = roundtrip(n); return #f end
+    ok(frames_of(228 - 4) == 1 and frames_of(228 - 3) == 2, 'mp: 228 bytes (with the 4-byte header) fit one frame, 229 need two')
+    -- interleaved senders and message numbers
+    local b1, f1 = roundtrip(1000, 7)
+    local b2, f2 = roundtrip(700, 7)
+    local b3, f3 = roundtrip(500, 8)
+    got = {}
+    for i = 1, math.max(#f1, #f2, #f3) do
+        if f2[i] then C.receive(3, f2[i]) end
+        if f3[i] then C.receive(2, f3[i]) end
+        if f1[i] then C.receive(2, f1[i]) end
+    end
+    local seen = {}
+    for _, g in ipairs(got) do seen[g.payload] = g.from.slot end
+    ok(#got == 3 and seen[b1] == 2 and seen[b2] == 3 and seen[b3] == 2, 'mp: interleaved senders and messages')
+    -- incomplete messages are dropped after 30 s
+    local _, f4 = roundtrip(1000, 9)
+    got = {}
+    C.receive(2, f4[1])
+    ok(next(C.partial) ~= nil, 'mp: an incomplete message waits')
+    for _ = 1, 31 do kernel.tick(1) end
+    ok(next(C.partial) == nil, 'mp: an incomplete message is dropped after 30 s')
+    for i = 2, #f4 do C.receive(2, f4[i]) end
+    ok(#got == 0, 'mp: its rest alone delivers nothing')
+    C.partial = {}
+    C.receive(2, 'garbage!')
+    ok(#got == 0 and next(C.partial) == nil, 'mp: frames without the marker are ignored')
+    -- a network game: the host, sending through the carrier, pacing
+    objects[2] = {id = 2, type = 6, x = 5, y = 5, layer = 0, creature = true, hp = 10, max_hp = 10}
+    objects[3] = {id = 3, type = 6, x = 5, y = 5, layer = 0, creature = true, hp = 10, max_hp = 10}
+    hero_names[2], hero_names[3] = 'Borin', 'Cyra'
+    mp_info_mock = {network = true, is_host = false, host_slot = 2}
+    ok(mp.is_host() == false and mp.host_slot() == 2 and mp.player(2).is_host and not mp.local_player().is_host
+        and mp.player(3).name == 'Cyra', 'mp: host flags in a network game')
+    net_sent = {}
+    local big = {}
+    for i = 1, 5000 do big[i] = string.char(65 + i % 26) end
+    big = table.concat(big)
+    ok(mp.send('big', {data = big}, 'host') == true, 'mp: 5000 bytes to the host')
+    local need = C.frame_count(#C.encode('big', {data = big}))
+    kernel.tick(0.016)
+    ok(#net_sent >= 1 and #net_sent <= 4 and net_sent[1][1] == 2, 'mp: paced, a few frames a tick to the host slot')
+    local t = 0
+    while #net_sent < need and t < 1000 do kernel.tick(0.016); t = t + 1 end
+    ok(#net_sent == need and t * 0.016 < 2, ('mp: all %d frames sent in %.2f s'):format(need, t * 0.016))
+    got = {}
+    for _, f in ipairs(net_sent) do net_frames[#net_frames + 1] = {1, f[2]} end
+    ticks(2)
+    ok(#got == 1 and got[1].payload.data == big and got[1].from.slot == 1, 'mp: the frames from the native queue arrive intact')
+    net_sent = {}
+    ok(mp.send('x', 'y', 'all') == true, 'mp: all in a network game')
+    ticks(2)
+    local to = {}
+    for _, f in ipairs(net_sent) do to[f[1]] = true end
+    ok(to[2] and to[3] and not to[1] and got[2] and got[2].payload == 'y', 'mp: all = the others through the network, the local player by loopback')
+    -- the debug switch: the local slot through the carrier
+    net_sent = {}
+    mp.force_network(true)
+    ok(mp.send('self', {n = 42}, 1) == true, 'mp: send to the local slot, forced through the network')
+    ticks(1)
+    ok(#net_sent == 1 and net_sent[1][1] == 1, 'mp: forced: one frame to the local slot')
+    mp.force_network(false)
+    -- a dropped frame does not block the queue
+    net_send_ok = false
+    mp.send('x', 'y', 3)
+    ticks(1)
+    net_send_ok = true
+    net_sent = {}
+    mp.send('x', 'z', 3)
+    ticks(1)
+    ok(#net_sent == 1, 'mp: a frame the game refused is dropped, the next one goes')
+    ok(mp.send('t', ('x'):rep(60000), 'all') == true, 'mp: queue a large message')
+    for _ = 1, 7 do mp.send('t', ('x'):rep(60000), 3) end
+    ok(mp.send('t', ('x'):rep(60000), 3) == nil, 'mp: refused while too much is waiting')
+    C.queue, C.qhead, C.qtail, C.queued = {}, 1, 0, 0
+    mp_info_mock = {network = false}
+    hero_names[2], hero_names[3] = nil, nil
+    hero_id, objects[1], objects[2], objects[3] = saved_hero, saved1, saved2, saved3
 end
 
 print(('%d passed, %d failed'):format(passes, failures))

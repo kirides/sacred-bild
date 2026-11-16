@@ -77,6 +77,15 @@ namespace Gear::Addr
     // Net trace (gear/netmsg.cpp). ENG 007D4860: the client's send queue, thiscall (net, message*, flush), ret 8. A
     // message is a 16-byte header (u32 size | slot << 22 in the low 22 / high bits, +0xE u16 message id) and its payload.
     inline Sacred::Thiscall<uint32_t(void* net, uint32_t* message, uint8_t flush)> cNet_queueMessage{};
+    // The mod channel (gear/netmsg.cpp). ENG 007D4300: build a message (16-byte header, the sender slot from net +0x48)
+    // and queue it, thiscall (net, data, size, type, flush), ret 0x10. ENG 0182EBF0: the connection object (may be null;
+    // +0x2A and +0x2B must be set to send). ENG 007DCF91: in the receive dispatcher 0x7DC260 (engine thread), the type
+    // switch `cmp ecx, 0x1D4` / `ja <next message>` / `xor edx, edx` / `mov dl, [ecx + index table]` /
+    // `jmp [edx*4 + jump table]`; at the jump: [esp+0x2C] the message, ebp its payload, ebx the payload size, esi the
+    // sender slot (0: the server).
+    inline Sacred::Thiscall<uint8_t(void* net, const void* data, uint32_t size, uint32_t type, uint32_t flush)> cNet_sendMessage{};
+    inline Sacred::Global<uint8_t*> g_pNet{};
+    inline uintptr_t netDispatchSwitch{};
 
     // Mod UI input (gear/ui.cpp). ENG 00757840: cUI_Manager::receiveEvent (vtable slot 0); cEngine_receiveEvent
     // (00618090) gives it every mouse and key event first, and the world gets a mouse event only if it returns

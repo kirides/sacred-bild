@@ -110,6 +110,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'game.save_failed'` | It could not be written. |
 | `'kill'` | A kill the local computer sent to the game (a hero's kill: `(kill)`, see `GearKill`). |
+| `'mp_message'` | A message of the mod channel (`gear.mp.send`) arrived: `(from, channel, payload)`. |
 | `'realm.changed'` | `gear.realm.use` switched the online play server: `(realm)`. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'skillslot.key'` | A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it. |
@@ -207,7 +208,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
 | `game` | `GearGame` | The game itself: difficulty and saving. |
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
-| `mp` | `GearMp` | Players of a network game and the `kill` event. |
+| `mp` | `GearMp` | Players of a network game, the host, the mod channel and the `kill` event. |
 | `settings` | `GearSettings` | This mod's settings (declared in `mod.lua`, changed by the player in the mod manager). |
 | `keys` | `GearKeys` | This mod's declared key binds. |
 | `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
@@ -231,6 +232,7 @@ Forms:
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
 - `fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler`
+- `fun(event: 'mp_message', fn: fun(from: GearPlayer, channel: string, payload: table|string)): GearHandler`
 - `fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
 - `fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler`
@@ -1074,6 +1076,12 @@ The hero's class name and id; nil for other creatures.
 - returns `name` `GearClassName?`
 - returns `id` `integer?`
 
+#### `creature:name() -> string?`
+
+A hero's name as the game shows it; nil for other creatures (and for a hero the game has no name for).
+
+- returns `string?`
+
 #### `creature:set_hp(hp) -> boolean?, string?`
 
 Sets the hit points (1..max: mods do not kill through it). Single player only.
@@ -1364,7 +1372,9 @@ Chooses the realm for the next Closed or Open Internet and saves the choice. Rai
 
 ## Multiplayer (gear.mp)
 
-In a network game every player is a hero object (slots 1 to 16 are the object ids of the heroes). A mod runs on every player's computer; the `kill` event runs on the computer of the player who made the kill. Design and what is still to come (chat, a channel between the mods, per-player storage, announcements): `docs/GearServerMods.md`.
+In a network game every player is a hero object (slots 1 to 16 are the object ids of the heroes). A mod runs on every player's computer; the `kill` event runs on the computer of the player who made the kill. Mods on different computers talk through the mod channel (`gear.mp.send` and the `mp_message` event), which rides the game's own connection. Design and what is still to come (per-player storage, announcements): `docs/GearServerMods.md`.
+
+The host is the player whose game started the server. In single player the local player is the host and slot 1.
 
 ### GearPlayer
 
@@ -1372,9 +1382,12 @@ A player of the game.
 
 | Field | Type | |
 |---|---|---|
-| `slot` | `integer` | The player's slot, 1 to 16; the same number as the hero's object id. |
+| `slot` | `integer` | The player's slot, 1 to 16; the same number as the hero's object id. 0 for the server (`mp_message` only). |
+| `name` | `string` | The hero's name as the game shows it (`'hero <slot>'` if the game has none for it). |
+| `key` | `string` | An identity for storage: the name in lower case, `:` and the class (`'aria:seraphim'`); opaque, stable between sessions, not unique across computers. |
 | `class` | `GearClassName` | The hero's class. (optional) |
 | `is_local` | `boolean` | This is the player at this computer. |
+| `is_host` | `boolean` | This player is the host (started the game). Always true for the local player in single player. |
 
 #### `GearPlayer:hero() -> Creature`
 
@@ -1386,7 +1399,7 @@ The player's hero.
 
 Reached as `gear.mp`.
 
-Players of a network game.
+Players of a network game and the mod channel.
 
 #### `gear.mp.players() -> GearPlayer[]`
 
@@ -1412,6 +1425,42 @@ The player at this computer, or nil.
 Whether the heroes of other players are in the game (a network game with more than the local player).
 
 - returns `boolean`
+
+#### `gear.mp.local_slot() -> integer?`
+
+The local player's slot (the local hero's object id); 1 in single player, nil in a network game before the hero is there.
+
+- returns `integer?`
+
+#### `gear.mp.host_slot() -> integer?`
+
+The host's slot; the local slot in single player, nil in a network game while the host is not known yet.
+
+- returns `integer?`
+
+#### `gear.mp.is_host() -> boolean`
+
+Whether this computer is the host (always true in single player).
+
+- returns `boolean`
+
+#### `gear.mp.send(channel, payload, to) -> boolean?, string?`
+
+Sends `payload` to the mods on another computer (or this one), which get it as the `mp_message` event `(from, channel, payload)`. `channel` names what the message is for (1 to 32 letters, digits, `_`, `.`, `-`; use your mod's id). `payload` is a table (sent as JSON, `gear.json` rules) or a string, at most 64 KB. `to` is a slot, a player, `'host'` (the default) or `'all'` (every player, this one included).
+
+Messages to this computer (single player, or the host sending to itself) arrive on the next tick without the network. Others travel as frames of the game's private chat, which every game server relays; players never see them. Sending is paced (about 8 KB/s), so a 64 KB message takes about 8 s; messages to one player arrive in the order they were sent. Incomplete messages (a player left mid-message) are dropped after 30 s. Nothing is encrypted, and a modified client can send anything: check what you receive.
+
+- `channel`: `string`
+- `payload`: `table|string`
+- `to`: `integer|GearPlayer|'host'|'all'` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?` - `'the host is not known yet'`, `'no such player'`, `'too many messages are waiting to be sent'`, a bad channel or payload ...
+
+#### `gear.mp.force_network(on)`
+
+Debug: `true` sends messages to the local slot through the real chat carrier (out to the server and back) instead of the loopback, in a network game. For self tests of the channel; off by default.
+
+- `on`: `boolean`
 
 ### GearKill
 

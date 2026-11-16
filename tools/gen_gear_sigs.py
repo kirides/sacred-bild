@@ -73,6 +73,13 @@ GEAR = [
     # Net trace (gear/netmsg.cpp): the client's send queue (thiscall (cGCclass* net, message*, flush), ret 8): a
     # message is a 16-byte header (u32 size | slot << 22, +0xE u16 message id) and its payload.
     ('cNet_queueMessage', 0x007D4860, 'func'),
+    # The mod channel (gear/netmsg.cpp): build + queue a game message (thiscall (net, data, size, u16 type, flush), ret
+    # 0x10), the connection object it takes (0182EBF0, what the chat sender 0x7D4510 is called with), and the
+    # receive dispatcher's type switch (0x7DC260: `cmp ecx, 0x1D4; ja <next message>; ... jmp [edx*4 + table]`), whose
+    # chat case (types 3, 4, 5: 0x7E0880) Gear routes through its own stub to drop its frames before the chat shows them.
+    ('cNet_sendMessage', 0x007D4300, 'func'),
+    ('g_pNet', 0x0182EBF0, 'data'),
+    ('netDispatchSwitch', 0x007DCF91, 'code'),
     ('modelRenderer_instance', 0x00401660, 'func'),
     ('modelRenderer_drawItem', 0x0040E9C0, 'func'),
     ('renderFlags_instance', 0x00643110, 'func'),

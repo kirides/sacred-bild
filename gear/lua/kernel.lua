@@ -786,13 +786,31 @@ local mp = {}
 do
 local player_mt = {}
 player_mt.__index = player_mt
+-- native.mp_info() -> {network, is_host, host_slot} (host_slot nil while it is not known).
+local function mp_info()
+    return native.mp_info and native.mp_info() or {network = false}
+end
+local function host_slot()
+    local i = mp_info()
+    if not i.network or i.is_host then return native.hero() or (not i.network and 1 or nil) end
+    return i.host_slot
+end
 local function make_player(id)
     local o = native.object(id)
     if not (o and o.creature) then return nil end
     local cname = creature_mt.class({id = id})
-    return setmetatable({slot = id, class = cname, is_local = native.hero() == id}, player_mt)
+    local name = native.hero_name and native.hero_name(id) or nil
+    local p = {slot = id, class = cname, is_local = native.hero() == id, name = name or ('hero ' .. id)}
+    p.key = p.name:lower() .. ':' .. (cname or '?')
+    p.is_host = host_slot() == id
+    return setmetatable(p, player_mt)
 end
 function player_mt:hero() return wrap(self.slot) end
+-- A hero's name as the game shows it (nil for other creatures).
+function creature_mt:name()
+    if self.id < 1 or self.id > 16 then return nil end
+    return native.hero_name and native.hero_name(self.id) or nil
+end
 function mp.players()
     local out = {}
     for id = 1, 16 do
@@ -812,6 +830,252 @@ function mp.local_player()
 end
 -- Whether other players' heroes are in the game (a network game with more than the local player).
 function mp.active() return #mp.players() > 1 end
+function mp.local_slot() return native.hero() or (not mp_info().network and 1 or nil) end
+function mp.host_slot() return host_slot() end
+function mp.is_host()
+    local i = mp_info()
+    return not i.network or i.is_host == true
+end
+
+-- The mod channel. A message (kind 's' string or 'j' JSON, the channel's length and name, the body) is cut into frames
+-- the native side sends as private chat (0x003) to the target slot: native.mp_send_frame(slot, utf16le) -> bool;
+-- received frames come from native.mp_take_frame() -> slot, utf16le. A frame is UTF-16 units: the marker, the message
+-- number, the fragment index, in the first fragment the total length (two units), then the bytes packed 15 bits per
+-- unit; every unit but the marker is 0x4000 + a 15-bit value (no NUL, no surrogates). At most 127 units (the 254 bytes
+-- the server relays): 228 bytes in the first frame, 232 in each further one.
+local C = {
+    MARKER = 0xE1A0, FIRST = 228, NEXT = 232, MAX_BODY = 65536, RATE = 8192, BURST = 2048, PER_TICK = 4,
+    MAX_QUEUED = 512 * 1024, EXPIRE = 30, MAX_PARTIAL = 16,
+    queue = {}, qhead = 1, qtail = 0, queued = 0, credit = 2048, number = 0, now = 0,
+    loop = {}, partial = {}, force = false,
+}
+mp._channel = C   -- for the kernel tests (names starting with _ are not part of the API)
+
+local band, bor, lshift, rshift = bit.band, bit.bor, bit.lshift, bit.rshift
+local schar, sbyte = string.char, string.byte
+
+local function units_to_le(units)
+    local parts = {}
+    for i = 1, #units do
+        local u = units[i]
+        parts[i] = schar(band(u, 0xFF), rshift(u, 8))
+    end
+    return table.concat(parts)
+end
+-- The bytes s[i .. j] packed 15 bits per unit, appended to `units`.
+local function pack(s, i, j, units)
+    local acc, n = 0, 0
+    for k = i, j do
+        acc = bor(lshift(acc, 8), sbyte(s, k))
+        n = n + 8
+        if n >= 15 then
+            n = n - 15
+            units[#units + 1] = 0x4000 + band(rshift(acc, n), 0x7FFF)
+            acc = band(acc, lshift(1, n) - 1)
+        end
+    end
+    if n > 0 then units[#units + 1] = 0x4000 + band(lshift(acc, 15 - n), 0x7FFF) end
+end
+-- `count` bytes from units[from ..], appended to `out`; false if the units run out first.
+local function unpack_units(units, from, count, out)
+    local acc, n, got = 0, 0, 0
+    for k = from, #units do
+        if got >= count then break end
+        acc = bor(lshift(acc, 15), units[k] - 0x4000)
+        n = n + 15
+        while n >= 8 and got < count do
+            n = n - 8
+            got = got + 1
+            out[#out + 1] = schar(band(rshift(acc, n), 0xFF))
+        end
+        acc = band(acc, lshift(1, n) - 1)
+    end
+    return got == count
+end
+function C.frame_count(len) return len <= C.FIRST and 1 or 1 + math.ceil((len - C.FIRST) / C.NEXT) end
+-- The frames (UTF-16LE strings) of one encoded message.
+function C.frames(data, number)
+    local out, len, pos = {}, #data, 1
+    for index = 0, C.frame_count(len) - 1 do
+        local units = {C.MARKER, 0x4000 + number, 0x4000 + index}
+        local size = index == 0 and C.FIRST or C.NEXT
+        if index == 0 then
+            units[4] = 0x4000 + rshift(len, 15)
+            units[5] = 0x4000 + band(len, 0x7FFF)
+        end
+        pack(data, pos, math.min(pos + size - 1, len), units)
+        pos = pos + size
+        out[#out + 1] = units_to_le(units)
+    end
+    return out
+end
+function C.encode(channel, payload)
+    if type(channel) ~= 'string' or not channel:match('^[%w_%.%-]+$') or #channel > 32 then
+        return nil, 'channel must be 1 to 32 letters, digits, _ . -'
+    end
+    local kind, body = 's', payload
+    if type(payload) == 'table' then
+        local ok, text = pcall(json.encode, payload)
+        if not ok then return nil, tostring(text) end
+        kind, body = 'j', text
+    elseif type(payload) ~= 'string' then
+        return nil, 'payload must be a table or a string'
+    end
+    if #body > C.MAX_BODY then return nil, 'the message is larger than 64 KB' end
+    return kind .. schar(#channel) .. channel .. body
+end
+function C.decode(data)
+    local kind, n = data:sub(1, 1), sbyte(data, 2)
+    if not n or n == 0 or #data < 2 + n then return nil end
+    local channel, body = data:sub(3, 2 + n), data:sub(3 + n)
+    if kind == 's' then return channel, body end
+    if kind == 'j' then
+        local v = json.decode(body)
+        if v ~= nil then return channel, v end
+    end
+end
+
+function C.deliver(slot, data)
+    local channel, payload = C.decode(data)
+    if not channel then
+        log('gear.mp: a message from slot %s could not be read', tostring(slot))
+        return
+    end
+    local from = slot == 0 and {slot = 0, name = 'server', key = 'server', is_local = false, is_host = false}
+        or mp.player(slot)
+        or setmetatable({slot = slot, name = 'hero ' .. slot, key = '?', is_local = false, is_host = host_slot() == slot}, player_mt)
+    kernel.dispatch('mp_message', from, channel, payload)
+end
+
+-- gear.mp.send(channel, payload, to) -> true | nil, message. `to`: a slot, a player, 'host' (default) or 'all'.
+function mp.send(channel, payload, to)
+    local data, err = C.encode(channel, payload)
+    if not data then return nil, err end
+    local me = native.hero()
+    if not me then return nil, 'no game is running' end
+    local network = mp_info().network
+    if to == nil then to = 'host' end
+    if type(to) == 'table' then to = to.slot end
+    local targets = {}
+    if to == 'host' then
+        local h = host_slot()
+        if not h then return nil, 'the host is not known yet' end
+        targets[1] = h
+    elseif to == 'all' then
+        if network then
+            for _, p in ipairs(mp.players()) do targets[#targets + 1] = p.slot end
+        else
+            targets[1] = me
+        end
+    elseif type(to) == 'number' and to >= 1 and to <= 16 and to == math.floor(to) then
+        if to ~= me and not (network and mp.player(to)) then return nil, 'no such player' end
+        targets[1] = to
+    else
+        return nil, "to must be a slot (1 to 16), a player, 'host' or 'all'"
+    end
+    local frames
+    local waiting = 0
+    for _, slot in ipairs(targets) do
+        if slot ~= me or (C.force and network) then waiting = waiting + C.frame_count(#data) * 254 end
+    end
+    if C.queued + waiting > C.MAX_QUEUED then return nil, 'too many messages are waiting to be sent' end
+    C.number = (C.number + 1) % 0x8000
+    for _, slot in ipairs(targets) do
+        if slot == me and not (C.force and network) then
+            C.loop[#C.loop + 1] = data
+        else
+            frames = frames or C.frames(data, C.number)
+            for _, f in ipairs(frames) do
+                C.qtail = C.qtail + 1
+                C.queue[C.qtail] = {slot, f}
+                C.queued = C.queued + #f
+            end
+        end
+    end
+    return true
+end
+-- Debug: in a network game, messages to the local slot go through the real chat carrier instead of the loopback.
+function mp.force_network(on) C.force = on and true or false end
+
+function C.receive(slot, s)
+    local units = {}
+    for i = 1, #s - 1, 2 do units[#units + 1] = sbyte(s, i) + sbyte(s, i + 1) * 256 end
+    if units[1] ~= C.MARKER or #units < 4 or #units > 127 then return end
+    for i = 2, #units do
+        if units[i] < 0x4000 or units[i] > 0xBFFF then return end
+    end
+    C.received = (C.received or 0) + 1
+    local number, index = units[2] - 0x4000, units[3] - 0x4000
+    local key = slot * 0x8000 + number
+    local m = C.partial[key]
+    if not m then
+        local open, oldest = 0, nil
+        for k, v in pairs(C.partial) do
+            if v.slot == slot then
+                open = open + 1
+                if not oldest or v.at < C.partial[oldest].at then oldest = k end
+            end
+        end
+        if open >= C.MAX_PARTIAL then C.partial[oldest] = nil end
+        m = {slot = slot, at = C.now, parts = {}, got = 0}
+        C.partial[key] = m
+    end
+    if index == 0 then
+        if #units < 6 then C.partial[key] = nil return end
+        m.len = (units[4] - 0x4000) * 0x8000 + (units[5] - 0x4000)
+        if m.len > C.MAX_BODY + 64 then C.partial[key] = nil return end
+        m.count = C.frame_count(m.len)
+    end
+    if not m.parts[index] then
+        m.parts[index] = units
+        m.got = m.got + 1
+    end
+    if m.count and index >= m.count then C.partial[key] = nil return end
+    if not (m.count and m.got >= m.count) then return end
+    C.partial[key] = nil
+    local out = {}
+    for i = 0, m.count - 1 do
+        local first = i == 0
+        local size = first and math.min(m.len, C.FIRST) or math.min(m.len - C.FIRST - (i - 1) * C.NEXT, C.NEXT)
+        if not unpack_units(m.parts[i], first and 6 or 4, size, out) then return end
+    end
+    C.deliver(slot, table.concat(out))
+end
+
+-- Every tick: the loopback messages of the last tick, the frames that came in, the frames to send (paced: about
+-- 8 KB/s and at most 4 frames a tick, so the game's send queue never floods).
+function kernel.poll_mp(dt)
+    C.now = C.now + (dt or 0)
+    if #C.loop > 0 then
+        local list = C.loop
+        C.loop = {}
+        local me = native.hero()
+        for _, data in ipairs(list) do C.deliver(me, data) end
+    end
+    if native.mp_take_frame then
+        for _ = 1, 64 do
+            local slot, s = native.mp_take_frame()
+            if not slot then break end
+            C.receive(slot, s)
+        end
+    end
+    for k, m in pairs(C.partial) do
+        if C.now - m.at > C.EXPIRE then C.partial[k] = nil end
+    end
+    C.credit = math.min(C.credit + C.RATE * (dt or 0), C.BURST)
+    local sent = 0
+    while C.qhead <= C.qtail and sent < C.PER_TICK and C.credit >= 0 do
+        local f = C.queue[C.qhead]
+        -- false: the game cannot send it (the player left, the connection is gone): the frame is dropped
+        if not (native.mp_send_frame and native.mp_send_frame(f[1], f[2])) then C.dropped = (C.dropped or 0) + 1 end
+        C.queue[C.qhead] = nil
+        C.qhead = C.qhead + 1
+        C.queued = C.queued - #f[2]
+        C.credit = C.credit - #f[2] - 20
+        sent = sent + 1
+    end
+    if C.qhead > C.qtail then C.queue, C.qhead, C.qtail = {}, 1, 0 end
+end
 end
 
 -- Items. The kind (the type record's +0x2E) -> category; quality from the rarity (as the label colours).
@@ -4309,6 +4573,7 @@ function kernel.tick(dt)
     poll_keys()
     poll_saves()
     kernel.poll_kills()
+    kernel.poll_mp(dt)
     poll_pipes()
     run_timers()
     ui_begin_tick()

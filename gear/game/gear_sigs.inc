@@ -33,6 +33,9 @@ static const Sig::Entry kGearSigs[] = {
     {"cItem_labelColor", "53 55 8B 6C 24 0C 56 57 8B F9 85 ED", 0, Sig::Take::Match, &Gear::Addr::cItem_labelColor}, // 005C13C0, 005C1330
     {"cItem_loadResources", "83 EC 2C 55 56 8B F1 57 F6 46 08 80", 0, Sig::Take::Match, &Gear::Addr::cItem_loadResources}, // 00640640, 00640730
     {"cNet_queueMessage", "55 8B E9 32 C0 8A 4D 2A 84 C9 0F 84 ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::cNet_queueMessage}, // 007D4860, 007D4090
+    {"cNet_sendMessage", "8B 44 24 10 8B 54 24 08 56 8B F1 8B 4C 24 10", 0, Sig::Take::Match, &Gear::Addr::cNet_sendMessage}, // 007D4300, 007D3B30
+    {"g_pNet", "8A 8E 18 38 00 00 8B 56 40 51 8B 0D ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::g_pNet}, // 0182EBF0, 0182CB70
+    {"netDispatchSwitch", "C1 EE 1B 8D 4A FF 81 F9 D4 01 00 00", 6, Sig::Take::Match, &Gear::Addr::netDispatchSwitch}, // 007DCF91, 007DC561
     {"modelRenderer_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3F 68 FC 00 00 00", 0, Sig::Take::Match, &Gear::Addr::modelRenderer_instance}, // 00401660, 00401660
     {"modelRenderer_drawItem", "81 EC 64 03 00 00 56 8B F1 57 8D 8C 24 2C 03 00 00", 0, Sig::Take::Match, &Gear::Addr::modelRenderer_drawItem}, // 0040E9C0, 0040EA00
     {"renderFlags_instance", "A1 ?? ?? ?? ?? 85 C0 75 28 6A 08 E8 ?? ?? ?? ?? 83 C4 04 85 C0", 0, Sig::Take::Match, &Gear::Addr::renderFlags_instance}, // 00643110, 00643240
