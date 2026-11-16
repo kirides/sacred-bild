@@ -218,8 +218,8 @@ local hero's own backpack and the chest may be changed, and Gear then takes the 
 made is announced as created (message 0x16F, `create` with broadcast) and then updated with its data (0x16C, the
 engine's `0x005C0810`), put into and taken out of a container with the announcing flag (0x13F / 0x13E) and destroyed
 with `0x005FBDB0 (id, 1, 0, 0)` (0x167), the sequence the engine's own loot generation and inventory use, so the other
-players and the game server see the same objects. Spawning and the temporary items of item icons and tooltips for stored
-items stay single player only. Not tested against a second PC; closed online servers that check items are out of scope. An exported item made again is byte for byte the same (type, entries, data):
+players and the game server see the same objects. `world.spawn` stays single player only. The temporary items of item icons and tooltips for stored items are local-only
+in a network game (see Item icons). Not tested against a second PC; closed online servers that check items are out of scope. An exported item made again is byte for byte the same (type, entries, data):
 the self test of `shared-stash` and the probe that found the format moved 55 backpack items through the chest and
 back with equal exports. An export holds everything that makes an item what it is: its type, its entries (the random properties, and one entry
 for every rune socketed into it: a socketed item is 6 + 130 * entries + 130 bytes) and its record (the bonuses, which a
@@ -295,13 +295,15 @@ back after.
 - **A type id or name**: no object exists, and the model renderer needs one (the model instance lives in the item at
   `+0x40`). Gear makes one for the frame: `cObjectManager::create` at the hero's feet, at once `cInventory::put` into
   container 31 (an inventory container the game does not use: so the item is never in the world for the world pass and
-  the sector lists forget it), draws, takes it out and destroys it after the layer's commands. Single player only
-  (`gear.world.can_change()`), at most 48 types a frame, a few tenths of a millisecond per type and frame: draw a stash
+  the sector lists forget it), draws, takes it out and destroys it after the layer's commands. In a network game it is local-only: created without broadcast (the engine takes its id from the
+  pool the server granted this client, as for its own local objects), put into and taken out of the container without the
+  announcing flag and destroyed through the engine's local path (`0x005FBDB0 (id, 0, 0, 0)`: no 0x167, the id goes back to
+  the pool), so nothing about it reaches the peers or the server (`Inventory::LocalOnly`). At most 48 types a frame, a few tenths of a millisecond per type and frame: draw a stash
   list's visible part only, and prefer live items where there are some. The item is created like any new item (random
   properties may use the game's random numbers); nothing is broadcast and nothing stays behind (the self test draws
   thousands of frames and checks that no item is left in the container or the world). Destroying such an item while it
   is still in the world crashes the game a moment later, which is why it goes through the container.
-- Nothing is drawn when the type is no item or has no model, in a network game (for types), without a hero, or when the
+- Nothing is drawn when the type is no item or has no model, without a hero, or when the
   addresses were not found (the log says so at start).
 
 Self test: `gear/examples/itemicontest` draws a row by type id and a row from live items.

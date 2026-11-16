@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <cstring>
+#include <optional>
 
 namespace
 {
@@ -149,11 +150,11 @@ namespace
         }
     }
 
-    int callDestroy(void* m, uint32_t id)
+    int callDestroy(void* m, uint32_t id, bool localOnly)
     {
         __try
         {
-            Addr::cObjectManager_destroy(m, id, 1, 0, 0);
+            Addr::cObjectManager_destroy(m, id, localOnly ? 0 : 1, 0, 0);
             return 1;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -233,11 +234,17 @@ namespace
         }
     }
 
+    int g_localDepth = 0;
+    bool localScope() { return g_localDepth > 0; }
+    // Whether the engine's calls should tell the peers: a network game and not a local-only scope.
+    bool announcing() { return World::networkGame() && !localScope(); }
+
     // In a network game only the local hero's backpack and the chest may be touched: those are the containers the
     // engine's own item calls announce to the peers for this player.
     bool containerAllowed(uint32_t index)
     {
-        return !World::networkGame() || index == Inventory::kChest || index == World::hero();
+        return !World::networkGame() || index == Inventory::kChest || index == World::hero() ||
+               (localScope() && index == Inventory::kScratch);
     }
 
     // Whether item object `o` is a weapon: its vtable's slot 8 is cWeapon3D's.
@@ -294,6 +301,9 @@ namespace
         return true;
     }
 }
+
+Inventory::LocalOnly::LocalOnly() { ++g_localDepth; }
+Inventory::LocalOnly::~LocalOnly() { --g_localDepth; }
 
 bool Inventory::available()
 {
@@ -400,7 +410,7 @@ bool Inventory::put(uint32_t index, uint32_t id, uint32_t x, uint32_t y, const c
         return false;
     }
     const uint32_t slot = y * columns + x;
-    if (callPut(c, slot, id, w, h, World::networkGame() ? 1 : 0) < 0)
+    if (callPut(c, slot, id, w, h, announcing() ? 1 : 0) < 0)
     {
         LOG("Inventory: putting item {} into container {} faulted", id, index);
         error = "the game faulted while putting the item in";
@@ -433,7 +443,7 @@ bool Inventory::remove(uint32_t index, uint32_t id, const char*& error)
         error = "no such container";
         return false;
     }
-    const int r = callRemove(c, id, World::networkGame() ? 1 : 0);
+    const int r = callRemove(c, id, announcing() ? 1 : 0);
     if (r < 0)
     {
         LOG("Inventory: taking item {} out of container {} faulted", id, index);
@@ -472,7 +482,7 @@ bool Inventory::destroy(uint32_t id, const char*& error)
             }
         }
     }
-    if (callDestroy(m, id) < 0)
+    if (callDestroy(m, id, World::networkGame() && localScope()) < 0)
     {
         LOG("Inventory: destroying item {} faulted", id);
         error = "the game faulted while destroying the item";
@@ -546,12 +556,13 @@ bool Inventory::exportItem(uint32_t id, std::string& bytes, const char*& error)
 
 uint32_t Inventory::importItem(const std::string& bytes, const char*& error, bool temporary)
 {
-    const bool net = World::networkGame();
-    if (net && temporary)
+    // A temporary item (a tooltip's) never reaches the peers: it is made, read and destroyed local-only.
+    std::optional<LocalOnly> scope;
+    if (temporary)
     {
-        error = "temporary items are not made in a network game";
-        return 0;
+        scope.emplace();
     }
+    const bool net = announcing();
     if (!World::inventoryChangesAllowed())
     {
         error = "inventory changes are not possible now (no hero, or the game does not allow it)";

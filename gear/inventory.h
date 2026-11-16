@@ -29,6 +29,21 @@ namespace Inventory
         uint32_t height = 0;
     };
 
+    // The container nobody uses: temporary display items (icons, tooltips) are put into it so they are never in the world.
+    constexpr uint32_t kScratch = 31;
+
+    // While one of these lives, the item and inventory calls of this module stay on this PC, in a network game too: an
+    // item made is not announced (the engine takes its id from the pool the server granted this client, as for its own
+    // local objects), put in and taken out without the announcing flag, and destroyed through the engine's local path
+    // (no 0x167; the id goes back to the pool). For temporary items drawn or read and gone within the frame. Nestable.
+    struct LocalOnly
+    {
+        LocalOnly();
+        ~LocalOnly();
+        LocalOnly(const LocalOnly&) = delete;
+        LocalOnly& operator=(const LocalOnly&) = delete;
+    };
+
     // False before a game ran, or if the addresses were not found.
     bool available();
 
@@ -63,7 +78,7 @@ namespace Inventory
 
     // Makes an item from those bytes at the hero's feet (a new object of the same type with the saved data); its
     // id, or 0 with `error`. The caller puts it into a container.
-    // `temporary`: only to read something from it and destroy it at once (tooltips): never in a network game.
+    // `temporary`: only to read something from it and destroy it at once (tooltips): made local-only in a network game.
     // In a network game the item is made and announced with the engine's own network calls (0x16F, then 0x16C with its
     // data) and put into the local hero's backpack or the chest with the engine's announcing calls.
     uint32_t importItem(const std::string& bytes, const char*& error, bool temporary = false);

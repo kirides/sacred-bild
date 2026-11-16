@@ -1458,7 +1458,7 @@ A container: `'chest'`, `'backpack'` (the local hero's) or its number (0..31). N
 
 #### `gear.inv.can_change() -> boolean, boolean`
 
-Whether the local hero's inventory may be changed now, and whether a network game runs. Single player: as `gear.world.can_change()`. In a network game (LAN, open net) the changes go through the engine's own announcing calls (an item made is announced as created and updated, put in and taken out as inventory moves, destroyed as a destruction) and only the hero's own backpack and the chest may be changed there; spawning and the temporary items of icons and tooltips stay refused.
+Whether the local hero's inventory may be changed now, and whether a network game runs. Single player: as `gear.world.can_change()`. In a network game (LAN, open net) the changes go through the engine's own announcing calls (an item made is announced as created and updated, put in and taken out as inventory moves, destroyed as a destruction) and only the hero's own backpack and the chest may be changed there; spawning stays refused. The temporary items of icons and tooltips are made local-only there: not announced, put in and taken out without the announcing flag and destroyed through the engine's local path.
 
 - returns `allowed` `boolean`
 - returns `network` `boolean`
@@ -1703,7 +1703,7 @@ A UI image; `w`, `h` default to its own size. Images are filtered linearly.
 
 #### `gear.ui.item_icon(item, x, y, w, h, opts) -> boolean`
 
-What the game's inventory windows show for an item, its own 3D model, drawn by the game's model renderer as large as fits the box (x, y, w, h) and centered in it (the inventory's own size is 32 units a cell). Give an item (a table from `gear.world.item` or a container's `items()`: the live object is drawn, with its own state), or a type id or name: then a temporary item of that type is made at the hero's feet for the frame and destroyed after the layer's drawing (single player only; nothing is drawn in a network game or without a hero; at most 48 different types a frame). Same `layer` and `window` options as the other draws.
+What the game's inventory windows show for an item, its own 3D model, drawn by the game's model renderer as large as fits the box (x, y, w, h) and centered in it (the inventory's own size is 32 units a cell). Give an item (a table from `gear.world.item` or a container's `items()`: the live object is drawn, with its own state), or a type id or name: then a temporary item of that type is made at the hero's feet for the frame and destroyed after the layer's drawing (local-only in a network game: nothing reaches the peers; nothing is drawn without a hero; at most 48 different types a frame). Same `layer` and `window` options as the other draws.
 
 - `item`: `GearItem|integer|string` - An item, a type id or a type name.
 - `x`: `number`
@@ -1715,7 +1715,7 @@ What the game's inventory windows show for an item, its own 3D model, drawn by t
 
 #### `gear.ui.item_tooltip(item, x, y) -> boolean?, number|string?, number?`
 
-The game's own tooltip popup for an item, as the inventory windows show it (framed, the name in the rarity colour, price, protection, level, bonus lines), centered on (x, y) of the 1024x768 layout and kept on the screen. `item` is an item (a table from `gear.world.item` or a container's `items()`), an item id, or the string `gear.inv.export` made (a temporary item is made to read the text from and destroyed at once; single player only). Call it every frame the tooltip should be shown; it is drawn by the game's popup pass. `x`, `y` are the popup's top-left corner. It also returns the popup's size as of its last layout (what the previous tooltip it showed took; 0 at first), so a mod can place the next one beside a region.
+The game's own tooltip popup for an item, as the inventory windows show it (framed, the name in the rarity colour, price, protection, level, bonus lines), centered on (x, y) of the 1024x768 layout and kept on the screen. `item` is an item (a table from `gear.world.item` or a container's `items()`), an item id, or the string `gear.inv.export` made (a temporary item is made to read the text from and destroyed at once, local-only in a network game). Call it every frame the tooltip should be shown; it is drawn by the game's popup pass. `x`, `y` are the popup's top-left corner. It also returns the popup's size as of its last layout (what the previous tooltip it showed took; 0 at first), so a mod can place the next one beside a region.
 
 - `item`: `GearItem|integer|string`
 - `x`: `number`

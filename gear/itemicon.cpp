@@ -24,7 +24,7 @@ namespace
     std::map<uint32_t, uint32_t> g_temporary;       // type -> the item made for this pass
     uint32_t g_madeThisPass = 0;
     constexpr uint32_t kMaxTemporary = 48;
-    constexpr uint32_t kScratch = 31;       // an inventory container the game does not use
+    constexpr uint32_t kScratch = Inventory::kScratch;       // an inventory container the game does not use
 
     template <class T>
     T& at(uintptr_t base, uintptr_t offset)
@@ -143,7 +143,7 @@ namespace
         {
             return World::itemObject(found->second);
         }
-        if (g_madeThisPass >= kMaxTemporary || !World::changesAllowed())
+        if (g_madeThisPass >= kMaxTemporary || !World::inventoryChangesAllowed())
         {
             return 0;
         }
@@ -153,7 +153,9 @@ namespace
             return 0;
         }
         const char* error = nullptr;
-        const uint32_t id = World::spawn(type, hero.position, error);
+        // Local only, in a network game too: nothing about this item reaches the peers or the server.
+        Inventory::LocalOnly localOnly;
+        const uint32_t id = World::createObject(type, hero.position, false, error);
         ++g_madeThisPass;
         if (!id)
         {
@@ -228,6 +230,7 @@ bool ItemIcon::draw(void* device, const Request& request)
 
 void ItemIcon::endPass()
 {
+    Inventory::LocalOnly localOnly;
     for (const auto& [type, id] : g_temporary)
     {
         const char* error = nullptr;
