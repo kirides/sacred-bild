@@ -84,6 +84,11 @@ namespace Gear::Addr
     // `jmp [edx*4 + jump table]`; at the jump: [esp+0x2C] the message, ebp its payload, ebx the payload size, esi the
     // sender slot (0: the server).
     inline Sacred::Thiscall<uint8_t(void* net, const void* data, uint32_t size, uint32_t type, uint32_t flush)> cNet_sendMessage{};
+    // Gold (gear/world.cpp). ENG 00580110: the hero stats' gold setter, thiscall (stats = creature + 0x3A8, gold), ret 4:
+    // the anti-cheat check (0x590730), addGold (0x57FD80: clamps to 0 .. 0x7FFFFFFE, sets the values-dirty flag
+    // creature +0x4CF, so the next update sends message 0x11B, refreshes the checked copy), then a new snapshot.
+    // ENG 00461B74: a `call 00580110` (after `lea ecx, [ebp + 0x3A8]`) the setter is read from (gear/world.cpp).
+    inline uintptr_t cStats_setGoldCall{};
     inline Sacred::Global<uint8_t*> g_pNet{};
     inline uintptr_t netDispatchSwitch{};
 

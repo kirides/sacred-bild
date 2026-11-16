@@ -1092,7 +1092,7 @@ Sets the hit points (1..max: mods do not kill through it). Single player only.
 
 #### `creature:set_gold(gold) -> boolean?, string?`
 
-Sets the gold (heroes). Single player only.
+Sets the local hero's gold (0 to 2,147,483,646), also in LAN and Open Net games: through the engine's own gold setter, as a merchant sale does, so the hero's next update tells the server and the other players. Other heroes are refused (only their own computer may change them).
 
 - `gold`: `number`
 - returns `ok` `boolean?`
@@ -1100,7 +1100,7 @@ Sets the gold (heroes). Single player only.
 
 #### `creature:add_gold(amount) -> boolean?, string?`
 
-Adds gold, negative amounts take it away (heroes). Single player only.
+Adds gold to the local hero, negative amounts take it away (not below 0); also in network games, as `set_gold`.
 
 - `amount`: `number`
 - returns `ok` `boolean?`

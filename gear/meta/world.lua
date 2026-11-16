@@ -221,13 +221,15 @@ function Creature:name() end
 ---@return string? error
 function Creature:set_hp(hp) end
 
---- Sets the gold (heroes). Single player only.
+--- Sets the local hero's gold (0 to 2,147,483,646), also in LAN and Open Net games: through the engine's own gold
+--- setter, as a merchant sale does, so the hero's next update tells the server and the other players. Other heroes
+--- are refused (only their own computer may change them).
 ---@param gold number
 ---@return boolean? ok
 ---@return string? error
 function Creature:set_gold(gold) end
 
---- Adds gold, negative amounts take it away (heroes). Single player only.
+--- Adds gold to the local hero, negative amounts take it away (not below 0); also in network games, as `set_gold`.
 ---@param amount number
 ---@return boolean? ok
 ---@return string? error

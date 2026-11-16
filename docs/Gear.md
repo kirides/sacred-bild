@@ -190,7 +190,7 @@ player (`gear.world.can_change()`); in a network game (also a host nobody has jo
 A creature object `c` (`c.id`) reads the game each time; after the object is gone the reads give nil:
 `c:exists()`, `c:info()` (all fields), `c:type()`, `c:type_name()`, `c:position()` (x, y, layer), `c:hp()`,
 `c:max_hp()`, `c:is_dead()`, `c:level()`, `c:experience()`, `c:gold()`, `c:distance(other | x, y)`, `c:label()`;
-changes: `c:set_hp(hp)` (1..max: mods do not kill through it), `c:set_gold(n)`, `c:add_gold(n)` (heroes),
+changes: `c:set_hp(hp)` (1..max: mods do not kill through it), `c:set_gold(n)`, `c:add_gold(n)` (the local hero only, also in network games: through the engine's own gold setter, which keeps its anti-cheat copy in step and sends the change with the hero's next update),
 `c:teleport(x, y, layer)`.
 
 #### Items and pickup

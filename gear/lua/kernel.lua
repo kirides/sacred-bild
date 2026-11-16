@@ -717,13 +717,13 @@ function creature_mt:set_hp(hp)
 end
 function creature_mt:set_gold(gold)
     assert(type(gold) == 'number', 'gold must be a number')
-    return native.set_gold(self.id, math.max(0, math.floor(gold)))
+    return native.set_gold(self.id, math.min(math.max(0, math.floor(gold)), 2147483646))
 end
 function creature_mt:add_gold(amount)
     assert(type(amount) == 'number', 'amount must be a number')
     local o = info(self)
     if not o or not o.gold then return nil, 'no such hero' end
-    return native.set_gold(self.id, math.min(math.max(0, o.gold + math.floor(amount)), 4294967295))
+    return native.set_gold(self.id, math.min(math.max(0, o.gold + math.floor(amount)), 2147483646))
 end
 function creature_mt:teleport(x, y, layer)
     assert(type(x) == 'number' and type(y) == 'number', 'x and y must be numbers')

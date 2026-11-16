@@ -1,6 +1,7 @@
 #include "world.h"
 #include "game/gear_addr.h"
 #include "log.h"
+#include "patch.h"
 
 #include <windows.h>
 
@@ -102,6 +103,36 @@ namespace
         {
             id = Addr::cObjectManager_create(m, type, pos, 0, broadcast ? 1 : 0, 0);
             return id ? 1 : 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    // The engine's gold setter (ENG 0x580110), read from the call at cStats_setGoldCall; 0 if that is not a call.
+    Sacred::Thiscall<void(void* stats, uint32_t gold)> goldSetter()
+    {
+        static uintptr_t target = [] {
+            const uintptr_t at = Addr::cStats_setGoldCall;
+            int32_t rel = 0;
+            if (!at || !Patch::verify(at, {0xE8}))
+            {
+                return uintptr_t{0};
+            }
+            std::memcpy(&rel, reinterpret_cast<const void*>(at + 1), 4);
+            return static_cast<uintptr_t>(at + 5 + rel);
+        }();
+        return {target};
+    }
+
+    // The engine's own gold setter on the hero's stats (+0x3A8): -1 on a fault.
+    int callSetGold(uintptr_t hero, uint32_t gold)
+    {
+        __try
+        {
+            goldSetter()(reinterpret_cast<void*>(hero + 0x3A8), gold);
+            return 1;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
@@ -418,11 +449,31 @@ bool World::setHealth(uint32_t id, int32_t health, const char*& error)
 
 bool World::setGold(uint32_t id, uint32_t gold, const char*& error)
 {
-    void* m = manager();
-    const uintptr_t o = changesAllowed() && id >= 1 && id <= kHeroIds ? live(m, id) : 0;
+    // Only the local hero, also in network games: the engine's setter (ENG 0x580110, what merchants and quests use)
+    // runs its anti-cheat check, keeps the hero's checked copy of its values in step and marks the values dirty, so
+    // the hero's next update sends them to the server and the peers (message 0x11B). A direct write would leave the
+    // copy behind, and the engine's next check would take the hero for a cheater.
+    void* m = available() ? manager() : nullptr;
+    const uint32_t local = hero();
+    const uintptr_t o = m && id >= 1 && id <= kHeroIds && id == local ? live(m, id) : 0;
     if (!o || !callIsCreature(o))
     {
-        error = "no such hero, or world changes are not possible now";
+        error = "only the local hero's gold can be changed, and only in a running game";
+        return false;
+    }
+    gold = std::min<uint32_t>(gold, 0x7FFFFFFE);    // the engine's own limit
+    if (goldSetter())
+    {
+        if (callSetGold(o, gold) < 0)
+        {
+            error = "the game's gold function failed";
+            return false;
+        }
+        return true;
+    }
+    if (networkGame() || !changesAllowed())
+    {
+        error = "the game's gold function was not found (network games need it)";
         return false;
     }
     if (!safeStore(reinterpret_cast<void*>(o + kGold), &gold, sizeof(gold)))

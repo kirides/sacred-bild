@@ -80,6 +80,10 @@ GEAR = [
     ('cNet_sendMessage', 0x007D4300, 'func'),
     ('g_pNet', 0x0182EBF0, 'data'),
     ('netDispatchSwitch', 0x007DCF91, 'code'),
+    # Gold (gear/world.cpp): the hero stats' gold setter (thiscall (creature + 0x3A8, gold), ret 4), as merchants use it;
+    # it keeps the anti-cheat copy in step and marks the values for the next 0x11B update, also in network games.
+    # No signature of its own (its body is nearly addGold's): found through a call (0x461B74: lea ecx, [ebp + 0x3A8]; fstp; call).
+    ('cStats_setGoldCall', 0x00461B74, 'code'),
     ('modelRenderer_instance', 0x00401660, 'func'),
     ('modelRenderer_drawItem', 0x0040E9C0, 'func'),
     ('renderFlags_instance', 0x00643110, 'func'),
