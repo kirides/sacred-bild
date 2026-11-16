@@ -1,4 +1,5 @@
 #include "sitehook.h"
+#include "drops.h"
 #include "log.h"
 #include "lua_host.h"
 #include "patch.h"
@@ -142,6 +143,31 @@ namespace
     std::atomic<unsigned> g_constCalls{0}, g_constAnswered{0}, g_constBusy{0};
     std::atomic<unsigned> g_constSiteCalls[std::size(kConstSites)];
 
+    // The drop tuning (gear/drops.h) rides on three of the loot function's 0.01 constants: the chance scale (00559F08, site 0 of
+    // `scale.559BF0`) and the two rarity bonus scales (0055A149, 0055A248, sites 1 and 2). A multiplier of 1 (no mod) is exactly the
+    // engine's own value.
+    float dropScale(int site)
+    {
+        static int first = -2;
+        if (first == -2)
+        {
+            first = -1;
+            for (size_t i = 0; i < std::size(kConstSites); ++i)
+            {
+                if (std::strcmp(kConstSites[i].name, "scale.559BF0") == 0)
+                {
+                    first = static_cast<int>(i);
+                    break;
+                }
+            }
+        }
+        if (first < 0 || site < first || site > first + 2)
+        {
+            return 1.0f;
+        }
+        return static_cast<float>(site == first ? Drops::chanceScale() : Drops::findScale());
+    }
+
     // Called by the stubs: the float the instruction should load, in st0 (cdecl float result). Any thread the game calls from.
     extern "C" float __cdecl constantHandler(int site)
     {
@@ -154,20 +180,23 @@ namespace
         }
         if (!g_constantActive.load(std::memory_order_relaxed))
         {
-            return vanilla;
+            return vanilla * dropScale(site);
         }
         double result = 0;
+        float value = vanilla;
         switch (LuaHost::combatConstant(spec.name, vanilla, spec.index, result))
         {
         case LuaHost::Answer::Value:
             g_constAnswered.fetch_add(1, std::memory_order_relaxed);
-            return static_cast<float>(result);
+            value = static_cast<float>(result);
+            break;
         case LuaHost::Answer::Busy:
             g_constBusy.fetch_add(1, std::memory_order_relaxed);
-            return vanilla;
+            break;
         default:
-            return vanilla;
+            break;
         }
+        return value * dropScale(site);
     }
 
     // The stub of a constant site: keeps the registers and flags the engine code may still use, gets the float from the

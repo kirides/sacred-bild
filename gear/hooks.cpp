@@ -1,4 +1,5 @@
 #include "hooks.h"
+#include "drops.h"
 #include "lua_host.h"
 #include "patch.h"
 #include "pickup.h"
@@ -18,6 +19,7 @@ namespace
         g_updateZoom(engine, edx, dt);
         Ui::setEngine(engine);
         Save::frame(engine);
+        Drops::frame();
         LuaHost::frame(dt);
     }
 }
@@ -30,8 +32,10 @@ bool Hooks::install()
     Ui::install();
     Pickup::install();
     Realm::install(LuaHost::stateFilePath(L"gear_realm.txt"));
+    Drops::install();
     const bool committed = Patch::commit();
     // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.
     SiteHook::install();
+    Drops::installSites();
     return committed && ok;
 }

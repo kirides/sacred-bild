@@ -1,5 +1,6 @@
 #include "lua_host.h"
 #include "automation.h"
+#include "drops.h"
 #include "gear.h"
 #include "instance.h"
 #include "inventory.h"
@@ -1894,6 +1895,126 @@ namespace
         return 1;
     }
 
+    // Drops (gear/drops.h). native.drops_handlers(roll, select, random); native.drops_scales(chance, find); native.drops_rng(mode, seeded, seed);
+    // native.drops_rarity({[table id] = multiplier}); native.drops_rarity_table() -> {{id, weight, vanilla}}; native.drops_stats() -> table;
+    // native.drops_stats_reset(); native.drops_test_roll(object id, count, bonus) -> bool; native.drops_test_progress() -> done, queued;
+    // native.drops_random(n) -> 0 .. n - 1 from the fair generator.
+    int nativeDropsHandlers(lua_State* L)
+    {
+        Drops::setHandlers(lua_toboolean(L, 1) != 0, lua_toboolean(L, 2) != 0, lua_toboolean(L, 3) != 0);
+        return 0;
+    }
+
+    int nativeDropsScales(lua_State* L)
+    {
+        Drops::setScales(luaL_checknumber(L, 1), luaL_checknumber(L, 2));
+        return 0;
+    }
+
+    int nativeDropsRng(lua_State* L)
+    {
+        const lua_Number seed = luaL_optnumber(L, 3, 0);
+        Drops::setRng(static_cast<int>(luaL_checknumber(L, 1)), lua_toboolean(L, 2) != 0, static_cast<uint64_t>(seed < 0 ? -seed : seed));
+        return 0;
+    }
+
+    int nativeDropsRarity(lua_State* L)
+    {
+        luaL_checktype(L, 1, LUA_TTABLE);
+        std::vector<std::pair<int, double>> multipliers;
+        lua_pushnil(L);
+        while (lua_next(L, 1) != 0)
+        {
+            if (lua_isnumber(L, -2) && lua_isnumber(L, -1))
+            {
+                multipliers.emplace_back(static_cast<int>(lua_tonumber(L, -2)), lua_tonumber(L, -1));
+            }
+            lua_pop(L, 1);
+        }
+        Drops::setRarityMultipliers(multipliers);
+        return 0;
+    }
+
+    int nativeDropsRarityTable(lua_State* L)
+    {
+        const std::vector<Drops::RarityEntry> table = Drops::rarityTable();
+        lua_createtable(L, static_cast<int>(table.size()), 0);
+        int i = 1;
+        for (const Drops::RarityEntry& e : table)
+        {
+            lua_createtable(L, 0, 3);
+            lua_pushnumber(L, e.id);
+            lua_setfield(L, -2, "id");
+            lua_pushnumber(L, e.weight);
+            lua_setfield(L, -2, "weight");
+            lua_pushnumber(L, e.vanilla);
+            lua_setfield(L, -2, "vanilla");
+            lua_rawseti(L, -2, i++);
+        }
+        return 1;
+    }
+
+    int nativeDropsStats(lua_State* L)
+    {
+        const Drops::Stats s = Drops::stats();
+        lua_createtable(L, 0, 12);
+        const auto num = [L](const char* key, double v) {
+            lua_pushnumber(L, v);
+            lua_setfield(L, -2, key);
+        };
+        num("rolls", static_cast<double>(s.rolls));
+        num("forced", static_cast<double>(s.forcedRolls));
+        num("vetoed", static_cast<double>(s.vetoed));
+        num("picks", static_cast<double>(s.picks));
+        num("overridden", static_cast<double>(s.overridden));
+        num("rarity_draws", static_cast<double>(s.rarityDraws));
+        num("rand_calls", static_cast<double>(s.randCalls));
+        num("lua_draws", static_cast<double>(s.luaDraws));
+        lua_createtable(L, 16, 0);
+        for (int q = 0; q < 16; ++q)
+        {
+            lua_pushnumber(L, static_cast<double>(s.quality[q]));
+            lua_rawseti(L, -2, q + 1);          // index quality + 1
+        }
+        lua_setfield(L, -2, "quality");
+        lua_createtable(L, 32, 0);
+        for (int c = 0; c < 32; ++c)
+        {
+            lua_pushnumber(L, static_cast<double>(s.category[c]));
+            lua_rawseti(L, -2, c + 1);          // index category + 1
+        }
+        lua_setfield(L, -2, "category");
+        return 1;
+    }
+
+    int nativeDropsStatsReset(lua_State*)
+    {
+        Drops::resetStats();
+        return 0;
+    }
+
+    int nativeDropsTestRoll(lua_State* L)
+    {
+        lua_pushboolean(L, Drops::testRoll(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<int>(luaL_checknumber(L, 2)),
+                                           static_cast<uint32_t>(luaL_optnumber(L, 3, 0))));
+        return 1;
+    }
+
+    int nativeDropsTestProgress(lua_State* L)
+    {
+        const auto p = Drops::testProgress();
+        lua_pushnumber(L, p.first);
+        lua_pushnumber(L, p.second);
+        return 2;
+    }
+
+    int nativeDropsRandom(lua_State* L)
+    {
+        const lua_Number n = luaL_checknumber(L, 1);
+        lua_pushnumber(L, Drops::randomBelow(static_cast<uint32_t>(n < 1 ? 1 : n)));
+        return 1;
+    }
+
     // Automation (only registered when it is on, see start()).
     int nativeAutoInstance(lua_State* L)
     {
@@ -2315,6 +2436,16 @@ namespace
             {"hero_class", nativeHeroClass},
             {"pickup_rules", nativePickupRules},
             {"pickup_refused", nativePickupRefused},
+    {"drops_handlers", nativeDropsHandlers},
+    {"drops_scales", nativeDropsScales},
+    {"drops_rng", nativeDropsRng},
+    {"drops_rarity", nativeDropsRarity},
+    {"drops_rarity_table", nativeDropsRarityTable},
+    {"drops_stats", nativeDropsStats},
+    {"drops_stats_reset", nativeDropsStatsReset},
+    {"drops_test_roll", nativeDropsTestRoll},
+    {"drops_test_progress", nativeDropsTestProgress},
+    {"drops_random", nativeDropsRandom},
             {"inv_can_change", nativeInvCanChange},
             {"inv_container", nativeInvContainer},
             {"inv_items", nativeInvItems},
@@ -2691,6 +2822,174 @@ LuaHost::Answer LuaHost::effectAdd(const EffectInfo& info, EffectAnswer& answer)
             answer.stack = std::strcmp(mode, "set") == 0 ? 1 : std::strcmp(mode, "inc") == 0 ? 2 : 0;
         }
         lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+    return result;
+}
+
+LuaHost::Answer LuaHost::dropRoll(const DropRoll& info, DropRollAnswer& answer)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "drops_roll");
+    lua_remove(L, -2);
+    lua_createtable(L, 0, 8);
+    const auto num = [L](const char* key, double v) {
+        lua_pushnumber(L, v);
+        lua_setfield(L, -2, key);
+    };
+    num("creature", info.creatureType);
+    num("level", info.level);
+    num("forced", info.forced);
+    num("bonus", info.bonus);
+    num("killer", info.killer);
+    num("survival", info.survival);
+    lua_pushboolean(L, info.network ? 1 : 0);
+    lua_setfield(L, -2, "network");
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 1, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer result = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.drops_roll failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_istable(L, -1))
+    {
+        result = Answer::Value;
+        lua_getfield(L, -1, "cancel");
+        answer.cancel = lua_toboolean(L, -1) != 0;
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "bonus");
+        if (lua_isnumber(L, -1))
+        {
+            const lua_Number b = lua_tonumber(L, -1);
+            answer.hasBonus = true;
+            answer.bonus = b <= 0 ? 0u : b >= 4294967295.0 ? 0xFFFFFFFFu : static_cast<uint32_t>(b);
+        }
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+    return result;
+}
+
+LuaHost::Answer LuaHost::dropSelect(const DropSelect& info, DropSelectAnswer& answer)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "drops_select");
+    lua_remove(L, -2);
+    lua_createtable(L, 0, 8);
+    const auto num = [L](const char* key, double v) {
+        lua_pushnumber(L, v);
+        lua_setfield(L, -2, key);
+    };
+    num("category", info.category);
+    num("level", info.level);
+    num("quality", info.quality);
+    num("hero_pref", info.heroPref);
+    num("flags", info.flags);
+    num("creature", info.creatureType);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 1, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer result = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.drops_select failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_istable(L, -1))
+    {
+        result = Answer::Value;
+        const auto field = [L](const char* key, bool& has, uint32_t& value) {
+            lua_getfield(L, -1, key);
+            if (lua_isnumber(L, -1))
+            {
+                const lua_Number v = lua_tonumber(L, -1);
+                if (v >= 0 && v < 4294967295.0)
+                {
+                    has = true;
+                    value = static_cast<uint32_t>(v);
+                }
+            }
+            lua_pop(L, 1);
+        };
+        bool hasType = false;
+        field("category", answer.hasCategory, answer.category);
+        field("level", answer.hasLevel, answer.level);
+        field("quality", answer.hasQuality, answer.quality);
+        field("type", hasType, answer.type);
+    }
+    lua_pop(L, 1);
+    return result;
+}
+
+LuaHost::Answer LuaHost::dropRandom(double& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "drops_random");
+    lua_remove(L, -2);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 0, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer result = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.drops_random failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        out = lua_tonumber(L, -1);
+        result = Answer::Value;
     }
     lua_pop(L, 1);
     return result;

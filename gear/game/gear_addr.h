@@ -243,4 +243,20 @@ namespace Gear::Addr
     inline Sacred::Thiscall<void(void* popup, uint32_t itemId)> cUI_Popup_setOwner{};
     inline Sacred::Cdecl<void*(uint32_t bytes)> engine_alloc{};
     inline Sacred::Thiscall<void(void* unused, void* ptr, uint32_t count)> engine_free{};
+
+    // Drops (gear/drops.cpp). ENG 00849B40: the CRT rand (cdecl () -> 0 .. 0x7FFF, one LCG state per thread); ENG 00443B20: cdecl (lo, hi) ->
+    // rand() % (hi - lo + 1) + lo. ENG 005C7FA0: the equipment type picker, thiscall (type manager at 00AAB5E4, category, level, 0, 0xF, hero
+    // preference, flags, 1, quality) -> item type id, ret 0x20. ENG 00AD4438: the rarity table, a vector (begin at +0, end at +4) of 8 byte
+    // entries {dword id, word weight, word pad}; the loot code walks it with a roll of 1 .. 10000.
+    inline Sacred::Cdecl<int()> crtRand{};
+    inline Sacred::Cdecl<int(int lo, int hi)> rangeRand{};
+    inline Sacred::Thiscall<uint32_t(void* typeManager, uint32_t category, uint32_t level, uint32_t a3, uint32_t a4, uint32_t heroPref,
+                                     uint32_t flags, uint32_t a7, uint32_t quality)> cItem_pickType{};
+    inline Sacred::Global<uint8_t*> g_rarityTable{};
+    // The functions that hold drop sites: the creature loot function (ENG 00559BF0, thiscall (creature, forced type, rarity bonus, survival
+    // float, killer id), ret 0x10) and three more with a rarity draw (ENG 00485C10, 004AC940, 005D57C0).
+    inline uintptr_t lootRollFn{};
+    inline uintptr_t rarityFn485C10{};
+    inline uintptr_t rarityFn4AC940{};
+    inline uintptr_t rarityFn5D57C0{};
 }

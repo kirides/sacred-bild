@@ -110,4 +110,8 @@ namespace World
     // The address of the live item object `id` (an item, not any object), 0 if there is none: for the code that
     // reads and rewrites an item in place (gear/inventory.cpp). Valid until the item is destroyed.
     uintptr_t itemObject(uint32_t id);
+
+    // The address of the live object id of any kind (creature, item ...), 0 if there is none: for Gear's own native code (gear/drops.cpp's
+    // loot self test calls the engine's loot function with a creature). Valid until the object is destroyed.
+    uintptr_t objectAddress(uint32_t id);
 }

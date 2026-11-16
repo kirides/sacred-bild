@@ -526,3 +526,8 @@ uint32_t World::classBit(uint32_t heroClass)
     }
     return heroClass == 8 ? 0x400000u : heroClass == 9 ? 0x800000u : 0;
 }
+
+uintptr_t World::objectAddress(uint32_t id)
+{
+    return World::available() ? live(manager(), id) : 0;
+}

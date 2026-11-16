@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <cstdint>
 #include <string>
 
 // The LuaJIT state that runs the mods. In game, everything Lua happens on the engine's thread (the in-game loop,
@@ -53,6 +54,37 @@ namespace LuaHost
 
     // event `bonus.constant`: the number the item bonus code pushes at site `index` (`vanilla` the engine's own).
     Answer bonusConstant(int index, double vanilla, int address, double& out);
+
+    // events of the drop code (gear/drops.cpp). `drops.roll`: a creature (or other source) is about to run the loot function. The answer may
+    // cancel the roll or change the rarity bonus.
+    struct DropRoll
+    {
+        uint32_t creatureType = 0, level = 0, forced = 0, bonus = 0, killer = 0;
+        float survival = 0;
+        bool network = false;
+    };
+    struct DropRollAnswer
+    {
+        bool cancel = false, hasBonus = false;
+        uint32_t bonus = 0;
+    };
+    Answer dropRoll(const DropRoll& info, DropRollAnswer& answer);
+
+    // `drops.select`: the loot function asks the equipment type picker for an item. The answer may change the category, level and rarity or
+    // name the item type (> 0) to use instead.
+    struct DropSelect
+    {
+        uint32_t category = 0, level = 0, heroPref = 0, flags = 0, quality = 0, creatureType = 0;
+    };
+    struct DropSelectAnswer
+    {
+        bool hasCategory = false, hasLevel = false, hasQuality = false;
+        uint32_t category = 0, level = 0, quality = 0, type = 0;
+    };
+    Answer dropSelect(const DropSelect& info, DropSelectAnswer& answer);
+
+    // `drops.random`: a number in [0, 1) for the loot rolls from the mod that chose a Lua generator.
+    Answer dropRandom(double& out);
 
     // event `skillslot.select`: a digit key selected a skill slot (`index` the place in the handler); Value when a mod ran.
     Answer skillSlot(int index);

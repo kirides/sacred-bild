@@ -178,6 +178,7 @@ if(SACREDGEAR)
     gear/padnav.cpp
     gear/text.cpp
     gear/pickup.cpp
+    gear/drops.cpp
     gear/inventory.cpp
     gear/itemtip.cpp
     gear/save.cpp
