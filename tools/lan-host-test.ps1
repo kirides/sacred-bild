@@ -16,7 +16,7 @@ $b = [IO.File]::ReadAllBytes("$g\bin\Balance.bin")
 if ($patch) { $b[1000] = $b[1000] -bxor 1 }
 [IO.File]::WriteAllBytes("$g\mods\lanhosttest\data\balance.bin", $b)
 Remove-Item "$g\SacredGear-server.log" -ErrorAction SilentlyContinue
-$lock = 'E:\git\github\sacred-bild\tools\game-lock.ps1'
+$lock = Join-Path $PSScriptRoot 'game-lock.ps1'
 & $lock acquire -Id lanhost | Out-Null
 try {
     $p = Start-Process "$g\Sacred.exe" -WorkingDirectory $g -PassThru -ArgumentList '-gear-auto', "-gear-mods=$mods", "-gear-instance=$inst", '-gear-timeout=120'
