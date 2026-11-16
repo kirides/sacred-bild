@@ -408,7 +408,7 @@ all move with it, as with SacredBild's HUD anchoring. Without SacredBild the gam
 panels move either way.
 
 Files: `gear.read(name)` reads a file of the mod's folder, `gear.save(name, text)` writes one (directly in the mod's
-folder, `*.json`, `*.txt` or `*.lua` other than `mod.lua` and `main.lua`, at most 1 MB): for settings a mod's own UI
+folder, `*.json`, `*.txt` or `*.lua` other than `mod.lua` and `main.lua`, at most 8 MB, written atomically): for settings a mod's own UI
 changes. A write is atomic (a temporary file moved over the old one), so a crash leaves the old file or the new one.
 
 ```lua

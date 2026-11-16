@@ -1555,9 +1555,9 @@ namespace
             {
                 error = "only .json, .txt and .lua files other than mod.lua and main.lua";
             }
-            else if (n > 1024 * 1024)
+            else if (n > 8 * 1024 * 1024)
             {
-                error = "the text is larger than 1 MB";
+                error = "the text is larger than 8 MB";
             }
             else
             {

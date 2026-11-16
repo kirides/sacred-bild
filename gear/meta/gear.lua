@@ -185,7 +185,8 @@ function gear.time() end
 function gear.read(name) end
 
 --- Writes a file in the mod's folder, for settings a mod's own UI changes: `*.json`, `*.txt` or `*.lua` other than
---- `mod.lua` and `main.lua`, at most 1 MB.
+--- `mod.lua` and `main.lua`, at most 8 MB. The write is atomic: the text goes to `<name>.tmp`, is flushed
+--- and then replaces the file, so a crash leaves the old file or the new one, never part of one.
 ---@param name string
 ---@param text string
 ---@return boolean? ok
