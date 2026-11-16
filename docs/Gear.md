@@ -301,16 +301,22 @@ Every widget takes `opts.tooltip` (shown after the cursor rests on it for 0.4 s)
 | `checkbox(id, x, y, text, checked, opts)` | `changed, checked`. |
 | `radio(id, x, y, text, selected, opts)` | true when clicked. |
 | `radio_group(id, x, y, options, index, opts)` | `changed, index`; `opts.horizontal`, `opts.spacing`, `opts.tooltips` (one per option). |
-| `dropdown(id, x, y, w, options, index, opts)` | `changed, index`. The open list lies on the top layer; a click beside it closes it. |
+| `dropdown(id, x, y, w, options, index, opts)` | `changed, index`. The open list is drawn after every mod's draw handlers, over all panels and text on the top layer, and takes the mouse first (nothing under it reacts); it shows at most `opts.max_rows` (12) entries and scrolls like a scroll area, the selected one in view; a click beside it closes it. |
 | `slider(id, x, y, w, min, max, value, opts)` | `changed, value` while dragged; `opts.step` (default 1), `opts.format` (`'%g'`; false: no number). |
 | `label(id, text, x, y, opts)` | Text in the widgets' look (the UI font; `size`, `font`, `height` / `valign` as for `text`), with a tooltip if `opts.tooltip`. |
 | `panel(id, title, x, y, w, h, opts)` | A window: `{open, x, y, w, h, content_x, content_y}`. Its title bar drags it (the position is kept for the session), its X closes it (`open` false); `show_panel(id, open)` and `panel_open(id)`. `opts.closable`, `opts.draggable` (default true). |
+| `scroll_begin(id, x, y, w, h, opts)`, `scroll_end(content_height)` | A vertically scrollable area. `scroll_begin` returns `{x, y, w, h, offset, max, content_x, content_y}` (the viewport, less the scrollbar when it shows); draw the content at `content_y` plus its own y, then `scroll_end(content_height)` (returns `offset, max`) draws the scrollbar: arrows (held: repeat), the track (a click pages), the thumb (drag it). Until `scroll_end` everything drawn is clipped to the viewport (rects, images and the UI font's text are cut; the game's fonts and item models show only when wholly inside) and regions are cut to it, so a widget scrolled out of sight takes no click. The wheel scrolls the area under the cursor (3 lines of `opts.step`, default 20, a notch); Up, Down, PageUp, PageDown, Home, End the one under the cursor or clicked last; with SacredBild the controller's D-pad the one its cursor is in (once no widget lies further that way inside it) and the right stick as a wheel. The offset is kept per id for the session; `scroll_to(id, offset)`, `scroll_offset(id)` -> `offset, max`. Areas nest. |
+| `wheel()` | The wheel's notches over mod UI this tick (+ away from the player), and whether a scroll area took them. |
+| `text_wrap(text, width, opts)` | `lines, height`: the text broken into lines that fit `width` in `text`'s font options (at spaces, `
+` too), and their height; cached. |
 | `region(id, x, y, w, h, opts)` | A rectangle that takes the mouse, for widgets of a mod's own: `{hover, pressed, released, clicked, held}`. |
 | `mouse()` | The cursor in layout coordinates. |
 | `capture_keys(on)` | While on, the keyboard does not reach the game (its key and character messages are dropped, its key state queries see nothing held); the mod's own `key_pressed` / `key_down` still work. For a screen that types or binds keys (the mod manager uses it while it is open); ends when the mod unloads. |
 | `key_pressed(name)` | True once per press of a key (`'f9'`, `'a'`, `'escape'` ...), read while the game's window has the focus. |
 | `key_down(name)` | Whether the key is held. Both see the keys [automation](#automation) holds; isolated automation sees only those. |
 | `COLORS` | The widgets' colours. |
+
+The mouse wheel over a mod's region is the mod's: the game does not get it (no zoom under a panel). It comes through SacredBild's window procedure (the player's wheel and the controller's right stick), or without SacredBild through a message hook Gear sets on the game window's thread.
 
 Input: a left click (press and release) over a mod's region is taken from the game: the UI manager's event handler
 (0x00757840) reports it handled, so neither the game's windows nor the world see it, and the release that follows
@@ -498,6 +504,7 @@ faults returns nil and a message instead of crashing the game.
 | `layout` | A layout editor in the manner of an MMO's edit mode (its "Edit layout" button, top left while Alt shows the game's labels; Done ends it; no key binding): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
 | `itemicontest` | `gear.ui.item_icon`: a row of weapon and armour models by type id and a row from live items; checks that nothing is left behind. |
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
+| `scrolltest` | An automation run: a scroll area of 100 lines (wheel, a line scrolled out of sight takes no click, thumb drag) and a dropdown of 30 entries whose open list lies over text and a button drawn after it (`-gear-mods=scrolltest`). |
 | `tooltiptest` | An automation run: tooltips of buttons at the screen's edges and corners, with screenshots (`gear.ui.tooltip_rect`). |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 | `shared-stash` (in the sacred-gear-mods repository) | A stash shared by all heroes of the player, in a panel beside the chest window, built on `gear.inv`: items are copied to `stash.json` in the mod's folder and back, the file written first on a deposit and last on a withdrawal. |
@@ -520,7 +527,7 @@ The mods load in the main menu and get the `idle` event there. Mods with `automa
 |---|---|
 | `state()` | `{ui, menus, in_game, cinematic, help, dialog, window, width, height, mouse_x, mouse_y}`: the UI manager's state, the client size, the game's cursor in UI layout coordinates. |
 | `ui()` | The visible UI: menus, in-game windows, the message box and their visible children, each `{group, index, parent, vtable, flags, x, y, width, height}` in UI layout coordinates (`parent` indexes the list, 0 top level). |
-| `move(x, y)`, `down(button)`, `up(button)`, `key_down(key)`, `key_up(key)`, `release()` | Raw input; positions in client pixels; buttons `'lbutton'`, `'rbutton'`, `'mbutton'`; keys by name (`'escape'`, `'enter'`, `'f5'`, `'a'`, ...) or virtual key code. |
+| `move(x, y)`, `down(button)`, `up(button)`, `key_down(key)`, `key_up(key)`, `release()`, `wheel(notches)` | Raw input; positions in client pixels; buttons `'lbutton'`, `'rbutton'`, `'mbutton'`; keys by name (`'escape'`, `'enter'`, `'f5'`, `'a'`, ...) or virtual key code; `wheel`: + away from the player (scrolls up). |
 | In a task: `click(x, y, button)`, `press(key)`, `type(text)` | As a player would, with short pauses. |
 | In a task: `ui_click(x, y)` or `ui_click(node)` | Clicks a point in UI layout coordinates (or a node's center); the mapping to pixels is measured once by moving the cursor, so it works with SacredBild's scaled UI too. |
 | `load_save(n)` | Loads savegame n from the menus. |

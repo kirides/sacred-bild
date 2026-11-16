@@ -48,7 +48,21 @@ namespace Ui
         uint32_t image = 0;
         // Region
         uint32_t region = 0;        // the kernel's handle, reported with the events
+        // Clip (setClip while it was recorded; canvas commands only): drawn only inside x, y, w, h.
+        bool clipped = false;
+        float clip[4] = {};
     };
+
+    // Lua thread: the clip rectangle for the commands recorded from now on (canvas coordinates; regions are cut to
+    // it, a region left empty is dropped); on = false: none. A scroll area sets it for its content.
+    void setClip(bool on, float x = 0, float y = 0, float w = 0, float h = 0);
+
+    // The mouse wheel turned over mod UI since the last call (WM_MOUSEWHEEL units, + away from the player): through
+    // SacredBild's window procedure, else Gear's own message hook on the game's window. Over a mod's region the game
+    // does not get it.
+    int takeWheel();
+    // D-pad up / down in a mod's scroll area since the last call (SacredBild's controller; lines, + down).
+    int takePadScroll();
 
     // Input. A mouse button pressed over a region (the last one registered on the highest layer wins) is taken
     // from the game: the UI manager reports it handled, so neither the game's windows nor the world see it, and the

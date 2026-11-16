@@ -11,7 +11,7 @@ namespace GearNav
     {
         float x, y;     // where the cursor goes, screen pixels
         float left, top, right, bottom;
-        int kind;       // 0 button, 1 slider
+        int kind;       // 0 button, 1 slider, 2 scroll area
     };
 
     // The reported stops, in screen pixels; empty when Gear has not reported within the last moments.
@@ -24,9 +24,16 @@ namespace GearNav
     bool home(float& x, float& y);
     // Whether (x, y) lies on a slider stop (D-pad left / right then nudge it instead of jumping).
     bool onSlider(float x, float y);
+    // The scroll area stop (x, y) lies in, false if none (D-pad up / down there scrolls it at the ends).
+    bool scrollAreaAt(float x, float y, Stop& out);
+
+    // The mouse wheel (WM_MOUSEWHEEL, the player's or the controller's): Gear takes it while the cursor is over a mod's
+    // widget; true if it did (the game then does not get it).
+    bool wheel(int delta);
 
     // Pad events for Gear.
     void postNudge(int steps);
+    void postScroll(int steps);     // D-pad up / down in a scroll area: lines, + down
     void postBack();
     void postMenu();
 }

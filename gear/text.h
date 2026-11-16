@@ -50,6 +50,13 @@ namespace Text
               float x, float y, float width, float height, int align, int valign, uint32_t color,
               SetTextureFn setTexture, void* ctx);
 
+    // A clip rectangle (layout units) for the glyphs the calling thread draws; nullptr: none. Glyphs are cut at it,
+    // their texture coordinates with them.
+    void setClip(const float* rect);
+    // Cuts the quad (x0, y0)-(x1, y1) with texture coordinates (u0, v0)-(u1, v1) to `clip` (x, y, w, h); false if
+    // nothing is left.
+    bool clipQuad(const float* clip, float& x0, float& y0, float& x1, float& y1, float& u0, float& v0, float& u1, float& v1);
+
     // Snaps a layout coordinate to the screen's pixel grid.
     inline float snap(float screen) { return static_cast<float>(static_cast<int>(screen + (screen >= 0 ? 0.5f : -0.5f))); }
     inline float snapX(const Placement& p, float x) { return p.toLayoutX(snap(p.toScreenX(x))); }

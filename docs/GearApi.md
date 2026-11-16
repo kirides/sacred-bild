@@ -1842,6 +1842,37 @@ Includes everything of `GearWidgetOpts`.
 | `spacing` | `number` | Between the options (default 18 vertical, 8 horizontal). (optional) |
 | `tooltips` | `string[]` | One per option. (optional) |
 
+### GearDropdownOpts
+
+Includes everything of `GearWidgetOpts`.
+
+| Field | Type | |
+|---|---|---|
+| `max_rows` | `integer` | The open list shows at most this many entries and scrolls (default 12). (optional) |
+
+### GearScrollOpts
+
+| Field | Type | |
+|---|---|---|
+| `step` | `number` | One line: Up / Down, an arrow button and the D-pad move it, a wheel notch three (default 20). (optional) |
+| `layer` | `GearLayer` | Default `'hud'`. (optional) |
+| `nav` | `boolean` | `false`: the area is no stop of the controller's D-pad. (optional) |
+
+### GearScrollArea
+
+What `scroll_begin` returns: the viewport (without the scrollbar) and where the content starts.
+
+| Field | Type | |
+|---|---|---|
+| `x` | `number` |  |
+| `y` | `number` |  |
+| `w` | `number` | The viewport's width (the area's, less the scrollbar when it shows). |
+| `h` | `number` |  |
+| `offset` | `number` | How far the content is scrolled (0 .. max). |
+| `max` | `number` |  |
+| `content_x` | `number` | Where the content's top-left lies: draw at `content_y + its own y`. |
+| `content_y` | `number` |  |
+
 ### GearSliderOpts
 
 Includes everything of `GearWidgetOpts`.
@@ -1988,7 +2019,7 @@ True when clicked.
 
 #### `gear.ui.dropdown(id, x, y, w, options, index, opts) -> boolean, integer`
 
-The open list lies on the top layer; a click beside it closes it.
+The open list is drawn after every draw handler, over all panels and text, on the top layer, and takes the mouse first; it shows at most `opts.max_rows` (12) entries and scrolls (wheel, scrollbar, keys, D-pad), the selected one in view when it opens. A click beside it closes it.
 
 - `id`: `string|integer`
 - `x`: `number`
@@ -1996,9 +2027,61 @@ The open list lies on the top layer; a click beside it closes it.
 - `w`: `number`
 - `options`: `string[]`
 - `index`: `integer` - The selected option (1-based).
-- `opts`: `GearWidgetOpts` (optional)
+- `opts`: `GearDropdownOpts` (optional)
 - returns `changed` `boolean`
 - returns `index` `integer`
+
+#### `gear.ui.scroll_begin(id, x, y, w, h, opts) -> GearScrollArea`
+
+Starts a vertically scrollable area: until `scroll_end`, what is drawn is clipped to its viewport (rects, images, the UI font's text; the game's fonts and item models only when wholly inside) and regions are cut to it, so a widget scrolled out of sight takes no click. Draw the content at `content_y + its own y`. The wheel scrolls the area under the cursor (3 lines a notch), Up / Down / PageUp / PageDown / Home / End the one under the cursor or clicked last, the controller's D-pad (SacredBild) the one its cursor is in, once no widget lies further that way inside it, and the right stick as a wheel. The offset is kept per id for the session. Areas nest.
+
+- `id`: `string|integer`
+- `x`: `number`
+- `y`: `number`
+- `w`: `number`
+- `h`: `number`
+- `opts`: `GearScrollOpts` (optional)
+- returns `area` `GearScrollArea`
+
+#### `gear.ui.scroll_end(content_height) -> number, number`
+
+Ends the innermost scroll area and draws its scrollbar (arrows, track: a click pages, thumb: drag it) when the content is taller than the viewport.
+
+- `content_height`: `number` (optional) - The content's height (default: the last one given).
+- returns `offset` `number`
+- returns `max` `number`
+
+#### `gear.ui.scroll_to(id, offset)`
+
+Sets a scroll area's offset (clamped when it is drawn next).
+
+- `id`: `string|integer`
+- `offset`: `number`
+
+#### `gear.ui.scroll_offset(id) -> number, number`
+
+A scroll area's offset and its largest offset (as of its last frame); 0, 0 for an unknown id.
+
+- `id`: `string|integer`
+- returns `offset` `number`
+- returns `max` `number`
+
+#### `gear.ui.wheel() -> number, boolean`
+
+The mouse wheel's notches over mod UI this tick (+ away from the player, as Windows counts them; 0: none; a notch is 1), and whether a scroll area already took them. Over a mod's widget the game does not get the wheel.
+
+- returns `notches` `number`
+- returns `taken` `boolean`
+
+#### `gear.ui.text_wrap(text, width, opts) -> string[], number`
+
+The text broken into lines that fit `width` (at spaces; a word longer than the width gets a line of its own; `\n` breaks too), in the font of `opts` (as `text` takes it), and the lines' total height. Cached per text, width and font.
+
+- `text`: `string`
+- `width`: `number`
+- `opts`: `GearTextOpts` (optional)
+- returns `lines` `string[]`
+- returns `height` `number`
 
 #### `gear.ui.slider(id, x, y, w, min, max, value, opts) -> boolean, number`
 
@@ -2253,6 +2336,12 @@ Moves the game's cursor; client pixels.
 #### `gear.auto.up(button)`
 
 - `button`: `GearMouseButton` (optional) - Default `'lbutton'`.
+
+#### `gear.auto.wheel(notches)`
+
+The mouse wheel at the cursor, as `WM_MOUSEWHEEL`: + away from the player (scrolls up), - towards.
+
+- `notches`: `number` (optional) - Default 1.
 
 #### `gear.auto.key_down(key)`
 

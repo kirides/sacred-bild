@@ -1256,6 +1256,25 @@ void Automation::button(int vk, bool down)
     post(w, message, state, pos);
 }
 
+void Automation::wheel(int delta)
+{
+    HWND w = window();
+    WPARAM state;
+    LPARAM pos;
+    {
+        std::lock_guard guard(g_inputLock);
+        state = buttonState();
+        pos = cursorParam();
+    }
+    // The wheel's position is in screen coordinates.
+    POINT p = {static_cast<SHORT>(LOWORD(pos)), static_cast<SHORT>(HIWORD(pos))};
+    if (w)
+    {
+        ClientToScreen(w, &p);
+    }
+    post(w, WM_MOUSEWHEEL, MAKEWPARAM(LOWORD(state), static_cast<WORD>(static_cast<SHORT>(delta))), MAKELPARAM(p.x, p.y));
+}
+
 void Automation::key(int vk, bool down)
 {
     if (vk <= 0 || vk > 0xFE)

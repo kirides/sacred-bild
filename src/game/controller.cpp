@@ -460,6 +460,21 @@ namespace
             GearNav::postNudge(static_cast<int>(dx));
             return;
         }
+        // Up / down in a mod's scroll area: to the next widget inside it, else it scrolls (Sacred Gear).
+        GearNav::Stop area;
+        if (dy != 0.0f && GearNav::scrollAreaAt(g_x, g_y, area))
+        {
+            if (UiNav::next(g_x, g_y, dx, dy, x, y) && x >= area.left && x < area.right && y >= area.top && y < area.bottom &&
+                !(x == area.x && y == area.y))
+            {
+                setCursor(x, y);
+            }
+            else
+            {
+                GearNav::postScroll(static_cast<int>(dy));
+            }
+            return;
+        }
         // Up / down in the savegame list: row by row, scrolling it at its ends; the row is selected.
         int row, scrollTo;
         if (dy != 0.0f && UiNav::savegameStep(g_x, g_y, static_cast<int>(dy), row, scrollTo))

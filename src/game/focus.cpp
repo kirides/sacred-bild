@@ -1,5 +1,6 @@
 #include "game/focus.h"
 #include "game/controller.h"
+#include "game/gear_nav.h"
 #include "game/sacred_addr.h"
 #include "input/inject.h"
 #include "input/input_mode.h"
@@ -169,6 +170,11 @@ namespace
             return injected;
         }
         noteInput(message, wParam);
+        // Over a mod's widget the wheel scrolls it (Sacred Gear), not the game.
+        if (message == WM_MOUSEWHEEL && GearNav::wheel(GET_WHEEL_DELTA_WPARAM(wParam)))
+        {
+            return 0;
+        }
         if ((message == WM_ACTIVATE && LOWORD(wParam) == WA_INACTIVE) || (message == WM_ACTIVATEAPP && !wParam) ||
             message == WM_ENTERSIZEMOVE || message == WM_ENTERMENULOOP || message == WM_DESTROY)
         {

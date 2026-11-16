@@ -1117,6 +1117,47 @@ local ui_nav_modal = nil    -- the mod whose screen takes the pad alone (ui.nav_
 local ui_window_open = false    -- a closable panel is up this tick
 local ui_pad = {nudge = 0, back = 0, menu = 0}
 local ui_menu_items = {}    -- mod -> {{id, label, fn}} (ui.menu_item)
+-- Clipping and scrolling: a scroll area clips what is drawn inside it (and the regions: a widget scrolled out of
+-- sight takes no mouse); things that must lie over everything (an open dropdown's list) are drawn after all draw
+-- handlers (uis.defer).
+local uis = {}            -- the scroll areas' and deferred drawing's state (one local: the main chunk has few left)
+uis.clip_stack = {}    -- this tick's open clips {x, y, w, h}, innermost last
+uis.deferred = {}      -- functions run after every mod's draw handlers, in order
+uis.wheel = 0          -- wheel notches over mod UI this tick (+ away from the player, as WM_MOUSEWHEEL)
+uis.wheel_taken = false
+uis.pad_scroll = 0     -- D-pad lines in a scroll area this tick (+ down)
+uis.scroll_now = {}    -- this tick's scroll areas {key, x, y, w, h, layer}
+uis.scroll_prev = {}
+uis.scroll_hot = nil   -- the key of the topmost scroll area under the cursor (last tick's)
+uis.scroll_focus = nil -- the key of the scroll area clicked last (its keys work while the cursor is elsewhere)
+uis.SCROLLBAR = 12     -- the scrollbar's width
+
+function uis.defer(fn)
+    uis.deferred[#uis.deferred + 1] = fn
+end
+
+function uis.set_clip(c)
+    if not native.ui_clip then return end
+    if c then native.ui_clip(c.x, c.y, c.w, c.h) else native.ui_clip() end
+end
+
+-- Scroll math (also for the kernel tests): the offset clamped to 0..max, the thumb's size and place in a track.
+function uis.scroll_clamp(offset, content, view)
+    local max = math.max(0, content - view)
+    return math.max(0, math.min(max, offset)), max
+end
+function uis.scroll_thumb(offset, content, view, track)
+    local max = math.max(0, content - view)
+    local size = math.max(16, math.min(track, track * view / math.max(content, 1)))
+    local pos = max > 0 and (track - size) * offset / max or 0
+    return size, pos
+end
+function uis.scroll_from_thumb(pos, content, view, track, size)
+    local max = math.max(0, content - view)
+    if track - size <= 0 then return 0 end
+    return math.max(0, math.min(max, pos / (track - size) * max))
+end
+kernel.scroll_math = {clamp = uis.scroll_clamp, thumb = uis.scroll_thumb, from_thumb = uis.scroll_from_thumb}
 
 local function ui_handle(mod, id)
     local key = mod.id .. '\0' .. tostring(id)
@@ -1146,8 +1187,27 @@ local function ui_begin_tick()
             ui_pad.back = ui_pad.back - 1
         end
     end
+    uis.clip_stack, uis.deferred = {}, {}
+    uis.set_clip(nil)
+    do
+        local wheel, pad = 0, 0
+        if native.ui_wheel then wheel, pad = native.ui_wheel() end
+        uis.wheel, uis.pad_scroll, uis.wheel_taken = (wheel or 0) / 120, pad or 0, false
+    end
+    uis.scroll_prev, uis.scroll_now = uis.scroll_now, {}
     ui_tick_state = native.ui_state()
     ui_mouse.x, ui_mouse.y = ui_tick_state.mouse_x or 0, ui_tick_state.mouse_y or 0
+    -- The topmost scroll area under the cursor takes the wheel (layers in draw order, then the order drawn).
+    uis.scroll_hot = nil
+    do
+        local best = -1
+        for i, a in ipairs(uis.scroll_prev) do
+            local rank = a.layer * 100000 + i
+            if rank > best and ui_mouse.x >= a.x and ui_mouse.y >= a.y and ui_mouse.x < a.x + a.w and ui_mouse.y < a.y + a.h then
+                uis.scroll_hot, best = a.key, rank
+            end
+        end
+    end
     -- The topmost region of the last frame under the cursor (layers in draw order, then the order registered).
     ui_hot = nil
     local best = -1
@@ -1279,6 +1339,17 @@ local function ui_push_nav()
 end
 
 local function ui_end_tick()
+    -- What must lie over everything: open dropdown lists, drawn after all draw handlers, outside any clip.
+    uis.clip_stack = {}
+    uis.set_clip(nil)
+    local deferred = uis.deferred
+    uis.deferred = {}
+    for _, fn in ipairs(deferred) do
+        local ok, err = pcall(fn)
+        if not ok then log('UI: a deferred draw failed: %s', tostring(err)) end
+        uis.clip_stack = {}
+        uis.set_clip(nil)
+    end
     ui_push_nav()
     local t = ui_tooltip
     if not t then return end
@@ -1501,6 +1572,16 @@ local function make_ui(mod)
         local layer = UI_LAYERS[opts.layer or 'hud']
         if not layer then error('layer is "world", "hud" or "top"', 2) end
         local handle = ui_handle(mod, id)
+        local c = uis.clip_stack[#uis.clip_stack]
+        if c then
+            -- Inside a scroll area: only the visible part takes the mouse; nothing if it is scrolled out of sight.
+            local x0, y0 = math.max(x, c.x), math.max(y, c.y)
+            local x1, y1 = math.min(x + w, c.x + c.w), math.min(y + h, c.y + c.h)
+            if x1 <= x0 or y1 <= y0 then
+                return {hover = false, pressed = false, released = false, clicked = false, held = false, hidden = true}
+            end
+            x, y, w, h = x0, y0, x1 - x0, y1 - y0
+        end
         ui_count(mod)
         native.ui_region(layer, x, y, w, h, handle)
         ui_regions[#ui_regions + 1] = {handle = handle, layer = layer, x = x, y = y, w = w, h = h}
@@ -1539,6 +1620,7 @@ local function make_ui(mod)
         return down and not was
     end
 
+    local scrolls = {}      -- scroll area id -> {offset, content, ...} (ui.scroll_begin), for the session
     local function box(x, y, w, h, fill, edge, opts)
         ui.rect(x, y, w, h, fill, opts)
         ui.frame(x, y, w, h, edge, 1, opts)
@@ -1621,7 +1703,171 @@ local function make_ui(mod)
         return changed, index
     end
 
-    -- ui.dropdown(id, x, y, w, options, index, opts) -> changed, index. The open list lies on the top layer; a
+
+    -- Scroll areas. ui.scroll_begin(id, x, y, w, h, opts{step, layer, nav}) -> area {x, y, w, h, offset, max,
+    -- content_x, content_y}; draw the content at content_y + its own y (what lies outside the viewport is clipped and
+    -- takes no mouse), then ui.scroll_end(content_height) -> offset, max. The scrollbar (arrows, track, thumb) shows
+    -- when the content is taller than the area; the wheel scrolls the area under the cursor, the keys (Up, Down,
+    -- PageUp, PageDown, Home, End) the one under the cursor or clicked last, the D-pad (SacredBild) the one the
+    -- pad's cursor is in. The offset is kept per id for the session; ui.scroll_to(id, offset) sets it.
+    local scroll_stack = {}
+    local function scroll_key_pressed(st, name)
+        local vk = UI_VK[name]
+        local down = native.key_down(vk)
+        st.keys = st.keys or {}
+        local was = st.keys[name]
+        st.keys[name] = down
+        return down and not was
+    end
+    function ui.scroll_begin(id, x, y, w, h, opts)
+        opts = opts or {}
+        local key = mod.id .. '\0' .. tostring(id)
+        local st = scrolls[id] or {offset = 0, content = 0}
+        scrolls[id] = st
+        local layer = UI_LAYERS[opts.layer or 'hud']
+        if not layer then error('layer is "world", "hud" or "top"', 2) end
+        local step = opts.step or 20
+        local bar = st.content > h and uis.SCROLLBAR or 0
+        -- The body takes clicks on empty space (they focus the area) and is the pad's stop for it.
+        local body = region(tostring(id) .. '#body', x, y, w, h, {layer = opts.layer, nav = opts.nav, _nav_kind = 2})
+        if body.pressed then uis.scroll_focus = key end
+        local delta = 0
+        local hot = uis.scroll_hot == key
+        if hot and uis.wheel ~= 0 and not uis.wheel_taken then
+            delta = delta - uis.wheel * step * 3
+            uis.wheel_taken = true
+        end
+        if (hot or uis.scroll_focus == key) and uis.pad_scroll ~= 0 then
+            delta = delta + uis.pad_scroll * step
+            uis.pad_scroll = 0
+        end
+        if hot or uis.scroll_focus == key then
+            if scroll_key_pressed(st, 'down') then delta = delta + step end
+            if scroll_key_pressed(st, 'up') then delta = delta - step end
+            if scroll_key_pressed(st, 'pagedown') then delta = delta + h - step end
+            if scroll_key_pressed(st, 'pageup') then delta = delta - h + step end
+            if scroll_key_pressed(st, 'home') then delta = -math.huge end
+            if scroll_key_pressed(st, 'end') then delta = math.huge end
+        end
+        local max
+        st.offset, max = uis.scroll_clamp(st.offset + delta, st.content, h)
+        uis.scroll_now[#uis.scroll_now + 1] = {key = key, x = x, y = y, w = w, h = h, layer = layer}
+        local view = {x = x, y = y, w = w - bar, h = h}
+        local outer = uis.clip_stack[#uis.clip_stack]
+        local c = view
+        if outer then
+            local x0, y0 = math.max(view.x, outer.x), math.max(view.y, outer.y)
+            local x1, y1 = math.min(view.x + view.w, outer.x + outer.w), math.min(view.y + view.h, outer.y + outer.h)
+            c = {x = x0, y = y0, w = math.max(0, x1 - x0), h = math.max(0, y1 - y0)}
+        end
+        uis.clip_stack[#uis.clip_stack + 1] = c
+        uis.set_clip(c)
+        st.view, st.step, st.layer_name, st.id, st.full_w = view, step, opts.layer, id, w
+        scroll_stack[#scroll_stack + 1] = st
+        return {x = x, y = y, w = view.w, h = h, offset = st.offset, max = max, content_x = x, content_y = y - st.offset}
+    end
+    function ui.scroll_end(content_height)
+        local st = table.remove(scroll_stack)
+        if not st then error('scroll_end without scroll_begin', 2) end
+        table.remove(uis.clip_stack)
+        uis.set_clip(uis.clip_stack[#uis.clip_stack])
+        if content_height then st.content = math.max(0, content_height) end
+        local v = st.view
+        local max
+        st.offset, max = uis.scroll_clamp(st.offset, st.content, v.h)
+        if max <= 0 then return st.offset, max end
+        local o = {layer = st.layer_name}
+        local id = tostring(st.id)
+        local bx, bw = v.x + st.full_w - uis.SCROLLBAR + 1, uis.SCROLLBAR - 1
+        local track_y, track_h = v.y + bw, v.h - 2 * bw
+        local up = region(id .. '#up', bx, v.y, bw, bw, o)
+        local down = region(id .. '#down', bx, v.y + v.h - bw, bw, bw, o)
+        local track = region(id .. '#track', bx, track_y, bw, track_h, {layer = st.layer_name, nav = false})
+        local size, pos = uis.scroll_thumb(st.offset, st.content, v.h, track_h)
+        local thumb = region(id .. '#thumb', bx, track_y + pos, bw, size, {layer = st.layer_name, nav = false})
+        local now = native.time()
+        local function repeating(r)
+            if r.pressed then st.repeat_at = now + 0.4; return true end
+            if r.held and st.repeat_at and now >= st.repeat_at then st.repeat_at = now + 0.06; return true end
+            return false
+        end
+        local offset = st.offset
+        if repeating(up) then offset = offset - st.step end
+        if repeating(down) then offset = offset + st.step end
+        if thumb.pressed then st.grab = ui_mouse.y - (track_y + pos) end
+        if thumb.held and st.grab then
+            offset = uis.scroll_from_thumb(ui_mouse.y - st.grab - track_y, st.content, v.h, track_h, size)
+        elseif not thumb.held then
+            st.grab = nil
+        end
+        if track.clicked then offset = offset + (ui_mouse.y < track_y + pos and -v.h or v.h) end
+        st.offset = uis.scroll_clamp(offset, st.content, v.h)
+        size, pos = uis.scroll_thumb(st.offset, st.content, v.h, track_h)
+        ui.rect(bx, v.y, bw, v.h, 0xC00C0C14, o)
+        box(bx, track_y + pos, bw, size, (thumb.hover or thumb.held) and C.bg_down or C.bg_hover, C.edge, o)
+        for _, a in ipairs({{up, v.y, -1}, {down, v.y + v.h - bw, 1}}) do
+            local r, ay, dir = a[1], a[2], a[3]
+            box(bx, ay, bw, bw, (r.hover or r.held) and C.bg_hover or C.bg, C.edge_dim, o)
+            for i = 0, 2 do
+                local row = dir < 0 and (2 - i) or i
+                ui.rect(bx + 2 + i, ay + 4 + row, bw - 4 - 2 * i, 1, C.accent, o)
+            end
+        end
+        return st.offset, max
+    end
+    function ui.scroll_to(id, offset)
+        local st = scrolls[id] or {offset = 0, content = 0}
+        scrolls[id] = st
+        st.offset = math.max(0, offset or 0)
+    end
+    function ui.scroll_offset(id)
+        local st = scrolls[id]
+        return st and st.offset or 0, st and math.max(0, st.content - (st.view and st.view.h or 0)) or 0
+    end
+
+    -- ui.wheel(): wheel notches over mod UI this tick (+ away from the player, as Windows has it; 0 if none), and
+    -- whether a scroll area already took them.
+    function ui.wheel() return uis.wheel, uis.wheel_taken end
+
+    -- ui.text_wrap(text, width, opts) -> lines, height: the text broken into lines that fit `width` (at spaces; a
+    -- word longer than the width gets a line of its own; \n breaks too), and their height, in the font of `opts`
+    -- (ui.text's). Cached per text, width and font.
+    local wrap_cache = setmetatable({}, {__mode = 'k'})
+    local wrap_count = 0
+    function ui.text_wrap(text, width, opts)
+        opts = opts or {}
+        text = tostring(text)
+        local fkey = table.concat({tostring(opts.font), tostring(opts.size), tostring(opts.face), tostring(opts.bold),
+            tostring(opts.italic)}, '|')
+        local key = text .. '\0' .. width .. '\0' .. fkey
+        local hit = wrap_cache[key]
+        if hit then return hit.lines, hit.height end
+        local _, line_h = ui_measure('Ag', opts)
+        line_h = line_h or 16
+        local lines = {}
+        for para in (text .. '\n'):gmatch('(.-)\n') do
+            local line = nil
+            for word in para:gmatch('%S+') do
+                local try = line and (line .. ' ' .. word) or word
+                local tw = ui_measure(try, opts) or (#try * 7)
+                if tw <= width or not line then
+                    line = try
+                else
+                    lines[#lines + 1] = line
+                    line = word
+                end
+            end
+            lines[#lines + 1] = line or ''
+        end
+        local height = #lines * line_h
+        wrap_count = wrap_count + 1
+        if wrap_count > 2000 then wrap_cache, wrap_count = setmetatable({}, {__mode = 'k'}), 0 end
+        wrap_cache[key] = {lines = lines, height = height}
+        return lines, height
+    end
+
+    -- ui.dropdown(id, x, y, w, options, index, opts{max_rows}) -> changed, index. The open list is drawn after every
+    -- draw handler, over all panels and text, on the top layer; it shows at most max_rows (12) entries and scrolls; a
     -- click anywhere else closes it.
     function ui.dropdown(id, x, y, w, options, index, opts)
         opts = opts or {}
@@ -1638,30 +1884,54 @@ local function make_ui(mod)
             open = not open
             ui_dropdown = open and handle or nil
         end
+        local n = #options
+        local rows = math.max(1, math.min(n, opts.max_rows or 12))
+        local list_id = tostring(id) .. '#list'
+        if r.clicked and open then
+            -- Opened: the selected entry in the middle of the list (when it has to scroll).
+            local off = uis.scroll_clamp((index - 1) * 18 - (rows * 18 - 18) / 2, n * 18, rows * 18)
+            scrolls[list_id] = {offset = off, content = n * 18}
+        end
         local changed = false
         if open then
-            local s = ui_tick_state or {}
-            local top = {layer = 'top'}
-            -- Behind the list: the whole screen, so a click beside it closes it (and goes nowhere else).
-            local away = region(tostring(id) .. '#away', s.screen_left or 0, s.screen_top or 0,
-                (s.screen_right or 1024) - (s.screen_left or 0), (s.screen_bottom or 768) - (s.screen_top or 0),
-                {layer = 'top', nav = false})
-            local ly = y + h
-            box(x, ly, w, #options * 18 + 2, 0xF0141420, C.edge, top)
-            for i, text in ipairs(options) do
-                local ir = region(tostring(id) .. '#' .. i, x + 1, ly + 1 + (i - 1) * 18, w - 2, 18, {layer = 'top', _nav_drop = true})
-                if ir.hover or i == index then
-                    ui.rect(x + 1, ly + 1 + (i - 1) * 18, w - 2, 18, ir.hover and 0xFF4A3C28 or 0xFF2A2418, top)
-                end
-                ui.text(tostring(text), x + 6, ly + 1 + (i - 1) * 18, {height = 18, valign = 'middle', layer = 'top',
-                    color = i == index and C.accent or C.text})
-                if ir.clicked then
+            -- The list's clicks (its regions were drawn last tick), so the new index is returned now.
+            for i = 1, n do
+                local st = ui_input[ui_handle(mod, tostring(id) .. '#' .. i)]
+                if st and st.clicked then
                     changed = i ~= index
                     index = i
                     ui_dropdown = nil
                 end
             end
-            if away.clicked then ui_dropdown = nil end
+            local away = ui_input[ui_handle(mod, tostring(id) .. '#away')]
+            if away and away.clicked then ui_dropdown = nil end
+        end
+        if open and ui_dropdown == handle then
+            -- The list itself after every draw handler: over all panels and text, and it takes the mouse first.
+            local sel = index
+            uis.defer(function()
+                local s = ui_tick_state or {}
+                local top = {layer = 'top'}
+                local sl, st_, sr, sb = s.screen_left or 0, s.screen_top or 0, s.screen_right or 1024, s.screen_bottom or 768
+                -- Behind the list: the whole screen, so a click beside it closes it (and goes nowhere else).
+                region(tostring(id) .. '#away', sl, st_, sr - sl, sb - st_, {layer = 'top', nav = false})
+                local lh = rows * 18 + 2
+                local ly = y + h
+                if ly + lh > sb and y - lh >= st_ then ly = y - lh end     -- no room below: above the box
+                box(x, ly, w, lh, 0xF0141420, C.edge, top)
+                local area = ui.scroll_begin(list_id, x + 1, ly + 1, w - 2, rows * 18, {layer = 'top', step = 18, nav = false})
+                local first = math.max(1, math.floor(area.offset / 18) + 1)
+                for i = first, math.min(n, first + rows) do
+                    local iy = area.content_y + (i - 1) * 18
+                    local ir = region(tostring(id) .. '#' .. i, x + 1, iy, area.w, 18, {layer = 'top', _nav_drop = true})
+                    if ir.hover or i == sel then
+                        ui.rect(x + 1, iy, area.w, 18, ir.hover and 0xFF4A3C28 or 0xFF2A2418, top)
+                    end
+                    ui.text(tostring(options[i]), x + 6, iy, {height = 18, valign = 'middle', layer = 'top',
+                        color = i == sel and C.accent or C.text})
+                end
+                ui.scroll_end(n * 18)
+            end)
         end
         return changed, index
     end
@@ -2129,6 +2399,8 @@ local function make_auto()
         native.auto_move(math.floor(x), math.floor(y))
     end
     function auto.down(button) native.auto_button(vk_of(button or 'lbutton'), true) end
+    -- auto.wheel(notches): the mouse wheel at the cursor (+ away from the player: scrolls up), as WM_MOUSEWHEEL.
+    function auto.wheel(notches) native.auto_wheel(math.floor((notches or 1) * 120 + 0.5)) end
     function auto.up(button) native.auto_button(vk_of(button or 'lbutton'), false) end
     function auto.key_down(key) native.auto_key(vk_of(key), true) end
     function auto.key_up(key) native.auto_key(vk_of(key), false) end

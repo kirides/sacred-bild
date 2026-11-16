@@ -1837,6 +1837,34 @@ namespace
         return 0;
     }
 
+    // native.auto_wheel(delta)
+    int nativeAutoWheel(lua_State* L)
+    {
+        Automation::wheel(static_cast<int>(luaL_checknumber(L, 1)));
+        return 0;
+    }
+
+    // native.ui_clip(x, y, w, h) sets the clip for what is recorded next; native.ui_clip() clears it.
+    int nativeUiClip(lua_State* L)
+    {
+        if (lua_isnoneornil(L, 1))
+        {
+            Ui::setClip(false);
+            return 0;
+        }
+        Ui::setClip(true, static_cast<float>(luaL_checknumber(L, 1)), static_cast<float>(luaL_checknumber(L, 2)),
+                    static_cast<float>(luaL_checknumber(L, 3)), static_cast<float>(luaL_checknumber(L, 4)));
+        return 0;
+    }
+
+    // native.ui_wheel() -> delta (WM_MOUSEWHEEL units over mod UI since the last call), pad scroll lines (+ down)
+    int nativeUiWheel(lua_State* L)
+    {
+        lua_pushnumber(L, Ui::takeWheel());
+        lua_pushnumber(L, Ui::takePadScroll());
+        return 2;
+    }
+
     int nativeAutoKey(lua_State* L)
     {
         const int vk = static_cast<int>(luaL_checknumber(L, 1));
@@ -2105,6 +2133,8 @@ namespace
             {"ui_events", nativeUiEvents},
             {"ui_nav", nativeUiNav},
             {"ui_pad", nativeUiPad},
+            {"ui_clip", nativeUiClip},
+            {"ui_wheel", nativeUiWheel},
             {"key_down", nativeKeyDown},
             {"ui_block_keys", nativeUiBlockKeys},
             {"write_file", nativeWriteFile},
@@ -2140,6 +2170,7 @@ namespace
                 {"auto_ui", nativeAutoUi},
                 {"auto_move", nativeAutoMove},
                 {"auto_button", nativeAutoButton},
+                {"auto_wheel", nativeAutoWheel},
                 {"auto_key", nativeAutoKey},
                 {"auto_pad", nativeAutoPad},
                 {"auto_nav", nativeAutoNav},

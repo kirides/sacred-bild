@@ -59,6 +59,10 @@ function GearAuto.down(button) end
 ---@param button? GearMouseButton Default `'lbutton'`.
 function GearAuto.up(button) end
 
+--- The mouse wheel at the cursor, as `WM_MOUSEWHEEL`: + away from the player (scrolls up), - towards.
+---@param notches? number Default 1.
+function GearAuto.wheel(notches) end
+
 ---@param key GearAutoKey
 function GearAuto.key_down(key) end
 

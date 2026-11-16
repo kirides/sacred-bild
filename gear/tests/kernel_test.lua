@@ -968,6 +968,24 @@ do
     native.builtin = saved_builtin
 end
 
+-- Scroll math: the offset is clamped to 0..content-view; the thumb's size follows view/content (at least 16) and
+-- its place the offset; a thumb position maps back to the offset.
+do
+    local m = kernel.scroll_math
+    local o, max = m.clamp(50, 2000, 400)
+    ok(o == 50 and max == 1600, 'scroll clamp inside')
+    ok(m.clamp(-10, 2000, 400) == 0 and m.clamp(9999, 2000, 400) == 1600, 'scroll clamp at the ends')
+    ok(m.clamp(30, 300, 400) == 0, 'content shorter than the view: no scrolling')
+    -- 100 lines of 20: 2000; a 400 view, three wheel notches of 3 lines each scroll 180
+    ok(m.clamp(0 + 3 * 3 * 20, 2000, 400) == 180, 'three notches: 180')
+    local size, pos = m.thumb(800, 2000, 400, 376)
+    ok(math.abs(size - 75.2) < 0.01 and math.abs(pos - (376 - 75.2) * 0.5) < 0.01, 'thumb size and place')
+    ok(m.thumb(0, 100000, 400, 376) == 16, 'thumb at least 16')
+    ok(math.abs(m.from_thumb(pos, 2000, 400, 376, size) - 800) < 0.01, 'thumb place back to the offset')
+    ok(m.from_thumb(-50, 2000, 400, 376, size) == 0 and m.from_thumb(9999, 2000, 400, 376, size) == 1600,
+        'thumb dragged past the ends')
+end
+
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

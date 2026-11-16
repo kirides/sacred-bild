@@ -26,7 +26,9 @@ namespace
     int g_flags = 0;
     ULONGLONG g_updated = 0;
 
-    std::atomic<int> g_nudge{0}, g_back{0}, g_menu{0};
+    std::atomic<int> g_nudge{0}, g_back{0}, g_menu{0}, g_scroll{0};
+    using WheelFn = int(__cdecl*)(int delta);
+    std::atomic<WheelFn> g_wheel{nullptr};
 
     bool fresh()
     {
@@ -93,6 +95,26 @@ bool GearNav::onSlider(float x, float y)
     return false;
 }
 
+bool GearNav::scrollAreaAt(float x, float y, Stop& out)
+{
+    for (const Stop& s : stops())
+    {
+        if (s.kind == 2 && x >= s.left && x < s.right && y >= s.top && y < s.bottom)
+        {
+            out = s;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool GearNav::wheel(int delta)
+{
+    const WheelFn fn = g_wheel.load(std::memory_order_acquire);
+    return fn && fn(delta) != 0;
+}
+
+void GearNav::postScroll(int steps) { g_scroll += steps; }
 void GearNav::postNudge(int steps) { g_nudge += steps; }
 void GearNav::postBack() { ++g_back; }
 void GearNav::postMenu() { ++g_menu; }
@@ -121,6 +143,18 @@ extern "C" int __cdecl SacredBild_UiNavState(int* flags)
     std::lock_guard lock(g_lock);
     *flags = g_flags;
     return fresh() ? static_cast<int>(g_stops.size()) : -1;
+}
+
+// Sacred Gear: its mouse wheel handler (delta as WM_MOUSEWHEEL has it; returns 1 if the wheel went to mod UI, which
+// the game then does not get), and the D-pad's scroll steps in a scroll area since the last call (+ down).
+extern "C" void __cdecl SacredBild_UiSetWheelHandler(int(__cdecl* fn)(int delta))
+{
+    g_wheel.store(fn, std::memory_order_release);
+}
+
+extern "C" int __cdecl SacredBild_UiTakeScroll()
+{
+    return g_scroll.exchange(0);
 }
 
 // Sacred Gear, once per tick: the pad's events since the last call (each count is then reset).
