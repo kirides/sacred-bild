@@ -773,6 +773,13 @@ namespace
     {
         out.clear();
         lua_getfield(L, edit, field);
+        if (lua_type(L, -1) == LUA_TNUMBER)             // one byte, e.g. an operand tag by its name (TAG.FLY_TO)
+        {
+            const double v = lua_tonumber(L, -1);
+            lua_pop(L, 1);
+            out.push_back(static_cast<unsigned char>(v));
+            return v >= 0 && v < 256;
+        }
         size_t n = 0;
         const char* hex = lua_isstring(L, -1) ? lua_tolstring(L, -1, &n) : nullptr;
         bool ok = hex && !(n & 1);
