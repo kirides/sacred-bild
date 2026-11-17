@@ -61,6 +61,13 @@ local function host_lan()
     A.ui_click(px(553, 448))                -- create
     gear.wait(3)
     A.ui_click(px(747, 448))                -- create: the game starts its gameserver and connects to it
+    -- the dialog turns into "join game" with Starten at the same place once the server is up: press it until in game
+    for _ = 1, 8 do
+        gear.wait(5)
+        if A.wait_for_game(1) then return end
+        A.ui_click(px(747, 448))            -- Starten
+        if A.wait_for_game(10) then return end
+    end
 end
 
 gear.task(function()
