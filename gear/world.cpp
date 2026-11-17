@@ -193,7 +193,7 @@ namespace
         {
             return false;
         }
-        out = {p.x, p.y, p.layer};
+        out = {p.x, p.y, p.layer, p.sector};
         return true;
     }
 

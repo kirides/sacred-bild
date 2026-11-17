@@ -21,6 +21,7 @@ local sent = {}
 local ability_store = {}
 local ability_active, damage_active, effect_active, bonus_active, slot_active, branch_active, key_active
 local clicks = 0
+clipboard_text = nil
 local level_active, constant_active
 local ui_recording, ui_published = {}, {}
 local nav_published
@@ -108,6 +109,8 @@ local native = {
     hero = function() return hero_id end,
     world_changes = function() return hero_id ~= nil end,
     object = function(id) return objects[id] end,
+    clipboard_set = function(text) clipboard_text = text; return true end,
+    clipboard_get = function() return clipboard_text end,
     creatures_near = function() local t = {}; for id in pairs(objects) do t[#t + 1] = id end; table.sort(t); return t end,
     spawn = function(type, x, y, layer)
         local id = 100 + #sent
@@ -374,6 +377,8 @@ files.w = {
             widgets.ui = ui
             widgets.panel = ui.panel('p', 'Panel', 400, 400, 200, 100, {resizable = true, min_width = 150})
             widgets.panels = ui.panels()
+            widgets.clip = gear.clipboard
+            widgets.get_sector = function() local hero = gear.world.hero(); return hero and hero:sector() end
             widgets.bare = ui.panel('b', 'Bare', 100, 100, 200, 30, {bare = true, resizable = true, min_width = 20, min_height = 10})
         end)
     ]],
@@ -546,7 +551,7 @@ ok(abil.setting == '2560' and abil.no_setting == nil, 'gear.settings.get')
 
 -- Frames: session start, pipes, timers, tasks.
 hero_id = 1
-objects[1] = {id = 1, type = 5, x = 100, y = 200, layer = 0, creature = true, hp = 50, max_hp = 100, gold = 10, level = 3}
+objects[1] = {id = 1, type = 5, x = 100, y = 200, layer = 0, sector = 2909, creature = true, hp = 50, max_hp = 100, gold = 10, level = 3}
 pipe_events = {{'connect', ''}, {'message', 'hello'}}
 kernel.tick(0.016)
 ok(rec.hero == 1, 'session.start with the hero')
@@ -653,6 +658,11 @@ local pn = widgets.panel
 ok(pn and math.abs(pn.x - 300) < 0.01 and math.abs(pn.y - 200) < 0.01 and math.abs(pn.w - 150) < 0.01 and math.abs(pn.h - 150) < 0.01,
    'the panel takes the place and size (min width kept): ' .. tostring(pn and pn.x) .. ',' .. tostring(pn and pn.w))
 ok(not widgets.ui.set_panel_rect('w:nope', 0, 0), 'set_panel_rect on an unknown panel')
+hero_id = 1
+ok(widgets.get_sector() == 2909, 'creature:sector() is the sector word of the position: ' .. tostring(widgets.get_sector()))
+ok(widgets.clip and widgets.clip.set('Silver Creek café') == true and widgets.clip.get() == 'Silver Creek café', 'gear.clipboard sets and gets text')
+ok(not pcall(widgets.clip.set, 5), 'gear.clipboard.set wants text')
+hero_id = nil
 do
     local b = widgets.bare
     ok(b and b.open and b.content_x == b.x and b.content_y == b.y and b.content_w == 200 and b.content_h == 30,

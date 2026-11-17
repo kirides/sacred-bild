@@ -93,6 +93,7 @@
 ---@field drops GearDrops Item drops: chance, rarity weights, the generator, the roll and select events.
 ---@field inv GearInv Inventories: containers, items, export and import of items.
 ---@field game GearGame The game itself: difficulty and saving.
+---@field clipboard GearClipboard The Windows clipboard: copy text out of the game.
 ---@field realm GearRealmApi The online play server (realms): list, switch, add.
 ---@field mp GearMp Players of a network game, the host, the mod channel and the `kill` event.
 ---@field net GearNet Custom net messages: named channels between computers and the game server.

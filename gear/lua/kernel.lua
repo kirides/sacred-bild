@@ -705,6 +705,7 @@ function creature_mt:is_creature() local o = info(self); return o ~= nil and o.c
 function creature_mt:type() local o = info(self); return o and o.type end
 function creature_mt:type_name() local o = info(self); return o and data.object_types:name(o.type) end
 function creature_mt:position() local o = info(self); if o then return o.x, o.y, o.layer end end
+function creature_mt:sector() local o = info(self); return o and o.sector end
 function creature_mt:hp() local o = info(self); return o and o.hp end
 function creature_mt:max_hp() local o = info(self); return o and o.max_hp end
 function creature_mt:is_dead() local o = info(self); return not o or not o.creature or o.hp <= 0 end
@@ -4226,6 +4227,15 @@ local function make_env(mod)
     gear.world = w
     gear.mp = mp
     gear.net = mp._net.api
+    gear.clipboard = {
+        -- set(text) -> true | nil, message: the Windows clipboard gets the text (Unicode, at most 1 MB).
+        set = function(text)
+            assert(type(text) == 'string', 'text must be a string')
+            return native.clipboard_set(text)
+        end,
+        -- get() -> the text on the clipboard, or nil.
+        get = function() return native.clipboard_get() end,
+    }
     gear.game = {
         -- difficulty() -> 0..4: the difficulty level of the running game.
         difficulty = function() return native.difficulty() end,

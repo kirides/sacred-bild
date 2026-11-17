@@ -19,6 +19,7 @@ namespace World
         int32_t x = 0;
         int32_t y = 0;
         uint8_t layer = 0;
+        uint16_t sector = 0;    // the sector word of the position (the game's sector table slot), 0: not filed
     };
 
     struct Object

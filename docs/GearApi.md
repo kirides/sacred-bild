@@ -209,6 +209,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `drops` | `GearDrops` | Item drops: chance, rarity weights, the generator, the roll and select events. |
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
 | `game` | `GearGame` | The game itself: difficulty and saving. |
+| `clipboard` | `GearClipboard` | The Windows clipboard: copy text out of the game. |
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
 | `mp` | `GearMp` | Players of a network game, the host, the mod channel and the `kill` event. |
 | `net` | `GearNet` | Custom net messages: named channels between computers and the game server. |
@@ -957,6 +958,7 @@ What `creature:info()` returns.
 | `x` | `integer` |  |
 | `y` | `integer` |  |
 | `layer` | `integer` |  |
+| `sector` | `integer` | The sector word of its position: the slot of the game's sector table (not a coordinate), 0 when none. |
 | `creature` | `boolean` | Whether the object is a creature. |
 | `hp` | `integer` | Creatures only. (optional) |
 | `max_hp` | `integer` | Creatures only. (optional) |
@@ -1033,6 +1035,12 @@ World position and layer.
 - returns `x` `integer?`
 - returns `y` `integer?`
 - returns `layer` `integer?`
+
+#### `creature:sector() -> integer?`
+
+The sector the object's position is filed under: a slot of the game's sector table (the number a game server's scripts see as `player.sector`; ids are not coordinates), 0 when there is none, nil when the object is gone.
+
+- returns `integer?`
 
 #### `creature:hp() -> integer?`
 
@@ -1318,6 +1326,28 @@ The savegame file of `slot`: nil for a slot outside 0..509, else a table whose `
 
 - `slot`: `integer`
 - returns `GearSaveInfo?`
+
+## Clipboard (gear.clipboard)
+
+### GearClipboard
+
+Reached as `gear.clipboard`.
+
+The Windows clipboard, for a mod that shows something the player wants to paste elsewhere (a server admin's config line): text only, Unicode.
+
+#### `gear.clipboard.set(text) -> boolean?, string?`
+
+Puts `text` (UTF-8, at most 1 MB) on the clipboard, replacing what was there.
+
+- `text`: `string`
+- returns `ok` `boolean?`
+- returns `error` `string?` - `'the clipboard is not available'` (another program holds it) or the size limit.
+
+#### `gear.clipboard.get() -> string?`
+
+The text on the clipboard, nil when there is none (or it is not text).
+
+- returns `string?`
 
 ## Realms (gear.realm)
 

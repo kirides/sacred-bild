@@ -116,6 +116,7 @@ function GearWorld.pickup_refused() end
 ---@field x integer
 ---@field y integer
 ---@field layer integer
+---@field sector integer The sector word of its position: the slot of the game's sector table (not a coordinate), 0 when none.
 ---@field creature boolean Whether the object is a creature.
 ---@field hp? integer Creatures only.
 ---@field max_hp? integer Creatures only.
@@ -176,6 +177,11 @@ function Creature:type_name() end
 ---@return integer? y
 ---@return integer? layer
 function Creature:position() end
+
+--- The sector the object's position is filed under: a slot of the game's sector table (the number a game server's
+--- scripts see as `player.sector`; ids are not coordinates), 0 when there is none, nil when the object is gone.
+---@return integer?
+function Creature:sector() end
 
 ---@return integer?
 function Creature:hp() end

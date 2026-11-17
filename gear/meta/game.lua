@@ -56,3 +56,21 @@ function GearGame.save_pending() end
 ---@param slot integer
 ---@return GearSaveInfo?
 function GearGame.save_info(slot) end
+
+-- ## Clipboard (gear.clipboard)
+
+-- path gear.clipboard
+--- The Windows clipboard, for a mod that shows something the player wants to paste elsewhere (a server admin's config line):
+--- text only, Unicode.
+---@class GearClipboard
+local GearClipboard = {}
+
+--- Puts `text` (UTF-8, at most 1 MB) on the clipboard, replacing what was there.
+---@param text string
+---@return boolean? ok
+---@return string? error `'the clipboard is not available'` (another program holds it) or the size limit.
+function GearClipboard.set(text) end
+
+--- The text on the clipboard, nil when there is none (or it is not text).
+---@return string?
+function GearClipboard.get() end
