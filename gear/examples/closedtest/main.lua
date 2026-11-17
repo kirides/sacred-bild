@@ -38,7 +38,7 @@ gear.task(function()
     if cfg.create then
         A.ui_click(94, 495) gear.wait(1.5)      -- an empty slot
         A.ui_click(508, 662) gear.wait(3)       -- Neuer Charakter
-        A.ui_click(102, 480) gear.wait(1.5)     -- the Gladiator
+        if cfg.keep_class then A.ui_click(375, 392) gear.wait(1.5) else A.ui_click(102, 480) gear.wait(1.5) end     -- the Gladiator (the screen starts with the Dark Elf)
         field(512, 585, cfg.hero, 16)           -- the name
         gear.wait(0.5)
         A.ui_click(608, 713) gear.wait(4)       -- Ok
@@ -104,6 +104,34 @@ gear.task(function()
         end
         A.write('inspect.json', gear.json.encode(out))
         A.screenshot('ct-15-inspect')
+    end
+    if cfg.portal then
+        -- the transfer portal next to the start (it takes the hero to the mainland): walk into it, then look around
+        A.click(1040, 340) gear.wait(8)
+        A.screenshot('ct-19-portal1')
+        A.click(1040, 340) gear.wait(8)
+        A.screenshot('ct-19-portal2')
+    end
+    if cfg.walk_to then
+        -- walk towards a world position in steps (pixel mapping as for fight), logging progress and what is near on arrival
+        local hero = gear.world.hero()
+        local tx, ty = cfg.walk_to[1], cfg.walk_to[2]
+        local log = {}
+        for i = 1, cfg.walk_steps or 80 do
+            local hx, hy = hero:position()
+            local dx, dy = tx - hx, ty - hy
+            local d = math.sqrt(dx * dx + dy * dy)
+            if d < 400 then break end
+            local k = math.min(1, 450 / d)
+            local sx = 800 + 0.89 * ((dx * k) - (dy * k))
+            local sy = 444 + 0.42 * ((dx * k) + (dy * k))
+            A.click(sx, sy) gear.wait(2.5)
+            if i % 5 == 0 then log[#log + 1] = ('%d: %d,%d d=%d'):format(i, hx, hy, d) end
+        end
+        local hx, hy = hero:position()
+        log[#log + 1] = ('end %d,%d'):format(hx, hy)
+        A.write('walk.txt', table.concat(log, ';'))
+        A.screenshot('ct-18-arrived')
     end
     if cfg.fight then
         -- deterministic aiming: the screen is isometric around the hero (calibrated: pixel = hero pixel + (0.89 * (dx - dy), 0.42 * (dx + dy)))
