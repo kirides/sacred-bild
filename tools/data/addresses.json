@@ -100,6 +100,31 @@
    "451BBE74": "00617360",
    "451BBE74:sacredreborn.exe": "00617360"
   },
+  "cEngine_handleZoomInput": {
+   "452F85C7": "0060DD20",
+   "451BBE74": "0060DDC0",
+   "451BBE74:sacredreborn.exe": "0060DDC0"
+  },
+  "zoomInputCall": {
+   "452F85C7": "0060E6DC",
+   "451BBE74": "0060E77C",
+   "451BBE74:sacredreborn.exe": "0060E77C"
+  },
+  "cWorldView_setZoom": {
+   "452F85C7": "00628130",
+   "451BBE74": "00628210",
+   "451BBE74:sacredreborn.exe": "00628210"
+  },
+  "getPauseState": {
+   "452F85C7": "006413E0",
+   "451BBE74": "006414D0",
+   "451BBE74:sacredreborn.exe": "006414D0"
+  },
+  "g_textInputActive": {
+   "452F85C7": "017EA344",
+   "451BBE74": "017E82C4",
+   "451BBE74:sacredreborn.exe": "017E82C4"
+  },
   "cEngine_receiveEvent": {
    "452F85C7": "00618090",
    "451BBE74": "00618130",

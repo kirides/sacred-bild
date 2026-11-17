@@ -196,6 +196,17 @@ namespace Sacred::Addr
     inline Global<int32_t> g_viewCameraX{};             // ENG 00AD7998
     inline Global<int32_t> g_viewCameraY{};             // ENG 00AD799C
 
+    // Zoom: cEngine_handleZoomInput (ENG 0060DD20) runs each frame in game: numpad +/- (not with Shift, not while the game
+    // is paused or a text is typed) add to the world view's zoom, and a zoom between the steps 0.5 / 1 / 2 glides on to
+    // the next one. cWorldView_setZoom (ENG 00628130) stores a zoom and rebuilds the projection and view metrics.
+    inline Thiscall<void(cEngine* self, float dt)> cEngine_handleZoomInput{};
+    // The call in the engine's update (ENG 0060E6DC); SacredBild retargets it, so Sacred Gear's own hook of the function
+    // (its signature scan) still finds the function's bytes.
+    inline uintptr_t zoomInputCall{};
+    inline Thiscall<bool(cWorldView* self, float zoom)> cWorldView_setZoom{};
+    inline Cdecl<char*()> getPauseState{};               // ENG 006413E0; the byte it returns is set while the game is paused
+    inline Global<uint8_t> g_textInputActive{};         // ENG 017EA344
+
     // Engine input: cEngine_receiveEvent (0x618090) passes mouse events to the UI manager first (UI coordinates)
     // and then to the world mouse handler, which picks with the event position.
     // ENG 006172C0; returns a bool

@@ -1,5 +1,6 @@
 #include "game/build.h"
 #include "game/click_walk.h"
+#include "game/zoom.h"
 #include "game/controller.h"
 #include "game/d3d_stats.h"
 #include "game/fast_math.h"
@@ -131,6 +132,7 @@ void Sacred::installHooks()
     Overlay::install();
     Controller::install();
     ClickWalk::install();
+    Zoom::install();
     OptionsScreen::install();
     Movie::install();
     Screenshot::install();

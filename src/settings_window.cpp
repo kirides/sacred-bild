@@ -1,5 +1,6 @@
 #include "settings_window.h"
 #include "config.h"
+#include "config/camera.h"
 #include "config/controller.h"
 #include "config/ddraw.h"
 #include "config/debug.h"
@@ -13,6 +14,8 @@
 #include "ui/form.h"
 
 #include <algorithm>
+#include <cmath>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -100,6 +103,19 @@ namespace
         return choices;
     }
 
+    // A zoom factor in percent in the list, the ini's factor as the value.
+    std::vector<Choice> zoomChoices(std::initializer_list<double> values, float original)
+    {
+        std::vector<Choice> choices;
+        for (double v : values)
+        {
+            choices.push_back({Fmt::format(L"{} %{}", static_cast<int>(std::lround(v * 100.0)),
+                                           std::abs(v - original) < 1e-6 ? L" (original)" : L""),
+                Fmt::format(L"{}", static_cast<float>(v))});
+        }
+        return choices;
+    }
+
     std::wstring fps(int n)
     {
         return n ? Fmt::format(L"{} fps", n) : L"Off";
@@ -168,6 +184,28 @@ namespace
         ui.check(L"Keep the mouse inside the game window", {L"Display", L"ClipCursor"}, Config::display.clipCursor)
             .tip(L"Keep the mouse inside the game window while it is in the foreground (multiple monitors, a smaller "
                  L"window on a wide screen). Hold Alt to move the mouse out of the window.");
+
+        ui.group(L"Camera");
+        ui.combo(L"Zoom:", {L"Camera", L"Zoom"},
+              {{L"Smooth", L"Smooth"}, {L"Steps", L"Steps"}, {L"Original (3 steps)", L"Original"}},
+              Config::camera.zoom == Config::Camera::Zoom::Smooth  ? L"Smooth"
+                  : Config::camera.zoom == Config::Camera::Zoom::Steps ? L"Steps" : L"Original")
+            .tip(L"Smooth: any zoom between the limits, with a slight easing; numpad + / -, the controller's zoom buttons "
+                 L"and the mouse wheel (the right stick) zoom.\nSteps: one step per press, from the list in the ini "
+                 L"([Camera] ZoomSteps).\nOriginal: the game's own three steps.");
+        ui.combo(L"Closest zoom:", {L"Camera", L"ZoomMin"}, zoomChoices({0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.75}, 0.5f),
+              Fmt::format(L"{}", Config::camera.zoomMin))
+            .enabledIf([](const Form& f) { return f.value(L"Camera", L"Zoom") != L"Original"; })
+            .tip(L"How close the camera may come. The original game stops at 50 %; the hero is twice the size there at "
+                 L"most. Closer shows fewer tiles at a larger size (it is sharpest at 100 %).");
+        ui.combo(L"Farthest zoom:", {L"Camera", L"ZoomMax"}, zoomChoices({1.0, 1.25, 1.5, 2.0, 2.5}, 2.0f),
+              Fmt::format(L"{}", Config::camera.zoomMax))
+            .enabledIf([](const Form& f) { return f.value(L"Camera", L"Zoom") != L"Original"; })
+            .tip(L"How far the camera may go back. The original game's limit is 200 %; far views draw many more tiles.");
+        ui.check(L"Zoom with the mouse wheel", {L"Camera", L"ZoomWheel"}, Config::camera.zoomWheel)
+            .enabledIf([](const Form& f) { return f.value(L"Camera", L"Zoom") != L"Original"; })
+            .tip(L"The mouse wheel (the controller's right stick) zooms while the cursor is over the world, not over a "
+                 L"window.");
 
         ui.column();
         ui.group(L"Interface");

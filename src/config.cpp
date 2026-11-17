@@ -1,4 +1,5 @@
 #include "config.h"
+#include "config/camera.h"
 #include "config/controller.h"
 #include "config/ddraw.h"
 #include "config/debug.h"
@@ -13,6 +14,9 @@
 
 #include <windows.h>
 #include <algorithm>
+#include <cstdlib>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -194,6 +198,46 @@ void ConfigFile::load(const std::wstring& gameDir)
     readPosition(ini, L"Minimap", Config::ui.minimap);
     readPosition(ini, L"Portraits", Config::ui.portraits);
     readPosition(ini, L"Shops", Config::ui.shops);
+    {
+        Config::Camera& camera = Config::camera;
+        const std::wstring zoom = readString(ini, L"Camera", L"Zoom", L"Smooth");
+        camera.zoom = _wcsicmp(zoom.c_str(), L"Original") == 0 ? Config::Camera::Zoom::Original
+            : _wcsicmp(zoom.c_str(), L"Steps") == 0            ? Config::Camera::Zoom::Steps
+                                                                : Config::Camera::Zoom::Smooth;
+        camera.zoomMin = std::clamp(static_cast<float>(_wtof(readString(ini, L"Camera", L"ZoomMin", L"0.5").c_str())), 0.2f, 1.0f);
+        camera.zoomMax = std::clamp(static_cast<float>(_wtof(readString(ini, L"Camera", L"ZoomMax", L"2").c_str())), 1.0f, 2.5f);
+        camera.zoomSpeed = std::clamp(readInt(ini, L"Camera", L"ZoomSpeed", camera.zoomSpeed), 10, 1000);
+        camera.zoomWheel = readBool(ini, L"Camera", L"ZoomWheel", camera.zoomWheel);
+        if (Instance::automation())
+        {
+            const std::wstring start = commandLineValue(L"-gear-zoom=");
+            camera.startZoom = start.empty() ? 0.0f : std::clamp(static_cast<float>(_wtof(start.c_str())), 0.2f, 2.5f);
+        }
+        std::vector<float> steps;
+        const std::wstring list = readString(ini, L"Camera", L"ZoomSteps", L"0.5, 0.75, 1, 1.5, 2");
+        for (size_t at = 0; at < list.size();)
+        {
+            wchar_t* end = nullptr;
+            const double value = wcstod(list.c_str() + at, &end);
+            const size_t next = static_cast<size_t>(end - list.c_str());
+            if (next == at)
+            {
+                ++at;   // a separator
+                continue;
+            }
+            at = next;
+            if (value >= 0.2 && value <= 2.5)
+            {
+                steps.push_back(static_cast<float>(value));
+            }
+        }
+        if (steps.empty())
+        {
+            steps = camera.steps;
+        }
+        std::ranges::sort(steps);
+        camera.steps = std::move(steps);
+    }
     Config::render.textureBudgetMB = readInt(ini, L"Render", L"TextureBudgetMB", Config::render.textureBudgetMB);
     Config::render.batch = readInt(ini, L"Render", L"Batch", Config::render.batch) != 0;
     Config::render.batchNoClip = readInt(ini, L"Render", L"BatchNoClip", Config::render.batchNoClip) != 0;

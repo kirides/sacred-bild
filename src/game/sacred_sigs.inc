@@ -21,6 +21,11 @@ static const Sig::Entry kAddressSigs[] = {
     {"worldCursorUiTestCall", "E8 ?? ?? ?? ?? 84 C0 0F 85 ?? ?? ?? ?? 39 5C 24 18 0F 84 ?? ?? ?? ?? 33 C0", 0, Sig::Take::Match, &Sacred::Addr::worldCursorUiTestCall}, // 00611EE3, 00611F83, 00611F83
     {"worldCursorSpecialRenderReturn", "E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? EB 19 8B 44 24 54 8B 8C 24 10 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::worldCursorSpecialRenderReturn}, // 00612E6F, 00612F0F, 00612F0F
     {"cEngine_worldMouse", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC D8 00 00 00 53 55 56 8B F1", 0, Sig::Take::Match, &Sacred::Addr::cEngine_worldMouse}, // 006172C0, 00617360, 00617360
+    {"cEngine_handleZoomInput", "56 57 8B F1 E8 ?? ?? ?? ?? 80 38 00 75 61 A0 ?? ?? ?? ?? 84 C0", 0, Sig::Take::Match, &Sacred::Addr::cEngine_handleZoomInput}, // 0060DD20, 0060DDC0, 0060DDC0
+    {"zoomInputCall", "8B CE E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 53 8B B9 CC 00 00 00", 2, Sig::Take::Match, &Sacred::Addr::zoomInputCall}, // 0060E6DC, 0060E77C, 0060E77C
+    {"cWorldView_setZoom", "83 EC 50 53 56 8B F1 32 DB 57 D9 86 60 0B 00 00", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_setZoom}, // 00628130, 00628210, 00628210
+    {"getPauseState", "A1 ?? ?? ?? ?? 53 33 DB 3B C3 0F 85 ?? ?? ?? ?? 56 6A 60 E8 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::getPauseState}, // 006413E0, 006414D0, 006414D0
+    {"g_textInputActive", "A0 ?? ?? ?? ?? 83 EC 0C 84 C0 53 8B 5C 24 18 56", 1, Sig::Take::Abs32, &Sacred::Addr::g_textInputActive}, // 017EA344, 017E82C4, 017E82C4
     {"cEngine_receiveEvent", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC 34 03 00 00", 0, Sig::Take::Match, &Sacred::Addr::cEngine_receiveEvent}, // 00618090, 00618130, 00618130
     {"worldMouseTileAtCall", "E8 ?? ?? ?? ?? 3B C3 74 70 39 58 08 75 6B F6 40 1E 01", 0, Sig::Take::Match, &Sacred::Addr::worldMouseTileAtCall}, // 0061746E, 0061750E, 0061750E
     {"cEventMouseDown_vtable", "C6 44 24 3A 00 8B 0C A8 C7 44 24 28 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::cEventMouseDown_vtable}, // 0089704C, 008950A8, 008950A8

@@ -20,6 +20,12 @@ tabs, Start is Play. Text fields need the keyboard.
 | Display | FpsLimitInactive | 20 | Frame limit while the game is in the background, in game and in the menus; 0 = off. |
 | Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh (flip model); 0 = right away, not limited by the refresh rate (blit model). |
 | Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |
+| Camera | Zoom | Smooth | `Smooth`: any zoom between `ZoomMin` and `ZoomMax`, easing slightly into the target (numpad + / -, the controller's zoom buttons, the mouse wheel and the right stick). `Steps`: one step of `ZoomSteps` per press or wheel notch. `Original`: the game's own three steps (0.5, 1, 2). |
+| Camera | ZoomMin | 0.5 | Closest zoom (0.2 to 1); the view is this fraction of the screen, so 0.35 shows the hero 1.4 times larger than the original's closest. |
+| Camera | ZoomMax | 2 | Farthest zoom (1 to 2.5); far views draw many more tiles. |
+| Camera | ZoomSteps | 0.5, 0.75, 1, 1.5, 2 | The zooms of `Zoom=Steps`, separated by commas. |
+| Camera | ZoomSpeed | 100 | Percent: how fast a held zoom key and a wheel notch change the zoom. |
+| Camera | ZoomWheel | 1 | The mouse wheel (and the controller's right stick) zooms while the cursor is over the world, not over a window. |
 | UI | Scale | 0 | UI scale; 0 = as large as fits the screen height, otherwise a factor (1 = native pixels), capped at that. |
 | UI | ScaleMode | InGame | Where `Scale` applies: `InGame` = the in-game UI only; the menus, the full-screen windows in game (options, save/load, character export, map) and the loading screen always fill the screen height. `Full` = those too. |
 | UI | LinearFilter | 1 | Bilinear filtering for the scaled UI instead of the game's point sampling. |
