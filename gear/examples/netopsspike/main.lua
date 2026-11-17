@@ -50,14 +50,32 @@ gear.task(function()
     local c, d, ready = native.net_ops()
     print(('spike: ops control 0x%X data 0x%X ready %s'):format(c, d, tostring(ready)))
     check('ops ready in a network game', ready == true)
+    local expect = gear.config.expect or 'stock'
     local frame = '\1\0\0\0' .. 'abcdefgh'
-    check('send 0x1E0', native.net_send_op(c, '\1\1\0\0\0\0\0\0\0'))
+    check('send HELLO on 0x1E0', native.net_send_op(c, '\1\1\3\0\0\0\52\18\205\171'))   -- kind 1, proto 1, features 3, hash 0xABCD1234
     check('send 0x1E1 small', native.net_send_op(d, frame))
     check('send 0x1E1 4016 bytes', native.net_send_op(d, string.rep('x', 4016)))
     check('refuses a stock id', native.net_send_op(0x3, 'abcd') == false)
     gear.wait(4)
-    local t = native.net_take_op()
-    check('nothing came back from the stock server', t == nil, t)
+    local got = {}
+    while true do
+        local t, slot, bytes = native.net_take_op()
+        if not t then break end
+        got[#got + 1] = {type = t, slot = slot, bytes = bytes}
+        print(('spike: received type 0x%X from slot %d, %d bytes'):format(t, slot, #bytes))
+    end
+    if expect == 'remake' then
+        local ack, peers
+        for _, m in ipairs(got) do
+            if m.type == c and m.bytes:byte(1) == 2 then ack = m end
+            if m.type == c and m.bytes:byte(1) == 3 then peers = m end
+        end
+        check('received HELLO_ACK through the dispatcher hook', ack ~= nil and #ack.bytes == 19 and ack.slot == 0)
+        check('HELLO_ACK announces the data opcode', ack and ack.bytes:byte(7) + ack.bytes:byte(8) * 256 == d, ack and ack.bytes:byte(7) + ack.bytes:byte(8) * 256)
+        check('received PEERS', peers ~= nil and #peers.bytes == 3 and peers.bytes:byte(2) % 2 == 1)
+    else
+        check('nothing came back from the stock server', #got == 0, #got)
+    end
     local hero = gear.world.hero()
     check('hero alive after the sends', hero and not hero:is_dead())
     mp.force_network(true)
@@ -71,4 +89,5 @@ gear.task(function()
     A.write('netopsspike.json', gear.json.encode({results = results, passed = passed, failed = failed}))
     A.quit(failed == 0 and 0 or 1)
 end)
+
 
