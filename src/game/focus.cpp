@@ -1,6 +1,7 @@
 #include "game/focus.h"
 #include "game/controller.h"
 #include "game/gear_nav.h"
+#include "game/zoom.h"
 #include "game/sacred_addr.h"
 #include "input/inject.h"
 #include "input/input_mode.h"
@@ -175,6 +176,10 @@ namespace
         {
             return 0;
         }
+        if (message == WM_MOUSEWHEEL && Zoom::wheel(GET_WHEEL_DELTA_WPARAM(wParam)))
+        {
+            return 0;   // over the world the wheel zooms
+        }
         if ((message == WM_ACTIVATE && LOWORD(wParam) == WA_INACTIVE) || (message == WM_ACTIVATEAPP && !wParam) ||
             message == WM_ENTERSIZEMOVE || message == WM_ENTERMENULOOP || message == WM_DESTROY)
         {
@@ -253,6 +258,14 @@ namespace
         OffsetRect(&rect, origin.x, origin.y);
         return !IsRectEmpty(&rect);
     }
+}
+
+bool Focus::keyDown(int vk)
+{
+    // The game's own import, as every hook in front of it (SacredBild's, Sacred Gear's isolation) leaves it.
+    using Fn = SHORT(WINAPI*)(int);
+    const auto fn = static_cast<Fn>(Patch::importTarget("USER32.dll", "GetAsyncKeyState"));
+    return ((fn ? fn : &GetAsyncKeyState)(vk) & 0x8000) != 0;
 }
 
 void Focus::install()

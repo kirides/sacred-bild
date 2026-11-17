@@ -22,6 +22,10 @@ namespace Focus
     // One of the game's windows (the main window, a dialog, a message box) is in the foreground.
     bool foreground();
 
+    // A key or mouse button is down as the game's own GetAsyncKeyState polls see it (the controller's held keys
+    // count; nothing while the game is in the background or SacredBild's screen is open).
+    bool keyDown(int vk);
+
     // The main game window, nullptr before it exists.
     HWND window();
 }

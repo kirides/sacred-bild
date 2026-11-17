@@ -92,6 +92,7 @@ set(DDRAW_SOURCES
   src/game/controller.cpp
   src/game/hero_move.cpp
   src/game/click_walk.cpp
+  src/game/zoom.cpp
   src/game/options_screen.cpp
   src/game/ui_nav.cpp
   src/game/gear_nav.cpp

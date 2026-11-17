@@ -142,6 +142,32 @@ void* Patch::iat(const char* importer, const char* dll, const char* function, vo
     return nullptr;
 }
 
+void* Patch::importTarget(const char* dll, const char* function)
+{
+    auto* base = reinterpret_cast<uint8_t*>(GetModuleHandleA(nullptr));
+    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + reinterpret_cast<IMAGE_DOS_HEADER*>(base)->e_lfanew);
+    const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    for (auto* imp = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + dir.VirtualAddress); imp->Name; ++imp)
+    {
+        if (_stricmp(reinterpret_cast<const char*>(base + imp->Name), dll) != 0)
+        {
+            continue;
+        }
+        auto* names = reinterpret_cast<IMAGE_THUNK_DATA*>(base + imp->OriginalFirstThunk);
+        auto* slots = reinterpret_cast<IMAGE_THUNK_DATA*>(base + imp->FirstThunk);
+        for (; names->u1.AddressOfData; ++names, ++slots)
+        {
+            if (!IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal) &&
+                std::strcmp(reinterpret_cast<const char*>(
+                    reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(base + names->u1.AddressOfData)->Name), function) == 0)
+            {
+                return reinterpret_cast<void*>(slots->u1.Function);
+            }
+        }
+    }
+    return nullptr;
+}
+
 void Patch::begin()
 {
     DetourTransactionBegin();

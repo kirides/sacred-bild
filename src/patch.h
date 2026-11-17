@@ -21,6 +21,9 @@ namespace Patch
     // previous target or nullptr.
     // `quiet`: a missing import is not logged (an optional one).
     void* iat(const char* dll, const char* function, void* replacement, bool quiet = false);
+    // What the main exe's import slot of a function (by name) holds now: whatever hooks are in front of it, nullptr if
+    // there is no such import.
+    void* importTarget(const char* dll, const char* function);
     // The same for an import of a loaded module (`importer`, e.g. "tincat2.dll"; nullptr = the main exe).
     void* iat(const char* importer, const char* dll, const char* function, void* replacement, bool quiet = false);
 
