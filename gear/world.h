@@ -49,7 +49,10 @@ namespace World
     // net object (`*g_pNetPlayers`, the one with the local hero id at +0x14): +0x3818 is set when the multiplayer menu's
     // Internet entries (Closed or Open) were used (the menu's mode 4 or 6, 007D8560), and +0x3819 when the game's
     // announcement has bit 8 set, which is the server's "lobby identity checked" flag (Closed Net: the heroes belong to
-    // lobby accounts; GameServer reply byte bit 3). Not told: Closed Net with a server that does not set the flag.
+    // lobby accounts; GameServer reply byte bit 3). Default-deny: an Internet game counts as Closed Net unless Open Net is
+    // proven, by the hero's source: in Closed Net the server delivers the hero (message 0x132, NetMsg::heroFromServer) and
+    // the client keeps no local one; in Open Net nothing comes, so after the hero has been in the game for 10 s without one
+    // (and with the receive hook in) the game reads as Open. LAN: only when entered through the LAN menu.
     enum class NetworkMode { Single, Lan, Open, Closed };
     NetworkMode networkMode();
 
@@ -70,7 +73,8 @@ namespace World
     // the engine's thread), to test that the guards refuse in a network game.
     bool setNetworkFlagForTest(bool on);
     // The same for the kind of game (the net object's two bytes too); the caller restores what it read with networkMode().
-    bool setNetworkModeForTest(NetworkMode mode);
+    // `proven`: Open Net counts as proven (without it an Internet game reads as Closed Net: the default).
+    bool setNetworkModeForTest(NetworkMode mode, bool proven = true);
 
     // The local hero's id, 0 if there is none.
     uint32_t hero();

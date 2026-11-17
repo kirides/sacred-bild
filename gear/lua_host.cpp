@@ -906,8 +906,17 @@ namespace
         if (!std::strcmp(m, "lan")) mode = World::NetworkMode::Lan;
         else if (!std::strcmp(m, "open")) mode = World::NetworkMode::Open;
         else if (!std::strcmp(m, "closed")) mode = World::NetworkMode::Closed;
-        lua_pushboolean(L, World::setNetworkModeForTest(mode));
+        const bool internetUnproven = !std::strcmp(m, "internet");     // the Internet menu, nothing proven: reads as closed
+        if (internetUnproven) mode = World::NetworkMode::Open;
+        lua_pushboolean(L, World::setNetworkModeForTest(mode, !internetUnproven));
         return 1;
+    }
+
+    // native.auto_hero_from_server(on) -> nil (self tests: the hero came from the server, or did not)
+    int nativeAutoHeroFromServer(lua_State* L)
+    {
+        NetMsg::setHeroFromServerForTest(lua_toboolean(L, 1) != 0);
+        return 0;
     }
 
     // native.hero_name(slot) -> UTF-8 | nil
@@ -2762,6 +2771,7 @@ namespace
                 {"auto_show_window", nativeAutoShowWindow},
                 {"auto_network_flag", nativeAutoNetworkFlag},
                 {"auto_network_mode", nativeAutoNetworkMode},
+                {"auto_hero_from_server", nativeAutoHeroFromServer},
                 {"auto_quit", nativeAutoQuit},
                 {"auto_start_gameserver", nativeAutoStartGameServer},
                 {nullptr, nullptr},

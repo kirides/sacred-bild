@@ -183,9 +183,14 @@ function GearAuto.network_flag(on) end
 
 --- Sets the flags `gear.mp.mode()` reads (`'single'`, `'lan'`, `'open'`, `'closed'`; the network-game flag too), to test what depends
 --- on the kind of game without one. Read the old mode first and put it back in the same tick: nothing else runs in between.
----@param mode 'single'|'lan'|'open'|'closed'
+---@param mode 'single'|'lan'|'open'|'closed'|'internet' `'internet'`: the Internet menu was used and nothing is proven (reads as `'closed'`)
 ---@return boolean ok
 function GearAuto.network_mode(mode) end
+
+--- Sets or clears "the game server delivered the hero" (message 0x132), the proof of Closed Net that `gear.mp.mode()` reads;
+--- set, an `'open'` game reads as `'closed'`.
+---@param on boolean
+function GearAuto.hero_from_server(on) end
 
 --- Ends the game at once with that exit code.
 ---@param code? integer Default 0.

@@ -3228,9 +3228,12 @@ local function make_auto()
     -- auto.network_mode(mode) -> bool: sets the flags gear.mp.mode() reads ('single', 'lan', 'open', 'closed'), for self tests
     -- of what depends on the kind of game. Set it, test, put the old mode back in the same tick.
     function auto.network_mode(mode)
-        assert(mode == 'single' or mode == 'lan' or mode == 'open' or mode == 'closed', "mode must be 'single', 'lan', 'open' or 'closed'")
+        assert(mode == 'single' or mode == 'lan' or mode == 'open' or mode == 'closed' or mode == 'internet',
+            "mode must be 'single', 'lan', 'open', 'closed' or 'internet'")
         return native.auto_network_mode(mode)
     end
+    -- auto.hero_from_server(on): the game server delivered the hero (message 0x132) or not; 'open' reads as closed while it is set
+    function auto.hero_from_server(on) native.auto_hero_from_server(on and true or false) end
     function auto.network_flag(on)
         return native.auto_network_flag(on and true or false)
     end

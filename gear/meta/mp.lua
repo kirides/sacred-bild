@@ -54,10 +54,12 @@ function GearMp.local_slot() end
 function GearMp.host_slot() end
 
 --- The kind of game: `'single'` (no network game), `'lan'` (the multiplayer menu's LAN), `'open'` (Open Internet, characters on
---- the players' computers) or `'closed'` (Closed Internet: the server requires lobby identities, the heroes belong to
---- lobby accounts and the server keeps them). Read from the engine's own flags, not from anything a mod or the player can
---- set: the net object's byte for "the Internet entries of the menu were used" and the "lobby identity checked" bit of the
---- game's announcement. A network game whose kind cannot be read counts as `'closed'`.
+--- the players' computers) or `'closed'` (Closed Internet: the heroes belong to lobby accounts and the server keeps them).
+--- Default-deny: a game entered through the Internet menu is `'closed'` unless Open Net is proven. Read from the engine, not
+--- from anything a mod or the player can set: the net object's bytes ("the Internet menu was used", "lobby identity checked")
+--- and the hero's source: in Closed Net the server delivers the hero (message 0x132); in Open Net none comes, so the game
+--- reads `'open'` once the hero has been in the game for 10 s with the receive hook in and none arrived. `'lan'` only when
+--- entered through the LAN menu. Anything that cannot be read counts as `'closed'`.
 ---@return 'single'|'lan'|'open'|'closed' mode
 function GearMp.mode() end
 

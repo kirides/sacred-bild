@@ -143,6 +143,58 @@ namespace
         }
     }
 
+    // Message 0x132 (a character block): the game server delivers the hero it holds for the player (Closed Net: from the
+    // lobby). Open Net and LAN games never get one: the client keeps its local hero. The case of the dispatcher's jump table
+    // for that type is redirected to a stub that notes it and goes on with the original case (the case's own code is not
+    // touched). Reset by NetMsg::clearHeroFromServer (the world does it when the network game ends).
+    volatile uint8_t g_heroFromServer = 0;
+    uintptr_t g_heroCase = 0;
+    bool g_heroHook = false;
+
+    __declspec(naked) void heroStub()
+    {
+        __asm {
+            mov byte ptr [g_heroFromServer], 1
+            jmp dword ptr [g_heroCase]
+        }
+    }
+
+    bool installHeroHook()
+    {
+        const uintptr_t sw = Gear::Addr::netDispatchSwitch;
+        if (!sw || !Patch::verify(sw, {0x81, 0xF9, 0xD4, 0x01, 0x00, 0x00, 0x0F, 0x87}) || !Patch::verify(sw + 0xC, {0x33, 0xD2, 0x8A, 0x91}) ||
+            !Patch::verify(sw + 0x14, {0xFF, 0x24, 0x95}))
+        {
+            LOG("NetMsg: hero source: the receive dispatcher was not recognised: games entered through the Internet count as Closed Net");
+            return false;
+        }
+        uint32_t indexTable = 0, jumpTable = 0;
+        std::memcpy(&indexTable, reinterpret_cast<const void*>(sw + 0x10), 4);
+        std::memcpy(&jumpTable, reinterpret_cast<const void*>(sw + 0x17), 4);
+        const uint8_t* idx = reinterpret_cast<const uint8_t*>(static_cast<uintptr_t>(indexTable));
+        constexpr uint32_t kType = 0x132;
+        const uint8_t mine = idx[kType - 1];
+        unsigned same = 0;
+        for (uint32_t i = 0; i < 0x1D4; ++i)
+        {
+            same += idx[i] == mine;
+        }
+        if (same != 1)
+        {
+            LOG("NetMsg: hero source: message 0x132 shares its case with {} others: not hooked", same - 1);
+            return false;
+        }
+        const uintptr_t slot = jumpTable + mine * 4u;
+        g_heroCase = *reinterpret_cast<const uint32_t*>(slot);
+        if (!g_heroCase || !Patch::value(slot, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&heroStub))))
+        {
+            return false;
+        }
+        g_heroHook = true;
+        LOG("NetMsg: hero source: message 0x132 (case {:08X}, jump table slot {:08X}) is watched", g_heroCase, slot);
+        return true;
+    }
+
     bool installChannel()
     {
         const uintptr_t sw = Gear::Addr::netDispatchSwitch;
@@ -372,9 +424,15 @@ namespace
     }
 }
 
+bool NetMsg::heroSourceKnown() { return g_heroHook; }
+bool NetMsg::heroFromServer() { return g_heroFromServer != 0; }
+void NetMsg::clearHeroFromServer() { g_heroFromServer = 0; }
+void NetMsg::setHeroFromServerForTest(bool on) { g_heroFromServer = on ? 1 : 0; }
+
 bool NetMsg::install()
 {
     g_channel = installChannel();
+    installHeroHook();
     if (const char* ops = std::getenv("GEAR_NETOPS"))
     {
         unsigned c = 0, d = 0;

@@ -1,6 +1,7 @@
 #include "world.h"
 #include "game/gear_addr.h"
 #include "log.h"
+#include "netmsg.h"
 #include "patch.h"
 
 #include <windows.h>
@@ -248,29 +249,73 @@ bool World::networkGame()
            flag != 0;
 }
 
+namespace
+{
+    ULONGLONG g_netSince = 0;       // when a game entered through the Internet menu had its hero (0: not yet)
+    bool g_testProven = false;      // self tests: Open Net counts as proven
+    constexpr ULONGLONG kProveMs = 10000;
+}
+
 World::NetworkMode World::networkMode()
 {
     if (!networkGame())
     {
+        g_netSince = 0;
+        NetMsg::clearHeroFromServer();
         return NetworkMode::Single;
     }
     uint32_t net = 0;
     uint8_t internet = 0, identity = 0;
-    if (Addr::g_pNetPlayers && safeCopy(&net, reinterpret_cast<const void*>(Addr::g_pNetPlayers.address), 4) && net &&
-        safeCopy(&internet, reinterpret_cast<const void*>(static_cast<uintptr_t>(net) + 0x3818), 1) &&
-        safeCopy(&identity, reinterpret_cast<const void*>(static_cast<uintptr_t>(net) + 0x3819), 1))
+    if (!Addr::g_pNetPlayers || !safeCopy(&net, reinterpret_cast<const void*>(Addr::g_pNetPlayers.address), 4) || !net ||
+        !safeCopy(&internet, reinterpret_cast<const void*>(static_cast<uintptr_t>(net) + 0x3818), 1) ||
+        !safeCopy(&identity, reinterpret_cast<const void*>(static_cast<uintptr_t>(net) + 0x3819), 1))
     {
-        return identity ? NetworkMode::Closed : internet ? NetworkMode::Open : NetworkMode::Lan;
+        return NetworkMode::Closed;     // a network game whose kind cannot be read is treated as the strictest
     }
-    return NetworkMode::Closed;     // a network game whose kind cannot be read is treated as the strictest
+    if (identity)
+    {
+        return NetworkMode::Closed;
+    }
+    if (!internet)
+    {
+        return NetworkMode::Lan;        // entered through the LAN menu
+    }
+    // Entered through the Internet menu (Closed or Open Net): Closed Net unless Open Net is proven. The hero comes from the
+    // server in Closed Net (message 0x132, right after admission); in Open Net the client keeps its local hero and never
+    // gets one. Proof of Open Net: the receive hook is in, the hero has been in the game for kProveMs, no 0x132 came.
+    if (NetMsg::heroFromServer())
+    {
+        return NetworkMode::Closed;
+    }
+    if (g_testProven)
+    {
+        return NetworkMode::Open;
+    }
+    if (!NetMsg::heroSourceKnown())
+    {
+        return NetworkMode::Closed;
+    }
+    uint32_t hero = 0;
+    if (!safeCopy(&hero, reinterpret_cast<const void*>(static_cast<uintptr_t>(net) + 0x14), 4) || hero == 0)
+    {
+        g_netSince = 0;
+        return NetworkMode::Closed;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (!g_netSince)
+    {
+        g_netSince = now;
+    }
+    return now - g_netSince >= kProveMs ? NetworkMode::Open : NetworkMode::Closed;
 }
 
-bool World::setNetworkModeForTest(NetworkMode mode)
+bool World::setNetworkModeForTest(NetworkMode mode, bool proven)
 {
     uint32_t net = 0;
     const uint8_t flag = mode == NetworkMode::Single ? 0 : 1;
     const uint8_t internet = mode == NetworkMode::Open || mode == NetworkMode::Closed ? 1 : 0;
     const uint8_t identity = mode == NetworkMode::Closed ? 1 : 0;
+    g_testProven = proven && mode == NetworkMode::Open;
     return Addr::g_pNetPlayers && safeCopy(&net, reinterpret_cast<const void*>(Addr::g_pNetPlayers.address), 4) && net &&
            safeStore(reinterpret_cast<void*>(Addr::g_pNetPlayers.address + 4), &flag, 1) &&
            safeStore(reinterpret_cast<void*>(static_cast<uintptr_t>(net) + 0x3818), &internet, 1) &&
