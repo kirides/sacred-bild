@@ -65,6 +65,7 @@ gear.task(function()
     local ok = A.wait_for_game(180)
     gear.wait(5)
     A.screenshot('ct-9-ingame')
-    A.write('closedtest.json', gear.json.encode({in_game = ok, mode = gear.mp.mode()}))
+    local bp = gear.inv.container('backpack')
+    A.write('closedtest.json', gear.json.encode({in_game = ok, mode = gear.mp.mode(), backpack = bp and #bp:items() or -1, types = (function() local l = {} for _, it in ipairs(bp and bp:items() or {}) do l[#l + 1] = tostring(it.type_name) .. '#' .. it.id end return table.concat(l, ',') end)()}))
     if cfg.quit then A.quit(ok and 0 or 1) end
 end)
