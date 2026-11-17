@@ -374,6 +374,7 @@ files.w = {
             widgets.ui = ui
             widgets.panel = ui.panel('p', 'Panel', 400, 400, 200, 100, {resizable = true, min_width = 150})
             widgets.panels = ui.panels()
+            widgets.bare = ui.panel('b', 'Bare', 100, 100, 200, 30, {bare = true, resizable = true, min_width = 20, min_height = 10})
         end)
     ]],
 }
@@ -652,6 +653,22 @@ local pn = widgets.panel
 ok(pn and math.abs(pn.x - 300) < 0.01 and math.abs(pn.y - 200) < 0.01 and math.abs(pn.w - 150) < 0.01 and math.abs(pn.h - 150) < 0.01,
    'the panel takes the place and size (min width kept): ' .. tostring(pn and pn.x) .. ',' .. tostring(pn and pn.w))
 ok(not widgets.ui.set_panel_rect('w:nope', 0, 0), 'set_panel_rect on an unknown panel')
+do
+    local b = widgets.bare
+    ok(b and b.open and b.content_x == b.x and b.content_y == b.y and b.content_w == 200 and b.content_h == 30,
+        'a bare panel gives the whole rectangle as its content')
+    local info
+    for _, p in ipairs(widgets.ui.panels()) do if p.key == 'w:b' then info = p end end
+    ok(info and info.title == 'Bare' and info.resizable and info.min_width == 20, 'a bare panel is listed for the layout editor')
+    ok(widgets.ui.set_panel_rect('w:b', 50, 60, 80, 20), 'set_panel_rect on a bare panel')
+    kernel.tick(0.016)
+    b = widgets.bare
+    ok(math.abs(b.x - 50) < 0.01 and math.abs(b.y - 60) < 0.01 and math.abs(b.w - 80) < 0.01 and math.abs(b.h - 20) < 0.01 and b.content_w == b.w,
+        'a bare panel takes the place and size of the layout: ' .. tostring(b.x) .. ',' .. tostring(b.w))
+    widgets.ui.reset_panel('w:b')
+    kernel.tick(0.016)
+    ok(widgets.bare.x == 100 and widgets.bare.w == 200, 'reset_panel on a bare panel')
+end
 widgets.ui.reset_panel('w:p')
 kernel.tick(0.016)
 ok(widgets.panel.x == 400 and widgets.panel.w == 200, 'reset_panel: its own place again')

@@ -2379,6 +2379,7 @@ Includes everything of `GearWidgetOpts`.
 | `min_height` | `number` | Default 60. (optional) |
 | `background` | `GearColor` |  (optional) |
 | `back` | `boolean` | Default true: the controller's B closes the panel while it is the topmost closable one; `false`: the mod handles B itself (`ui.back_pressed`). (optional) |
+| `bare` | `boolean` | No window: no background, frame, title bar, close button or resize grip, and no region, so the mouse and clicks go on to the game; the mod draws in the whole rectangle (`content_*` is the rect). It is still a panel for the layout: the layout editor moves it (and resizes it with `resizable`) and `set_panel_rect` works; the layout editor's mode draws its frame. For a HUD element. `closable` and `draggable` do not apply. (optional) |
 | `passive` | `boolean` | A closable panel that should not take the controller (no cursor, B not caught): a HUD-like panel. (optional) |
 
 ### GearRegionState

@@ -2557,7 +2557,7 @@ local function make_ui(mod)
         return changed, value
     end
 
-    -- ui.panel(id, title, x, y, w, h, opts{closable, draggable, layer}) -> panel {x, y, w, h, open, content_x,
+    -- ui.panel(id, title, x, y, w, h, opts{closable, draggable, layer, bare}) -> panel {x, y, w, h, open, content_x,
     -- content_y}. A window of the mod's: the title bar drags it (it keeps the position for the session), its X
     -- closes it (panel.open false; ui.show_panel(id) opens it again). Its body takes the mouse, so clicks on it do
     -- not reach the game.
@@ -2595,6 +2595,15 @@ local function make_ui(mod)
             y = math.max(st_, math.min(y, sb - h))
         end
         local o = {layer = opts.layer}
+        if opts.bare then
+            -- No window: nothing drawn (the layout editor's mode shows the frame), no region (the mouse and clicks go on to the
+            -- game), the mod draws in the whole rectangle. The layout editor still moves and, with opts.resizable, sizes it.
+            if ui_edit then ui.frame(x, y, w, h, C.accent, 1, o) end
+            ui_panel_list[#ui_panel_list + 1] = {key = key, mod = mod.id, id = id, title = tostring(title), x = x, y = y,
+                w = w, h = h, closable = false, back = false, resizable = opts.resizable and true or false,
+                min_width = min_w, min_height = min_h, layer = opts.layer or 'hud'}
+            return {open = true, key = key, x = x, y = y, w = w, h = h, content_x = x, content_y = y, content_w = w, content_h = h}
+        end
         ui.rect(x, y, w, h, opts.background or 0xD80E0E14, o)
         ui.frame(x, y, w, h, ui_edit and C.accent or C.edge, ui_edit and 2 or 1, o)
         ui.rect(x + 1, y + 1, w - 2, 20, C.title, o)
