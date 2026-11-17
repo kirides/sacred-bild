@@ -7,3 +7,5 @@ vcpkg_installed/
 .named_funcs.txt
 __pycache__/
 *.pyc
+tools/gs-launcher/bin/
+tools/gs-launcher/obj/
