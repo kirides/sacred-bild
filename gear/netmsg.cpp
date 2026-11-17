@@ -250,7 +250,7 @@ namespace
     constexpr size_t kOpQueueMax = 4096, kOpBytesMax = 4u << 20, kOpWireMax = 0x10000;
     std::atomic<uint32_t> g_opSeen{0};
 
-    bool copyOp(const uint8_t* message, const uint8_t* payload, uint32_t size, std::vector<uint8_t>& out)
+    bool copyOp(const uint8_t* /*message*/, const uint8_t* payload, uint32_t size, std::vector<uint8_t>& out)
     {
         __try
         {
