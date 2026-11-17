@@ -262,3 +262,19 @@ chat carrier. Self test: `netopstest` with `chat_only = true` (the client declin
   login streak per hero and pays rewards with `server.drop_gold` / `server.drop_item`; `gear/examples/achievements` shows toasts and a panel (F7).
   Wire: channel `achievements:sync`; server to client JSON `{op='state', ach={{id,name,desc,have,need,done?,reward?}...}, streak, best, days, claimed, next}`,
   `{op='unlock', id, name, desc, reward}`, `{op='streak', streak, best, reward}`; client to server `{op='get'}`.
+## Statistics mods and the server feed
+
+Five Lua mods of the SacredEngineRemake game server (`Sacred.GameServer/scripts-examples`) keep statistics in their own
+storage and serve a page and JSON endpoints each (public ones under `/public/mods/<mod>/` with `WebUi:PublicApi`):
+`server_stats` (players, peak, uptime, totals, 24 h charts), `hall_of_fame` (records, firsts), `seasons` (ladders per season with
+an archive), `rare_drops` (live feed of rare and unique drops) and `graveyard` (recent deaths with killer names). The server got
+one new script event for the feed, `server.on("drop", function(item, reporter) ... end)`: the game has no drop message, so it
+fires when a client reports a new item with a position on the ground (see the server's README for what that does and does not
+cover). `rare_drops` and `graveyard` also send each new drop or death on the net channels `rare_drops:feed` and `graveyard:feed`
+(table payloads), and answer any message on them with the latest five (`kind = 'recent'`).
+
+`gear/examples/serverfeed` is the client side: it listens on both channels with `gear.net.channel(name):on`, shows each live
+message as a coloured line (item rarity colours as in the game) for a few seconds, keeps the latest twelve in a list (F7) and
+asks for the latest five when the handshake is done. Settings: drops on/off, deaths on/off, seconds on screen, position. A
+server without the scripts never sends on those channels, and a stock `GameServer.exe` drops the HELLO, so the mod stays idle.
+Not tested in a running game (see the commit message); the file syntax and the handlers were run against a stub of `gear`.
