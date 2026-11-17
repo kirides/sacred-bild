@@ -831,6 +831,8 @@ function mp.local_player()
 end
 -- Whether other players' heroes are in the game (a network game with more than the local player).
 function mp.active() return #mp.players() > 1 end
+-- mp.mode() -> 'single' | 'lan' | 'open' | 'closed': the kind of game, from the engine's own flags (see World::networkMode).
+function mp.mode() return native.mp_mode() end
 function mp.local_slot() return native.hero() or (not mp_info().network and 1 or nil) end
 function mp.host_slot() return host_slot() end
 function mp.is_host()
@@ -3223,6 +3225,12 @@ local function make_auto()
     end
     -- auto.network_flag(on) -> bool: sets or clears the engine's network-game flag, to test that the guards (can_change,
     -- inventory and spawn) refuse in a network game. Set it, test, clear it in the same tick.
+    -- auto.network_mode(mode) -> bool: sets the flags gear.mp.mode() reads ('single', 'lan', 'open', 'closed'), for self tests
+    -- of what depends on the kind of game. Set it, test, put the old mode back in the same tick.
+    function auto.network_mode(mode)
+        assert(mode == 'single' or mode == 'lan' or mode == 'open' or mode == 'closed', "mode must be 'single', 'lan', 'open' or 'closed'")
+        return native.auto_network_mode(mode)
+    end
     function auto.network_flag(on)
         return native.auto_network_flag(on and true or false)
     end

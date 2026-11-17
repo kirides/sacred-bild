@@ -1473,6 +1473,12 @@ The host's slot; the local slot in single player, nil in a network game while th
 
 - returns `integer?`
 
+#### `gear.mp.mode() -> 'single'|'lan'|'open'|'closed'`
+
+The kind of game: `'single'` (no network game), `'lan'` (the multiplayer menu's LAN), `'open'` (Open Internet, characters on the players' computers) or `'closed'` (Closed Internet: the server requires lobby identities, the heroes belong to lobby accounts and the server keeps them). Read from the engine's own flags, not from anything a mod or the player can set: the net object's byte for "the Internet entries of the menu were used" and the "lobby identity checked" bit of the game's announcement. A network game whose kind cannot be read counts as `'closed'`.
+
+- returns `mode` `'single'|'lan'|'open'|'closed'`
+
 #### `gear.mp.is_host() -> boolean`
 
 Whether this computer is the host (always true in single player).
@@ -3006,6 +3012,13 @@ Shows or hides an in-game window by its control name (`UI_WND_CHEST` ...) throug
 Sets or clears the engine's network-game flag (the byte the engine's own object and inventory code test), to test that the guards (`world.can_change`, inventory changes, `spawn`) refuse in a network game. Set it, test and clear it in the same tick: nothing else runs in between.
 
 - `on`: `boolean`
+- returns `ok` `boolean`
+
+#### `gear.auto.network_mode(mode) -> boolean`
+
+Sets the flags `gear.mp.mode()` reads (`'single'`, `'lan'`, `'open'`, `'closed'`; the network-game flag too), to test what depends on the kind of game without one. Read the old mode first and put it back in the same tick: nothing else runs in between.
+
+- `mode`: `'single'|'lan'|'open'|'closed'`
 - returns `ok` `boolean`
 
 #### `gear.auto.quit(code)`

@@ -53,6 +53,14 @@ function GearMp.local_slot() end
 ---@return integer?
 function GearMp.host_slot() end
 
+--- The kind of game: `'single'` (no network game), `'lan'` (the multiplayer menu's LAN), `'open'` (Open Internet, characters on
+--- the players' computers) or `'closed'` (Closed Internet: the server requires lobby identities, the heroes belong to
+--- lobby accounts and the server keeps them). Read from the engine's own flags, not from anything a mod or the player can
+--- set: the net object's byte for "the Internet entries of the menu were used" and the "lobby identity checked" bit of the
+--- game's announcement. A network game whose kind cannot be read counts as `'closed'`.
+---@return 'single'|'lan'|'open'|'closed' mode
+function GearMp.mode() end
+
 --- Whether this computer is the host (always true in single player).
 ---@return boolean
 function GearMp.is_host() end
