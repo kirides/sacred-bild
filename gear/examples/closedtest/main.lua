@@ -65,8 +65,33 @@ gear.task(function()
     local ok = A.wait_for_game(180)
     gear.wait(5)
     A.screenshot('ct-9-ingame')
+    if cfg.world_actions then
+        -- walk to the merchant left of the start (pixels of the 1600x900 window) and open his trade window
+        A.click(176, 610) gear.wait(10)
+        A.screenshot('ct-10-merchant')
+        A.click(176, 610) gear.wait(3)
+        A.screenshot('ct-11-merchant2')
+        if cfg.buy then
+            -- Buy something: try the cells of the merchant's ware grid (pixels) until the hero's gold goes down. A ware is picked up on the
+            -- cursor with a click and paid for when it is put into the backpack.
+            local hero = gear.world.hero()
+            local gold0 = hero and hero:gold() or 0
+            local bought = false
+            for y = 86, 330, 32 do
+                for x = 16, 480, 32 do
+                    A.click(x, y, cfg.buy_button) gear.wait(0.5)
+                    if not cfg.buy_button then A.click(220 + (x % 64), 520) gear.wait(0.7) end
+                    if hero and hero:gold() < gold0 then bought = true break end
+                end
+                if bought then break end
+            end
+            A.screenshot('ct-13-bought')
+            gear.log(('closedtest: purchase %s (gold %d -> %d)'):format(bought and 'done' or 'not done', gold0, hero and hero:gold() or -1))
+            gear.wait(8)
+        end
+    end
     local bp = gear.inv.container('backpack')
-    A.write('closedtest.json', gear.json.encode({in_game = ok, mode = gear.mp.mode(), backpack = bp and #bp:items() or -1, types = (function() local l = {} for _, it in ipairs(bp and bp:items() or {}) do l[#l + 1] = tostring(it.type_name) .. '#' .. it.id end return table.concat(l, ',') end)()}))
+    A.write('closedtest.json', gear.json.encode({in_game = ok, mode = gear.mp.mode(), gold = gear.world.hero() and gear.world.hero():gold() or -1, backpack = bp and #bp:items() or -1, types = (function() local l = {} for _, it in ipairs(bp and bp:items() or {}) do l[#l + 1] = tostring(it.type_name) .. '#' .. it.id end return table.concat(l, ',') end)()}))
     local count = bp and #bp:items() or -1
     local good = ok and (cfg.expect_backpack == nil or cfg.expect_backpack == count)
     if cfg.expect_backpack ~= nil and not good then gear.log(('closedtest: %d items in the backpack, expected %d'):format(count, cfg.expect_backpack)) end
