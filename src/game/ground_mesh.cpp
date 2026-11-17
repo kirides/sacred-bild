@@ -127,6 +127,8 @@ namespace
         cWorldView* view = nullptr;
         bool active = false;        // the game's ground draws are skipped
         bool groundRows = false;    // a row with ground was walked
+        bool rowWalked = false;     // the first row of the frame has been seen
+        bool litLogged = false;
         bool haveOffset = false;
         float offsetX = 0, offsetY = 0;     // view position of loaded tile (0, 0)
         bool drawn = false;
@@ -809,8 +811,25 @@ namespace
         }
     }
 
+    bool dynamicLight();
+
     void __fastcall hookTileRow(cWorldView* self, void* edx, IDirect3DDevice7* device, RowPos* rowPos, int detail)
     {
+        if (g.active && self == g.view && !g.rowWalked)
+        {
+            // The world render turns the lit ground on after the frame began (caves: the light falls off around the
+            // hero and the light sources, darker towards the walls): the game draws this frame's ground itself.
+            g.rowWalked = true;
+            if (dynamicLight())
+            {
+                g.active = false;
+                if (!g.litLogged)
+                {
+                    g.litLogged = true;
+                    LOG("Ground mesh: the game lights the ground itself here (caves), its own ground draws are used");
+                }
+            }
+        }
         if (!g.active || self != g.view)
         {
             g_origTileRow(self, edx, device, rowPos, detail);
@@ -966,6 +985,7 @@ void GroundMesh::beginFrame(cWorldView* view, IDirect3DDevice7* device)
     ++g.frame;
     g.view = view;
     g.groundRows = false;
+    g.rowWalked = false;
     g.haveOffset = false;
     g.drawn = false;
     std::fill(std::begin(g.slots), std::end(g.slots), nullptr);
