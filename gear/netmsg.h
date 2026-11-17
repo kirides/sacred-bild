@@ -31,6 +31,14 @@ namespace NetMsg
     constexpr uint16_t kFrameMarker = 0xE1A0;
     constexpr size_t kMaxFrameUnits = 127;      // the 254 bytes of text the game server relays
 
+    // Hero source: the game server delivered a character block (message 0x132) in this network game, i.e. the hero is the
+    // server's (Closed Net). heroSourceKnown: the receive hook is in (without it nothing can be proven: callers must not
+    // assume Open Net). Cleared when the network game ends.
+    bool heroSourceKnown();
+    bool heroFromServer();
+    void clearHeroFromServer();
+    void setHeroFromServerForTest(bool on);
+
     // Whether frames can be sent and received (the hooks are in, a connection is up).
     bool channelReady();
     // Sends one frame (1 to 127 units, none of them 0) to `slot` (1 to 16) as private chat. Engine thread.

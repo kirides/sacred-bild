@@ -1475,7 +1475,7 @@ The host's slot; the local slot in single player, nil in a network game while th
 
 #### `gear.mp.mode() -> 'single'|'lan'|'open'|'closed'`
 
-The kind of game: `'single'` (no network game), `'lan'` (the multiplayer menu's LAN), `'open'` (Open Internet, characters on the players' computers) or `'closed'` (Closed Internet: the server requires lobby identities, the heroes belong to lobby accounts and the server keeps them). Read from the engine's own flags, not from anything a mod or the player can set: the net object's byte for "the Internet entries of the menu were used" and the "lobby identity checked" bit of the game's announcement. A network game whose kind cannot be read counts as `'closed'`.
+The kind of game: `'single'` (no network game), `'lan'` (the multiplayer menu's LAN), `'open'` (Open Internet, characters on the players' computers) or `'closed'` (Closed Internet: the heroes belong to lobby accounts and the server keeps them). Default-deny: a game entered through the Internet menu is `'closed'` unless Open Net is proven. Read from the engine, not from anything a mod or the player can set: the net object's bytes ("the Internet menu was used", "lobby identity checked") and the hero's source: in Closed Net the server delivers the hero (message 0x132); in Open Net none comes, so the game reads `'open'` once the hero has been in the game for 10 s with the receive hook in and none arrived. `'lan'` only when entered through the LAN menu. Anything that cannot be read counts as `'closed'`.
 
 - returns `mode` `'single'|'lan'|'open'|'closed'`
 
@@ -3018,8 +3018,14 @@ Sets or clears the engine's network-game flag (the byte the engine's own object 
 
 Sets the flags `gear.mp.mode()` reads (`'single'`, `'lan'`, `'open'`, `'closed'`; the network-game flag too), to test what depends on the kind of game without one. Read the old mode first and put it back in the same tick: nothing else runs in between.
 
-- `mode`: `'single'|'lan'|'open'|'closed'`
+- `mode`: `'single'|'lan'|'open'|'closed'|'internet'` - `'internet'`: the Internet menu was used and nothing is proven (reads as `'closed'`)
 - returns `ok` `boolean`
+
+#### `gear.auto.hero_from_server(on)`
+
+Sets or clears "the game server delivered the hero" (message 0x132), the proof of Closed Net that `gear.mp.mode()` reads; set, an `'open'` game reads as `'closed'`.
+
+- `on`: `boolean`
 
 #### `gear.auto.quit(code)`
 
