@@ -235,3 +235,8 @@ server side: SacredEngineRemake `Sacred.GameServer/README.md` ("Custom net messa
 - **Data frame:** `[u32 FNV-1a(channel)][u8 flags: 1 first, 2 last, 4 JSON][u8 target: 0 server, 1 host, 0xFF all, 0x10+slot][u16 id][bytes]`.
 - **Self test:** `gear/examples/netopstest` (`expect = 'stock'` or `'remake'`; the remake run needs `tools/gs-launcher` and
   the server's `scripts-examples/net_echo.lua`); kernel tests in `gear/tests/kernel_test.lua`.
+
+- **Example: achievements and login streak.** Server `scripts-examples/achievements.lua` (SacredEngineRemake) tracks achievements and a daily
+  login streak per hero and pays rewards with `server.drop_gold` / `server.drop_item`; `gear/examples/achievements` shows toasts and a panel (F7).
+  Wire: channel `achievements:sync`; server to client JSON `{op='state', ach={{id,name,desc,have,need,done?,reward?}...}, streak, best, days, claimed, next}`,
+  `{op='unlock', id, name, desc, reward}`, `{op='streak', streak, best, reward}`; client to server `{op='get'}`.
