@@ -15,6 +15,7 @@
 #include "config/debug.h"
 #include "config/display.h"
 #include "config/render.h"
+#include "ddraw9/smaa.h"
 #include "log.h"
 #include "patch.h"
 #include "profiler.h"
@@ -253,6 +254,8 @@ namespace
         return bits;
     }
 
+    bool g_worldDrawn = false;      // the world view was drawn since the last UI render (SMAA)
+
     void __fastcall hookWorldRender(cWorldView* self, void* edx, IDirect3DDevice7* device)
     {
         D3DStats::mark(D3DStats::TimerCount);
@@ -276,6 +279,7 @@ namespace
         if (proxy && device == proxy)
         {
             proxy->endBatch();
+            g_worldDrawn = true;
         }
         D3DStats::addTime(D3DStats::TWorldProxy, D3DStats::total(D3DStats::TProxy) - proxyTime);
         D3DStats::mark(D3DStats::TGameAfterWorld);
@@ -287,6 +291,16 @@ namespace
         D3DStats::Scope s{D3DStats::TUi};
         UiWindows::sync();
         UiCanvas::updateCursorFilter();
+        // The world view antialiased before the interface goes on top of it.
+        if (g_worldDrawn)
+        {
+            g_worldDrawn = false;
+            DeviceProxy* proxy = DeviceProxy::instance();
+            if (Config::render.smaa > 0 && proxy && device == proxy)
+            {
+                DDraw9::Smaa::apply(proxy->real(), static_cast<DDraw9::Smaa::Preset>(Config::render.smaa - 1));
+            }
+        }
         // The manager draws a window alone (savegame, options, character, world map): the original screen showed
         // nothing else, so keep the world beside the canvas hidden.
         if (UiCanvas::enabled() && device && UiState::exclusiveWindow())

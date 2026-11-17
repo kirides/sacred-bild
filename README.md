@@ -155,6 +155,7 @@ SacredBild builds on:
 - [Detours](https://github.com/microsoft/Detours) (hooks), [gtl](https://github.com/greg7mdp/gtl) (hash maps),
   [Dear ImGui](https://github.com/ocornut/imgui) (SacredBild's own screens), [SDL3](https://www.libsdl.org)
   (controllers) and [KCP](https://github.com/skywind3000/kcp) (the UDP connection), linked in;
+- [SMAA](https://github.com/iryoku/smaa) by Jorge Jimenez et al. (MIT, `src/ddraw9/smaa/`): the antialiasing;
 - [Input Prompts](https://github.com/meritite-union/input-prompts) by the Meritite Union (CC0): the controller
   button images of the button prompts;
 - [DDrawCompat](https://github.com/narzoul/DDrawCompat) and [DXVK](https://github.com/doitsujin/dxvk), which it can

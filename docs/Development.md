@@ -28,7 +28,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 | `src/spin_lock.h` | Locks for the render thread's hot paths |
 | `src/mem.h` | Fields of granny.dll's objects by byte offset (`Mem::field`) |
 | `src/profiler.*` | `[Debug] Profiler` |
-| `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
+| `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `smaa.*` (SMAA antialiasing, `smaa.hlsl` over the reference shader and lookup textures in `smaa/`), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
 | `src/game/build.*` | Which exe this is, address lookup, the list of game modules |
 | `src/game/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses SacredBild uses, functions with their signatures (`Sacred::Thiscall`, `Cdecl`; `tools/check_hooks.py` checks them) and globals with their types (`Sacred::Global`); their signatures (generated) |
 | `src/sacred/` | The game's classes as structs (the Sacred Gold API): fields at their offsets and vtables as structs of function pointers, both checked by `static_assert`, member functions calling the game's code. `engine.h` (cEngine, orders), `object.h` (cObject / cCreature, cObjectManager), `world.h` (cWorldView, sectors, tiles, map data), `render.h` (dxDriver7, textures, cQuadBatcher), `ui.h` (cUI_Control2 / cUI_Window2 and their subclasses, cUI_Manager, events, fonts), `mouse.h`, `text.h`, `net.h` (cGCclass; gameserver.exe's cApp / cNetServer); `address.h` the typed addresses, `vector.h` the exe's std::vector |
@@ -91,7 +91,7 @@ Generated files in the repository, and the checks:
 | `tools/gen_res_sites.py` | Writes `src/game/resolution_sites.inc`: the 1024x768 constants to patch, each verified and with a signature |
 | `tools/check_hooks.py` | Checks that every hook declares as many stack arguments as the hooked function pops |
 | `tools/gen_prompts.py` | Writes `src/overlay/prompts.png`: the button prompt atlas, from the [Input Prompts](https://github.com/meritite-union/input-prompts) images (needs Pillow; see the script's header) |
-| `tools/gen_shaders.py` | Writes `src/ddraw9/skin_shaders.inc` and `ground_shaders.inc`: `skin.hlsl` and `ground.hlsl` compiled to vs_2_0 with `fxc` from the Windows SDK |
+| `tools/gen_shaders.py` | Writes `src/ddraw9/skin_shaders.inc`, `ground_shaders.inc` and `smaa_shaders.inc`: `skin.hlsl` and `ground.hlsl` compiled to vs_2_0, `smaa.hlsl` to vs_3_0 / ps_3_0 per preset, with `fxc` from the Windows SDK |
 | `tools/sigs.py`, `funcs.py`, `eng.py` | Shared code: signature search, function boundaries and names (`tools/data/functions_eng.tsv`, exported from Ghidra), the English exe |
 
 Reverse engineering helpers (how addresses and offsets were found):

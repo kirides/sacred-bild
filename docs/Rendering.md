@@ -49,6 +49,15 @@ and their sector is built again. The water and lava tiles, objects and character
 backend only; idea from the [SacredEngineRemake](https://github.com/Aytackydln/SacredEngineRemake), which composes
 each sector's terrain once).
 
+## Antialiasing (SMAA)
+
+The game has no antialiasing: its `FSAA_FILTER` option (Options, `Settings.cfg`) only pulls sprite texture coordinates
+in by a fraction of a texel (`0x62E410`, `0x62FF60`) so bilinear filtering doesn't bleed at their edges, and stays as
+it is. With `[Render] SMAA`, the backend runs [SMAA](https://github.com/iryoku/smaa) 1x (`src/ddraw9/smaa.*`, the
+reference shader at shader model 3) after the world view and before the interface: the frame is copied into a texture,
+edges are found by luma, blending weights come from SMAA's area and search textures, and the blend writes back into
+the frame, in linear light where the GPU can read and write sRGB. The interface drawn afterwards stays sharp.
+
 ## Characters animated on the GPU
 
 Granny skinned every character and its shadow on the CPU each frame (a fifth of the render thread zoomed out). With

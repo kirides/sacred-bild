@@ -28,6 +28,9 @@ namespace Config
         bool groundMesh = true;
         // Characters skinned in a vertex shader instead of by Granny on the CPU (Direct3D 9 backend only).
         bool gpuSkinning = true;
+        // SMAA antialiasing of the world view, before the UI is drawn (Direct3D 9 backend only): 0 off, 1 low,
+        // 2 medium, 3 high (SMAA's presets).
+        int smaa = 0;
         // Skeletons not drawn in the last frames are posed every Nth frame instead of every frame (1 = every frame).
         int offscreenPoses = 4;
         // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.

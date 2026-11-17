@@ -14,6 +14,7 @@
 #include "ui/form.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <initializer_list>
 #include <string>
@@ -237,6 +238,12 @@ namespace
             .tip(L"Keep the ground's tiles and their blend layers in vertex buffers, built once as they come into view, "
                  L"and draw them in a few calls per frame instead of rebuilding every tile each frame. "
                  L"Needs the SacredBild (Direct3D 9) renderer.");
+        ui.combo(L"Antialiasing (SMAA):", {L"Render", L"SMAA"},
+              {{L"Off", L"Off"}, {L"Low", L"Low"}, {L"Medium", L"Medium"}, {L"High", L"High"}},
+              std::array{L"Off", L"Low", L"Medium", L"High"}[std::clamp(Config::render.smaa, 0, 3)])
+            .enabledIf(d3d9)
+            .tip(L"Smooths jagged edges in the game world with SMAA (the interface stays sharp). Higher presets find more "
+                 L"edges and cost a little more GPU time. Needs the SacredBild (Direct3D 9) renderer.");
 
         ui.page(L"Advanced");
         ui.group(L"Frame timing");
