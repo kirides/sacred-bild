@@ -461,7 +461,7 @@ setting); **Default** beside a key restores its default. A key that two mods use
 and in the Keys page (both still fire; rebind one).
 
 Default hotkeys of the mods in this repository and the examples: F11 the Mods screen, F5 the loot
-filter's panel, F4 the widget gallery of `uidemo`; in `sacred-gear-mods`: F6 the autosave panel, F10 the shared stash.
+filter's panel, F4 the widget gallery of `uidemo`, F7 the server feed's list; in `sacred-gear-mods`: F6 the autosave panel, F10 the shared stash.
 None is a key of the game: the screen marks a bind that is also one of the game's own hotkeys (digits, Q W E R B, A, I, F,
 C, L, M, Tab, O, S, H, N, P, Space, Esc, + and -, F8 quick load, F9 quick save; the game reacts to them with any modifiers held) as
 a conflict with "The game", like a clash between two mods.
@@ -573,6 +573,7 @@ faults returns nil and a message instead of crashing the game.
 | `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices; filtered items' labels are dimmed; an overlay shows the rules; the rules are declared settings (the Mods screen shows them) and a panel of its own (F5 or the overlay's button) changes the same values. An old `settings.json` is migrated once. Self test with `-gear-auto`. |
 | `realms` | The realm picker: a page in the mod manager (Mods > Realm > More) that chooses the online play server for Closed / Open Internet. `realmtest` is its self test: it chooses a realm and drives the menus (`mode = 'lan'` in its `config.lua` opens LAN instead). See [Realms](#realms). |
 | `layout` | A layout editor in the manner of an MMO's edit mode (its "Edit layout" button, top left while Alt shows the game's labels; Done ends it; no key binding): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
+| `serverfeed` | On-screen announcements of the SacredEngineRemake game server's scripts over `gear.net`: rare and unique drops (`rare_drops.lua`) and hero deaths (`graveyard.lua`) as lines in the game, and a list of the latest of both (F7). Does nothing on a server without those scripts. See [Server mods](GearServerMods.md#statistics-mods-and-the-server-feed). |
 | `itemicontest` | `gear.ui.item_icon`: a row of weapon and armour models by type id and a row from live items; checks that nothing is left behind. |
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
 | `mptest` | An automation run: the hero's name, key and host, gold through the engine's setter, and a 5000-byte table through the mod channel (`-gear-load=1 -gear-mods=mptest`: the loopback; config `mode = 'lan'`: hosts a LAN game and also sends to its own slot through the real chat carrier). |
