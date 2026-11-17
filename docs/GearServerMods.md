@@ -262,6 +262,8 @@ chat carrier. Self test: `netopstest` with `chat_only = true` (the client declin
   login streak per hero and pays rewards with `server.drop_gold` / `server.drop_item`; `gear/examples/achievements` shows toasts and a panel (F7).
   Wire: channel `achievements:sync`; server to client JSON `{op='state', ach={{id,name,desc,have,need,done?,reward?}...}, streak, best, days, claimed, next}`,
   `{op='unlock', id, name, desc, reward}`, `{op='streak', streak, best, reward}`; client to server `{op='get'}`.
+User documentation of the five client mods (`bounty`, `achievements`, `serverfeed`, `buildsharer`, `questhelper`): install, hotkeys, settings, panel layouts, in [docs/mods](mods/README.md). The sections below are the design notes.
+
 ## Statistics mods and the server feed
 
 Five Lua mods of the SacredEngineRemake game server (`Sacred.GameServer/scripts-examples`) keep statistics in their own

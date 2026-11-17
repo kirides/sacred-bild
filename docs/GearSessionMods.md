@@ -46,3 +46,40 @@ Limits: in a network game another hero of the same class counts as the local her
 "dealt" (the hook cannot say whose they are); the number is the engine's computed damage, not the hit points removed;
 damage that does not pass the hook (if there is any) is missing. Whether every skill passes the hook has not been
 checked in a running game.
+
+## Install, hotkeys, settings, panels
+
+**Install.** Copy `gear/examples/sessiontracker`, `gear/examples/lootlog` and/or `gear/examples/damagemeter` (each holds `mod.lua` and
+`main.lua`) into the game's `mods` folder as `mods\sessiontracker`, `mods\lootlog`, `mods\damagemeter`. They need no server. The
+Mods screen (F11) lists them with their settings and keys; choices are saved in `mods\gear_mods.json`.
+
+**Hotkeys** (rebindable in the Mods screen, Keys page): `sessiontracker` F2 (`panel`), `lootlog` F3 (`panel`), `damagemeter` F7
+(`panel`) and `reset` (unbound by default). F7 is also the default of the server mods `achievements`, `serverfeed` and
+`buildsharer`: if you run those too, both fire on one press, so rebind one side (see [mods/README.md](mods/README.md#hotkeys-and-the-clashes-in-the-defaults)).
+
+**Settings** (Mods screen, Settings page):
+
+| Mod | Setting | Default | Meaning |
+|---|---|---|---|
+| `sessiontracker` | Show per-hour rates after | 30 s (5 to 600) | Rates of a very short session swing wildly; they show as "-" until this much time has been played |
+| `sessiontracker` | Save totals every | 60 s (15 to 600) | How often `session_totals.json` is written |
+| `lootlog` | Watch the ground within | 25 tiles (5 to 60) | Items that appear on the ground within this distance of the hero are logged as drops |
+| `lootlog` | Entries kept | 500 (50 to 2000) | Size of the log |
+| `lootlog` | Log plain (normal quality) items | off | Off: only magic, rare, set, unique and quest items |
+| `lootlog` | Log gold piles | off | Piles are logged as drops only (the amount is not exposed) |
+| `damagemeter` | A fight ends after | 5 s (2 to 30) | Seconds without damage |
+| `damagemeter` | Rolling DPS window | 10 s (3 to 30) | The "Last N s" row |
+
+**Panels** (no screenshots exist: they are drawn inside the running game, and none was available; this is read from the code, in the
+1024x768 layout, and every panel can be dragged):
+
+* *Session (F2)*, 270 x 330 at (16, 200), open when the mod loads. Rows: Time played, Kills (with a per-hour rate), Gold gained (rate),
+  Gold spent, Experience (rate), Levels gained; "Lifetime (with this session)": Time, Kills, Gold gained, Experience; "Last sessions": up to
+  three lines `time  hero  k<kills>  g<gold>`; a **New session** button.
+* *Loot log (F3)*, 420 x 360 at (300, 200), resizable, closed until F3. Three dropdowns (lowest quality, category, kind), "N of M entries",
+  a **Clear** button (also empties the file), then a scrolling list, newest first, of `#session  m:ss  item name` in the quality colour
+  with "dropped", "picked up" or "acquired" (and "(creature)") at the right; at most 300 rows are drawn.
+* *Damage meter (F7)*, 290 x 420 at (700, 200), closed until F7. "Fight (running / last)": dealt DPS / taken DPS and the rolling window; "Since
+  reset": damage dealt and taken with hit counts, biggest hit dealt / taken, average hit, fighting time, average DPS while fighting, kills
+  (and per minute after 10 s of fighting); a 30-second bar graph (dealt green up, taken red down); "Biggest targets" (3) and "Biggest damage
+  sources" (2); a **Reset** button. It says "no hero" until a hero is known.

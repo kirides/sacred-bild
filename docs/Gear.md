@@ -462,8 +462,9 @@ setting); **Default** beside a key restores its default. A key that two mods use
 and in the Keys page (both still fire; rebind one).
 
 Default hotkeys of the mods in this repository and the examples: F11 the Mods screen, F5 the loot
-filter's panel, F4 the widget gallery of `uidemo`, F7 the server feed's list; in `sacred-gear-mods`: F6 the autosave panel, F10 the shared stash.
-filter's panel, F4 the widget gallery of `uidemo`, F2 / F3 / F7 the panels of `sessiontracker`, `lootlog` and `damagemeter`; in `sacred-gear-mods`: F6 the autosave panel, F10 the shared stash.
+filter's panel, F4 the widget gallery of `uidemo`, F2 / F3 the panels of `sessiontracker` and `lootlog`, F7 the panel of `damagemeter`, `achievements`,
+`buildsharer` and the list of `serverfeed` (four mods share it), F8 the panels of `bounty` and `questhelper` (also the game's quick load);
+in `sacred-gear-mods`: F6 the autosave panel, F10 the shared stash. The clashes and how to rebind: [docs/mods/README.md](mods/README.md#hotkeys-and-the-clashes-in-the-defaults).
 None is a key of the game: the screen marks a bind that is also one of the game's own hotkeys (digits, Q W E R B, A, I, F,
 C, L, M, Tab, O, S, H, N, P, Space, Esc, + and -, F8 quick load, F9 quick save; the game reacts to them with any modifiers held) as
 a conflict with "The game", like a clash between two mods.
@@ -563,6 +564,8 @@ compiled may not be caught. The game's own functions that Gear calls for a mod r
 faults returns nil and a message instead of crashing the game.
 
 ### Examples
+
+User documentation of the session mods and of the client mods of the game server's Lua mods (install, hotkeys, settings, panels): [Session mods](GearSessionMods.md) and [docs/mods](mods/README.md).
 
 `gear/examples` in the repository:
 
