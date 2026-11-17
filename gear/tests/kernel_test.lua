@@ -1500,8 +1500,11 @@ do
     net_sent = {}
     op_ready = true
     ticks(3)
-    ok(#op_sent == 0 and #net_sent == 0 and N.state == 'idle' and net.transport('server') == nil and net.transport('host') == 'chat',
-        'net: nothing goes to the server before it asks; players are reachable over chat')
+    ok(#op_sent == 0 and #net_sent == 1 and net_sent[1][1] == 0 and N.state == 'idle' and net.transport('server') == nil and net.transport('host') == 'chat',
+        'net: only an announcement over chat goes to the server; no custom frame; players are reachable over chat')
+    for _ = 1, 20 do kernel.tick(1) end
+    ok(N.announces == 5 or N.announces == 4 or N.announces == 6, 'net: the announcement repeats every few seconds, a limited number of times')
+    ok(#op_sent == 0, 'net: still no custom frame')
     net_sent = {}
     -- the server's query on the chat carrier: answered over chat (slot 0); HELLO follows once the answer has left
     query(0x1E0, 0x1E1)

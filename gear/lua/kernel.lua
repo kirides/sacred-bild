@@ -1047,8 +1047,8 @@ end
 
 -- Net channels (gear.net, docs/GearServerMods.md): channels with a name. Their messages ride on the chat carrier (frames
 -- of kind n/k, to a player slot or to slot 0, the game server) and, when the server agrees, on two message types above
--- the stock range. The handshake is on the chat carrier too: the server (entering the game) sends a query 'q' with the
--- numbers it offers, the client answers 'a' (accepts or declines), and on an accept sends HELLO on the agreed control type;
+-- the stock range. The handshake is on the chat carrier too: the client announces itself ('h') on entering the game, the server
+-- answers with a query 'q' with the numbers it offers, the client answers 'a' (accepts or declines), and on an accept sends HELLO on the agreed control type;
 -- the server's HELLO_ACK (limits) and PEERS (who else can) complete it. A server that never queries (the original
 -- GameServer.exe, other servers) never sees a custom type from us: channels stay on chat (to players; not to the server).
 -- Native side: native.net_ops() -> control, data, ready; net_configure(control, data); net_send_op(type, bytes) -> bool;
@@ -1059,7 +1059,7 @@ N = {
     FRAGMENT = 4000, MAX_MESSAGE = 262144, RATE = 65536, INFLIGHT = 8, HELLO_TIMEOUT = 3, EXPIRE = 10,
     MAX_PARTIAL_BYTES = 1048576, MAX_QUEUED = 1048576, PER_TICK = 16,
     channels = {}, partial = {}, partial_bytes = 0, queue = {}, qhead = 1, qtail = 0, queued = 0, credit = 0, number = 0,
-    unknown = 0, dropped = 0, received = 0, sent = 0, supported = false, snapshot = '', server_chat = false, chat_caps = false,
+    unknown = 0, dropped = 0, received = 0, sent = 0, supported = false, snapshot = '', server_chat = false, announces = 0, announce_at = 0,
 }
 mp._net = N   -- for the kernel tests
 local net_api = {}
@@ -1102,6 +1102,7 @@ end
 
 local function net_reset()
     N.state, N.mask, N.ack, N.server_chat = 'idle', 0, nil, false
+    N.announces, N.announce_at = 0, 0
     N.partial, N.partial_bytes = {}, 0
     N.queue, N.qhead, N.qtail, N.queued = {}, 1, 0, 0
     caps_changed()
@@ -1382,6 +1383,12 @@ function N.poll(dt)
     if not ready then
         if N.state ~= 'idle' or N.server_chat then net_reset() end
         return
+    end
+    -- A Gear client announces itself to the server over chat on entering the game (private chat to slot 0, harmless to servers that
+    -- do not know it); only a server that heard it writes channel frames to this client, which plain clients would show as chat.
+    if N.state == 'idle' and not N.server_chat and info.network and native.hero() and N.announces < 6 and N.now >= N.announce_at then
+        N.announces, N.announce_at = N.announces + 1, N.now + 5
+        chat_frame(0, 'h', 'gear.net', schar(1))
     end
     if N.state == 'answered' and (not N.hello_wait or N.hello_wait.sent) then
         local hash = kernel.mod_set_hash and tonumber(kernel.mod_set_hash(), 16) or 0

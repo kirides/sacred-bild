@@ -6,8 +6,9 @@
 --: messages ride on the chat carrier (private chat frames every server relays, up to 64 KB, about 8 KB/s) and, where the
 --: server agrees, on two message types of their own above the game's range (up to 256 KB, faster). The agreement is made
 --: on the chat carrier first: a server that supports channels (the Sacred Gear game server, `Sacred.GameServer` of the
---: SacredEngineRemake) sends a query with the two numbers it offers when the player enters the game, the client answers
---: over chat, and one HELLO / HELLO_ACK on the agreed types checks the versions and limits. Nothing custom is ever sent to a
+--: SacredEngineRemake) is told by the client (a small chat message on entering the game) and sends a query with the two
+--: numbers it offers; the client answers over chat, and one HELLO / HELLO_ACK on the agreed types checks the versions and
+--: limits. Plain clients are never written to, so they see no frames as chat. Nothing custom is ever sent to a
 --: server that did not ask, so the original `GameServer.exe` and servers with opcodes of their own see only chat. Without
 --: the agreement (or when it fails) messages to players still go over chat; messages to `'server'` need a server that
 --: supports channels (`gear.net.transport('server')` is nil otherwise). `gear.mp.send` uses the custom messages by itself

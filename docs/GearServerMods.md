@@ -235,3 +235,26 @@ server side: SacredEngineRemake `Sacred.GameServer/README.md` ("Custom net messa
 - **Data frame:** `[u32 FNV-1a(channel)][u8 flags: 1 first, 2 last, 4 JSON][u8 target: 0 server, 1 host, 0xFF all, 0x10+slot][u16 id][bytes]`.
 - **Self test:** `gear/examples/netopstest` (`expect = 'stock'` or `'remake'`; the remake run needs `tools/gs-launcher` and
   the server's `scripts-examples/net_echo.lua`); kernel tests in `gear/tests/kernel_test.lua`.
+
+### Net channels on chat first (2026-11-17, follow-up)
+
+`gear.net` channels no longer need the custom message types. Their messages ride on the chat carrier (private chat frames, kinds
+`n` bytes / `k` JSON, channel names of 1 to 64 printable ASCII characters) to any player, and to the game server as private chat to
+slot 0, once the server has shown it speaks them. The custom types (above) are an upgrade negotiated **on chat**:
+
+1. The client announces itself to the server on entering the game: chat frame `h` (name `gear.net`, body `[proto]`), repeated every
+   5 s up to 6 times until the server queries. A server that does not know it ignores it (the original GameServer.exe: checked, no
+   effect); a server never writes chat frames to a player that did not announce itself, because a plain client would show them.
+2. The server queries (`q`): `[proto][u16 control][u16 data]`, the numbers it offers (its `NETOPS_CONTROL` / `NETOPS_DATA`).
+3. The client answers (`a`): `[proto][u16 control][u16 data][u8 flags: 1 accepts]`. It accepts valid numbers (above 0x1D5, below
+   0x400, different), unless `gear.net.configure` restricted them to others; it never sends an unsolicited custom type.
+4. After an accept the client sends HELLO on the agreed control type once its answer has left; the server ignores a HELLO without
+   an agreement. HELLO_ACK (limits) and PEERS complete it; from then on channels to capable players use data frames.
+5. Failure, decline, timeout (3 s) or a server that never queries: channels stay on chat. Messages to players always have the chat
+   path; messages to `'server'` need a server that queried.
+
+`gear.net.transport(to)` / `channel:transport(to)` say which way a message would go (`'custom'`, `'chat'`, `'mixed'`, nil). Chat caps
+(client and server): 64 KB per message, about 8 KB/s from the client, 16 KB/s from the server (`NETOPS_CHAT_RATE`), 127 units per
+frame. `server_only` channels are not relayed between players on chat either (the server reads the channel name from the first
+frame). With the server's flood protection on, chat lines are limited per player (`FLOOD_CHAT_PER_SECOND`), which also limits the
+chat carrier. Self test: `netopstest` with `chat_only = true` (the client declines the offered numbers).

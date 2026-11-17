@@ -3,6 +3,8 @@
 -- 'remake': GameServer.exe is the SacredEngineRemake server (tools/gs-launcher) with scripts\net_echo.lua in the game folder.
 local mp, net = gear.mp, gear.net
 if not gear.auto then return end
+-- chat_only: decline the server's custom message types (restrict them to numbers it will not offer): channels stay on chat
+if gear.config.chat_only then net.configure({control = 0x2F0, data = 0x2F1}) end
 local A = gear.auto
 local passed, failed, results = 0, 0, {}
 local function check(name, ok, detail)
@@ -70,7 +72,7 @@ gear.task(function()
     if expect == 'stock' then
         gear.wait(6)
         check('no answer from the original server: not supported', net.supported() == false and #caps == 0)
-        check('limits are nil', net.limits() == nil)
+        check('limits are nil, the server is not reachable over chat', net.limits() == nil and net.transport('server') == nil)
         local ch = net.channel('example:echo')
         check('send is refused with a reason', select(2, ch:send('x', 'server')) ~= nil)
         check('peer_supported is false', net.peer_supported(mp.local_slot()) == false)
@@ -79,12 +81,20 @@ gear.task(function()
         return finish()
     end
 
-    check('handshake with the remake server', gear.wait_until(function() return net.supported() end, 20))
-    local lim = net.limits()
-    check('limits announced', lim and lim.max_fragment == 4000 and lim.max_message == 262144 and lim.bytes_per_second == 65536 and lim.in_flight == 8,
-        lim and ('%d/%d/%d/%d'):format(lim.max_fragment, lim.max_message, lim.bytes_per_second, lim.in_flight))
-    check('net_caps fired', #caps >= 1 and caps[1].supported == true)
-    check('this computer is in the peer list', gear.wait_until(function() return net.peer_supported(mp.local_slot()) end, 5), mp.local_slot())
+    local chat_only = gear.config.chat_only == true
+    if chat_only then
+        check('the server queried over chat, the client declined: channels use chat', gear.wait_until(function() return net.transport('server') == 'chat' end, 30)
+            and net.supported() == false, net.transport('server'))
+        check('net_caps tells about chat', #caps >= 1 and caps[#caps].chat == true and caps[#caps].supported == false)
+    else
+        check('handshake with the remake server (chat query, answer, HELLO)', gear.wait_until(function() return net.supported() end, 30))
+        local lim = net.limits()
+        check('limits announced', lim and lim.max_fragment == 4000 and lim.max_message == 262144 and lim.bytes_per_second == 65536 and lim.in_flight == 8,
+            lim and ('%d/%d/%d/%d'):format(lim.max_fragment, lim.max_message, lim.bytes_per_second, lim.in_flight))
+        check('net_caps fired', #caps >= 1 and caps[#caps].supported == true and caps[#caps].chat == true)
+        check('this computer is in the peer list', gear.wait_until(function() return net.peer_supported(mp.local_slot()) end, 5), mp.local_slot())
+        check('transport to the server is custom', net.transport('server') == 'custom')
+    end
 
     local ch = net.channel('example:echo')
     local got = {}
@@ -99,18 +109,19 @@ gear.task(function()
     check('string echoed upper case, bytes intact', await(2) and got[2].payload == 'ABC\0DEF', got[2] and #got[2].payload)
 
     local big = {}
-    for i = 1, 100000 do big[i] = string.char(97 + i % 26) end
+    local size = chat_only and 40000 or 100000
+    for i = 1, size do big[i] = string.char(97 + i % 26) end
     big = table.concat(big)
     local t0 = os.clock()
-    check('send 100 KB', ch:send(big, 'server') == true)
-    check('100 KB echoed (paced out, reassembled back)', await(3, 40) and got[3].payload == big:upper(), got[3] and #got[3].payload)
-    print(('netopstest: 100 KB each way took %.1f s'):format(os.clock() - t0))
+    check('send ' .. size .. ' bytes', ch:send(big, 'server') == true)
+    check(size .. ' bytes echoed (paced out, reassembled back)', await(3, 60) and got[3].payload == big:upper(), got[3] and #got[3].payload)
     check('a message to the local slot is refused', select(2, ch:send('x', mp.local_slot())) ~= nil)
 
     local unknown = net.channel('example:nobody')
     check('send on a channel the server does not know', unknown:send('x', 'server') == true)
+    check('the transport did not change', net.transport('server') == (chat_only and 'chat' or 'custom'))
     gear.wait(2)
-    check('the connection survived it', not gear.world.hero():is_dead() and net.supported())
+    check('the connection survived it', not gear.world.hero():is_dead() and net.transport('server') ~= nil)
     chat_carrier()
     A.screenshot('netopstest-remake')
     finish()
