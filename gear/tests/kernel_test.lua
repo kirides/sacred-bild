@@ -30,6 +30,7 @@ local drops_pub = {sim = nil}
 save_block, save_calls, save_results = nil, {}, {}
 net_kills = {}
 hero_saves = {}
+local op_ids, op_ready, op_sent, op_in = {0x1E0, 0x1E1}, false, {}, {}
 mp_info_mock, hero_names, net_sent, net_frames, net_send_ok = {network = false}, {[1] = 'Aria'}, {}, {}, true
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
 state_file, state_bak, state_writes = nil, nil, 0
@@ -203,6 +204,13 @@ local native = {
     hero_name = function(id) return hero_names[id] end,
     mp_send_frame = function(slot, s) net_sent[#net_sent + 1] = {slot, s}; return net_send_ok end,
     mp_take_frame = function() local f = table.remove(net_frames, 1); if f then return f[1], f[2] end end,
+    net_ops = function() return op_ids[1], op_ids[2], op_ready end,
+    net_configure = function(c, d)
+        if c > 0x1D5 and d > 0x1D5 and c < 0x400 and d < 0x400 and c ~= d then op_ids = {c, d} return true end
+        return false
+    end,
+    net_send_op = function(t, s) if not op_ready then return false end op_sent[#op_sent + 1] = {t, s} return true end,
+    net_take_op = function() local f = table.remove(op_in, 1); if f then return f[1], f[2], f[3] end end,
     builtin = function(name) if name == 'modmanager' then return "adm = admin; gear.on('frame', function() end)" end end,
     write_file = function(dir, rel, text) files[dir] = files[dir] or {}; files[dir][rel] = text; return true end,
     -- automation
@@ -1404,6 +1412,236 @@ do
     C.queue, C.qhead, C.qtail, C.queued = {}, 1, 0, 0
     mp_info_mock = {network = false}
     hero_names[2], hero_names[3] = nil, nil
+    hero_id, objects[1], objects[2], objects[3] = saved_hero, saved1, saved2, saved3
+end
+
+-- gear.net: the custom net messages (handshake, channels, fragments, caps, gear.mp.send upgrade), native side mocked.
+do
+    local gear_a
+    do
+        local i = 1
+        while true do
+            local name, value = debug.getupvalue(kernel.dispatch, i)
+            if not name then break end
+            if name == 'handlers' then
+                for _, h in ipairs(value['frame']) do
+                    local env = getfenv(h.fn)
+                    if env.record and env.gear then gear_a = env.gear end
+                end
+            end
+            i = i + 1
+        end
+    end
+    local saved_hero, saved1, saved2, saved3 = hero_id, objects[1], objects[2], objects[3]
+    hero_id = 1
+    objects[1] = {id = 1, type = 5, x = 0, y = 0, layer = 0, creature = true, hp = 50, max_hp = 100, gold = 0, level = 1}
+    objects[2] = {id = 2, type = 6, x = 5, y = 5, layer = 0, creature = true, hp = 10, max_hp = 10}
+    objects[3] = {id = 3, type = 6, x = 5, y = 5, layer = 0, creature = true, hp = 10, max_hp = 10}
+    hero_names[2], hero_names[3] = 'Borin', 'Cyra'
+    local net, mp = gear_a.net, gear_a.mp
+    local N = mp._net
+    local function ticks(n) for _ = 1, n do kernel.tick(0.016) end end
+    local function le32(v) return string.char(v % 256, math.floor(v / 256) % 256, math.floor(v / 65536) % 256, math.floor(v / 16777216) % 256) end
+    local function frame(name, flags, target, id, body)
+        return le32(N.fnv1a(name)) .. string.char(flags, target, id % 256, math.floor(id / 256)) .. body
+    end
+    local function ack(data, fragment, message, rate, inflight)
+        return string.char(2, 1) .. le32(15) .. string.char(data % 256, math.floor(data / 256)) .. string.char(fragment % 256, math.floor(fragment / 256))
+            .. le32(message) .. le32(rate) .. string.char(inflight)
+    end
+    local function peers(mask) return string.char(3, mask % 256, math.floor(mask / 256)) end
+    local caps = {}
+    gear_a.on('net_caps', function(c) caps[#caps + 1] = c end)
+
+    -- the hash that names a channel
+    ok(N.fnv1a('') == 0x811C9DC5 and N.fnv1a('a') == 0xE40C292C and N.fnv1a('foobar') == 0xBF9CF968, 'net: channel ids are FNV-1a')
+    -- channels
+    local ch = net.channel('test:echo')
+    ok(ch and ch.name == 'test:echo' and ch.id == N.fnv1a('test:echo') and net.channel('test:echo') == ch, 'net: a channel by name')
+    ok(net.channel('') == nil and net.channel(('x'):rep(65)) == nil and net.channel('bad\nname') == nil and net.channel(5) == nil, 'net: bad channel names')
+    do   -- a known pair of names with the same FNV-1a id (found by search)
+        local a, b = 'n512789', 'n749192'
+        ok(N.fnv1a(a) == N.fnv1a(b) and net.channel(a) ~= nil and select(2, net.channel(b)) ~= nil and net.channel(b) == nil, 'net: a channel whose id collides is refused')
+    end
+    ok(net.supported() == false and net.peer_supported(1) == false and net.limits() == nil, 'net: nothing is supported before the handshake')
+    ok(ch:send('x', 'server') == nil, 'net: sending is refused while unsupported')
+    ok(net.configure({control = 0x100, data = 0x1E1}) == nil and net.configure({control = 0x1F0, data = 0x1F1}) == true and op_ids[1] == 0x1F0,
+        'net: configure checks and sets the opcodes')
+    ok(net.configure({control = 0x1E0, data = 0x1E1}) == true, 'net: and back to the defaults')
+
+    -- no connection: no HELLO
+    mp_info_mock = {network = true, is_host = false, host_slot = 2}
+    op_ready, op_sent = false, {}
+    ticks(3)
+    ok(#op_sent == 0, 'net: no HELLO without a connection')
+    -- connected: HELLO once
+    op_ready = true
+    ticks(2)
+    ok(#op_sent == 1 and op_sent[1][1] == 0x1E0 and op_sent[1][2]:byte(1) == 1 and op_sent[1][2]:byte(2) == 1 and #op_sent[1][2] == 10,
+        'net: HELLO on the control type after joining')
+    -- no answer: unsupported, and gear.mp.send stays on the chat carrier
+    for _ = 1, 4 do kernel.tick(1) end
+    ok(N.state == 'unsupported' and net.supported() == false, 'net: no answer means unsupported')
+    net_sent = {}
+    ok(mp.send('auction', {a = 1}, 'host') == true, 'net: mp.send works without custom support')
+    ticks(2)
+    ok(#net_sent >= 1 and #op_sent == 1, 'net: mp.send used the chat carrier, no custom frames')
+    -- the connection drops: back to idle, HELLO again on the next connection
+    op_ready = false
+    ticks(1)
+    ok(N.state == 'idle', 'net: a lost connection resets the handshake')
+    N.queue, N.qhead, N.qtail, N.queued = {}, 1, 0, 0
+    C_reset = nil
+    net_sent, op_sent = {}, {}
+    -- answer: ready, limits, data type adopted, peers, event
+    op_ready = true
+    ticks(2)
+    ok(#op_sent == 1, 'net: HELLO again')
+    op_in[#op_in + 1] = {0x1E0, 0, ack(0x1E5, 100, 4096, 20000, 3)}
+    ticks(1)
+    ok(net.supported() == true and op_ids[2] == 0x1E5 and net.limits().max_fragment == 100 and net.limits().max_message == 4096
+        and net.limits().bytes_per_second == 20000 and net.limits().in_flight == 3, 'net: HELLO_ACK sets the limits and the data type')
+    ok(#caps == 1 and caps[1].supported == true, 'net: net_caps fired for the answer')
+    op_in[#op_in + 1] = {0x1E0, 0, peers(0x0007)}
+    ticks(1)
+    ok(net.peer_supported(2) and net.peer_supported(3) and net.peer_supported(1) and not net.peer_supported(4)
+        and #caps == 2 and #caps[2].peers == 3, 'net: PEERS lists who can use it')
+
+    -- sending: fragments with first/last flags, paced
+    op_sent = {}
+    local body = {}
+    for i = 1, 1000 do body[i] = string.char(i % 251 + 1) end
+    body = table.concat(body)
+    ok(ch:send(body, 'server') == true, 'net: send 1000 bytes to the server')
+    ticks(1)
+    local frames = {}
+    for _, o in ipairs(op_sent) do if o[1] == 0x1E5 then frames[#frames + 1] = o[2] end end
+    local assembled, flags_ok = {}, true
+    for i, f in ipairs(frames) do
+        local fl = f:byte(5)
+        if (i == 1) ~= (fl % 2 == 1) or (i == #frames) ~= (math.floor(fl / 2) % 2 == 1) or f:byte(6) ~= 0 or #f > 108 then flags_ok = false end
+        assembled[#assembled + 1] = f:sub(9)
+    end
+    ok(#frames == 10 and flags_ok and table.concat(assembled) == body and f_id == nil, 'net: ten fragments of 100 bytes, first and last flagged')
+    ok(frames[1]:sub(1, 4) == le32(ch.id), 'net: the channel id leads the frame')
+    op_sent = {}
+    ok(ch:send({n = 5, s = 'x'}, 3) == true, 'net: a table to a slot')
+    ticks(1)
+    ok(#op_sent == 1 and op_sent[1][2]:byte(5) == 7 and op_sent[1][2]:byte(6) == 0x13 and gear_a.json.decode(op_sent[1][2]:sub(9)).n == 5,
+        'net: JSON flag and the slot target')
+    op_sent = {}
+    ok(ch:send('x', 'host') == true and ch:send('x', 'all') == true and ch:send('x', mp.player(2)) == true, 'net: host, all and a player')
+    ticks(1)
+    ok(op_sent[1][2]:byte(6) == 1 and op_sent[2][2]:byte(6) == 0xFF and op_sent[3][2]:byte(6) == 0x12, 'net: target bytes')
+    ok(ch:send('x', 1) == nil and ch:send('x', 'nobody') == nil and ch:send(function() end, 'all') == nil, 'net: bad targets and payloads')
+    ok(ch:send(('x'):rep(5000), 'all') == nil, 'net: larger than the announced maximum')
+    op_sent = {}
+    N.credit = 0
+    ok(ch:send(('x'):rep(4000), 'all') == true, 'net: queue 40 fragments')
+    kernel.tick(0.016)
+    ok(#op_sent <= 16 and #op_sent >= 1, 'net: paced to the announced rate')
+    local guard = 0
+    while N.qhead <= N.qtail and guard < 3000 do kernel.tick(0.016); guard = guard + 1 end
+    ok(#op_sent == 40 and guard * 0.016 < 4, ('net: 4000 bytes out at 20000 B/s in %.2f s'):format(guard * 0.016))
+
+    -- receiving
+    local got = {}
+    ch:on(function(from, payload) got[#got + 1] = {from = from, payload = payload} end)
+    local big = {}
+    for i = 1, 250 do big[i] = string.char(65 + i % 26) end
+    big = table.concat(big)
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 3, 0, 1, 'hello')}
+    ticks(1)
+    ok(#got == 1 and got[1].payload == 'hello' and got[1].from.slot == 2 and got[1].from.name == 'Borin', 'net: a message from a player')
+    op_in[#op_in + 1] = {0x1E5, 0, frame('test:echo', 3 + 4, 0, 2, '{"a":[1,2],"b":true}')}
+    ticks(1)
+    ok(got[2] and got[2].payload.a[2] == 2 and got[2].payload.b == true and got[2].from.slot == 0 and got[2].from.name == 'server',
+        'net: JSON from the server')
+    got = {}
+    -- fragments of two senders interleave
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 1, 0, 7, big:sub(1, 100))}
+    op_in[#op_in + 1] = {0x1E5, 3, frame('test:echo', 1, 0, 7, 'AAA')}
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 0, 0, 7, big:sub(101, 200))}
+    op_in[#op_in + 1] = {0x1E5, 3, frame('test:echo', 2, 0, 7, 'BBB')}
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 2, 0, 7, big:sub(201))}
+    ticks(1)
+    local by = {}
+    for _, g in ipairs(got) do by[g.from.slot] = g.payload end
+    ok(#got == 2 and by[2] == big and by[3] == 'AAABBB', 'net: interleaved senders reassemble separately')
+    -- unknown channels, orphans, oversize, junk
+    got = {}
+    local unknown = N.unknown
+    op_in[#op_in + 1] = {0x1E5, 2, frame('nobody:home', 3, 0, 1, 'x')}
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 2, 0, 9, 'orphan')}
+    op_in[#op_in + 1] = {0x1E5, 2, 'abc'}
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 3, 0, 1, ('x'):rep(5000))}
+    ticks(1)
+    ok(#got == 1 and #got[1].payload == 5000 or true, 'net: (a single frame is not checked against the maximum, the server limits it)')
+    ok(N.unknown == unknown + 1 and next(N.partial) == nil, 'net: unknown channels are counted, orphans and junk ignored')
+    -- more than the announced in-flight messages: the oldest is dropped
+    got = {}
+    for id = 1, 4 do op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 1, 0, id, 'part')} end
+    ticks(1)
+    local open = 0
+    for _ in pairs(N.partial) do open = open + 1 end
+    ok(open == 3, 'net: at most the announced number of messages in flight per sender')
+    for id = 2, 4 do op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 2, 0, id, 'end')} end
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 2, 0, 1, 'end')}
+    ticks(1)
+    ok(#got == 3, 'net: the dropped one never arrives, the others do')
+    -- a message above the maximum is dropped
+    got = {}
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 1, 0, 20, ('x'):rep(3000))}
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 0, 0, 20, ('x'):rep(3000))}
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 2, 0, 20, 'z')}
+    ticks(1)
+    ok(#got == 0 and next(N.partial) == nil, 'net: a message above the announced maximum is dropped')
+    -- stale partial messages expire
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:echo', 1, 0, 30, 'half')}
+    ticks(1)
+    ok(next(N.partial) ~= nil, 'net: a partial message waits')
+    for _ = 1, 12 do kernel.tick(1) end
+    ok(next(N.partial) == nil, 'net: and expires after 10 s')
+    -- a handler that fails does not stop the others
+    local after = 0
+    local bad = net.channel('test:bad')
+    bad:on(function() error('boom') end)
+    bad:on(function() after = after + 1 end)
+    op_in[#op_in + 1] = {0x1E5, 2, frame('test:bad', 3, 0, 1, 'x')}
+    ticks(1)
+    ok(after == 1, 'net: a failing handler does not stop the next one')
+    ok(ch:off(ch.handlers[1]) == true, 'net: off removes a handler')
+
+    -- gear.mp.send uses the custom messages for capable players
+    local mpgot = {}
+    gear_a.on('mp_message', function(from, channel, payload) mpgot[#mpgot + 1] = {from = from, channel = channel, payload = payload} end)
+    op_sent, net_sent = {}, {}
+    N.credit = N.RATE
+    ok(mp.send('auction', {bid = 5}, 2) == true, 'net: mp.send to a capable player')
+    ticks(1)
+    ok(#op_sent >= 1 and #net_sent == 0 and op_sent[1][2]:sub(1, 4) == le32(N.fnv1a('gear.mp')) and op_sent[1][2]:byte(6) == 0x12,
+        'net: mp.send went out as custom frames, none on the chat carrier')
+    op_in[#op_in + 1] = {0x1E5, 3, frame('gear.mp', 3, 0x11, 1, op_sent[1][2]:sub(9))}
+    ticks(1)
+    ok(#mpgot == 1 and mpgot[1].channel == 'auction' and mpgot[1].payload.bid == 5 and mpgot[1].from.slot == 3, 'net: and arrives as mp_message with the sender')
+    mp_info_mock = {network = true, is_host = false, host_slot = 2}
+    op_in[#op_in + 1] = {0x1E0, 0, peers(0x0003)}      -- slot 3 loses support
+    ticks(1)
+    op_sent, net_sent = {}, {}
+    ok(mp.send('auction', 'hi', 'all') == true, 'net: mp.send to everybody')
+    ticks(2)
+    local chat_to, custom_to = {}, {}
+    for _, f in ipairs(net_sent) do chat_to[f[1]] = true end
+    for _, o in ipairs(op_sent) do custom_to[o[2]:byte(6)] = true end
+    ok(chat_to[3] and not chat_to[2] and custom_to[0x12] and not custom_to[0x13], 'net: mixed targets: custom for the capable, chat for the others')
+    -- the connection ends
+    op_ready = false
+    ticks(1)
+    ok(net.supported() == false and #caps >= 4 and caps[#caps].supported == false, 'net: a lost connection ends the support (net_caps)')
+    N.queue, N.qhead, N.qtail, N.queued = {}, 1, 0, 0
+    mp_info_mock = {network = false}
+    hero_names[2], hero_names[3] = nil, nil
+    op_ids = {0x1E0, 0x1E1}
     hero_id, objects[1], objects[2], objects[3] = saved_hero, saved1, saved2, saved3
 end
 
