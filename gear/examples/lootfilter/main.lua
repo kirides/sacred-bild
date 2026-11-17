@@ -125,11 +125,17 @@ local function overlay(state)
     overlay_shown = false
     -- It stays a moment after Alt is released, so a click made just before still lands on its button.
     if state.show_text then show_text_until = gear.time() + 0.4 end
-    if not cfg.overlay or state.mode ~= 'game' or state.exclusive or gear.time() >= show_text_until then return end
+    local editing = ui.edit_mode()
+    if not cfg.overlay or state.mode ~= 'game' or state.exclusive or (gear.time() >= show_text_until and not editing) then
+        return
+    end
     overlay_shown = true
-    local x, y = cfg.overlay_x, cfg.overlay_y
     local rows = 7 + #CATEGORIES
     local h = 18 + rows * 13
+    -- A bare panel (no window of its own), so the layout editor lists it and the player can move it; it also shows in
+    -- the edit mode, Alt or not. cfg.overlay_x / overlay_y are only its default place. The settings button lies in it.
+    local p = ui.panel('overlay', 'Loot filter overlay', cfg.overlay_x, cfg.overlay_y, 196, h + 26, {bare = true})
+    local x, y = p.x, p.y
     ui.rect(x, y, 196, h, ui.rgba(0, 0, 0, 140))
     ui.frame(x, y, 196, h, ui.rgba(200, 170, 90, 200))
     ui.text('Loot filter', x + 6, y + 3, {color = cfg.enabled and 0xFFFFD780 or 0xFF909090, size = 15, bold = true})
@@ -162,7 +168,7 @@ local function overlay(state)
     line(('Set items: %s, quest: %s'):format(cfg.keep_set and 'always' or 'by rule', cfg.keep_quest and 'always' or 'by rule'), x + 6, ty); ty = ty + 13
     line(('Nearby: %d items, %d filtered'):format(stats.near, stats.blocked), x + 6, ty); ty = ty + 13
     line(('Refused pickups: %d'):format(W.pickup_refused()), x + 6, ty, 0xFFB0B0B0)
-    if ui.button('open-settings', x + 6, y + h + 4, 184, 20, 'Settings (F5)', {tooltip = 'Change the rules in game'}) then
+    if not editing and ui.button('open-settings', x + 6, y + h + 4, 184, 20, 'Settings (F5)', {tooltip = 'Change the rules in game'}) then
         ui.show_panel('settings', not ui.panel_open('settings'))
     end
 end
@@ -428,7 +434,32 @@ gear.task(function()
     check('overlay with Alt', overlay_shown and ui.state().show_text)
     A.screenshot('lootfilter-samples')
     A.screenshot('showtext-on')
+    local function overlay_panel()
+        for _, q in ipairs(ui.panels()) do
+            if q.key == 'lootfilter:overlay' then return q end
+        end
+    end
+    local op = overlay_panel()
+    check('overlay is a layout panel', op ~= nil)
     A.key_up('alt')
+    gear.wait(0.8)
+    -- The layout editor's edit mode shows it without Alt, and a moved place sticks (set_panel_rect is what the editor calls).
+    ui.set_edit_mode(true)
+    gear.wait(0.5)
+    check('overlay shown in the edit mode without Alt', overlay_shown)
+    if op then
+        check('moved by the layout editor', ui.set_panel_rect('lootfilter:overlay', op.x + 300, op.y + 100))
+        gear.wait(0.5)
+        local q = overlay_panel()
+        check('overlay at its new place', q and math.abs(q.x - (op.x + 300)) < 3 and math.abs(q.y - (op.y + 100)) < 3,
+            q and ('%d,%d -> %d,%d'):format(op.x, op.y, q.x, q.y))
+        A.screenshot('lootfilter-edit-moved')
+        ui.reset_panel('lootfilter:overlay')
+        gear.wait(0.3)
+    end
+    ui.set_edit_mode(false)
+    gear.wait(0.8)
+    check('overlay gone again after the edit mode', not overlay_shown)
     -- "Show overlay" off in the mod's settings: not even with Alt.
     S.set('overlay', false)
     gear.wait(0.3)
