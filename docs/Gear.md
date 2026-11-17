@@ -541,6 +541,11 @@ dependencies, key binds and conflicts) and drives the screen against a mocked UI
 
 ### Realms
 
+`gear.mp.mode()` tells the kind of game: `'single'`, `'lan'`, `'open'` or `'closed'` (Closed Internet: the server checks lobby
+identities, the heroes belong to lobby accounts). It reads the engine's own flags in the net object (+0x3818 the menu's Internet
+entries were used, +0x3819 the game announcement's "lobby identity checked" bit), nothing a mod or the player sets. A network
+game that cannot be read counts as `'closed'`. `gear.auto.network_mode(mode)` sets those flags for self tests.
+
 `gear.realm` chooses the server of the game's online play (register and login), so that several servers (a private
 realm, for example) can be used without editing `Settings.cfg`. The game reads the lobby host and port when the
 multiplayer menu opens **Closed Internet** or **Open Internet**; Sacred Gear hooks those steps (`gear/realm.*`) and

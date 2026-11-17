@@ -248,6 +248,35 @@ bool World::networkGame()
            flag != 0;
 }
 
+World::NetworkMode World::networkMode()
+{
+    if (!networkGame())
+    {
+        return NetworkMode::Single;
+    }
+    uint32_t net = 0;
+    uint8_t internet = 0, identity = 0;
+    if (Addr::g_pNetPlayers && safeCopy(&net, reinterpret_cast<const void*>(Addr::g_pNetPlayers.address), 4) && net &&
+        safeCopy(&internet, reinterpret_cast<const void*>(static_cast<uintptr_t>(net) + 0x3818), 1) &&
+        safeCopy(&identity, reinterpret_cast<const void*>(static_cast<uintptr_t>(net) + 0x3819), 1))
+    {
+        return identity ? NetworkMode::Closed : internet ? NetworkMode::Open : NetworkMode::Lan;
+    }
+    return NetworkMode::Closed;     // a network game whose kind cannot be read is treated as the strictest
+}
+
+bool World::setNetworkModeForTest(NetworkMode mode)
+{
+    uint32_t net = 0;
+    const uint8_t flag = mode == NetworkMode::Single ? 0 : 1;
+    const uint8_t internet = mode == NetworkMode::Open || mode == NetworkMode::Closed ? 1 : 0;
+    const uint8_t identity = mode == NetworkMode::Closed ? 1 : 0;
+    return Addr::g_pNetPlayers && safeCopy(&net, reinterpret_cast<const void*>(Addr::g_pNetPlayers.address), 4) && net &&
+           safeStore(reinterpret_cast<void*>(Addr::g_pNetPlayers.address + 4), &flag, 1) &&
+           safeStore(reinterpret_cast<void*>(static_cast<uintptr_t>(net) + 0x3818), &internet, 1) &&
+           safeStore(reinterpret_cast<void*>(static_cast<uintptr_t>(net) + 0x3819), &identity, 1);
+}
+
 bool World::setNetworkFlagForTest(bool on)
 {
     const uint8_t flag = on ? 1 : 0;

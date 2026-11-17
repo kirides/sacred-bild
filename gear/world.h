@@ -45,6 +45,14 @@ namespace World
     // 0x005D9F00 ...). Single player: 0.
     bool networkGame();
 
+    // The kind of game: single player, or a network game by how it was joined. The engine keeps two flag bytes in its
+    // net object (`*g_pNetPlayers`, the one with the local hero id at +0x14): +0x3818 is set when the multiplayer menu's
+    // Internet entries (Closed or Open) were used (the menu's mode 4 or 6, 007D8560), and +0x3819 when the game's
+    // announcement has bit 8 set, which is the server's "lobby identity checked" flag (Closed Net: the heroes belong to
+    // lobby accounts; GameServer reply byte bit 3). Not told: Closed Net with a server that does not set the flag.
+    enum class NetworkMode { Single, Lan, Open, Closed };
+    NetworkMode networkMode();
+
     // Whether world changes are allowed now: a game runs, it is not a network game (not even a host nobody has joined:
     // the engine would announce the changes to peers that do not know the objects) and the local hero is the only one.
     bool changesAllowed();
@@ -61,6 +69,8 @@ namespace World
     // Automation self tests only: sets or clears the network flag (nothing else runs in between: the mod code runs on
     // the engine's thread), to test that the guards refuse in a network game.
     bool setNetworkFlagForTest(bool on);
+    // The same for the kind of game (the net object's two bytes too); the caller restores what it read with networkMode().
+    bool setNetworkModeForTest(NetworkMode mode);
 
     // The local hero's id, 0 if there is none.
     uint32_t hero();

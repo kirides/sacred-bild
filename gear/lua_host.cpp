@@ -885,6 +885,31 @@ namespace
         return 1;
     }
 
+    // native.mp_mode() -> 'single' | 'lan' | 'open' | 'closed'
+    int nativeMpMode(lua_State* L)
+    {
+        switch (World::networkMode())
+        {
+        case World::NetworkMode::Lan: lua_pushstring(L, "lan"); break;
+        case World::NetworkMode::Open: lua_pushstring(L, "open"); break;
+        case World::NetworkMode::Closed: lua_pushstring(L, "closed"); break;
+        default: lua_pushstring(L, "single"); break;
+        }
+        return 1;
+    }
+
+    // native.auto_network_mode(mode) -> bool (self tests: sets the flags the kind of game is read from)
+    int nativeAutoNetworkMode(lua_State* L)
+    {
+        const char* m = luaL_checkstring(L, 1);
+        World::NetworkMode mode = World::NetworkMode::Single;
+        if (!std::strcmp(m, "lan")) mode = World::NetworkMode::Lan;
+        else if (!std::strcmp(m, "open")) mode = World::NetworkMode::Open;
+        else if (!std::strcmp(m, "closed")) mode = World::NetworkMode::Closed;
+        lua_pushboolean(L, World::setNetworkModeForTest(mode));
+        return 1;
+    }
+
     // native.hero_name(slot) -> UTF-8 | nil
     int nativeHeroName(lua_State* L)
     {
@@ -2636,6 +2661,7 @@ namespace
             {"net_send_op", nativeNetSendOp},
             {"net_take_op", nativeNetTakeOp},
             {"mp_info", nativeMpInfo},
+            {"mp_mode", nativeMpMode},
             {"hero_saved", nativeHeroSaved},
             {"hero_name", nativeHeroName},
             {"object", nativeObject},
@@ -2735,6 +2761,7 @@ namespace
                 {"auto_write", nativeAutoWrite},
                 {"auto_show_window", nativeAutoShowWindow},
                 {"auto_network_flag", nativeAutoNetworkFlag},
+                {"auto_network_mode", nativeAutoNetworkMode},
                 {"auto_quit", nativeAutoQuit},
                 {"auto_start_gameserver", nativeAutoStartGameServer},
                 {nullptr, nullptr},
