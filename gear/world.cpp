@@ -272,6 +272,16 @@ World::NetworkMode World::networkMode()
     {
         return NetworkMode::Closed;     // a network game whose kind cannot be read is treated as the strictest
     }
+    if (NetMsg::heroFromServer())
+    {
+        static bool logged = false;
+        if (!logged)
+        {
+            logged = true;
+            LOG("World: the game server delivered the hero (message 0x132): this is a Closed Net game");
+        }
+        return NetworkMode::Closed;
+    }
     if (identity)
     {
         return NetworkMode::Closed;
@@ -283,10 +293,7 @@ World::NetworkMode World::networkMode()
     // Entered through the Internet menu (Closed or Open Net): Closed Net unless Open Net is proven. The hero comes from the
     // server in Closed Net (message 0x132, right after admission); in Open Net the client keeps its local hero and never
     // gets one. Proof of Open Net: the receive hook is in, the hero has been in the game for kProveMs, no 0x132 came.
-    if (NetMsg::heroFromServer())
-    {
-        return NetworkMode::Closed;
-    }
+
     if (g_testProven)
     {
         return NetworkMode::Open;

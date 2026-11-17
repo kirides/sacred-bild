@@ -8,7 +8,10 @@ return {
     config = {
         host = '127.0.0.1', port = 17066,
         account = 'stasha', password = 'test1234',
+        hero = 'Stasha',
+        game_password = '1234', -- the game server's NETWORK_PASSWORD (Gameserver.cfg)
         create = false,         -- make a character first (a new account has none)
+        stop = false,           -- 'games': stop at the game list
         quit = true,
     },
 }
