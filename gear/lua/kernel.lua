@@ -3825,6 +3825,7 @@ local function make_env(mod)
     w.pickup_refused = function() return native.pickup_refused() end
     gear.world = w
     gear.mp = mp
+    if native.net_ops then gear._native_net = native end   -- stage 1 spike access to the raw opcode calls
     gear.game = {
         -- difficulty() -> 0..4: the difficulty level of the running game.
         difficulty = function() return native.difficulty() end,
