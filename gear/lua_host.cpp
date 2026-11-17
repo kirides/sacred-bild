@@ -921,7 +921,90 @@ namespace
         return 2;
     }
 
-    // native.object(id) -> {id, type, flags, x, y, layer, creature, hp, max_hp, gold, exp, level} | nil
+    // native.clipboard_set(text) -> true | nil, message: puts UTF-8 text on the Windows clipboard (as Unicode text).
+    int nativeClipboardSet(lua_State* L)
+    {
+        size_t length = 0;
+        const char* text = luaL_checklstring(L, 1, &length);
+        if (length > 1024 * 1024)
+        {
+            lua_pushnil(L);
+            lua_pushstring(L, "the text is longer than 1 MB");
+            return 2;
+        }
+        const int wide = MultiByteToWideChar(CP_UTF8, 0, text, static_cast<int>(length), nullptr, 0);
+        HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, (static_cast<size_t>(wide) + 1) * sizeof(wchar_t));
+        wchar_t* target = memory ? static_cast<wchar_t*>(GlobalLock(memory)) : nullptr;
+        if (!target)
+        {
+            if (memory) GlobalFree(memory);
+            lua_pushnil(L);
+            lua_pushstring(L, "out of memory");
+            return 2;
+        }
+        MultiByteToWideChar(CP_UTF8, 0, text, static_cast<int>(length), target, wide);
+        target[wide] = 0;
+        GlobalUnlock(memory);
+        bool ok = false;
+        for (int attempt = 0; attempt < 5 && !ok; ++attempt)
+        {
+            if (OpenClipboard(nullptr))
+            {
+                EmptyClipboard();
+                ok = SetClipboardData(CF_UNICODETEXT, memory) != nullptr;   // the clipboard owns the memory after this
+                CloseClipboard();
+            }
+            if (!ok) Sleep(10);
+        }
+        if (!ok)
+        {
+            GlobalFree(memory);
+            lua_pushnil(L);
+            lua_pushstring(L, "the clipboard is not available");
+            return 2;
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.clipboard_get() -> the Unicode text on the clipboard as UTF-8, or nil.
+    int nativeClipboardGet(lua_State* L)
+    {
+        std::string out;
+        bool have = false;
+        for (int attempt = 0; attempt < 5 && !have; ++attempt)
+        {
+            if (OpenClipboard(nullptr))
+            {
+                if (HANDLE data = GetClipboardData(CF_UNICODETEXT))
+                {
+                    if (const wchar_t* wide = static_cast<const wchar_t*>(GlobalLock(data)))
+                    {
+                        const int bytes = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
+                        if (bytes > 1)
+                        {
+                            out.resize(static_cast<size_t>(bytes) - 1);
+                            WideCharToMultiByte(CP_UTF8, 0, wide, -1, out.data(), bytes, nullptr, nullptr);
+                        }
+                        GlobalUnlock(data);
+                        have = true;
+                    }
+                }
+                CloseClipboard();
+                if (have) break;
+            }
+            Sleep(10);
+        }
+        if (!have)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushlstring(L, out.data(), out.size());
+        return 1;
+    }
+
+    // native.object(id) -> {id, type, flags, x, y, layer, sector, creature, hp, max_hp, gold, exp, level} | nil
     int nativeObject(lua_State* L)
     {
         const uint32_t id = checkId(L, 1);
@@ -939,6 +1022,7 @@ namespace
         set("x", o.position.x);
         set("y", o.position.y);
         set("layer", o.position.layer);
+        set("sector", o.position.sector);
         lua_pushboolean(L, o.creature);
         lua_setfield(L, -2, "creature");
         if (o.creature)
@@ -2504,6 +2588,8 @@ namespace
         }
         static constexpr luaL_Reg kNative[] = {
             {"log", nativeLog},
+            {"clipboard_set", nativeClipboardSet},
+            {"clipboard_get", nativeClipboardGet},
             {"mod_dirs", nativeModDirs},
             {"read_file", nativeReadFile},
             {"load", nativeLoad},

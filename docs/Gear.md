@@ -188,7 +188,7 @@ player (`gear.world.can_change()`); in a network game (also a host nobody has jo
 | `gear.world.spawn(type, x, y, {layer, label})` | Creates an object of `type` (a type id or name) there, as the game's own scripts do; the creature, or nil and a message. `label` is kept for the creature this session (`c:label()`; shown in game in a later version). |
 
 A creature object `c` (`c.id`) reads the game each time; after the object is gone the reads give nil:
-`c:exists()`, `c:info()` (all fields), `c:type()`, `c:type_name()`, `c:position()` (x, y, layer), `c:hp()`,
+`c:exists()`, `c:info()` (all fields), `c:type()`, `c:type_name()`, `c:position()` (x, y, layer), `c:sector()` (the sector table slot of the position), `c:hp()`,
 `c:max_hp()`, `c:is_dead()`, `c:level()`, `c:experience()`, `c:gold()`, `c:distance(other | x, y)`, `c:label()`;
 changes: `c:set_hp(hp)` (1..max: mods do not kill through it), `c:set_gold(n)`, `c:add_gold(n)` (the local hero only, also in network games: through the engine's own gold setter, which keeps its anti-cheat copy in step and sends the change with the hero's next update),
 `c:teleport(x, y, layer)`.
@@ -215,6 +215,7 @@ at the items around the hero every fraction of a second and hands over the curre
 | `gear.game.can_save()` | `true`, or `false` and why not: a living hero in a single player game, the game shown (no cinematic, window drawn alone, escape menu or message box), no save or load pending. |
 | `gear.game.save(slot, name, {thumbnail})` | Asks the engine to save into `Save\GAME<slot>.PAK` (slot 0 the quicksave, up to 509), as the savegame window does; `true` when accepted, else nil and a message (the engine refuses while a trade, chest or similar window is open). `name` is the display name (60 ASCII characters). The result comes as the events `'game.saved'` / `'game.save_failed'`. |
 | `gear.game.save_pending()` | Whether a save or a load is queued or being written. |
+| `gear.clipboard.set(text)`, `get()` | The Windows clipboard (Unicode text, at most 1 MB): `set` returns `true`, or nil and why; `get` the text on it or nil. For a mod that shows something the player wants to paste elsewhere. |
 | `gear.game.save_info(slot)` | `{exists, size, mtime}` of the slot's file (`mtime` in unix seconds), so a mod can rotate slots oldest first. |
 
 The engine writes the file a moment later on its render thread; Sacred Gear sees the write end (the engine's flags)
