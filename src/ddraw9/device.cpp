@@ -610,14 +610,23 @@ namespace DDraw9
         }
     }
 
+    void Device::restoreCoordIndices()
+    {
+        for (DWORD stage = 0; stage < kStages; ++stage)
+        {
+            setStageState9(stage, D3DTSS_TEXCOORDINDEX, m_tss[stage][D3DTSS_TEXCOORDINDEX]);
+        }
+    }
+
     void Device::prepare(DWORD fvf)
     {
         prepareTarget();
         applyFixedFunction();
         if (m_skinBound)
         {
-            // Back from the skinning shader to the fixed-function pipeline.
+            // Back from the skinning shader to the fixed-function pipeline, with the coordinate sets the game chose.
             m_skinBound = false;
+            restoreCoordIndices();
             m_dev->SetVertexShader(nullptr);
             m_dev->SetStreamSource(1, nullptr, 0, 0);
             m_fvf9 = 0;
@@ -698,6 +707,7 @@ namespace DDraw9
         m_skinConstantCount = 0;
         std::memset(m_skinFlags, 0xFF, sizeof(m_skinFlags));
         m_skinLightCount = -1;
+        m_skinTexTransformSet = false;
         m_skinPalette.clear();
         m_skinPaletteId = 0;
         // Fixed-function transforms, material and lights.
