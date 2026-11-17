@@ -258,3 +258,7 @@ slot 0, once the server has shown it speaks them. The custom types (above) are a
 frame. `server_only` channels are not relayed between players on chat either (the server reads the channel name from the first
 frame). With the server's flood protection on, chat lines are limited per player (`FLOOD_CHAT_PER_SECOND`), which also limits the
 chat carrier. Self test: `netopstest` with `chat_only = true` (the client declines the offered numbers).
+- **Example: achievements and login streak.** Server `scripts-examples/achievements.lua` (SacredEngineRemake) tracks achievements and a daily
+  login streak per hero and pays rewards with `server.drop_gold` / `server.drop_item`; `gear/examples/achievements` shows toasts and a panel (F7).
+  Wire: channel `achievements:sync`; server to client JSON `{op='state', ach={{id,name,desc,have,need,done?,reward?}...}, streak, best, days, claimed, next}`,
+  `{op='unlock', id, name, desc, reward}`, `{op='streak', streak, best, reward}`; client to server `{op='get'}`.
