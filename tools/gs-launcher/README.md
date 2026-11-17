@@ -11,3 +11,5 @@ unknown options. This launcher takes that place: it starts `SacredGameServer.exe
     # output (SacredGameServer.*) and this launcher's GameServer.* next to Sacred.exe
 
 Kill `SacredGameServer.exe` of the copy after a run (the game only kills the launcher).
+
+A file `launcher.args` next to the launcher (one argument per line, `{dir}` = its folder) replaces the default options, for tests that need others (Closed Net against a test lobby: see gear/examples/closedtest/README.md).
