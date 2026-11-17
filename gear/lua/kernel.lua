@@ -2308,6 +2308,14 @@ local function make_ui(mod)
         if p.w then w, h = p.w, p.h end         -- being resized
         local min_w, min_h = opts.min_width or 120, opts.min_height or 60
         w, h = math.max(w, min_w), math.max(h, min_h)
+        if saved and not p.x then
+            -- A kept place (a fraction of the screen, see from_virtual) or a size from another screen shape may not fit
+            -- this one: the panel stays on the screen (left / top win when it is larger than the screen).
+            local s = ui_tick_state or {}
+            local sl, st_, sr, sb = s.screen_left or 0, s.screen_top or 0, s.screen_right or 1024, s.screen_bottom or 768
+            x = math.max(sl, math.min(x, sr - w))
+            y = math.max(st_, math.min(y, sb - h))
+        end
         local o = {layer = opts.layer}
         ui.rect(x, y, w, h, opts.background or 0xD80E0E14, o)
         ui.frame(x, y, w, h, ui_edit and C.accent or C.edge, ui_edit and 2 or 1, o)

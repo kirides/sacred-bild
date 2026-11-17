@@ -190,10 +190,20 @@ D3DVIEWPORT7 DeviceProxy::canvasViewport(const D3DVIEWPORT7& virt) const
     const bool wholeScreen = Sacred::reBorn() && !UiCanvas::frame().confine;
     const float r = wholeScreen ? p.clipRight : std::min(p.clipRight, p.originX + 1024.0f * s);
     const float b = wholeScreen ? p.clipBottom : std::min(p.clipBottom, p.originY + 768.0f * s);
-    const float x0 = std::max(p.originX + virt.dwX * s, l);
-    const float y0 = std::max(p.originY + virt.dwY * s, t);
-    const float x1 = std::min(p.originX + (virt.dwX + virt.dwWidth) * s, r);
-    const float y1 = std::min(p.originY + (virt.dwY + virt.dwHeight) * s, b);
+    float x0 = std::max(p.originX + virt.dwX * s, l);
+    float y0 = std::max(p.originY + virt.dwY * s, t);
+    float x1 = std::min(p.originX + (virt.dwX + virt.dwWidth) * s, r);
+    float y1 = std::min(p.originY + (virt.dwY + virt.dwHeight) * s, b);
+    if (!UiCanvas::frame().confine && !Sacred::reBorn())
+    {
+        // An unconfined frame draws on the whole screen: a viewport reaching a 1024x768 edge (the full UI viewport the
+        // game and Sacred Gear's item icons restore) reaches the screen's edge there, not the canvas' (the canvas
+        // only is the screen's middle when the UI is scaled). Smaller viewports stay what they are.
+        if (virt.dwX == 0) x0 = p.clipLeft;
+        if (virt.dwY == 0) y0 = p.clipTop;
+        if (virt.dwX + virt.dwWidth >= 1024) x1 = p.clipRight;
+        if (virt.dwY + virt.dwHeight >= 768) y1 = p.clipBottom;
+    }
     D3DVIEWPORT7 vp = virt;
     vp.dwX = static_cast<DWORD>(std::lround(x0));
     vp.dwY = static_cast<DWORD>(std::lround(y0));
