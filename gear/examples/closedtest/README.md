@@ -20,3 +20,8 @@ Setup (everything loopback, test ports, a COPY of the game folder, never the pla
 
 What the run found (details in the commit history): the account fields come filled with `guest`; the host pane's Starten does nothing until
 the game password (NETWORK_PASSWORD of the server's Gameserver.cfg) is typed into the pane's password field.
+
+Regression for the item-loss bug (a withdrawn or given-back item vanished at the next login because the server saved the client's creation
+state of the item, a world position and no container flags): create a hero, note the backpack count (4 for a Gladiator), run
+`-gear-mods=closedtest,shared-stash` with the stash mod's `selftest = 'e2e'` (deposit + withdraw), then log in again with
+`return {expect_backpack = 4}` for closedtest: the run exits with 1 if the count changed. Unit test: `HeroWriterTests.AHeldItemIsSavedWith...`.

@@ -11,6 +11,7 @@ return {
         hero = 'Stasha',
         game_password = '1234', -- the game server's NETWORK_PASSWORD (Gameserver.cfg)
         create = false,         -- make a character first (a new account has none)
+        expect_backpack = nil,  -- regression check: the number of backpack items the hero must have (exit code 1 otherwise)
         stop = false,           -- 'games': stop at the game list
         quit = true,
     },

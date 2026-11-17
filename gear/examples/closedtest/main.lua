@@ -67,5 +67,8 @@ gear.task(function()
     A.screenshot('ct-9-ingame')
     local bp = gear.inv.container('backpack')
     A.write('closedtest.json', gear.json.encode({in_game = ok, mode = gear.mp.mode(), backpack = bp and #bp:items() or -1, types = (function() local l = {} for _, it in ipairs(bp and bp:items() or {}) do l[#l + 1] = tostring(it.type_name) .. '#' .. it.id end return table.concat(l, ',') end)()}))
-    if cfg.quit then A.quit(ok and 0 or 1) end
+    local count = bp and #bp:items() or -1
+    local good = ok and (cfg.expect_backpack == nil or cfg.expect_backpack == count)
+    if cfg.expect_backpack ~= nil and not good then gear.log(('closedtest: %d items in the backpack, expected %d'):format(count, cfg.expect_backpack)) end
+    if cfg.quit then A.quit(good and 0 or 1) end
 end)
