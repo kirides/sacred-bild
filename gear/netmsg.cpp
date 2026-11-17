@@ -432,7 +432,7 @@ bool NetMsg::channelReady()
 
 bool NetMsg::sendFrame(uint32_t slot, const uint16_t* units, size_t count)
 {
-    if (slot < 1 || slot > 16 || count == 0 || count > kMaxFrameUnits || !channelReady())
+    if (slot > 16 || count == 0 || count > kMaxFrameUnits || !channelReady())
     {
         return false;
     }

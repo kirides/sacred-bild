@@ -801,7 +801,7 @@ namespace
         const char* s = luaL_checklstring(L, 2, &n);
         uint16_t units[NetMsg::kMaxFrameUnits];
         const size_t count = n / 2;
-        bool ok = n % 2 == 0 && count >= 1 && count <= NetMsg::kMaxFrameUnits && slot >= 1 && slot <= 16;
+        bool ok = n % 2 == 0 && count >= 1 && count <= NetMsg::kMaxFrameUnits && slot >= 0 && slot <= 16;
         if (ok)
         {
             std::memcpy(units, s, count * 2);

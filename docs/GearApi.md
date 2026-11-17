@@ -1482,7 +1482,7 @@ What the `kill` event gets.
 
 ## Custom net messages (gear.net)
 
-Named channels between the mods of different computers (and the game server's scripts) over two message types of their own, above the game's range. They carry messages up to 256 KB, as bytes or tables (JSON), cut into pieces and paced by the library. A computer says HELLO when it joins; a server that supports them (the Sacred Gear game server, `Sacred.GameServer` of the SacredEngineRemake) answers with its limits and the list of players who can use them. The original `GameServer.exe` and hosts without it do not answer: `gear.net.supported()` stays false and `gear.mp.send` keeps using the chat carrier, which every server relays. `gear.mp.send` uses the custom messages by itself for players that can; mods of the auction house kind need no change.
+Named channels between the mods of different computers (and the game server's scripts). A channel works everywhere: its messages ride on the chat carrier (private chat frames every server relays, up to 64 KB, about 8 KB/s) and, where the server agrees, on two message types of their own above the game's range (up to 256 KB, faster). The agreement is made on the chat carrier first: a server that supports channels (the Sacred Gear game server, `Sacred.GameServer` of the SacredEngineRemake) sends a query with the two numbers it offers when the player enters the game, the client answers over chat, and one HELLO / HELLO_ACK on the agreed types checks the versions and limits. Nothing custom is ever sent to a server that did not ask, so the original `GameServer.exe` and servers with opcodes of their own see only chat. Without the agreement (or when it fails) messages to players still go over chat; messages to `'server'` need a server that supports channels (`gear.net.transport('server')` is nil otherwise). `gear.mp.send` uses the custom messages by itself for players that can. `gear.net.transport` says which way a message would travel.
 
 Every message names a channel (`'auction:bid'`); both sides ask for the same name. A channel's id is the FNV-1a hash of its name; two names with the same id are refused when the second is created. Messages for channels this computer has not created are ignored. The server puts the real sender into the message: the `from` a handler gets cannot be forged by the sender. Nothing is encrypted and a modified client can send anything: check what you receive.
 
@@ -1513,12 +1513,19 @@ Removes a handler added with `GearNetChannel:on`. Returns whether it was there.
 
 #### `GearNetChannel:send(payload, to) -> boolean?, string?`
 
-Sends `payload` (a string of bytes, or a table sent as JSON, at most `gear.net.limits().max_message` bytes, 256 KB by default) to `to`: `'server'` (the game server's scripts), `'host'` (the default), `'all'` (everybody else) or a slot or player. The pieces leave over the next ticks, paced to the server's rate (64 KB/s by default); messages of one sender arrive in order. Only players that can use the custom messages get them (`gear.net.peer_supported`); the others are skipped silently. Not available (nil and the reason) when the server does not support the messages.
+Sends `payload` (a string of bytes, or a table sent as JSON; at most 64 KB over the chat carrier, `gear.net.limits().max_message`, 256 KB by default, over the custom messages) to `to`: `'server'` (the game server's scripts), `'host'` (the default), `'all'` (everybody else) or a slot or player. Each recipient gets it the best way: over the custom messages when this computer and the player can use them (`gear.net.peer_supported`), else over the chat carrier. The pieces leave over the next ticks, paced (64 KB/s custom, about 8 KB/s chat); messages of one sender arrive in order per transport.
 
 - `payload`: `table|string`
 - `to`: `integer|GearPlayer|'server'|'host'|'all'` (optional)
 - returns `ok` `boolean?`
-- returns `error` `string?` - `'custom net messages are not available here ...'`, a bad target, `'too many messages are waiting to be sent'`, a message that is too large ...
+- returns `error` `string?` - `'the server does not support net channels'`, a bad target, `'too many messages are waiting to be sent'`, a message that is too large ...
+
+#### `GearNetChannel:transport(to) -> 'custom'|'chat'|'mixed'|nil`
+
+Which way a message to `to` would travel now (same `to` as `GearNetChannel:send`): `'custom'`, `'chat'`, `'mixed'` (some players one way, some the other) or nil when it cannot be sent.
+
+- `to`: `integer|GearPlayer|'server'|'host'|'all'` (optional)
+- returns `transport` `'custom'|'chat'|'mixed'|nil`
 
 ### GearNetCaps
 
@@ -1528,6 +1535,7 @@ What the `net_caps` event gets.
 |---|---|---|
 | `supported` | `boolean` | The server supports the custom messages (the handshake is done). |
 | `peers` | `integer[]` | The slots of the players that can use them (this computer's slot included). |
+| `chat` | `boolean` | The server supports net channels (it queried this client), at least over the chat carrier. |
 
 ### GearNetLimits
 
@@ -1566,7 +1574,7 @@ The channel `name` (1 to 64 printable ASCII characters; use your mod's id as a p
 
 #### `gear.net.supported() -> boolean`
 
-Whether the game server supports the custom messages (the handshake after joining is done). False in single player, before the answer and on servers without them.
+Whether the custom message types are in use with the game server (the chat query, the answer and HELLO / HELLO_ACK are done). False in single player, before the agreement, and on servers without them; channels still work over chat then (see `gear.net.transport`).
 
 - returns `boolean`
 
@@ -1577,6 +1585,13 @@ Whether the player in `slot` (1 to 16) can use them (told by the server; this co
 - `slot`: `integer`
 - returns `boolean`
 
+#### `gear.net.transport(to) -> 'custom'|'chat'|'mixed'|nil`
+
+Which way a message to `to` would travel now: `'custom'`, `'chat'`, `'mixed'` or nil when it cannot be sent (no such player, `'server'` while the server does not support net channels).
+
+- `to`: `integer|GearPlayer|'server'|'host'|'all'` (optional)
+- returns `transport` `'custom'|'chat'|'mixed'|nil`
+
 #### `gear.net.limits() -> GearNetLimits?`
 
 The server's limits, nil while `supported()` is false.
@@ -1585,7 +1600,7 @@ The server's limits, nil while `supported()` is false.
 
 #### `gear.net.configure(opts) -> boolean?, string?`
 
-Sets the two message types (`control`, `data`: above 0x1D5 and below 0x400, different) for servers that use other numbers than 0x1E0 / 0x1E1. Only before the game connects (nil and a message once the handshake started).
+Restricts the two message types (`control`, `data`: above 0x1D5 and below 0x400, different) a server may offer: the client accepts only these numbers and declines others (channels then stay on chat). Without it the offered numbers are accepted. Only before the game connects (nil and a message once the handshake started).
 
 - `opts`: `GearNetConfigureOpts`
 - returns `ok` `boolean?`

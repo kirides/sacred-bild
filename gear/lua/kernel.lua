@@ -929,19 +929,22 @@ function C.decode(data)
     local kind, n = data:sub(1, 1), sbyte(data, 2)
     if not n or n == 0 or #data < 2 + n then return nil end
     local channel, body = data:sub(3, 2 + n), data:sub(3 + n)
-    if kind == 's' then return channel, body end
-    if kind == 'j' then
+    -- s/j: gear.mp messages; n/k: gear.net channel messages on the chat carrier (string / JSON); q/a: the net handshake
+    if kind == 's' or kind == 'n' or kind == 'q' or kind == 'a' then return channel, body, kind end
+    if kind == 'j' or kind == 'k' then
         local v = json.decode(body)
-        if v ~= nil then return channel, v end
+        if v ~= nil then return channel, v, kind end
     end
 end
 
 function C.deliver(slot, data)
-    local channel, payload = C.decode(data)
+    local channel, payload, kind = C.decode(data)
     if not channel then
         log('gear.mp: a message from slot %s could not be read', tostring(slot))
         return
     end
+    if kind == 'n' or kind == 'k' then return N.chat_message(slot, channel, payload) end
+    if kind == 'q' or kind == 'a' then return N.chat_control(slot, kind, payload) end
     kernel.dispatch('mp_message', C.player_of(slot), channel, payload)
 end
 
@@ -1042,9 +1045,12 @@ function C.receive(slot, s)
     C.deliver(slot, table.concat(out))
 end
 
--- Custom net opcodes (gear.net, docs/GearServerMods.md): channels with a name, over two message types above the
--- stock range. HELLO after joining; the server answers HELLO_ACK (limits, the data opcode) and PEERS (who else can),
--- or says nothing (an original GameServer.exe / a host without it): then everything stays on the chat carrier.
+-- Net channels (gear.net, docs/GearServerMods.md): channels with a name. Their messages ride on the chat carrier (frames
+-- of kind n/k, to a player slot or to slot 0, the game server) and, when the server agrees, on two message types above
+-- the stock range. The handshake is on the chat carrier too: the server (entering the game) sends a query 'q' with the
+-- numbers it offers, the client answers 'a' (accepts or declines), and on an accept sends HELLO on the agreed control type;
+-- the server's HELLO_ACK (limits) and PEERS (who else can) complete it. A server that never queries (the original
+-- GameServer.exe, other servers) never sees a custom type from us: channels stay on chat (to players; not to the server).
 -- Native side: native.net_ops() -> control, data, ready; net_configure(control, data); net_send_op(type, bytes) -> bool;
 -- net_take_op() -> type, sender slot, bytes | nil. Data frame: [u32 channel id (FNV-1a of the name)][u8 flags: 1 first,
 -- 2 last, 4 JSON][u8 target: 0 server, 1 host, 0xFF all, 0x10 + slot][u16 message id][bytes], all little endian.
@@ -1053,7 +1059,7 @@ N = {
     FRAGMENT = 4000, MAX_MESSAGE = 262144, RATE = 65536, INFLIGHT = 8, HELLO_TIMEOUT = 3, EXPIRE = 10,
     MAX_PARTIAL_BYTES = 1048576, MAX_QUEUED = 1048576, PER_TICK = 16,
     channels = {}, partial = {}, partial_bytes = 0, queue = {}, qhead = 1, qtail = 0, queued = 0, credit = 0, number = 0,
-    unknown = 0, dropped = 0, received = 0, sent = 0, supported = false, snapshot = '',
+    unknown = 0, dropped = 0, received = 0, sent = 0, supported = false, snapshot = '', server_chat = false, chat_caps = false,
 }
 mp._net = N   -- for the kernel tests
 local net_api = {}
@@ -1087,15 +1093,15 @@ local function caps_changed()
     local peers = {}
     for slot = 1, 16 do if band(rshift(N.mask, slot - 1), 1) == 1 then peers[#peers + 1] = slot end end
     local supported = N.state == 'ready'
-    local snapshot = supported and table.concat(peers, ',') or ''
+    local snapshot = (supported and table.concat(peers, ',') or '') .. (N.server_chat and '+chat' or '')
     if supported ~= N.supported or snapshot ~= N.snapshot then
         N.supported, N.snapshot = supported, snapshot
-        kernel.dispatch('net_caps', {supported = supported, peers = peers})
+        kernel.dispatch('net_caps', {supported = supported, peers = peers, chat = N.server_chat})
     end
 end
 
 local function net_reset()
-    N.state, N.mask, N.ack = 'idle', 0, nil
+    N.state, N.mask, N.ack, N.server_chat = 'idle', 0, nil, false
     N.partial, N.partial_bytes = {}, 0
     N.queue, N.qhead, N.qtail, N.queued = {}, 1, 0, 0
     caps_changed()
@@ -1109,6 +1115,7 @@ function net_api.configure(opts)
     local c, d = opts.control or N.control, opts.data or N.data
     if not (native.net_configure and native.net_configure(c, d)) then return nil, 'invalid message types (above 0x1D5, below 0x400, different)' end
     N.control, N.data = c, d
+    N.preferred = {c, d}   -- the handshake accepts only these numbers from a server
     return true
 end
 
@@ -1150,15 +1157,6 @@ function channel_mt:off(fn)
     return false
 end
 
-local function resolve_target(to)
-    if to == nil then to = 'host' end
-    if type(to) == 'table' then to = to.slot end
-    if to == 'server' then return 0 end
-    if to == 'host' then return 1 end
-    if to == 'all' then return 0xFF end
-    if type(to) == 'number' and to >= 1 and to <= 16 and to == math.floor(to) then return 0x10 + to end
-end
-
 -- Queues one message (string, or a table as JSON) as fragments; `target` is the wire byte. true | nil, message.
 function N.enqueue(c, payload, target)
     if N.state ~= 'ready' then return nil, 'custom net messages are not available here (the server does not support them)' end
@@ -1179,13 +1177,93 @@ function N.enqueue(c, payload, target)
     return true
 end
 
--- ch:send(payload, to) -> true | nil, message. `to`: 'server', 'host' (default), 'all', a slot or a player.
-function channel_mt:send(payload, to)
-    local target = resolve_target(to)
-    if not target then return nil, "to must be 'server', 'host', 'all', a slot (1 to 16) or a player" end
-    if target >= 0x11 and target - 0x10 == native.hero() then return nil, 'a custom net message cannot go to this computer' end
-    return N.enqueue(self, payload, target)
+-- One frame group of the chat carrier: kind, name and body as one message to `slot` (0: the game server).
+local function chat_frame(slot, kind, name, body)
+    if #body > C.MAX_BODY then return nil, 'the message is larger than 64 KB on the chat carrier' end
+    local data = kind .. schar(#name) .. name .. body
+    if C.queued + C.frame_count(#data) * 254 > C.MAX_QUEUED then return nil, 'too many messages are waiting to be sent' end
+    C.number = (C.number + 1) % 0x8000
+    for _, f in ipairs(C.frames(data, C.number)) do
+        C.qtail = C.qtail + 1
+        C.queue[C.qtail] = {slot, f}
+        C.queued = C.queued + #f
+        C.last_entry = C.queue[C.qtail]
+    end
+    return true
 end
+-- A message on a net channel through the chat carrier (n: bytes, k: JSON).
+function N.chat_send(slot, name, payload)
+    if type(payload) == 'table' then
+        local ok, text = pcall(json.encode, payload)
+        if not ok then return nil, tostring(text) end
+        return chat_frame(slot, 'k', name, text)
+    elseif type(payload) ~= 'string' then
+        return nil, 'payload must be a table or a string'
+    end
+    return chat_frame(slot, 'n', name, payload)
+end
+
+-- How a message to `to` would travel: a list of steps {via = 'custom' | 'chat', slot, target}, or nil and why.
+local function plan(to)
+    if to == nil then to = 'host' end
+    if type(to) == 'table' then to = to.slot end
+    local me = native.hero()
+    if to == 'server' then
+        if N.state == 'ready' then return {{via = 'custom', slot = 0, target = 0}} end
+        if N.server_chat then return {{via = 'chat', slot = 0}} end
+        return nil, 'the server does not support net channels'
+    end
+    local slots
+    if to == 'host' then
+        local h = host_slot()
+        if not h then return nil, 'the host is not known yet' end
+        if h == me then return nil, 'a net message cannot go to this computer' end
+        slots = {h}
+    elseif to == 'all' then
+        slots = {}
+        for _, p in ipairs(mp.players()) do if p.slot ~= me then slots[#slots + 1] = p.slot end end
+    elseif type(to) == 'number' and to >= 1 and to <= 16 and to == math.floor(to) then
+        if to == me then return nil, 'a net message cannot go to this computer' end
+        slots = {to}
+    else
+        return nil, "to must be 'server', 'host', 'all', a slot (1 to 16) or a player"
+    end
+    local custom, every = N.state == 'ready', N.state == 'ready'
+    for _, s in ipairs(slots) do
+        if not (custom and net_api.peer_supported(s)) then every = false end
+    end
+    if to == 'all' and every and #slots > 0 then return {{via = 'custom', target = 0xFF}} end
+    local steps = {}
+    for _, s in ipairs(slots) do
+        if custom and net_api.peer_supported(s) then steps[#steps + 1] = {via = 'custom', slot = s, target = to == 'host' and 1 or 0x10 + s}
+        else steps[#steps + 1] = {via = 'chat', slot = s} end
+    end
+    return steps
+end
+
+-- ch:send(payload, to) -> true | nil, message. `to`: 'server', 'host' (default), 'all', a slot or a player. Over the custom
+-- message types where both sides support them, over the chat carrier otherwise.
+function channel_mt:send(payload, to)
+    local steps, err = plan(to)
+    if not steps then return nil, err end
+    for i, st in ipairs(steps) do
+        local ok, e
+        if st.via == 'custom' then ok, e = N.enqueue(self, payload, st.target) else ok, e = N.chat_send(st.slot, self.name, payload) end
+        if not ok and i == 1 then return nil, e end
+    end
+    return true
+end
+
+-- 'custom', 'chat', 'mixed' (some players one way, some the other) or nil (not possible): the transport a message to `to`
+-- would use now.
+function net_api.transport(to)
+    local steps = plan(to)
+    if not steps or #steps == 0 then return nil end
+    local custom = 0
+    for _, st in ipairs(steps) do if st.via == 'custom' then custom = custom + 1 end end
+    return custom == #steps and 'custom' or custom == 0 and 'chat' or 'mixed'
+end
+function channel_mt:transport(to) return net_api.transport(to) end
 
 local function net_deliver(ch, slot, json_flag, body)
     local payload = body
@@ -1193,11 +1271,38 @@ local function net_deliver(ch, slot, json_flag, body)
         payload = json.decode(body)
         if payload == nil then N.dropped = N.dropped + 1 return end
     end
+    N.dispatch_message(ch, slot, payload)
+end
+function N.dispatch_message(ch, slot, payload)
     local from = player_of(slot)
     for _, fn in ipairs({unpack(ch.handlers)}) do
         local ok, err = pcall(fn, from, payload)
         if not ok then log('gear.net: handler of %s failed: %s', ch.name, tostring(err)) end
     end
+end
+
+-- A channel message that came on the chat carrier (payload already a string or a table).
+function N.chat_message(slot, name, payload)
+    local ch = N.channels[fnv1a(name)]
+    if not ch or ch.name ~= name then N.unknown = N.unknown + 1 return end
+    N.received = N.received + 1
+    N.dispatch_message(ch, slot, payload)
+end
+
+-- The handshake on the chat carrier: only the server's query 'q' [u8 proto][u16 control][u16 data] is acted on; the answer 'a'
+-- [u8 proto][u16 control][u16 data][u8 flags: 1 accepts the custom types] goes back over chat, then HELLO follows on the
+-- agreed control type once the answer has left (poll).
+function N.chat_control(slot, kind, body)
+    if slot ~= 0 or kind ~= 'q' or #body < 5 or N.state ~= 'idle' then return end
+    local proto, control, data = sbyte(body, 1), u16(body, 2), u16(body, 4)
+    N.server_chat = true
+    local accept = proto >= 1 and native.net_configure ~= nil and (not N.preferred or (N.preferred[1] == control and N.preferred[2] == data))
+        and native.net_configure(control, data) == true
+    if accept then N.control, N.data = control, data end
+    chat_frame(0, 'a', 'gear.net', schar(1) .. p16(N.control) .. p16(N.data) .. schar(accept and 1 or 0))
+    if accept then N.state, N.hello_wait = 'answered', C.last_entry else N.state = 'chat' end
+    log('gear.net: the server offered custom message types %X/%X: %s', control, data, accept and 'accepted' or 'declined')
+    caps_changed()
 end
 
 local function drop_partial(key)
@@ -1249,7 +1354,7 @@ N.receive = net_receive
 
 local function net_control(s)
     local kind = sbyte(s, 1)
-    if kind == 2 and #s >= 19 then
+    if kind == 2 and #s >= 19 and (N.state == 'hello' or N.state == 'ready') then
         N.ack = {protocol = sbyte(s, 2), features = u32(s, 3), data = u16(s, 7), fragment = u16(s, 9), message = u32(s, 11),
             rate = u32(s, 15), in_flight = sbyte(s, 19)}
         local a = N.ack
@@ -1275,15 +1380,15 @@ function N.poll(dt)
     local _, _, ready = native.net_ops()
     local info = mp_info()
     if not ready then
-        if N.state ~= 'idle' then net_reset() end
+        if N.state ~= 'idle' or N.server_chat then net_reset() end
         return
     end
-    if N.state == 'idle' and info.network and native.hero() then
+    if N.state == 'answered' and (not N.hello_wait or N.hello_wait.sent) then
         local hash = kernel.mod_set_hash and tonumber(kernel.mod_set_hash(), 16) or 0
         if native.net_send_op(N.control, schar(1, 1) .. p32(3) .. p32(hash)) then N.state, N.hello_at = 'hello', N.now end
     elseif N.state == 'hello' and N.now - N.hello_at > N.HELLO_TIMEOUT then
         N.state = 'unsupported'
-        log('gear.net: no answer to HELLO: the server has no custom net messages; the chat carrier stays in use')
+        log('gear.net: no answer to HELLO: the custom message types stay off, the chat carrier is used')
     end
     for _ = 1, 64 do
         local t, slot, s = native.net_take_op()
@@ -1344,6 +1449,7 @@ function kernel.poll_mp(dt)
     local sent = 0
     while C.qhead <= C.qtail and sent < C.PER_TICK and C.credit >= 0 do
         local f = C.queue[C.qhead]
+        f.sent = true
         -- false: the game cannot send it (the player left, the connection is gone): the frame is dropped
         if not (native.mp_send_frame and native.mp_send_frame(f[1], f[2])) then C.dropped = (C.dropped or 0) + 1 end
         C.queue[C.qhead] = nil

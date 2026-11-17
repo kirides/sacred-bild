@@ -1457,6 +1457,7 @@ do
     hero_names[2], hero_names[3] = 'Borin', 'Cyra'
     local net, mp = gear_a.net, gear_a.mp
     local N = mp._net
+    local C = mp._channel
     local function ticks(n) for _ = 1, n do kernel.tick(0.016) end end
     local function le32(v) return string.char(v % 256, math.floor(v / 256) % 256, math.floor(v / 65536) % 256, math.floor(v / 16777216) % 256) end
     local function frame(name, flags, target, id, body)
@@ -1491,38 +1492,85 @@ do
     op_ready, op_sent = false, {}
     ticks(3)
     ok(#op_sent == 0, 'net: no HELLO without a connection')
-    -- connected: HELLO once
-    op_ready = true
-    ticks(2)
-    ok(#op_sent == 1 and op_sent[1][1] == 0x1E0 and op_sent[1][2]:byte(1) == 1 and op_sent[1][2]:byte(2) == 1 and #op_sent[1][2] == 10,
-        'net: HELLO on the control type after joining')
-    -- no answer: unsupported, and gear.mp.send stays on the chat carrier
-    for _ = 1, 4 do kernel.tick(1) end
-    ok(N.state == 'unsupported' and net.supported() == false, 'net: no answer means unsupported')
+    local function query(control, data)    -- the server's chat query 'q' [proto][control][data]
+        local msg = 'q' .. string.char(8) .. 'gear.net' .. string.char(1, control % 256, math.floor(control / 256), data % 256, math.floor(data / 256))
+        for _, f in ipairs(C.frames(msg, 77)) do C.receive(0, f) end
+    end
+    N.preferred = nil
     net_sent = {}
-    ok(mp.send('auction', {a = 1}, 'host') == true, 'net: mp.send works without custom support')
+    op_ready = true
+    ticks(3)
+    ok(#op_sent == 0 and #net_sent == 0 and N.state == 'idle' and net.transport('server') == nil and net.transport('host') == 'chat',
+        'net: nothing goes to the server before it asks; players are reachable over chat')
+    net_sent = {}
+    -- the server's query on the chat carrier: answered over chat (slot 0); HELLO follows once the answer has left
+    query(0x1E0, 0x1E1)
+    ok(N.state == 'answered' and N.server_chat == true and #op_sent == 0 and caps[#caps].chat == true and caps[#caps].supported == false,
+        'net: the query is accepted, no custom frame yet')
+    ok(net.transport('server') == 'chat' and net.supported() == false, 'net: the server is reachable over chat')
+    ticks(4)
+    ok(#net_sent >= 1 and net_sent[1][1] == 0, 'net: the answer goes to slot 0 over chat')
+    ok(#op_sent == 1 and op_sent[1][1] == 0x1E0 and op_sent[1][2]:byte(1) == 1 and op_sent[1][2]:byte(2) == 1 and #op_sent[1][2] == 10,
+        'net: HELLO on the agreed control type after the answer')
+    -- no HELLO_ACK: the custom types stay off; channels use chat
+    for _ = 1, 4 do kernel.tick(1) end
+    ok(N.state == 'unsupported' and net.supported() == false and net.transport('server') == 'chat', 'net: no HELLO_ACK means chat only')
+    -- a channel message to the server over chat arrives intact when fed back as if from the server
+    local rt = net.channel('test:chat')
+    local rtgot = {}
+    rt:on(function(from, payload) rtgot[#rtgot + 1] = {from = from, payload = payload} end)
+    net_sent = {}
+    ok(rt:send({text = 'hi', list = {1, 2}}, 'server') == true and rt:send(('y'):rep(1000), 'server') == true, 'net: send to the server over chat')
+    ticks(40)
+    ok(#net_sent >= 6 and net_sent[1][1] == 0 and #op_sent == 1, 'net: chat frames to slot 0, no custom frame')
+    for _, f in ipairs(net_sent) do C.receive(0, f[2]) end
+    ok(#rtgot == 2 and rtgot[1].payload.text == 'hi' and rtgot[1].payload.list[2] == 2 and rtgot[1].from.slot == 0 and rtgot[2].payload == ('y'):rep(1000),
+        'net: table and bytes survive the chat carrier')
+    ok(rt:send(('z'):rep(70000), 'server') == nil, 'net: the chat carrier keeps its 64 KB cap')
+    ok(rt:transport('server') == 'chat' and net.transport(2) == 'chat' and net.transport('all') == 'chat', 'net: transport reports chat')
+    net_sent = {}
+    ok(rt:send('x', 2) == true, 'net: a channel message to a player rides on chat as well')
     ticks(2)
-    ok(#net_sent >= 1 and #op_sent == 1, 'net: mp.send used the chat carrier, no custom frames')
-    -- the connection drops: back to idle, HELLO again on the next connection
+    ok(#net_sent >= 1 and net_sent[1][1] == 2, 'net: ... to that slot')
+    -- a query that is not from the server, or while a handshake is under way, is ignored
+    local before = N.state
+    for _, f in ipairs(C.frames('q' .. string.char(8) .. 'gear.net' .. string.char(1, 0xE0, 1, 0xE1, 1), 78)) do C.receive(2, f) end
+    ok(N.state == before, 'net: a query from a player is ignored')
+    -- the connection drops: back to idle, a new query starts over
     op_ready = false
     ticks(1)
-    ok(N.state == 'idle', 'net: a lost connection resets the handshake')
-    N.queue, N.qhead, N.qtail, N.queued = {}, 1, 0, 0
-    C_reset = nil
+    ok(N.state == 'idle' and N.server_chat == false and net.transport('server') == nil, 'net: a lost connection resets the handshake')
+    C.queue, C.qhead, C.qtail, C.queued = {}, 1, 0, 0
+    net_sent, op_sent = {}, {}
+    op_ready = true
+    -- numbers that are not valid are declined: chat only
+    query(0x100, 0x101)
+    ok(N.state == 'chat' and N.server_chat == true and net.transport('server') == 'chat', 'net: invalid offered numbers are declined')
+    ticks(4)
+    ok(#op_sent == 0, 'net: no HELLO after a decline')
+    op_ready = false; ticks(1); op_ready = true
+    -- configured numbers are the only ones accepted
+    N.preferred = {0x1F0, 0x1F1}
+    query(0x1E0, 0x1E1)
+    ok(N.state == 'chat', 'net: numbers other than the configured ones are declined')
+    N.preferred = nil
+    op_ready = false; ticks(1); op_ready = true
     net_sent, op_sent = {}, {}
     -- answer: ready, limits, data type adopted, peers, event
-    op_ready = true
-    ticks(2)
-    ok(#op_sent == 1, 'net: HELLO again')
+    query(0x1E0, 0x1E5)
+    ticks(4)
+    ok(#op_sent == 1 and op_ids[2] == 0x1E5, 'net: the offered numbers are adopted, HELLO again')
     op_in[#op_in + 1] = {0x1E0, 0, ack(0x1E5, 100, 4096, 20000, 3)}
     ticks(1)
     ok(net.supported() == true and op_ids[2] == 0x1E5 and net.limits().max_fragment == 100 and net.limits().max_message == 4096
         and net.limits().bytes_per_second == 20000 and net.limits().in_flight == 3, 'net: HELLO_ACK sets the limits and the data type')
-    ok(#caps == 1 and caps[1].supported == true, 'net: net_caps fired for the answer')
+    ok(caps[#caps].supported == true and caps[#caps].chat == true and net.transport('server') == 'custom', 'net: net_caps fired for the answer')
+    local ncaps = #caps
     op_in[#op_in + 1] = {0x1E0, 0, peers(0x0007)}
     ticks(1)
     ok(net.peer_supported(2) and net.peer_supported(3) and net.peer_supported(1) and not net.peer_supported(4)
-        and #caps == 2 and #caps[2].peers == 3, 'net: PEERS lists who can use it')
+        and #caps == ncaps + 1 and #caps[#caps].peers == 3 and net.transport(2) == 'custom' and net.transport('all') == 'custom',
+        'net: PEERS lists who can use it')
 
     -- sending: fragments with first/last flags, paced
     op_sent = {}
