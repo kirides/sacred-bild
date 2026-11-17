@@ -92,6 +92,11 @@ namespace Gear::Addr
     // ENG 0061CD00 ("SAVEHERO"): writes the hero file, cdecl (path) -> bool. A network game calls it through 0x7F38E0
     // (Save\HeroNN.pax: every 300 s from the receive loop, when the player leaves, at merchants); the network menu too.
     inline Sacred::Cdecl<uint8_t(const char* path)> heroSave{};
+    // Hero names. ENG 017E7F68: the text manager; ENG 00672C90: its lookup, thiscall (manager, id) -> STLport wstring*
+    // ({begin, end, ...}; an empty one if the id has no text), ret 4. A hero's text id is at creature +0x3C (0x26FF +
+    // its object id: the menus and 0x7EDC50 store the heroes' names there in single player and network games alike).
+    inline Sacred::Global<uint8_t*> g_pTextManager{};
+    inline Sacred::Thiscall<const wchar_t* const*(void* manager, uint32_t id)> cTextManager_get{};
     inline Sacred::Global<uint8_t*> g_pNet{};
     inline uintptr_t netDispatchSwitch{};
 

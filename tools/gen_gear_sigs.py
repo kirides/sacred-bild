@@ -87,6 +87,10 @@ GEAR = [
     # The hero file writer ("SAVEHERO", cdecl bool (path), the network game's Save\HeroNN.pax every 300 s, on leaving and
     # at merchants): Gear raises game.hero_saved after it.
     ('heroSave', 0x0061CD00, 'func'),
+    # Hero names (gear/netmsg.cpp): a hero keeps its name as a text resource whose id is at creature +0x3C (0x26FF + the
+    # hero's id); the text manager (singleton at 017E7F68, getter 0x6725E0) returns it: thiscall (manager, id) -> wstring*.
+    ('g_pTextManager', 0x017E7F68, 'data'),
+    ('cTextManager_get', 0x00672C90, 'func'),
     ('modelRenderer_instance', 0x00401660, 'func'),
     ('modelRenderer_drawItem', 0x0040E9C0, 'func'),
     ('renderFlags_instance', 0x00643110, 'func'),

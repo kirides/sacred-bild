@@ -396,6 +396,56 @@ namespace
         return true;
     }
 
+    // The hero's name from its text resource (the id at creature +0x3C), as the hero save and the HUD take it.
+    bool textName(uint32_t slot, wchar_t* out, size_t& n)
+    {
+        n = 0;
+        if (!Gear::Addr::g_pTextManager || !Gear::Addr::cTextManager_get || !Gear::Addr::g_pObjectManager)
+        {
+            return false;
+        }
+        __try
+        {
+            const uint8_t* manager = static_cast<const uint8_t*>(*Gear::Addr::g_pObjectManager.get());
+            void* texts = *Gear::Addr::g_pTextManager.get();
+            if (!manager || !texts)
+            {
+                return false;
+            }
+            const uintptr_t* begin = *reinterpret_cast<uintptr_t* const*>(manager + 4);
+            const uintptr_t* end = *reinterpret_cast<uintptr_t* const*>(manager + 8);
+            if (!begin || begin + slot >= end)
+            {
+                return false;
+            }
+            const uint8_t* hero = reinterpret_cast<const uint8_t*>(begin[slot]);
+            if (!hero || *reinterpret_cast<const uint32_t*>(hero + 0x0C) != slot)
+            {
+                return false;
+            }
+            const uint32_t id = *reinterpret_cast<const uint32_t*>(hero + 0x3C);
+            if (id < 0x2700 || id > 0x270F)
+            {
+                return false;
+            }
+            const wchar_t* const* ws = Gear::Addr::cTextManager_get(texts, id);
+            if (!ws || !ws[0])
+            {
+                return false;
+            }
+            for (const wchar_t* p = ws[0]; p < ws[1] && n < 63 && *p; ++p)
+            {
+                out[n++] = *p;
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            n = 0;
+            return false;
+        }
+        return true;
+    }
+
     bool readHost(const uint8_t* net, NetMsg::Host& h)
     {
         __try
@@ -454,6 +504,10 @@ std::wstring NetMsg::heroName(uint32_t slot)
     const uint8_t* record = net + kRoster + slot * kRecord;
     // the hero's own name from the roster (network games), then the player name, then (the local hero, also in single
     // player) the name of the hero the save preview holds
+    if (textName(slot, buf, n) && n)
+    {
+        return {buf, n};
+    }
     if (readName(record + kRecordHeroName, 64, buf, n) && n)
     {
         return {buf, n};

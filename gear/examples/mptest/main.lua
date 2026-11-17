@@ -46,6 +46,7 @@ end
 local function host_lan()
     A.wait_for_menu(120)
     gear.wait(8)
+    A.screenshot('lan-0-menu')
     A.ui_click(512, 352)                    -- Multiplayer
     gear.wait(2)
     A.ui_click(512, 352 - 38 / 1.1719)      -- LAN
@@ -53,8 +54,10 @@ local function host_lan()
     local function px(x, y) return (x - 200) / 1.1719, y / 1.1719 end
     A.ui_click(px(gear.config.hero_x, gear.config.hero_y))
     gear.wait(2)
+    A.screenshot('lan-1-heroes')
     A.ui_click(px(910, 838))                -- next
     gear.wait(3)
+    A.screenshot('lan-2-games')
     A.ui_click(px(553, 448))                -- create
     gear.wait(3)
     A.ui_click(px(747, 448))                -- create: the game starts its gameserver and connects to it
@@ -64,6 +67,7 @@ gear.task(function()
     local lan = gear.config.mode == 'lan'
     if lan then host_lan() end
     if not A.wait_for_game(lan and 240 or 180) then
+        A.screenshot('lan-no-game')
         check('game', false)
         A.write('mptest.json', gear.json.encode({results = results}))
         return A.quit(1)
@@ -79,6 +83,16 @@ gear.task(function()
     check('host slot', mp.host_slot() == mp.local_slot(), mp.host_slot())
     local hero = gear.world.hero()
     check('Creature:name', hero and hero:name() == (me and me.name), hero and hero:name())
+    -- gold through the engine's setter: the hero keeps it and is not taken for a cheater by the engine's check
+    if hero then
+        local g0 = hero:gold()
+        local ok1, e1 = hero:add_gold(123)
+        check('add_gold', ok1 == true and hero:gold() == g0 + 123, e1 or hero:gold())
+        local ok2 = hero:set_gold(g0)
+        check('set_gold', ok2 == true and hero:gold() == g0, hero:gold())
+        gear.wait(2)
+        check('the hero is alive after the gold changes', not hero:is_dead() and hero:gold() == g0, hero:hp())
+    end
     -- the loopback (single player, or the host sending to itself)
     send_and_wait('host', 'loopback', 5)
     if lan then

@@ -38,6 +38,8 @@ static const Sig::Entry kGearSigs[] = {
     {"netDispatchSwitch", "C1 EE 1B 8D 4A FF 81 F9 D4 01 00 00", 6, Sig::Take::Match, &Gear::Addr::netDispatchSwitch}, // 007DCF91, 007DC561
     {"cStats_setGoldCall", "E8 ?? ?? ?? ?? 8B 85 00 02 00 00 8B 8D A0 03 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_setGoldCall}, // 00461B74, 00461E64
     {"heroSave", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC A8 00 00 00", 0, Sig::Take::Match, &Gear::Addr::heroSave}, // 0061CD00, 0061CDA0
+    {"g_pTextManager", "A1 ?? ?? ?? ?? 64 89 25 00 00 00 00 83 EC 0C 53", 1, Sig::Take::Abs32, &Gear::Addr::g_pTextManager}, // 017E7F68, 017E5EE8
+    {"cTextManager_get", "8B 44 24 04 56 83 F8 FF 8B F1 74 4A", 0, Sig::Take::Match, &Gear::Addr::cTextManager_get}, // 00672C90, 00672F70
     {"modelRenderer_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3F 68 FC 00 00 00", 0, Sig::Take::Match, &Gear::Addr::modelRenderer_instance}, // 00401660, 00401660
     {"modelRenderer_drawItem", "81 EC 64 03 00 00 56 8B F1 57 8D 8C 24 2C 03 00 00", 0, Sig::Take::Match, &Gear::Addr::modelRenderer_drawItem}, // 0040E9C0, 0040EA00
     {"renderFlags_instance", "A1 ?? ?? ?? ?? 85 C0 75 28 6A 08 E8 ?? ?? ?? ?? 83 C4 04 85 C0", 0, Sig::Take::Match, &Gear::Addr::renderFlags_instance}, // 00643110, 00643240
