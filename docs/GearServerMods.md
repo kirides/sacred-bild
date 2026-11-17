@@ -235,3 +235,40 @@ server side: SacredEngineRemake `Sacred.GameServer/README.md` ("Custom net messa
 - **Data frame:** `[u32 FNV-1a(channel)][u8 flags: 1 first, 2 last, 4 JSON][u8 target: 0 server, 1 host, 0xFF all, 0x10+slot][u16 id][bytes]`.
 - **Self test:** `gear/examples/netopstest` (`expect = 'stock'` or `'remake'`; the remake run needs `tools/gs-launcher` and
   the server's `scripts-examples/net_echo.lua`); kernel tests in `gear/tests/kernel_test.lua`.
+
+## Example mods on top of gear.net: build sharer and quest helper (2026-11-17)
+
+Both have a server half (Lua in the SacredEngineRemake `Sacred.GameServer/scripts-examples/`) and a client half (`gear/examples/`).
+They talk over one channel each with small JSON tables; every request is checked on the server (types, lengths, a request budget per
+client) and every answer is checked on the client (only slot 0, the server, is listened to; texts are cut to a length).
+
+**Build sharer** (`build_sharer.lua` + `buildsharer`, channel `buildsharer`). Requests: `list {q, class, sort, page, per}`, `get {id}`,
+`mine`, `publish {title, note, tags, carried, level}`, `unpublish`; answers `list`, `build`, `mine`, `published`, `unpublished`, `error`.
+Where the data comes from decides what is shown: the server fills class, level, skills, combat arts and equipment from its own view of the
+hero (`server.hero`, which needs the web UI or `--authoritative`), so those are "server-verified". Gear cannot read a hero's skills or worn
+equipment (only the backpack), so a client could not send them anyway; without hero data on the server the build holds class and level as the
+server knows them plus the client's title, note, tags and carried item names, marked "reported". One build per hero (publishing again
+replaces it), 200 builds per server, 15 s between publishes. The server stores builds in its mod storage (`script-data/build_sharer.json`),
+serves a page with a text and class filter (`/mods/build_sharer/`, with `?id=` for one build), JSON (`builds`, `build`) and the chat commands
+`!sharebuild [title]`, `!unsharebuild`, `!builds`. Public output has character names only (no account, no player id). Not done: moderation
+(the owner edits the storage file), ratings, comments, importing a build into a hero (a build is a description, not a save).
+
+**Quest helper** (`quest_helper.lua` + `questhelper`, channel `questhelper`). Requests: `state {watch}`, `unwatch`; answers `state`, `error`.
+What can really be known: a hero file's only quest state is a list of `[key][value]` records (the "quest pairs" of the inventory stream);
+the server reads them with `server.hero(...).quest_pairs`. The quest journal, active quests, their texts, map markers and progress are
+state of the game's script interpreter: not in a hero file, on no message the server sees, and not in Gear's API either. Nobody has mapped
+which key is which quest, and in the five hero saves we have the list is empty. So the mod is honest about it: it lists the records a hero
+has, announces new and changed ones (chat line, screen line), shows which other online heroes have the same record, and shows a name, area,
+hint and value labels for the keys the server owner put in the catalog (`CATALOG` in the Lua file or the storage key `catalog`); every other
+key is "record <key>". The client part also lists the quest items in the backpack and lying near the hero (distance in tiles) because Gear
+can read those (`item.quest`). It says "no hero data" instead of guessing when the server has none. Page: `/mods/quest_helper/`, JSON
+`records`, chat `!quests`.
+
+**Server API added for them:** `server.hero(player|slot)` (read only table: character, class, level, experience, gold, skills, arts,
+equipment, attribute points, quest pairs, a count of inventory items). The C# side is one interface method and one table builder; all mod
+logic is Lua.
+
+**Tests:** server `ModScriptTests` (Lua against a fake server, the real server with a hero upload when saves exist); client
+`gear/tests/modmock` (the panels against a strict mock of the API). **Not verified:** the panels in a running game (the game build was not
+available to this work), the class numbers of the server's FIRSTCONTACT byte against Gear's hero types, and quest pairs ever being filled
+by real play.
