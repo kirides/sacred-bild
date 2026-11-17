@@ -230,6 +230,9 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   `drawTileLayers` (`src/game/ground_mesh.*`). The cached ground of every loaded sector is drawn there, walked yet
   or not, in case it comes in the middle of the walk (water tiles drawn early when their list could not be moved
   aside, below). A sector object's `+0x44`/`+0x48` hold its first tile's world column/row.
+- The lit ground (caves: the light falls off around the hero and the light sources, darker towards the walls) is
+  switched on by the world render after SacredBild's frame start; GroundMesh decides at the frame's first tile row
+  and leaves such frames' ground to the game.
 - `renderTileRow` per tile: after the detail and row range tests, `0x62B103` (`fld [1.0]`) starts the ground quad
   (positions and cell coordinates into `cWorldView + 0xAD0`, 4 x 0x24 bytes), culls it (`0x62B2BD`..`0x62B2FF`, off
   screen: on at `0x62B7FF`), sets its corner colors (lit through `0x620090`/`0x61ED70`, else the tile's light bytes
@@ -344,7 +347,18 @@ AMD user-mode driver 12 %, DDrawCompat 10 %, ntdll 9 %, msvcrt 6 % (memcpy), d3d
   test `0x4057D0` (reads world/view/projection back with `GetTransform`), `cGranny_render` (`0x405C90`: per
   mesh piece `GrannyLockNextRenderingState`, SetTexture, SetTransform(WORLD), `DrawIndexedPrimitiveStrided`
   FVF `0x112`/`0x152`, lighting on) and `cGranny_renderShadow` (`0x406FF0`: the same meshes flattened through
-  a shadow matrix, FVF `0x142`, stencil flag `0x10000`). `0x401920` calls `GrannyAdvanceTime` per model
+  a shadow matrix, FVF `0x142`, stencil flag `0x10000`). Glow passes over the same meshes, drawn after the model with
+  Z test `LESSEQUAL`, so they must land on exactly the model's depth: `cObject3D_drawModel`'s effect flags (its last
+  argument) `0x800`-`0x4000` draw `FX_RESSKIN.TGA` in a color each (`0x40D590`: lock flags `0x29`, two additive FVF
+  `0x142` draws, constant diffuse with stride 0, lighting off, stage 0 the effect texture through a scrolling 2D
+  texture matrix (render flag `0x8000`: `TEXTURETRANSFORMFLAGS` COUNT2 on stage 0, `SetTransform(TEXTURE0)`, the
+  offset in `_31`/`_32`), stage 1 the mesh's own texture for alpha, both on coordinate set 0); item types with flag
+  `0x100000` (glow type at `+0x6E`, texture handle at `+0x66` of the 0x80-byte type record) go through
+  `cGranny::renderComplex` (`0x406510`: FVF `0x152` with a stride-0 color, then `0x112` additive, both with the
+  texture matrix); in the character view (`0x6F54D0`) `0x40C320` uses the deformed normals as coordinate set 1
+  (FVF `0x252`). With `GpuSkinning` the skinning shader applies stage 0/1 texture matrices itself, so these passes
+  are drawn by the same shader as the model; drawn from CPU-skinned vertices they missed its depth and showed only
+  in a few spots. `0x401920` calls `GrannyAdvanceTime` per model
   instance (~10 % of the thread); the skinning inside the lock calls is about as much. Granny is 1.x (2002 API:
   `GrannyLockSequenceForRendering`, `...RenderingState`).
 - `GetTransform` through d3dim700/DDrawCompat/driver cost ~5 %: SacredBild answers it from the last

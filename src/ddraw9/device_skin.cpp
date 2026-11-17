@@ -39,6 +39,7 @@ namespace DDraw9
         constexpr UINT kLightRegisters = 7;
         constexpr UINT kMaxLights = 8;
         constexpr UINT kBoneRegister = 73;
+        constexpr UINT kTexTransformRegister = 252;     // after the bones (c73-c249) and the ground shader's c250-c251
         constexpr UINT kDiffuseRing = 1u << 16;     // diffuse colors per pass through the ring
         constexpr UINT kIndexArena = 1u << 20;      // indices per arena (2 MB); all pieces of all meshes so far fit
         constexpr UINT kCameraRegisters = 10;       // world x view, projection, normal matrix: change per character
@@ -199,6 +200,7 @@ namespace DDraw9
         m_skinBound = false;
         m_skinConstantCount = 0;
         m_skinLightCount = -1;
+        m_skinTexTransformSet = false;
     }
 
     bool Device::skinAvailable()
@@ -288,12 +290,25 @@ namespace DDraw9
         {
             return false;
         }
-        for (DWORD stage = 0; stage < kStages && m_tss[stage][D3DTSS_COLOROP] != D3DTOP_DISABLE; ++stage)
+        // All four coordinate sets the shader writes start from the mesh's one set: stage s reads set s (its
+        // D3DTSS_TEXCOORDINDEX is set so for the draw), sets 0 and 1 through their stage's 2D texture matrix
+        // (D3DTTFF_COUNT2: the glow effects scroll and turn their texture over the mesh's own coordinates, another stage
+        // reading them untransformed). Generated coordinates have flags in the high bits.
+        Float4 texTransform[4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {1, 0, 0, 0}, {0, 1, 0, 0}};
+        DWORD stages = 0;
+        for (; stages < kStages && m_tss[stages][D3DTSS_COLOROP] != D3DTOP_DISABLE; ++stages)
         {
-            // The shader writes the coordinates to sets 0-3; generated coordinates have flags in the high bits.
-            if (m_tss[stage][D3DTSS_TEXCOORDINDEX] > 3 || m_tss[stage][D3DTSS_TEXTURETRANSFORMFLAGS] != D3DTTFF_DISABLE)
+            const DWORD flags = m_tss[stages][D3DTSS_TEXTURETRANSFORMFLAGS];
+            if (stages > 3 || m_tss[stages][D3DTSS_TEXCOORDINDEX] > 3 ||
+                (flags != D3DTTFF_DISABLE && (flags != D3DTTFF_COUNT2 || stages > 1)))
             {
                 return false;
+            }
+            if (flags == D3DTTFF_COUNT2)
+            {
+                const D3DMATRIX& m = m_transforms[D3DTRANSFORMSTATE_TEXTURE0 + stages];
+                set(texTransform[stages * 2], m._11, m._21, m._31, 0.0f);
+                set(texTransform[stages * 2 + 1], m._12, m._22, m._32, 0.0f);
             }
         }
         const D3DLIGHT7* lights[kMaxLights];
@@ -405,6 +420,16 @@ namespace DDraw9
         }
         std::memcpy(m_skinConstants, c, count * sizeof(Float4));
         m_skinConstantCount = count;
+        for (DWORD stage = 0; stage < stages; ++stage)
+        {
+            setStageState9(stage, D3DTSS_TEXCOORDINDEX, stage);
+        }
+        if (!m_skinTexTransformSet || std::memcmp(texTransform, m_skinTexTransform, sizeof(texTransform)) != 0)
+        {
+            m_dev->SetVertexShaderConstantF(kTexTransformRegister, &texTransform[0][0], 4);
+            std::memcpy(m_skinTexTransform, texTransform, sizeof(texTransform));
+            m_skinTexTransformSet = true;
+        }
         const BOOL flags[5] = {draw.normalizeSkinned, m_rs[D3DRENDERSTATE_NORMALIZENORMALS] != 0,
             m_rs[D3DRENDERSTATE_LOCALVIEWER] != 0, m_rs[D3DRENDERSTATE_SPECULARENABLE] != 0, lighting};
         if (std::memcmp(flags, m_skinFlags, sizeof(flags)) != 0)

@@ -24,6 +24,10 @@ float4 g_vertexColor : register(c16);      // without a diffuse stream: the vert
 #define LIGHT_REGISTERS 7
 float4 g_lights[8 * LIGHT_REGISTERS] : register(c17);
 float4 g_bones[177] : register(c73);        // 59 bones; the compiler keeps its literals above
+// Texture coordinate sets 0 and 1 (read by stages 0 and 1) through those stages' texture matrices (D3DTTFF_COUNT2: the
+// glow effects scroll and turn their textures): 2D coordinates as (u, v, 1), two registers per set holding the matrix
+// columns; identity for a stage without one. c250-c251 belong to the ground shader.
+float4 g_texTransform[4] : register(c252);
 
 int g_lightCount : register(i0);
 bool g_normalizeSkinned : register(b0);     // Granny normalized the skinned normals
@@ -147,8 +151,9 @@ VsOut main(VsIn v)
     const float4 pc4 = float4(pc, 1.0);
     o.position = float4(dot(pc4, g_projection[0]), dot(pc4, g_projection[1]), dot(pc4, g_projection[2]),
         dot(pc4, g_projection[3]));
-    o.uv0 = v.uv;
-    o.uv1 = v.uv;
+    const float3 uv = float3(v.uv, 1.0);
+    o.uv0 = float2(dot(uv, g_texTransform[0].xyz), dot(uv, g_texTransform[1].xyz));
+    o.uv1 = float2(dot(uv, g_texTransform[2].xyz), dot(uv, g_texTransform[3].xyz));
     o.uv2 = v.uv;
     o.uv3 = v.uv;
 

@@ -149,6 +149,8 @@ namespace DDraw9
         void syncDepth();
         // Before every fixed-function draw: z-buffer, vertex format, and textures with CPU changes uploaded.
         void prepare(DWORD fvf);
+        // The skinning shader's draws read coordinate set s in stage s: the game's own sets again.
+        void restoreCoordIndices();
         // The z-buffer and texture part of it (skinned draws set their own vertex format).
         void prepareTarget();
         // The overlay drew since the last call: sets everything this device believes is set on Direct3D 9 again.
@@ -231,6 +233,8 @@ namespace DDraw9
         float m_skinConstants[73][4] = {};
         UINT m_skinConstantCount = 0;
         BOOL m_skinFlags[5] = {};
+        float m_skinTexTransform[4][4] = {};    // c252-c255 as last uploaded
+        bool m_skinTexTransformSet = false;
         int m_skinLightCount = -1;
         // The lights in camera space (7 registers per light, at most 8) and what they were made from: recomputed
         // only when an enabled light or the view changes, not for every character.
