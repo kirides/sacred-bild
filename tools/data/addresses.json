@@ -110,6 +110,11 @@
    "451BBE74": "0060E77C",
    "451BBE74:sacredreborn.exe": "0060E77C"
   },
+  "g_zoomPrevStep": {
+   "452F85C7": "0095DCAC",
+   "451BBE74": "0095BCC4",
+   "451BBE74:sacredreborn.exe": "0095BCC4"
+  },
   "cWorldView_setZoom": {
    "452F85C7": "00628130",
    "451BBE74": "00628210",

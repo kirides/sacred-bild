@@ -205,6 +205,8 @@ namespace Sacred::Addr
     inline uintptr_t zoomInputCall{};
     inline Thiscall<bool(cWorldView* self, float zoom)> cWorldView_setZoom{};
     inline Cdecl<char*()> getPauseState{};               // ENG 006413E0; the byte it returns is set while the game is paused
+    // The zoom the engine's zoom function saw last (ENG 0095DCAC): it picks which way a zoom between the steps glides.
+    inline Global<float> g_zoomPrevStep{};
     inline Global<uint8_t> g_textInputActive{};         // ENG 017EA344
 
     // Engine input: cEngine_receiveEvent (0x618090) passes mouse events to the UI manager first (UI coordinates)

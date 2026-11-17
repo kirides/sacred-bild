@@ -58,6 +58,7 @@ SACRED = [
     ('cEngine_worldMouse', 0x006172C0, 'func'),
     ('cEngine_handleZoomInput', 0x0060DD20, 'func'),
     ('zoomInputCall', 0x0060E6DC, 'code'),
+    ('g_zoomPrevStep', 0x0095DCAC, 'data'),
     ('cWorldView_setZoom', 0x00628130, 'func'),
     ('getPauseState', 0x006413E0, 'func'),
     ('g_textInputActive', 0x017EA344, 'data'),

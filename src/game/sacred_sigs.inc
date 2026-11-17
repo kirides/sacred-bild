@@ -23,6 +23,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"cEngine_worldMouse", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC D8 00 00 00 53 55 56 8B F1", 0, Sig::Take::Match, &Sacred::Addr::cEngine_worldMouse}, // 006172C0, 00617360, 00617360
     {"cEngine_handleZoomInput", "56 57 8B F1 E8 ?? ?? ?? ?? 80 38 00 75 61 A0 ?? ?? ?? ?? 84 C0", 0, Sig::Take::Match, &Sacred::Addr::cEngine_handleZoomInput}, // 0060DD20, 0060DDC0, 0060DDC0
     {"zoomInputCall", "8B CE E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 53 8B B9 CC 00 00 00", 2, Sig::Take::Match, &Sacred::Addr::zoomInputCall}, // 0060E6DC, 0060E77C, 0060E77C
+    {"g_zoomPrevStep", "8B 4C 86 08 D9 81 60 0B 00 00 D9 05 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::g_zoomPrevStep}, // 0095DCAC, 0095BCC4, 0095BCC4
     {"cWorldView_setZoom", "83 EC 50 53 56 8B F1 32 DB 57 D9 86 60 0B 00 00", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_setZoom}, // 00628130, 00628210, 00628210
     {"getPauseState", "A1 ?? ?? ?? ?? 53 33 DB 3B C3 0F 85 ?? ?? ?? ?? 56 6A 60 E8 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::getPauseState}, // 006413E0, 006414D0, 006414D0
     {"g_textInputActive", "A0 ?? ?? ?? ?? 83 EC 0C 84 C0 53 8B 5C 24 18 56", 1, Sig::Take::Abs32, &Sacred::Addr::g_textInputActive}, // 017EA344, 017E82C4, 017E82C4

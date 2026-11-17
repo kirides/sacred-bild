@@ -72,17 +72,29 @@ namespace
         cWorldView* view = engine->worldView();
         if (!view)
         {
+            g_orig(engine, edx, dt);
             return;
         }
-        dt = std::clamp(dt, 0.0f, 0.1f);
-        const float speed = c.zoomSpeed / 100.0f;
-        // Something else set the zoom (a game start, a script): follow it.
+        // Something else set the zoom between the frames (a game start, a script): follow it.
         if (!g_known || std::abs(view->zoom - g_shown) > 1e-4f)
         {
             g_target = g_shown = view->zoom;
             g_known = true;
             g_startApplied = false;
         }
+        // The game's function also carries Sacred Gear's per-frame tick (Gear hooks it), so it always runs, with the
+        // real dt. Its own zoom is undone below: a zoom between its steps would glide on to one, so the zoom it
+        // saw last is set to where the glide has nothing to do (below 1 a zoom above it only snaps from 1 up; from 1 up
+        // a zoom below it only snaps at 1 or below), and what the numpad keys add is overwritten by ours.
+        *Addr::g_zoomPrevStep = view->zoom < 1.0f ? 0.0f : 3.0f;
+        g_orig(engine, edx, dt);
+        view = engine->worldView();
+        if (!view)
+        {
+            return;
+        }
+        dt = std::clamp(dt, 0.0f, 0.1f);
+        const float speed = c.zoomSpeed / 100.0f;
         if (!g_startApplied && c.startZoom > 0.0f)
         {
             g_target = c.startZoom;
@@ -146,7 +158,7 @@ namespace
 void Zoom::install()
 {
     if (Config::camera.zoom == Camera::Zoom::Original || !Addr::cEngine_handleZoomInput || !Addr::zoomInputCall || !Addr::cWorldView_setZoom ||
-        !Addr::getPauseState || !Addr::g_textInputActive)
+        !Addr::getPauseState || !Addr::g_textInputActive || !Addr::g_zoomPrevStep)
     {
         return;
     }
