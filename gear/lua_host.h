@@ -104,4 +104,8 @@ namespace LuaHost
 
     // GetTickCount64() of the last in-game frame, 0 before the first.
     unsigned long long lastFrameTime();
+
+    // From the UI pass while a menu is up (no in-game frame runs there): ticks the mods so their menu UI draws,
+    // like idle() does for automation. A no-op in game and while automation ticks.
+    void menuFrame();
 }

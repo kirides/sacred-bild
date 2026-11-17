@@ -2640,6 +2640,8 @@ void LuaHost::configure(HMODULE module, const std::wstring& gameDir)
     g_gameDir = gameDir;
 }
 
+static ULONGLONG g_lastIdle = 0, g_lastMenuTick = 0;
+
 void LuaHost::frame(float dt)
 {
     g_lastFrame = GetTickCount64();
@@ -2660,8 +2662,21 @@ void LuaHost::frame(float dt)
     callKernel("tick", 1, kFrameBudget);
 }
 
+void LuaHost::menuFrame()
+{
+    // The menus run no in-game frame: tick from the UI pass, unless the automation thread already ticks them.
+    const ULONGLONG now = GetTickCount64();
+    if (now - g_lastFrame < 250 || now - g_lastIdle < 250 || now - g_lastMenuTick < 16)
+    {
+        return;
+    }
+    g_lastMenuTick = now;
+    idle();
+}
+
 void LuaHost::idle()
 {
+    g_lastIdle = GetTickCount64();
     std::unique_lock guard(g_running, std::try_to_lock);
     if (!guard.owns_lock())
     {

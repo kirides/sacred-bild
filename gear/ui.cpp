@@ -2,6 +2,7 @@
 #include "itemicon.h"
 #include "text.h"
 #include "automation.h"
+#include "lua_host.h"
 #include "log.h"
 #include "patch.h"
 #include "game/gear_addr.h"
@@ -741,6 +742,14 @@ namespace
 
     void drawLayer(Layer layer, IDirect3DDevice7* device)
     {
+        if (layer == Layer::Hud)
+        {
+            const uintptr_t m = manager();
+            if (m && (managerFlags(m) & (kManagerMenus | kManagerCinematic)) == kManagerMenus)
+            {
+                LuaHost::menuFrame();
+            }
+        }
         if (!device)
         {
             return;
