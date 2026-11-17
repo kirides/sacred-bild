@@ -90,6 +90,63 @@ gear.task(function()
             gear.wait(8)
         end
     end
+    if cfg.inspect then
+        -- what is around the hero: positions and kinds (to aim clicks at world containers and monsters deterministically)
+        local hero = gear.world.hero()
+        local hx, hy = hero:position()
+        local out = {hero = {x = hx, y = hy}, near = {}, items = {}}
+        for _, c in ipairs(gear.world.creatures_near(hx, hy, 3000, {limit = 300})) do
+            local x, y = c:position()
+            out.near[#out.near + 1] = {t = c:type_name(), id = c.id, x = x, y = y, hp = c:hp(), name = c:name(), dead = c:is_dead() or nil}
+        end
+        for _, it in ipairs(gear.world.items_near(hx, hy, 3000, {limit = 100})) do
+            out.items[#out.items + 1] = {t = it.type_name, x = it.x, y = it.y}
+        end
+        A.write('inspect.json', gear.json.encode(out))
+        A.screenshot('ct-15-inspect')
+    end
+    if cfg.fight then
+        -- deterministic aiming: the screen is isometric around the hero (calibrated: pixel = hero pixel + (0.89 * (dx - dy), 0.42 * (dx + dy)))
+        local hero = gear.world.hero()
+        local function px(wx, wy)
+            local hx, hy = hero:position()
+            return 800 + 0.89 * ((wx - hx) - (wy - hy)), 444 + 0.42 * ((wx - hx) + (wy - hy))
+        end
+        local log = {}
+        local target
+        local sx0, sy0 = hero:position()
+        for _, c in ipairs(gear.world.creatures_near(sx0, sy0, 2500, {limit = 200})) do
+            if c:type_name() == 'gob_warrior.grn' then target = c break end
+        end
+        log[#log + 1] = 'target ' .. tostring(target and target.id)
+        for i = 1, 60 do
+            if not target or target:is_dead() then break end
+            local x, y = target:position()
+            local sx, sy = px(x, y)
+            A.click(sx, sy) gear.wait(1)
+        end
+        log[#log + 1] = 'target dead ' .. tostring(target and target:is_dead()) .. ' hero hp ' .. tostring(hero:hp())
+        gear.wait(4)
+        A.screenshot('ct-16-after-fight')
+        local hx, hy = hero:position()
+        for _, it in ipairs(gear.world.items_near(hx, hy, 1500, {limit = 30})) do
+            log[#log + 1] = 'item ' .. tostring(it.type_name) .. ' ' .. (it.x - hx) .. ',' .. (it.y - hy)
+            if it.type_name ~= 'wegweiser_01.grn' then
+                local sx, sy = px(it.x, it.y)
+                A.click(sx, sy) gear.wait(4)
+            end
+        end
+        A.screenshot('ct-17-after-pickup')
+        A.write('fight.txt', table.concat(log, ';'))
+    end
+    if cfg.containers then
+        -- the chest and the barrels around the start (pixels of the 1600x900 window): walk there, open them
+        for i, spot in ipairs({{980, 430}, {690, 580}, {740, 750}, {930, 660}}) do
+            A.click(spot[1], spot[2]) gear.wait(7)
+            A.click(spot[1], spot[2]) gear.wait(3)
+            A.screenshot('ct-14-container' .. i)
+        end
+    end
     local bp = gear.inv.container('backpack')
     A.write('closedtest.json', gear.json.encode({in_game = ok, mode = gear.mp.mode(), gold = gear.world.hero() and gear.world.hero():gold() or -1, backpack = bp and #bp:items() or -1, types = (function() local l = {} for _, it in ipairs(bp and bp:items() or {}) do l[#l + 1] = tostring(it.type_name) .. '#' .. it.id end return table.concat(l, ',') end)()}))
     local count = bp and #bp:items() or -1
