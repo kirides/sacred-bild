@@ -811,6 +811,49 @@ namespace
         return 1;
     }
 
+    // native.net_ops() -> control, data, ready: the custom opcode ids and whether frames can go out.
+    int nativeNetOps(lua_State* L)
+    {
+        lua_pushnumber(L, NetMsg::controlOpcode());
+        lua_pushnumber(L, NetMsg::dataOpcode());
+        lua_pushboolean(L, NetMsg::opsReady());
+        return 3;
+    }
+
+    // native.net_configure(control, data) -> bool: set the opcode ids (before the first frame is sent).
+    int nativeNetConfigure(lua_State* L)
+    {
+        const lua_Number c = luaL_checknumber(L, 1), d = luaL_checknumber(L, 2);
+        lua_pushboolean(L, c >= 0 && c < 0x10000 && d >= 0 && d < 0x10000 &&
+                               NetMsg::setOpcodes(static_cast<uint16_t>(c), static_cast<uint16_t>(d)));
+        return 1;
+    }
+
+    // native.net_send_op(type, bytes) -> bool: one message of a custom opcode to the game server.
+    int nativeNetSendOp(lua_State* L)
+    {
+        const lua_Number type = luaL_checknumber(L, 1);
+        size_t n = 0;
+        const char* s = luaL_checklstring(L, 2, &n);
+        lua_pushboolean(L, type >= 0 && type < 0x10000 && NetMsg::sendOp(static_cast<uint16_t>(type), s, n));
+        return 1;
+    }
+
+    // native.net_take_op() -> type, sender slot, bytes | nil: the oldest custom opcode message received.
+    int nativeNetTakeOp(lua_State* L)
+    {
+        NetMsg::OpFrame f;
+        if (!NetMsg::takeOp(f))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, f.type);
+        lua_pushnumber(L, f.sender);
+        lua_pushlstring(L, reinterpret_cast<const char*>(f.data.data()), f.data.size());
+        return 3;
+    }
+
     // native.hero_saved() -> slot, network | nil: a hero file the game wrote.
     int nativeHeroSaved(lua_State* L)
     {
@@ -2502,6 +2545,10 @@ namespace
             {"net_kill", nativeNetKill},
             {"mp_send_frame", nativeMpSendFrame},
             {"mp_take_frame", nativeMpTakeFrame},
+            {"net_ops", nativeNetOps},
+            {"net_configure", nativeNetConfigure},
+            {"net_send_op", nativeNetSendOp},
+            {"net_take_op", nativeNetTakeOp},
             {"mp_info", nativeMpInfo},
             {"hero_saved", nativeHeroSaved},
             {"hero_name", nativeHeroName},

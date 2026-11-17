@@ -188,6 +188,106 @@ namespace
         return true;
     }
 
+    // Custom opcodes: message types above the stock range (the dispatcher's index check `cmp ecx, 0x1D4 / ja next`
+    // sends every type over 0x1D5 to the next message). The `ja` is redirected to opStub, which hands frames of the
+    // two configured types to onOp and then goes on to the next message like the stock code did.
+    std::atomic<uint16_t> g_opControl{NetMsg::kDefaultControl}, g_opData{NetMsg::kDefaultData};
+    bool g_ops = false;
+    std::deque<NetMsg::OpFrame> g_opFrames;     // under g_lock
+    size_t g_opBytes = 0;
+    constexpr size_t kOpQueueMax = 4096, kOpBytesMax = 4u << 20, kOpWireMax = 0x10000;
+    std::atomic<uint32_t> g_opSeen{0};
+
+    bool copyOp(const uint8_t* message, const uint8_t* payload, uint32_t size, std::vector<uint8_t>& out)
+    {
+        __try
+        {
+            if (size > kOpWireMax)
+            {
+                return false;
+            }
+            out.assign(payload, payload + size);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    void __stdcall onOp(const uint8_t* message, const uint8_t* payload, uint32_t size, uint32_t sender, uint32_t type)
+    {
+        const uint16_t t = static_cast<uint16_t>(type);
+        if (t != g_opControl.load(std::memory_order_relaxed) && t != g_opData.load(std::memory_order_relaxed))
+        {
+            return;
+        }
+        NetMsg::OpFrame f;
+        f.sender = sender;
+        f.type = t;
+        if (!copyOp(message, payload, size, f.data))
+        {
+            return;
+        }
+        if (g_opSeen.fetch_add(1) < 5)
+        {
+            LOG("NetMsg: custom opcode 0x{:X} received from slot {}, {} bytes", t, sender, size);
+        }
+        std::lock_guard lock(g_lock);
+        if (g_opFrames.size() >= kOpQueueMax || g_opBytes + f.data.size() > kOpBytesMax)
+        {
+            return;
+        }
+        g_opBytes += f.data.size();
+        g_opFrames.push_back(std::move(f));
+    }
+
+    // At the dispatcher's `ja next` (cmp ecx, 0x1D4): edx the type, esi the sender slot, ebx the payload size, ebp the
+    // payload, [esp+0x2C] the message. The jump to the next message is the one the `ja` took.
+    __declspec(naked) void opStub()
+    {
+        __asm {
+            pushad
+            push edx
+            push esi
+            push ebx
+            push ebp
+            push dword ptr [esp + 0x2C + 0x20 + 0x10]
+            call onOp
+            popad
+            jmp dword ptr [g_nextMessage]
+        }
+    }
+
+    bool installOps()
+    {
+        const uintptr_t sw = Gear::Addr::netDispatchSwitch;
+        if (!sw || !g_nextMessage)
+        {
+            return false;
+        }
+        // ja rel32 at sw+6; its target must be the next-message address the chat stub found
+        if (!Patch::verify(sw + 6, {0x0F, 0x87}))
+        {
+            LOG("NetMsg: the dispatcher's range check is not a ja at {:08X}: no custom opcodes", sw + 6);
+            return false;
+        }
+        int32_t rel = 0;
+        std::memcpy(&rel, reinterpret_cast<const void*>(sw + 8), 4);
+        if (sw + 0xC + rel != g_nextMessage)
+        {
+            LOG("NetMsg: the dispatcher's range check jumps elsewhere: no custom opcodes");
+            return false;
+        }
+        const int32_t stubRel = static_cast<int32_t>(reinterpret_cast<uintptr_t>(&opStub) - (sw + 0xC));
+        if (!Patch::value(sw + 8, static_cast<uint32_t>(stubRel)))
+        {
+            return false;
+        }
+        LOG("NetMsg: custom opcodes on (0x{:X} control, 0x{:X} data, range check at {:08X})", g_opControl.load(), g_opData.load(), sw + 6);
+        return true;
+    }
+
     decltype(Gear::Addr::heroSave)::Ptr g_heroSave = nullptr;
     std::deque<NetMsg::HeroSaved> g_heroSaves;     // under g_lock
 
@@ -275,6 +375,15 @@ namespace
 bool NetMsg::install()
 {
     g_channel = installChannel();
+    if (const char* ops = std::getenv("GEAR_NETOPS"))
+    {
+        unsigned c = 0, d = 0;
+        if (std::sscanf(ops, "%i,%i", &c, &d) == 2)
+        {
+            setOpcodes(static_cast<uint16_t>(c), static_cast<uint16_t>(d));
+        }
+    }
+    g_ops = g_channel && installOps();
     if (Gear::Addr::heroSave)
     {
         Patch::hook(g_heroSave, Gear::Addr::heroSave, hookHeroSave, "heroSave");
@@ -340,6 +449,55 @@ bool NetMsg::sendFrame(uint32_t slot, const uint16_t* units, size_t count)
     std::memcpy(data + 4, units, count * 2);
     const uint32_t size = static_cast<uint32_t>(4 + (count + 1) * 2);
     Gear::Addr::cNet_sendMessage(*Gear::Addr::g_pNet.get(), data, size, 3, 0);   // queued; its result says nothing more
+    return true;
+}
+
+bool NetMsg::opsReady()
+{
+    return g_ops && channelReady();
+}
+
+bool NetMsg::setOpcodes(uint16_t control, uint16_t data)
+{
+    if (control <= kStockMax || data <= kStockMax || control == data || control >= kOpMax || data >= kOpMax)
+    {
+        return false;
+    }
+    g_opControl = control;
+    g_opData = data;
+    return true;
+}
+
+uint16_t NetMsg::controlOpcode()
+{
+    return g_opControl;
+}
+
+uint16_t NetMsg::dataOpcode()
+{
+    return g_opData;
+}
+
+bool NetMsg::sendOp(uint16_t type, const void* data, size_t size)
+{
+    if ((type != g_opControl && type != g_opData) || size == 0 || size > kMaxOpPayload || !opsReady())
+    {
+        return false;
+    }
+    Gear::Addr::cNet_sendMessage(*Gear::Addr::g_pNet.get(), data, static_cast<uint32_t>(size), type, 0);
+    return true;
+}
+
+bool NetMsg::takeOp(OpFrame& out)
+{
+    std::lock_guard lock(g_lock);
+    if (g_opFrames.empty())
+    {
+        return false;
+    }
+    out = std::move(g_opFrames.front());
+    g_opFrames.pop_front();
+    g_opBytes -= out.data.size();
     return true;
 }
 

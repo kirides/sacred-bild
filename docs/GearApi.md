@@ -112,6 +112,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'game.hero_saved'` | The game wrote the hero file (`Save\HeroNN.pax`): `(slot, network)`. A network game does this every 5 minutes, when the player leaves and at merchants; the moment an item or gold that changed hands is safe in the player's own save. |
 | `'kill'` | A kill the local computer sent to the game (a hero's kill: `(kill)`, see `GearKill`). |
 | `'mp_message'` | A message of the mod channel (`gear.mp.send`) arrived: `(from, channel, payload)`. |
+| `'net_caps'` | The custom net messages became available, or the list of players who can use them changed (gear.net): `(caps)`, see `GearNetCaps`. |
 | `'realm.changed'` | `gear.realm.use` switched the online play server: `(realm)`. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'skillslot.key'` | A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it. |
@@ -210,6 +211,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `game` | `GearGame` | The game itself: difficulty and saving. |
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
 | `mp` | `GearMp` | Players of a network game, the host, the mod channel and the `kill` event. |
+| `net` | `GearNet` | Custom net messages: named channels between computers and the game server. |
 | `settings` | `GearSettings` | This mod's settings (declared in `mod.lua`, changed by the player in the mod manager). |
 | `keys` | `GearKeys` | This mod's declared key binds. |
 | `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
@@ -235,6 +237,7 @@ Forms:
 - `fun(event: 'game.hero_saved', fn: fun(slot: integer, network: boolean)): GearHandler`
 - `fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler`
 - `fun(event: 'mp_message', fn: fun(from: GearPlayer, channel: string, payload: table|string)): GearHandler`
+- `fun(event: 'net_caps', fn: fun(caps: GearNetCaps)): GearHandler`
 - `fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
 - `fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler`
@@ -1476,6 +1479,117 @@ What the `kill` event gets.
 | `killer` | `GearPlayer` | The player who killed it; nil if a creature or something else did. (optional) |
 | `award` | `integer` | Experience the killer got. |
 | `by_local` | `boolean` | The local hero killed it. |
+
+## Custom net messages (gear.net)
+
+Named channels between the mods of different computers (and the game server's scripts) over two message types of their own, above the game's range. They carry messages up to 256 KB, as bytes or tables (JSON), cut into pieces and paced by the library. A computer says HELLO when it joins; a server that supports them (the Sacred Gear game server, `Sacred.GameServer` of the SacredEngineRemake) answers with its limits and the list of players who can use them. The original `GameServer.exe` and hosts without it do not answer: `gear.net.supported()` stays false and `gear.mp.send` keeps using the chat carrier, which every server relays. `gear.mp.send` uses the custom messages by itself for players that can; mods of the auction house kind need no change.
+
+Every message names a channel (`'auction:bid'`); both sides ask for the same name. A channel's id is the FNV-1a hash of its name; two names with the same id are refused when the second is created. Messages for channels this computer has not created are ignored. The server puts the real sender into the message: the `from` a handler gets cannot be forged by the sender. Nothing is encrypted and a modified client can send anything: check what you receive.
+
+The two message types default to 0x1E0 (control) and 0x1E1 (data). A server with custom types of its own announces the data type itself; the control type is set with `gear.net.configure` before the game connects, with the environment variable `GEAR_NETOPS="0x1E0,0x1E1"`, or in the server's `NETOPS_CONTROL` / `NETOPS_DATA`.
+
+### GearNetChannel
+
+A named channel (`gear.net.channel`).
+
+| Field | Type | |
+|---|---|---|
+| `name` | `string` | The channel's name. |
+| `id` | `integer` | Its id on the wire (FNV-1a of the name). |
+
+#### `GearNetChannel:on(fn) -> fun(from: GearPlayer, payload: table|string)`
+
+Calls `fn(from, payload)` for every message that arrives on the channel. `from` is the sending player (slot 0 is the server); `payload` is a table if the sender sent one (JSON) and a string of bytes otherwise. An error in `fn` is logged and does not reach the game. Returns `fn`, for `GearNetChannel:off`.
+
+- `fn`: `fun(from: GearPlayer, payload: table|string)`
+- returns `fn` `fun(from: GearPlayer, payload: table|string)`
+
+#### `GearNetChannel:off(fn) -> boolean`
+
+Removes a handler added with `GearNetChannel:on`. Returns whether it was there.
+
+- `fn`: `fun(from: GearPlayer, payload: table|string)`
+- returns `removed` `boolean`
+
+#### `GearNetChannel:send(payload, to) -> boolean?, string?`
+
+Sends `payload` (a string of bytes, or a table sent as JSON, at most `gear.net.limits().max_message` bytes, 256 KB by default) to `to`: `'server'` (the game server's scripts), `'host'` (the default), `'all'` (everybody else) or a slot or player. The pieces leave over the next ticks, paced to the server's rate (64 KB/s by default); messages of one sender arrive in order. Only players that can use the custom messages get them (`gear.net.peer_supported`); the others are skipped silently. Not available (nil and the reason) when the server does not support the messages.
+
+- `payload`: `table|string`
+- `to`: `integer|GearPlayer|'server'|'host'|'all'` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?` - `'custom net messages are not available here ...'`, a bad target, `'too many messages are waiting to be sent'`, a message that is too large ...
+
+### GearNetCaps
+
+What the `net_caps` event gets.
+
+| Field | Type | |
+|---|---|---|
+| `supported` | `boolean` | The server supports the custom messages (the handshake is done). |
+| `peers` | `integer[]` | The slots of the players that can use them (this computer's slot included). |
+
+### GearNetLimits
+
+What `gear.net.limits` returns: the server's announced limits.
+
+| Field | Type | |
+|---|---|---|
+| `max_fragment` | `integer` | Bytes of one wire message (the library cuts messages to this). |
+| `max_message` | `integer` | Largest message. |
+| `bytes_per_second` | `integer` | The rate the server accepts from this computer. |
+| `in_flight` | `integer` | Messages of one sender the server follows at once. |
+
+### GearNetConfigureOpts
+
+Options of gear.net.configure.
+
+| Field | Type | |
+|---|---|---|
+| `control` | `integer` | The control message type (default 0x1E0). (optional) |
+| `data` | `integer` | The data message type (default 0x1E1). (optional) |
+
+### GearNet
+
+Reached as `gear.net`.
+
+Custom net messages: named channels between mods on different computers and the game server's scripts.
+
+#### `gear.net.channel(name, opts) -> GearNetChannel?, string?`
+
+The channel `name` (1 to 64 printable ASCII characters; use your mod's id as a prefix, `'auction:bid'`). The same name returns the same channel. nil and a message if the name is bad or has the same id as another channel's name. `opts` is reserved.
+
+- `name`: `string`
+- `opts`: `table` (optional)
+- returns `channel` `GearNetChannel?`
+- returns `error` `string?`
+
+#### `gear.net.supported() -> boolean`
+
+Whether the game server supports the custom messages (the handshake after joining is done). False in single player, before the answer and on servers without them.
+
+- returns `boolean`
+
+#### `gear.net.peer_supported(slot) -> boolean`
+
+Whether the player in `slot` (1 to 16) can use them (told by the server; this computer's slot included).
+
+- `slot`: `integer`
+- returns `boolean`
+
+#### `gear.net.limits() -> GearNetLimits?`
+
+The server's limits, nil while `supported()` is false.
+
+- returns `GearNetLimits?`
+
+#### `gear.net.configure(opts) -> boolean?, string?`
+
+Sets the two message types (`control`, `data`: above 0x1D5 and below 0x400, different) for servers that use other numbers than 0x1E0 / 0x1E1. Only before the game connects (nil and a message once the handshake started).
+
+- `opts`: `GearNetConfigureOpts`
+- returns `ok` `boolean?`
+- returns `error` `string?`
 
 ## Settings, key binds and the mod manager
 

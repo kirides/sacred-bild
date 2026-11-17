@@ -849,6 +849,7 @@ local C = {
     queue = {}, qhead = 1, qtail = 0, queued = 0, credit = 2048, number = 0, now = 0,
     loop = {}, partial = {}, force = false,
 }
+local N   -- the custom net messages (set below)
 mp._channel = C   -- for the kernel tests (names starting with _ are not part of the API)
 
 local band, bor, lshift, rshift = bit.band, bit.bor, bit.lshift, bit.rshift
@@ -941,10 +942,7 @@ function C.deliver(slot, data)
         log('gear.mp: a message from slot %s could not be read', tostring(slot))
         return
     end
-    local from = slot == 0 and {slot = 0, name = 'server', key = 'server', is_local = false, is_host = false}
-        or mp.player(slot)
-        or setmetatable({slot = slot, name = 'hero ' .. slot, key = '?', is_local = false, is_host = host_slot() == slot}, player_mt)
-    kernel.dispatch('mp_message', from, channel, payload)
+    kernel.dispatch('mp_message', C.player_of(slot), channel, payload)
 end
 
 -- gear.mp.send(channel, payload, to) -> true | nil, message. `to`: a slot, a player, 'host' (default) or 'all'.
@@ -983,6 +981,8 @@ function mp.send(channel, payload, to)
     for _, slot in ipairs(targets) do
         if slot == me and not (C.force and network) then
             C.loop[#C.loop + 1] = data
+        elseif slot ~= me and N.state == 'ready' and N.api.peer_supported(slot) and N.enqueue(N.mp_channel, data, 0x10 + slot) then
+            C.via_net = (C.via_net or 0) + 1   -- the custom opcode carries it
         else
             frames = frames or C.frames(data, C.number)
             for _, f in ipairs(frames) do
@@ -1042,9 +1042,287 @@ function C.receive(slot, s)
     C.deliver(slot, table.concat(out))
 end
 
+-- Custom net opcodes (gear.net, docs/GearServerMods.md): channels with a name, over two message types above the
+-- stock range. HELLO after joining; the server answers HELLO_ACK (limits, the data opcode) and PEERS (who else can),
+-- or says nothing (an original GameServer.exe / a host without it): then everything stays on the chat carrier.
+-- Native side: native.net_ops() -> control, data, ready; net_configure(control, data); net_send_op(type, bytes) -> bool;
+-- net_take_op() -> type, sender slot, bytes | nil. Data frame: [u32 channel id (FNV-1a of the name)][u8 flags: 1 first,
+-- 2 last, 4 JSON][u8 target: 0 server, 1 host, 0xFF all, 0x10 + slot][u16 message id][bytes], all little endian.
+N = {
+    control = 0x1E0, data = 0x1E1, state = 'idle', hello_at = 0, mask = 0, ack = nil, now = 0,
+    FRAGMENT = 4000, MAX_MESSAGE = 262144, RATE = 65536, INFLIGHT = 8, HELLO_TIMEOUT = 3, EXPIRE = 10,
+    MAX_PARTIAL_BYTES = 1048576, MAX_QUEUED = 1048576, PER_TICK = 16,
+    channels = {}, partial = {}, partial_bytes = 0, queue = {}, qhead = 1, qtail = 0, queued = 0, credit = 0, number = 0,
+    unknown = 0, dropped = 0, received = 0, sent = 0, supported = false, snapshot = '',
+}
+mp._net = N   -- for the kernel tests
+local net_api = {}
+N.api = net_api
+local channel_mt = {}
+channel_mt.__index = channel_mt
+
+local function fnv1a(s)
+    local M = 4294967296
+    local h = 0x811C9DC5
+    for i = 1, #s do
+        h = bit.bxor(h, sbyte(s, i)) % M
+        h = (bit.lshift(h, 24) % M + h * 0x193) % M      -- h * 0x01000193 mod 2^32: the prime is 2^24 + 0x193
+    end
+    return h
+end
+N.fnv1a = fnv1a
+local function u16(s, i) local a, b = sbyte(s, i, i + 1); return a + b * 256 end
+local function u32(s, i) local a, b, c, d = sbyte(s, i, i + 3); return a + b * 256 + c * 65536 + d * 16777216 end
+local function p16(v) return schar(band(v, 255), band(rshift(v, 8), 255)) end
+local function p32(v) return schar(band(v, 255), band(rshift(v, 8), 255), band(rshift(v, 16), 255), band(rshift(v, 24), 255)) end
+
+local function player_of(slot)
+    return slot == 0 and {slot = 0, name = 'server', key = 'server', is_local = false, is_host = false}
+        or mp.player(slot)
+        or setmetatable({slot = slot, name = 'hero ' .. slot, key = '?', is_local = false, is_host = host_slot() == slot}, player_mt)
+end
+C.player_of = player_of
+
+local function caps_changed()
+    local peers = {}
+    for slot = 1, 16 do if band(rshift(N.mask, slot - 1), 1) == 1 then peers[#peers + 1] = slot end end
+    local supported = N.state == 'ready'
+    local snapshot = supported and table.concat(peers, ',') or ''
+    if supported ~= N.supported or snapshot ~= N.snapshot then
+        N.supported, N.snapshot = supported, snapshot
+        kernel.dispatch('net_caps', {supported = supported, peers = peers})
+    end
+end
+
+local function net_reset()
+    N.state, N.mask, N.ack = 'idle', 0, nil
+    N.partial, N.partial_bytes = {}, 0
+    N.queue, N.qhead, N.qtail, N.queued = {}, 1, 0, 0
+    caps_changed()
+end
+
+-- gear.net.configure({control = 0x1E0, data = 0x1E1}): the custom message types (for servers with opcodes of their own);
+-- before the game connects. The data type is told by the server in the handshake as well.
+function net_api.configure(opts)
+    if type(opts) ~= 'table' then return nil, 'opts must be a table' end
+    if N.state ~= 'idle' then return nil, 'the handshake has already started' end
+    local c, d = opts.control or N.control, opts.data or N.data
+    if not (native.net_configure and native.net_configure(c, d)) then return nil, 'invalid message types (above 0x1D5, below 0x400, different)' end
+    N.control, N.data = c, d
+    return true
+end
+
+function net_api.supported() return N.state == 'ready' end
+function net_api.peer_supported(slot)
+    if N.state ~= 'ready' or type(slot) ~= 'number' or slot < 1 or slot > 16 or slot ~= math.floor(slot) then return false end
+    return band(rshift(N.mask, slot - 1), 1) == 1
+end
+function net_api.limits()
+    if N.state ~= 'ready' then return nil end
+    return {max_fragment = N.FRAGMENT, max_message = N.MAX_MESSAGE, bytes_per_second = N.RATE, in_flight = N.INFLIGHT}
+end
+
+function net_api.channel(name, opts)
+    if type(name) ~= 'string' or #name < 1 or #name > 64 or name:find('[^\32-\126]') then
+        return nil, 'a channel name is 1 to 64 printable ASCII characters'
+    end
+    local id = fnv1a(name)
+    local c = N.channels[id]
+    if c then
+        if c.name ~= name then return nil, ('channel %q has the same id as %q: rename one'):format(name, c.name) end
+        return c
+    end
+    c = setmetatable({name = name, id = id, handlers = {}}, channel_mt)
+    N.channels[id] = c
+    return c
+end
+
+-- ch:on(fn): fn(from, payload) for every message of the channel; fn is returned (give it to ch:off).
+function channel_mt:on(fn)
+    assert(type(fn) == 'function', 'fn must be a function')
+    self.handlers[#self.handlers + 1] = fn
+    return fn
+end
+function channel_mt:off(fn)
+    for i, h in ipairs(self.handlers) do
+        if h == fn then table.remove(self.handlers, i) return true end
+    end
+    return false
+end
+
+local function resolve_target(to)
+    if to == nil then to = 'host' end
+    if type(to) == 'table' then to = to.slot end
+    if to == 'server' then return 0 end
+    if to == 'host' then return 1 end
+    if to == 'all' then return 0xFF end
+    if type(to) == 'number' and to >= 1 and to <= 16 and to == math.floor(to) then return 0x10 + to end
+end
+
+-- Queues one message (string, or a table as JSON) as fragments; `target` is the wire byte. true | nil, message.
+function N.enqueue(c, payload, target)
+    if N.state ~= 'ready' then return nil, 'custom net messages are not available here (the server does not support them)' end
+    local flags, body = 0, payload
+    if type(payload) == 'table' then
+        local ok, text = pcall(json.encode, payload)
+        if not ok then return nil, tostring(text) end
+        flags, body = 4, text
+    elseif type(payload) ~= 'string' then
+        return nil, 'payload must be a table or a string'
+    end
+    if #body > N.MAX_MESSAGE then return nil, ('the message is larger than %d bytes'):format(N.MAX_MESSAGE) end
+    if N.queued + #body > N.MAX_QUEUED then return nil, 'too many messages are waiting to be sent' end
+    N.number = (N.number + 1) % 65536
+    N.qtail = N.qtail + 1
+    N.queue[N.qtail] = {c = c, flags = flags, target = target, id = N.number, body = body, pos = 1}
+    N.queued = N.queued + #body
+    return true
+end
+
+-- ch:send(payload, to) -> true | nil, message. `to`: 'server', 'host' (default), 'all', a slot or a player.
+function channel_mt:send(payload, to)
+    local target = resolve_target(to)
+    if not target then return nil, "to must be 'server', 'host', 'all', a slot (1 to 16) or a player" end
+    if target >= 0x11 and target - 0x10 == native.hero() then return nil, 'a custom net message cannot go to this computer' end
+    return N.enqueue(self, payload, target)
+end
+
+local function net_deliver(ch, slot, json_flag, body)
+    local payload = body
+    if json_flag then
+        payload = json.decode(body)
+        if payload == nil then N.dropped = N.dropped + 1 return end
+    end
+    local from = player_of(slot)
+    for _, fn in ipairs({unpack(ch.handlers)}) do
+        local ok, err = pcall(fn, from, payload)
+        if not ok then log('gear.net: handler of %s failed: %s', ch.name, tostring(err)) end
+    end
+end
+
+local function drop_partial(key)
+    local m = N.partial[key]
+    if m then N.partial_bytes = N.partial_bytes - m.size; N.partial[key] = nil end
+end
+
+local function net_receive(slot, s)
+    if #s < 8 then return end
+    local ch = N.channels[u32(s, 1)]
+    if not ch then N.unknown = N.unknown + 1 return end
+    local flags, id = sbyte(s, 5), u16(s, 7)
+    local first, last, js = band(flags, 1) ~= 0, band(flags, 2) ~= 0, band(flags, 4) ~= 0
+    local body = s:sub(9)
+    N.received = N.received + 1
+    if first and last then
+        if #body <= N.MAX_MESSAGE then net_deliver(ch, slot, js, body) end
+        return
+    end
+    local key = slot * 65536 + id
+    local m = N.partial[key]
+    if first then
+        drop_partial(key)
+        local open, oldest = 0, nil
+        for k, v in pairs(N.partial) do
+            if v.slot == slot then
+                open = open + 1
+                if not oldest or v.at < N.partial[oldest].at then oldest = k end
+            end
+        end
+        if open >= N.INFLIGHT then drop_partial(oldest) end
+        m = {slot = slot, ch = ch, json = js, parts = {}, size = 0, at = N.now}
+        N.partial[key] = m
+    elseif not m or m.ch ~= ch then
+        return
+    end
+    m.size = m.size + #body
+    N.partial_bytes = N.partial_bytes + #body
+    m.parts[#m.parts + 1] = body
+    m.at = N.now
+    if m.size > N.MAX_MESSAGE or N.partial_bytes > N.MAX_PARTIAL_BYTES then drop_partial(key) N.dropped = N.dropped + 1 return end
+    if last then
+        N.partial[key] = nil
+        N.partial_bytes = N.partial_bytes - m.size
+        net_deliver(ch, slot, m.json, table.concat(m.parts))
+    end
+end
+N.receive = net_receive
+
+local function net_control(s)
+    local kind = sbyte(s, 1)
+    if kind == 2 and #s >= 19 then
+        N.ack = {protocol = sbyte(s, 2), features = u32(s, 3), data = u16(s, 7), fragment = u16(s, 9), message = u32(s, 11),
+            rate = u32(s, 15), in_flight = sbyte(s, 19)}
+        local a = N.ack
+        N.FRAGMENT = math.max(64, math.min(a.fragment, 4000))
+        N.MAX_MESSAGE = a.message
+        N.RATE = math.max(1024, a.rate)
+        N.INFLIGHT = math.max(1, a.in_flight)
+        if a.data ~= N.data and native.net_configure and native.net_configure(N.control, a.data) then N.data = a.data end
+        N.state = 'ready'
+        N.credit = N.RATE
+        log('gear.net: the server supports custom net messages (fragment %d, message %d, %d B/s)', N.FRAGMENT, N.MAX_MESSAGE, N.RATE)
+        caps_changed()
+    elseif kind == 3 and #s >= 3 and N.state == 'ready' then
+        N.mask = u16(s, 2)
+        caps_changed()
+    end
+end
+
+-- Every tick: the handshake, frames in, frames out (paced to the server's announced rate), stale partial messages.
+function N.poll(dt)
+    N.now = N.now + (dt or 0)
+    if not native.net_ops then return end
+    local _, _, ready = native.net_ops()
+    local info = mp_info()
+    if not ready then
+        if N.state ~= 'idle' then net_reset() end
+        return
+    end
+    if N.state == 'idle' and info.network and native.hero() then
+        local hash = kernel.mod_set_hash and tonumber(kernel.mod_set_hash(), 16) or 0
+        if native.net_send_op(N.control, schar(1, 1) .. p32(3) .. p32(hash)) then N.state, N.hello_at = 'hello', N.now end
+    elseif N.state == 'hello' and N.now - N.hello_at > N.HELLO_TIMEOUT then
+        N.state = 'unsupported'
+        log('gear.net: no answer to HELLO: the server has no custom net messages; the chat carrier stays in use')
+    end
+    for _ = 1, 64 do
+        local t, slot, s = native.net_take_op()
+        if not t then break end
+        if t == N.control then net_control(s) elseif t == N.data and N.state == 'ready' then net_receive(slot, s) end
+    end
+    for k, m in pairs(N.partial) do
+        if N.now - m.at > N.EXPIRE then drop_partial(k) end
+    end
+    if N.state ~= 'ready' then return end
+    N.credit = math.min(N.credit + N.RATE * (dt or 0), N.RATE * 2)
+    local sent = 0
+    while N.qhead <= N.qtail and sent < N.PER_TICK and N.credit >= 0 do
+        local m = N.queue[N.qhead]
+        local len = #m.body
+        local take = math.min(N.FRAGMENT, len - m.pos + 1)
+        local flags = m.flags + (m.pos == 1 and 1 or 0) + (m.pos + take > len and 2 or 0)
+        local frame = p32(m.c.id) .. schar(flags, m.target) .. p16(m.id) .. m.body:sub(m.pos, m.pos + take - 1)
+        if not native.net_send_op(N.data, frame) then N.dropped = N.dropped + 1 else N.sent = N.sent + 1 end
+        N.credit = N.credit - #frame - 20
+        sent = sent + 1
+        m.pos = m.pos + take
+        if m.pos > len then
+            N.queue[N.qhead] = nil
+            N.qhead = N.qhead + 1
+            N.queued = N.queued - len
+        end
+    end
+    if N.qhead > N.qtail then N.queue, N.qhead, N.qtail = {}, 1, 0 end
+end
+
+-- gear.mp.send travels on this channel when the target can use it: the encoded message as raw bytes
+N.mp_channel = net_api.channel('gear.mp')
+N.mp_channel:on(function(from, data) C.deliver(from.slot, data) end)
+
 -- Every tick: the loopback messages of the last tick, the frames that came in, the frames to send (paced: about
 -- 8 KB/s and at most 4 frames a tick, so the game's send queue never floods).
 function kernel.poll_mp(dt)
+    N.poll(dt)
     C.now = C.now + (dt or 0)
     if #C.loop > 0 then
         local list = C.loop
@@ -3825,6 +4103,7 @@ local function make_env(mod)
     w.pickup_refused = function() return native.pickup_refused() end
     gear.world = w
     gear.mp = mp
+    gear.net = mp._net.api
     gear.game = {
         -- difficulty() -> 0..4: the difficulty level of the running game.
         difficulty = function() return native.difficulty() end,
@@ -4016,6 +4295,7 @@ local function mod_set_hash()
     end
     return bit.tohex(h)
 end
+kernel.mod_set_hash = mod_set_hash
 
 ---------------------------------------------------------------------------------------------------------------
 -- The catalog and the loader: every installed mod has an entry; mods are loaded and unloaded live as the player

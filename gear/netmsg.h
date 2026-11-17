@@ -38,6 +38,30 @@ namespace NetMsg
     // The oldest frame received and not taken yet: the sender's slot (0: the server) and its units.
     bool takeFrame(uint32_t& slot, std::vector<uint16_t>& units);
 
+    // Custom opcodes: two message types above the stock range (the stock dispatcher's table ends at 0x1D5; anything
+    // above goes to its default case, which only moves on to the next message). The receive side hands frames of
+    // these two types to takeOp; the send side queues one message of such a type like any other game message. The
+    // ids are configurable (setOpcodes before the first send, or GEAR_NETOPS="0x1E0,0x1E1" in the environment) so
+    // that servers with their own custom ids can be matched.
+    constexpr uint16_t kStockMax = 0x1D5;
+    constexpr uint16_t kOpMax = 0x400;
+    constexpr uint16_t kDefaultControl = 0x1E0, kDefaultData = 0x1E1;
+    constexpr size_t kMaxOpPayload = 4096 + 16;     // what one message may carry (the data frame header and 4000 bytes)
+
+    struct OpFrame
+    {
+        uint32_t sender = 0;            // the header's sender slot (0: the server)
+        uint16_t type = 0;
+        std::vector<uint8_t> data;      // the message payload
+    };
+    // Both hooks are in and a connection is up.
+    bool opsReady();
+    bool setOpcodes(uint16_t control, uint16_t data);
+    uint16_t controlOpcode();
+    uint16_t dataOpcode();
+    bool sendOp(uint16_t type, const void* data, size_t size);
+    bool takeOp(OpFrame& out);
+
     // The players (the object at g_pNetPlayers, ENG 0x7D7A70: +0x01 "this computer hosts", +0x14 the local slot,
     // +0x54 17 roster records of 0x342 bytes by slot: +0x00 occupied, +0x07 host, +0x16 the player name, +0x11E the
     // hero's name, both UTF-16; +0x172 the local hero's name from its save preview).

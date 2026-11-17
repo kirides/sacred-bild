@@ -213,3 +213,25 @@ two-client capture.
    client keeps, or is name + class enough for now?
 3. Grants through the owning client need the engine's sync path; if that proves unreliable in tests, is
    "host spawns the loot on the ground next to the player" an acceptable fallback?
+
+## Built: custom net messages (gear.net), 2026-11-17
+
+The chat carrier above stays (it works with every server). On top of it, two message types above the stock range carry
+named channels directly between Gear clients and the server's Lua scripts. Reference: `gear/meta/net.lua` (`docs/GearApi.md`),
+server side: SacredEngineRemake `Sacred.GameServer/README.md` ("Custom net messages for scripts") and `docs/protocol.md`.
+
+- **Stock client delivers them.** The dispatcher's range check (`cmp ecx, 0x1D4 / ja`) sends every type above 0x1D5 to "next
+  message"; `NetMsg` redirects that `ja` to a stub that queues frames of the two configured types (default 0x1E0 control,
+  0x1E1 data). Sending is `cNet_sendMessage` with the type. Verified in a real LAN game: the original GameServer.exe accepts
+  and silently drops both (a 4032 byte message too), the connection, the hero and the chat carrier stay fine; the remake
+  server's HELLO_ACK and PEERS reach the hook.
+- **Handshake.** HELLO after the hero joined (before admission the server would drop the connection); HELLO_ACK carries the
+  limits (fragment 4000, message 256 KB, 64 KB/s, 8 messages in flight) and the data type; PEERS lists the capable players.
+  No answer in 3 s = unsupported (original server): `gear.net.supported()` stays false, `gear.mp.send` keeps using chat.
+- **API.** `gear.net.channel(name):on(fn)` / `:send(payload, to)`, `supported()`, `peer_supported(slot)`, `limits()`,
+  `configure({control, data})`, event `net_caps`. `gear.mp.send` uses an internal channel (`gear.mp`) for capable players.
+- **Other opcode ids.** Server: `NETOPS_CONTROL` / `NETOPS_DATA` (cfg, command line, environment). Client: `gear.net.configure`
+  before connecting, or `GEAR_NETOPS="0x1E0,0x1E1"`; the data id is also taken from HELLO_ACK.
+- **Data frame:** `[u32 FNV-1a(channel)][u8 flags: 1 first, 2 last, 4 JSON][u8 target: 0 server, 1 host, 0xFF all, 0x10+slot][u16 id][bytes]`.
+- **Self test:** `gear/examples/netopstest` (`expect = 'stock'` or `'remake'`; the remake run needs `tools/gs-launcher` and
+  the server's `scripts-examples/net_echo.lua`); kernel tests in `gear/tests/kernel_test.lua`.
