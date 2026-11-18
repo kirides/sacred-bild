@@ -1,4 +1,5 @@
 #include "netmsg.h"
+#include "chat.h"
 #include "log.h"
 #include "patch.h"
 #include "game/gear_addr.h"
@@ -107,12 +108,42 @@ namespace
         return true;
     }
 
+    // A chat message that is no Gear frame: its type and text for gear.chat (it tells who sent the line the game adds
+    // next, gear/chat.cpp).
+    void noteChat(const uint8_t* message, const uint8_t* payload, uint32_t size, uint32_t sender)
+    {
+        uint16_t text[512];
+        size_t n = 0;
+        uint16_t type = 0;
+        __try
+        {
+            type = *reinterpret_cast<const uint16_t*>(message + 0xE);
+            if (type < 3 || type > 5 || size < 6 || size > 0x10000)
+            {
+                return;
+            }
+            const uint16_t* t = reinterpret_cast<const uint16_t*>(payload + 4);
+            const size_t max = (size - 4) / 2;
+            while (n < max && n < 512 && t[n] != 0)
+            {
+                text[n] = t[n];
+                ++n;
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return;
+        }
+        Chat::noteNet(type, sender, text, n);
+    }
+
     bool __stdcall onChat(const uint8_t* message, const uint8_t* payload, uint32_t size, uint32_t sender)
     {
         uint16_t units[NetMsg::kMaxFrameUnits];
         size_t n = 0;
         if (!copyFrame(message, payload, size, units, n))
         {
+            noteChat(message, payload, size, sender);
             return false;
         }
         std::lock_guard lock(g_lock);
@@ -510,6 +541,19 @@ bool NetMsg::sendFrame(uint32_t slot, const uint16_t* units, size_t count)
     return true;
 }
 
+bool NetMsg::sendChatForTest(uint16_t type, uint32_t target, const uint16_t* units, size_t count)
+{
+    if ((type < 3 || type > 5) || target > 16 || count == 0 || count > kMaxFrameUnits || !channelReady())
+    {
+        return false;
+    }
+    uint8_t data[4 + (kMaxFrameUnits + 1) * 2] = {};
+    std::memcpy(data, &target, 4);
+    std::memcpy(data + 4, units, count * 2);
+    const uint32_t size = static_cast<uint32_t>(4 + (count + 1) * 2);
+    Gear::Addr::cNet_sendMessage(*Gear::Addr::g_pNet.get(), data, size, type, 0);
+    return true;
+}
 bool NetMsg::opsReady()
 {
     return g_ops && channelReady();

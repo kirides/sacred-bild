@@ -36,6 +36,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cNet_sendMessage", "8B 44 24 10 8B 54 24 08 56 8B F1 8B 4C 24 10", 0, Sig::Take::Match, &Gear::Addr::cNet_sendMessage}, // 007D4300, 007D3B30
     {"g_pNet", "8A 8E 18 38 00 00 8B 56 40 51 8B 0D ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::g_pNet}, // 0182EBF0, 0182CB70
     {"netDispatchSwitch", "C1 EE 1B 8D 4A FF 81 F9 D4 01 00 00", 6, Sig::Take::Match, &Gear::Addr::netDispatchSwitch}, // 007DCF91, 007DC561
+    {"cUI_TextLines_add", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC A4 00 00 00 53 55", 0, Sig::Take::Match, &Gear::Addr::cUI_TextLines_add}, // 007237D0, 00723060
     {"cStats_setGoldCall", "E8 ?? ?? ?? ?? 8B 85 00 02 00 00 8B 8D A0 03 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_setGoldCall}, // 00461B74, 00461E64
     {"heroSave", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC A8 00 00 00", 0, Sig::Take::Match, &Gear::Addr::heroSave}, // 0061CD00, 0061CDA0
     {"g_pTextManager", "A1 ?? ?? ?? ?? 64 89 25 00 00 00 00 83 EC 0C 53", 1, Sig::Take::Abs32, &Gear::Addr::g_pTextManager}, // 017E7F68, 017E5EE8

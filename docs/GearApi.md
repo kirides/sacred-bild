@@ -114,6 +114,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'kill'` | A kill the local computer sent to the game (a hero's kill: `(kill)`, see `GearKill`). |
 | `'mp_message'` | A message of the mod channel (`gear.mp.send`) arrived: `(from, channel, payload)`. |
 | `'net_caps'` | The custom net messages became available, or the list of players who can use them changed (gear.net): `(caps)`, see `GearNetCaps`. |
+| `'chat.line'` | The game added a chat or message line: `(line)`, see `GearChatLine` (gear.chat). |
 | `'realm.changed'` | `gear.realm.use` switched the online play server: `(realm)`. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'skillslot.key'` | A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it. |
@@ -210,6 +211,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `drops` | `GearDrops` | Item drops: chance, rarity weights, the generator, the roll and select events. |
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
 | `game` | `GearGame` | The game itself: difficulty and saving. |
+| `chat` | `GearChat` | The game's chat and message lines: who sent them, the session's history, the game's overlay. |
 | `clipboard` | `GearClipboard` | The Windows clipboard: copy text out of the game. |
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
 | `mp` | `GearMp` | Players of a network game, the host, the mod channel and the `kill` event. |
@@ -241,6 +243,7 @@ Forms:
 - `fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler`
 - `fun(event: 'mp_message', fn: fun(from: GearPlayer, channel: string, payload: table|string)): GearHandler`
 - `fun(event: 'net_caps', fn: fun(caps: GearNetCaps)): GearHandler`
+- `fun(event: 'chat.line', fn: fun(line: GearChatLine)): GearHandler`
 - `fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
 - `fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler`
@@ -266,7 +269,7 @@ Removes a handler.
 
 #### `gear.emit(event, ...)`
 
-Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.`, `game.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep.
+Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.`, `game.`, `chat.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep.
 
 - `event`: `string`
 - `...`: `any`
@@ -837,6 +840,7 @@ Positions are world units (`TILE`, about 53.7, is one tile; the screen shows abo
 | `TILE` | `number` | World units per tile. |
 | `CLASSES` | `GearClassInfo[]` | The hero classes. |
 | `QUALITIES` | `GearQuality[]` | Item qualities in ascending order; `quality_rank` is the index. |
+| `QUALITY_COLORS` | `table<GearQuality, integer>` | The game's item label colours (ARGB) by quality: white, blue, yellow, gold, green for set items. |
 
 #### `gear.world.hero() -> Creature?`
 
@@ -876,6 +880,21 @@ Items lying in the world within `radius` of (x, y), nearest first.
 - `radius`: `number`
 - `opts`: `GearNearOpts` (optional)
 - returns `GearItem[]`
+
+#### `gear.world.quality_color(quality, set) -> integer`
+
+The colour of a quality (ARGB, `QUALITY_COLORS`): a quality name, or a rarity 0..15 with `set` for set items.
+
+- `quality`: `GearQuality|integer`
+- `set`: `boolean` (optional)
+- returns `integer`
+
+#### `gear.world.item_color(item) -> integer?`
+
+The colour the game gives an item's name and ground label (ARGB): as `quality_color`, but items for one class take that class's colour unless the game's UNIQUE_COLOR setting is on. Nil when the item is gone.
+
+- `item`: `GearItem|integer` - An item or its id.
+- returns `integer?`
 
 #### `gear.world.around(x, y, min, max) -> integer, integer`
 
@@ -1707,6 +1726,85 @@ Restricts the two message types (`control`, `data`: above 0x1D5 and below 0x400,
 - `opts`: `GearNetConfigureOpts`
 - returns `ok` `boolean?`
 - returns `error` `string?`
+
+## Chat lines (gear.chat)
+
+Every line the game adds to its message list at the top of the screen goes to the mods too: chat from other players (to everyone, to the team, private), the game server's messages, the game's own notes (a trade declined, a player joined, ...) and the player's own lines. The `chat.line` event gets each one as it comes; `history` keeps the last 200 of the session, also those that came before the mod loaded. For player chat Gear knows who sent it (from the network message the line was made of). A mod that shows the lines itself (a chat window) can keep the game's own lines off the screen with `replace_overlay`; they come back by themselves when it stops calling it. The lines of a window's own list (the trade window, the private conversation window) are passed on too, unless they are the same line the message list just got.
+
+### GearChatKind
+
+| Value | |
+|---|---|
+| `'global'` | A player's chat to everyone. |
+| `'team'` | A player's chat to the team. |
+| `'private'` | A private message to this player. |
+| `'server'` | A message of the game server. |
+| `'own'` | The player's own line, as the game echoes it. |
+| `'system'` | The game's own lines (and chat whose sender could not be told). |
+| `'notice'` | The game's separate notices (channel 0x10). |
+
+### GearChatRun
+
+A run of a line's text in one colour (the game's `\c` codes switch colours, `\r` goes back).
+
+| Field | Type | |
+|---|---|---|
+| `text` | `string` |  |
+| `color` | `integer` | ARGB. |
+
+### GearChatLine
+
+One line, as `chat.line` and `history` give it. Shared by every mod: read it, do not change it.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | Counts up from 1 in the session. |
+| `time` | `number` | `gear.time()` when it came. |
+| `text` | `string` | As the game got it (UTF-8), with its backslash codes (`\cAARRGGBB` colour, `\r` reset, `\g` image). |
+| `plain` | `string` | The text without the codes. |
+| `runs` | `GearChatRun[]` | The text in runs of one colour. |
+| `color` | `integer` | The line's colour (ARGB): the game's for its channel (white, light blue for private, tomato for the server, green for own lines) unless the line came with one (team chat: yellow). |
+| `channel` | `integer` | The game's channel (1 to 4, 0x10 notices). |
+| `kind` | `GearChatKind` |  |
+| `main` | `boolean` | The game's message list (false: a window's own list). |
+| `hidden` | `boolean` | The game did not show it (a mod replaced the overlay). |
+| `slot` | `integer` | Player chat: the sender's slot (1 to 16, 0 the server). (optional) |
+| `sender` | `string` | Player chat: the sender's name as the game shows it. (optional) |
+| `message` | `string` | Player chat: what was written, without the name the game puts before it. (optional) |
+
+### GearChat
+
+Reached as `gear.chat`.
+
+The game's chat and message lines.
+
+#### `gear.chat.available() -> boolean`
+
+Whether the lines can be read (the game's message list was found in this build).
+
+- returns `boolean`
+
+#### `gear.chat.history(n) -> GearChatLine[]`
+
+The last `n` lines of the session (all that are kept, up to 200, without `n`), oldest first.
+
+- `n`: `integer` (optional)
+- returns `GearChatLine[]`
+
+#### `gear.chat.replace_overlay() -> boolean`
+
+Call it every tick the mod shows the lines itself: the game then adds no line to its own message list (its chat and message lines at the top of the screen stay empty; the lines still reach `chat.line`). The game's lines come back half a second after the last call, so a mod that is switched off, stopped by an error or not drawn gives them back by itself. Several mods may call it. Returns `available()`.
+
+- returns `available` `boolean`
+
+#### `gear.chat.segments(text, color) -> GearChatRun[], string`
+
+A text with the game's backslash codes taken apart: its runs of one colour (`color` where no code says otherwise, default white) and the plain text. Also for item names from `gear.ui.item_tooltip_text`.
+
+- `text`: `string`
+- `color`: `integer` (optional)
+- returns `runs` `GearChatRun[]`
+- returns `plain` `string`
 
 ## Settings, key binds and the mod manager
 
@@ -3128,6 +3226,24 @@ Sets the flags `gear.mp.mode()` reads (`'single'`, `'lan'`, `'open'`, `'closed'`
 Sets or clears "the game server delivered the hero" (message 0x132), the proof of Closed Net that `gear.mp.mode()` reads; set, an `'open'` game reads as `'closed'`.
 
 - `on`: `boolean`
+
+#### `gear.auto.chat_add(text, channel, color) -> boolean`
+
+Adds a line to the game's message list as the game itself does (through Gear's hook: `chat.line` gets it, and a replaced overlay keeps it off the screen). In game only. For self tests of `gear.chat`.
+
+- `text`: `string` - UTF-8, with the game's backslash codes if wanted.
+- `channel`: `integer` (optional) - 1 (default) to 4, or 0x10.
+- `color`: `integer` (optional) - ARGB; 0 (default): the channel's colour.
+- returns `ok` `boolean`
+
+#### `gear.auto.chat_send(kind, target, text) -> boolean`
+
+Sends a chat message on the network as the game's chat does (a network game only): `'private'` to `target` (a slot), `'team'` or `'global'`. For self tests of `gear.chat` with two instances.
+
+- `kind`: `'private'|'team'|'global'`
+- `target`: `integer` - The slot for `'private'` (0 otherwise).
+- `text`: `string` - At most 127 characters.
+- returns `ok` `boolean`
 
 #### `gear.auto.quit(code)`
 

@@ -80,6 +80,9 @@ GEAR = [
     ('cNet_sendMessage', 0x007D4300, 'func'),
     ('g_pNet', 0x0182EBF0, 'data'),
     ('netDispatchSwitch', 0x007DCF91, 'code'),
+    # Chat lines (gear/chat.cpp): cUI_TextLines::add (thiscall (lines, channel, font, wstring*, color), ret 0x10), the
+    # message list every chat, server and game message line goes to (the UI manager's at +0x14C, 0x75A770).
+    ('cUI_TextLines_add', 0x007237D0, 'func'),
     # Gold (gear/world.cpp): the hero stats' gold setter (thiscall (creature + 0x3A8, gold), ret 4), as merchants use it;
     # it keeps the anti-cheat copy in step and marks the values for the next 0x11B update, also in network games.
     # No signature of its own (its body is nearly addGold's): found through a call (0x461B74: lea ecx, [ebp + 0x3A8]; fstp; call).

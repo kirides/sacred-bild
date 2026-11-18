@@ -30,6 +30,7 @@ local pickup_published
 local drops_pub = {sim = nil}
 save_block, save_calls, save_results = nil, {}, {}
 net_kills = {}
+chat_queue = {}
 hero_saves = {}
 local op_ids, op_ready, op_sent, op_in = {0x1E0, 0x1E1}, false, {}, {}
 mp_info_mock, hero_names, net_sent, net_frames, net_send_ok = {network = false}, {[1] = 'Aria'}, {}, {}, true
@@ -203,6 +204,10 @@ local native = {
     save_poll = function() return table.remove(save_results, 1) end,
     game_config = function() return {AUTOSAVE = '1', GFXLOADING = 'LOADING0.BMP'} end,
     net_kill = function() return table.remove(net_kills, 1) end,
+    chat_take = function() return table.remove(chat_queue, 1) end,
+    chat_hide = function(on) chat_hidden = on; chat_hide_calls = (chat_hide_calls or 0) + 1 end,
+    chat_info = function() return true, chat_hidden == true end,
+    item_color = function(id) return id == 50 and 0xFFF0E040 or nil end,
     mp_info = function() return mp_info_mock end,
     hero_saved = function() local h = table.remove(hero_saves, 1); if h then return h[1], h[2] end end,
     hero_name = function(id) return hero_names[id] end,
@@ -1723,6 +1728,42 @@ do
     hero_names[2], hero_names[3] = nil, nil
     op_ids = {0x1E0, 0x1E1}
     hero_id, objects[1], objects[2], objects[3] = saved_hero, saved1, saved2, saved3
+end
+
+-- Chat lines (gear.chat): history, segments, the chat.line event, replace_overlay and its lapse.
+do
+    local G = mrec.gear
+    local got = {}
+    local h = G.on('chat.line', function(l) got[#got + 1] = l end)
+    chat_queue[1] = {text = 'Aria\\r: hi \\cFFF0E040Sword\\r!', color = 0xFFFFFFFF, channel = 1, kind = 'global', main = true,
+        hidden = false, slot = 2, sender = 'Aria', message = 'hi Sword!'}
+    chat_queue[2] = {text = '\\gFFFFFFFF00000012 Ring', color = 0xFFFF6347, channel = 3, kind = 'server', main = true, hidden = false}
+    kernel.tick(0.016)
+    ok(#got == 2 and got[1].sender == 'Aria' and got[1].plain == 'Aria: hi Sword!' and got[2].plain == ' Ring',
+        'chat: chat.line with sender and plain text (' .. tostring(got[1] and got[1].plain) .. ')')
+    local runs = got[1] and got[1].runs or {}
+    ok(#runs == 3 and runs[2].text == 'Sword' and runs[2].color == 0xFFF0E040 and runs[3].color == 0xFFFFFFFF,
+        'chat: \\c starts a colour, \\r goes back')
+    local hist = G.chat.history()
+    ok(#hist == 2 and hist[2].id == hist[1].id + 1 and #G.chat.history(1) == 1, 'chat: history keeps the lines, oldest first')
+    local r2, p2 = G.chat.segments('a\\x\\cFF00FF00b')
+    ok(p2 == 'a\\xb' and r2[2].color == 0xFF00FF00, 'chat: unknown codes stay in the text')
+    for i = 1, 210 do chat_queue[#chat_queue + 1] = {text = 'l' .. i, color = 0, channel = 1, kind = 'system', main = true, hidden = false} end
+    for _ = 1, 4 do kernel.tick(0.016) end
+    ok(#G.chat.history() == 200 and G.chat.history()[200].text == 'l210', 'chat: at most 200 lines are kept')
+    G.off(h)
+    ok(G.chat.replace_overlay() == true, 'chat: replace_overlay says it works')
+    kernel.tick(0.016)
+    ok(chat_hidden == true, 'chat: the game lines are hidden while a mod asks')
+    kernel.tick(0.016)
+    kernel.tick(0.016)
+    ok(chat_hidden == false, 'chat: and come back when it stops asking')
+    local calls = chat_hide_calls
+    kernel.tick(0.016)
+    ok(chat_hide_calls == calls, 'chat: nothing is pushed while no mod asks')
+    ok(G.world.quality_color(13) == 0xFFF0E040 and G.world.quality_color('set') == 0xFF15FF25 and G.world.quality_color(3, true) == 0xFF15FF25,
+        'world.quality_color')
+    ok(G.world.item_color({id = 50}) == 0xFFF0E040 and G.world.item_color(51) == nil, 'world.item_color')
 end
 
 print(('%d passed, %d failed'):format(passes, failures))

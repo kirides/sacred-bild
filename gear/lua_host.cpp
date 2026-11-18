@@ -1,5 +1,6 @@
 #include "lua_host.h"
 #include "automation.h"
+#include "chat.h"
 #include "drops.h"
 #include "gamecfg.h"
 #include "gear.h"
@@ -1022,6 +1023,79 @@ namespace
         return 2;
     }
 
+    // native.chat_take() -> {text, color, channel, kind, main, hidden, slot?, sender?, message?} | nil: the oldest chat or
+    // message line the game added (gear/chat.cpp).
+    int nativeChatTake(lua_State* L)
+    {
+        static const char* const kKinds[] = {"system", "global", "team", "private", "server", "own", "notice"};
+        Chat::Line line;
+        if (!Chat::take(line))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        const std::string text = narrow(line.text);
+        const std::string sender = narrow(line.sender);
+        const std::string message = narrow(line.message);
+        const size_t kind = static_cast<size_t>(line.kind) < std::size(kKinds) ? static_cast<size_t>(line.kind) : 0;
+        const bool paired = !line.message.empty();
+        lua_createtable(L, 0, 9);
+        lua_pushlstring(L, text.data(), text.size());
+        lua_setfield(L, -2, "text");
+        lua_pushnumber(L, line.color);
+        lua_setfield(L, -2, "color");
+        lua_pushnumber(L, line.channel);
+        lua_setfield(L, -2, "channel");
+        lua_pushstring(L, kKinds[kind]);
+        lua_setfield(L, -2, "kind");
+        lua_pushboolean(L, line.main);
+        lua_setfield(L, -2, "main");
+        lua_pushboolean(L, line.hidden);
+        lua_setfield(L, -2, "hidden");
+        if (paired)
+        {
+            lua_pushnumber(L, line.slot);
+            lua_setfield(L, -2, "slot");
+            if (!sender.empty())
+            {
+                lua_pushlstring(L, sender.data(), sender.size());
+                lua_setfield(L, -2, "sender");
+            }
+            lua_pushlstring(L, message.data(), message.size());
+            lua_setfield(L, -2, "message");
+        }
+        return 1;
+    }
+
+    // native.chat_hide(on): some mod shows the lines itself (refreshed every tick; see Chat::setHidden).
+    int nativeChatHide(lua_State* L)
+    {
+        Chat::setHidden(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.chat_info() -> available, hidden
+    int nativeChatInfo(lua_State* L)
+    {
+        lua_pushboolean(L, Chat::available());
+        lua_pushboolean(L, Chat::hidden());
+        return 2;
+    }
+
+    // native.item_color(id) -> ARGB | nil: the game's label colour of a live item.
+    int nativeItemColor(lua_State* L)
+    {
+        const lua_Number id = luaL_checknumber(L, 1);
+        uint32_t color = 0;
+        if (id < 1 || id > 4294967295.0 || !Pickup::labelColor(static_cast<uint32_t>(id), color))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, color);
+        return 1;
+    }
+
     // native.mp_info() -> {network, is_host, host_slot (nil if unknown)}
     int nativeMpInfo(lua_State* L)
     {
@@ -1071,6 +1145,32 @@ namespace
     {
         NetMsg::setHeroFromServerForTest(lua_toboolean(L, 1) != 0);
         return 0;
+    }
+
+    // native.auto_chat_add(text, channel, color) -> bool (self tests: a line on the game's message list)
+    int nativeAutoChatAdd(lua_State* L)
+    {
+        size_t n = 0;
+        const char* s = luaL_checklstring(L, 1, &n);
+        const lua_Number channel = luaL_checknumber(L, 2), color = luaL_optnumber(L, 3, 0);
+        const bool ok = channel >= 0 && channel < 0x10000 && color >= 0 && color <= 4294967295.0 &&
+                        Chat::addForTest(widen(s, n), static_cast<uint16_t>(channel), static_cast<uint32_t>(color));
+        lua_pushboolean(L, ok);
+        return 1;
+    }
+
+    // native.auto_chat_send(type, target, text) -> bool (self tests: a chat message on the network)
+    int nativeAutoChatSend(lua_State* L)
+    {
+        const lua_Number type = luaL_checknumber(L, 1), target = luaL_checknumber(L, 2);
+        size_t n = 0;
+        const char* s = luaL_checklstring(L, 3, &n);
+        const std::wstring w = widen(s, n);
+        const bool ok = type >= 3 && type <= 5 && target >= 0 && target <= 16 &&
+                        NetMsg::sendChatForTest(static_cast<uint16_t>(type), static_cast<uint32_t>(target),
+                                                reinterpret_cast<const uint16_t*>(w.data()), w.size());
+        lua_pushboolean(L, ok);
+        return 1;
     }
 
     // native.hero_name(slot) -> UTF-8 | nil
@@ -2864,6 +2964,10 @@ namespace
             {"mp_info", nativeMpInfo},
             {"mp_mode", nativeMpMode},
             {"hero_saved", nativeHeroSaved},
+            {"chat_take", nativeChatTake},
+            {"chat_hide", nativeChatHide},
+            {"chat_info", nativeChatInfo},
+            {"item_color", nativeItemColor},
             {"hero_name", nativeHeroName},
             {"object", nativeObject},
             {"creatures_near", nativeCreaturesNear},
@@ -2965,6 +3069,8 @@ namespace
                 {"auto_network_flag", nativeAutoNetworkFlag},
                 {"auto_network_mode", nativeAutoNetworkMode},
                 {"auto_hero_from_server", nativeAutoHeroFromServer},
+                {"auto_chat_add", nativeAutoChatAdd},
+                {"auto_chat_send", nativeAutoChatSend},
                 {"auto_quit", nativeAutoQuit},
                 {"auto_start_gameserver", nativeAutoStartGameServer},
                 {nullptr, nullptr},

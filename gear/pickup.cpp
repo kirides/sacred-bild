@@ -123,3 +123,30 @@ uint32_t Pickup::refused()
 {
     return g_refused.load();
 }
+
+namespace
+{
+    bool callLabel(uintptr_t item, uint32_t& color)
+    {
+        __try
+        {
+            color = g_origLabel ? g_origLabel(reinterpret_cast<void*>(item), nullptr, nullptr)
+                                : Gear::Addr::cItem_labelColor(reinterpret_cast<void*>(item), nullptr);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+        return true;
+    }
+}
+
+bool Pickup::labelColor(uint32_t id, uint32_t& color)
+{
+    if (!Gear::Addr::cItem_labelColor)
+    {
+        return false;
+    }
+    const uintptr_t item = World::itemObject(id);
+    return item && callLabel(item, color);
+}
