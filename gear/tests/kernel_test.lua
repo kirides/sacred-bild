@@ -251,6 +251,7 @@ files.a = {
         gear.on('test.*', function(name, v) record.wild = (record.wild or '') .. name .. '=' .. tostring(v) .. ';' end)
         gear.events.declare('test.ping', {doc = 'b says hi', args = 'v'})
         record.declare_other = not pcall(gear.events.declare, 'session.x')
+        record.gear = gear
         record.game = gear.game
         gear.on('game.saved', function(slot, info) record.saved = {slot, info.size} end)
         gear.on('game.save_failed', function(slot, message) record.save_failed = {slot, message} end)
@@ -417,6 +418,8 @@ files.s = {
     }]],
     ['config.lua'] = 'return {limit = 3}',
     ['main.lua'] = [[
+        gear.events.declare('s.ping', 'from s')
+        gear.on('test.ping', function() end)
         srec = {changes = {}, gear = gear}
         gear.on('settings.changed', function(id, v) srec.changes[#srec.changes + 1] = id .. '=' .. tostring(v) end)
         gear.on('unload', function() srec.unloaded = (srec.unloaded or 0) + 1 end)
@@ -893,6 +896,7 @@ kernel.tick(0.016)
 local frames, ticks = srec.frames, srec.ticks
 ok(frames and frames > 0 and ticks and ticks > 0, 'mod s runs frame handlers and timers')
 ok(entry_of(adm, 's').state == 'on' and entry_of(adm, 't').state == 'on', 's and t are on')
+ok(rec.gear.events.declared('s.ping') and rec.gear.events.list('s.')[1].mod == 's', 'a mod that is on has its hook declared')
 ok(adm.set_enabled('s', false) == true, 'switch s off')
 ok(entry_of(adm, 't').state == 'blocked' and entry_of(adm, 't').reason:find('requires s', 1, true), 'dependent t is blocked at once')
 kernel.tick(0.016)
@@ -902,6 +906,8 @@ clock = clock + 5
 kernel.tick(0.016); kernel.tick(0.016)
 ok(srec.frames == frames and srec.ticks == ticks, 'no handler or timer of s runs any more')
 ok(handler_global(kernel, 'settings.changed', 'srec') == nil, 'handlers are dropped')
+ok(not rec.gear.events.declared('s.ping') and #rec.gear.events.list('s.') == 0, 'declarations of an unloaded mod are dropped')
+ok(rec.gear.events.declared('test.ping') and not pcall(rec.gear.emit, 'nodot'), 'other mods keep theirs; a provider going does not break emitters')
 press({CTRL, K}, true); kernel.tick(0.016); press({CTRL, K}, false)
 ok(trec.opened == 2, 'key binds of an unloaded mod are gone')
 kernel.flush()
