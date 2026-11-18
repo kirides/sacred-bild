@@ -114,6 +114,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'session.stop'` | That hero is gone. |
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'savegame.changed'` | The game loaded a savegame or hero file, or started a new game: `(kind, scope, number)` (see `gear.savegame`). |
+| `'savegame.leaving'` | Another savegame is loading (or a new game starts) and the running one ends: `(scope, kind)`; the data kept for `scope` can still be written with `gear.savegame.write_saved`. Fires before `savegame.changed`. |
 | `'savegame.saving'` | A savegame was written and the data of the running game is about to be kept for it: `(scope)`; write what changed now. |
 | `'game.save_failed'` | It could not be written. |
 | `'game.saved_other'` | A save the game or the player made: the quicksave, the savegame window, the game's own Auto-Save. |
@@ -256,6 +257,7 @@ Forms:
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
 - `fun(event: 'game.saved_other', fn: fun(slot: integer)): GearHandler`
 - `fun(event: 'savegame.changed', fn: fun(kind: 'load'|'hero'|'new', scope: string?, number: integer)): GearHandler`
+- `fun(event: 'savegame.leaving', fn: fun(scope: string?, kind: 'load'|'hero'|'new')): GearHandler`
 - `fun(event: 'savegame.saving', fn: fun(scope: string)): GearHandler`
 - `fun(event: 'game.hero_saved', fn: fun(slot: integer, network: boolean)): GearHandler`
 - `fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler`
@@ -2993,7 +2995,7 @@ Mods keep two kinds of data: what is the player's (settings, window places, a st
 
 - a save (the savegame window, the quicksave, the game's own auto save, `gear.game.save`) keeps the working copy for that savegame, in `saves/GAME05/` for `Save\GAME05.PAK` (first the event `savegame.saving`, so a mod can write what changed); - loading a savegame (from the menus, the savegame window, `gear.game.load`) replaces the working copy with the one kept for it, or empties it if there is none (then the mod starts from its defaults); a network game's hero file (`Save\Hero03.pax`) has the scope `HERO03` and is kept when the game writes it; - a new game empties the working copy; deleting a savegame (`gear.game.delete_save`) deletes what was kept for it.
 
-After a load or a new game the event `savegame.changed` `(kind, scope, number)` tells the mods to read their data again; progress since the last save is gone, as the game's own is. The scope is the file's name (`GAME05`); when the game reads its savegames from another folder than `Save` (ReBorn: `mods\reborn\save`) it has the folder in front: `mods_reborn_save-GAME05`.
+Before that, `savegame.leaving` `(scope, kind)` lets a mod write into the data kept for the game that ends. After a load or a new game the event `savegame.changed` `(kind, scope, number)` tells the mods to read their data again; progress since the last save is gone, as the game's own is. The scope is the file's name (`GAME05`); when the game reads its savegames from another folder than `Save` (ReBorn: `mods\reborn\save`) it has the folder in front: `mods_reborn_save-GAME05`.
 
 Most mods use `gear.store.game` (a JSON file with the usual handle) and never touch this API directly. Not for settings (use `gear.settings`) and not for what all savegames share (use `gear.store.file`).
 
@@ -3030,6 +3032,16 @@ A file of this mod's data of the running game (`.json` or `.txt`, a name of lett
 
 Writes a file of this mod's data of the running game (atomic, at most 8 MB).
 
+- `name`: `string`
+- `text`: `string`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.savegame.write_saved(scope, name, text) -> boolean?, string?`
+
+Writes a file of the data kept for savegame `scope` (not the running game's own). For what a mod learns after the savegame was written and must attribute to it, such as the time played when the game ends: write it in the handler of `savegame.leaving`.
+
+- `scope`: `string`
 - `name`: `string`
 - `text`: `string`
 - returns `ok` `boolean?`

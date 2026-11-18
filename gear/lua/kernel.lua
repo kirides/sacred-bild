@@ -4972,6 +4972,13 @@ local function make_env(mod)
             return native.scope_write(mod.dir, kernel.savegame.working, name, text)
         end,
         -- read_saved(scope, name) -> text | nil, message: a file of the data kept for another savegame.
+        -- write_saved(scope, name, text) -> true | nil, message: a file of the data kept for savegame `scope` (what the mod
+        -- learned after the savegame was written, e.g. when it ends: see the event 'savegame.leaving').
+        write_saved = function(scope, name, text)
+            assert(type(scope) == 'string' and type(name) == 'string' and type(text) == 'string', 'scope, name and text must be strings')
+            if scope == kernel.savegame.working then return nil, 'not a savegame scope' end
+            return native.scope_write(mod.dir, scope, name, text)
+        end,
         read_saved = function(scope, name)
             assert(type(scope) == 'string' and type(name) == 'string', 'scope and name must be strings')
             return native.scope_read(mod.dir, scope, name)
@@ -5764,6 +5771,8 @@ function kernel.savegame.poll()
     while true do
         local kind, number, scope = native.game_command()
         if not kind then return end
+        -- Before the working copy is replaced: a mod may still write into the data kept for the game that ends.
+        kernel.dispatch('savegame.leaving', kernel.savegame.scope, kind)
         kernel.savegame.kind = kind
         kernel.savegame.scope = kind ~= 'new' and scope or nil
         kernel.savegame.each(kernel.savegame.enter)

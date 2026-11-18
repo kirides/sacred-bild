@@ -13,7 +13,7 @@
 --:   (`Save\Hero03.pax`) has the scope `HERO03` and is kept when the game writes it;
 --: - a new game empties the working copy; deleting a savegame (`gear.game.delete_save`) deletes what was kept for it.
 --:
---: After a load or a new game the event `savegame.changed` `(kind, scope, number)` tells the mods to read their data again;
+--: Before that, `savegame.leaving` `(scope, kind)` lets a mod write into the data kept for the game that ends. After a load or a new game the event `savegame.changed` `(kind, scope, number)` tells the mods to read their data again;
 --: progress since the last save is gone, as the game's own is. The scope is the file's name (`GAME05`); when the game reads its
 --: savegames from another folder than `Save` (ReBorn: `mods\reborn\save`) it has the folder in front: `mods_reborn_save-GAME05`.
 --:
@@ -56,6 +56,15 @@ function GearSavegame.read(name) end
 ---@return boolean? ok
 ---@return string? error
 function GearSavegame.write(name, text) end
+
+--- Writes a file of the data kept for savegame `scope` (not the running game's own). For what a mod learns after the savegame was
+--- written and must attribute to it, such as the time played when the game ends: write it in the handler of `savegame.leaving`.
+---@param scope string
+---@param name string
+---@param text string
+---@return boolean? ok
+---@return string? error
+function GearSavegame.write_saved(scope, name, text) end
 
 --- A file of the data kept for another savegame (for a list that shows what each savegame holds).
 ---@param scope string
