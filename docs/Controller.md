@@ -39,6 +39,9 @@ Default layout ("LT+" = with LT held):
 | L3 / R3 | Show names (Alt) / overview map (Tab) | Collect all / cursor mode on and off |
 | LB | Stand still (Ctrl) | Mod menu (Sacred Gear) |
 
+Unbound by default (give them a button on the Options' Controller page): *Next party hero* / *Previous party hero*
+(PageDown / PageUp: the Companions mod switches the hero you play), and a few window keys.
+
 ## Menus and windows
 
 In menus and windows (and in game in cursor mode, e.g. for a conversation the game shows as a window SacredBild

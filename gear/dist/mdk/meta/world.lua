@@ -349,6 +349,21 @@ function Creature:order_ability(ability, target, y) end
 ---@return string? error
 function Creature:set_name(name) end
 
+--- Lets a party hero drink a potion from its own backpack, as the potion keys do for the controlled hero (the game
+--- picks the potion). Fails if it carries none.
+---@param kind? 'health'|integer `'health'` (default, what Space drinks) or the game's potion kind number.
+---@return boolean? ok
+---@return string? error
+function Creature:drink_potion(kind) end
+
+--- Brings a fallen party hero back (`gear.party`). The engine removes a fallen companion from the world (with what
+--- it wears and carries) about 25 seconds after it fell, as a network game removes a dead player's hero: revive it
+--- before that.
+---@param hp? number Hit points (1 to the maximum; default a quarter of the maximum).
+---@return boolean? ok
+---@return string? error
+function Creature:revive(hp) end
+
 --- Gives a party hero experience through the game's own gain (it levels up with skill points). Not shared.
 ---@param amount number
 ---@return boolean? ok

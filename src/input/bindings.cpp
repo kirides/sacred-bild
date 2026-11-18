@@ -59,6 +59,8 @@ namespace
         {"ZoomOut", "Zoom out", "Game", VK_SUBTRACT, Press::Hold, layer(Left)},
         {"Cursor", "Cursor mode on / off", "Game", 0, Press::Tap, layer(R3)},
         {"ModMenu", "Mod menu (Sacred Gear)", "Game", 0, Press::Tap, layer(LB)},
+        {"PartyNext", "Next party hero (PageDown, mods)", "Game", VK_NEXT, Press::Tap, none},
+        {"PartyPrevious", "Previous party hero (PageUp, mods)", "Game", VK_PRIOR, Press::Tap, none},
     };
     static_assert(std::size(kInfo) == Bindings::actionCount);
 

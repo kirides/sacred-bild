@@ -480,7 +480,7 @@ game's hero file format (the engine's own writer), `hero_files()` lists those an
 the engine's own hero loader (a developer command loads a hero file into object 2 the same way): level, attributes,
 skills, combat arts, equipment and backpack come along. `mercenaries()` lists the game's own mercenaries that follow
 the party; the creature orders, `abilities`, `action` and `equipment` work for them too (their own AI keeps running;
-their quests stay the game's). `creature:equipment()` lists what a hero or mercenary wears. Id 2 is never used: the engine
+their quests stay the game's). `creature:equipment()` lists what a hero or mercenary wears. `creature:drink_potion()` lets a party hero drink a healing potion from its own backpack (what Space does for the controlled one), `creature:revive(hp)` brings a fallen one back (the engine removes a fallen companion about 25 seconds after it fell). Id 2 is never used: the engine
 moves object 2 with the arrow keys in single player (a developer feature).
 
 In a network game the functions refuse: there the hero ids belong to the players, and objects tick only on the

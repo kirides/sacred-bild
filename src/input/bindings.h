@@ -24,6 +24,7 @@ namespace Bindings
         QuickSave, QuickLoad, Pause, ZoomIn, ZoomOut,
         Cursor,         // switches the sticks to moving the cursor in game (and back)
         ModMenu,        // Sacred Gear's mod menu: the mods' hotkeys and tools as buttons the pad can press
+        PartyNext, PartyPrevious,   // PageDown / PageUp: the Companions mod plays the next / previous hero of the party
         Count
     };
     constexpr int actionCount = static_cast<int>(Action::Count);
