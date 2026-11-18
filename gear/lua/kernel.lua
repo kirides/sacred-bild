@@ -4618,6 +4618,15 @@ local function make_env(mod)
         if h.event == 'drops.roll' or h.event == 'drops.select' then D.dirty = true end
     end
     env.gear = gear
+    -- gear.lookup: a library shipped in the DLL (lua/lookup.lua), run in this mod's environment.
+    do
+        local source = native.builtin and native.builtin('lookup')
+        local chunk = source and native.load(source, '@gear/lookup.lua', env)
+        if chunk then
+            local ok, lib = pcall(chunk)
+            if ok then gear.lookup = lib else native.log('[' .. mod.id .. '] gear.lookup: ' .. tostring(lib)) end
+        end
+    end
     return env
 end
 

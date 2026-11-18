@@ -7,7 +7,7 @@ import os
 import re
 
 # The meta files in the order they appear in the reference.
-FILES = ['gear.lua', 'data.lua', 'world.lua', 'drops.lua', 'game.lua', 'realm.lua', 'mp.lua', 'net.lua', 'chat.lua', 'mods.lua', 'inv.lua', 'ui.lua', 'ui_widgets.lua', 'auto.lua']
+FILES = ['gear.lua', 'data.lua', 'world.lua', 'drops.lua', 'game.lua', 'realm.lua', 'mp.lua', 'net.lua', 'chat.lua', 'mods.lua', 'inv.lua', 'lookup.lua', 'ui.lua', 'ui_widgets.lua', 'auto.lua']
 
 
 class Param:
