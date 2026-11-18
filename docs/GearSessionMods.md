@@ -70,7 +70,7 @@ Mods screen (F11) lists them with their settings and keys; choices are saved in 
 
 **Hotkeys** (rebindable in the Mods screen, Keys page): `sessiontracker` F2 (`panel`), `lootlog` F3 (`panel`), `damagemeter` F7
 (`panel`), `view` and `reset` (both unbound by default). F7 is also the default of the server mods `achievements`, `serverfeed` and
-`buildsharer`: if you run those too, both fire on one press, so rebind one side (see [mods/README.md](mods/README.md#hotkeys-and-the-clashes-in-the-defaults)).
+`buildsharer`: if you run those too, both fire on one press, so rebind one side (see [Hotkeys](https://github.com/kirides/sacred-gear-mods/blob/main/docs/Hotkeys.md#hotkeys-and-the-clashes-in-the-defaults)).
 
 **Settings** (Mods screen, Settings page):
 

@@ -53,7 +53,7 @@ right now, and a short note confirms each save.
 
 ![An autosave note](docs/images/gear-autosave.jpg)
 
-The loot filter and the layout editor are in this repository (`gear/examples`); the shared stash, the autosave and
+The loot filter, the layout editor, the shared stash, the autosave and
 more are in [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods). A mod is a folder in the game's `mods`
 folder: copy it in, press F11, switch it on. Writing your own is covered in [Sacred Gear](docs/Gear.md).
 

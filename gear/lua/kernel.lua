@@ -2797,7 +2797,7 @@ local function make_ui(mod)
     end
 
     -- Layout editing (like an "edit mode" in other games): the panels of every mod show their ids and their resize
-    -- grips while it is on; a layout editor (gear/examples/layout) moves the game's windows too.
+    -- grips while it is on; a layout editor (the layout mod of sacred-gear-mods) moves the game's windows too.
     -- ui.nav_modal(on): the mod's screen takes the controller alone while on: the pad's D-pad only reaches its
     -- widgets (and nothing else), B is ui.back_pressed(), and the mod menu button is not offered.
     function ui.nav_modal(on)

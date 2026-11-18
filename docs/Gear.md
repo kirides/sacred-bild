@@ -206,7 +206,7 @@ changes: `c:set_hp(hp)` (1..max: mods do not kill through it), `c:set_gold(n)`, 
 
 Pickup rules hold in single player and for the host's own hero; a network client's pickups go through the host
 (its own message) and are not filtered. Item ids are only valid while the item exists: a mod that filters loot looks
-at the items around the hero every fraction of a second and hands over the current list (`gear/examples/lootfilter`).
+at the items around the hero every fraction of a second and hands over the current list (the `lootfilter` mod in [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods)).
 
 #### Saving
 
@@ -410,7 +410,7 @@ layout keeps its places when the resolution changes. The game's own windows are 
 
 | | |
 |---|---|
-| `edit_mode()`, `set_edit_mode(on)` | The edit mode: a flag for every mod (panels get a highlighted frame); a layout editor turns it on and draws its overlays (`gear/examples/layout`, its "Edit layout" button while Alt is held). |
+| `edit_mode()`, `set_edit_mode(on)` | The edit mode: a flag for every mod (panels get a highlighted frame); a layout editor turns it on and draws its overlays (the `layout` mod in [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods), its "Edit layout" button while Alt is held). |
 | `panels()` | The panels of every mod drawn this tick (those not drawn yet: as of the last tick): `{key, mod, id, title, x, y, w, h, resizable, min_width, min_height, layer}`. |
 | `set_panel_rect(key, x, y, w, h)` | Puts any mod's panel at (x, y) of the canvas and, if it is resizable, makes it w x h (`nil`: the size stays; never below its minimum); kept in the layout, taken the next time its mod draws it. False for an unknown panel. |
 | `reset_panel(key)` | That panel back to the place and size its mod gives it. |
@@ -487,7 +487,7 @@ and in the Keys page (both still fire; rebind one).
 Default hotkeys of the mods in this repository and the examples: F11 the Mods screen, F5 the loot
 filter's panel, F4 the widget gallery of `uidemo`, F2 / F3 the panels of `sessiontracker` and `lootlog`, F7 the panel of `damagemeter`, `achievements`,
 `buildsharer` and the list of `serverfeed` (four mods share it), F8 the panels of `bounty` and `questhelper` (also the game's quick load);
-in `sacred-gear-mods`: F6 the autosave panel, F10 the shared stash. The clashes and how to rebind: [docs/mods/README.md](mods/README.md#hotkeys-and-the-clashes-in-the-defaults).
+in `sacred-gear-mods`: F6 the autosave panel, F10 the shared stash. The clashes and how to rebind: [Hotkeys](https://github.com/kirides/sacred-gear-mods/blob/main/docs/Hotkeys.md#hotkeys-and-the-clashes-in-the-defaults).
 None is a key of the game: the screen marks a bind that is also one of the game's own hotkeys (digits, Q W E R B, A, I, F,
 C, L, M, Tab, O, S, H, N, P, Space, Esc, + and -, F8 quick load, F9 quick save; the game reacts to them with any modifiers held) as
 a conflict with "The game", like a clash between two mods.
@@ -596,24 +596,14 @@ faults returns nil and a message instead of crashing the game.
 
 ### Examples
 
-User documentation of the session mods and of the client mods of the game server's Lua mods (install, hotkeys, settings, panels): [Session mods](GearSessionMods.md) and [docs/mods](mods/README.md).
+User documentation of the session mods and of the client mods of the game server's Lua mods (install, hotkeys, settings, panels): [Session mods](GearSessionMods.md) and [the docs of sacred-gear-mods](https://github.com/kirides/sacred-gear-mods/tree/main/docs).
 
-`gear/examples` in the repository:
+`gear/examples` in the repository (the mods players use, such as the loot filter, the layout editor, the realm picker, the Twitch Integration and the server mod clients, live in [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods); copy them from there or from its release zip):
 
 | Mod | |
 |---|---|
 | `hello` | The smallest mod: events and the creature types. |
-| `twitch_integration` | The Twitch connector's pipe, mapped by `custom.lua` to actions, offered one at a time inside a game as `twitch.command`. |
-| `twi_sacred` | The actions: monsters spawned just out of sight and labelled "<viewer>'s <monster>", gold, hit points (also for a few seconds), teleport. Set `config.monsters` to type names of this game (the selftest writes them all). |
 | `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F4) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
-| `lootfilter` | A loot filter: the hero picks up only items for its class (or chosen classes), above a minimum quality, with per-category rules and potion choices; filtered items' labels are dimmed; an overlay shows the rules; the rules are declared settings (the Mods screen shows them) and a panel of its own (F5 or the overlay's button) changes the same values. An old `settings.json` is migrated once. Self test with `-gear-auto`. |
-| `bounty` | The client of the server's bounty board (`scripts-examples/bounty_board.lua` of the SacredEngineRemake game server): the bounties, the hero's own progress, time left and reward in a panel (F8, rebindable) and as a small tracker, received over the net channel `bounty:state` (`gear.net`; the original GameServer.exe has no board and the panel says so). |
-| `achievements` | The client of the game server's `scripts-examples/achievements.lua` (SacredEngineRemake): a toast at the top of the screen for every achievement unlocked and for the daily login reward, and a panel (F7) with the login streak, tomorrow's reward and every achievement with its progress, over the custom net channel `achievements:sync` (`gear.net`). Settings: toasts on/off, toast time. Without that server script (or on the original GameServer.exe) the panel says so. No self test: it needs a running server with the script. |
-| `buildsharer` | Needs the SacredEngineRemake game server with `scripts-examples/build_sharer.lua`. A panel (F7): publish your hero build (the server reads class, level, skills and equipment itself; the mod sends a title, note, tags and the best items you carry) and browse, filter and fetch the builds others shared; fetched builds can be kept in a file ("Saved"). Settings: title, note, tags. `gear/tests/modmock` has a smoke test without the game. |
-| `questhelper` | A panel (F8): quest items in your backpack and lying near your hero (read by the mod), and, from a SacredEngineRemake server with `scripts-examples/quest_helper.lua` and hero data, the quest records of your hero with the names, areas and hints the server owner wrote, who else has them, and a line on the screen when one changes. It cannot show the game's quest journal (neither Gear nor the server can read it). |
-| `realms` | The realm picker: a page in the mod manager (Mods > Realm > More) that chooses the online play server for Closed / Open Internet. `realmtest` is its self test: it chooses a realm and drives the menus (`mode = 'lan'` in its `config.lua` opens LAN instead). See [Realms](#realms). |
-| `layout` | A layout editor in the manner of an MMO's edit mode (its "Edit layout" button, top left while Alt shows the game's labels; Done ends it; no key binding): every open game window (all it draws, its tabs too) and mod panel gets a translucent blue overlay with its name, and the game's tooltips stay hidden under it; click one to select it (gold) and drag it anywhere on its overlay; it snaps to the screen's edges and centre and to the other frames (Shift: freely); arrow keys nudge the selected one by a virtual unit (Shift: 10); its popup shows the place, resets it and sizes resizable panels (or drag the corner); a click on empty space deselects. Kept in `mods\gear_layout.json`. Self test (run it twice: select, drag, nudge, resize, then check the restore and reset). |
-| `serverfeed` | On-screen announcements of the SacredEngineRemake game server's scripts over `gear.net`: rare and unique drops (`rare_drops.lua`) and hero deaths (`graveyard.lua`) as lines in the game, and a list of the latest of both (F7). Does nothing on a server without those scripts. See [Server mods](GearServerMods.md#statistics-mods-and-the-server-feed). |
 | `itemicontest` | `gear.ui.item_icon`: a row of weapon and armour models by type id and a row from live items; checks that nothing is left behind. |
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
 | `mptest` | An automation run: the hero's name, key and host, gold through the engine's setter, and a 5000-byte table through the mod channel (`-gear-load=1 -gear-mods=mptest`: the loopback; config `mode = 'lan'`: hosts a LAN game and also sends to its own slot through the real chat carrier). |
