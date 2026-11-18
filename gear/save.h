@@ -47,6 +47,9 @@ namespace Save
         bool ok = false;
         std::string message;    // why not, if !ok
         FileInfo info;          // the file after the write
+        // A save the game made on its own, or the player's (quicksave, savegame window, the game's Auto-Save at a
+        // script's command): not one a mod asked for. Only `slot` and `ok` are set.
+        bool external = false;
     };
     bool takeResult(Result& out);
 }

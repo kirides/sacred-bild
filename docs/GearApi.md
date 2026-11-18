@@ -109,6 +109,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'session.stop'` | That hero is gone. |
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
 | `'game.save_failed'` | It could not be written. |
+| `'game.saved_other'` | A save the game or the player made: the quicksave, the savegame window, the game's own Auto-Save. |
 | `'game.hero_saved'` | The game wrote the hero file (`Save\HeroNN.pax`): `(slot, network)`. A network game does this every 5 minutes, when the player leaves and at merchants; the moment an item or gold that changed hands is safe in the player's own save. |
 | `'kill'` | A kill the local computer sent to the game (a hero's kill: `(kill)`, see `GearKill`). |
 | `'mp_message'` | A message of the mod channel (`gear.mp.send`) arrived: `(from, channel, payload)`. |
@@ -235,6 +236,7 @@ Forms:
 - `fun(event: 'session.stop', fn: fun()): GearHandler`
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
+- `fun(event: 'game.saved_other', fn: fun(slot: integer)): GearHandler`
 - `fun(event: 'game.hero_saved', fn: fun(slot: integer, network: boolean)): GearHandler`
 - `fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler`
 - `fun(event: 'mp_message', fn: fun(from: GearPlayer, channel: string, payload: table|string)): GearHandler`
@@ -1264,7 +1266,7 @@ Rolls done and queued by `simulate`.
 
 Reached as `gear.game`.
 
-Saving the game through the engine's own save request, the one the savegame window sends: the file is `Save\GAME<slot>.PAK` (slot 0 is the quicksave; the game lists the savegames sorted by file name). Single player only. A save is a request: the engine writes the file a moment later on its render thread, and the result comes as the events `game.saved` and `game.save_failed`. Slots 1 to 99 show as `GAME01` to `GAME99`; a mod that saves on its own should keep to slots the player does not use (the game's savegame window picks the first free number for manual saves).
+Saving the game through the engine's own save request, the one the savegame window sends: the file is `Save\GAME<slot>.PAK` (slot 0 is the quicksave; the game lists the savegames sorted by file name). Single player only. A save is a request: the engine writes the file a moment later on its render thread, and the result comes as the events `game.saved` and `game.save_failed`. Saves nobody asked this API for (the quicksave key, the savegame window, the game's own Auto-Save) come as `game.saved_other`. Slots 1 to 99 show as `GAME01` to `GAME99`; a mod that saves on its own should keep to slots the player does not use (the game's savegame window picks the first free number for manual saves).
 
 #### `gear.game.difficulty() -> integer?`
 
@@ -1309,6 +1311,19 @@ Asks the engine to save into slot `slot` (0 to 509). The engine refuses while a 
 Whether a save (or a load) is queued or being written.
 
 - returns `boolean`
+
+#### `gear.game.config(key) -> string|number|nil`
+
+A value of the game's own settings (`Settings.cfg` in the game folder), read only: numbers as numbers (`0` is truthy in Lua, compare it: `gear.game.config('AUTOSAVE') == 1`), everything else as text. The key is not case sensitive. nil if the file has no such key. This is what the game was set to, not a live view: the options window writes the file when the player confirms it, and many settings are read only at start. Useful for warnings about settings that clash with a mod (`AUTOSAVE`: the game's own autosave at script points).
+
+- `key`: `string`
+- returns `string|number|nil`
+
+#### `gear.game.config_all() -> table<string, string|number>`
+
+Every value of `Settings.cfg` (see `config`), keyed by the upper case name.
+
+- returns `table<string, string|number>`
 
 ### GearSaveInfo
 

@@ -201,6 +201,7 @@ local native = {
     save_pending = function() return false end,
     save_info = function(slot) if slot <= 509 then return {exists = slot == 97, size = 5, mtime = 100} end end,
     save_poll = function() return table.remove(save_results, 1) end,
+    game_config = function() return {AUTOSAVE = '1', GFXLOADING = 'LOADING0.BMP'} end,
     net_kill = function() return table.remove(net_kills, 1) end,
     mp_info = function() return mp_info_mock end,
     hero_saved = function() local h = table.remove(hero_saves, 1); if h then return h[1], h[2] end end,
@@ -245,6 +246,7 @@ files.a = {
         record.game = gear.game
         gear.on('game.saved', function(slot, info) record.saved = {slot, info.size} end)
         gear.on('game.save_failed', function(slot, message) record.save_failed = {slot, message} end)
+        gear.on('game.saved_other', function(slot) record.other = slot end)
         record.cfg = gear.config
         record.json = gear.json.encode({a = {1, 2, 3}, b = 'x"y', c = true})
         local v, err = gear.json.decode('{"type":"chat","data":{"text":"#hi \\u00e9","n":[1,2.5,-3e2]},"z":null}')

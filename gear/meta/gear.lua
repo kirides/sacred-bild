@@ -16,6 +16,7 @@
 ---| 'session.stop' # That hero is gone.
 ---| 'game.saved' # A save `gear.game.save` asked for is written.
 ---| 'game.save_failed' # It could not be written.
+---| 'game.saved_other' # A save the game or the player made: the quicksave, the savegame window, the game's own Auto-Save.
 ---| 'game.hero_saved' # The game wrote the hero file (`Save\HeroNN.pax`): `(slot, network)`. A network game does this every 5 minutes, when the player leaves and at merchants; the moment an item or gold that changed hands is safe in the player's own save.
 ---| 'kill' # A kill the local computer sent to the game (a hero's kill: `(kill)`, see `GearKill`).
 ---| 'mp_message' # A message of the mod channel (`gear.mp.send`) arrived: `(from, channel, payload)`.
@@ -116,6 +117,7 @@ gear = {}
 ---@overload fun(event: 'session.stop', fn: fun()): GearHandler
 ---@overload fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler
 ---@overload fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler
+---@overload fun(event: 'game.saved_other', fn: fun(slot: integer)): GearHandler
 ---@overload fun(event: 'game.hero_saved', fn: fun(slot: integer, network: boolean)): GearHandler
 ---@overload fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler
 ---@overload fun(event: 'mp_message', fn: fun(from: GearPlayer, channel: string, payload: table|string)): GearHandler

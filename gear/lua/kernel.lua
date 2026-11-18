@@ -4266,6 +4266,19 @@ local function make_env(mod)
             return native.save_request(slot, name or '', opts ~= nil and opts.thumbnail == true)
         end,
         save_pending = function() return native.save_pending() end,
+        -- config(key) -> string | number | nil: a value of the game's Settings.cfg (read only).
+        config = function(key)
+            assert(type(key) == 'string', 'key must be a string')
+            local v = native.game_config()[key:upper()]
+            if v == nil then return nil end
+            return tonumber(v) or v
+        end,
+        -- config_all() -> {KEY = string | number}
+        config_all = function()
+            local out = {}
+            for k, v in pairs(native.game_config()) do out[k] = tonumber(v) or v end
+            return out
+        end,
         save_info = function(slot)
             assert(type(slot) == 'number', 'slot must be a number')
             return native.save_info(slot)
@@ -4973,7 +4986,9 @@ local function poll_saves()
     while true do
         local r = native.save_poll()
         if not r then return end
-        if r.ok then
+        if r.external then
+            kernel.dispatch('game.saved_other', r.slot)
+        elseif r.ok then
             kernel.dispatch('game.saved', r.slot, r.info)
         else
             kernel.dispatch('game.save_failed', r.slot, r.message)

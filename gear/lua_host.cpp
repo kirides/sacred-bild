@@ -1,6 +1,7 @@
 #include "lua_host.h"
 #include "automation.h"
 #include "drops.h"
+#include "gamecfg.h"
 #include "gear.h"
 #include "instance.h"
 #include "inventory.h"
@@ -761,7 +762,9 @@ namespace
             lua_pushnil(L);
             return 1;
         }
-        lua_createtable(L, 0, 4);
+        lua_createtable(L, 0, 5);
+        lua_pushboolean(L, r.external);
+        lua_setfield(L, -2, "external");
         lua_pushnumber(L, r.slot);
         lua_setfield(L, -2, "slot");
         lua_pushboolean(L, r.ok);
@@ -1035,6 +1038,19 @@ namespace
             return 1;
         }
         lua_pushlstring(L, out.data(), out.size());
+        return 1;
+    }
+
+    // native.game_config() -> {KEY = "value", ...}: the game's Settings.cfg (read only)
+    int nativeGameConfig(lua_State* L)
+    {
+        const auto& values = GameCfg::all();
+        lua_createtable(L, 0, static_cast<int>(values.size()));
+        for (const auto& [key, value] : values)
+        {
+            lua_pushlstring(L, value.data(), value.size());
+            lua_setfield(L, -2, key.c_str());
+        }
         return 1;
     }
 
@@ -2662,6 +2678,7 @@ namespace
             {"save_pending", nativeSavePending},
             {"save_info", nativeSaveInfo},
             {"save_poll", nativeSavePoll},
+            {"game_config", nativeGameConfig},
             {"net_kill", nativeNetKill},
             {"mp_send_frame", nativeMpSendFrame},
             {"mp_take_frame", nativeMpTakeFrame},

@@ -43,6 +43,11 @@ namespace
         ULONGLONG started = 0;
     };
     Job g_job;
+    // A save the engine runs that no mod asked for: its slot (engine+0x68), seen when its bits (0xC0) went up.
+    bool g_foreign = false;
+    uint32_t g_foreignSlot = 0;
+    Save::FileInfo g_foreignBefore;
+    constexpr uintptr_t kEngineSlot = 0x68;     // uint16
     std::deque<Save::Result> g_results;
 
     bool readU32(uintptr_t address, uint32_t& out)
@@ -243,11 +248,36 @@ bool Save::request(uint32_t slot, const std::string& name, bool thumbnail, const
 void Save::frame(void* engine)
 {
     g_engine = engine;
+    uint32_t flags = 0;
     if (!g_job.active)
     {
+        // Somebody else's save: the quicksave key, the savegame window, the game's own Auto-Save.
+        const bool running = engineFlags(flags) && (flags & kSaveBits) != 0;
+        if (running && !g_foreign)
+        {
+            uint32_t word = 0;
+            g_foreign = readU32(reinterpret_cast<uintptr_t>(engine) + kEngineSlot, word);
+            g_foreignSlot = word & 0xFFFF;
+            g_foreignBefore = Save::fileInfo(g_foreignSlot);
+        }
+        else if (!running && g_foreign)
+        {
+            g_foreign = false;
+            const FileInfo after = fileInfo(g_foreignSlot);
+            Save::Result r;
+            r.slot = g_foreignSlot;
+            r.external = true;
+            r.info = after;
+            r.ok = after.exists && (!g_foreignBefore.exists || after.stamp != g_foreignBefore.stamp ||
+                                    after.size != g_foreignBefore.size);
+            if (r.ok)
+            {
+                g_results.push_back(std::move(r));
+            }
+        }
         return;
     }
-    uint32_t flags = 0;
+    g_foreign = false;
     if (!engineFlags(flags))
     {
         finish(false, "the engine state is unreadable");

@@ -7,7 +7,7 @@
 --- Saving the game through the engine's own save request, the one the savegame window sends: the file is
 --- `Save\GAME<slot>.PAK` (slot 0 is the quicksave; the game lists the savegames sorted by file name). Single player
 --- only. A save is a request: the engine writes the file a moment later on its render thread, and the result comes as
---- the events `game.saved` and `game.save_failed`. Slots 1 to 99 show as `GAME01` to `GAME99`; a mod that saves on
+--- the events `game.saved` and `game.save_failed`. Saves nobody asked this API for (the quicksave key, the savegame window, the game's own Auto-Save) come as `game.saved_other`. Slots 1 to 99 show as `GAME01` to `GAME99`; a mod that saves on
 --- its own should keep to slots the player does not use (the game's savegame window picks the first free number
 --- for manual saves).
 ---@class GearGame
@@ -45,6 +45,19 @@ function GearGame.save(slot, name, opts) end
 --- Whether a save (or a load) is queued or being written.
 ---@return boolean
 function GearGame.save_pending() end
+
+--- A value of the game's own settings (`Settings.cfg` in the game folder), read only: numbers as numbers (`0` is
+--- truthy in Lua, compare it: `gear.game.config('AUTOSAVE') == 1`), everything else as text. The key is not case
+--- sensitive. nil if the file has no such key. This is what the game was set to, not a live view: the options window
+--- writes the file when the player confirms it, and many settings are read only at start. Useful for warnings about
+--- settings that clash with a mod (`AUTOSAVE`: the game's own autosave at script points).
+---@param key string
+---@return string|number|nil
+function GearGame.config(key) end
+
+--- Every value of `Settings.cfg` (see `config`), keyed by the upper case name.
+---@return table<string, string|number>
+function GearGame.config_all() end
 
 --- The file of a slot.
 ---@class GearSaveInfo

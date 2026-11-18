@@ -185,6 +185,7 @@ if(SACREDGEAR)
     gear/inventory.cpp
     gear/itemtip.cpp
     gear/save.cpp
+    gear/gamecfg.cpp
     gear/keyblock.cpp
     gear/itemicon.cpp
     gear/realm.cpp
