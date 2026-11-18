@@ -192,6 +192,23 @@ function GearAuto.network_mode(mode) end
 ---@param on boolean
 function GearAuto.hero_from_server(on) end
 
+--- Adds a line to the game's message list as the game itself does (through Gear's hook: `chat.line` gets it, and a
+--- replaced overlay keeps it off the screen). In game only. For self tests of `gear.chat`.
+---@param text string UTF-8, with the game's backslash codes if wanted.
+---@param channel? integer 1 (default) to 4, or 0x10.
+---@param color? integer ARGB; 0 (default): the channel's colour.
+---@return boolean ok
+function GearAuto.chat_add(text, channel, color) end
+
+--- Sends a chat message on the network as the game's chat does (a network game only): `'private'` to `target` (a slot),
+--- `'team'` or `'global'`. For self tests of `gear.chat`: a private message to the own slot goes out to the game
+--- server and comes back like another player's.
+---@param kind 'private'|'team'|'global'
+---@param target integer The slot for `'private'` (0 otherwise).
+---@param text string At most 127 characters.
+---@return boolean ok
+function GearAuto.chat_send(kind, target, text) end
+
 --- Ends the game at once with that exit code.
 ---@param code? integer Default 0.
 function GearAuto.quit(code) end

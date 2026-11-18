@@ -1529,6 +1529,23 @@ function world.item(id)
     return it
 end
 
+-- The game's item label colours by quality (ENG 0x5C13C0): rarity 0-4 white, 5-11 blue, 12-14 yellow, 15 gold, set green.
+world.QUALITY_COLORS = {normal = 0xFFEFEFEF, magic = 0xFFA0A0FF, rare = 0xFFF0E040, unique = 0xFFC19A33, set = 0xFF15FF25}
+
+-- world.quality_color(quality | rarity, set) -> ARGB: a quality name or a rarity 0..15 (with `set` for set items).
+function world.quality_color(q, set)
+    if type(q) == 'number' then q = quality_of(q, set) end
+    return world.QUALITY_COLORS[q] or world.QUALITY_COLORS.normal
+end
+
+-- world.item_color(item | id) -> ARGB | nil: the colour the game gives the item's label (as quality_color, but class items
+-- take their class's colour unless the game's UNIQUE_COLOR is on); nil when the item is gone.
+function world.item_color(item)
+    local id = type(item) == 'table' and item.id or item
+    if type(id) ~= 'number' then return nil end
+    return native.item_color(id)
+end
+
 -- Whether an item (world.item's table) can be used by class `name` ('darkelf' ...).
 function world.usable_by(item, name)
     if #item.classes == 0 then return true end
@@ -3001,7 +3018,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true, ['effect.add'] = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.', 'chat.'}
 local emit_depth = 0
 
 local function emit(event, ...)
@@ -3280,6 +3297,18 @@ local function make_auto()
     end
     -- auto.hero_from_server(on): the game server delivered the hero (message 0x132) or not; 'open' reads as closed while it is set
     function auto.hero_from_server(on) native.auto_hero_from_server(on and true or false) end
+    -- auto.chat_add(text, channel, color) -> bool: a line on the game's message list, as the game adds one (gear.chat self tests).
+    function auto.chat_add(text, channel, color)
+        assert(type(text) == 'string', 'text must be a string')
+        return native.auto_chat_add(text, channel or 1, color or 0)
+    end
+    -- auto.chat_send(kind, target, text) -> bool: a chat message on the network ('private' to slot target, 'team', 'global').
+    function auto.chat_send(kind, target, text)
+        local t = ({private = 3, team = 4, global = 5})[kind]
+        assert(t, "kind must be 'private', 'team' or 'global'")
+        assert(type(text) == 'string', 'text must be a string')
+        return native.auto_chat_send(t, target or 0, text)
+    end
     function auto.network_flag(on)
         return native.auto_network_flag(on and true or false)
     end
@@ -4284,6 +4313,28 @@ local function make_env(mod)
     gear.world = w
     gear.mp = mp
     gear.net = mp._net.api
+    gear.chat = {
+        -- available() -> whether the game's message lines can be read (the hook is in).
+        available = function() return native.chat_info and (native.chat_info()) or false end,
+        -- history(n) -> the last n lines of the session (all kept ones without n), oldest first.
+        history = function(n)
+            local lines, out = uis.chat.lines, {}
+            local first = n and math.max(1, #lines - math.floor(n) + 1) or 1
+            for i = first, #lines do out[#out + 1] = lines[i] end
+            return out
+        end,
+        -- replace_overlay() -> available: call it every tick the mod shows the lines itself.
+        replace_overlay = function()
+            if mod.disabled then return false end
+            uis.chat.hide[mod] = uis.chat.tick
+            return native.chat_info and (native.chat_info()) or false
+        end,
+        -- segments(text, color) -> runs {text, color}, plain: a line's backslash codes taken apart.
+        segments = function(text, color)
+            assert(type(text) == 'string', 'text must be a string')
+            return uis.chat_segments(text, color or 0xFFFFFFFF)
+        end,
+    }
     gear.clipboard = {
         -- set(text) -> true | nil, message: the Windows clipboard gets the text (Unicode, at most 1 MB).
         set = function(text)
@@ -4651,6 +4702,7 @@ local function unload_mod(e)
     end
     if pickup_rules[m] then pickup_rules[m] = nil; pickup_dirty = true end
     if D.cfg[m] then D.cfg[m] = nil end
+    uis.chat.hide[m] = nil
     D.dirty = true
     ui_keys[m] = nil
     key_capture[m] = nil
@@ -5095,6 +5147,74 @@ function kernel.poll_kills()
     end
 end
 
+-- Chat lines (gear.chat, gear/chat.cpp): every line the game adds to its message list (chat, server and game
+-- messages, the player's own lines), kept for the session (the last uis.chat.MAX) and dispatched as 'chat.line'.
+-- uis.chat.hide[mod] = the tick a mod last asked to show the lines itself (gear.chat.replace_overlay).
+uis.chat = {lines = {}, seq = 0, tick = 0, MAX = 200, hide = {}}
+
+-- The game's backslash codes in a line: `\cAARRGGBB` a colour, `\r` back to the line's colour, `\w` (dropped), `\g`
+-- plus 16 characters an inline image (dropped). Returns the runs {text, color} and the plain text.
+function uis.chat_segments(text, color)
+    local runs, plain, cur, buf = {}, {}, color, {}
+    local function flush()
+        if #buf > 0 then
+            local s, last = table.concat(buf), runs[#runs]
+            if last and last.color == cur then last.text = last.text .. s else runs[#runs + 1] = {text = s, color = cur} end
+            plain[#plain + 1] = s
+            buf = {}
+        end
+    end
+    local i, n = 1, #text
+    while i <= n do
+        local b = text:find('\\', i, true)
+        if not b then buf[#buf + 1] = text:sub(i); break end
+        if b > i then buf[#buf + 1] = text:sub(i, b - 1) end
+        local code = text:sub(b + 1, b + 1)
+        local hex = code == 'c' and text:match('^%x%x%x%x%x%x%x%x', b + 2)
+        if hex then
+            flush(); cur = tonumber(hex, 16); i = b + 10
+        elseif code == 'r' then
+            flush(); cur = color; i = b + 2
+        elseif code == 'w' then
+            i = b + 2
+        elseif code == 'g' and #text >= b + 17 then
+            i = b + 18
+        else
+            buf[#buf + 1] = '\\'; i = b + 1
+        end
+    end
+    flush()
+    return runs, table.concat(plain)
+end
+
+function uis.chat_poll()
+    local C = uis.chat
+    if not native.chat_take then return end
+    for _ = 1, 64 do
+        local l = native.chat_take()
+        if not l then break end
+        C.seq = C.seq + 1
+        l.id = C.seq
+        l.time = native.time()
+        l.runs, l.plain = uis.chat_segments(l.text, l.color)
+        local lines = C.lines
+        lines[#lines + 1] = l
+        if #lines > C.MAX then table.remove(lines, 1) end
+        kernel.dispatch('chat.line', l)
+    end
+end
+
+-- After the draw handlers: the game's list stays empty while a mod that runs asked this tick (or the last).
+function uis.chat_publish()
+    local C, on = uis.chat, false
+    for m, t in pairs(C.hide) do
+        if m.disabled then C.hide[m] = nil elseif t >= C.tick - 1 then on = true end
+    end
+    if native.chat_hide and (on or C.was_on) then native.chat_hide(on) end
+    C.was_on = on
+    C.tick = C.tick + 1
+end
+
 -- One in-game frame: sessions, pipes, timers, the frame handlers, then the draw handlers; the frame's drawing is
 -- published at the end.
 function kernel.tick(dt)
@@ -5102,6 +5222,7 @@ function kernel.tick(dt)
     check_session()
     poll_keys()
     poll_saves()
+    uis.chat_poll()
     kernel.poll_kills()
     kernel.poll_mp(dt)
     poll_pipes()
@@ -5113,6 +5234,7 @@ function kernel.tick(dt)
     run_tasks()
     kernel.dispatch('frame', dt)
     kernel.dispatch('draw', gear_ui_state())
+    uis.chat_publish()
     ui_end_tick()
     native.ui_commit()
     save_layout()
@@ -5138,6 +5260,7 @@ function kernel.idle()
     run_tasks()
     kernel.dispatch('idle')
     kernel.dispatch('draw', gear_ui_state())
+    uis.chat_publish()
     ui_end_tick()
     native.ui_commit()
     save_layout()

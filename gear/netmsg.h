@@ -43,6 +43,9 @@ namespace NetMsg
     bool channelReady();
     // Sends one frame (1 to 127 units, none of them 0) to `slot` (1 to 16) as private chat. Engine thread.
     bool sendFrame(uint32_t slot, const uint16_t* units, size_t count);
+    // Self tests (gear.auto.chat_send): a chat message of 	ype (3 private, 4 team, 5 everyone) with the target slot
+    // and the text, laid out as the chat sender 0x7D4510 does ([u32 target][the units][a NUL unit]).
+    bool sendChatForTest(uint16_t type, uint32_t target, const uint16_t* units, size_t count);
     // The oldest frame received and not taken yet: the sender's slot (0: the server) and its units.
     bool takeFrame(uint32_t& slot, std::vector<uint16_t>& units);
 

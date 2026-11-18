@@ -19,6 +19,10 @@ namespace Pickup
     // Lua thread: replaces the rules. `dimAlpha` 0..255 (255: labels as they are).
     void setRules(std::vector<uint32_t> blocked, std::vector<uint32_t> dimmed, uint8_t dimAlpha);
 
+    // The colour the game gives item `id`'s ground label (ARGB: set green, the rarity's colour, a class's colour for
+    // class items unless UNIQUE_COLOR is on), without a mod's dimming. Engine thread; false if there is no such item.
+    bool labelColor(uint32_t id, uint32_t& color);
+
     // Pickups refused since the start (for mods and the log).
     uint32_t refused();
 }

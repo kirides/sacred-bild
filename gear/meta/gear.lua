@@ -21,6 +21,7 @@
 ---| 'kill' # A kill the local computer sent to the game (a hero's kill: `(kill)`, see `GearKill`).
 ---| 'mp_message' # A message of the mod channel (`gear.mp.send`) arrived: `(from, channel, payload)`.
 ---| 'net_caps' # The custom net messages became available, or the list of players who can use them changed (gear.net): `(caps)`, see `GearNetCaps`.
+---| 'chat.line' # The game added a chat or message line: `(line)`, see `GearChatLine` (gear.chat).
 ---| 'realm.changed' # `gear.realm.use` switched the online play server: `(realm)`.
 ---| 'combat.constant' # The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it.
 ---| 'skillslot.key' # A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it.
@@ -94,6 +95,7 @@
 ---@field drops GearDrops Item drops: chance, rarity weights, the generator, the roll and select events.
 ---@field inv GearInv Inventories: containers, items, export and import of items.
 ---@field game GearGame The game itself: difficulty and saving.
+---@field chat GearChat The game's chat and message lines: who sent them, the session's history, the game's overlay.
 ---@field clipboard GearClipboard The Windows clipboard: copy text out of the game.
 ---@field realm GearRealmApi The online play server (realms): list, switch, add.
 ---@field mp GearMp Players of a network game, the host, the mod channel and the `kill` event.
@@ -122,6 +124,7 @@ gear = {}
 ---@overload fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler
 ---@overload fun(event: 'mp_message', fn: fun(from: GearPlayer, channel: string, payload: table|string)): GearHandler
 ---@overload fun(event: 'net_caps', fn: fun(caps: GearNetCaps)): GearHandler
+---@overload fun(event: 'chat.line', fn: fun(line: GearChatLine)): GearHandler
 ---@overload fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler
 ---@overload fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler
 ---@overload fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler
@@ -144,7 +147,7 @@ function gear.on(event, fn) end
 function gear.off(handle) end
 
 --- Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the
---- prefixes `session.`, `gear.`, `pipe.`, `game.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep.
+--- prefixes `session.`, `gear.`, `pipe.`, `game.`, `chat.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep.
 ---@param event string
 ---@param ... any
 function gear.emit(event, ...) end

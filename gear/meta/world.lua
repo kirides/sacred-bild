@@ -23,6 +23,7 @@
 ---@field TILE number World units per tile.
 ---@field CLASSES GearClassInfo[] The hero classes.
 ---@field QUALITIES GearQuality[] Item qualities in ascending order; `quality_rank` is the index.
+---@field QUALITY_COLORS table<GearQuality, integer> The game's item label colours (ARGB) by quality: white, blue, yellow, gold, green for set items.
 local GearWorld = {}
 
 --- The local hero, or nil.
@@ -53,6 +54,18 @@ function GearWorld.creatures_near(x, y, radius, opts) end
 ---@param opts? GearNearOpts
 ---@return GearItem[]
 function GearWorld.items_near(x, y, radius, opts) end
+
+--- The colour of a quality (ARGB, `QUALITY_COLORS`): a quality name, or a rarity 0..15 with `set` for set items.
+---@param quality GearQuality|integer
+---@param set? boolean
+---@return integer
+function GearWorld.quality_color(quality, set) end
+
+--- The colour the game gives an item's name and ground label (ARGB): as `quality_color`, but items for one class take
+--- that class's colour unless the game's UNIQUE_COLOR setting is on. Nil when the item is gone.
+---@param item GearItem|integer An item or its id.
+---@return integer?
+function GearWorld.item_color(item) end
 
 --- A random point between `min` and `max` world units from (x, y).
 ---@param x number

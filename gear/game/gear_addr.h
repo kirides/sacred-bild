@@ -99,6 +99,10 @@ namespace Gear::Addr
     inline Sacred::Thiscall<const wchar_t* const*(void* manager, uint32_t id)> cTextManager_get{};
     inline Sacred::Global<uint8_t*> g_pNet{};
     inline uintptr_t netDispatchSwitch{};
+    // Chat lines (gear/chat.cpp). ENG 007237D0: cUI_TextLines::add, thiscall (lines, channel, font, const STLport
+    // wstring* text, ARGB color or 0 for the channel's), ret 0x10: wraps the text into lines and keeps the last 100. The
+    // UI manager's message list is at its +0x14C (0075A770); every chat, server and game message line goes through it.
+    inline Sacred::Thiscall<void(void* lines, uint32_t channel, uint32_t font, const void* text, uint32_t color)> cUI_TextLines_add{};
 
     // Mod UI input (gear/ui.cpp). ENG 00757840: cUI_Manager::receiveEvent (vtable slot 0); cEngine_receiveEvent
     // (00618090) gives it every mouse and key event first, and the world gets a mouse event only if it returns
