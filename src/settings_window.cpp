@@ -165,6 +165,10 @@ namespace
             .tip(L"Automatic: a frame with a title bar (to move the window) when the window is smaller than the screen, "
                  L"none when it fills the screen.\nBorderless: never a frame.\nWindow frame: always a frame.\n"
                  L"The area inside the frame has the chosen resolution either way.");
+        ui.check(L"Resizable window (with a frame)", {L"Display", L"Resizable"}, Config::display.resizable)
+            .enabledIf([](const Form& f) { return f.value(L"Display", L"Borderless") != L"1"; })
+            .tip(L"A window with a frame can be resized and maximized. The game keeps its resolution: the picture is "
+                 L"stretched to the window, which keeps the picture's proportions.");
         const int refresh = displayRefresh();
         std::vector<int> limits{0, 30, 60, 75, 90, 120, 144, 165, 240};
         if (refresh)

@@ -8,6 +8,7 @@
 #include "game/file_io_stats.h"
 #include "game/sacred_addr.h"
 #include "game/focus.h"
+#include "game/window_fit.h"
 #include "game/frame_hooks.h"
 #include "game/movie.h"
 #include "game/options_screen.h"
@@ -126,6 +127,7 @@ void Sacred::installHooks()
     FrameHooks::install();
     Resolution::install();
     Focus::install();
+    WindowFit::install();
     UiCanvas::install();
     UiWindows::install();
     UiAnchor::install();

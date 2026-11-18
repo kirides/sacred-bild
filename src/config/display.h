@@ -24,6 +24,9 @@ namespace Config
         bool hasPosition = false;
         int x = 0;
         int y = 0;
+        // A framed window can be resized and maximized; the game keeps its resolution and the frame is scaled to the
+        // window (aspect ratio kept, black bars). Not in automation runs.
+        bool resizable = true;
         bool clipCursor = true;       // mouse confined to the game window while it is in the foreground
         int fpsLimit = 60;            // the game's own in-game frame limit (it uses 60); 0 = off
         int fpsLimitInactive = 20;    // frame limit (menus and game) while none of the game's windows is in the foreground; 0 = off

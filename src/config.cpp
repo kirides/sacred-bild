@@ -173,6 +173,7 @@ void ConfigFile::load(const std::wstring& gameDir)
         : readBool(ini, L"Display", L"Borderless", true)      ? Config::Display::Frame::Never
                                                                : Config::Display::Frame::Always;
     applyAutomationWindow();
+    Config::display.resizable = !Config::display.automationWindow && readBool(ini, L"Display", L"Resizable", true);
     Config::display.clipCursor = readInt(ini, L"Display", L"ClipCursor", Config::display.clipCursor) != 0;
     Config::display.fpsLimit = readInt(ini, L"Display", L"FpsLimit", Config::display.fpsLimit);
     Config::display.fpsLimitInactive = readInt(ini, L"Display", L"FpsLimitInactive", Config::display.fpsLimitInactive);
