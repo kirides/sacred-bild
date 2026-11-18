@@ -8,6 +8,7 @@
 #include "pickup.h"
 #include "realm.h"
 #include "save.h"
+#include "savegames.h"
 #include "sitehook.h"
 #include "ui.h"
 #include "game/gear_addr.h"
@@ -40,6 +41,7 @@ bool Hooks::install()
     NetMsg::install();
     Chat::install();
     Party::install();
+    Savegames::install();
     const bool committed = Patch::commit();
     // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.
     SiteHook::install();

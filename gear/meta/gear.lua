@@ -15,6 +15,8 @@
 ---| 'session.start' # A game with a hero runs.
 ---| 'session.stop' # That hero is gone.
 ---| 'game.saved' # A save `gear.game.save` asked for is written.
+---| 'savegame.changed' # The game loaded a savegame or hero file, or started a new game: `(kind, scope, number)` (see `gear.savegame`).
+---| 'savegame.saving' # A savegame was written and the data of the running game is about to be kept for it: `(scope)`; write what changed now.
 ---| 'game.save_failed' # It could not be written.
 ---| 'game.saved_other' # A save the game or the player made: the quicksave, the savegame window, the game's own Auto-Save.
 ---| 'game.hero_saved' # The game wrote the hero file (`Save\HeroNN.pax`): `(slot, network)`. A network game does this every 5 minutes, when the player leaves and at merchants; the moment an item or gold that changed hands is safe in the player's own save.
@@ -104,6 +106,7 @@
 ---@field fmt GearFmt Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed).
 ---@field toast GearToast Short messages that stack up on the screen and fade; the layout editor moves them.
 ---@field events GearEvents Hooks between mods: declare the custom events the mod emits, list what is declared.
+---@field savegame GearSavegame The savegame being played: its scope, and the mod's files that belong to it.
 ---@field store GearStore The mod's own data in JSON files of its folder: load with defaults, save, save when changed.
 ---@field mp GearMp Players of a network game, the host, the mod channel and the `kill` event.
 ---@field net GearNet Custom net messages: named channels between computers and the game server.
@@ -128,6 +131,8 @@ gear = {}
 ---@overload fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler
 ---@overload fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler
 ---@overload fun(event: 'game.saved_other', fn: fun(slot: integer)): GearHandler
+---@overload fun(event: 'savegame.changed', fn: fun(kind: 'load'|'hero'|'new', scope: string?, number: integer)): GearHandler
+---@overload fun(event: 'savegame.saving', fn: fun(scope: string)): GearHandler
 ---@overload fun(event: 'game.hero_saved', fn: fun(slot: integer, network: boolean)): GearHandler
 ---@overload fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler
 ---@overload fun(event: 'mp_message', fn: fun(from: GearPlayer, channel: string, payload: table|string)): GearHandler

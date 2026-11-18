@@ -5,6 +5,7 @@
 #include "lua_host.h"
 #include "overlay.h"
 #include "patch.h"
+#include "savegames.h"
 
 #include <ddraw.h>
 #include <shellapi.h>
@@ -1410,6 +1411,7 @@ bool Automation::loadSave(int slot, const char*& error)
         error = "cannot post to the game window";
         return false;
     }
+    Savegames::noteLoad(slot);
     return true;
 }
 

@@ -30,6 +30,7 @@ local kernel = {}
 local MAX_ERRORS = 10   -- a mod whose handlers raised this many errors is switched off for the session
 
 local mods = {}         -- loaded mods in load order: {id, name, version, dir, env, errors, disabled}
+kernel.savegame = {scope = nil, kind = nil}      -- the savegame this game was loaded from or last saved to; 'load' | 'hero' | 'new'
 local handlers = {}     -- event name -> array of {mod, fn}
 local current           -- the mod whose code runs at the moment (for messages)
 local restore_abilities    -- defined with the ability tables below
@@ -4913,7 +4914,12 @@ local function make_env(mod)
         -- delete_save(slot) -> true | nil, message: deletes Save\GAME<slot>.PAK.
         delete_save = function(slot)
             assert(type(slot) == 'number', 'slot must be a number')
-            return native.save_delete(slot)
+            local ok, err = native.save_delete(slot)
+            if ok then
+                local scope = native.scope_of(slot)
+                for _, m in ipairs(mods) do native.scope_clear(m.dir, scope) end
+            end
+            return ok, err
         end,
         save_pending = function() return native.save_pending() end,
         -- config(key) -> string | number | nil: a value of the game's Settings.cfg (read only).
@@ -4932,6 +4938,43 @@ local function make_env(mod)
         save_info = function(slot)
             assert(type(slot) == 'number', 'slot must be a number')
             return native.save_info(slot)
+        end,
+    }
+    -- gear.savegame: data that belongs to the savegame being played (see the section above).
+    local function savegame_use()
+        if not mod.savegame_used then
+            mod.savegame_used = true
+            kernel.savegame.enter(mod)
+        end
+    end
+    gear.savegame = {
+        -- scope() -> 'GAME05' | 'HERO03' | nil: the savegame (Save\GAME05.PAK) this game was loaded from or last saved to, the
+        -- network hero (Save\Hero03.pax) it was loaded from; nil in a new game that was not saved yet. In another folder
+        -- than the game's own Save (ReBorn's mods\reborn\save) it is <folder>-GAME05.
+        scope = function() return kernel.savegame.scope end,
+        -- kind() -> 'load' | 'hero' | 'new' | nil: how this game started; nil if the game's load command was not seen.
+        kind = function() return kernel.savegame.kind end,
+        -- scope_of(slot) -> the scope name of savegame slot `slot`.
+        scope_of = function(slot)
+            assert(type(slot) == 'number', 'slot must be a number')
+            return native.scope_of(slot)
+        end,
+        -- read(name) -> text | nil, message; write(name, text) -> true | nil, message: a file of this mod's data of the
+        -- running game (.json or .txt, names of letters, digits, _ - and .). Most mods use gear.store.game instead.
+        read = function(name)
+            assert(type(name) == 'string', 'name must be a string')
+            savegame_use()
+            return native.scope_read(mod.dir, kernel.savegame.working, name)
+        end,
+        write = function(name, text)
+            assert(type(name) == 'string' and type(text) == 'string', 'name and text must be strings')
+            savegame_use()
+            return native.scope_write(mod.dir, kernel.savegame.working, name, text)
+        end,
+        -- read_saved(scope, name) -> text | nil, message: a file of the data kept for another savegame.
+        read_saved = function(scope, name)
+            assert(type(scope) == 'string' and type(name) == 'string', 'scope and name must be strings')
+            return native.scope_read(mod.dir, scope, name)
         end,
     }
     gear.inv = inv
@@ -5687,19 +5730,63 @@ local function gear_ui_state()
     return ui_tick_state
 end
 
+---------------------------------------------------------------------------------------------------------------
+-- Per savegame data (gear.savegame, gear.store.game). Each mod that uses it keeps its working copy in
+-- saves\_current\ of its folder; a save into slot N copies it to saves\GAMEnn\, a load of slot N copies that back (nothing
+-- there: empty), a new game empties it. The game's load / new game command is seen by gear/savegames.cpp.
+---------------------------------------------------------------------------------------------------------------
+kernel.savegame.working = '_current'
+
+function kernel.savegame.each(fn)
+    for _, m in ipairs(mods) do
+        if m.savegame_used and not m.disabled then fn(m) end
+    end
+end
+
+-- The working copy of every mod that uses it becomes the data of `scope` (nil: nothing, as in a new game).
+function kernel.savegame.enter(m)
+    if kernel.savegame.kind == 'load' or kernel.savegame.kind == 'hero' then
+        native.scope_copy(m.dir, kernel.savegame.scope, kernel.savegame.working)
+    elseif kernel.savegame.kind == 'new' then
+        native.scope_clear(m.dir, kernel.savegame.working)
+    end
+end
+
+-- A savegame was written: each mod saves its changed data (event 'savegame.saving'), then its working copy is kept for it.
+function kernel.savegame.store(scope)
+    kernel.dispatch('savegame.saving', scope)
+    kernel.savegame.each(function(m) native.scope_copy(m.dir, kernel.savegame.working, scope) end)
+    if kernel.savegame.scope == nil then kernel.savegame.scope = scope end
+end
+
+function kernel.savegame.poll()
+    if not native.game_command then return end
+    while true do
+        local kind, number, scope = native.game_command()
+        if not kind then return end
+        kernel.savegame.kind = kind
+        kernel.savegame.scope = kind ~= 'new' and scope or nil
+        kernel.savegame.each(kernel.savegame.enter)
+        kernel.dispatch('savegame.changed', kind, kernel.savegame.scope, number)
+    end
+end
+
 -- The finished saves (gear.game.save) as 'game.saved' (slot, info) and 'game.save_failed' (slot, message).
 local function poll_saves()
     while native.hero_saved do
         local slot, network = native.hero_saved()
         if not slot then break end
+        if network then kernel.savegame.store(native.hero_scope_of(slot)) end
         kernel.dispatch('game.hero_saved', slot, network)
     end
     while true do
         local r = native.save_poll()
         if not r then return end
         if r.external then
+            kernel.savegame.store(native.scope_of(r.slot))
             kernel.dispatch('game.saved_other', r.slot)
         elseif r.ok then
+            kernel.savegame.store(native.scope_of(r.slot))
             kernel.dispatch('game.saved', r.slot, r.info)
         else
             kernel.dispatch('game.save_failed', r.slot, r.message)
@@ -5799,6 +5886,7 @@ end
 -- published at the end.
 function kernel.tick(dt)
     if apply_pending then apply(false) end
+    kernel.savegame.poll()
     check_session()
     poll_keys()
     uis.input_poll()
@@ -5830,6 +5918,7 @@ end
 -- Automation only: a tick in the menus (every 50 ms while no in-game frame runs), on the automation thread.
 function kernel.idle()
     if apply_pending then apply(false) end
+    kernel.savegame.poll()
     check_session()
     poll_keys()
     poll_pipes()

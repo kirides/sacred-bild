@@ -48,4 +48,26 @@ namespace Savegames
     // Loads the savegame (single player): closes the savegame window if it is open and posts the game's load
     // message, as the window's Load does (0071CC90 command 6). False and `error` if not possible now.
     bool load(uint32_t slot, const char*& error);
+
+    // Inside the Patch transaction: detours the game's own load / new game command (cCommand_armaPlay::execute), so
+    // mods learn which savegame is loaded or that a new game starts (gear.savegame). False if it was not found.
+    bool install();
+
+    // What the game was told to do, in order (the oldest first).
+    struct Command
+    {
+        enum class Kind { Load, LoadHero, New } kind = Kind::New;
+        uint32_t number = 0;        // Load: the savegame slot; LoadHero: the network hero's number
+        std::string scope;          // Load / LoadHero: scope(); empty for New
+    };
+    bool take(Command& out);
+
+    // A load Gear itself posts to the game window (automation, Savegames::load): the game's command is not run then.
+    void noteLoad(uint32_t slot);
+
+    // A name for "this savegame" that is safe in a file name: GAME05 for Save/GAME05.PAK, <folder>-GAME05 when the game
+    // reads its savegames from another folder (ReBorn: mods/reborn/save), HERO03 for a network hero file. Mods keep
+    // per-savegame data in saves/<scope>/ of their folder.
+    std::string scopeOf(uint32_t slot);
+    std::string heroScopeOf(uint32_t number);
 }

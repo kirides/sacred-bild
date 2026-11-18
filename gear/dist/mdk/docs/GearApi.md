@@ -113,6 +113,8 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'session.start'` | A game with a hero runs. |
 | `'session.stop'` | That hero is gone. |
 | `'game.saved'` | A save `gear.game.save` asked for is written. |
+| `'savegame.changed'` | The game loaded a savegame or hero file, or started a new game: `(kind, scope, number)` (see `gear.savegame`). |
+| `'savegame.saving'` | A savegame was written and the data of the running game is about to be kept for it: `(scope)`; write what changed now. |
 | `'game.save_failed'` | It could not be written. |
 | `'game.saved_other'` | A save the game or the player made: the quicksave, the savegame window, the game's own Auto-Save. |
 | `'game.hero_saved'` | The game wrote the hero file (`Save\HeroNN.pax`): `(slot, network)`. A network game does this every 5 minutes, when the player leaves and at merchants; the moment an item or gold that changed hands is safe in the player's own save. |
@@ -225,6 +227,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `fmt` | `GearFmt` | Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed). |
 | `toast` | `GearToast` | Short messages that stack up on the screen and fade; the layout editor moves them. |
 | `events` | `GearEvents` | Hooks between mods: declare the custom events the mod emits, list what is declared. |
+| `savegame` | `GearSavegame` | The savegame being played: its scope, and the mod's files that belong to it. |
 | `store` | `GearStore` | The mod's own data in JSON files of its folder: load with defaults, save, save when changed. |
 | `mp` | `GearMp` | Players of a network game, the host, the mod channel and the `kill` event. |
 | `net` | `GearNet` | Custom net messages: named channels between computers and the game server. |
@@ -252,6 +255,8 @@ Forms:
 - `fun(event: 'game.saved', fn: fun(slot: integer, info: GearSaveInfo)): GearHandler`
 - `fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler`
 - `fun(event: 'game.saved_other', fn: fun(slot: integer)): GearHandler`
+- `fun(event: 'savegame.changed', fn: fun(kind: 'load'|'hero'|'new', scope: string?, number: integer)): GearHandler`
+- `fun(event: 'savegame.saving', fn: fun(scope: string)): GearHandler`
 - `fun(event: 'game.hero_saved', fn: fun(slot: integer, network: boolean)): GearHandler`
 - `fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler`
 - `fun(event: 'mp_message', fn: fun(from: GearPlayer, channel: string, payload: table|string)): GearHandler`
@@ -1719,7 +1724,9 @@ The savegame file of `slot`: nil for a slot outside 0..509, else a table whose `
 
 ### GearSavegame
 
-A savegame as `saves` lists it: what the file says about itself.
+Reached as `gear.savegame`.
+
+The savegame being played.
 
 | Field | Type | |
 |---|---|---|
@@ -2887,6 +2894,8 @@ How many of this mod's toasts are on the screen.
 
 A mod keeps its own data (a log, totals, saved lists) in JSON files of its folder (`gear.read` / `gear.save`). `load` and `save` do the reading, decoding, encoding and writing with defaults and one log line per broken file; `file` loads a table once and saves it when it changed, every few seconds and when the mod unloads. The library is shipped in the DLL (`gear/lua/store.lua`) and runs once per mod, the first time the mod uses `gear.store`.
 
+What belongs to one character or savegame (progress, lifetime totals, a log) goes in `gear.store.game` instead of `file`: it is kept per savegame (see `gear.savegame`), so it does not leak from one savegame or character into another. Settings, window places and what all games share stay in `file` / `load` / `save`.
+
 ### GearStoreOpts
 
 The options of `file`.
@@ -2896,6 +2905,17 @@ The options of `file`.
 | `every` | `number` | Seconds between saves of a changed file (default 30; 0: only on unload and `save`). (optional) |
 | `check` | `fun(data: any): any` | Repairs or replaces what was loaded (called once). (optional) |
 | `value` | `fun(): any` | What is written (default `handle.data`). (optional) |
+
+### GearStoreGameOpts
+
+Includes everything of `GearStoreOpts`.
+
+The options of `game` (those of `file`, and):
+
+| Field | Type | |
+|---|---|---|
+| `on_change` | `fun(handle: GearStoreFile, kind: 'load'\|'hero'\|'new', scope: string?)` | Called after the handle holds the data of another game (the mod's `savegame.changed` handlers run after it). (optional) |
+| `migrate` | `boolean` | A file `name` of the mod's folder from before the mod used per game data is taken once, by the first loaded savegame that has no data yet; `<name>.migrated.txt` records it. (optional) |
 
 ### GearStoreFile
 
@@ -2957,6 +2977,72 @@ Loads `name` (or takes `default`) and keeps it: the handle saves it when it chan
 - `default`: `any`
 - `opts`: `GearStoreOpts` (optional)
 - returns `GearStoreFile`
+
+#### `gear.store.game(name, default, opts) -> GearStoreFile`
+
+A file of the savegame being played: what the mod keeps about this character or game. The same handle as `file`, but the data belongs to the savegame: saving the game into a slot keeps it for that slot, loading a slot brings back what was kept for it (the defaults if nothing was), a new game starts from `default`. Progress made since the last save is dropped when another game loads, as the game's own progress is, and `handle.data` is replaced then: always reach the data through the handle (`handle.data.x`), never keep a part of it. Files are in `saves/<scope>/` of the mod's folder.
+
+- `name`: `string`
+- `default`: `any`
+- `opts`: `GearStoreGameOpts` (optional)
+- returns `GearStoreFile`
+
+## Per savegame data (gear.savegame)
+
+Mods keep two kinds of data: what is the player's (settings, window places, a stash all characters share) and what belongs to one character or game (progress, lifetime totals, a log). The second kind must not leak from one savegame into another, so Gear keeps a working copy of it per mod in `saves/_current/` of the mod's folder and moves it with the game:
+
+- a save (the savegame window, the quicksave, the game's own auto save, `gear.game.save`) keeps the working copy for that savegame, in `saves/GAME05/` for `Save\GAME05.PAK` (first the event `savegame.saving`, so a mod can write what changed); - loading a savegame (from the menus, the savegame window, `gear.game.load`) replaces the working copy with the one kept for it, or empties it if there is none (then the mod starts from its defaults); a network game's hero file (`Save\Hero03.pax`) has the scope `HERO03` and is kept when the game writes it; - a new game empties the working copy; deleting a savegame (`gear.game.delete_save`) deletes what was kept for it.
+
+After a load or a new game the event `savegame.changed` `(kind, scope, number)` tells the mods to read their data again; progress since the last save is gone, as the game's own is. The scope is the file's name (`GAME05`); when the game reads its savegames from another folder than `Save` (ReBorn: `mods\reborn\save`) it has the folder in front: `mods_reborn_save-GAME05`.
+
+Most mods use `gear.store.game` (a JSON file with the usual handle) and never touch this API directly. Not for settings (use `gear.settings`) and not for what all savegames share (use `gear.store.file`).
+
+Known limits: the load and new game commands are seen where the game runs them; a savegame copied or deleted outside the game keeps (or loses) nothing here; in a network game the data follows the hero file, not the server.
+
+#### `gear.savegame.scope() -> string?`
+
+The savegame this game was loaded from or last saved to: `'GAME05'` (`Save\GAME05.PAK`), `'HERO03'` (a network hero file), `<folder>-GAME05` when the game reads its savegames from another folder. nil in a new game that was not saved yet.
+
+- returns `string?`
+
+#### `gear.savegame.kind() -> ('load'|'hero'|'new')?`
+
+How this game started: `'load'` (a savegame), `'hero'` (a network hero file), `'new'` (a new game); nil if the game's load command was not seen (the game was running before Gear, or the command was not found: the data is then global as before).
+
+- returns `('load'|'hero'|'new')?`
+
+#### `gear.savegame.scope_of(slot) -> string`
+
+The scope name of savegame `slot` (`'GAME05'`).
+
+- `slot`: `integer`
+- returns `string`
+
+#### `gear.savegame.read(name) -> string?, string?`
+
+A file of this mod's data of the running game (`.json` or `.txt`, a name of letters, digits, `_`, `-` and `.`). Using this API makes Gear keep the mod's data per savegame.
+
+- `name`: `string`
+- returns `text` `string?`
+- returns `error` `string?`
+
+#### `gear.savegame.write(name, text) -> boolean?, string?`
+
+Writes a file of this mod's data of the running game (atomic, at most 8 MB).
+
+- `name`: `string`
+- `text`: `string`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.savegame.read_saved(scope, name) -> string?, string?`
+
+A file of the data kept for another savegame (for a list that shows what each savegame holds).
+
+- `scope`: `string`
+- `name`: `string`
+- returns `text` `string?`
+- returns `error` `string?`
 
 ## Hooks between mods (gear.events)
 
