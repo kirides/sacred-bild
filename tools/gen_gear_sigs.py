@@ -94,6 +94,15 @@ GEAR = [
     # The hero file writer ("SAVEHERO", cdecl bool (path), the network game's Save\HeroNN.pax every 300 s, on leaving and
     # at merchants): Gear raises game.hero_saved after it.
     ('heroSave', 0x0061CD00, 'func'),
+    # "LOADHERO" (cdecl (path, hero id, 0)): reads a hero file into the hero object with that id; a developer command
+    # (0x614230) creates hero 2 and loads Save\Hero%2d.pax into it so. gear.party imports heroes with it.
+    ('heroLoad', 0x0061D0F0, 'func'),
+    # A game-wide byte the hero loader sets from the file's header (record 0xC3; read by the save writer, the mouse
+    # handler, the stats code): an imported companion must not change it for the running game.
+    ('g_heroFileFlag', 0x0182EE50, 'data'),
+    # The backpack tab of the inventory window (cUI_InventoryTab, made by 0x6BFFE0): it keeps the hero id whose
+    # container it shows (+0x154, +0x158) from when the UI was built; a control switch points it at the new hero.
+    ('cUI_InventoryTab_vtable', 0x008965C4, 'data'),
     # Hero names (gear/netmsg.cpp): a hero keeps its name as a text resource whose id is at creature +0x3C (0x26FF + the
     # hero's id); the text manager (singleton at 017E7F68, getter 0x6725E0) returns it: thiscall (manager, id) -> wstring*.
     ('g_pTextManager', 0x017E7F68, 'data'),

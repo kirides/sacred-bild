@@ -26,10 +26,31 @@ namespace Party
     // The local player's heroes in the world (ids 1..16), the controlled one first (another player's hero is never one).
     std::vector<uint32_t> heroes();
     bool isHero(uint32_t id);
+    // The mercenaries that follow the local player's heroes (their follower lists); orders, abilities and state work
+    // for them as for the heroes.
+    std::vector<uint32_t> mercenaries();
 
     // Creates a hero of class `heroClass` (1..9, the hero types) at `at` with the lowest free id from 3 on, as the
     // engine creates the player's hero. 0 and `error` if it cannot.
     uint32_t recruit(uint32_t heroClass, const World::Position& at, const char*& error);
+
+    // A hero file (AMH: Save\HeroNN.pax of the network game, or one exportHero wrote): what its header (record 0xC3)
+    // says. False if it is none.
+    struct HeroFile
+    {
+        std::wstring path;
+        std::wstring name;
+        uint32_t heroClass = 0;
+        uint32_t level = 0;
+    };
+    bool readHeroFile(const std::wstring& path, HeroFile& out);
+
+    // Creates a companion from a hero file at `at`, as the engine's own LOADHERO does it: everything the hero had (stats,
+    // skills, combat arts, equipment, backpack) comes along. 0 and `error` if it cannot.
+    uint32_t importHero(const std::wstring& path, const World::Position& at, const char*& error);
+
+    // Writes the controlled hero to a hero file (the network game's format, the engine's SAVEHERO).
+    bool exportHero(const std::wstring& path, const char*& error);
 
     // Removes a companion (not the controlled hero) from the world, with what it wears.
     bool dismiss(uint32_t id, const char*& error);
@@ -67,6 +88,9 @@ namespace Party
         float regenMax = 0;     // its regeneration time
     };
     bool abilities(uint32_t id, std::vector<Ability>& out);
+
+    // What a hero wears: the item ids of its equipment slots (creature +0x1A4, 19 dwords), 0 for an empty slot.
+    bool equipment(uint32_t id, uint32_t (&slots)[19]);
 
     // A combo slot (the combo master's): its id (0x200 + slot, what an Ability order takes), up to four combat arts with
     // their levels, the regeneration time and how far it has regenerated (ready when charge >= total).

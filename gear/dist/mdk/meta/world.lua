@@ -290,6 +290,11 @@ function Creature:abilities() end
 ---@return GearHeroAbility?
 function Creature:ability(id) end
 
+--- What a hero wears: its equipment slots that hold an item (the game's slot numbers 0 to 18), nil for other
+--- creatures.
+---@return {slot: integer, item: GearItem}[]?
+function Creature:equipment() end
+
 --- A hero's combos (the combo master's slots that hold arts), nil for other creatures. Use one with
 --- `order_ability(combo.id, target)`.
 ---@return GearHeroCombo[]?

@@ -95,6 +95,14 @@ namespace Gear::Addr
     // ENG 0061CD00 ("SAVEHERO"): writes the hero file, cdecl (path) -> bool. A network game calls it through 0x7F38E0
     // (Save\HeroNN.pax: every 300 s from the receive loop, when the player leaves, at merchants); the network menu too.
     inline Sacred::Cdecl<uint8_t(const char* path)> heroSave{};
+    // ENG 0061D0F0 ("LOADHERO"): cdecl (path, hero id, 0) -> 1 if the file opened: loads a hero file (AMH) into the hero
+    // object with that id: its creature record, stats, skills, combat arts, equipment, backpack.
+    inline Sacred::Cdecl<uint32_t(const char* path, uint32_t id, uint32_t a3)> heroLoad{};
+    // ENG 008965C4: the vtable of cUI_InventoryTab, the backpack page of the inventory window; +0x154 (u32) and +0x158
+    // (u16) hold the hero id whose container it shows, set once when the UI is built (0x6BFFE0).
+    inline uintptr_t cUI_InventoryTab_vtable{};
+    // ENG 0182EE50: a byte of the running game that the hero loader overwrites from the file's header.
+    inline Sacred::Global<uint8_t> g_heroFileFlag{};
     // Hero names. ENG 017E7F68: the text manager; ENG 00672C90: its lookup, thiscall (manager, id) -> STLport wstring*
     // ({begin, end, ...}; an empty one if the id has no text), ret 4. A hero's text id is at creature +0x3C (0x26FF +
     // its object id: the menus and 0x7EDC50 store the heroes' names there in single player and network games alike).

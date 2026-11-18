@@ -899,6 +899,18 @@ do
         for _, k in ipairs(list) do k.ready = k.charge >= k.total end
         return list
     end
+    -- What the hero wears: {slot = n (0..18), item = gear.world.item table}, in slot order.
+    function creature_mt:equipment()
+        local slots = native.party_equipment(self.id)
+        if not slots then return nil end
+        local out = {}
+        for slot = 0, 18 do
+            local id = slots[slot]
+            local it = id and world.item(id)
+            if it then out[#out + 1] = {slot = slot, item = it} end
+        end
+        return out
+    end
     function creature_mt:set_combo(slot, arts)
         assert(type(slot) == 'number' and type(arts) == 'table', 'expected a slot (0..3) and a list of combat arts')
         return native.party_set_combo(self.id, slot, arts)
@@ -962,6 +974,12 @@ do
         return out
     end
     function P.leader() return wrap(native.hero()) end
+    -- The game's own mercenaries that follow the party (the hero they follow can be any party hero).
+    function P.mercenaries()
+        local out = {}
+        for i, id in ipairs(native.party_mercenaries()) do out[i] = wrap(id) end
+        return out
+    end
     function P.companions()
         local out = {}
         for i, id in ipairs(native.party_heroes()) do
@@ -4791,6 +4809,31 @@ local function make_env(mod)
     gear.world = w
     gear.party = {}
     for k, v in pairs(kernel.party) do gear.party[k] = v end
+    -- Hero files (the network game's Save\HeroNN.pax and the mod's own heroes\*.pax): list, bring one into the party,
+    -- write the controlled hero to one.
+    gear.party.hero_files = function()
+        local list = native.party_hero_files(mod.dir)
+        for _, f in ipairs(list) do
+            local c = CLASS_INFO.by_id[f.class_id]
+            f.class = c and c.name
+        end
+        return list
+    end
+    gear.party.recruit_hero = function(file, opts)
+        assert(type(file) == 'string', 'file must be a hero file (hero_files().file)')
+        opts = opts or {}
+        local leader = native.hero()
+        local lo = leader and native.object(leader)
+        local x, y, layer = opts.x or (lo and lo.x), opts.y or (lo and lo.y), opts.layer or (lo and lo.layer) or 0
+        if not x or not y then return nil, 'no game is running' end
+        local id, err = native.party_import(mod.dir, file, math.floor(x), math.floor(y), layer)
+        if not id then return nil, err end
+        return wrap(id)
+    end
+    gear.party.export_hero = function(name)
+        assert(type(name) == 'string', 'name must be a string')
+        return native.party_export(mod.dir, name)
+    end
     gear.mp = mp
     gear.net = mp._net.api
     gear.chat = {
