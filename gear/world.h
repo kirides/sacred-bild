@@ -67,7 +67,7 @@ namespace World
 
     // Creates an object of `type` at `at` with the engine's own create call, whatever the game kind: `broadcast` makes the
     // engine announce it to the peers in a network game (message 0x16F). The caller has checked that it may.
-    uint32_t createObject(uint32_t type, const Position& at, bool broadcast, const char*& error);
+    uint32_t createObject(uint32_t type, const Position& at, bool broadcast, const char*& error, uint32_t want = 0);
 
     // Automation self tests only: sets or clears the network flag (nothing else runs in between: the mod code runs on
     // the engine's thread), to test that the guards refuse in a network game.
@@ -132,4 +132,11 @@ namespace World
     // The address of the live object id of any kind (creature, item ...), 0 if there is none: for Gear's own native code (gear/drops.cpp's
     // loot self test calls the engine's loot function with a creature). Valid until the object is destroyed.
     uintptr_t objectAddress(uint32_t id);
+
+    // The local player's hero id as the players object keeps it (+0x14; 1 in single player unless gear.party switched
+    // control), 0 if there is none. Objects tick only on the computer whose id is their owner byte (+0x39).
+    uint32_t localId();
+
+    // Destroys an object through the engine (heroes too: the caller checked that it may). False if there was none.
+    bool destroyObject(uint32_t id);
 }

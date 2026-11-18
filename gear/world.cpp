@@ -98,11 +98,13 @@ namespace
     }
 
     // 1: created (id in `id`), 0: the game returned 0, -1: fault.
-    int callCreate(void* m, uint32_t type, WorldPos* pos, bool broadcast, uint32_t& id)
+    // `want`: the id the object should get (0: the next free one; a taken id's object is destroyed first, as the
+    // engine's create does).
+    int callCreate(void* m, uint32_t type, WorldPos* pos, bool broadcast, uint32_t want, uint32_t& id)
     {
         __try
         {
-            id = Addr::cObjectManager_create(m, type, pos, 0, broadcast ? 1 : 0, 0);
+            id = Addr::cObjectManager_create(m, type, pos, static_cast<int>(want), broadcast ? 1 : 0, 0);
             return id ? 1 : 0;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -355,16 +357,35 @@ bool World::changesAllowed()
     {
         return false;
     }
-    int heroes = 0;
+    // Another player's hero (one the local player does not own, +0x39) means a network game whatever the flag says.
+    // The party's companions (gear/party.cpp) are heroes of the local player.
+    const uint32_t local = localId();
+    int foreign = 0;
     for (uint32_t id = 1; id <= kHeroIds; ++id)
     {
         const uintptr_t o = live(m, id);
-        if (o && callIsCreature(o))
+        uint8_t owner = 0;
+        if (o && callIsCreature(o) && readAt(o, 0x39, owner) && owner != local)
         {
-            ++heroes;
+            ++foreign;
         }
     }
-    return heroes == 1;
+    return foreign == 0;
+}
+
+uint32_t World::localId()
+{
+    uint32_t net = 0, id = 0;
+    return Addr::g_pNetPlayers && safeCopy(&net, reinterpret_cast<const void*>(Addr::g_pNetPlayers.address), 4) && net &&
+                   readAt(net, 0x14, id)
+               ? id
+               : 0;
+}
+
+bool World::destroyObject(uint32_t id)
+{
+    void* m = manager();
+    return Addr::cObjectManager_destroy && live(m, id) && callDestroyObject(m, id) > 0;
 }
 
 uint32_t World::hero()
@@ -453,7 +474,7 @@ bool World::inventoryChangesAllowed()
     return available() && hero() && (networkGame() || changesAllowed());
 }
 
-uint32_t World::createObject(uint32_t type, const Position& at, bool broadcast, const char*& error)
+uint32_t World::createObject(uint32_t type, const Position& at, bool broadcast, const char*& error, uint32_t want)
 {
     void* m = manager();
     if (!Addr::cObjectManager_create || !available())
@@ -476,7 +497,7 @@ uint32_t World::createObject(uint32_t type, const Position& at, bool broadcast, 
     pos.y = at.y;
     pos.layer = at.layer;
     uint32_t id = 0;
-    const int result = callCreate(m, type, &pos, broadcast, id);
+    const int result = callCreate(m, type, &pos, broadcast, want, id);
     if (result < 0)
     {
         LOG("World: creating type {} at {},{} faulted", type, at.x, at.y);

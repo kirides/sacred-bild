@@ -296,4 +296,18 @@ namespace Gear::Addr
     inline uintptr_t rarityFn485C10{};
     inline uintptr_t rarityFn4AC940{};
     inline uintptr_t rarityFn5D57C0{};
+
+    // Party (gear/party.cpp). ENG 0057E160: a stats block (creature +0x3A8) gains experience and levels up with the
+    // skill points, thiscall (stats, amount), ret 4. ENG 0055FC00: the last step of the engine's own hero creation
+    // (0060D9F0), thiscall (stats, 0, -1), ret 8. ENG 00548F60: whether `target` is alive and hostile to the
+    // creature, thiscall, ret 4. ENG 00435D30: the UI image index of a creature type's portrait (the party window's),
+    // stdcall (type), ret 4. ENG 0089095C: the vtable of the 0x44-byte creature events (orders) a creature's vtable
+    // +0x18 takes. ENG 0182EE5C / 0182EE60: the two anti-cheat shadow pages of the local hero (see party.cpp).
+    inline Sacred::Thiscall<void(void* stats, uint32_t amount)> cStats_addExperience{};
+    inline Sacred::Thiscall<void(void* stats, uint32_t a, int32_t b)> cStats_initSpells{};
+    inline Sacred::Thiscall<uint32_t(void* creature, void* target)> cCreature_isEnemy{};
+    inline uintptr_t creaturePortraitImage{};   // stdcall (type) -> index
+    inline Sacred::Global<uint8_t> g_creatureEventVtable{};
+    inline Sacred::Global<uint32_t*> g_antiCheatShadow1{};
+    inline Sacred::Global<uint32_t*> g_antiCheatShadow2{};
 }

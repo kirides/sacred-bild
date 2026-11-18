@@ -459,6 +459,25 @@ fair generator without the CRT `rand`'s modulo bias, a seeded one, or a Lua func
 `drops.select` (change or replace the item the loot code picks). The loot code runs in `sacred.exe` on the machine that owns the creature (GameServer.exe has none).
 What the engine does, what each call touches, the limits and the tests: [Gear drops](GearDrops.md); the calls: [reference](GearApi.md#drops-geardrops).
 
+### Party
+
+`gear.party` gives the player companions in single player: more heroes of the player at the hero ids 3 to 16, the way a
+network game holds the players' heroes. Each has its own backpack, equipment, attributes, skills, combat arts, spells
+and experience, and is saved with the savegame like everything else in the world. `recruit(class, {experience = n})`
+creates one where the leader stands (as the engine creates the player's hero: level 1, no items; the experience goes
+through the game's own gain, so it levels up with skill points). `control(hero)` gives the player another hero: the
+camera, the HUD, the windows, the mouse, the keys and the controller serve it, `gear.world.hero()` is it, the gold goes
+with it (the party's purse) and the mercenaries follow it; every mod gets `party.control` `(from, to)`. The heroes the
+player does not control stand still until a mod orders them: `creature:order_move(x, y)`, `order_attack(target)`,
+`order_ability(id, target | x, y)` (a combat art or spell it knows, refused while it regenerates: `creature:abilities()`
+lists them with `regen`), `order_stop()`; `creature:action()` says what one does, `creature:is_enemy(other)` what the
+cursor's attack symbol would say. `share_experience(share, radius)` makes the experience a party hero gains from the
+game go to the others too. Loading a savegame gives control back to the hero with id 1. Id 2 is never used: the engine
+moves object 2 with the arrow keys in single player (a developer feature).
+
+In a network game the functions refuse: there the hero ids belong to the players, and objects tick only on the
+computer that owns them (see the engine notes). What it touches: [reference](GearApi.md#party-gearparty).
+
 ### Mod manager
 
 Sacred Gear has a **Mods** screen, a built-in part of it (`gear/lua/modmanager.lua`, shipped inside `SacredGear.dll` and
@@ -620,6 +639,7 @@ User documentation of the session mods and of the client mods of the game server
 | `uidemo` | `gear.ui`: a translucent hero panel, a widget gallery in a draggable, closable panel (F4) with every widget, images in the three fit modes and the fonts, tooltips; a note in the inventory's frame, the world and top layers; with `-gear-auto` a self test that clicks every widget and takes screenshots. |
 | `itemicontest` | `gear.ui.item_icon`: a row of weapon and armour models by type id and a row from live items; checks that nothing is left behind. |
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
+| `partytest` | An automation run of `gear.party`: recruits a companion with experience, gives it orders, switches control both ways (the old leader walks on orders, the world keeps ticking), kills an enemy with the former leader's combat art and checks the shared experience, saves and loads with the companion in control, dismisses it (`-gear-load=N -gear-mods=partytest`, a savegame with an enemy nearby; writes savegame 63: use a copy of the game folder). |
 | `mptest` | An automation run: the hero's name, key and host, gold through the engine's setter, and a 5000-byte table through the mod channel (`-gear-load=1 -gear-mods=mptest`: the loopback; config `mode = 'lan'`: hosts a LAN game and also sends to its own slot through the real chat carrier). |
 | `scrolltest` | An automation run: a scroll area of 100 lines (wheel, a line scrolled out of sight takes no click, thumb drag) and a dropdown of 30 entries whose open list lies over text and a button drawn after it (`-gear-mods=scrolltest`). |
 | `tooltiptest` | An automation run: tooltips of buttons at the screen's edges and corners, with screenshots (`gear.ui.tooltip_rect`). |
@@ -798,6 +818,7 @@ What Sacred Gear relies on, English GOG addresses:
 |---|---|
 | Object manager | `*0x00AD5C40`; +4 / +8 the object vector by id (ids 1..16 the heroes). Objects: +0x0C id, +0x10 type, +0x14 flags (0x10 freed or parked), +0x18 position `{u16 sector, i32 x, i32 y, u8 layer}`. Creatures: +0x3B4 experience, +0x3EE gold, +0x3FE level, +0x4D4 / +0x4D8 maximum / current health. |
 | `cObjectManager::create` 0x005FBA40 | thiscall (type, position*, 0, broadcast, x) -> id; the hero is created with (type, pos, 0, 1, 0), the script command CreateNPC with (type, pos, 0, 0, x). |
+| Party | The players object `*0x0182EBE8` +0x14 is the local hero id; an object ticks only where its owner byte (+0x39) is the local id. Switching control (gear/party.cpp) rewrites the owner of everything the old id owned, sets +0x14 and the engine's mouse target (`*0x00AD6EF8` +0x13C; a savegame load resets +0x14 to 1 but not this), swaps the follower vector (+0x39C, 9-byte entries, mercenary leader at +0x251) and rewrites the anti-cheat shadows (`*0x0182EE5C` and `*0x0182EE60`, checked by 0x00590730 against `hero()`: experience, gold, level XOR the hero's byte +0x38 x4 (doubled for the second page), then the dwords from +0x3B0). A hero is created with `create(type 1..9, pos, id, 0, 0)` and finished as 0x0060D9F0 does (+0x18 copied to +0x2B9, 0x0055FC00 (stats, 0, -1)). Stats block +0x3A8: abilities vector at +0x102 (0x16-byte entries: +4 id, +6 level, +7 bonus, +0xA regeneration time, +0x12 seconds left), experience gain 0x0057E160 (stats, amount) levels up. Orders are 0x44-byte events (vtable 0x0089095C) through the creature's vtable +0x18: move type 4 (+0x14 mode 2, +0x18 x, +0x1C y), attack 7 (+0x18 target, +0x1C x, +0x20 y), ability 0x105 (+0x10 target, +0x14 sector, +0x18 x, +0x1C y, +0x28 100, +0x2C 1 art / 0 spell, +0x30 id, +0x34 layer). 0x006107BC drives object 2 with the arrow keys in single player. |
 | `cObjectManager::pop` 0x005FCCB0 | thiscall (id, position*): places an object (teleport); ParkCreature (0x006073D0) moves one far away with it. |
 | Object types | `*0x00AAB5E4` + id * 0x80 (0 < id < 0x7E60): +0x2E kind, +0x37 name. |
 | Saving | The savegame window (0x0071CC90 action 2) sends a 0x24-byte event (vtable 0x00890B38, +4 code 0xF, +8 sub 2, +0xC slot, +0x10 stored in the header, +0x14 capture the picture first, +0x18 check that no trade or chest window blocks (the engine logs AUTOSAVE and refuses otherwise), +0x20 the display name, copied into the engine's 64 bytes at +0x6A) to `cEngine::receiveEvent` (0x00618090, thiscall (event)). It stores the slot at engine +0x68 and sets 0x40 in the engine's flags (+0x54), unless that bit is already set. The render thread loop (0x0060E350) writes `SAVE\GAME%02d.PAK` (0x00619BF0) when `flags & 0xC0` and clears them; 0x200 is a queued load. Byte `*0x0182EBE8` +4 is 0 in single player. |

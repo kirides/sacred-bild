@@ -93,6 +93,13 @@ static const Sig::Entry kGearSigs[] = {
     {"rangeRand", "56 57 8B 7C 24 0C 85 FF 7D 02 33 FF", 0, Sig::Take::Match, &Gear::Addr::rangeRand}, // 00443B20, 004439F0
     {"cItem_pickType", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 18 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_pickType}, // 005C7FA0, 005C7F10
     {"g_rarityTable", "8B 35 ?? ?? ?? ?? 8B C8 83 C4 14 33 C0 D8 4C 24 18", 2, Sig::Take::Abs32, &Gear::Addr::g_rarityTable}, // 00AD4438, 00AD23B8
+    {"cStats_addExperience", "55 8B EC 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 38 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_addExperience}, // 0057E160, 0057E020
+    {"cStats_initSpells", "83 EC 10 53 55 8B 6C 24 1C 56 57 33 FF", 0, Sig::Take::Match, &Gear::Addr::cStats_initSpells}, // 0055FC00, 0055FAC0
+    {"cCreature_isEnemy", "8B 44 24 04 85 C0 74 3E 66 83 B8 FC 00 00 00 09", 0, Sig::Take::Match, &Gear::Addr::cCreature_isEnemy}, // 00548F60, 00548DD0
+    {"creaturePortraitImage", "8B 4C 24 04 33 C0 49 81 F9 C9 02 00 00", 0, Sig::Take::Match, &Gear::Addr::creaturePortraitImage}, // 00435D30, 00435C00
+    {"g_creatureEventVtable", "C7 44 24 18 ?? ?? ?? ?? 89 7C 24 2C 89 7C 24 30", 4, Sig::Take::Abs32, &Gear::Addr::g_creatureEventVtable}, // 0089095C, 0088E95C
+    {"g_antiCheatShadow1", "8B 0D ?? ?? ?? ?? 8A 47 38 8B F0 8B 11 C1 E6 08", 2, Sig::Take::Abs32, &Gear::Addr::g_antiCheatShadow1}, // 0182EE5C, 0182CDDC
+    {"g_antiCheatShadow2", "8B 86 B4 03 00 00 8B 0D ?? ?? ?? ?? D1 E7 8B D7", 8, Sig::Take::Abs32, &Gear::Addr::g_antiCheatShadow2}, // 0182EE60, 0182CDE0
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
     {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270

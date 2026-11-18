@@ -3,6 +3,7 @@
 #include "drops.h"
 #include "lua_host.h"
 #include "netmsg.h"
+#include "party.h"
 #include "patch.h"
 #include "pickup.h"
 #include "realm.h"
@@ -22,6 +23,7 @@ namespace
         Ui::setEngine(engine);
         Save::frame(engine);
         Drops::frame();
+        Party::frame();
         LuaHost::frame(dt);
     }
 }
@@ -37,6 +39,7 @@ bool Hooks::install()
     Drops::install();
     NetMsg::install();
     Chat::install();
+    Party::install();
     const bool committed = Patch::commit();
     // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.
     SiteHook::install();

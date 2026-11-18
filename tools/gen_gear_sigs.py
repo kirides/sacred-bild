@@ -186,6 +186,20 @@ GEAR = [
     ('rangeRand', 0x00443B20, 'func'),
     ('cItem_pickType', 0x005C7FA0, 'func'),
     ('g_rarityTable', 0x00AD4438, 'data', 0x0055A106),
+    # Party (gear/party.cpp): companion heroes. A hero's stats block (creature +0x3A8) gains experience through
+    # addExperience (thiscall (stats, amount), ret 4: levels up with the skill points, as a kill does); the engine's
+    # own hero creation (0x60D9F0) finishes a new hero with initSpells (thiscall (stats, 0, -1), ret 8). isEnemy
+    # (thiscall (creature, target) -> bool, ret 4) is the cursor's attack test; portraitImage (stdcall (type) ->
+    # UI image index, ret 4) is the portrait the party window draws for a creature type. Orders reach a creature as
+    # 0x44-byte events of this class through its vtable +0x18. The anti-cheat shadows (0x590730 checks them against
+    # hero()) are two pages of XOR-keyed copies of experience, gold, level and the stats block.
+    ('cStats_addExperience', 0x0057E160, 'func'),
+    ('cStats_initSpells', 0x0055FC00, 'func'),
+    ('cCreature_isEnemy', 0x00548F60, 'func'),
+    ('creaturePortraitImage', 0x00435D30, 'func'),
+    ('g_creatureEventVtable', 0x0089095C, 'data'),
+    ('g_antiCheatShadow1', 0x0182EE5C, 'data'),
+    ('g_antiCheatShadow2', 0x0182EE60, 'data'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

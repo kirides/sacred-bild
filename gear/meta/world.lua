@@ -266,3 +266,65 @@ function Creature:remove() end
 ---@return boolean? ok
 ---@return string? error
 function Creature:teleport(x, y, layer) end
+
+--- Whether the creature is a hero (a player's or a companion).
+---@return boolean
+function Creature:is_hero() end
+
+--- Whether `other` is alive and hostile to this creature (what the cursor's attack symbol shows). Nil when one of
+--- them is not a creature.
+---@param other Creature|integer
+---@return boolean?
+function Creature:is_enemy(other) end
+
+--- The image of the creature's portrait as the party window draws it (an id for `gear.ui.image`), nil if it has none.
+---@return integer?
+function Creature:portrait() end
+
+--- A hero's combat arts and spells (see `gear.party`), nil for other creatures.
+---@return GearHeroAbility[]?
+function Creature:abilities() end
+
+--- One of the hero's combat arts or spells, nil if it does not know it.
+---@param id integer
+---@return GearHeroAbility?
+function Creature:ability(id) end
+
+--- What a party hero does now, and the game's raw action and movement states.
+---@return GearHeroAction? action
+---@return integer? action_state
+---@return integer? movement_state
+function Creature:action() end
+
+--- Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground does for the controlled one.
+---@param x number
+---@param y number
+---@return boolean? ok
+---@return string? error
+function Creature:order_move(x, y) end
+
+--- Orders a party hero to stop.
+---@return boolean? ok
+---@return string? error
+function Creature:order_stop() end
+
+--- Orders a party hero to attack `target` with its weapon (it walks there first), as a click on an enemy does.
+---@param target Creature|integer
+---@return boolean? ok
+---@return string? error
+function Creature:order_attack(target) end
+
+--- Orders a party hero to use a combat art or spell it knows on a creature (`target`) or a spot (`x`, `y`), as the
+--- skill slot does for the controlled one. The game refuses it while the ability regenerates (`ability(id).ready`).
+---@param ability integer
+---@param target Creature|integer|number A creature, or the x of a spot.
+---@param y? number The y of a spot.
+---@return boolean? ok
+---@return string? error
+function Creature:order_ability(ability, target, y) end
+
+--- Gives a party hero experience through the game's own gain (it levels up with skill points). Not shared.
+---@param amount number
+---@return boolean? ok
+---@return string? error
+function Creature:add_experience(amount) end

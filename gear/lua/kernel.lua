@@ -869,6 +869,134 @@ function creature_mt:class()
     if c then return c.name, c.id end
 end
 
+-- Party (gear.party): companion heroes in single player, see docs/Gear.md, "Party". Kept in kernel.party: the main
+-- chunk is at Lua's 200-locals limit.
+kernel.party = {}
+do
+    local P = kernel.party
+    local ACTIONS = {[0] = 'idle', [1] = 'attacking', [2] = 'walking', [4] = 'attacking', [8] = 'attacking', [11] = 'ability'}
+    function creature_mt:is_hero() return native.hero_class(self.id) ~= nil end
+    -- The combat arts (ids from 1000) and spells the hero knows: {id, level, bonus, regen, regen_max, art, ready}.
+    function creature_mt:abilities()
+        local list = native.party_abilities(self.id)
+        if not list then return nil end
+        for _, a in ipairs(list) do
+            a.art = a.id >= 1000
+            a.ready = a.regen <= 0
+        end
+        return list
+    end
+    function creature_mt:ability(id)
+        for _, a in ipairs(self:abilities() or {}) do
+            if a.id == id then return a end
+        end
+    end
+    -- What the hero does: 'idle', 'walking', 'attacking', 'ability' or 'busy', and the raw action and movement states.
+    function creature_mt:action()
+        local action, movement = native.party_state(self.id)
+        if not action then return nil end
+        local name = ACTIONS[action] or 'busy'
+        if name == 'idle' and movement ~= 0 then name = 'walking' end
+        return name, action, movement
+    end
+    function creature_mt:order_move(x, y)
+        assert(type(x) == 'number' and type(y) == 'number', 'x and y must be numbers')
+        local o = info(self)
+        return native.party_order(self.id, 'move', 0, math.floor(x), math.floor(y), o and o.layer or 0, 0)
+    end
+    function creature_mt:order_stop() return native.party_order(self.id, 'stop') end
+    function creature_mt:order_attack(target)
+        local id = type(target) == 'table' and target.id or target
+        assert(type(id) == 'number', 'target must be a creature or its id')
+        return native.party_order(self.id, 'attack', id)
+    end
+    -- order_ability(id, target) or order_ability(id, x, y): a combat art or spell on a creature or a spot.
+    function creature_mt:order_ability(ability, target, y)
+        assert(type(ability) == 'number', 'ability must be an id')
+        if type(target) == 'table' then target = target.id end
+        if y ~= nil then
+            assert(type(target) == 'number' and type(y) == 'number', 'x and y must be numbers')
+            local o = info(self)
+            return native.party_order(self.id, 'ability', 0, math.floor(target), math.floor(y), o and o.layer or 0, ability)
+        end
+        assert(type(target) == 'number', 'target must be a creature, its id, or x, y')
+        return native.party_order(self.id, 'ability', target, nil, nil, nil, ability)
+    end
+    function creature_mt:add_experience(amount)
+        assert(type(amount) == 'number', 'amount must be a number')
+        return native.party_add_exp(self.id, math.floor(amount))
+    end
+    function creature_mt:is_enemy(other)
+        local id = type(other) == 'table' and other.id or other
+        assert(type(id) == 'number', 'other must be a creature or its id')
+        return native.party_hostile(self.id, id)
+    end
+    -- The image (gear.ui.image) of the creature's portrait, as the party window shows it.
+    function creature_mt:portrait()
+        local o = info(self)
+        return o and native.party_portrait(o.type)
+    end
+
+    P.FIRST_ID, P.LAST_ID = 3, 16
+    function P.available() return native.party_available() end
+    function P.heroes()
+        local out = {}
+        for i, id in ipairs(native.party_heroes()) do out[i] = wrap(id) end
+        return out
+    end
+    function P.leader() return wrap(native.hero()) end
+    function P.companions()
+        local out = {}
+        for i, id in ipairs(native.party_heroes()) do
+            if i > 1 then out[#out + 1] = wrap(id) end
+        end
+        return out
+    end
+    -- recruit(class, opts) -> creature | nil, message. class: a name ('darkelf') or id; opts: {x, y, layer} (default:
+    -- where the leader stands), experience (given through the game's own gain, so it levels up with skill points).
+    function P.recruit(class, opts)
+        opts = opts or {}
+        local id = class
+        if type(class) == 'string' then
+            id = nil
+            for _, c in ipairs(CLASSES) do
+                if c.name == class then id = c.id end
+            end
+        end
+        if type(id) ~= 'number' or not CLASS_INFO.by_id[id] then return nil, 'no such hero class' end
+        local leader = native.hero()
+        local lo = leader and native.object(leader)
+        local x, y, layer = opts.x or (lo and lo.x), opts.y or (lo and lo.y), opts.layer or (lo and lo.layer) or 0
+        if not x or not y then return nil, 'no game is running' end
+        local made, err = native.party_recruit(id, math.floor(x), math.floor(y), layer)
+        if not made then return nil, err end
+        if opts.experience and opts.experience >= 1 then
+            native.party_add_exp(made, math.floor(opts.experience))
+        end
+        return wrap(made)
+    end
+    function P.dismiss(c)
+        local id = type(c) == 'table' and c.id or c
+        assert(type(id) == 'number', 'expected a creature or its id')
+        return native.party_dismiss(id)
+    end
+    -- control(c) -> true | nil, message; every mod gets 'party.control' (from, to) after a switch.
+    function P.control(c)
+        local id = type(c) == 'table' and c.id or c
+        assert(type(id) == 'number', 'expected a creature or its id')
+        local from = native.hero()
+        local ok, err = native.party_control(id)
+        if ok and from ~= id then kernel.dispatch('party.control', wrap(from), wrap(id)) end
+        return ok, err
+    end
+    -- share_experience(share, radius): experience a party hero gains from the game also goes to the others within
+    -- `radius` world units (0 or nil: anywhere), times `share` (0 turns it off, 1 the full amount).
+    function P.share_experience(share, radius)
+        assert(type(share) == 'number', 'share must be a number')
+        native.party_share(share, radius or 0)
+    end
+end
+
 -- Multiplayer (gear.mp). A player is a hero object: slots 1..16 are the heroes' object ids. See docs/GearServerMods.md.
 local mp = {}
 do
@@ -3165,7 +3293,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true, ['effect.add'] = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.', 'chat.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.', 'chat.', 'party.'}
 -- EV: emit depth and the hook registry (gear.events: declared custom events, listed for other mods and the docs).
 local EV = {depth = 0, declared = {}}
 
@@ -4644,6 +4772,8 @@ local function make_env(mod)
     end
     w.pickup_refused = function() return native.pickup_refused() end
     gear.world = w
+    gear.party = {}
+    for k, v in pairs(kernel.party) do gear.party[k] = v end
     gear.mp = mp
     gear.net = mp._net.api
     gear.chat = {
