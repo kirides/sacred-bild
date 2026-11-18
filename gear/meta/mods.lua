@@ -44,6 +44,8 @@
 ---@field id string Letters, digits, `_`, `-` and `.`; unique in the mod.
 ---@field label? string Shown in the screen (default: the id).
 ---@field default? string A key with optional modifiers: `'f8'`, `'ctrl+m'`, `'ctrl+shift+k'`; `''` or nil: unbound.
+---@field section? string A heading: keys in a row with the same section are shown under it.
+---@field second? string The id of another key that is this one's second slot: the screen shows both on one row (the other key gets no row of its own).
 
 -- path gear.settings
 --- This mod's declared settings (`settings` in `mod.lua`) with the player's values. Values are checked against the

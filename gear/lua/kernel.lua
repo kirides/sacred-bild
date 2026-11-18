@@ -3721,9 +3721,18 @@ local function parse_keys(list)
         if not default then
             return nil, 'mod.lua: key ' .. k.id .. ': "' .. tostring(k.default) .. '" is not a key like ctrl+m or f8'
         end
-        local d = {id = k.id, label = type(k.label) == 'string' and k.label or k.id, default = default}
+        local d = {id = k.id, label = type(k.label) == 'string' and k.label or k.id, default = default,
+            section = type(k.section) == 'string' and k.section or nil, second = type(k.second) == 'string' and k.second or nil}
         defs[#defs + 1] = d
         by_id[d.id] = d
+    end
+    -- `second`: the id of another key that is this one's second slot; the screen shows both on one row.
+    for _, d in ipairs(defs) do
+        if d.second then
+            local o = by_id[d.second]
+            if not o or o == d or o.second then return nil, 'mod.lua: key ' .. d.id .. ': second must be another key without a second' end
+            o.is_second = true
+        end
     end
     return defs, by_id
 end
@@ -4045,7 +4054,7 @@ function uis.make_input(mod)
             entry.owns = not (b.ctrl or b.shift or b.alt) and b.key or nil
             -- "this key is that same key" changes nothing, unless events are wanted: it only keeps the key from the game's
             -- other uses for the mod (see the conflicts)
-            if entry.poll or not (entry.to == entry.from and not (entry.ctrl or entry.shift or entry.alt) and entry.id == '') then
+            if not (entry.to == entry.from and not (entry.ctrl or entry.shift or entry.alt) and entry.id == '') then
                 list[#list + 1] = entry
             elseif entry.owns then
                 list.owned = list.owned or {}
@@ -4920,6 +4929,7 @@ end
 
 function admin.settings(id) local e = catalog[id]; return e and e.m.settings or {} end
 function admin.keys(id) local e = catalog[id]; return e and e.m.keys or {} end
+function admin.key_def(id, key) local e = catalog[id]; return e and e.m.keys_by_id[key] end
 function admin.get(id, key)
     local e = catalog[id]
     local d = e and e.m.settings_by_id[key]

@@ -1858,6 +1858,8 @@ An entry of `keys` in `mod.lua`: a key bind the player can change.
 | `id` | `string` | Letters, digits, `_`, `-` and `.`; unique in the mod. |
 | `label` | `string` | Shown in the screen (default: the id). (optional) |
 | `default` | `string` | A key with optional modifiers: `'f8'`, `'ctrl+m'`, `'ctrl+shift+k'`; `''` or nil: unbound. (optional) |
+| `section` | `string` | A heading: keys in a row with the same section are shown under it. (optional) |
+| `second` | `string` | The id of another key that is this one's second slot: the screen shows both on one row (the other key gets no row of its own). (optional) |
 
 ### GearSettings
 

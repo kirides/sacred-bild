@@ -8,7 +8,7 @@ local C = ui.COLORS
 
 local ROW_H, ROW_STEP = 58, 62   -- a mod's row in the list and the distance between rows
 local SETTING_ROWS = 9      -- rows of settings per page (section headers count)
-local KEY_ROWS = 7          -- key binds per page
+local KEY_ROWS = 12         -- rows (key binds and headings) per page
 local W, H_MAX = 640, 482   -- the panel: its height is the most it takes, less on a small screen
 local FOOTER_TOP = 42      -- the footer band: from this far above the panel's bottom edge down to it
 local FOOTER_ITEM_H = 22   -- footer controls are this tall and centered in the band (see footer_y)
@@ -391,10 +391,42 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Key binds of one mod
 ---------------------------------------------------------------------------------------------------------------
+-- One slot of a key row: the binding's button (click, then press the new key) and the pick button for a controller.
+local function key_slot(e, k, id, x, ry, w, conflicts)
+    local binding = admin.binding(e.id, k.id)
+    local capturing = screen.capture and screen.capture.mod == e.id and screen.capture.key == k.id
+    local text = capturing and 'Press a key...' or format_binding(binding)
+    local tip = 'Click, then press the new key. Esc cancels, Backspace unbinds.'
+    if #conflicts > 0 then
+        local names = {}
+        for _, c in ipairs(conflicts) do names[#names + 1] = c.name .. ' / ' .. c.label end
+        tip = 'Conflicts with: ' .. table.concat(names, ', ')
+    end
+    if ui.button(id, x, ry + 1, w, 20, text,
+        {layer = 'top', color = capturing and C.accent or (#conflicts > 0 and AMBER or nil), tooltip = tip}) then
+        screen.capture = {mod = e.id, key = k.id}
+        screen.edit = nil
+        admin.capture_start()
+    end
+    if ui.button(id .. '#pick', x + w + 2, ry + 1, 22, 20, '...', {layer = 'top',
+        tooltip = 'Choose the key from an on-screen list (for a controller)'}) then
+        screen.osk = {mode = 'key', mod = e.id, key = k.id, label = k.label, ctrl = false, shift = false, alt = false}
+        screen.capture, screen.edit = nil, nil
+    end
+end
+
 local function draw_keys(p, e)
-    local x, y, w = p.content_x, p.content_y + 34, p.content_w
-    local keys = admin.keys(e.id)
-    local pages = math.max(1, math.ceil(#keys / KEY_ROWS))
+    local x, y, w = p.content_x, p.content_y + 30, p.content_w
+    -- Rows: a heading where a key's section changes, then the key (a key that is another's second slot shares its row).
+    local rows, section = {}, nil
+    for _, k in ipairs(admin.keys(e.id)) do
+        if not k.is_second then
+            if k.section and k.section ~= section then rows[#rows + 1] = {head = k.section} end
+            if k.section then section = k.section end
+            rows[#rows + 1] = {key = k}
+        end
+    end
+    local pages = math.max(1, math.ceil(#rows / KEY_ROWS))
     screen.tab_page = math.max(1, math.min(pages, screen.tab_page))
     -- capturing a new binding
     local cap = screen.capture
@@ -408,38 +440,35 @@ local function draw_keys(p, e)
     end
     local first = (screen.tab_page - 1) * KEY_ROWS
     for i = 1, KEY_ROWS do
-        local k = keys[first + i]
-        if not k then break end
-        local ry = y + (i - 1) * 44
-        local id = 'k:' .. e.id .. ':' .. k.id
-        local binding = admin.binding(e.id, k.id)
-        local conflicts = admin.conflicts(e.id, k.id)
-        ui.label(id .. '#l', k.label, x + 6, ry, {height = 24, valign = 'middle', layer = 'top',
-            tooltip = 'Default: ' .. format_binding(admin.default_binding(e.id, k.id))})
-        local capturing = screen.capture and screen.capture.mod == e.id and screen.capture.key == k.id
-        local text = capturing and 'Press a key...' or format_binding(binding)
-        if ui.button(id, x + 290, ry + 1, 150, 22, text,
-            {layer = 'top', color = capturing and C.accent or (#conflicts > 0 and AMBER or nil),
-             tooltip = 'Click, then press the new key. Esc cancels, Backspace unbinds.'}) then
-            screen.capture = {mod = e.id, key = k.id}
-            screen.edit = nil
-            admin.capture_start()
-        end
-        if ui.button(id .. '#pick', x + 512, ry + 1, 50, 22, 'Pick', {layer = 'top',
-            tooltip = 'Choose the key from an on-screen list (for a controller)'}) then
-            screen.osk = {mode = 'key', mod = e.id, key = k.id, label = k.label, ctrl = false, shift = false, alt = false}
-            screen.capture, screen.edit = nil, nil
-        end
-        if binding ~= admin.default_binding(e.id, k.id) then
-            if ui.button(id .. '#reset', x + 448, ry + 1, 60, 22, 'Default', {layer = 'top', tooltip = 'Back to the default key'}) then
-                admin.set_binding(e.id, k.id, nil)
-            end
-        end
-        if #conflicts > 0 then
+        local row = rows[first + i]
+        if not row then break end
+        local ry = y + (i - 1) * 24
+        if row.head then
+            ui.text(row.head, x + 6, ry, {height = 22, valign = 'middle', color = C.accent, layer = 'top'})
+        else
+            local k = row.key
+            local id = 'k:' .. e.id .. ':' .. k.id
+            local second = k.second and admin.key_def(e.id, k.second) or nil
+            local conflicts = admin.conflicts(e.id, k.id)
+            local conflicts2 = second and admin.conflicts(e.id, second.id) or {}
             local names = {}
-            for _, c in ipairs(conflicts) do names[#names + 1] = c.name .. ' / ' .. c.label end
-            ui.text(fit('Conflicts with: ' .. table.concat(names, ', '), w - 12), x + 6, ry + 25,
-                {size = 11, color = AMBER, layer = 'top'})
+            for _, list in ipairs({conflicts, conflicts2}) do
+                for _, c in ipairs(list) do names[#names + 1] = c.name .. ' / ' .. c.label end
+            end
+            ui.label(id .. '#l', k.label, x + 6, ry, {height = 22, valign = 'middle', layer = 'top',
+                color = #names > 0 and AMBER or nil,
+                tooltip = (#names > 0 and ('Conflicts with: ' .. table.concat(names, ', ') .. '. ') or '') ..
+                    'Default: ' .. format_binding(admin.default_binding(e.id, k.id))})
+            local sw = second and 96 or 150
+            key_slot(e, k, id, x + 220, ry, sw, conflicts)
+            if second then key_slot(e, second, 'k:' .. e.id .. ':' .. second.id, x + 220 + sw + 28, ry, sw, conflicts2) end
+            local changed = admin.binding(e.id, k.id) ~= admin.default_binding(e.id, k.id) or
+                (second and admin.binding(e.id, second.id) ~= admin.default_binding(e.id, second.id))
+            if changed and ui.button(id .. '#reset', x + 220 + (second and 2 * sw + 56 or sw + 28) + 4, ry + 1, 58, 20, 'Default',
+                {layer = 'top', tooltip = 'Back to the default key' .. (second and 's' or '')}) then
+                admin.set_binding(e.id, k.id, nil)
+                if second then admin.set_binding(e.id, second.id, nil) end
+            end
         end
     end
     local fy = footer_y(p)
