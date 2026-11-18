@@ -218,6 +218,10 @@ at the items around the hero every fraction of a second and hands over the curre
 | `gear.clipboard.set(text)`, `get()` | The Windows clipboard (Unicode text, at most 1 MB): `set` returns `true`, or nil and why; `get` the text on it or nil. For a mod that shows something the player wants to paste elsewhere. |
 | `gear.game.config(key)`, `gear.game.config_all()` | The game's own settings from `Settings.cfg`, read only (numbers as numbers, the key in any case; nil if absent): what the game was set to, not a live view; the options window writes the file on OK and many settings are read at start only. For warnings about clashes, e.g. `gear.game.config('AUTOSAVE') == 1`. |
 | `gear.game.save_info(slot)` | `{exists, size, mtime}` of the slot's file (`mtime` in unix seconds), so a mod can rotate slots oldest first. |
+| `gear.game.saves()` | Every savegame (`Save\GAME*.PAK`, or a mod's save folder), sorted by file name like the game's list: `{slot, file, name, hero, class, class_id, level, version, compatible, time, mtime, size, world_date, picture}`, read from each file's header and chunks (hero name, class and level, the time it was saved). |
+| `gear.game.save_picture(slot)` | The savegame's picture (128 x 96, ARGB 4444 in the file) as an id for `gear.ui.image`. |
+| `gear.game.load(slot)`, `gear.game.delete_save(slot)` | Loads a savegame (single player, in game or from the menus) as the savegame window's Load does; deletes its file (the game's savegame windows read their lists again). |
+| `gear.game.save(slot, name, {window = true})` | Saves as the open savegame window's Save button does (for a replacement of that window): the picture the game took when the window opened, and the window closes. |
 
 The game's own **Auto-Save** option (`AUTOSAVE : 1` in `Settings.cfg`, the options window's "Auto-Save") saves when a script runs command number 0x79 (quest and map scripts place it) into the *first free* slot `GAME01`, `GAME02` ... (every one a new file, never overwritten), in single player only; Gear reports it, the quicksave and the savegame window's saves as `game.saved_other`.
 
@@ -379,6 +383,21 @@ what lies below it. Keyboard input is only `key_pressed` for now (no text fields
 While the cursor is over a mod's region (any widget, panel or the layout editor's overlays), the game's windows do
 not see it: with SacredBild, their reads of the cursor give a point far off the screen, so they neither hover nor show
 item tooltips under mod UI (the held item still follows the real cursor), and the world picks nothing there.
+
+#### Replaced windows
+
+A mod can draw its own screen in place of one of the game's windows: `gear.ui.replace_window(name)` claims it
+(`UI_WND_SAVEGAME` and the other in-game control names; the menus' screens `UI_MENU_MAIN`, `UI_MENU_CHARACTER`,
+`UI_MENU_OPTIONS`, `UI_MENU_LOADGAME`, `UI_MENU_NETWORK`). The game's window still opens and closes as it always does
+(hotkeys, the escape menu, its own commands), so the game's state is the one it expects; while it is replaced, its
+`render` and `receiveEvent` (vtable slots 5 and 4 of its class, patched only once a mod claims the window, after
+SacredBild wrapped them) draw nothing and swallow mouse and key events (named UI events still reach it, so it can be
+shown and hidden). Each tick the mod draws its screen it calls `gear.ui.replaced(name)` (true while the window is open);
+without that call for 0.5 s (1.5 s after the window opened), or when the mod is off, unloaded or switched off after
+errors, the game's own window shows again until it closes. `gear.ui.window_open(name)` and `gear.ui.close_window(name)`
+(as the window's Back / Esc) go with it. A replacement usually draws on the `top` layer and takes the keys
+(`capture_keys`) and the controller (`nav_modal`) while it is up. See `better-saveload` in the sacred-gear-mods
+repository.
 
 #### Layout: persistent panels, movable game windows
 

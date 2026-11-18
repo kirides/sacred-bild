@@ -32,6 +32,7 @@ function GearGame.can_save() end
 --- What `save` can be told.
 ---@class GearSaveOpts
 ---@field thumbnail? boolean Let the engine capture the savegame's picture first (default false: the savegame keeps no new picture).
+---@field window? boolean Save as the open savegame window's own Save button does, for a mod that replaces the window (`gear.ui.replace_window`): only while that window is open in game; the picture is the one the game took when it opened, and the window closes once the engine took the request.
 
 --- Asks the engine to save into slot `slot` (0 to 509). The engine refuses while a trading, chest or similar window
 --- is open. Returns true when the request is accepted; the outcome is the event `game.saved` or `game.save_failed`.
@@ -69,6 +70,47 @@ function GearGame.config_all() end
 ---@param slot integer
 ---@return GearSaveInfo?
 function GearGame.save_info(slot) end
+
+--- A savegame as `saves` lists it: what the file says about itself.
+---@class GearSavegame
+---@field slot integer The number in its file name (`GAME05.PAK`: 5); 0 is the quicksave.
+---@field file string The file name, e.g. `GAME05.PAK`.
+---@field name string The savegame's name (ASCII; may be empty, the game writes `QUICKSAVE` or its "empty" text).
+---@field hero? string The hero's name (UTF-8); nil if the file does not say.
+---@field class? GearClassName The hero's class; nil if unknown.
+---@field class_id integer The hero's class number (1 seraphim .. 9 daemon), 0 if unknown.
+---@field level integer The hero's level, 0 if unknown.
+---@field version integer The savegame format (0x1B for Sacred Gold).
+---@field compatible boolean Whether this game can load it (`version` is 0x1B).
+---@field time number When it was saved (unix seconds, from the time the game wrote into it); 0 in old savegames.
+---@field mtime number The file's last write (unix seconds).
+---@field size number Bytes.
+---@field world_date string The game world's date and time as the game shows it.
+---@field picture boolean Whether it has a picture (`save_picture`).
+
+--- Every savegame in the game's `Save` folder (or the folder a mod's overlay puts it in), sorted by file name like the
+--- game's own list. Each file is read for its header: call it when a screen opens, not every frame.
+---@return GearSavegame[]
+function GearGame.saves() end
+
+--- The savegame's picture (128 x 96, what the game captured when it was saved) as an id for `gear.ui.image`; made on
+--- the first call and kept while the file stays the same. nil if it has none.
+---@param slot integer
+---@return integer? picture
+function GearGame.save_picture(slot) end
+
+--- Loads a savegame, as the savegame window's Load does: in a single player game or from the menus (the open savegame
+--- window closes). Refuses a savegame of another version.
+---@param slot integer
+---@return boolean? ok
+---@return string? error
+function GearGame.load(slot) end
+
+--- Deletes a savegame's file (the game's savegame windows read their lists again).
+---@param slot integer
+---@return boolean? ok
+---@return string? error
+function GearGame.delete_save(slot) end
 
 -- ## Clipboard (gear.clipboard)
 

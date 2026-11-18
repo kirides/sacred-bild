@@ -16,6 +16,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include <map>
 #include <mutex>
 
 // See ui.h. The game's UI pass, cUI_Manager_render (ENG 00758ED0, docs/UI_SYSTEM.md section 7), draws everything as
@@ -361,6 +362,153 @@ namespace
         return texture ? readOr<IDirectDrawSurface7*>(reinterpret_cast<uintptr_t>(texture) + 0x14, nullptr) : nullptr;
     }
 
+    // ---- Pictures (Ui::pictureCreate): Gear's own images, a texture each, made on the render thread ----
+
+    struct Picture
+    {
+        int width = 0, height = 0;
+        std::vector<uint16_t> pixels;       // ARGB 4444, until the texture is made
+        IDirectDrawSurface7* surface = nullptr;
+        int texWidth = 0, texHeight = 0;
+        bool failed = false;
+    };
+    std::mutex g_pictureLock;
+    std::map<uint32_t, Picture> g_pictures;
+    std::vector<IDirectDrawSurface7*> g_deadSurfaces;      // released by the next draw (the render thread)
+    uint32_t g_nextPicture = Ui::kPictureBase;
+
+    int powerOfTwo(int n)
+    {
+        int p = 1;
+        while (p < n)
+        {
+            p <<= 1;
+        }
+        return p;
+    }
+
+    // The texture, made from the pixels (g_pictureLock held): 16-bit ARGB 4444 if the device has it, else 32-bit.
+    bool makePictureTexture(IDirect3DDevice7* device, Picture& pic)
+    {
+        IDirect3D7* d3d = nullptr;
+        if (FAILED(device->GetDirect3D(&d3d)) || !d3d)
+        {
+            return false;
+        }
+        IDirectDraw7* ddraw = nullptr;
+        d3d->QueryInterface(IID_IDirectDraw7, reinterpret_cast<void**>(&ddraw));
+        d3d->Release();
+        if (!ddraw)
+        {
+            return false;
+        }
+        const int tw = powerOfTwo(pic.width), th = powerOfTwo(pic.height);
+        bool wide = false;
+        HRESULT hr = E_FAIL;
+        for (const bool w : {false, true})
+        {
+            DDSURFACEDESC2 desc = {};
+            desc.dwSize = sizeof(desc);
+            desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
+            desc.dwWidth = tw;
+            desc.dwHeight = th;
+            desc.ddsCaps.dwCaps = DDSCAPS_TEXTURE;
+            desc.ddsCaps.dwCaps2 = DDSCAPS2_TEXTUREMANAGE;
+            desc.ddpfPixelFormat.dwSize = sizeof(DDPIXELFORMAT);
+            desc.ddpfPixelFormat.dwFlags = DDPF_RGB | DDPF_ALPHAPIXELS;
+            desc.ddpfPixelFormat.dwRGBBitCount = w ? 32 : 16;
+            desc.ddpfPixelFormat.dwRBitMask = w ? 0xFF0000 : 0xF00;
+            desc.ddpfPixelFormat.dwGBitMask = w ? 0xFF00 : 0xF0;
+            desc.ddpfPixelFormat.dwBBitMask = w ? 0xFF : 0xF;
+            desc.ddpfPixelFormat.dwRGBAlphaBitMask = w ? 0xFF000000 : 0xF000;
+            hr = ddraw->CreateSurface(&desc, &pic.surface, nullptr);
+            if (SUCCEEDED(hr))
+            {
+                wide = w;
+                break;
+            }
+            pic.surface = nullptr;
+        }
+        ddraw->Release();
+        if (FAILED(hr))
+        {
+            LOG("UI: no texture for a picture ({:08x})", static_cast<uint32_t>(hr));
+            return false;
+        }
+        DDSURFACEDESC2 desc = {};
+        desc.dwSize = sizeof(desc);
+        if (FAILED(pic.surface->Lock(nullptr, &desc, DDLOCK_WAIT | DDLOCK_WRITEONLY, nullptr)))
+        {
+            pic.surface->Release();
+            pic.surface = nullptr;
+            return false;
+        }
+        for (int y = 0; y < th; ++y)
+        {
+            auto* row = static_cast<uint8_t*>(desc.lpSurface) + size_t(y) * desc.lPitch;
+            // Beyond the picture: its last row and column repeated, so filtering at its edge takes nothing else.
+            const uint16_t* src = pic.pixels.data() + size_t(std::min(y, pic.height - 1)) * pic.width;
+            for (int x = 0; x < tw; ++x)
+            {
+                const uint16_t p = src[std::min(x, pic.width - 1)];
+                if (wide)
+                {
+                    const uint32_t a = (p >> 12) & 0xF, r = (p >> 8) & 0xF, g = (p >> 4) & 0xF, b = p & 0xF;
+                    reinterpret_cast<uint32_t*>(row)[x] = (a * 17) << 24 | (r * 17) << 16 | (g * 17) << 8 | (b * 17);
+                }
+                else
+                {
+                    reinterpret_cast<uint16_t*>(row)[x] = p;
+                }
+            }
+        }
+        pic.surface->Unlock(nullptr);
+        pic.texWidth = tw;
+        pic.texHeight = th;
+        pic.pixels.clear();
+        pic.pixels.shrink_to_fit();
+        return true;
+    }
+
+    // The picture's record (as an image's) and texture; render thread.
+    bool pictureTexture(IDirect3DDevice7* device, uint32_t id, ImageRecord& r, IDirectDrawSurface7*& surface)
+    {
+        std::scoped_lock lock(g_pictureLock);
+        auto it = g_pictures.find(id);
+        if (it == g_pictures.end() || it->second.failed)
+        {
+            return false;
+        }
+        Picture& pic = it->second;
+        if (!pic.surface && !makePictureTexture(device, pic))
+        {
+            pic.failed = true;
+            return false;
+        }
+        r.texture = 0;
+        r.width = pic.width;
+        r.height = pic.height;
+        r.u0 = 0;
+        r.v0 = 0;
+        r.u1 = static_cast<float>(pic.width) / pic.texWidth;
+        r.v1 = static_cast<float>(pic.height) / pic.texHeight;
+        surface = pic.surface;
+        return true;
+    }
+
+    void releaseDeadPictures()
+    {
+        std::vector<IDirectDrawSurface7*> dead;
+        {
+            std::scoped_lock lock(g_pictureLock);
+            dead.swap(g_deadSurfaces);
+        }
+        for (IDirectDrawSurface7* s : dead)
+        {
+            s->Release();
+        }
+    }
+
     // ---- Device state: what the overlay's quads need, read before and set back after ----
 
     struct TLVertex
@@ -584,12 +732,19 @@ namespace
     void drawImage(IDirect3DDevice7* device, StateGuard& state, const Command& c)
     {
         ImageRecord r{};
-        if (!imageRecord(c.image, r) || !(c.color >> 24))
+        IDirectDrawSurface7* surface = nullptr;
+        if (!(c.color >> 24))
         {
             return;
         }
-        IDirectDrawSurface7* surface = imageSurface(r.texture);
-        if (!surface)
+        if (c.image >= Ui::kPictureBase)
+        {
+            if (!pictureTexture(device, c.image, r, surface))
+            {
+                return;
+            }
+        }
+        else if (!imageRecord(c.image, r) || !(surface = imageSurface(r.texture)))
         {
             return;
         }
@@ -754,6 +909,7 @@ namespace
         {
             return;
         }
+        releaseDeadPictures();
         t_draw.clear();
         {
             std::scoped_lock lock(g_lock);
@@ -1368,4 +1524,34 @@ bool Ui::moveWindow(int slot, float x, float y, bool set)
 {
     findBild();
     return g_setWindowFrame && slot >= 0 && slot < kWindowSlots && g_setWindowFrame(slot, x, y, set ? 1 : 0) != 0;
+}
+
+uint32_t Ui::pictureCreate(int width, int height, std::vector<uint16_t> pixels)
+{
+    if (width <= 0 || height <= 0 || width > 2048 || height > 2048 || pixels.size() < size_t(width) * height)
+    {
+        return 0;
+    }
+    std::scoped_lock lock(g_pictureLock);
+    const uint32_t id = g_nextPicture++;
+    Picture& pic = g_pictures[id];
+    pic.width = width;
+    pic.height = height;
+    pic.pixels = std::move(pixels);
+    return id;
+}
+
+void Ui::pictureRelease(uint32_t id)
+{
+    std::scoped_lock lock(g_pictureLock);
+    auto it = g_pictures.find(id);
+    if (it == g_pictures.end())
+    {
+        return;
+    }
+    if (it->second.surface)
+    {
+        g_deadSurfaces.push_back(it->second.surface);
+    }
+    g_pictures.erase(it);
 }

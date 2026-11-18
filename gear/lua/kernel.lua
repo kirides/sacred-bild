@@ -1828,6 +1828,16 @@ uis.scroll_prev = {}
 uis.scroll_hot = nil   -- the key of the topmost scroll area under the cursor (last tick's)
 uis.scroll_focus = nil -- the key of the scroll area clicked last (its keys work while the cursor is elsewhere)
 uis.SCROLLBAR = 12     -- the scrollbar's width
+-- Replaced windows (ui.replace_window): name -> the mod that draws its own screen in the window's place. Published
+-- to Gear every tick before the handlers run; a mod that is off or unloaded does not count (the game's window shows).
+uis.replace = {}
+function uis.publish_replace()
+    local names = {}
+    for name, m in pairs(uis.replace) do
+        if m.disabled or m.unloaded then uis.replace[name] = nil else names[#names + 1] = name end
+    end
+    if native.ui_replace_claims then native.ui_replace_claims(names) end
+end
 
 function uis.defer(fn)
     uis.deferred[#uis.deferred + 1] = fn
@@ -2792,6 +2802,35 @@ local function make_ui(mod)
     function ui.nav_modal(on)
         if on then ui_nav_modal = mod elseif ui_nav_modal == mod then ui_nav_modal = nil end
     end
+    -- ui.replace_window(name, on): the mod draws its own screen in place of the game's window `name` (in game a
+    -- control name such as UI_WND_SAVEGAME, in the menus UI_MENU_LOADGAME ...): while it is open, the game's window
+    -- is not drawn and gets no mouse or keys. -> true | false, message. Each tick it shows its screen the mod calls
+    -- ui.replaced(name); without that the game's window comes back (1.5 s after it opened, 0.5 s after the last).
+    function ui.replace_window(name, on)
+        name = tostring(name):upper()
+        if not native.ui_replace_known(name) then return false, 'no window ' .. name end
+        local owner = uis.replace[name]
+        if on == false then
+            if owner == mod then uis.replace[name] = nil end
+            return true
+        end
+        if owner and owner ~= mod and not owner.disabled and not owner.unloaded then
+            return false, name .. ' is replaced by ' .. tostring(owner.id)
+        end
+        uis.replace[name] = mod
+        return true
+    end
+    -- ui.replaced(name) -> bool: the game's window is open and the mod's screen takes its place now (call it every
+    -- tick the screen is drawn; false: draw nothing, the window is closed or the game's own shows).
+    function ui.replaced(name)
+        name = tostring(name):upper()
+        if uis.replace[name] ~= mod then return false end
+        return native.ui_replace_beat(name)
+    end
+    -- ui.window_open(name) -> bool: whether the game's window (or menu screen) is open.
+    function ui.window_open(name) return native.ui_window_open(tostring(name):upper()) end
+    -- ui.close_window(name) -> bool: closes the game's window as its own Back (or Esc) does.
+    function ui.close_window(name) return native.ui_close_window(tostring(name):upper()) end
     -- ui.back_pressed() -> bool: the controller's B was pressed (consumed: true once per press). Mods with a
     -- nav_modal screen or a panel with `back = false` close or step back with it.
     function ui.back_pressed()
@@ -4258,12 +4297,42 @@ local function make_env(mod)
             return true
         end,
         -- save(slot, name?, opts?) -> true | nil, message: asks the engine to save into Save\GAME<slot>.PAK. The
-        -- result comes as 'game.saved' / 'game.save_failed'. opts: {thumbnail = bool}.
+        -- result comes as 'game.saved' / 'game.save_failed'. opts: {thumbnail = bool, window = bool}; window: as the
+        -- open savegame window's Save button (a replacement of the window saves; it closes).
         save = function(slot, name, opts)
             assert(type(slot) == 'number', 'slot must be a number')
             assert(name == nil or type(name) == 'string', 'name must be a string')
             assert(opts == nil or type(opts) == 'table', 'opts must be a table')
-            return native.save_request(slot, name or '', opts ~= nil and opts.thumbnail == true)
+            return native.save_request(slot, name or '', opts ~= nil and opts.thumbnail == true,
+                opts ~= nil and opts.window == true)
+        end,
+        -- saves() -> the savegames (Save\GAME*.PAK) by file name, each {slot, file, name, hero, class, class_id,
+        -- level, version, compatible, time, mtime, size, world_date, picture}.
+        saves = function()
+            local list = native.saves()
+            for _, s in ipairs(list) do
+                local c = CLASS_INFO.by_id[s.class_id]
+                s.class = c and c.name or nil
+                s.compatible = s.version == 0x1B
+                if s.hero == '' then s.hero = nil end
+            end
+            return list
+        end,
+        -- save_picture(slot) -> picture id for gear.ui.image (128 x 96), or nil if the savegame has none.
+        save_picture = function(slot)
+            assert(type(slot) == 'number', 'slot must be a number')
+            return native.save_picture(slot)
+        end,
+        -- load(slot) -> true | nil, message: loads the savegame (single player; in game or from the menus), as the
+        -- savegame window's Load does.
+        load = function(slot)
+            assert(type(slot) == 'number', 'slot must be a number')
+            return native.save_load(slot)
+        end,
+        -- delete_save(slot) -> true | nil, message: deletes Save\GAME<slot>.PAK.
+        delete_save = function(slot)
+            assert(type(slot) == 'number', 'slot must be a number')
+            return native.save_delete(slot)
         end,
         save_pending = function() return native.save_pending() end,
         -- config(key) -> string | number | nil: a value of the game's Settings.cfg (read only).
@@ -4578,6 +4647,9 @@ local function unload_mod(e)
     D.dirty = true
     ui_keys[m] = nil
     key_capture[m] = nil
+    for name, owner in pairs(uis.replace) do
+        if owner == m then uis.replace[name] = nil end
+    end
     if ui_dropdown and (ui_handle_key[ui_dropdown] or ''):sub(1, #m.id + 1) == m.id .. '\0' then ui_dropdown = nil end
     m.disabled, m.unloaded = true, true     -- timers, tasks and pipes of the mod notice and go
     e.loaded = false
@@ -5027,6 +5099,7 @@ function kernel.tick(dt)
     kernel.poll_mp(dt)
     poll_pipes()
     run_timers()
+    uis.publish_replace()
     ui_begin_tick()
     apply_game_layout()
     run_tasks()
@@ -5050,6 +5123,7 @@ function kernel.idle()
     poll_keys()
     poll_pipes()
     run_timers()
+    uis.publish_replace()
     ui_begin_tick()
     apply_game_layout()
     run_tasks()

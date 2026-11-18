@@ -12,10 +12,12 @@
 #include "netmsg.h"
 #include "pickup.h"
 #include "realm.h"
+#include "replace.h"
 #include "overlay.h"
 #include "padnav.h"
 #include "pipe.h"
 #include "save.h"
+#include "savegames.h"
 #include "sitehook.h"
 #include "tables.h"
 #include "game/gear_addr.h"
@@ -705,6 +707,7 @@ namespace
         size_t length = 0;
         const char* name = luaL_optlstring(L, 2, "", &length);
         const bool thumbnail = lua_toboolean(L, 3) != 0;
+        const bool fromWindow = lua_toboolean(L, 4) != 0;
         if (slot < 0 || slot > Save::kMaxSlot || slot != static_cast<uint32_t>(slot))
         {
             lua_pushnil(L);
@@ -712,7 +715,7 @@ namespace
             return 2;
         }
         const char* error = "";
-        const bool ok = Save::request(static_cast<uint32_t>(slot), std::string(name, length), thumbnail, error);
+        const bool ok = Save::request(static_cast<uint32_t>(slot), std::string(name, length), thumbnail, error, fromWindow);
         if (ok)
         {
             lua_pushboolean(L, 1);
@@ -721,6 +724,154 @@ namespace
         lua_pushnil(L);
         lua_pushstring(L, error);
         return 2;
+    }
+
+    bool checkSlot(lua_State* L, int index, uint32_t& slot)
+    {
+        const lua_Number n = luaL_checknumber(L, index);
+        if (n < 0 || n > Save::kMaxSlot || n != static_cast<uint32_t>(n))
+        {
+            return false;
+        }
+        slot = static_cast<uint32_t>(n);
+        return true;
+    }
+
+    int pushResult(lua_State* L, bool ok, const char* error)
+    {
+        if (ok)
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        lua_pushnil(L);
+        lua_pushstring(L, error ? error : "failed");
+        return 2;
+    }
+
+    // native.saves() -> {{slot, file, name, hero, class_id, level, version, time, mtime, size, world_date, picture}}
+    int nativeSaves(lua_State* L)
+    {
+        const std::vector<Savegames::Info> list = Savegames::list();
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        int i = 0;
+        for (const Savegames::Info& s : list)
+        {
+            lua_createtable(L, 0, 12);
+            lua_pushnumber(L, s.slot);
+            lua_setfield(L, -2, "slot");
+            lua_pushstring(L, s.file.c_str());
+            lua_setfield(L, -2, "file");
+            lua_pushstring(L, s.name.c_str());
+            lua_setfield(L, -2, "name");
+            lua_pushstring(L, s.hero.c_str());
+            lua_setfield(L, -2, "hero");
+            lua_pushnumber(L, s.classId);
+            lua_setfield(L, -2, "class_id");
+            lua_pushnumber(L, s.level);
+            lua_setfield(L, -2, "level");
+            lua_pushnumber(L, s.version);
+            lua_setfield(L, -2, "version");
+            lua_pushnumber(L, static_cast<lua_Number>(s.time));
+            lua_setfield(L, -2, "time");
+            lua_pushnumber(L, static_cast<lua_Number>(s.mtime));
+            lua_setfield(L, -2, "mtime");
+            lua_pushnumber(L, static_cast<lua_Number>(s.size));
+            lua_setfield(L, -2, "size");
+            lua_pushstring(L, s.worldDate.c_str());
+            lua_setfield(L, -2, "world_date");
+            lua_pushboolean(L, s.picture);
+            lua_setfield(L, -2, "picture");
+            lua_rawseti(L, -2, ++i);
+        }
+        return 1;
+    }
+
+    // native.save_picture(slot) -> picture id | nil
+    int nativeSavePicture(lua_State* L)
+    {
+        uint32_t slot = 0;
+        const uint32_t id = checkSlot(L, 1, slot) ? Savegames::picture(slot) : 0;
+        if (!id)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, id);
+        return 1;
+    }
+
+    // native.save_delete(slot) -> true | nil, message
+    int nativeSaveDelete(lua_State* L)
+    {
+        uint32_t slot = 0;
+        const char* error = "the slot is a whole number 0..509";
+        return pushResult(L, checkSlot(L, 1, slot) && Savegames::remove(slot, error), error);
+    }
+
+    // native.save_load(slot) -> true | nil, message
+    int nativeSaveLoad(lua_State* L)
+    {
+        uint32_t slot = 0;
+        const char* error = "the slot is a whole number 0..509";
+        return pushResult(L, checkSlot(L, 1, slot) && Savegames::load(slot, error), error);
+    }
+
+    std::string upperName(lua_State* L, int index)
+    {
+        std::string name = luaL_checkstring(L, index);
+        for (char& c : name)
+        {
+            c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        }
+        return name;
+    }
+
+    // native.ui_replace_known(name) -> bool
+    int nativeUiReplaceKnown(lua_State* L)
+    {
+        lua_pushboolean(L, Replace::known(upperName(L, 1)));
+        return 1;
+    }
+
+    // native.ui_replace_claims({names}): the windows the mods replace, once per tick
+    int nativeUiReplaceClaims(lua_State* L)
+    {
+        luaL_checktype(L, 1, LUA_TTABLE);
+        std::vector<std::string> names;
+        const int n = static_cast<int>(lua_objlen(L, 1));
+        for (int i = 1; i <= n && i <= 64; ++i)
+        {
+            lua_rawgeti(L, 1, i);
+            if (lua_type(L, -1) == LUA_TSTRING)
+            {
+                names.emplace_back(lua_tostring(L, -1));
+            }
+            lua_pop(L, 1);
+        }
+        Replace::setClaims(names);
+        return 0;
+    }
+
+    // native.ui_replace_beat(name) -> bool: the replacement is drawn; whether the window is open and hidden
+    int nativeUiReplaceBeat(lua_State* L)
+    {
+        lua_pushboolean(L, Replace::beat(upperName(L, 1)));
+        return 1;
+    }
+
+    // native.ui_window_open(name) -> bool (in-game windows and the menus' screens)
+    int nativeUiWindowOpen(lua_State* L)
+    {
+        lua_pushboolean(L, Replace::open(upperName(L, 1)));
+        return 1;
+    }
+
+    // native.ui_close_window(name) -> bool
+    int nativeUiCloseWindow(lua_State* L)
+    {
+        lua_pushboolean(L, Replace::close(upperName(L, 1)));
+        return 1;
     }
 
     int nativeSavePending(lua_State* L)
@@ -2678,6 +2829,15 @@ namespace
             {"save_pending", nativeSavePending},
             {"save_info", nativeSaveInfo},
             {"save_poll", nativeSavePoll},
+            {"saves", nativeSaves},
+            {"save_picture", nativeSavePicture},
+            {"save_delete", nativeSaveDelete},
+            {"save_load", nativeSaveLoad},
+            {"ui_replace_known", nativeUiReplaceKnown},
+            {"ui_replace_claims", nativeUiReplaceClaims},
+            {"ui_replace_beat", nativeUiReplaceBeat},
+            {"ui_window_open", nativeUiWindowOpen},
+            {"ui_close_window", nativeUiCloseWindow},
             {"game_config", nativeGameConfig},
             {"net_kill", nativeNetKill},
             {"mp_send_frame", nativeMpSendFrame},
