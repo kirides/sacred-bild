@@ -951,6 +951,12 @@ do
         assert(type(name) == 'string', 'name must be a string')
         return native.party_set_name(self.id, name)
     end
+    -- drink_potion(kind): a party hero drinks a potion of its own backpack ('health' default, or the game's kind number)
+    function creature_mt:drink_potion(kind)
+        local k = kind == nil and 1 or kind == 'health' and 1 or kind
+        assert(type(k) == 'number', "kind must be 'health' or a number")
+        return native.party_potion(self.id, k)
+    end
     -- revive(hp): a fallen party hero stands up again with hp hit points (default: a quarter of its maximum).
     function creature_mt:revive(hp)
         local o = info(self)

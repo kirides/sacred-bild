@@ -214,6 +214,11 @@ GEAR = [
     # A hero's combo slot (thiscall (stats, index, u32 arts[4]*, u16 levels[4]*, combo id), ret 0x10): what the combo
     # master writes; the hero creation clears the four slots with it (ids 0x200..0x203, 0x55E30F).
     ('cStats_setCombo', 0x005813D0, 'func'),
+    # Potions as the potion keys use them (usePotion 0x612FA0): a container's potion of a kind (thiscall (container,
+    # kind, by missing health), ret 8 -> item id; kind 1 healing, 2 mana, 4 ...) and a creature drinking an item it
+    # carries (thiscall (creature, item id) -> bool, ret 4); the caller then takes the item out of the container.
+    ('cInventory_findPotion', 0x005DA8C0, 'func'),
+    ('cCreature_useItem', 0x0054AA80, 'func'),
     ('cCreature_isEnemy', 0x00548F60, 'func'),
     ('creaturePortraitImage', 0x00435D30, 'func'),
     ('g_creatureEventVtable', 0x0089095C, 'data'),

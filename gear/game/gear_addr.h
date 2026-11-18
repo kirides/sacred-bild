@@ -316,6 +316,11 @@ namespace Gear::Addr
     // +0x18 takes. ENG 0182EE5C / 0182EE60: the two anti-cheat shadow pages of the local hero (see party.cpp).
     inline Sacred::Thiscall<void(void* stats, uint32_t amount)> cStats_addExperience{};
     inline Sacred::Thiscall<void(void* stats, uint32_t a, int32_t b)> cStats_initSpells{};
+    // ENG 005DA8C0 / 0054AA80: what the potion keys do (0x612FA0): a container's potion of a kind (1 healing; the
+    // third argument 1 picks the size by the controlled hero's missing health), then the creature uses the item;
+    // on success the item is taken out of the container (0x5DA630 (id, 1)).
+    inline Sacred::Thiscall<uint32_t(void* container, uint32_t kind, uint32_t bySize)> cInventory_findPotion{};
+    inline Sacred::Thiscall<uint32_t(void* creature, uint32_t item)> cCreature_useItem{};
     // ENG 005813D0: a combo slot, thiscall (stats, index, u32 arts[4]*, u16 levels[4]*, combo id 0x200 + index), ret
     // 0x10: the arts, their levels, and the regeneration time (their sum, +0x1A).
     inline Sacred::Thiscall<void(void* stats, uint32_t index, const uint32_t* arts, const uint16_t* levels, uint32_t comboId)> cStats_setCombo{};

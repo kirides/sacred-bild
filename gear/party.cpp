@@ -1132,6 +1132,60 @@ bool Party::state(uint32_t id, State& out)
     return c && readAt(c, kAction, out.action) && readAt(c, kMovement, out.movement);
 }
 
+namespace
+{
+    // The potion keys' steps (0x612FA0) for any party hero: 0 none, 1 drunk, -1 fault.
+    int callUsePotion(uintptr_t creature, uintptr_t container, uint32_t kind)
+    {
+        __try
+        {
+            const uint32_t item = Addr::cInventory_findPotion(reinterpret_cast<void*>(container), kind, 0);
+            if (!item)
+            {
+                return 0;
+            }
+            if (!(Addr::cCreature_useItem(reinterpret_cast<void*>(creature), item) & 0xFF))
+            {
+                return 0;
+            }
+            Addr::cInventory_remove(reinterpret_cast<void*>(container), item, 1);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+}
+
+bool Party::usePotion(uint32_t id, uint32_t kind, const char*& error)
+{
+    if (!available(error))
+    {
+        return false;
+    }
+    const uintptr_t c = heroObject(id);
+    uintptr_t base = 0;
+    if (!c || !sameOwnerAsLocal(c))
+    {
+        error = "not a party hero";
+        return false;
+    }
+    if (!Addr::cInventory_findPotion || !Addr::cCreature_useItem || !Addr::cInventory_remove || !Addr::g_pInventory ||
+        !safeCopy(&base, Addr::g_pInventory.get(), sizeof(base)) || !base || id >= Inventory::kContainers)
+    {
+        error = "the game's potion functions were not found";
+        return false;
+    }
+    const int r = callUsePotion(c, base + id * 0x1180, kind);
+    if (r <= 0)
+    {
+        error = r < 0 ? "the game faulted on the potion" : "no such potion in the backpack";
+        return false;
+    }
+    return true;
+}
+
 bool Party::revive(uint32_t id, int32_t health, const char*& error)
 {
     if (!available(error))

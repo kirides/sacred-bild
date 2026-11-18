@@ -1665,6 +1665,18 @@ namespace
         return 2;
     }
 
+    // native.party_potion(id, kind) -> true | nil, message
+    int nativePartyPotion(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Party::usePotion(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.party_revive(id, hp) -> true | nil, message
     int nativePartyRevive(lua_State* L)
     {
@@ -3578,6 +3590,7 @@ namespace
             {"party_set_combo", nativePartySetCombo},
             {"party_add_exp", nativePartyAddExp},
             {"party_revive", nativePartyRevive},
+            {"party_potion", nativePartyPotion},
             {"party_hostile", nativePartyHostile},
             {"party_portrait", nativePartyPortrait},
             {"party_set_name", nativePartySetName},

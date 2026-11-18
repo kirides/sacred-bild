@@ -101,6 +101,8 @@ static const Sig::Entry kGearSigs[] = {
     {"textResources_set", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 53 55 56 57 8B 44 24 24 33 DB", 0, Sig::Take::Match, &Gear::Addr::textResources_set}, // 00672A60, 00672D40
     {"cStats_initSpells", "83 EC 10 53 55 8B 6C 24 1C 56 57 33 FF", 0, Sig::Take::Match, &Gear::Addr::cStats_initSpells}, // 0055FC00, 0055FAC0
     {"cStats_setCombo", "51 53 8B D9 8B 0D ?? ?? ?? ?? 56 8B 43 08 50 E8 ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::cStats_setCombo}, // 005813D0, 00581290
+    {"cInventory_findPotion", "83 EC 18 53 55 56 8B F1 8B 0D ?? ?? ?? ?? BB 64 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cInventory_findPotion}, // 005DA8C0, 005DA880
+    {"cCreature_useItem", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 48 53 8B 5C 24 5C", 0, Sig::Take::Match, &Gear::Addr::cCreature_useItem}, // 0054AA80, 0054A8F0
     {"cCreature_isEnemy", "8B 44 24 04 85 C0 74 3E 66 83 B8 FC 00 00 00 09", 0, Sig::Take::Match, &Gear::Addr::cCreature_isEnemy}, // 00548F60, 00548DD0
     {"creaturePortraitImage", "8B 4C 24 04 33 C0 49 81 F9 C9 02 00 00", 0, Sig::Take::Match, &Gear::Addr::creaturePortraitImage}, // 00435D30, 00435C00
     {"g_creatureEventVtable", "C7 44 24 18 ?? ?? ?? ?? 89 7C 24 2C 89 7C 24 30", 4, Sig::Take::Abs32, &Gear::Addr::g_creatureEventVtable}, // 0089095C, 0088E95C
