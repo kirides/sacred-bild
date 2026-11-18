@@ -1363,7 +1363,7 @@ Whether the party works now: a single player game with a hero.
 
 #### `gear.party.heroes() -> Creature[]`
 
-The heroes in the world, the controlled one first.
+The player's heroes in the world, the controlled one first (never another player's hero in a network game).
 
 - returns `Creature[]`
 

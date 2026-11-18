@@ -417,6 +417,7 @@ bool Party::available(const char*& why)
 
 std::vector<uint32_t> Party::heroes()
 {
+    // The local player's heroes only: in a network game the other players' heroes are owned by their computers.
     std::vector<uint32_t> out;
     const uint32_t local = World::localId();
     if (heroObject(local))
@@ -425,7 +426,8 @@ std::vector<uint32_t> Party::heroes()
     }
     for (uint32_t id = 1; id <= kLastHeroId; ++id)
     {
-        if (id != local && heroObject(id))
+        const uintptr_t o = id != local ? heroObject(id) : 0;
+        if (o && sameOwnerAsLocal(o))
         {
             out.push_back(id);
         }

@@ -23,7 +23,7 @@ namespace Party
     // Whether the party works now: a single player game with a hero. `why` says why not.
     bool available(const char*& why);
 
-    // The heroes in the world (ids 1..16), the controlled one first.
+    // The local player's heroes in the world (ids 1..16), the controlled one first (another player's hero is never one).
     std::vector<uint32_t> heroes();
     bool isHero(uint32_t id);
 

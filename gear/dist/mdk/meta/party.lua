@@ -20,7 +20,7 @@ local GearParty = {}
 ---@return string? reason Why not.
 function GearParty.available() end
 
---- The heroes in the world, the controlled one first.
+--- The player's heroes in the world, the controlled one first (never another player's hero in a network game).
 ---@return Creature[]
 function GearParty.heroes() end
 
