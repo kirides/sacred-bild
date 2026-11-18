@@ -922,6 +922,11 @@ do
         assert(type(target) == 'number', 'target must be a creature, its id, or x, y')
         return native.party_order(self.id, 'ability', target, nil, nil, nil, ability)
     end
+    -- set_name(name): the name the game shows for a party hero (1 to 30 characters); not saved for companions.
+    function creature_mt:set_name(name)
+        assert(type(name) == 'string', 'name must be a string')
+        return native.party_set_name(self.id, name)
+    end
     function creature_mt:add_experience(amount)
         assert(type(amount) == 'number', 'amount must be a number')
         return native.party_add_exp(self.id, math.floor(amount))

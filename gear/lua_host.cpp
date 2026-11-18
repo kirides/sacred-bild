@@ -1595,6 +1595,18 @@ namespace
         return 1;
     }
 
+    // native.party_set_name(id, name) -> true | nil, message
+    int nativePartySetName(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Party::setName(checkId(L, 1), luaL_checkstring(L, 2), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.party_portrait(type) -> UI image index | nil
     int nativePartyPortrait(lua_State* L)
     {
@@ -3317,6 +3329,7 @@ namespace
             {"party_add_exp", nativePartyAddExp},
             {"party_hostile", nativePartyHostile},
             {"party_portrait", nativePartyPortrait},
+            {"party_set_name", nativePartySetName},
             {"party_share", nativePartyShare},
             {"pipe_open", nativePipeOpen},
             {"pipe_close", nativePipeClose},

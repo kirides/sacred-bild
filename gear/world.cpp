@@ -155,6 +155,19 @@ namespace
         }
     }
 
+    int callUnlink(void* m, uint32_t id)
+    {
+        __try
+        {
+            Addr::cObjectManager_unlink(m, id);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
     int callDestroyObject(void* m, uint32_t id)
     {
         __try
@@ -534,7 +547,22 @@ bool World::teleport(uint32_t id, const Position& at, const char*& error)
     pos.x = at.x;
     pos.y = at.y;
     pos.layer = at.layer;
+    // pop places only objects out of the world (+0x14 bit 2): take a placed one out first, and back where it was if
+    // the new spot does not take it.
+    uintptr_t o = live(m, id);
+    uint32_t flags = 0;
+    WorldPos old{};
+    const bool placed = o && readAt(o, kFlags, flags) && !(flags & 2) && readAt(o, kPos, old);
+    if (placed && (!Addr::cObjectManager_unlink || callUnlink(m, id) < 0))
+    {
+        error = "the game's object functions were not found";
+        return false;
+    }
     const int result = callPop(m, id, &pos);
+    if (result <= 0 && placed)
+    {
+        callPop(m, id, &old);
+    }
     if (result <= 0)
     {
         error = result < 0 ? "the game faulted while moving the object" : "the game could not place the object there";

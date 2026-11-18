@@ -323,6 +323,13 @@ function Creature:order_attack(target) end
 ---@return string? error
 function Creature:order_ability(ability, target, y) end
 
+--- Sets the name the game shows for a party hero (1 to 30 characters, UTF-8). The game keeps a companion's name only
+--- until the next savegame load: a mod sets it again (the player's own hero keeps the name the savegame has).
+---@param name string
+---@return boolean? ok
+---@return string? error
+function Creature:set_name(name) end
+
 --- Gives a party hero experience through the game's own gain (it levels up with skill points). Not shared.
 ---@param amount number
 ---@return boolean? ok

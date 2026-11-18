@@ -2,6 +2,7 @@
 #include "world.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 // Party companions in single player (docs/Gear.md, "Party"): more heroes of the local player at the hero ids 3..16,
@@ -79,6 +80,10 @@ namespace Party
 
     // 1 hostile, 0 not, -1 unknown (no such creatures).
     int hostile(uint32_t id, uint32_t other);
+
+    // Sets a hero's name (the text the game shows for it, 0x26FF + id): UTF-8, 1 to 30 characters. The game does not
+    // save it for companions: a mod sets it again after loading.
+    bool setName(uint32_t id, const std::string& name, const char*& error);
 
     // The UI image index of a creature type's portrait (the party window's), -1 if none.
     int portraitImage(uint32_t type);

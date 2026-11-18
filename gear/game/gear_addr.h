@@ -30,6 +30,9 @@ namespace Gear::Addr
         cObjectManager_create{};
     // ENG 005FCCB0 ("cObjectManager::pop"): places object `id` at `pos` (teleports it); false if it could not.
     inline Sacred::Thiscall<uint32_t(void* manager, uint32_t id, void* pos)> cObjectManager_pop{};
+    // ENG 005FC8B0: takes object `id` out of its sector's object list (+0x14 bit 2 "out of the world"); pop places only
+    // such objects (the engine unlinks a creature before it destroys or parks it).
+    inline Sacred::Thiscall<void(void* manager, uint32_t id)> cObjectManager_unlink{};
     // ENG 0084A961: MSVC's __RTDynamicCast; with the two type descriptors (ENG 008EB648 cObject, 008EB660
     // cCreature) it tells creatures from other objects.
     inline Sacred::Cdecl<void*(void* object, long vfDelta, void* source, void* target, int isReference)>
@@ -307,6 +310,9 @@ namespace Gear::Addr
     inline Sacred::Thiscall<void(void* stats, uint32_t a, int32_t b)> cStats_initSpells{};
     inline Sacred::Thiscall<uint32_t(void* creature, void* target)> cCreature_isEnemy{};
     inline uintptr_t creaturePortraitImage{};   // stdcall (type) -> index
+    // ENG 00672A60: stdcall (text id, wchar_t* begin, end, capacity end), ret 0x10: sets a text resource; the buffer
+    // (engine_alloc) becomes the engine's, which frees it. The heroes' names are the texts 0x26FF + hero id.
+    inline uintptr_t textResources_set{};
     inline Sacred::Global<uint8_t> g_creatureEventVtable{};
     inline Sacred::Global<uint32_t*> g_antiCheatShadow1{};
     inline Sacred::Global<uint32_t*> g_antiCheatShadow2{};

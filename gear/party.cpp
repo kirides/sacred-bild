@@ -315,6 +315,30 @@ namespace
         }
     }
 
+    // The engine takes the buffer (its allocator: engine_alloc) and frees it.
+    bool callSetText(uint32_t textId, const wchar_t* text, int length)
+    {
+        __try
+        {
+            Addr::textResources_instance();
+            const uint32_t bytes = static_cast<uint32_t>((length + 1) * 2);
+            auto* buffer = static_cast<wchar_t*>(Addr::engine_alloc(bytes));
+            if (!buffer)
+            {
+                return false;
+            }
+            std::memcpy(buffer, text, length * 2);
+            buffer[length] = 0;
+            using SetFn = void(__stdcall*)(uint32_t id, wchar_t* begin, wchar_t* end, wchar_t* capacity);
+            reinterpret_cast<SetFn>(Addr::textResources_set)(textId, buffer, buffer + length, buffer + length + 1);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
     int callPortrait(uint32_t type)
     {
         __try
@@ -719,6 +743,33 @@ int Party::hostile(uint32_t id, uint32_t other)
         return -1;
     }
     return callIsEnemy(a, b);
+}
+
+bool Party::setName(uint32_t id, const std::string& name, const char*& error)
+{
+    if (!heroObject(id))
+    {
+        error = "not a hero";
+        return false;
+    }
+    if (!Addr::textResources_set || !Addr::textResources_instance || !Addr::engine_alloc)
+    {
+        error = "the game's text functions were not found";
+        return false;
+    }
+    wchar_t wide[32] = {};
+    const int n = name.empty() ? 0 : MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, name.data(), static_cast<int>(name.size()), wide, 31);
+    if (n < 1 || n > 30)
+    {
+        error = "the name must be 1 to 30 characters";
+        return false;
+    }
+    if (!callSetText(0x26FF + id, wide, n))
+    {
+        error = "the game faulted while setting the name";
+        return false;
+    }
+    return true;
 }
 
 int Party::portraitImage(uint32_t type)

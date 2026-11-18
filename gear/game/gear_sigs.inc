@@ -7,6 +7,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cObjectManager_hero", "56 57 8B F9 E8 ?? ?? ?? ?? 8B 70 14 85 F6 76 5B", 0, Sig::Take::Match, &Gear::Addr::cObjectManager_hero}, // 00603E30, 00603E90
     {"cObjectManager_create", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 98 00 00 00 53 55 56 8B B4 24 B4 00 00 00 57 8B F9 8B 0D ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::cObjectManager_create}, // 005FBA40, 005FBAA0
     {"cObjectManager_pop", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC 10 01 00 00", 0, Sig::Take::Match, &Gear::Addr::cObjectManager_pop}, // 005FCCB0, 005FCD10
+    {"cObjectManager_unlink", "83 EC 1C 53 55 8B 6C 24 28 56 33 F6", 0, Sig::Take::Match, &Gear::Addr::cObjectManager_unlink}, // 005FC8B0, 005FC910
     {"rtDynamicCast", "55 8B EC 6A FF 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 3C", 0, Sig::Take::Match, &Gear::Addr::rtDynamicCast}, // 0084A961, 00849701
     {"cObject_typeDescriptor", "8D 14 80 68 ?? ?? ?? ?? 56 8D 04 50 8B 0C 81 51", 4, Sig::Take::Abs32, &Gear::Addr::cObject_typeDescriptor}, // 008EB648, 008E9648
     {"cCreature_typeDescriptor", "8B 44 24 04 83 EC 44 56 57 6A 00 68 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::cCreature_typeDescriptor}, // 008EB660, 008E9660
@@ -94,6 +95,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cItem_pickType", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 18 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_pickType}, // 005C7FA0, 005C7F10
     {"g_rarityTable", "8B 35 ?? ?? ?? ?? 8B C8 83 C4 14 33 C0 D8 4C 24 18", 2, Sig::Take::Abs32, &Gear::Addr::g_rarityTable}, // 00AD4438, 00AD23B8
     {"cStats_addExperience", "55 8B EC 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 38 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_addExperience}, // 0057E160, 0057E020
+    {"textResources_set", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 53 55 56 57 8B 44 24 24 33 DB", 0, Sig::Take::Match, &Gear::Addr::textResources_set}, // 00672A60, 00672D40
     {"cStats_initSpells", "83 EC 10 53 55 8B 6C 24 1C 56 57 33 FF", 0, Sig::Take::Match, &Gear::Addr::cStats_initSpells}, // 0055FC00, 0055FAC0
     {"cCreature_isEnemy", "8B 44 24 04 85 C0 74 3E 66 83 B8 FC 00 00 00 09", 0, Sig::Take::Match, &Gear::Addr::cCreature_isEnemy}, // 00548F60, 00548DD0
     {"creaturePortraitImage", "8B 4C 24 04 33 C0 49 81 F9 C9 02 00 00", 0, Sig::Take::Match, &Gear::Addr::creaturePortraitImage}, // 00435D30, 00435C00
