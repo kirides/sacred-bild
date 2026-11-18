@@ -1310,6 +1310,14 @@ Orders a party hero to use a combat art or spell it knows on a creature (`target
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:set_name(name) -> boolean?, string?`
+
+Sets the name the game shows for a party hero (1 to 30 characters, UTF-8). The game keeps a companion's name only until the next savegame load: a mod sets it again (the player's own hero keeps the name the savegame has).
+
+- `name`: `string`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:add_experience(amount) -> boolean?, string?`
 
 Gives a party hero experience through the game's own gain (it levels up with skill points). Not shared.
