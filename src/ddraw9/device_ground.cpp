@@ -225,6 +225,7 @@ namespace DDraw9
 
         prepareTarget();
         restoreCoordIndices();
+        updateSharp();
         // The skinning shader's binding state stands for "a shader is bound": the next fixed-function draw unbinds it,
         // and the next skinned draw binds its own again.
         if (!m_skinBound || m_skinBoundVariant != -2)

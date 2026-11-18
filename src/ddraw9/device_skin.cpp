@@ -529,6 +529,7 @@ namespace DDraw9
         }
 
         prepareTarget();
+        updateSharp();
         if (!m_skinBound || m_skinBoundVariant != int(diffuse))
         {
             m_dev->SetVertexDeclaration(m_skinDecls[diffuse]);
