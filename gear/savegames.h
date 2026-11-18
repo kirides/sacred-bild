@@ -10,7 +10,7 @@
 // The file: a 0x100-byte header ("AMS", the format version in byte 3: 0x1B for Sacred Gold; +4 the number of
 // chunks; +0x5C the local time it was saved, int32 year, month, day, day of week, hour, minute, second, ms, zero in
 // old ones), then a table of 12-byte entries {type, offset, size} from +0x100. Chunks read here: 0x83 the savegame's
-// name (64 bytes, ASCII), 0x95 the game world's date as text (UTF-16), 0x93 the picture (128 x 96, ARGB 4444, 24576
+// name (64 bytes, Windows-1252), 0x95 the game world's date as text (UTF-16), 0x93 the picture (128 x 96, ARGB 4444, 24576
 // bytes), 0xC3 the hero (int32 level, int32 class 1..9, then the name in UTF-16, 64 characters at most).
 namespace Savegames
 {
@@ -20,7 +20,7 @@ namespace Savegames
     {
         uint32_t slot = 0;
         std::string file;           // GAME05.PAK
-        std::string name;           // the savegame's name (ASCII), may be empty
+        std::string name;           // the savegame's name (UTF-8), may be empty
         std::string hero;           // UTF-8; empty if the file has no hero chunk
         int classId = 0;            // 1 seraphim .. 9 daemon, 0 unknown
         int level = 0;

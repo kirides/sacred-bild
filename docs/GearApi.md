@@ -1302,7 +1302,7 @@ What `save` can be told.
 Asks the engine to save into slot `slot` (0 to 509). The engine refuses while a trading, chest or similar window is open. Returns true when the request is accepted; the outcome is the event `game.saved` or `game.save_failed`.
 
 - `slot`: `integer`
-- `name`: `string` (optional) - The savegame's display name, at most 60 ASCII characters.
+- `name`: `string` (optional) - The savegame's display name, UTF-8, at most 60 characters; the game keeps Windows-1252 (umlauts and the like), anything else becomes `?`.
 - `opts`: `GearSaveOpts` (optional)
 - returns `ok` `boolean?`
 - returns `error` `string?`
@@ -1351,7 +1351,7 @@ A savegame as `saves` lists it: what the file says about itself.
 |---|---|---|
 | `slot` | `integer` | The number in its file name (`GAME05.PAK`: 5); 0 is the quicksave. |
 | `file` | `string` | The file name, e.g. `GAME05.PAK`. |
-| `name` | `string` | The savegame's name (ASCII; may be empty, the game writes `QUICKSAVE` or its "empty" text). |
+| `name` | `string` | The savegame's name (UTF-8; may be empty, the game writes `QUICKSAVE` or its "empty" text). |
 | `hero` | `string` | The hero's name (UTF-8); nil if the file does not say. (optional) |
 | `class` | `GearClassName` | The hero's class; nil if unknown. (optional) |
 | `class_id` | `integer` | The hero's class number (1 seraphim .. 9 daemon), 0 if unknown. |
@@ -2387,6 +2387,12 @@ True once per press of the key, read while the game's window has the focus. Also
 While `on`, the keyboard does not reach the game: its key and character messages are dropped (with the release of every key whose press was dropped) and its key state queries see nothing held, so hotkeys and typing stay out of the game. The mod's own `key_pressed` and `key_down` still work, the mouse is not affected. For a screen that types or binds keys; it ends when the mod unloads. Not tied to `gear.keys`: declared keys of other mods stay quiet only for the Mods screen.
 
 - `on`: `boolean`
+
+#### `gear.ui.typed() -> string`
+
+What the player typed since the last tick while this mod captures the keys (`capture_keys`): the characters their keyboard layout makes (umlauts, Shift, AltGr), UTF-8, no control characters (read Backspace and Enter with `key_pressed`). Empty otherwise. For a text field.
+
+- returns `string`
 
 #### `gear.ui.key_down(name) -> boolean`
 

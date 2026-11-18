@@ -1831,6 +1831,7 @@ uis.SCROLLBAR = 12     -- the scrollbar's width
 -- Replaced windows (ui.replace_window): name -> the mod that draws its own screen in the window's place. Published
 -- to Gear every tick before the handlers run; a mod that is off or unloaded does not count (the game's window shows).
 uis.replace = {}
+uis.typed = ''         -- the characters typed since the last tick (while a mod captures the keys)
 function uis.publish_replace()
     local names = {}
     for name, m in pairs(uis.replace) do
@@ -2904,6 +2905,12 @@ local function make_ui(mod)
     function ui.capture_keys(on)
         key_capture[mod] = on and true or nil
     end
+    -- ui.typed() -> string: what the player typed since the last tick while this mod captures the keys (UTF-8, in
+    -- the player's keyboard layout: umlauts, Shift, AltGr; no control characters: read Backspace and Enter with
+    -- key_pressed). For a text field.
+    function ui.typed()
+        return key_capture[mod] and uis.typed or ''
+    end
     -- ui.key_down(name): whether the key is held (while the game has the focus).
     function ui.key_down(name)
         local vk = type(name) == 'number' and name or UI_VK[tostring(name):lower()]
@@ -3132,7 +3139,7 @@ end
 ---------------------------------------------------------------------------------------------------------------
 local automation_on = native.auto_state ~= nil
 local VK = {
-    lbutton = 0x01, rbutton = 0x02, mbutton = 0x04, back = 0x08, tab = 0x09, enter = 0x0D, shift = 0x10,
+    lbutton = 0x01, rbutton = 0x02, mbutton = 0x04, back = 0x08, backspace = 0x08, tab = 0x09, enter = 0x0D, shift = 0x10,
     control = 0x11, alt = 0x12, pause = 0x13, escape = 0x1B, space = 0x20, left = 0x25, up = 0x26, right = 0x27,
     down = 0x28, delete = 0x2E, f1 = 0x70, f2 = 0x71, f3 = 0x72, f4 = 0x73, f5 = 0x74, f6 = 0x75, f7 = 0x76,
     f8 = 0x77, f9 = 0x78, f10 = 0x79, f11 = 0x7A, f12 = 0x7B,
@@ -5100,6 +5107,7 @@ function kernel.tick(dt)
     poll_pipes()
     run_timers()
     uis.publish_replace()
+    uis.typed = native.ui_take_typed and native.ui_take_typed() or ''
     ui_begin_tick()
     apply_game_layout()
     run_tasks()
@@ -5124,6 +5132,7 @@ function kernel.idle()
     poll_pipes()
     run_timers()
     uis.publish_replace()
+    uis.typed = native.ui_take_typed and native.ui_take_typed() or ''
     ui_begin_tick()
     apply_game_layout()
     run_tasks()

@@ -261,11 +261,25 @@ bool Save::request(uint32_t slot, const std::string& name, bool thumbnail, const
         return false;
     }
     // The engine copies the name while it handles the event, so a buffer of ours is enough.
+    // UTF-8 in, the game's single-byte text out (Windows-1252, as its own savegame window writes: umlauts and the
+    // like stay, anything else becomes '?').
     char text[kNameMax + 1] = {};
-    for (size_t i = 0; i < name.size() && i < kNameMax; ++i)
     {
-        const unsigned char c = static_cast<unsigned char>(name[i]);
-        text[i] = c >= 0x20 && c < 0x7F ? static_cast<char>(c) : '?';
+        std::wstring wide(name.size(), wchar_t{});
+        const int n = MultiByteToWideChar(CP_UTF8, 0, name.data(), static_cast<int>(name.size()), wide.data(),
+                                          static_cast<int>(wide.size()));
+        wide.resize(n > 0 ? n : 0);
+        for (wchar_t& c : wide)
+        {
+            if (c < 0x20)
+            {
+                c = L'?';
+            }
+        }
+        BOOL lossy = FALSE;
+        const int bytes = WideCharToMultiByte(1252, 0, wide.data(), static_cast<int>(wide.size()), text, kNameMax, "?",
+                                              &lossy);
+        text[bytes > 0 ? bytes : 0] = 0;
     }
     SaveEvent event{};
     event.vtable = A::cSaveEvent_vtable.get();

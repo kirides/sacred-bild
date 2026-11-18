@@ -260,6 +260,12 @@ function GearUi.key_pressed(name) end
 ---@param on boolean
 function GearUi.capture_keys(on) end
 
+--- What the player typed since the last tick while this mod captures the keys (`capture_keys`): the characters their
+--- keyboard layout makes (umlauts, Shift, AltGr), UTF-8, no control characters (read Backspace and Enter with
+--- `key_pressed`). Empty otherwise. For a text field.
+---@return string
+function GearUi.typed() end
+
 --- Whether the key is held.
 ---@param name GearKey
 ---@return boolean
