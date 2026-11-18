@@ -48,6 +48,7 @@ local function make_gear(mod_dir, opts)
         TILE = 53.7,
         hero = function() if G.hero_state.present then return hero end end,
         items_near = function() return G.ground end,
+        creatures_near = function() return G.nearby or {} end,
     }
     gear.mp = {
         active = function() return G.mp_state.active end,
@@ -355,6 +356,39 @@ do
     fire(G, 'draw', {mode = 'game'})
     ok(not joined(G):find('Bran', 1, true), 'party: silent player dropped after a while')
     ok(#G.logs == 0, 'party: no errors: ' .. table.concat(G.logs, '|'))
+end
+
+-- Damage meter: allies (Wilbur by name, a follower by walking along)
+do
+    local G = load_mod('damagemeter')
+    local function creature(id, t, name) return {id = id, type = function() return t end, type_name = function() return name end} end
+    G.nearby = {creature(900, 83, 'WILBUR.GRN'), creature(901, 120, 'MERC_WARRIOR.GRN')}
+    frames(G, 3)
+    fire(G, 'damage', {damage = 70, victim_type = 5, attacker_type = 83})            -- before the first scan: ally unknown
+    frames(G, 2)
+    fire(G, 'damage', {damage = 70, victim_type = 5, attacker_type = 83})
+    fire(G, 'damage', {damage = 30, victim_type = 5, attacker_type = 120})
+    fire(G, 'damage', {damage = 100, victim_type = 5, attacker_type = 77})
+    fire(G, 'damage', {damage = 40, victim_type = 83, attacker_type = 5})            -- the ally is hit
+    G.texts = {}
+    fire(G, 'draw', {mode = 'game'})
+    local t = joined(G)
+    ok(t:find('WILBUR', 1, true), 'allies: Wilbur gets a row: ' .. t)
+    ok(t:find('MERC WARRIOR', 1, true), 'allies: mercenary gets a row')
+    ok(t:find('Aria', 1, true), 'allies: hero keeps its row')
+    -- a follower: near the hero for 20 s while it walks 30 tiles
+    G.nearby = {creature(950, 130, 'HIRELING.GRN'), creature(951, 131, 'STRANGER.GRN')}
+    for _ = 1, 30 do G.hero_state.x = G.hero_state.x + 54; frames(G, 1) end
+    fire(G, 'damage', {damage = 50, victim_type = 5, attacker_type = 130})
+    fire(G, 'damage', {damage = 10, victim_type = 77, attacker_type = 131})          -- 131 attacks the hero: hostile
+    G.texts = {}
+    fire(G, 'draw', {mode = 'game'})
+    ok(joined(G):find('HIRELING', 1, true), 'allies: follower detected: ' .. joined(G))
+    -- a type that hits the hero is never an ally
+    fire(G, 'damage', {damage = 10, victim_type = 77, attacker_type = 120})
+    G.texts = {}
+    fire(G, 'draw', {mode = 'game'})
+    ok(#G.logs == 0, 'allies: no errors: ' .. table.concat(G.logs, '|'))
 end
 
 -- Damage meter: no hero, bad data

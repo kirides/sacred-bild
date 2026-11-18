@@ -51,6 +51,10 @@ controller's mod menu; the choice is kept in the mod's `view.txt`):
   10 s, totals, biggest hits, average hit, fighting time, kills and kills per minute of fighting, a 30 second bar graph,
   the biggest targets and damage sources.
 
+Allies (mercenaries, escorted NPCs such as Wilbur) get a row of their own under their owner. The hook knows only types, so an
+ally is a creature TYPE: one whose name contains `wilbur` or `merc`, or one that stayed within 9 tiles of the hero for 20 s while
+the hero walked 25 tiles. A type that ever hits the hero is never an ally; two creatures of one type count as one row.
+
 The panel is an ordinary Gear panel: the layout editor moves it, its buttons are controller stops. The size follows the view.
 
 Limits: in a network game another hero of the same class counts as the local hero; pets, traps and effects are not

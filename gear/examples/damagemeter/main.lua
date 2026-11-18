@@ -52,9 +52,19 @@ local function reset()
         fights = {},                           -- finished fights, newest first (at most 5)
         active = 0,                            -- seconds of finished fights
         bucket_dealt = {}, bucket_taken = {}, bucket_stamp = {},
+        allies = {},                           -- ally type id -> {name, dealt, taken, hits, bucket = {}, stamp = {}, fdealt, last_dps}
     }
 end
 reset()
+
+-- Allies (mercenaries, escorted NPCs such as Wilbur): creature types that fight on the hero's side. The damage hook knows
+-- only types, so an ally is a TYPE: either one named in KNOWN_ALLIES, or one seen following the hero (within FOLLOW_TILES of
+-- it for FOLLOW_SECONDS while the hero walked FOLLOW_WALK tiles). A type that ever hits the hero is never an ally.
+local KNOWN_ALLIES = {'wilbur', 'merc'}
+local FOLLOW_TILES, FOLLOW_SECONDS, FOLLOW_WALK = 9, 20, 25
+local ally_types = {}               -- type id -> name (survives reset(): the knowledge is about the game, not the counters)
+local hostile_types = {}            -- types that hit the hero
+local seen = {}                     -- creature id -> {type, since, moved}
 
 local function warn(where, err)
     if not warned[where] then
@@ -106,7 +116,35 @@ local function record(damage, victim_type, attacker_type)
     if not hero_type then return end
     local from_hero = attacker_type == hero_type
     local to_hero = victim_type == hero_type
-    if from_hero == to_hero then return end      -- neither, or hero against its own type: ambiguous
+    if to_hero and not from_hero and attacker_type >= 0 and attacker_type ~= hero_type then
+        hostile_types[attacker_type] = true
+        ally_types[attacker_type] = nil
+    end
+    if not from_hero and not to_hero then
+        local ally_att = ally_types[attacker_type] and not ally_types[victim_type]
+        local ally_vic = ally_types[victim_type] and not ally_types[attacker_type]
+        if ally_att or ally_vic then
+            local id = ally_att and attacker_type or victim_type
+            local a = T.allies[id]
+            if not a then
+                a = {name = ally_types[id], dealt = 0, taken = 0, hits = 0, bucket = {}, stamp = {}, fdealt = 0, last_dps = 0}
+                T.allies[id] = a
+            end
+            touch_fight()
+            if ally_att then
+                a.dealt, a.hits = a.dealt + damage, a.hits + 1
+                a.fdealt = a.fdealt + damage
+                local sec = math.floor(clock)
+                local i = sec % BUCKETS + 1
+                if a.stamp[i] ~= sec then a.stamp[i], a.bucket[i] = sec, 0 end
+                a.bucket[i] = a.bucket[i] + damage
+            else
+                a.taken = a.taken + damage
+            end
+        end
+        return
+    end
+    if from_hero == to_hero then return end      -- hero against its own type: ambiguous
     local f = touch_fight()
     local b = bucket(math.floor(clock))
     if from_hero then
@@ -139,6 +177,46 @@ gear.on('kill', guard('kill', function(kill)
     if mine then T.kills = T.kills + 1 end
 end))
 
+local next_scan = 0
+local last_hero_x, last_hero_y
+
+local function matches_known(name)
+    name = tostring(name or ''):lower()
+    for _, k in ipairs(KNOWN_ALLIES) do if name:find(k, 1, true) then return true end end
+    return false
+end
+
+-- Once a second: which creature types near the hero are following it?
+local function scan_allies(hero)
+    local hx, hy = hero:position()
+    if not hx then return end
+    local walked = 0
+    if last_hero_x then walked = math.sqrt((hx - last_hero_x) ^ 2 + (hy - last_hero_y) ^ 2) end
+    last_hero_x, last_hero_y = hx, hy
+    local tile = W.TILE or 53.7
+    local alive = {}
+    local list = W.creatures_near(hx, hy, FOLLOW_TILES * tile, {limit = 32}) or {}
+    for _, c in ipairs(list) do
+        local ok, t = pcall(c.type, c)
+        if ok and type(t) == 'number' and t ~= hero_type and not hostile_types[t] then
+            local id = c.id
+            local rec = seen[id]
+            if not rec or rec.type ~= t then rec = {type = t, since = clock, moved = 0}; seen[id] = rec end
+            rec.moved = rec.moved + walked
+            alive[id] = true
+            if not ally_types[t] then
+                local okn, name = pcall(c.type_name, c)
+                if okn and matches_known(name) then
+                    ally_types[t] = tostring(name):gsub('%.GRN$', ''):gsub('_', ' ')
+                elseif clock - rec.since >= FOLLOW_SECONDS and rec.moved >= FOLLOW_WALK * tile then
+                    ally_types[t] = okn and type(name) == 'string' and (name:gsub('%.GRN$', ''):gsub('_', ' ')) or ('type ' .. t)
+                end
+            end
+        end
+    end
+    for id in pairs(seen) do if not alive[id] then seen[id] = nil end end
+end
+
 local function end_fight()
     local f = T.fight
     if not f then return end
@@ -146,6 +224,7 @@ local function end_fight()
     local dur = math.max(1, f.last - f.start)
     T.active = T.active + dur
     table.insert(T.fights, 1, {dur = dur, dealt = f.dealt, taken = f.taken})
+    for _, a in pairs(T.allies) do a.last_dps, a.fdealt = a.fdealt / dur, 0 end
     while #T.fights > 5 do table.remove(T.fights) end
 end
 
@@ -162,9 +241,13 @@ gear.on('frame', guard('frame', function(dt)
     end
     local f = T.fight
     if f and clock - f.last > setting('combat_timeout', 5) then end_fight() end
+    if hero and clock >= next_scan then
+        next_scan = clock + 1
+        pcall(scan_allies, hero)
+    end
 end))
 
-gear.on('session.start', guard('session.start', function() reset() end))
+gear.on('session.start', guard('session.start', function() reset(); seen = {}; hostile_types = {}; ally_types = {} end))
 
 ---------------------------------------------------------------------------------------------------------------
 -- Derived numbers
@@ -274,7 +357,22 @@ local function current_numbers()
         local last = T.fights[1]
         if last then dealt_dps, taken_dps = last.dealt / last.dur, last.taken / last.dur else dealt_dps, taken_dps = 0, 0 end
     end
-    return {dps = dealt_dps, tdps = taken_dps, dealt = T.dealt, taken = T.taken, fighting = f ~= nil}
+    local allies = {}
+    for _, a in pairs(T.allies) do
+        local dps = a.last_dps
+        if f then
+            local window = math.min(BUCKETS, setting('window', 10))
+            local now, sum = math.floor(clock), 0
+            for sec = now - window + 1, now do
+                local i = sec % BUCKETS + 1
+                if a.stamp[i] == sec then sum = sum + (a.bucket[i] or 0) end
+            end
+            dps = sum / math.max(1, math.min(window, clock - f.start))
+        end
+        allies[#allies + 1] = {name = a.name, dps = dps, tdps = 0, dealt = a.dealt, taken = a.taken, fighting = f ~= nil, ally = true}
+    end
+    table.sort(allies, function(x, y) if x.dealt ~= y.dealt then return x.dealt > y.dealt end return x.name < y.name end)
+    return {dps = dealt_dps, tdps = taken_dps, dealt = T.dealt, taken = T.taken, fighting = f ~= nil, allies = allies}
 end
 
 local CHANNEL = 'damagemeter'
@@ -318,8 +416,18 @@ gear.on('mp_message', guard('mp_message', function(from, channel, payload)
         name = type(from.name) == 'string' and from.name or ('hero ' .. tostring(from.slot)),
         dps = clean_number(payload.dps), tdps = clean_number(payload.tdps),
         dealt = clean_number(payload.dealt), taken = clean_number(payload.taken),
-        fighting = payload.fighting == true, seen = clock,
+        fighting = payload.fighting == true, seen = clock, allies = {},
     }
+    if type(payload.allies) == 'table' then
+        local mine = peers[from.slot].allies
+        for i = 1, math.min(4, #payload.allies) do
+            local a = payload.allies[i]
+            if type(a) == 'table' and type(a.name) == 'string' then
+                mine[#mine + 1] = {name = a.name:sub(1, 24), dps = clean_number(a.dps), tdps = 0, dealt = clean_number(a.dealt),
+                    taken = 0, fighting = payload.fighting == true, ally = true}
+            end
+        end
+    end
 end))
 
 -- Sends the local numbers once a second while other players are in the game.
@@ -330,7 +438,12 @@ local function share()
     if clock < next_send then return end
     next_send = clock + SEND_EVERY
     local n = current_numbers()
-    pcall(mp().send, CHANNEL, {dps = n.dps, tdps = n.tdps, dealt = n.dealt, taken = n.taken, fighting = n.fighting}, 'all')
+    local allies = {}
+    for i = 1, math.min(4, #n.allies) do
+        local a = n.allies[i]
+        allies[i] = {name = a.name, dps = a.dps, dealt = a.dealt}
+    end
+    pcall(mp().send, CHANNEL, {dps = n.dps, tdps = n.tdps, dealt = n.dealt, taken = n.taken, fighting = n.fighting, allies = allies}, 'all')
 end
 
 gear.on('frame', guard('share', function()
@@ -354,7 +467,13 @@ local function characters()
         if (a.mine or false) ~= (b.mine or false) then return a.mine or false end
         return a.name < b.name
     end)
-    return list
+    -- Each character is followed by its allies (mercenaries, NPC companions) as rows of their own.
+    local rows = {}
+    for _, c in ipairs(list) do
+        rows[#rows + 1] = c
+        for _, a in ipairs(c.allies or {}) do rows[#rows + 1] = a end
+    end
+    return rows
 end
 
 local function fit_name(name, max)
@@ -407,7 +526,7 @@ local function draw_compact(x, y, w, list)
         for i = 1, math.min(MAX_ROWS, #list) do
             local e = list[i]
             local yy = y + (i - 1) * ROW
-            ui.text(fit_name(e.name, 14), x, yy, {color = e.mine and GOLD or WHITE})
+            ui.text(e.ally and ('  ' .. fit_name(e.name, 12)) or fit_name(e.name, 14), x, yy, {color = e.ally and DIM or (e.mine and GOLD or WHITE)})
             ui.text(num(e.dps), x, yy, {width = w, align = 'right', color = e.fighting and GREEN or DIM})
         end
     end
@@ -426,7 +545,7 @@ local function draw_extended(x, y, w, list)
     for i = 1, n do
         local e = list[i]
         local yy = y + 16 + (i - 1) * ROW
-        ui.text(fit_name(e.name, 12), x, yy, {color = e.mine and GOLD or WHITE})
+        ui.text(e.ally and ('  ' .. fit_name(e.name, 10)) or fit_name(e.name, 12), x, yy, {color = e.ally and DIM or (e.mine and GOLD or WHITE)})
         ui.text(num(e.dps), right - 210, yy, {width = 60, align = 'right', color = e.fighting and GREEN or WHITE})
         ui.text(num(e.tdps), right - 140, yy, {width = 60, align = 'right', color = RED})
         ui.text(short(e.dealt), right - 70, yy, {width = 70, align = 'right', color = DIM})
