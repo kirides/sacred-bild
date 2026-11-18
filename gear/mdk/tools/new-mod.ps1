@@ -1,5 +1,5 @@
 <#
-.SYNOPSIS  Creates a new mod folder from the MDK template.
+.SYNOPSIS  Creates a new mod folder from the MDK's example-mod.
 .EXAMPLE   .\tools\new-mod.ps1 -Id my-mod -Name "My mod"
            .\tools\new-mod.ps1 -Id my-mod -Name "My mod" -Dest "C:\Games\Sacred\mods"
 #>
@@ -10,13 +10,13 @@ param(
     [string]$Dest = (Join-Path (Split-Path $PSScriptRoot -Parent) 'src')
 )
 $ErrorActionPreference = 'Stop'
-$template = Join-Path (Split-Path $PSScriptRoot -Parent) 'template'
+$template = Join-Path (Split-Path $PSScriptRoot -Parent) 'example-mod'
 $target = Join-Path $Dest $Id
 if (Test-Path $target) { throw "$target already exists" }
 New-Item -ItemType Directory -Force $target | Out-Null
 foreach ($f in 'mod.lua', 'main.lua') {
     $text = [IO.File]::ReadAllText((Join-Path $template $f))
-    $text = $text.Replace('@ID@', $Id).Replace('@NAME@', $Name)
+    $text = $text.Replace('example-mod', $Id).Replace('Example mod', $Name)
     [IO.File]::WriteAllText((Join-Path $target $f), $text, (New-Object Text.UTF8Encoding $false))
 }
 Write-Host "Created $target"

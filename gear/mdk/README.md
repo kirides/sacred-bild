@@ -1,16 +1,16 @@
 # Sacred Gear MDK
 
 Everything to write [Sacred Gear](https://github.com/kirides/sacred-bild/blob/main/docs/Gear.md) mods in Lua with
-editor help. **Version: @VERSION@** (built from SacredBild @COMMIT@).
+editor help.
 
 | Folder | What it is |
 |---|---|
 | `meta/` | LuaLS definitions of the `gear` API: completion, parameter help and type checks in the editor. Generated from the same sources as the API reference. |
 | `docs/GearApi.md` | The API reference. |
 | `docs/Gear.md` | The guide to writing a mod: events, `mod.lua`, automation, engine notes. |
-| `template/` | A mod to start from: a manifest with a setting and a key bind, and a `main.lua` that draws text. |
+| `example-mod/` | A small mod to start from: `mod.lua` (manifest with a setting and a key bind) and `main.lua` (draws text). `new-mod.ps1` copies it. |
 | `examples/` | Small working mods (`hello`, `uidemo`, `saveinfo`). |
-| `tools/` | `new-mod.ps1` makes a mod from the template; `pack-mod.ps1` zips a mod for players. |
+| `tools/` | `new-mod.ps1` makes a mod from `example-mod`; `pack-mod.ps1` zips a mod for players. |
 
 ## Start
 
@@ -37,7 +37,7 @@ editor help. **Version: @VERSION@** (built from SacredBild @COMMIT@).
 - Settings and keys declared in `mod.lua` appear in the Mods screen; read them with `gear.settings.get`, react to
   `gear.keys.on`.
 - More mods to read: [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods).
-- The MDK is rebuilt with every SacredBild release, so `meta/` matches the Sacred Gear you download with it. Using an
+- The MDK is part of every SacredBild release, so `meta/` matches the Sacred Gear you download with it. Using an
   older Sacred Gear with a newer MDK may show functions the game does not have.
 
 Licensed as SacredBild (see `LICENSE`).

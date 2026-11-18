@@ -1,8 +1,8 @@
 ---@type GearModManifest
 -- The manifest: a table, evaluated without any globals. See GearModManifest in meta/gear.lua.
 return {
-    id = '@ID@',                 -- the folder name should match; letters, digits, _ and -
-    name = '@NAME@',
+    id = 'example-mod',                 -- the folder name should match; letters, digits, _ and -
+    name = 'Example mod',
     version = '0.1.0',
     author = '',
     description = 'What this mod does, in a sentence.',
@@ -13,12 +13,12 @@ return {
     -- The defaults; the player's choices (Mods screen, F11) override them.
     config = {
         enabled = true,
-        message = 'Hello from @NAME@',
+        message = 'Hello from Example mod',
     },
     -- What the Mods screen shows. Read them with gear.settings.get(id); hear changes as 'settings.changed'.
     settings = {
         {id = 'enabled', type = 'bool', label = 'Show the message', default = true},
-        {id = 'message', type = 'text', label = 'Message', default = 'Hello from @NAME@', max_length = 60},
+        {id = 'message', type = 'text', label = 'Message', default = 'Hello from Example mod', max_length = 60},
     },
     -- Key binds the player can change in the Mods screen.
     keys = {

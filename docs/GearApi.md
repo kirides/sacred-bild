@@ -14,7 +14,7 @@ editor completes and checks mod code (VS Code with the "Lua" extension by sumnek
 In this repository nothing is needed: `.luarc.json` at the root points LuaLS at `gear/meta`, so the examples in
 `gear/examples` get completion and checks.
 
-**Without this repository: the MDK.** Each release has `sacred-gear-mdk.zip`, a mod development kit built from
+**Without this repository: the MDK.** `gear/dist/mdk` (generated, committed) and each release has `sacred-gear-mdk.zip`, a mod development kit built from
 `gear/meta` by `tools/gen_gear_mdk.py` (so it is always current): the definitions, this reference, `Gear.md`, a mod
 template, a few examples and scripts to create and pack a mod. Extract it, open the folder in VS Code and run
 `tools/new-mod.ps1`; `.luarc.json` is already set up.

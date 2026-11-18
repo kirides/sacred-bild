@@ -1,4 +1,4 @@
--- @NAME@: a starting point. Everything print() writes goes to SacredGear.log.
+-- Example mod: a starting point. Everything print() writes goes to SacredGear.log.
 -- The `gear` global, its events and every function are declared in the MDK's meta folder (see README.md), so the
 -- editor completes and checks what you type here.
 
