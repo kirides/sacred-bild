@@ -102,6 +102,7 @@
 ---@field net GearNet Custom net messages: named channels between computers and the game server.
 ---@field settings GearSettings This mod's settings (declared in `mod.lua`, changed by the player in the mod manager).
 ---@field keys GearKeys This mod's declared key binds.
+---@field input GearInput The game's own keys, remapped.
 ---@field mods GearMods The installed mods; a page of this mod's own in the mod manager.
 ---@field ui GearUi Drawing on top of the game, widgets, panels and the layout.
 ---@field auto? GearAuto Automation (only with `-gear-auto` and `automation = true` in `mod.lua`).

@@ -2171,7 +2171,10 @@ local UI_VK = {
     multiply = 0x6A, add = 0x6B, subtract = 0x6D, decimal = 0x6E, divide = 0x6F,
 }
 for i = 0, 9 do UI_VK['num' .. i] = 0x60 + i end
-for i = 1, 12 do UI_VK['f' .. i] = 0x6F + i end
+for i = 1, 24 do UI_VK['f' .. i] = 0x6F + i end
+-- Mouse buttons 3 to 5 (middle, and the two side buttons), as polled keys: bindable like any key. Mice with more
+-- buttons (MMO mice) send those as keys, usually F13 to F24 or digits, which the names above cover.
+UI_VK.mouse3, UI_VK.mouse4, UI_VK.mouse5 = 0x04, 0x05, 0x06
 for c = string.byte('a'), string.byte('z') do UI_VK[string.char(c)] = c - 32 end
 for c = string.byte('0'), string.byte('9') do UI_VK[string.char(c)] = c end
 
@@ -2339,6 +2342,8 @@ local function make_ui(mod)
 
     -- The cursor in layout coordinates, and whether the left button is held over a mod's widget.
     function ui.mouse() return ui_mouse.x, ui_mouse.y end
+    -- ui.over_ui(): whether the cursor is over a region of a mod's UI (as of the last frame).
+    function ui.over_ui() return ui_hot ~= nil end
 
     -- ui.key_pressed(name): true once per press of the key ('f9', 'a', 'escape' ...), while the game has the focus.
     function ui.key_pressed(name)
@@ -3156,11 +3161,12 @@ end
 ---------------------------------------------------------------------------------------------------------------
 local automation_on = native.auto_state ~= nil
 local VK = {
-    lbutton = 0x01, rbutton = 0x02, mbutton = 0x04, back = 0x08, backspace = 0x08, tab = 0x09, enter = 0x0D, shift = 0x10,
+    lbutton = 0x01, rbutton = 0x02, mbutton = 0x04, xbutton1 = 0x05, xbutton2 = 0x06, back = 0x08, backspace = 0x08, tab = 0x09, enter = 0x0D, shift = 0x10,
     control = 0x11, alt = 0x12, pause = 0x13, escape = 0x1B, space = 0x20, left = 0x25, up = 0x26, right = 0x27,
     down = 0x28, delete = 0x2E, f1 = 0x70, f2 = 0x71, f3 = 0x72, f4 = 0x73, f5 = 0x74, f6 = 0x75, f7 = 0x76,
     f8 = 0x77, f9 = 0x78, f10 = 0x79, f11 = 0x7A, f12 = 0x7B,
 }
+for i = 13, 24 do VK['f' .. i] = 0x6F + i end
 for c = string.byte('A'), string.byte('Z') do VK[string.char(c):lower()] = c end
 for c = string.byte('0'), string.byte('9') do VK[string.char(c)] = c end
 
@@ -3841,8 +3847,10 @@ local function key_conflicts(e, def)
     local out = {}
     local mine = key_binding(e, def)
     if mine == '' then return out end
-    local game = GAME_KEYS[mine:match('[^%+]+$')]
-    if game then out[#out + 1] = {mod = '', name = 'The game', key = '', label = game, game = true} end
+    local keyname = mine:match('[^%+]+$')
+    local game = GAME_KEYS[keyname]
+    -- A key a mod took over with gear.input (the game's action moved elsewhere, or the mod handles it) is no longer the game's.
+    if game and not uis.input.owned[keyname] then out[#out + 1] = {mod = '', name = 'The game', key = '', label = game, game = true} end
     for _, o in ipairs(catalog_list) do
         if o.want ~= false and not o.invalid then
             for _, k in ipairs(o.m.keys) do
@@ -3987,6 +3995,106 @@ local function make_keys_api(mod)
         return key_set(mod.entry, def_of(id), binding)
     end
     return api
+end
+
+-- gear.input: the game's own keys, remapped (gear/input.cpp). State lives in `uis` (the main chunk is at its locals limit).
+uis.input = {rules = {}, handlers = {}, dirty = false, owned = {}}
+function uis.make_input(mod)
+    local api = {}
+    local function vk_of(name, what)
+        local vk = UI_VK[tostring(name):lower()]
+        if not vk or vk == 0x1B or MOD_ALIAS[tostring(name):lower()] then
+            error(what .. ' is not a key or mouse button: ' .. tostring(name), 3)
+        end
+        return vk
+    end
+    -- gear.input.remap(rules): this mod's rules (replaces the earlier ones; {} removes them). A rule:
+    --   {from = 'shift+mouse4', to = '6', id = 'art1'}   the input (a key or mouse 3 to 5, with exactly the modifiers named)
+    --                                                    is the game's key `to`, as if the player pressed that
+    --   {from = '6', block = true}                       the input does nothing in game (any modifiers)
+    -- Only while the game has the keyboard (in game, nobody typing, no message box or escape menu).
+    function api.remap(rules)
+        assert(type(rules) == 'table', 'rules must be a list')
+        local list = {}
+        for i, r in ipairs(rules) do
+            assert(type(r) == 'table', 'rule ' .. i .. ' must be a table')
+            local b = parse_binding(r.from)
+            if not b then error('rule ' .. i .. ': from is not a key: ' .. tostring(r.from), 2) end
+            local entry = {from = b.vk, ctrl = b.ctrl, shift = b.shift, alt = b.alt, id = r.id and (mod.id .. ' ' .. r.id) or ''}
+            if r.block then
+                entry.any = true
+            else
+                entry.to = vk_of(r.to, 'rule ' .. i .. ': to')
+            end
+            entry.owns = not (b.ctrl or b.shift or b.alt) and b.key or nil
+            -- "this key is that same key" changes nothing, unless events are wanted: it only keeps the key from the game's
+            -- other uses for the mod (see the conflicts)
+            if not (entry.to == entry.from and not (entry.ctrl or entry.shift or entry.alt) and entry.id == '') then
+                list[#list + 1] = entry
+            elseif entry.owns then
+                list.owned = list.owned or {}
+                list.owned[entry.owns] = true
+            end
+        end
+        uis.input.rules[mod] = (#list > 0 or list.owned) and list or nil
+        uis.input.dirty = true
+    end
+    -- gear.input.on(fn): fn(id, down, repeat) when the input of one of this mod's rules with an id is pressed or
+    -- released (`repeat`: the key's auto repeat).
+    function api.on(fn)
+        assert(type(fn) == 'function', 'handler must be a function')
+        local h = {mod = mod, fn = fn}
+        uis.input.handlers[#uis.input.handlers + 1] = h
+        return h
+    end
+    function api.off(h)
+        for i = #uis.input.handlers, 1, -1 do
+            if uis.input.handlers[i] == h then table.remove(uis.input.handlers, i) end
+        end
+    end
+    -- gear.input.context() -> ok, typing: whether the layer applies now (in game, nobody typing), and whether keys go to text.
+    function api.context()
+        if not native.input_context then return false, false end
+        return native.input_context()
+    end
+    -- Rebinding: capture_start(), then capture() each frame returns the binding ('ctrl+mouse4') of the first key or
+    -- mouse button pressed since, or nil. A screen that does this calls gear.ui.capture_keys(true) as well.
+    function api.capture_start() admin.capture_start() end
+    function api.capture() return admin.capture() end
+    -- gear.input.normalize(text) -> canonical binding text, or nil if it is not one ('' stays '').
+    function api.normalize(text) return normalize_binding(text) end
+    return api
+end
+
+-- Publishes the rules of every mod that runs, and hands the events to the mods' handlers.
+function uis.input_poll()
+    local I = uis.input
+    if I.dirty then
+        I.dirty = false
+        local all = {}
+        I.owned = {}
+        for m, list in pairs(I.rules) do
+            if m.disabled then
+                I.rules[m] = nil
+            else
+                for _, r in ipairs(list) do
+                    all[#all + 1] = r
+                    if r.owns then I.owned[r.owns] = true end
+                end
+                for name in pairs(list.owned or {}) do I.owned[name] = true end
+            end
+        end
+        -- A rule with an exact binding goes before a blocking one of the same key (the native code also prefers it).
+        if native.input_rules then native.input_rules(all) end
+    end
+    if native.input_events and next(I.rules) then
+        for _, ev in ipairs(native.input_events()) do
+            local mid, id = ev.id:match('^(.-)%z(.*)$')
+            for _, h in ipairs({unpack(I.handlers)}) do
+                if h.mod.id == mid and not h.mod.disabled then call(h.mod, 'input ' .. id, h.fn, id, ev.down, ev['repeat']) end
+            end
+        end
+    end
 end
 
 local function make_mods_api(mod)
@@ -4416,6 +4524,7 @@ local function make_env(mod)
     gear.settings = make_settings_api(mod)
     gear.drops = D.make(mod)
     gear.keys = make_keys_api(mod)
+    gear.input = uis.make_input(mod)
     gear.mods = make_mods_api(mod)
     if mod.builtin then env.admin = admin end
     gear.ui = make_ui(mod)
@@ -4706,6 +4815,10 @@ local function unload_mod(e)
     D.dirty = true
     ui_keys[m] = nil
     key_capture[m] = nil
+    if uis.input.rules[m] then uis.input.rules[m] = nil; uis.input.dirty = true end
+    for i = #uis.input.handlers, 1, -1 do
+        if uis.input.handlers[i].mod == m then table.remove(uis.input.handlers, i) end
+    end
     for name, owner in pairs(uis.replace) do
         if owner == m then uis.replace[name] = nil end
     end
@@ -5221,6 +5334,7 @@ function kernel.tick(dt)
     if apply_pending then apply(false) end
     check_session()
     poll_keys()
+    uis.input_poll()
     poll_saves()
     uis.chat_poll()
     kernel.poll_kills()

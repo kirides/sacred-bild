@@ -191,6 +191,7 @@ if(SACREDGEAR)
     gear/replace.cpp
     gear/gamecfg.cpp
     gear/keyblock.cpp
+    gear/input.cpp
     gear/itemicon.cpp
     gear/realm.cpp
     gear/gear.rc

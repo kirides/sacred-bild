@@ -218,6 +218,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `net` | `GearNet` | Custom net messages: named channels between computers and the game server. |
 | `settings` | `GearSettings` | This mod's settings (declared in `mod.lua`, changed by the player in the mod manager). |
 | `keys` | `GearKeys` | This mod's declared key binds. |
+| `input` | `GearInput` | The game's own keys, remapped. |
 | `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
 | `ui` | `GearUi` | Drawing on top of the game, widgets, panels and the layout. |
 | `auto` | `GearAuto` | Automation (only with `-gear-auto` and `automation = true` in `mod.lua`). (optional) |
@@ -2469,6 +2470,12 @@ The cursor in layout coordinates. In a tick with a button press or release over 
 - returns `x` `number`
 - returns `y` `number`
 
+#### `gear.ui.over_ui() -> boolean`
+
+Whether the cursor is over a region of a mod's UI (a panel, a button), as of the last frame.
+
+- returns `boolean`
+
 ### GearKey
 
 `'escape'|'enter'|'space'|'tab'|'shift'|'control'|'alt'|'left'|'up'|'right'|'down'|'insert'|'delete'|'home'|'end'|'pageup'|'pagedown'|'f1'|'f2'|'f3'|'f4'|'f5'|'f6'|'f7'|'f8'|'f9'|'f10'|'f11'|'f12'|'a'|'b'|'c'|'d'|'e'|'f'|'g'|'h'|'i'|'j'|'k'|'l'|'m'|'n'|'o'|'p'|'q'|'r'|'s'|'t'|'u'|'v'|'w'|'x'|'y'|'z'|'0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9'|integer`
@@ -2997,11 +3004,11 @@ From the canvas to the virtual 4096 x 4096 screen.
 
 ### GearAutoKey
 
-`'back'|'tab'|'enter'|'shift'|'control'|'alt'|'pause'|'escape'|'space'|'left'|'up'|'right'|'down'|'delete'|'f1'|'f2'|'f3'|'f4'|'f5'|'f6'|'f7'|'f8'|'f9'|'f10'|'f11'|'f12'|'a'|'b'|'c'|'d'|'e'|'f'|'g'|'h'|'i'|'j'|'k'|'l'|'m'|'n'|'o'|'p'|'q'|'r'|'s'|'t'|'u'|'v'|'w'|'x'|'y'|'z'|'0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9'|integer`
+`'back'|'tab'|'enter'|'shift'|'control'|'alt'|'pause'|'escape'|'space'|'left'|'up'|'right'|'down'|'delete'|'f1'|'f2'|'f3'|'f4'|'f5'|'f6'|'f7'|'f8'|'f9'|'f10'|'f11'|'f12'|'f13'|'f14'|'f15'|'f16'|'f17'|'f18'|'f19'|'f20'|'f21'|'f22'|'f23'|'f24'|'a'|'b'|'c'|'d'|'e'|'f'|'g'|'h'|'i'|'j'|'k'|'l'|'m'|'n'|'o'|'p'|'q'|'r'|'s'|'t'|'u'|'v'|'w'|'x'|'y'|'z'|'0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9'|integer`
 
 ### GearMouseButton
 
-`'lbutton'|'rbutton'|'mbutton'`
+`'lbutton'|'rbutton'|'mbutton'|'xbutton1'|'xbutton2'`
 
 ### GearAutoState
 

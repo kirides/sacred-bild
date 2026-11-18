@@ -245,6 +245,10 @@ function GearUi.screen() end
 ---@return number y
 function GearUi.mouse() end
 
+--- Whether the cursor is over a region of a mod's UI (a panel, a button), as of the last frame.
+---@return boolean
+function GearUi.over_ui() end
+
 ---@alias GearKey 'escape'|'enter'|'space'|'tab'|'shift'|'control'|'alt'|'left'|'up'|'right'|'down'|'insert'|'delete'|'home'|'end'|'pageup'|'pagedown'|'f1'|'f2'|'f3'|'f4'|'f5'|'f6'|'f7'|'f8'|'f9'|'f10'|'f11'|'f12'|'a'|'b'|'c'|'d'|'e'|'f'|'g'|'h'|'i'|'j'|'k'|'l'|'m'|'n'|'o'|'p'|'q'|'r'|'s'|'t'|'u'|'v'|'w'|'x'|'y'|'z'|'0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9'|integer
 
 --- True once per press of the key, read while the game's window has the focus. Also sees the keys automation holds.

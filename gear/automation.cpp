@@ -1240,6 +1240,8 @@ void Automation::button(int vk, bool down)
     case VK_LBUTTON: message = down ? WM_LBUTTONDOWN : WM_LBUTTONUP; break;
     case VK_RBUTTON: message = down ? WM_RBUTTONDOWN : WM_RBUTTONUP; break;
     case VK_MBUTTON: message = down ? WM_MBUTTONDOWN : WM_MBUTTONUP; break;
+    case VK_XBUTTON1:
+    case VK_XBUTTON2: message = down ? WM_XBUTTONDOWN : WM_XBUTTONUP; break;
     default: return;
     }
     HWND w = window();
@@ -1257,6 +1259,10 @@ void Automation::button(int vk, bool down)
         }
         state = buttonState();
         pos = cursorParam();
+    }
+    if (vk == VK_XBUTTON1 || vk == VK_XBUTTON2)
+    {
+        state |= static_cast<WPARAM>(vk == VK_XBUTTON1 ? XBUTTON1 : XBUTTON2) << 16;
     }
     post(w, message, state, pos);
 }

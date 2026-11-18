@@ -1,4 +1,5 @@
 #include "keyblock.h"
+#include "input.h"
 #include "log.h"
 #include "patch.h"
 
@@ -116,6 +117,10 @@ namespace
             return false;
         }
         if (effectivelyBlocked())
+        {
+            return true;
+        }
+        if (Input::hidingModifiers() && ((vk >= VK_SHIFT && vk <= VK_MENU) || (vk >= VK_LSHIFT && vk <= VK_RMENU)))
         {
             return true;
         }
@@ -247,6 +252,10 @@ namespace
         {
             msg->message = WM_NULL;
         }
+        else if (ok && msg)
+        {
+            Input::filter(*msg, (remove & PM_REMOVE) != 0);
+        }
         return ok;
     }
 
@@ -256,6 +265,10 @@ namespace
         if (ok > 0 && msg && dropMessage(msg->message, msg->wParam, msg->lParam, true))
         {
             msg->message = WM_NULL;
+        }
+        else if (ok > 0 && msg)
+        {
+            Input::filter(*msg, true);
         }
         return ok;
     }

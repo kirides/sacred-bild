@@ -9,6 +9,7 @@
 #include "itemtip.h"
 #include "itemicon.h"
 #include "keyblock.h"
+#include "input.h"
 #include "log.h"
 #include "netmsg.h"
 #include "pickup.h"
@@ -2023,6 +2024,81 @@ namespace
         return 1;
     }
 
+    // native.input_rules(rules): {{id, from, to, ctrl, shift, alt, any}} (VK_ codes) for gear.input
+    int nativeInputRules(lua_State* L)
+    {
+        luaL_checktype(L, 1, LUA_TTABLE);
+        std::vector<Input::Rule> rules;
+        const int n = static_cast<int>(lua_objlen(L, 1));
+        for (int i = 1; i <= n; ++i)
+        {
+            lua_rawgeti(L, 1, i);
+            if (lua_istable(L, -1))
+            {
+                Input::Rule r;
+                lua_getfield(L, -1, "id");
+                if (lua_isstring(L, -1))
+                {
+                    r.id = lua_tostring(L, -1);
+                }
+                lua_pop(L, 1);
+                lua_getfield(L, -1, "from");
+                r.from = static_cast<int>(lua_tointeger(L, -1));
+                lua_pop(L, 1);
+                lua_getfield(L, -1, "to");
+                r.to = static_cast<int>(lua_tointeger(L, -1));
+                lua_pop(L, 1);
+                lua_getfield(L, -1, "ctrl");
+                r.ctrl = lua_toboolean(L, -1) != 0;
+                lua_pop(L, 1);
+                lua_getfield(L, -1, "shift");
+                r.shift = lua_toboolean(L, -1) != 0;
+                lua_pop(L, 1);
+                lua_getfield(L, -1, "alt");
+                r.alt = lua_toboolean(L, -1) != 0;
+                lua_pop(L, 1);
+                lua_getfield(L, -1, "any");
+                r.anyModifiers = lua_toboolean(L, -1) != 0;
+                lua_pop(L, 1);
+                if (r.from > 0 && r.from < 256)
+                {
+                    rules.push_back(std::move(r));
+                }
+            }
+            lua_pop(L, 1);
+        }
+        Input::setRules(std::move(rules));
+        return 0;
+    }
+
+    // native.input_events() -> {{id, down, repeat}}
+    int nativeInputEvents(lua_State* L)
+    {
+        const std::vector<Input::Event> events = Input::takeEvents();
+        lua_createtable(L, static_cast<int>(events.size()), 0);
+        int i = 1;
+        for (const Input::Event& e : events)
+        {
+            lua_createtable(L, 0, 3);
+            lua_pushstring(L, e.id.c_str());
+            lua_setfield(L, -2, "id");
+            lua_pushboolean(L, e.down);
+            lua_setfield(L, -2, "down");
+            lua_pushboolean(L, e.repeat);
+            lua_setfield(L, -2, "repeat");
+            lua_rawseti(L, -2, i++);
+        }
+        return 1;
+    }
+
+    // native.input_context() -> remapping applies now, typing
+    int nativeInputContext(lua_State* L)
+    {
+        lua_pushboolean(L, Input::context());
+        lua_pushboolean(L, Input::typing());
+        return 2;
+    }
+
     // native.ui_block_keys(blocked): the keyboard stays from the game while true (called every tick by the kernel).
     int nativeUiBlockKeys(lua_State* L)
     {
@@ -3006,6 +3082,9 @@ namespace
             {"ui_clip", nativeUiClip},
             {"ui_wheel", nativeUiWheel},
             {"key_down", nativeKeyDown},
+            {"input_rules", nativeInputRules},
+            {"input_events", nativeInputEvents},
+            {"input_context", nativeInputContext},
             {"ui_block_keys", nativeUiBlockKeys},
             {"ui_take_typed", nativeUiTakeTyped},
             {"write_file", nativeWriteFile},

@@ -550,6 +550,20 @@ current binding. Two mods with the same binding both fire; pick a default that i
 can rebind. Hotkeys of other mods stay quiet while the Mods screen is open. The text of a binding is lower case,
 modifiers first: `ctrl+shift+m`, `alt+f5`; keys are named as in `gear.ui.key_pressed`.
 
+**Remapping the game's own keys (`gear.input`).** The game's keys are fixed (I inventory, 6 to 0 combat arts, Space the
+healing potion ...). `gear.input.remap(rules)` lets a mod turn another key or mouse button into one of them:
+`{from = 'mouse4', to = 'i'}` makes the first side button open the inventory, `{from = 'i', block = true}` makes the
+original I do nothing. Sacred Gear changes the messages the game reads (before its handlers: nothing sees the original
+press), swallows the character the old key made and gives the game the new key's own, however Shift or Ctrl are held.
+It applies only while the game has the keyboard (in game; not with a message box, the escape menu, the savegame, options
+or character screen or the chat line open), so typing and menus are never touched, and all keys are the game's own when no
+mod sets rules. A rule with an `id` also reports presses to `gear.input.on(fn)` (a quick cast mod uses that to add a
+click). Inputs are the key names of `gear.ui.key_pressed` (now with `f13` to `f24`) and `mouse3` (middle), `mouse4`,
+`mouse5`, with modifiers (`shift+mouse4`). Declared keys in `mod.lua` take the same names, so the Mods screen rebinds
+them with its key capture and the controller's key picker. `gear.input.capture_start()` / `capture()` give a screen of
+a mod's own the same capture. A key the mod took over (a rule for it, even `{from = '6', to = '6'}`) is no longer listed
+as a clash with the game's hotkey in the Mods screen. See the [Key bindings mod](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/key-bindings.md).
+
 `gear.mods.list()` and `gear.mods.get(id)` describe the installed mods (state, enabled, errors ...) for a mod that
 wants to know about another one, e.g. to offer a feature only when a companion mod runs. Switching mods is the
 player's choice; mods cannot do it.
