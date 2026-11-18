@@ -105,18 +105,26 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Entries
 ---------------------------------------------------------------------------------------------------------------
--- A readable name: the first line of the game's tooltip when it comes without colour codes, else the type name.
+-- Takes the game's text markup out of a tooltip line: `\cAARRGGBB` is a colour, `\gAARRGGBB` plus 8 more characters
+-- (hex, space padded) an inline image (equipment names start with one), `\r` a reset, `\w`. Returns nil when
+-- other backslash codes remain, so unknown markup never ends up in the log.
+local function plain(line)
+    line = line:gsub('\\g%x%x%x%x%x%x%x%x[%x ][%x ][%x ][%x ][%x ][%x ][%x ][%x ]', '')
+    line = line:gsub('\\c%x%x%x%x%x%x%x%x', ''):gsub('\\[rw]', '')
+    line = line:gsub('^%s+', ''):gsub('%s+$', '')
+    if line == '' or line:find('\\', 1, true) then return nil end
+    return line
+end
+
+-- A readable name: the first line of the game's tooltip (the localized name, without its markup), else the type name.
 local function item_name(item)
-    local name
     local ok, text = pcall(ui.item_tooltip_text, item)
     if ok and type(text) == 'string' then
         local line = text:match('^[^\r\n]+')
-        if line then
-            line = line:gsub('\\c%x%x%x%x%x%x%x%x', ''):gsub('^%s+', ''):gsub('%s+$', '')
-            if line ~= '' and not line:find('\\', 1, true) then name = line end
-        end
+        local name = line and plain(line)
+        if name then return name end
     end
-    return name or item.type_name or ('type ' .. tostring(item.type))
+    return item.type_name or ('type ' .. tostring(item.type))
 end
 
 local function worth_logging(item)
