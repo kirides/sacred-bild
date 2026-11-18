@@ -22,11 +22,27 @@ namespace
     };
     std::map<int, Held> g_held;
     std::atomic<bool> g_hiding{false};
-    // The game acts on the characters TranslateMessage makes of the key messages it reads. For a press a rule turned
-    // into another key that is the character of the new key with the modifiers the player holds (Shift+1 for 6 would
-    // be '&'): the character that follows is replaced by the one the game's key makes by itself.
-    int g_charVk = 0;
-    ULONGLONG g_charUntil = 0;
+    // The game acts on the characters TranslateMessage makes of the key messages it reads, and TranslateMessage makes them
+    // from the keys the player holds: Ctrl+F turned into 6 makes none (Ctrl+digit has no character), Shift+1 turned into
+    // 6 makes '&'. So the characters TranslateMessage makes of a rewritten press are dropped and the layer posts the
+    // character the game's key makes by itself (marked, so it is passed on as it is).
+    int g_dropChars = 0;
+    ULONGLONG g_dropUntil = 0;
+    constexpr LPARAM kOwnChar = 0x10000000;
+
+    void postChar(HWND window, int vk)
+    {
+        BYTE state[256] = {};
+        wchar_t buffer[8] = {};
+        const UINT scan = MapVirtualKeyA(static_cast<UINT>(vk), MAPVK_VK_TO_VSC);
+        const int n = ToUnicodeEx(static_cast<UINT>(vk), scan, state, buffer, 8, 4, GetKeyboardLayout(0));
+        if (n == 1 && window)
+        {
+            PostMessageW(window, WM_CHAR, buffer[0], kOwnChar | 1 | (static_cast<LPARAM>(scan) << 16));
+        }
+        g_dropChars = 1;
+        g_dropUntil = GetTickCount64() + 100;
+    }
 
     // Offsets in the UI manager (SacredBild's src/sacred/ui.h).
     constexpr uint32_t kFlagsOff = 0x08, kWindowsOff = 0x80, kDialogOff = 0x144;
@@ -210,20 +226,17 @@ void Input::filter(MSG& m, bool consume)
     g_hiding.store(false, std::memory_order_relaxed);
     if (m.message == WM_CHAR || m.message == WM_SYSCHAR || m.message == WM_DEADCHAR || m.message == WM_SYSDEADCHAR)
     {
-        if (g_charVk && GetTickCount64() < g_charUntil)
+        if (m.lParam & kOwnChar)
         {
-            BYTE state[256] = {};
-            wchar_t buffer[8] = {};
-            const UINT scan = MapVirtualKeyA(static_cast<UINT>(g_charVk), MAPVK_VK_TO_VSC);
-            const int n = ToUnicodeEx(static_cast<UINT>(g_charVk), scan, state, buffer, 8, 4, GetKeyboardLayout(0));
-            if (n == 1)
-            {
-                m.wParam = buffer[0];
-            }
+            m.lParam &= ~kOwnChar;
+        }
+        else if (g_dropChars > 0 && GetTickCount64() < g_dropUntil)
+        {
             if (consume)
             {
-                g_charVk = 0;
+                --g_dropChars;
             }
+            m.message = WM_NULL;
         }
         return;
     }
@@ -273,8 +286,7 @@ void Input::filter(MSG& m, bool consume)
         {
             if (consume)
             {
-                g_charVk = held->second.to;
-                g_charUntil = GetTickCount64() + 100;
+                postChar(m.hwnd, held->second.to);
             }
             asKey(m, held->second.to, true, true);
             g_hiding.store(true, std::memory_order_relaxed);
@@ -310,8 +322,7 @@ void Input::filter(MSG& m, bool consume)
         note(rule->id, true, repeat);
         if (to)
         {
-            g_charVk = to;
-            g_charUntil = GetTickCount64() + 100;
+            postChar(m.hwnd, to);
         }
     }
     if (to)
