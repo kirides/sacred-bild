@@ -118,6 +118,12 @@ function GearKeys.off(handle) end
 ---@return string
 function GearKeys.binding(id) end
 
+--- The key bound to `id` now as text for a window title or hint: `'Ctrl+G'`, `'F3'`, `''` if unbound. It follows the
+--- player's rebinding, so a title like `'Loot log (' .. gear.keys.label('panel') .. ')'` stays right.
+---@param id string
+---@return string
+function GearKeys.label(id) end
+
 --- Rebinds a key from the mod itself (`''` unbinds, nil restores the default). Returns true, or nil and a message for
 --- a text that is not a key.
 ---@param id string

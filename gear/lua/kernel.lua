@@ -4028,6 +4028,13 @@ local function make_keys_api(mod)
     function api.set(id, binding)
         return key_set(mod.entry, def_of(id), binding)
     end
+    function api.label(id)
+        local b = key_binding(mod.entry, def_of(id))
+        if b == '' then return '' end
+        local out = {}
+        for part in b:gmatch('[^%+]+') do out[#out + 1] = part:sub(1, 1):upper() .. part:sub(2) end
+        return table.concat(out, '+')
+    end
     return api
 end
 
