@@ -161,6 +161,17 @@ function GearUi.item_tooltip(item, x, y) end
 ---@return string? error
 function GearUi.item_tooltip_text(item) end
 
+--- The item whose tooltip the game shows right now: the cursor (the mouse's or the controller's pad cursor) rests on an item
+--- in the backpack, the chest, a shop, the equipment window ... Read as of the last frame; nil when no item tooltip is up.
+--- Also returns the popup's rectangle (top-left corner and size, the size as of its last layout) in layout units, so a mod
+--- can put something beside the tooltip.
+---@return GearItem? item
+---@return number? x
+---@return number? y
+---@return number? w
+---@return number? h
+function GearUi.hovered_item() end
+
 --- The UI images whose sheet name contains `filter` (any case), all of them without a filter.
 ---@param filter? string
 ---@return GearImageInfo[]

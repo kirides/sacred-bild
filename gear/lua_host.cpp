@@ -3167,6 +3167,39 @@ namespace
         return 1;
     }
 
+    // native.item_hover() -> item id, x, y, width, height, popup flags | nil: the item whose tooltip the game shows now
+    int nativeItemHover(lua_State* L)
+    {
+        ItemTip::Hover h;
+        if (!ItemTip::hovered(h))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, h.id);
+        lua_pushnumber(L, h.x);
+        lua_pushnumber(L, h.y);
+        lua_pushnumber(L, h.width);
+        lua_pushnumber(L, h.height);
+        lua_pushnumber(L, h.flags);
+        return 6;
+    }
+
+    // native.item_equip_slot(creature id, item type) -> slot (0..18) | nil
+    int nativeItemEquipSlot(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const lua_Number type = luaL_checknumber(L, 2);
+        const int slot = id && type >= 1 && type < 0x7E60 ? ItemTip::equipSlot(id, static_cast<uint32_t>(type)) : -1;
+        if (slot < 0)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, slot);
+        return 1;
+    }
+
     // native.item_type_text(type) -> the tooltip text of a scratch item of that type (UTF-8, colour codes) | nil, message
     int nativeItemTypeText(lua_State* L)
     {
@@ -3887,6 +3920,8 @@ namespace
             {"item_tooltip", nativeItemTooltip},
             {"item_tooltip_text", nativeItemTooltipText},
             {"item_type_text", nativeItemTypeText},
+            {"item_hover", nativeItemHover},
+            {"item_equip_slot", nativeItemEquipSlot},
             {"inv_export", nativeInvExport},
             {"inv_import", nativeInvImport},
             {"realm_get", nativeRealmGet},

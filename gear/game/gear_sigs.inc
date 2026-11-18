@@ -68,6 +68,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cUI_Popup_show", "53 8B 5C 24 08 56 8B F1 F6 46 10 01", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_show}, // 00732550, 00731E70
     {"cUI_Control_clearFlags", "53 8B 5C 24 08 56 8B F1 F6 C3 30 74 3E", 0, Sig::Take::Match, &Gear::Addr::cUI_Control_clearFlags}, // 007325C0, 00731EE0
     {"cUI_Popup_setOwner", "8B 44 24 04 85 C0 89 81 D0 21 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Popup_setOwner}, // 006E81C0, 006E7E00
+    {"cCreature_equipSlot", "56 57 8B 7C 24 0C 8B F1 81 FF 00 16 00 00", 0, Sig::Take::Match, &Gear::Addr::cCreature_equipSlot}, // 0054ACC0, 0054AB30
     {"engine_alloc", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 08 8B 44 24 18 53 48", 0, Sig::Take::Match, &Gear::Addr::engine_alloc}, // 008321A0, 00830F60
     {"engine_free", "8B 4C 24 04 85 C9 74 23 8B 44 24 08", 0, Sig::Take::Match, &Gear::Addr::engine_free}, // 0041D3B0, 0041D390
     {"cItem_setRecord", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 8B 44 24 10 64 89 25 00 00 00 00 81 EC 88 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_setRecord}, // 005C0810, 005C0780

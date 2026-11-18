@@ -1281,6 +1281,13 @@ What a hero wears: its equipment slots that hold an item (the game's slot number
 
 - returns `{slot: integer, item: GearItem}[]?`
 
+#### `creature:equip_slot(item) -> integer?`
+
+The equipment slot (0..18) an item goes to for this hero, by the engine's own rule: for a group of slots the first one (amulets 6, 7; rings 8 to 11; weapons 12; shields and off-hand items 13), whatever the hero wears. Nil when the hero cannot wear it or it is no equipment.
+
+- `item`: `GearItem|integer` - An item or an item type id.
+- returns `integer?`
+
 #### `creature:combos() -> GearHeroCombo[]?`
 
 A hero's combos (the combo master's slots that hold arts), nil for other creatures. Use one with `order_ability(combo.id, target)`.
@@ -3318,6 +3325,16 @@ The words of the game's item tooltip (UTF-8, with the game's colour codes such a
 - `item`: `GearItem|integer|string`
 - returns `text` `string?`
 - returns `error` `string?`
+
+#### `gear.ui.hovered_item() -> GearItem?, number?, number?, number?, number?`
+
+The item whose tooltip the game shows right now: the cursor (the mouse's or the controller's pad cursor) rests on an item in the backpack, the chest, a shop, the equipment window ... Read as of the last frame; nil when no item tooltip is up. Also returns the popup's rectangle (top-left corner and size, the size as of its last layout) in layout units, so a mod can put something beside the tooltip.
+
+- returns `item` `GearItem?`
+- returns `x` `number?`
+- returns `y` `number?`
+- returns `w` `number?`
+- returns `h` `number?`
 
 #### `gear.ui.images(filter) -> GearImageInfo[]`
 

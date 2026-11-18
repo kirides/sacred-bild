@@ -2,6 +2,7 @@
 #include "game/gear_addr.h"
 #include "inventory.h"
 #include "log.h"
+#include "patch.h"
 #include "world.h"
 
 #include <windows.h>
@@ -13,6 +14,23 @@ namespace
     using namespace Gear;
 
     uint32_t g_scratchShown = 0, g_fallbackUsed = 0;
+
+    // The item whose tooltip the engine showed last: every item tooltip ties the popup to the item with setOwner (the hover code of the
+    // inventory, chest, shop and equipment windows), a tooltip of Gear's own (`show`) with owner 0, which is not recorded.
+    decltype(Addr::cUI_Popup_setOwner)::Ptr g_origSetOwner = nullptr;
+    void* g_hoverPopup = nullptr;
+    uint32_t g_hoverId = 0, g_hoverFrame = 0, g_frame = 0;
+
+    void __fastcall hookSetOwner(void* popup, void* edx, uint32_t itemId)
+    {
+        g_origSetOwner(popup, edx, itemId);
+        if (itemId)
+        {
+            g_hoverPopup = popup;
+            g_hoverId = itemId;
+            g_hoverFrame = g_frame;
+        }
+    }
 
     constexpr uintptr_t kReservedPopup = 0x54;                   // u16 in the UI manager: index of a spare popup
     constexpr uintptr_t kPopupX = 0x24, kPopupY = 0x28;          // its top-left corner (the flags below)
@@ -282,4 +300,66 @@ bool ItemTip::textExported(const std::string& bytes, std::wstring& out, const ch
     }
     out.assign(buffer, capture.length);
     return true;
+}
+
+bool ItemTip::hovered(Hover& out)
+{
+    // The engine shows an item's tooltip during the window render of a frame, after the tick: shown in frame N, the tick of frame N + 1
+    // sees it one frame old; two frames old means the cursor has left the item.
+    if (!g_hoverPopup || !g_hoverId || g_frame - g_hoverFrame > 1)
+    {
+        return false;
+    }
+    __try
+    {
+        const auto* popup = static_cast<const uint8_t*>(g_hoverPopup);
+        out.id = g_hoverId;
+        out.x = *reinterpret_cast<const int*>(popup + kPopupX);
+        out.y = *reinterpret_cast<const int*>(popup + kPopupY);
+        out.width = *reinterpret_cast<const int16_t*>(popup + kPopupW);
+        out.height = *reinterpret_cast<const int16_t*>(popup + kPopupH);
+        out.flags = *reinterpret_cast<const uint32_t*>(popup + 0x154);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+void ItemTip::frame()
+{
+    ++g_frame;
+}
+
+bool ItemTip::install()
+{
+    if (!Addr::cUI_Popup_setOwner)
+    {
+        LOG("ItemTip: the popup's owner setter was not found: no hovered item");
+        return false;
+    }
+    return Patch::hook(g_origSetOwner, Addr::cUI_Popup_setOwner, hookSetOwner, "cUI_Popup_setOwner");
+}
+
+int ItemTip::equipSlot(uint32_t creatureId, uint32_t itemType)
+{
+    const uintptr_t hero = Addr::cCreature_equipSlot ? World::objectAddress(creatureId) : 0;
+    if (!hero || itemType == 0 || itemType >= 0x7E60)
+    {
+        return -1;
+    }
+    __try
+    {
+        // The engine's answer depends on what is worn (the first free slot of a group): ask about a copy without equipment.
+        uint8_t copy[0x600];
+        std::memcpy(copy, reinterpret_cast<void*>(hero), sizeof(copy));
+        std::memset(copy + 0x1A4, 0, 19 * 4);
+        const uint32_t slot = Addr::cCreature_equipSlot(copy, itemType);
+        return slot < 19 ? static_cast<int>(slot) : -1;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return -1;
+    }
 }

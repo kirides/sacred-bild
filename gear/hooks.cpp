@@ -1,5 +1,6 @@
 #include "hooks.h"
 #include "chat.h"
+#include "itemtip.h"
 #include "drops.h"
 #include "lua_host.h"
 #include "netmsg.h"
@@ -23,6 +24,7 @@ namespace
         g_updateZoom(engine, edx, dt);
         Ui::setEngine(engine);
         Save::frame(engine);
+        ItemTip::frame();
         Drops::frame();
         Party::frame();
         LuaHost::frame(dt);
@@ -42,6 +44,7 @@ bool Hooks::install()
     Chat::install();
     Party::install();
     Savegames::install();
+    ItemTip::install();
     const bool committed = Patch::commit();
     // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.
     SiteHook::install();

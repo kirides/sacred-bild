@@ -912,6 +912,13 @@ do
         end
         return out
     end
+    -- The equipment slot (0..18) an item goes to for this hero (the engine's own rule: the first slot of the item's group, i.e.
+    -- 6 for amulets (6, 7), 8 for rings (8..11), 12 for weapons, 13 for shields), nil if it cannot wear it.
+    function creature_mt:equip_slot(item)
+        local item_type = type(item) == 'table' and item.type or item
+        if type(item_type) ~= 'number' then error('equip_slot wants an item or an item type', 2) end
+        return native.item_equip_slot(self.id, item_type)
+    end
     function creature_mt:set_combo(slot, arts)
         assert(type(slot) == 'number' and type(arts) == 'table', 'expected a slot (0..3) and a list of combat arts')
         return native.party_set_combo(self.id, slot, arts)
@@ -2538,6 +2545,15 @@ local function make_ui(mod)
         if type(item) == 'table' then item = item.id end
         if type(item) ~= 'number' and type(item) ~= 'string' then error('item_tooltip_text wants an item, an id or an export', 2) end
         return native.item_tooltip_text(item)
+    end
+    -- ui.hovered_item() -> item, x, y, w, h | nil: the item whose tooltip the game shows right now (cursor or pad cursor resting on
+    -- an item in the backpack, chest, shop, equipment ...) as a gear.world.item table, and the tooltip's rectangle in layout units.
+    function ui.hovered_item()
+        local id, x, y, w, h = native.item_hover()
+        if not id then return nil end
+        local item = world.item(id)
+        if not item then return nil end
+        return item, x, y, w, h
     end
     function ui.image_info(id)
         local info = type(id) == 'number' and native.ui_image_info(id)

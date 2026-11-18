@@ -295,6 +295,13 @@ function Creature:ability(id) end
 ---@return {slot: integer, item: GearItem}[]?
 function Creature:equipment() end
 
+--- The equipment slot (0..18) an item goes to for this hero, by the engine's own rule: for a group of slots the first one
+--- (amulets 6, 7; rings 8 to 11; weapons 12; shields and off-hand items 13), whatever the hero wears. Nil when the hero cannot
+--- wear it or it is no equipment.
+---@param item GearItem|integer An item or an item type id.
+---@return integer?
+function Creature:equip_slot(item) end
+
 --- A hero's combos (the combo master's slots that hold arts), nil for other creatures. Use one with
 --- `order_ability(combo.id, target)`.
 ---@return GearHeroCombo[]?

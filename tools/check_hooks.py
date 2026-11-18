@@ -12,6 +12,7 @@ from gen_sigs import SACRED_DE
 # entry close enough: unlisted handler funclets follow, and a linear sweep runs into inline switch tables])
 HOOKS = {
     0x00645260: ('dxDriver7::init', 3),
+    0x006E81C0: ('cUI_Popup::setOwner', 1),
     0x00645E40: ('dxDriver7::flip', 0),
     0x00646150: ('dxDriver7::lockBack', 1),
     0x006468A0: ('dxDriver7::drawLoadingScreen', 2),
