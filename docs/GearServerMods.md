@@ -259,7 +259,7 @@ frame. `server_only` channels are not relayed between players on chat either (th
 frame). With the server's flood protection on, chat lines are limited per player (`FLOOD_CHAT_PER_SECOND`), which also limits the
 chat carrier. Self test: `netopstest` with `chat_only = true` (the client declines the offered numbers).
 - **Example: achievements and login streak.** Server `scripts-examples/achievements.lua` (SacredEngineRemake) tracks achievements and a daily
-  login streak per hero and pays rewards with `server.drop_gold` / `server.drop_item`; `achievements` ([sacred-gear-mods](https://github.com/kirides/sacred-gear-mods)) shows toasts and a panel (F7).
+  login streak per hero and pays rewards with `server.drop_gold` / `server.drop_item`; `achievements` ([sacred-gear-mods](https://github.com/kirides/sacred-gear-mods)) shows toasts and a panel (Ctrl+G).
   Wire: channel `achievements:sync`; server to client JSON `{op='state', ach={{id,name,desc,have,need,done?,reward?}...}, streak, best, days, claimed, next}`,
   `{op='unlock', id, name, desc, reward}`, `{op='streak', streak, best, reward}`; client to server `{op='get'}`.
 User documentation of the five client mods (`bounty`, `achievements`, `serverfeed`, `buildsharer`, `questhelper`): install, hotkeys, settings, panel layouts, in [Server mods](https://github.com/kirides/sacred-gear-mods/blob/main/docs/ServerMods.md). The sections below are the design notes.
@@ -276,7 +276,7 @@ cover). `rare_drops` and `graveyard` also send each new drop or death on the net
 (table payloads), and answer any message on them with the latest five (`kind = 'recent'`).
 
 `serverfeed` ([sacred-gear-mods](https://github.com/kirides/sacred-gear-mods)) is the client side: it listens on both channels with `gear.net.channel(name):on`, shows each live
-message as a coloured line (item rarity colours as in the game) for a few seconds, keeps the latest twelve in a list (F7) and
+message as a coloured line (item rarity colours as in the game) for a few seconds, keeps the latest twelve in a list (Ctrl+Y) and
 asks for the latest five when the handshake is done. Settings: drops on/off, deaths on/off, seconds on screen, position. A
 server without the scripts never sends on those channels, and a stock `GameServer.exe` drops the HELLO, so the mod stays idle.
 Not tested in a running game (see the commit message); the file syntax and the handlers were run against a stub of `gear`.
