@@ -24,7 +24,7 @@ import gen_gear_api_docs  # noqa: E402
 ROOT = os.path.dirname(HERE)
 META = os.path.join(ROOT, 'gear', 'meta')
 MDK_SRC = os.path.join(ROOT, 'gear', 'mdk')
-EXAMPLES = ['hello', 'uidemo', 'saveinfo']
+EXAMPLES = ['hello', 'uidemo', 'saveinfo', 'hooks']
 NAME = 'sacred-gear-mdk'
 
 

@@ -101,6 +101,7 @@
 ---@field lookup GearLookup Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window.
 ---@field fmt GearFmt Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed).
 ---@field toast GearToast Short messages that stack up on the screen and fade; the layout editor moves them.
+---@field events GearEvents Hooks between mods: declare the custom events the mod emits, list what is declared.
 ---@field store GearStore The mod's own data in JSON files of its folder: load with defaults, save, save when changed.
 ---@field mp GearMp Players of a network game, the host, the mod channel and the `kill` event.
 ---@field net GearNet Custom net messages: named channels between computers and the game server.
@@ -153,6 +154,7 @@ function gear.off(handle) end
 
 --- Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the
 --- prefixes `session.`, `gear.`, `pipe.`, `game.`, `chat.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep.
+--- Handlers of `prefix.*` (`gear.on('bounty.*', fn)`) also get every custom event below the prefix, with the event name first. See `gear.events` for publishing hooks.
 ---@param event string
 ---@param ... any
 function gear.emit(event, ...) end

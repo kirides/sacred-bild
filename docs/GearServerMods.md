@@ -316,3 +316,21 @@ logic is Lua.
 `gear/tests/modmock` (the panels against a strict mock of the API). **Not verified:** the panels in a running game (the game build was not
 available to this work), the class numbers of the server's FIRSTCONTACT byte against Gear's hero types, and quest pairs ever being filled
 by real play.
+
+## Hooks between mods (gear.events), client and server
+
+Mods publish *hooks* (`bounty.completed`, `worldevent.started`) with `gear.emit` after declaring them with
+`gear.events.declare`; other mods subscribe with `gear.on(name, fn)` or `gear.on('bounty.*', fn)`. See the "Hooks between
+mods" chapter of `docs/GearApi.md`.
+
+- **Client (single player and network):** every computer's mods emit for what happens on it, for its own hero. Subscribers on
+  that computer react; nothing crosses the network by itself. A mod that wants the host or another player to hear a hook
+  forwards it on its own channel (`gear.mp.send`, `gear.net`).
+- **Game server (headless server, Lua):** the server's Lua host must offer the same three calls with the same behaviour:
+  `gear.emit(name, payload)`, `gear.on(name | 'prefix.*', fn)` and `gear.events.declare/list`, with the same name rules (a dot,
+  the reserved prefixes) and the same payload shapes as the client mods, so a server-side bounty board and the client's
+  one publish `bounty.*` with identical fields. A server-side `bounty_board.lua` therefore emits `bounty.started`,
+  `bounty.progress`, `bounty.completed`, `bounty.claimed`, with an extra `player` field (the slot's hero name) because the
+  server sees every player. The kernel's emit/declare code (`EV` in `gear/lua/kernel.lua`, about 50 lines of plain Lua) can be
+  ported unchanged. Not built here: the server host is in the SacredEngineRemake `feature/headless-game-server` branch,
+  which is not part of these repositories.

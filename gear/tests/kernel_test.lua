@@ -248,6 +248,9 @@ files.a = {
         gear.on('session.start', function(h) record.hero = h.id end)
         gear.on('session.stop', function() record.stopped = true end)
         gear.on('test.ping', function(v) record.ping = v end)
+        gear.on('test.*', function(name, v) record.wild = (record.wild or '') .. name .. '=' .. tostring(v) .. ';' end)
+        gear.events.declare('test.ping', {doc = 'b says hi', args = 'v'})
+        record.declare_other = not pcall(gear.events.declare, 'session.x')
         record.game = gear.game
         gear.on('game.saved', function(slot, info) record.saved = {slot, info.size} end)
         gear.on('game.save_failed', function(slot, message) record.save_failed = {slot, message} end)
@@ -304,7 +307,10 @@ files.a = {
 files.b = {
     ['mod.lua'] = "return {id = 'b', requires = {'a'}}",
     ['main.lua'] = [[
-        gear.on('load', function() gear.emit('test.ping', 42) end)
+        gear.on('load', function()
+            gear.emit('test.ping', 42)
+            record.b = {clash = not pcall(gear.events.declare, 'test.ping', 'mine'), listed = #gear.events.list('test.') }
+        end)
         gear.on('frame', function() error('boom') end)
         has_auto = gear.auto ~= nil
     ]],
@@ -483,6 +489,8 @@ ok(rec.bad ~= nil, 'json decode error message')
 ok(rec.pipe_denied, 'pipe not listed in mod.lua is refused')
 ok(rec.ro, 'data is read only')
 ok(rec.emit_reserved, 'reserved events cannot be emitted')
+ok(rec.wild == 'test.ping=42;', 'prefix.* handlers get the event name first: ' .. tostring(rec.wild))
+ok(rec.declare_other, 'reserved events cannot be declared')
 ok(rec.auto, 'automation for a mod that asks for it')
 ok(rec.auto_instance == 'test', 'gear.auto.instance')
 ok(rec.goblin == 2, 'type by name')

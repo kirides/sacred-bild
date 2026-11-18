@@ -9,7 +9,7 @@ editor help.
 | `docs/GearApi.md` | The API reference. |
 | `docs/Gear.md` | The guide to writing a mod: events, `mod.lua`, automation, engine notes. |
 | `example-mod/` | A small mod to start from: `mod.lua` (manifest with a setting and a key bind) and `main.lua` (draws text). `new-mod.ps1` copies it. |
-| `examples/` | Small working mods (`hello`, `uidemo`, `saveinfo`). |
+| `examples/` | Small working mods (`hello`, `uidemo`, `saveinfo`, `hooks`: reacting to other mods' hooks). |
 | `tools/` | `new-mod.ps1` makes a mod from `example-mod`; `pack-mod.ps1` zips a mod for players. |
 
 ## Start

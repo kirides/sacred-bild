@@ -3117,20 +3117,57 @@ end
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true, ['effect.add'] = true}
 local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.', 'chat.'}
-local emit_depth = 0
+-- EV: emit depth and the hook registry (gear.events: declared custom events, listed for other mods and the docs).
+local EV = {depth = 0, declared = {}}
 
-local function emit(event, ...)
+function EV.check(event)
     assert(type(event) == 'string' and event:match('^[%w_%-]+%.[%w_%.%-]+$'),
         'custom event names have a dot ("twitch.command")')
     assert(not BUILTIN[event], 'built-in event')
     for _, p in ipairs(RESERVED_PREFIX) do
         assert(event:sub(1, #p) ~= p, 'events starting with ' .. p .. ' are reserved')
     end
-    if emit_depth >= 8 then error('events nested too deeply', 2) end
-    emit_depth = emit_depth + 1
-    local ok, err = pcall(kernel.dispatch, event, ...)
-    emit_depth = emit_depth - 1
+end
+
+-- Handlers of `prefix.*` ("bounty.*", "bounty.board.*") also get every custom event below that prefix, with the event name first.
+local function emit(event, ...)
+    EV.check(event)
+    if EV.depth >= 8 then error('events nested too deeply', 2) end
+    EV.depth = EV.depth + 1
+    local ok, err = pcall(function(...)
+        kernel.dispatch(event, ...)
+        local dot = 0
+        while true do
+            dot = event:find('.', dot + 1, true)
+            if not dot then break end
+            kernel.dispatch(event:sub(1, dot) .. '*', event, ...)
+        end
+    end, ...)
+    EV.depth = EV.depth - 1
     if not ok then error(err, 0) end
+end
+
+-- gear.events.declare(name, info): the mod says it emits `name`. info = {doc = 'when', args = 'payload fields'}.
+function EV.declare(mod, name, info)
+    EV.check(name)
+    assert(not name:find('*', 1, true), 'declare the event, not a pattern')
+    info = type(info) == 'table' and info or {doc = info}
+    local old = EV.declared[name]
+    assert(not old or old.mod == mod.id, ('%s is declared by mod %s'):format(name, old and old.mod))
+    EV.declared[name] = {name = name, mod = mod.id, doc = tostring(info.doc or ''), args = tostring(info.args or '')}
+end
+
+function EV.list(prefix)
+    local out = {}
+    for name, d in pairs(EV.declared) do
+        if not prefix or name:sub(1, #prefix) == prefix then
+            local n = 0
+            for _, h in ipairs(handlers[name] or {}) do if not h.mod.disabled then n = n + 1 end end
+            out[#out + 1] = {name = name, mod = d.mod, doc = d.doc, args = d.args, listeners = n}
+        end
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -4476,6 +4513,11 @@ local function make_env(mod)
         time = native.time,
         pipe = {open = function(name) return open_pipe(mod, name) end},
         emit = emit,
+        events = {
+            declare = function(name, info) EV.declare(mod, name, info) end,
+            list = EV.list,
+            declared = function(name) return EV.declared[name] ~= nil end,
+        },
         -- The game's own texts, by the ids its data tables hold.
         text = {
             get = function(id)
@@ -4971,6 +5013,7 @@ local function unload_mod(e)
             if list[i].mod == m then table.remove(list, i) end
         end
     end
+    for name, d in pairs(EV.declared) do if d.mod == m.id then EV.declared[name] = nil end end
     for i = #key_handlers, 1, -1 do
         if key_handlers[i].mod == m then table.remove(key_handlers, i) end
     end

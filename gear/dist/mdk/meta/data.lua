@@ -9,6 +9,7 @@
 ---@field object_types GearObjectTypes The type records every object refers to (0x80 bytes; id = index, 1..0x7E5F).
 ---@field creature_types GearTable `Pak\Creature.pak`'s records (0x56 bytes).
 ---@field abilities GearAbilities The ability tables of the exe by id (skills, combat arts, spells), which a mod can change.
+---@field regions GearRegions The engine's region kill countdowns (the Region Boss quest), which a mod can read and change.
 local GearData = {}
 
 -- path record
@@ -283,3 +284,39 @@ function GearPipe:connected() end
 
 --- Closes the pipe for good.
 function GearPipe:close() end
+
+-- path regions
+--- One region of the kill countdown: when `kills_left` reaches 0 the region boss comes.
+---@class GearRegion
+---@field index integer The record's index (1 ..).
+---@field id integer The region id the game uses.
+---@field name string The region's name (may be empty).
+---@field boss boolean The boss flag of the record.
+---@field kills_needed integer The kills the region needs; 0 for a record the game did not set up. Writable (0 .. 1000000).
+---@field kills_left integer The kills left before the boss. Writable (0 .. 1000000).
+local GearRegion = {}
+
+--- The region kill table. The game keeps its progress in memory only: it is not in savegames, and the game resets it when a region is left.
+---@class GearRegions
+local GearRegions = {}
+
+--- The number of records (32; record 0 is unused), 0 if the table is not available.
+---@return integer
+function GearRegions:count() end
+
+--- The record `index` (1 .. count - 1).
+---@param index integer
+---@return GearRegion?
+function GearRegions:get(index) end
+
+--- The region a sector lies in (a sector word, as `creature:sector()` gives). nil where the game has no region.
+---@param sector integer
+---@return GearRegion?
+---@return integer? code The region byte the map files give the sector.
+function GearRegions:of_sector(sector) end
+
+--- The region a creature (for example the hero) is in.
+---@param creature Creature
+---@return GearRegion?
+---@return integer? code
+function GearRegions:of_creature(creature) end

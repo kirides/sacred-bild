@@ -222,6 +222,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `lookup` | `GearLookup` | Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window. |
 | `fmt` | `GearFmt` | Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed). |
 | `toast` | `GearToast` | Short messages that stack up on the screen and fade; the layout editor moves them. |
+| `events` | `GearEvents` | Hooks between mods: declare the custom events the mod emits, list what is declared. |
 | `store` | `GearStore` | The mod's own data in JSON files of its folder: load with defaults, save, save when changed. |
 | `mp` | `GearMp` | Players of a network game, the host, the mod channel and the `kill` event. |
 | `net` | `GearNet` | Custom net messages: named channels between computers and the game server. |
@@ -279,7 +280,7 @@ Removes a handler.
 
 #### `gear.emit(event, ...)`
 
-Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.`, `game.`, `chat.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep.
+Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.`, `game.`, `chat.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep. Handlers of `prefix.*` (`gear.on('bounty.*', fn)`) also get every custom event below the prefix, with the event name first. See `gear.events` for publishing hooks.
 
 - `event`: `string`
 - `...`: `any`
@@ -2684,6 +2685,58 @@ Loads `name` (or takes `default`) and keeps it: the handle saves it when it chan
 - `default`: `any`
 - `opts`: `GearStoreOpts` (optional)
 - returns `GearStoreFile`
+
+## Hooks between mods (gear.events)
+
+A mod that has something other mods may want to react to (a bounty that is done, a world event that starts) *publishes a hook*: it declares a custom event with `gear.events.declare` and fires it with `gear.emit`. Any mod subscribes with `gear.on(name, fn)`, or with `gear.on('prefix.*', fn)` for every event of a mod (the handler then gets the event name first). Rules: the name is `<mod>.<what>` (`bounty.completed`), the payload is one table (new fields may be added, never removed or renamed), handlers must not change it, and a handler's error never reaches the publisher. Subscribing needs no dependency: a handler for an event nobody emits just never runs, so the load order does not matter. Each computer emits for what happens on it (in a network game every player's mod fires its own hero's hooks). The mods' hooks are listed in the documentation of the mod that publishes them; the game server's Lua mods use the same names and payloads.
+
+### GearEventInfo
+
+A declared hook.
+
+| Field | Type | |
+|---|---|---|
+| `name` | `string` |  |
+| `mod` | `string` | The id of the mod that declared it. |
+| `doc` | `string` | When it fires. |
+| `args` | `string` | The fields of the payload. |
+| `listeners` | `integer` | How many handlers are subscribed now. |
+
+### GearEventDecl
+
+What `declare` takes.
+
+| Field | Type | |
+|---|---|---|
+| `doc` | `string` | When the hook fires. (optional) |
+| `args` | `string` | The fields of the payload table. (optional) |
+
+### GearEvents
+
+Reached as `gear.events`.
+
+The hook registry.
+
+#### `gear.events.declare(name, info)`
+
+Says that this mod emits `name` (`bounty.completed`). Declaring twice is fine; another mod's name is refused. The declaration ends when the mod unloads.
+
+- `name`: `string`
+- `info`: `GearEventDecl|string` (optional)
+
+#### `gear.events.list(prefix) -> GearEventInfo[]`
+
+The declared hooks, by name, optionally only those starting with `prefix` (`'bounty.'`).
+
+- `prefix`: `string` (optional)
+- returns `GearEventInfo[]`
+
+#### `gear.events.declared(name) -> boolean`
+
+Whether a loaded mod has declared `name`.
+
+- `name`: `string`
+- returns `boolean`
 
 ## Drawing (gear.ui)
 

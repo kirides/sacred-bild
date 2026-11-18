@@ -206,7 +206,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `version` | `string` | Sacred Gear's version. |
 | `mod` | `GearModInfo` | This mod's identity. |
 | `config` | `table<string, any>` | This mod's settings: the manifest's `config`, overridden by `config.lua`. |
-| `data` | `GearData` | The engine's data tables (read only, except the abilities). |
+| `data` | `GearData` | The engine's data tables (read only, except the abilities and regions). |
 | `text` | `GearText` | The game's texts by id. |
 | `files` | `GearFiles` | The mod's file overlay. |
 | `hooks` | `GearHooks` | The engine hooks that ask mods for values. |
@@ -222,6 +222,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `lookup` | `GearLookup` | Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window. |
 | `fmt` | `GearFmt` | Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed). |
 | `toast` | `GearToast` | Short messages that stack up on the screen and fade; the layout editor moves them. |
+| `events` | `GearEvents` | Hooks between mods: declare the custom events the mod emits, list what is declared. |
 | `store` | `GearStore` | The mod's own data in JSON files of its folder: load with defaults, save, save when changed. |
 | `mp` | `GearMp` | Players of a network game, the host, the mod channel and the `kill` event. |
 | `net` | `GearNet` | Custom net messages: named channels between computers and the game server. |
@@ -279,7 +280,7 @@ Removes a handler.
 
 #### `gear.emit(event, ...)`
 
-Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.`, `game.`, `chat.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep.
+Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.`, `game.`, `chat.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep. Handlers of `prefix.*` (`gear.on('bounty.*', fn)`) also get every custom event below the prefix, with the event name first. See `gear.events` for publishing hooks.
 
 - `event`: `string`
 - `...`: `any`
@@ -462,6 +463,7 @@ The engine's data tables: read only, except the abilities.
 | `object_types` | `GearObjectTypes` | The type records every object refers to (0x80 bytes; id = index, 1..0x7E5F). |
 | `creature_types` | `GearTable` | `Pak\Creature.pak`'s records (0x56 bytes). |
 | `abilities` | `GearAbilities` | The ability tables of the exe by id (skills, combat arts, spells), which a mod can change. |
+| `regions` | `GearRegions` | The engine's region kill countdowns (the Region Boss quest), which a mod can read and change. |
 
 ### GearRecord
 
@@ -822,6 +824,54 @@ Sends a message; false if the pipe is closed or not connected.
 #### `pipe:close()`
 
 Closes the pipe for good.
+
+### GearRegion
+
+Written `regions` in the signatures.
+
+One region of the kill countdown: when `kills_left` reaches 0 the region boss comes.
+
+| Field | Type | |
+|---|---|---|
+| `index` | `integer` | The record's index (1 ..). |
+| `id` | `integer` | The region id the game uses. |
+| `name` | `string` | The region's name (may be empty). |
+| `boss` | `boolean` | The boss flag of the record. |
+| `kills_needed` | `integer` | The kills the region needs; 0 for a record the game did not set up. Writable (0 .. 1000000). |
+| `kills_left` | `integer` | The kills left before the boss. Writable (0 .. 1000000). |
+
+### GearRegions
+
+The region kill table. The game keeps its progress in memory only: it is not in savegames, and the game resets it when a region is left.
+
+#### `GearRegions:count() -> integer`
+
+The number of records (32; record 0 is unused), 0 if the table is not available.
+
+- returns `integer`
+
+#### `GearRegions:get(index) -> GearRegion?`
+
+The record `index` (1 .. count - 1).
+
+- `index`: `integer`
+- returns `GearRegion?`
+
+#### `GearRegions:of_sector(sector) -> GearRegion?, integer?`
+
+The region a sector lies in (a sector word, as `creature:sector()` gives). nil where the game has no region.
+
+- `sector`: `integer`
+- returns `GearRegion?`
+- returns `code` `integer?` - The region byte the map files give the sector.
+
+#### `GearRegions:of_creature(creature) -> GearRegion?, integer?`
+
+The region a creature (for example the hero) is in.
+
+- `creature`: `Creature`
+- returns `GearRegion?`
+- returns `code` `integer?`
 
 ## World (gear.world)
 
@@ -2635,6 +2685,58 @@ Loads `name` (or takes `default`) and keeps it: the handle saves it when it chan
 - `default`: `any`
 - `opts`: `GearStoreOpts` (optional)
 - returns `GearStoreFile`
+
+## Hooks between mods (gear.events)
+
+A mod that has something other mods may want to react to (a bounty that is done, a world event that starts) *publishes a hook*: it declares a custom event with `gear.events.declare` and fires it with `gear.emit`. Any mod subscribes with `gear.on(name, fn)`, or with `gear.on('prefix.*', fn)` for every event of a mod (the handler then gets the event name first). Rules: the name is `<mod>.<what>` (`bounty.completed`), the payload is one table (new fields may be added, never removed or renamed), handlers must not change it, and a handler's error never reaches the publisher. Subscribing needs no dependency: a handler for an event nobody emits just never runs, so the load order does not matter. Each computer emits for what happens on it (in a network game every player's mod fires its own hero's hooks). The mods' hooks are listed in the documentation of the mod that publishes them; the game server's Lua mods use the same names and payloads.
+
+### GearEventInfo
+
+A declared hook.
+
+| Field | Type | |
+|---|---|---|
+| `name` | `string` |  |
+| `mod` | `string` | The id of the mod that declared it. |
+| `doc` | `string` | When it fires. |
+| `args` | `string` | The fields of the payload. |
+| `listeners` | `integer` | How many handlers are subscribed now. |
+
+### GearEventDecl
+
+What `declare` takes.
+
+| Field | Type | |
+|---|---|---|
+| `doc` | `string` | When the hook fires. (optional) |
+| `args` | `string` | The fields of the payload table. (optional) |
+
+### GearEvents
+
+Reached as `gear.events`.
+
+The hook registry.
+
+#### `gear.events.declare(name, info)`
+
+Says that this mod emits `name` (`bounty.completed`). Declaring twice is fine; another mod's name is refused. The declaration ends when the mod unloads.
+
+- `name`: `string`
+- `info`: `GearEventDecl|string` (optional)
+
+#### `gear.events.list(prefix) -> GearEventInfo[]`
+
+The declared hooks, by name, optionally only those starting with `prefix` (`'bounty.'`).
+
+- `prefix`: `string` (optional)
+- returns `GearEventInfo[]`
+
+#### `gear.events.declared(name) -> boolean`
+
+Whether a loaded mod has declared `name`.
+
+- `name`: `string`
+- returns `boolean`
 
 ## Drawing (gear.ui)
 
