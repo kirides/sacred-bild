@@ -185,13 +185,32 @@ player (`gear.world.can_change()`); in a network game (also a host nobody has jo
 | `gear.world.object(id)` | The object with `id`, or nil. |
 | `gear.world.creatures_near(x, y, radius, {layer, limit})` | Creatures there, nearest first (default limit 64). |
 | `gear.world.around(x, y, min, max)` | A random point between `min` and `max` from (x, y). |
-| `gear.world.spawn(type, x, y, {layer, label})` | Creates an object of `type` (a type id or name) there, as the game's own scripts do; the creature, or nil and a message. `label` is kept for the creature this session (`c:label()`; shown in game in a later version). |
+| `gear.world.spawn(type, x, y, {layer, label, modifiers})` | Creates an object of `type` (a type id or name) there, as the game's own scripts do; the creature, or nil and a message. `label` is kept for the creature this session (`c:label()`; shown in game in a later version). `modifiers` gives it boss modifiers (below); if they are refused the creature is removed again. |
+| `gear.world.modified()` | The creatures that have modifiers now. |
 
 A creature object `c` (`c.id`) reads the game each time; after the object is gone the reads give nil:
 `c:exists()`, `c:info()` (all fields), `c:type()`, `c:type_name()`, `c:position()` (x, y, layer), `c:sector()` (the sector table slot of the position), `c:hp()`,
 `c:max_hp()`, `c:is_dead()`, `c:level()`, `c:experience()`, `c:gold()`, `c:distance(other | x, y)`, `c:label()`;
 changes: `c:set_hp(hp)` (1..max: mods do not kill through it), `c:set_gold(n)`, `c:add_gold(n)` (the local hero only, also in network games: through the engine's own gold setter, which keeps its anti-cheat copy in step and sends the change with the hero's next update),
-`c:teleport(x, y, layer)`.
+`c:teleport(x, y, layer)`, `c:set_modifiers(mods)` (below).
+
+##### Creature modifiers (world bosses)
+
+`c:set_modifiers{...}` turns a creature into a boss; `c:modifiers()` reads them back, `c:modifier_stats()` counts what they did (hits, deflected, damage, reflected, hits dealt, `max_hp_resets`), `c:set_modifiers(nil)` clears them. Single player and LAN host only, like `spawn`; heroes are refused. Fields (all optional):
+
+| | |
+|---|---|
+| `health` / `max_hp` | The maximum health as a multiple of the creature's own, or absolute (the creature starts at full health). Written into the creature (+0x4D4 maximum, +0x4D8 current). |
+| `damage` | Multiplier of the damage it deals. |
+| `taken` | Multiplier of the damage it takes (0.5: half, 0: immune). |
+| `deflect` | Chance 0 to 1 that a hit does nothing. |
+| `reflect` | Fraction of the damage it takes that the attacker takes back (never kills: the attacker keeps 1 hit point). |
+| `regen` | Health per second as a fraction of the maximum. |
+| `base_hp` | The creature's own maximum when it already holds the boosted one (re-attaching after a load, see below). |
+
+`damage`, `taken`, `deflect` and `reflect` are applied in the `damage` hook, after the handlers of the mods (`hit.damage` is the engine's number; the hit now also carries the object ids `hit.victim` and `hit.attacker`). The hook is installed only while a creature has modifiers or a mod handles `damage`. It sees every hit the engine resolves through its damage site; effects that change health in other ways (damage over time, reflection of spells by items) are not modified. The engine recomputes a creature's maximum health when it levels up (a boss wolf that kills something): Gear notices within half a second and writes the boss maximum again with the same share of health (`max_hp_resets`).
+
+Persistence: the modifiers live only in the running session (they are forgotten when the game ends and when a savegame is loaded: object ids mean other creatures then). A savegame written while a boss exists keeps the creature as it is, with its boosted maximum health and the current health, as a plain strong monster; it does not crash and a mod can re-attach the boss (the mod keeps the boss's id, type and `base_hp` in `gear.store.game` and calls `set_modifiers{health = ..., base_hp = ...}` after the load; the world-events mod does). Not available: scale/size, movement speed and resistances other than the damage multiplier (nothing in the creature record was found that changes them safely). Test: `gear/examples/bosstest`.
 
 #### Items and pickup
 
@@ -654,6 +673,7 @@ User documentation of the session mods and of the client mods of the game server
 | `scrolltest` | An automation run: a scroll area of 100 lines (wheel, a line scrolled out of sight takes no click, thumb drag) and a dropdown of 30 entries whose open list lies over text and a button drawn after it (`-gear-mods=scrolltest`). |
 | `tooltiptest` | An automation run: tooltips of buttons at the screen's edges and corners, with screenshots (`gear.ui.tooltip_rect`). |
 | `droptest` | An automation run of the drop hooks (`gear.drops`): the engine's loot function is run a few hundred times per phase with vanilla settings, a doubled and a zero chance, rarity weights, a veto, a replaced item, the fair, a seeded and a Lua generator; 31 checks. Use a copy of the game folder: the items stay in the world. See [Gear drops](GearDrops.md). |
+| `bosstest` | An automation run of the creature modifiers (`c:set_modifiers`): boosted health, damage dealt and taken, reflection, regeneration, spawn with modifiers, and save and load with a boss (a savegame with a hostile creature 1266: use a copy of the game folder; 24 checks). |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 | `shared-stash` (in the sacred-gear-mods repository) | A stash shared by all heroes of the player, in a panel beside the chest window, built on `gear.inv`: items are copied to `stash.json` in the mod's folder and back, the file written first on a deposit and last on a withdrawal. |
 

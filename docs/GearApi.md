@@ -147,6 +147,8 @@ A handler registered with `gear.on`; pass it to `gear.off` to remove it. What th
 | `victim_type` | `integer` | Creature type of the one that is hit (-1: unknown). |
 | `attacker_type` | `integer` | Creature type of the attacker (-1: none, e.g. a trap or an effect). |
 | `site` | `integer` | Which damage hook site (0: the damage resolution of the hit handlers). |
+| `victim` | `integer` | Object id of the one that is hit (0: unknown). |
+| `attacker` | `integer` | Object id of the attacker (0: none). With `gear.world.object(id)` this tells which creature took part. |
 
 ### GearEffectAdd
 
@@ -967,6 +969,12 @@ Items lying in the world within `radius` of (x, y), nearest first.
 - `opts`: `GearNearOpts` (optional)
 - returns `GearItem[]`
 
+#### `gear.world.modified() -> Creature[]`
+
+The creatures that have modifiers now (`creature:set_modifiers`), by id.
+
+- returns `Creature[]`
+
 #### `gear.world.quality_color(quality, set) -> integer`
 
 The colour of a quality (ARGB, `QUALITY_COLORS`): a quality name, or a rarity 0..15 with `set` for set items.
@@ -1044,6 +1052,34 @@ The number of pickups refused so far.
 |---|---|---|
 | `layer` | `integer` | Default: the hero's layer. (optional) |
 | `label` | `any` | Kept for the creature this session (`creature:label()`). (optional) |
+| `modifiers` | `GearModifiers` | Boss modifiers (`creature:set_modifiers`) set on the new creature; if they are refused the creature is removed again and spawn fails. (optional) |
+
+### GearModifiers
+
+Boss modifiers of one creature (`creature:set_modifiers`). A field left out does nothing. The health is written into the creature (maximum and current value); the rest is applied by Gear's `damage` hook on every hit the engine resolves, so it holds for melee, arrows and spells alike as far as they reach the hook. Modifiers exist for this session only, are not saved with a savegame and are forgotten when a savegame is loaded (see docs/Gear.md, "Creature modifiers").
+
+| Field | Type | |
+|---|---|---|
+| `health` | `number` | Maximum health as a multiple of the creature's own (0.01 to 100000); the creature starts at full health. (optional) |
+| `max_hp` | `integer` | Maximum health as an absolute number (wins over `health`). (optional) |
+| `damage` | `number` | Multiplier of the damage the creature deals (0 to 1000; the engine keeps 16 bit: at most 65534 per hit). (optional) |
+| `taken` | `number` | Multiplier of the damage the creature takes (0 to 1000; 0.5 is a deflecting armour, 0 immunity). (optional) |
+| `deflect` | `number` | Chance 0 to 1 that a hit does no damage at all. (optional) |
+| `reflect` | `number` | Fraction (0 to 10) of the damage the creature takes that the attacker takes back. The attacker keeps at least 1 hit point (reflection never kills); nothing is reflected onto the creature itself. (optional) |
+| `regen` | `number` | Health regained per second as a fraction of the maximum (0 to 1, e.g. 0.01). (optional) |
+| `base_hp` | `integer` | The creature's own maximum health, when `health` is applied to a creature that already holds the boosted maximum: a creature loaded from a savegame that was written while it was a boss. Without it the creature's current maximum counts as its own. (optional) |
+
+### GearModifierStats
+
+| Field | Type | |
+|---|---|---|
+| `base_max_hp` | `integer` | The creature's own maximum health before the modifiers. |
+| `hits` | `integer` | Hits the creature took. |
+| `deflected` | `integer` | Of them, the ones it deflected. |
+| `damage` | `integer` | Damage it took (after `taken`). |
+| `reflected` | `integer` | Damage reflected onto attackers. |
+| `dealt` | `integer` | Hits it dealt with `damage` applied. |
+| `max_hp_resets` | `integer` | How often the engine put the creature's own maximum health back and Gear wrote the boss maximum again. |
 
 ### GearPickupRules
 
@@ -1225,6 +1261,26 @@ Adds gold to the local hero, negative amounts take it away (not below 0); also i
 - `amount`: `number`
 - returns `ok` `boolean?`
 - returns `error` `string?`
+
+#### `creature:set_modifiers(mods) -> boolean?, string?`
+
+Gives the creature boss modifiers (`GearModifiers`: health, damage dealt and taken, deflection, reflection, regeneration), replacing its previous ones; an empty table or nil clears them (the health goes back to the creature's own maximum). Single player only, creatures that are not heroes. Gear reads and writes the maximum health at +0x4D4 and the current at +0x4D8; the effect on hits needs the `damage` hook (installed on demand).
+
+- `mods`: `GearModifiers` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:modifiers() -> GearModifiers?`
+
+The modifiers set on the creature (a copy), nil if it has none (or is gone).
+
+- returns `GearModifiers?`
+
+#### `creature:modifier_stats() -> GearModifierStats?`
+
+What the modifiers did so far, nil if the creature has none.
+
+- returns `GearModifierStats?`
 
 #### `creature:remove() -> boolean?, string?`
 

@@ -100,7 +100,7 @@ namespace LuaHost
     Answer branch(const char* name, int index, bool vanilla, int eax, bool& take);
 
     // event `damage`: the final damage of a hit; `victimType` / `attackerType` -1 for none. The answer is not yet clamped.
-    Answer damage(int damage, int victimType, int attackerType, int index, int& out);
+    Answer damage(int damage, int victimType, int attackerType, int index, int victimId, int attackerId, int& out);
 
     // GetTickCount64() of the last in-game frame, 0 before the first.
     unsigned long long lastFrameTime();

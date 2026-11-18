@@ -55,6 +55,10 @@ function GearWorld.creatures_near(x, y, radius, opts) end
 ---@return GearItem[]
 function GearWorld.items_near(x, y, radius, opts) end
 
+--- The creatures that have modifiers now (`creature:set_modifiers`), by id.
+---@return Creature[]
+function GearWorld.modified() end
+
 --- The colour of a quality (ARGB, `QUALITY_COLORS`): a quality name, or a rarity 0..15 with `set` for set items.
 ---@param quality GearQuality|integer
 ---@param set? boolean
@@ -115,6 +119,31 @@ function GearWorld.pickup_refused() end
 ---@class GearSpawnOpts
 ---@field layer? integer Default: the hero's layer.
 ---@field label? any Kept for the creature this session (`creature:label()`).
+---@field modifiers? GearModifiers Boss modifiers (`creature:set_modifiers`) set on the new creature; if they are refused the creature is removed again and spawn fails.
+
+--- Boss modifiers of one creature (`creature:set_modifiers`). A field left out does nothing.
+--- The health is written into the creature (maximum and current value); the rest is applied by Gear's `damage` hook
+--- on every hit the engine resolves, so it holds for melee, arrows and spells alike as far as they reach the hook.
+--- Modifiers exist for this session only, are not saved with a savegame and are forgotten when a savegame is loaded
+--- (see docs/Gear.md, "Creature modifiers").
+---@class GearModifiers
+---@field health? number Maximum health as a multiple of the creature's own (0.01 to 100000); the creature starts at full health.
+---@field max_hp? integer Maximum health as an absolute number (wins over `health`).
+---@field damage? number Multiplier of the damage the creature deals (0 to 1000; the engine keeps 16 bit: at most 65534 per hit).
+---@field taken? number Multiplier of the damage the creature takes (0 to 1000; 0.5 is a deflecting armour, 0 immunity).
+---@field deflect? number Chance 0 to 1 that a hit does no damage at all.
+---@field reflect? number Fraction (0 to 10) of the damage the creature takes that the attacker takes back. The attacker keeps at least 1 hit point (reflection never kills); nothing is reflected onto the creature itself.
+---@field regen? number Health regained per second as a fraction of the maximum (0 to 1, e.g. 0.01).
+---@field base_hp? integer The creature's own maximum health, when `health` is applied to a creature that already holds the boosted maximum: a creature loaded from a savegame that was written while it was a boss. Without it the creature's current maximum counts as its own.
+
+---@class GearModifierStats
+---@field base_max_hp integer The creature's own maximum health before the modifiers.
+---@field hits integer Hits the creature took.
+---@field deflected integer Of them, the ones it deflected.
+---@field damage integer Damage it took (after `taken`).
+---@field reflected integer Damage reflected onto attackers.
+---@field dealt integer Hits it dealt with `damage` applied.
+---@field max_hp_resets integer How often the engine put the creature's own maximum health back and Gear wrote the boss maximum again.
 
 ---@class GearPickupRules
 ---@field block? integer[] Item ids the local hero does not pick up.
@@ -253,6 +282,23 @@ function Creature:set_gold(gold) end
 ---@return boolean? ok
 ---@return string? error
 function Creature:add_gold(amount) end
+
+--- Gives the creature boss modifiers (`GearModifiers`: health, damage dealt and taken, deflection, reflection,
+--- regeneration), replacing its previous ones; an empty table or nil clears them (the health goes back to the
+--- creature's own maximum). Single player only, creatures that are not heroes. Gear reads and writes the maximum
+--- health at +0x4D4 and the current at +0x4D8; the effect on hits needs the `damage` hook (installed on demand).
+---@param mods? GearModifiers
+---@return boolean? ok
+---@return string? error
+function Creature:set_modifiers(mods) end
+
+--- The modifiers set on the creature (a copy), nil if it has none (or is gone).
+---@return GearModifiers?
+function Creature:modifiers() end
+
+--- What the modifiers did so far, nil if the creature has none.
+---@return GearModifierStats?
+function Creature:modifier_stats() end
 
 --- Removes the creature from the world at once, through the engine's own object destroy: no corpse, no loot, no experience. The handle is dead afterwards (`exists()` is false). Heroes are refused. Single player only.
 ---@return boolean? ok

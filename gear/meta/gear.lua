@@ -46,6 +46,8 @@
 ---@field victim_type integer Creature type of the one that is hit (-1: unknown).
 ---@field attacker_type integer Creature type of the attacker (-1: none, e.g. a trap or an effect).
 ---@field site integer Which damage hook site (0: the damage resolution of the hit handlers).
+---@field victim integer Object id of the one that is hit (0: unknown).
+---@field attacker integer Object id of the attacker (0: none). With `gear.world.object(id)` this tells which creature took part.
 
 --- What the `effect.add` event gets: the engine is adding to one entry of a creature's effect list.
 ---@class GearEffectAdd

@@ -819,6 +819,185 @@ function creature_mt:teleport(x, y, layer)
     local o = info(self)
     return native.teleport(self.id, math.floor(x), math.floor(y), layer or (o and o.layer) or 0)
 end
+---------------------------------------------------------------------------------------------------------------
+-- Creature modifiers (creature:set_modifiers, the "world boss" building block). Kept per session in kernel.boss, by
+-- object id: the engine knows nothing of them. The health is written into the creature (its maximum and current
+-- value), the rest is applied by the `damage` hook (the damage the creature deals and takes, deflected hits,
+-- reflected damage) and a slow tick (regeneration, forgetting creatures that are gone). Gear writes nothing of it
+-- into a savegame.
+---------------------------------------------------------------------------------------------------------------
+kernel.boss = {mods = {}, count = 0, next_poll = 0}
+
+function kernel.boss.number(v, name, lo, hi)
+    if v == nil then return nil end
+    assert(type(v) == 'number' and v == v, 'modifier ' .. name .. ' must be a number')
+    return math.min(math.max(v, lo), hi)
+end
+
+-- Whether the damage hook is needed: some mod handles `damage`, or a creature has modifiers.
+function kernel.boss.sync()
+    local list = handlers['damage']
+    native.damage_active(kernel.boss.count > 0 or (list ~= nil and #list > 0))
+end
+
+function kernel.boss.forget(id)
+    local e = kernel.boss.mods[id]
+    if not e then return end
+    kernel.boss.mods[id] = nil
+    kernel.boss.count = kernel.boss.count - 1
+    kernel.boss.sync()
+end
+
+-- All modifiers are forgotten (the game ended or another savegame was loaded: the object ids mean other creatures now).
+function kernel.boss.reset()
+    kernel.boss.mods = {}
+    kernel.boss.count = 0
+    kernel.boss.sync()
+end
+
+-- The entry of a live creature with modifiers (nil when it has none, is gone, or the id now names another creature).
+function kernel.boss.entry(id)
+    local e = kernel.boss.mods[id]
+    if not e then return nil end
+    local o = native.object(id)
+    if not o or not o.creature or o.type ~= e.type then
+        kernel.boss.forget(id)
+        return nil
+    end
+    return e, o
+end
+
+-- The engine now and then recomputes a creature's maximum health from its own data (seen about half a minute into a fight): the boss
+-- maximum is written again, with the share of health the creature had.
+function kernel.boss.fix(id, e, o)
+    if not e.want then return end
+    if o.max_hp ~= e.want then
+        e.resets = e.resets + 1
+        native.set_max_health(id, e.want, math.max(1, math.floor((e.share or 1) * e.want)))
+    elseif o.max_hp > 0 then
+        e.share = o.hp / o.max_hp
+    end
+end
+
+-- The hook: the damage after the mods' own `damage` handlers; returns the final damage.
+function kernel.boss.hit(damage, victim, attacker)
+    local dealt = attacker ~= 0 and kernel.boss.entry(attacker)
+    if dealt and dealt.mods.damage then
+        damage = damage * dealt.mods.damage
+        dealt.stats.dealt = dealt.stats.dealt + 1
+    end
+    local taken, vo = nil, nil
+    if victim ~= 0 then taken, vo = kernel.boss.entry(victim) end
+    if taken then
+        kernel.boss.fix(victim, taken, vo)
+        local m, st = taken.mods, taken.stats
+        st.hits = st.hits + 1
+        if m.deflect and m.deflect > 0 and math.random() < m.deflect then
+            st.deflected = st.deflected + 1
+            return 0
+        end
+        if m.taken then damage = damage * m.taken end
+        damage = math.floor(damage)
+        st.damage = st.damage + damage
+        if m.reflect and m.reflect > 0 and damage > 0 and attacker ~= 0 and attacker ~= victim then
+            local ao = native.object(attacker)
+            if ao and ao.creature and ao.hp and ao.hp > 1 then
+                local back = math.floor(damage * m.reflect)
+                if back > 0 then
+                    -- as `set_hp`: the reflection never kills (the attacker keeps at least 1 hit point)
+                    native.set_health(attacker, ao.hp - back)
+                    st.reflected = st.reflected + math.min(back, ao.hp - 1)
+                end
+            end
+        end
+    end
+    return math.floor(damage)
+end
+
+-- Slow tick: regeneration and forgetting the creatures that are gone (twice a second).
+function kernel.boss.poll()
+    local b = kernel.boss
+    if b.count == 0 then return end
+    local now = native.time()
+    if now < b.next_poll then return end
+    local elapsed = b.last and (now - b.last) or 0.5
+    b.last = now
+    b.next_poll = now + 0.5
+    local ids = {}
+    for id in pairs(b.mods) do ids[#ids + 1] = id end
+    for _, id in ipairs(ids) do
+        local e, o = b.entry(id)
+        if e then
+            b.fix(id, e, o)
+            if e.mods.regen and e.mods.regen > 0 and o.hp > 0 and o.hp < o.max_hp then
+                native.set_health(id, math.min(o.max_hp, o.hp + math.max(1, math.floor(o.max_hp * e.mods.regen * elapsed))))
+            end
+        end
+    end
+end
+
+-- Sets the creature's modifiers (replacing the previous ones); see GearModifiers. An empty table or nil clears them.
+function creature_mt:set_modifiers(mods)
+    local b = kernel.boss
+    if mods ~= nil and type(mods) ~= 'table' then error('the modifiers are a table or nil', 2) end
+    mods = mods or {}
+    local m = {
+        health = kernel.boss.number(mods.health, 'health', 0.01, 100000),
+        max_hp = kernel.boss.number(mods.max_hp, 'max_hp', 1, 1e9),
+        damage = kernel.boss.number(mods.damage, 'damage', 0, 1000),
+        taken = kernel.boss.number(mods.taken, 'taken', 0, 1000),
+        reflect = kernel.boss.number(mods.reflect, 'reflect', 0, 10),
+        deflect = kernel.boss.number(mods.deflect, 'deflect', 0, 1),
+        regen = kernel.boss.number(mods.regen, 'regen', 0, 1),
+        base_hp = kernel.boss.number(mods.base_hp, 'base_hp', 1, 1e9),
+    }
+    local o = info(self)
+    if not o or not o.creature then return nil, 'no such creature' end
+    if self.id >= 1 and self.id <= 16 then return nil, 'heroes cannot have modifiers' end
+    if not native.world_changes() then return nil, 'creature modifiers work only in single player' end
+    local old = b.mods[self.id]
+    if old and old.type ~= o.type then old = nil end
+    if next(m) == nil or (next(m) == 'base_hp' and next(m, 'base_hp') == nil) then
+        -- cleared: the health goes back to the creature's own maximum, keeping its share
+        if old and old.base_max then native.set_max_health(self.id, old.base_max) end
+        if old then b.forget(self.id) end
+        return true
+    end
+    local base = old and old.base_max or m.base_hp or o.max_hp
+    local want = m.max_hp or (m.health and math.max(1, math.floor(base * m.health + 0.5))) or base
+    if want ~= o.max_hp then
+        local ok, err = native.set_max_health(self.id, want)
+        if not ok then return nil, err end
+    end
+    if not old then b.count = b.count + 1 end
+    b.mods[self.id] = {
+        type = o.type, base_max = base, mods = m, resets = old and old.resets or 0,
+        want = (want ~= base) and want or nil, share = nil,
+        stats = old and old.stats or {hits = 0, deflected = 0, damage = 0, reflected = 0, dealt = 0},
+    }
+    b.sync()
+    return true
+end
+
+-- The modifiers set on the creature (a copy), nil if it has none.
+function creature_mt:modifiers()
+    local e = kernel.boss.entry(self.id)
+    if not e then return nil end
+    local c = {}
+    for k, v in pairs(e.mods) do c[k] = v end
+    return c
+end
+
+-- What the modifiers did so far (hits taken, deflected, damage taken after the changes, damage reflected, hits dealt).
+function creature_mt:modifier_stats()
+    local e = kernel.boss.entry(self.id)
+    if not e then return nil end
+    local c = {base_max_hp = e.base_max, max_hp_resets = e.resets}
+    for k, v in pairs(e.stats) do c[k] = v end
+    return c
+end
+
+
 -- Distance in world units to another creature or to (x, y).
 function creature_mt:distance(x, y)
     local ax, ay = self:position()
@@ -840,6 +1019,15 @@ function world.object(id)
     if native.object(id) then return wrap(id) end
 end
 function world.can_change() return native.world_changes() end
+-- The creatures that have modifiers (creature:set_modifiers) now.
+function world.modified()
+    local out = {}
+    for id in pairs(kernel.boss.mods) do
+        if kernel.boss.entry(id) then out[#out + 1] = wrap(id) end
+    end
+    table.sort(out, function(a, c) return a.id < c.id end)
+    return out
+end
 
 -- Creatures within `radius` world units of (x, y) on `layer` (default 0), nearest first: at most opts.limit (64).
 function world.creatures_near(x, y, radius, opts)
@@ -1992,7 +2180,7 @@ function world.around(x, y, min, max)
 end
 
 -- spawn(type, x, y, opts) -> creature | nil, message. `type` is a type id or an object type name;
--- opts.layer (default: the hero's), opts.label (a text kept for the creature, see creature:label()).
+-- opts.layer (default: the hero's), opts.label (a text kept for the creature, see creature:label()), opts.modifiers (see creature:set_modifiers).
 local function spawn(mod, kind, x, y, opts)
     opts = opts or {}
     assert(type(x) == 'number' and type(y) == 'number', 'x and y must be numbers')
@@ -2012,6 +2200,14 @@ local function spawn(mod, kind, x, y, opts)
     if not oid then return nil, err end
     if opts.label ~= nil then
         labels[oid] = {text = tostring(opts.label), mod = mod.id}
+    end
+    if opts.modifiers ~= nil then
+        local c = wrap(oid)
+        local ok, err = c:set_modifiers(opts.modifiers)
+        if not ok then
+            c:remove()
+            return nil, err
+        end
     end
     log('[%s] spawned %s (type %d) as %d at %d,%d', mod.id, data.object_types:name(id) or '?', id, oid, x, y)
     return wrap(oid)
@@ -3408,6 +3604,7 @@ local function check_session()
         session_hero = nil
         kernel.dispatch('session.stop')
         labels = {}
+        kernel.boss.reset()
     end
     if h then
         session_hero = h
@@ -5036,7 +5233,7 @@ local function make_env(mod)
         if h.event == 'level.factor' and #list == 0 then native.level_factor_active(false) end
         if h.event == 'combat.constant' and #list == 0 then native.combat_constant_active(false) end
         if h.event == 'creature.ability' and #list == 0 then native.creature_ability_active(false) end
-        if h.event == 'damage' and #list == 0 then native.damage_active(false) end
+        if h.event == 'damage' and #list == 0 then kernel.boss.sync() end
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
         if h.event == 'bonus.constant' and #list == 0 then native.bonus_active(false) end
         if h.event == 'skillslot.select' and #list == 0 then native.skillslot_active(false) end
@@ -5728,20 +5925,26 @@ function kernel.effect_add(e)
 end
 
 -- `damage`: the final damage of a hit, as the engine is about to apply it (a hook inside its damage resolution). A handler gets
--- `hit = {damage, victim_type, attacker_type}` (creature types, -1 for none) and may return another damage; the engine keeps 16 bit
+-- `hit = {damage, victim_type, attacker_type, site, victim, attacker}` (creature types, -1 for none; object ids, 0 for none) and may return another damage; the engine keeps 16 bit
 -- (0 .. 65534). The first handler that returns a number answers.
-function kernel.damage(damage, victim_type, attacker_type, index)
+function kernel.damage(damage, victim_type, attacker_type, index, victim, attacker)
     local list = handlers['damage']
-    if not list then return nil end
-    local hit = {damage = damage, victim_type = victim_type, attacker_type = attacker_type, site = index}
-    for i = 1, #list do
-        local h = list[i]
-        if h and not h.mod.disabled then
-            local ok, result = call(h.mod, 'damage', h.fn, hit)
-            if ok and type(result) == 'number' then return math.floor(result) end
+    local answer = nil
+    if list and #list > 0 then
+        local hit = {damage = damage, victim_type = victim_type, attacker_type = attacker_type, site = index,
+                     victim = victim or 0, attacker = attacker or 0}
+        for i = 1, #list do
+            local h = list[i]
+            if h and not h.mod.disabled then
+                local ok, result = call(h.mod, 'damage', h.fn, hit)
+                if ok and type(result) == 'number' then answer = math.floor(result); break end
+            end
         end
     end
-    return nil
+    if kernel.boss.count > 0 then
+        return kernel.boss.hit(answer or damage, victim or 0, attacker or 0)
+    end
+    return answer
 end
 
 -- The 'draw' handlers get the UI state (gear.ui.state()); read only when someone draws.
@@ -5785,6 +5988,7 @@ function kernel.savegame.poll()
         if not kind then return end
         -- Before the working copy is replaced: a mod may still write into the data kept for the game that ends.
         kernel.dispatch('savegame.leaving', kernel.savegame.scope, kind)
+        kernel.boss.reset()
         kernel.savegame.kind = kind
         kernel.savegame.scope = kind ~= 'new' and scope or nil
         kernel.savegame.each(kernel.savegame.enter)
@@ -5914,6 +6118,7 @@ function kernel.tick(dt)
     poll_saves()
     uis.chat_poll()
     kernel.poll_kills()
+    kernel.boss.poll()
     kernel.poll_mp(dt)
     poll_pipes()
     run_timers()
