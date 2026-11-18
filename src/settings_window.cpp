@@ -549,6 +549,11 @@ namespace
 
 bool SettingsWindow::wanted()
 {
+    // Sacred Gear's automation runs (-gear-auto, SACREDGEAR_AUTO=1) never wait for a window nobody can click.
+    if (wcsstr(GetCommandLineW(), L"-gear-auto") || GetEnvironmentVariableW(L"SACREDGEAR_AUTO", nullptr, 0) > 0)
+    {
+        return false;
+    }
     return Config::launcher.settingsWindow || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
 }
 
