@@ -18,6 +18,7 @@
 --   creatures_near(x, y, layer, radius, limit)  ids of the creatures there, nearest first
 --   spawn(type, x, y, layer)          the new object's id, or nil and a message
 --   teleport(id, x, y, layer)         true, or nil and a message
+--   remove(id)                        true, or nil and a message (a creature other than a hero is deleted)
 --   set_health(id, hp), set_gold(id, gold)  true, or nil and a message
 --   pipe_open(name), pipe_close(h), pipe_send(h, text), pipe_poll(h, limit), pipe_connected(h)
 --   version                           Sacred Gear's version string
@@ -725,6 +726,9 @@ function creature_mt:add_gold(amount)
     local o = info(self)
     if not o or not o.gold then return nil, 'no such hero' end
     return native.set_gold(self.id, math.min(math.max(0, o.gold + math.floor(amount)), 2147483646))
+end
+function creature_mt:remove()
+    return native.remove(self.id)
 end
 function creature_mt:teleport(x, y, layer)
     assert(type(x) == 'number' and type(y) == 'number', 'x and y must be numbers')
