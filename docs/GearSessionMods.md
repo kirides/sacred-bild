@@ -55,7 +55,7 @@ Allies (mercenaries, escorted NPCs such as Wilbur) get a row of their own under 
 ally is a creature TYPE: one whose name contains `wilbur` or `merc`, or one that stayed within 9 tiles of the hero for 20 s while
 the hero walked 25 tiles. A type that ever hits the hero is never an ally; two creatures of one type count as one row.
 
-The panel is an ordinary Gear panel: the layout editor moves it, its buttons are controller stops. The size follows the view.
+The compact view is a bare, translucent panel (no title bar); the other views are framed. Small buttons: `^` bigger view (`v` back to compact), `x` clears the counters. The layout editor moves the panel, the buttons are controller stops, the size follows the view.
 
 Limits: in a network game another hero of the same class counts as the local hero; pets, traps and effects are not
 "dealt" (the hook cannot say whose they are); the number is the engine's computed damage, not the hit points removed;

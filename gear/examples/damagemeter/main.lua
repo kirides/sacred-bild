@@ -2,7 +2,7 @@
 -- The panel is on F7; the Reset button (or the 'reset' key, unbound by default) starts over.
 --
 -- Views (setting 'View', the View button, the 'view' key or the controller's mod menu cycle through them):
---   compact   (default) one row per character: name and DPS. Alone: a single line. In a network game every player's
+--   compact   (default, a bare translucent panel without title bar) one row per character: name and DPS. Alone: a single line. In a network game every player's
 --             copy of the mod sends its own numbers over the mod channel ('damagemeter'), so the party is listed;
 --             players without the mod are not.
 --   extended  per character: DPS, DPS taken, damage dealt; below, the biggest hit and fighting time of the local hero.
@@ -501,16 +501,20 @@ end
 -- Height of a view's content, from the number of characters.
 local function content_height(n)
     local rows = math.max(1, math.min(MAX_ROWS, n))
-    if view == 'compact' then return n <= 1 and not network_game() and 38 or rows * ROW + 4 end
+    if view == 'compact' then return n <= 1 and not network_game() and 38 or rows * ROW + 4 end   -- without the button row
     if view == 'extended' then return 16 + rows * ROW + 6 + 3 * ROW + 4 end
     return 366
 end
 
--- The footer shared by every view: View cycles the views, Reset clears the counters.
-local function footer(x, y, w)
-    local vw = math.min(78, w - 54 - 8)          -- the compact panel is narrow
-    if ui.button('view', x, y, vw, 18, VIEW_LABEL[view], {tooltip = 'Next view (compact, extended, detailed)'}) then next_view() end
-    if ui.button('reset', x + w - 54, y, 54, 18, 'Reset', {tooltip = 'Clears every counter'}) then reset() end
+-- Small icon buttons shared by every view, right-aligned at (right, y): ^ goes to the next (bigger) view (v from the
+-- biggest back to compact), x clears the counters.
+local ICON = 14
+local function icon_buttons(right, y)
+    local up = view ~= 'detailed'
+    if ui.button('view', right - 2 * ICON - 3, y, ICON, ICON, up and '^' or 'v', {tooltip = up and 'Bigger view' or 'Back to the compact view'}) then
+        if view == 'detailed' then set_view('compact') else next_view() end
+    end
+    if ui.button('reset', right - ICON, y, ICON, ICON, 'x', {tooltip = 'Clear the counters'}) then reset() end
 end
 
 local function draw_compact(x, y, w, list)
@@ -521,7 +525,7 @@ local function draw_compact(x, y, w, list)
         local e = list[1]
         ui.text(fit_name(e.name, 16), x, y + 2, {color = DIM})
         ui.text(num(e.dps), x, y, {width = w, align = 'right', color = e.fighting and GREEN or WHITE, size = 18})
-        ui.text('DPS', x, y + 20, {width = w, align = 'right', color = DIM, size = 11})
+        ui.text('DPS', x, y + 20, {color = DIM, size = 11})
     else
         for i = 1, math.min(MAX_ROWS, #list) do
             local e = list[i]
@@ -610,28 +614,48 @@ local function draw_detailed(x, y, w)
     end
 end
 
--- Panel width (layout units) per view; the height is the content plus the title bar and the footer.
-local WIDTH = {compact = 150, extended = 290, detailed = 290}
+-- Panel width (layout units) per view; the height is the content plus the title bar and the buttons.
+local WIDTH = {compact = 140, extended = 290, detailed = 290}
 local CHROME = 56
+
+local THIN = 0x90806A3C            -- the compact panel's hairline frame
+local FILL = 0x90000000            -- translucent black behind the compact view
+
+-- The compact view: a bare panel (no title bar, no window: clicks pass through to the game) drawn on a translucent
+-- rectangle with a one-unit frame, rows of name and DPS, and the two small buttons in a thin row below. The layout editor
+-- moves it; F7 shows and hides it.
+local function draw_compact_panel(list)
+    local pad = 6
+    local content_h = content_height(#list)
+    local h = content_h + pad * 2 + ICON + 2
+    local p = ui.panel('meter', 'Damage meter', 700, 200, WIDTH.compact, h, {bare = true})
+    if not p.open then return end
+    local x, y = p.content_x or 0, p.content_y or 0
+    local w = p.content_w or WIDTH.compact
+    local ph = p.content_h or h
+    ui.rect(x, y, w, ph, FILL)
+    ui.rect(x, y, w, 1, THIN); ui.rect(x, y + ph - 1, w, 1, THIN)
+    ui.rect(x, y, 1, ph, THIN); ui.rect(x + w - 1, y, 1, ph, THIN)
+    draw_compact(x + pad, y + pad, w - pad * 2, list)
+    icon_buttons(x + w - 3, y + pad + content_h + 1)
+end
 
 local function draw_panel()
     local list = characters()
+    if view == 'compact' then return draw_compact_panel(list) end
     local content_h = content_height(#list)
-    local title = view == 'compact' and 'DPS' or 'Damage meter (F7)'
-    local p = ui.panel('meter', title, 700, 200, WIDTH[view], content_h + CHROME, {})
+    local p = ui.panel('meter', 'Damage meter (F7)', 700, 200, WIDTH[view], content_h + CHROME, {})
     if not p.open then return end
     local x, y = p.content_x or 0, p.content_y or 0
     local w = p.content_w or (WIDTH[view] - 20)
-    if view == 'compact' then
-        draw_compact(x, y, w, list)
-    elseif view == 'extended' then
+    if view == 'extended' then
         draw_extended(x, y, w, list)
     elseif hero_type then
         draw_detailed(x, y, w)
     else
         ui.text('no hero', x, y, {color = DIM})
     end
-    footer(x, y + content_h + 4, w)
+    icon_buttons(x + w, y + content_h + 4)
 end
 
 gear.on('draw', guard('draw', function(state)
