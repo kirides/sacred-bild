@@ -1931,6 +1931,21 @@ namespace
         return 0;
     }
 
+    // native.ui_take_typed() -> string (UTF-8): what the keys kept from the game typed since the last call
+    int nativeUiTakeTyped(lua_State* L)
+    {
+        const std::wstring typed = KeyBlock::takeTyped();
+        std::string out;
+        if (!typed.empty())
+        {
+            const int n = WideCharToMultiByte(CP_UTF8, 0, typed.data(), static_cast<int>(typed.size()), nullptr, 0, nullptr, nullptr);
+            out.resize(n);
+            WideCharToMultiByte(CP_UTF8, 0, typed.data(), static_cast<int>(typed.size()), out.data(), n, nullptr, nullptr);
+        }
+        lua_pushlstring(L, out.data(), out.size());
+        return 1;
+    }
+
     // native.key_down(vk) -> bool
     int nativeKeyDown(lua_State* L)
     {
@@ -2888,6 +2903,7 @@ namespace
             {"ui_wheel", nativeUiWheel},
             {"key_down", nativeKeyDown},
             {"ui_block_keys", nativeUiBlockKeys},
+            {"ui_take_typed", nativeUiTakeTyped},
             {"write_file", nativeWriteFile},
             {"items_near", nativeItemsNear},
             {"hero_class", nativeHeroClass},

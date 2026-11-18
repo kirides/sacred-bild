@@ -175,14 +175,17 @@ namespace
             char name[0x41] = {};
             if (f.read(c->offset, name, std::min<uint32_t>(c->size, 0x40)))
             {
-                for (char* p = name; *p; ++p)
+                // The game's single-byte text (Windows-1252), as UTF-8.
+                wchar_t wide[0x41] = {};
+                const int n = MultiByteToWideChar(1252, 0, name, static_cast<int>(strnlen(name, 0x40)), wide, 0x40);
+                for (int i = 0; i < n; ++i)
                 {
-                    if (static_cast<unsigned char>(*p) < 0x20 || static_cast<unsigned char>(*p) > 0x7E)
+                    if (wide[i] < 0x20)
                     {
-                        *p = '?';
+                        wide[i] = L'?';
                     }
                 }
-                info.name = name;
+                info.name = utf8(wide, n > 0 ? n : 0);
             }
         }
         if (const Chunk* c = chunk(chunks, kChunkHero); c && c->size >= 8)

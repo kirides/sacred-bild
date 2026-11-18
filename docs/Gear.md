@@ -213,7 +213,7 @@ at the items around the hero every fraction of a second and hands over the curre
 | | |
 |---|---|
 | `gear.game.can_save()` | `true`, or `false` and why not: a living hero in a single player game, the game shown (no cinematic, window drawn alone, escape menu or message box), no save or load pending. |
-| `gear.game.save(slot, name, {thumbnail})` | Asks the engine to save into `Save\GAME<slot>.PAK` (slot 0 the quicksave, up to 509), as the savegame window does; `true` when accepted, else nil and a message (the engine refuses while a trade, chest or similar window is open). `name` is the display name (60 ASCII characters). The result comes as the events `'game.saved'` / `'game.save_failed'`. |
+| `gear.game.save(slot, name, {thumbnail})` | Asks the engine to save into `Save\GAME<slot>.PAK` (slot 0 the quicksave, up to 509), as the savegame window does; `true` when accepted, else nil and a message (the engine refuses while a trade, chest or similar window is open). `name` is the display name (UTF-8, 60 characters; kept in Windows-1252 like the game's own names, other characters become `?`). The result comes as the events `'game.saved'` / `'game.save_failed'`. |
 | `gear.game.save_pending()` | Whether a save or a load is queued or being written. |
 | `gear.clipboard.set(text)`, `get()` | The Windows clipboard (Unicode text, at most 1 MB): `set` returns `true`, or nil and why; `get` the text on it or nil. For a mod that shows something the player wants to paste elsewhere. |
 | `gear.game.config(key)`, `gear.game.config_all()` | The game's own settings from `Settings.cfg`, read only (numbers as numbers, the key in any case; nil if absent): what the game was set to, not a live view; the options window writes the file on OK and many settings are read at start only. For warnings about clashes, e.g. `gear.game.config('AUTOSAVE') == 1`. |
@@ -367,6 +367,7 @@ Every widget takes `opts.tooltip` (shown after the cursor rests on it for 0.4 s)
 | `region(id, x, y, w, h, opts)` | A rectangle that takes the mouse, for widgets of a mod's own: `{hover, pressed, released, clicked, held}`. |
 | `mouse()` | The cursor in layout coordinates. |
 | `capture_keys(on)` | While on, the keyboard does not reach the game (its key and character messages are dropped, its key state queries see nothing held); the mod's own `key_pressed` / `key_down` still work. For a screen that types or binds keys (the mod manager uses it while it is open); ends when the mod unloads. |
+| `typed()` | What the player typed since the last tick while this mod captures the keys (`capture_keys`): UTF-8 in the player's keyboard layout (umlauts, Shift, AltGr), no control characters (Backspace and Enter with `key_pressed`). For a text field. |
 | `key_pressed(name)` | True once per press of a key (`'f9'`, `'a'`, `'escape'` ...), read while the game's window has the focus. |
 | `key_down(name)` | Whether the key is held. Both see the keys [automation](#automation) holds; isolated automation sees only those. |
 | `COLORS` | The widgets' colours. |
@@ -377,7 +378,7 @@ Input: a left click (press and release) over a mod's region is taken from the ga
 (0x00757840) reports it handled, so neither the game's windows nor the world see it, and the release that follows
 goes to the same region. Regions on the world and hud layers take nothing while the escape menu or a message box is
 up. Hover is decided against the previous frame's regions (the topmost under the cursor), so an open dropdown hides
-what lies below it. Keyboard input is only `key_pressed` for now (no text fields). A press or release also puts
+what lies below it. Keyboard input is `key_pressed` / `key_down`, and `typed()` for text while the mod captures the keys. A press or release also puts
 `mouse()` at its own position for that tick.
 
 While the cursor is over a mod's region (any widget, panel or the layout editor's overlays), the game's windows do

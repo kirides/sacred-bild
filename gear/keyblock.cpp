@@ -8,6 +8,8 @@
 #include <cstring>
 #include <mutex>
 #include <set>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -26,6 +28,68 @@ namespace
     // The character a dropped press makes (TranslateMessage queues it before we see the press) arrives a moment later,
     // maybe after the block ended: it is dropped too.
     std::atomic<ULONGLONG> g_dropCharsUntil{0};
+    // What the dropped presses type (a Gear screen's text field), in the keyboard layout of the player (g_lock).
+    std::wstring g_typed;
+    constexpr size_t kTypedMax = 256;
+    // The characters taken from presses lately: a character message that still comes for one of them (made by a
+    // TranslateMessage before the press was dropped) is not taken twice (g_lock).
+    struct Recent
+    {
+        wchar_t ch;
+        ULONGLONG at;
+    };
+    std::vector<Recent> g_recent;
+    constexpr ULONGLONG kRecentMs = 250;
+
+    void addTyped(wchar_t ch, bool fromPress)
+    {
+        if (ch < 0x20 || ch == 0x7F)
+        {
+            return;
+        }
+        const ULONGLONG now = GetTickCount64();
+        std::erase_if(g_recent, [now](const Recent& r) { return now - r.at > kRecentMs; });
+        if (!fromPress)
+        {
+            for (auto it = g_recent.begin(); it != g_recent.end(); ++it)
+            {
+                if (it->ch == ch)
+                {
+                    g_recent.erase(it);
+                    return;
+                }
+            }
+        }
+        else
+        {
+            g_recent.push_back({ch, now});
+        }
+        if (g_typed.size() < kTypedMax)
+        {
+            g_typed.push_back(ch);
+        }
+    }
+
+    // The character(s) the press of `vk` makes with the keys held now (ToUnicodeEx without touching the dead key state).
+    void noteTyped(WPARAM vk, LPARAM lParam)
+    {
+        BYTE state[256] = {};
+        if (!GetKeyboardState(state))
+        {
+            return;
+        }
+        if (state[VK_CONTROL] & 0x80 && !(state[VK_MENU] & 0x80))
+        {
+            return;     // Ctrl+key types nothing (AltGr is Ctrl+Alt and does)
+        }
+        wchar_t buffer[8] = {};
+        const UINT scan = static_cast<UINT>((lParam >> 16) & 0xFF);
+        const int n = ToUnicodeEx(static_cast<UINT>(vk), scan, state, buffer, 8, 4, GetKeyboardLayout(0));
+        for (int i = 0; i < n; ++i)
+        {
+            addTyped(buffer[i], true);
+        }
+    }
 
     using GetAsyncKeyStateFn = SHORT(WINAPI*)(int);
     using GetKeyStateFn = SHORT(WINAPI*)(int);
@@ -99,7 +163,7 @@ namespace
 
     // Whether a key or character message must not reach the game. `consume`: the message is being taken off the queue
     // (a PM_NOREMOVE peek decides the same way, but leaves the bookkeeping to the real read).
-    bool dropMessage(UINT message, WPARAM wParam, bool consume)
+    bool dropMessage(UINT message, WPARAM wParam, LPARAM lParam, bool consume)
     {
         const bool blocked = effectivelyBlocked();
         switch (message)
@@ -113,6 +177,10 @@ namespace
                     std::lock_guard guard(g_lock);
                     g_swallowed.insert(wParam);
                     g_dropCharsUntil.store(GetTickCount64() + 200);
+                    if (message == WM_KEYDOWN)
+                    {
+                        noteTyped(wParam, lParam);
+                    }
                 }
                 return true;
             }
@@ -133,6 +201,13 @@ namespace
             return true;
         }
         case WM_CHAR:
+            if (consume && effectivelyBlocked() && g_blocked.load())
+            {
+                // A character on its own (posted, or made from a press before it was dropped): typed too.
+                std::lock_guard guard(g_lock);
+                addTyped(static_cast<wchar_t>(wParam), false);
+            }
+            return blocked || GetTickCount64() < g_dropCharsUntil.load();
         case WM_SYSCHAR:
         case WM_DEADCHAR:
         case WM_SYSDEADCHAR:
@@ -146,7 +221,7 @@ namespace
 
     LRESULT CALLBACK windowProc(HWND w, UINT message, WPARAM wParam, LPARAM lParam)
     {
-        if (dropMessage(message, wParam, true))
+        if (dropMessage(message, wParam, lParam, true))
         {
             return 0;
         }
@@ -168,7 +243,7 @@ namespace
     BOOL WINAPI hookPeek(LPMSG msg, HWND w, UINT min, UINT max, UINT remove)
     {
         const BOOL ok = g_origPeek(msg, w, min, max, remove);
-        if (ok && msg && dropMessage(msg->message, msg->wParam, (remove & PM_REMOVE) != 0))
+        if (ok && msg && dropMessage(msg->message, msg->wParam, msg->lParam, (remove & PM_REMOVE) != 0))
         {
             msg->message = WM_NULL;
         }
@@ -178,7 +253,7 @@ namespace
     BOOL WINAPI hookGet(LPMSG msg, HWND w, UINT min, UINT max)
     {
         const BOOL ok = g_origGet(msg, w, min, max);
-        if (ok > 0 && msg && dropMessage(msg->message, msg->wParam, true))
+        if (ok > 0 && msg && dropMessage(msg->message, msg->wParam, msg->lParam, true))
         {
             msg->message = WM_NULL;
         }
@@ -247,6 +322,14 @@ void KeyBlock::set(bool blocked)
             }
         }
     }
+}
+
+std::wstring KeyBlock::takeTyped()
+{
+    std::lock_guard guard(g_lock);
+    std::wstring out;
+    out.swap(g_typed);
+    return out;
 }
 
 bool KeyBlock::blocked()

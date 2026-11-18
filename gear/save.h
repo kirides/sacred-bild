@@ -26,7 +26,7 @@ namespace Save
     const char* blocked();
 
     // Sends the save request for `slot` (0..kMaxSlot) with the savegame's display name (at most 60 characters of
-    // ASCII). `thumbnail`: let the engine capture the savegame's picture first (the savegame window captures it
+    // UTF-8, kept as Windows-1252 like the game's own names; other characters become ?). `thumbnail`: let the engine capture the savegame's picture first (the savegame window captures it
     // before it opens). False with `error` set if the request is not possible or the engine refused it.
     // `fromWindow`: as the savegame window's own Save button (a mod's replacement of it saves): only while that window
     // is open in game; the picture is the one the game took when the window opened, the window closes once the

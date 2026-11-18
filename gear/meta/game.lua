@@ -37,7 +37,7 @@ function GearGame.can_save() end
 --- Asks the engine to save into slot `slot` (0 to 509). The engine refuses while a trading, chest or similar window
 --- is open. Returns true when the request is accepted; the outcome is the event `game.saved` or `game.save_failed`.
 ---@param slot integer
----@param name? string The savegame's display name, at most 60 ASCII characters.
+---@param name? string The savegame's display name, UTF-8, at most 60 characters; the game keeps Windows-1252 (umlauts and the like), anything else becomes `?`.
 ---@param opts? GearSaveOpts
 ---@return boolean? ok
 ---@return string? error
@@ -75,7 +75,7 @@ function GearGame.save_info(slot) end
 ---@class GearSavegame
 ---@field slot integer The number in its file name (`GAME05.PAK`: 5); 0 is the quicksave.
 ---@field file string The file name, e.g. `GAME05.PAK`.
----@field name string The savegame's name (ASCII; may be empty, the game writes `QUICKSAVE` or its "empty" text).
+---@field name string The savegame's name (UTF-8; may be empty, the game writes `QUICKSAVE` or its "empty" text).
 ---@field hero? string The hero's name (UTF-8); nil if the file does not say.
 ---@field class? GearClassName The hero's class; nil if unknown.
 ---@field class_id integer The hero's class number (1 seraphim .. 9 daemon), 0 if unknown.
