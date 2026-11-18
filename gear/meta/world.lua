@@ -254,6 +254,11 @@ function Creature:set_gold(gold) end
 ---@return string? error
 function Creature:add_gold(amount) end
 
+--- Removes the creature from the world at once, through the engine's own object destroy: no corpse, no loot, no experience. The handle is dead afterwards (`exists()` is false). Heroes are refused. Single player only.
+---@return boolean? ok
+---@return string? error
+function Creature:remove() end
+
 --- Moves the creature. Single player only.
 ---@param x number
 ---@param y number

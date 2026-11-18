@@ -1141,6 +1141,13 @@ Adds gold to the local hero, negative amounts take it away (not below 0); also i
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:remove() -> boolean?, string?`
+
+Removes the creature from the world at once, through the engine's own object destroy: no corpse, no loot, no experience. The handle is dead afterwards (`exists()` is false). Heroes are refused. Single player only.
+
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:teleport(x, y, layer) -> boolean?, string?`
 
 Moves the creature. Single player only.

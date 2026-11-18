@@ -91,6 +91,9 @@ namespace World
     // Places object `id` at `at`.
     bool teleport(uint32_t id, const Position& at, const char*& error);
 
+    // Removes creature `id` (not a hero) from the world through the engine's own object destroy: gone at once, no corpse, no loot, no experience.
+    bool remove(uint32_t id, const char*& error);
+
     // Sets a creature's health (clamped to 1..max: a mod does not kill through this) or a hero's gold.
     bool setHealth(uint32_t id, int32_t health, const char*& error);
     bool setGold(uint32_t id, uint32_t gold, const char*& error);

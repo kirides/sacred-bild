@@ -1396,6 +1396,18 @@ namespace
         return 1;
     }
 
+    int nativeRemove(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const char* error = "no such creature";
+        if (!id || !World::remove(id, error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.set_health(id, hp) / native.set_gold(id, gold) -> true | nil, message
     int nativeSetHealth(lua_State* L)
     {
@@ -3052,6 +3064,7 @@ namespace
             {"creatures_near", nativeCreaturesNear},
             {"spawn", nativeSpawn},
             {"teleport", nativeTeleport},
+            {"remove", nativeRemove},
             {"set_health", nativeSetHealth},
             {"set_gold", nativeSetGold},
             {"pipe_open", nativePipeOpen},

@@ -153,6 +153,19 @@ namespace
         }
     }
 
+    int callDestroyObject(void* m, uint32_t id)
+    {
+        __try
+        {
+            Addr::cObjectManager_destroy(m, id, 1, 0, 0);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
     // The number of slots in the manager's id vector (+4 begin, +8 end), and where the vector is.
     uint32_t slots(void* m, uintptr_t* first = nullptr)
     {
@@ -504,6 +517,33 @@ bool World::teleport(uint32_t id, const Position& at, const char*& error)
     if (result <= 0)
     {
         error = result < 0 ? "the game faulted while moving the object" : "the game could not place the object there";
+        return false;
+    }
+    return true;
+}
+
+bool World::remove(uint32_t id, const char*& error)
+{
+    void* m = manager();
+    if (!Addr::cObjectManager_destroy || !changesAllowed())
+    {
+        error = "world changes are not possible now";
+        return false;
+    }
+    if (id <= kHeroIds)
+    {
+        error = "a hero cannot be removed";
+        return false;
+    }
+    const uintptr_t o = live(m, id);
+    if (!o || !callIsCreature(o))
+    {
+        error = "no such creature";
+        return false;
+    }
+    if (callDestroyObject(m, id) < 0)
+    {
+        error = "the game faulted while removing the creature";
         return false;
     }
     return true;
