@@ -73,6 +73,13 @@ local GearObjectTypes = {}
 ---@return string?
 function GearObjectTypes:name(id) end
 
+--- The localized name of item type `id` as the game's tooltip shows it (the first line, colour codes removed), nil if the type is
+--- not an item or has no name. Made from a scratch item (nothing is registered or sent); the names are cached.
+---@param id integer
+---@return string? name
+---@return string? error
+function GearObjectTypes:display_name(id) end
+
 --- The kind (the type record's byte +0x2E) of type `id`.
 ---@param id integer
 ---@return integer?

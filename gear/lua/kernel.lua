@@ -18,6 +18,7 @@
 --   creatures_near(x, y, layer, radius, limit)  ids of the creatures there, nearest first
 --   spawn(type, x, y, layer)          the new object's id, or nil and a message
 --   teleport(id, x, y, layer)         true, or nil and a message
+--   item_type_text(type)              the tooltip text of a scratch item of an item type, or nil and a message
 --   remove(id)                        true, or nil and a message (a creature other than a hero is deleted)
 --   set_health(id, hp), set_gold(id, gold)  true, or nil and a message
 --   pipe_open(name), pipe_close(h), pipe_send(h, text), pipe_poll(h, limit), pipe_connected(h)
@@ -134,6 +135,25 @@ end
 function data.object_types:kind(id)
     local r = self:get(id)
     return r and r:u8(OBJECT_TYPE_KIND)
+end
+
+-- The localized name of item type `id`: the first line of the tooltip of a scratch item of that type (colour codes removed).
+do
+local display_names = {}
+function data.object_types:display_name(id)
+    assert(type(id) == 'number', 'id must be a number')
+    local cached = display_names[id]
+    if cached ~= nil then return cached or nil end
+    local text, err = native.item_type_text(id)
+    if not text then return nil, err end
+    local BS = string.char(92)       -- the game's codes: BS g + 16 characters (image), BS c / BS w + 8 hex digits (colour), BS + one letter
+    local line = text:match('^[^' .. string.char(10, 13) .. ']*') or ''
+    line = line:gsub(BS .. 'g' .. string.rep('.', 16), ''):gsub(BS .. '[cw]' .. string.rep('%x', 8), ''):gsub(BS .. '%w', '')
+    line = line:gsub('%s*%(%d+/%d+%)%s*$', ''):gsub('^%s+', ''):gsub('%s+$', '')
+    if line == '' then display_names[id] = false return nil, 'the item has no name' end
+    display_names[id] = line
+    return line
+end
 end
 
 local function build_type_index()

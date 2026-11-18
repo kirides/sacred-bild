@@ -2469,6 +2469,22 @@ namespace
         return 1;
     }
 
+    // native.item_type_text(type) -> the tooltip text of a scratch item of that type (UTF-8, colour codes) | nil, message
+    int nativeItemTypeText(lua_State* L)
+    {
+        const lua_Number v = luaL_checknumber(L, 1);
+        const char* error = "bad arguments";
+        std::wstring text;
+        if (!(v >= 1 && v < 0x7E60) || !ItemTip::textForType(static_cast<uint32_t>(v), text, error))
+        {
+            return pushFailure(L, error);
+        }
+        char utf8[16384];
+        const int n = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), utf8, sizeof(utf8), nullptr, nullptr);
+        lua_pushlstring(L, utf8, n > 0 ? n : 0);
+        return 1;
+    }
+
     // native.inv_export(item id) -> bytes | nil, message
     int nativeInvExport(lua_State* L)
     {
@@ -3129,6 +3145,7 @@ namespace
             {"inv_socket", nativeInvSocket},
             {"item_tooltip", nativeItemTooltip},
             {"item_tooltip_text", nativeItemTooltipText},
+            {"item_type_text", nativeItemTypeText},
             {"inv_export", nativeInvExport},
             {"inv_import", nativeInvImport},
             {"realm_get", nativeRealmGet},
