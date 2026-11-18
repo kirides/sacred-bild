@@ -95,6 +95,10 @@ namespace Gear::Addr
     // ENG 0061CD00 ("SAVEHERO"): writes the hero file, cdecl (path) -> bool. A network game calls it through 0x7F38E0
     // (Save\HeroNN.pax: every 300 s from the receive loop, when the player leaves, at merchants); the network menu too.
     inline Sacred::Cdecl<uint8_t(const char* path)> heroSave{};
+    // ENG 007561E0 (cCommand_armaPlay::execute): the game's own load / new game command, fastcall (command), which posts
+    // WM_APP + 2 to the game window. Command +4 (uint16): 1 load a savegame, 4 load a network hero file, else a new game
+    // ("init"); +8 the savegame / hero number.
+    inline Sacred::Thiscall<void(void* command)> armaPlayExecute{};
     // ENG 0061D0F0 ("LOADHERO"): cdecl (path, hero id, 0) -> 1 if the file opened: loads a hero file (AMH) into the hero
     // object with that id: its creature record, stats, skills, combat arts, equipment, backpack.
     inline Sacred::Cdecl<uint32_t(const char* path, uint32_t id, uint32_t a3)> heroLoad{};

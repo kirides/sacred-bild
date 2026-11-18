@@ -94,6 +94,10 @@ GEAR = [
     # The hero file writer ("SAVEHERO", cdecl bool (path), the network game's Save\HeroNN.pax every 300 s, on leaving and
     # at merchants): Gear raises game.hero_saved after it.
     ('heroSave', 0x0061CD00, 'func'),
+    # cCommand_armaPlay::execute (fastcall (command), the game's own load / new game command): +4 the kind (1 load a savegame,
+    # 4 load a network hero file, else "init", a new game), +8 the number; it posts WM_APP + 2 to the game window. Gear raises
+    # savegame.load / savegame.new from it (gear.savegame, per savegame mod storage).
+    ('armaPlayExecute', 0x007561E0, 'func'),
     # "LOADHERO" (cdecl (path, hero id, 0)): reads a hero file into the hero object with that id; a developer command
     # (0x614230) creates hero 2 and loads Save\Hero%2d.pax into it so. gear.party imports heroes with it.
     ('heroLoad', 0x0061D0F0, 'func'),

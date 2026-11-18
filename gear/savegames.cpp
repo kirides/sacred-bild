@@ -6,6 +6,7 @@
 #include "ui.h"
 #include "game/gear_addr.h"
 #include "log.h"
+#include "patch.h"
 
 #include <windows.h>
 
@@ -13,6 +14,8 @@
 #include <cstdio>
 #include <cstring>
 #include <map>
+#include <mutex>
+#include <deque>
 
 // See savegames.h.
 
@@ -487,6 +490,151 @@ bool Savegames::load(uint32_t slot, const char*& error)
         error = "cannot post to the game window";
         return false;
     }
+    noteLoad(slot);
     LOG("Savegames: loading GAME{:02}.PAK", slot);
+    return true;
+}
+
+// --- the game's load / new game command ---------------------------------------------------------------------------------
+
+namespace
+{
+    std::mutex g_commandLock;
+    std::deque<Savegames::Command> g_commands;
+    void(__fastcall* g_armaPlay)(void* command, void* edx) = nullptr;
+
+    std::string sanitize(const std::string& s)
+    {
+        std::string out;
+        for (char ch : s)
+        {
+            const bool ok = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_';
+            out += ok ? ch : '_';
+        }
+        return out;
+    }
+
+    // The part of the savegame folder that tells it from the game's own Save folder: empty for that one.
+    std::string folderTag()
+    {
+        std::string f = Savegames::folder();
+        wchar_t exe[MAX_PATH] = {};
+        GetModuleFileNameW(nullptr, exe, MAX_PATH);
+        std::wstring dir = exe;
+        dir.resize(dir.find_last_of(L"\\/") == std::wstring::npos ? 0 : dir.find_last_of(L"\\/"));
+        std::wstring w = widen(f);
+        for (auto& ch : w) { if (ch == L'/') ch = L'\\'; }
+        auto lower = [](std::wstring s) { for (auto& ch : s) ch = static_cast<wchar_t>(towlower(ch)); return s; };
+        if (w == L"Save" || lower(w) == lower(dir + L"\\Save"))
+        {
+            return {};
+        }
+        // Relative to the game folder if it is inside it, else the last two components.
+        std::string rel = f;
+        if (lower(w).compare(0, dir.size() + 1, lower(dir + L"\\")) == 0)
+        {
+            rel = utf8(w.c_str() + dir.size() + 1, w.size() - dir.size() - 1);
+        }
+        else
+        {
+            const size_t last = w.find_last_of(L'\\');
+            const size_t prev = last == std::wstring::npos || last == 0 ? std::wstring::npos : w.find_last_of(L'\\', last - 1);
+            rel = utf8(w.c_str() + (prev == std::wstring::npos ? 0 : prev + 1), w.size() - (prev == std::wstring::npos ? 0 : prev + 1));
+        }
+        std::string tag = sanitize(rel);
+        return tag.size() > 48 ? tag.substr(tag.size() - 48) : tag;
+    }
+
+    bool readCommand(const void* command, uint16_t& kind, uint32_t& number)
+    {
+        __try
+        {
+            kind = *reinterpret_cast<const uint16_t*>(static_cast<const char*>(command) + 4);
+            number = *reinterpret_cast<const uint32_t*>(static_cast<const char*>(command) + 8);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    void __fastcall hookArmaPlay(void* command, void* edx)
+    {
+        Savegames::Command c;
+        uint16_t kind = 0;
+        if (!readCommand(command, kind, c.number))
+        {
+            g_armaPlay(command, edx);
+            return;
+        }
+        c.kind = kind == 1 ? Savegames::Command::Kind::Load
+               : kind == 4 ? Savegames::Command::Kind::LoadHero : Savegames::Command::Kind::New;
+        if (c.kind == Savegames::Command::Kind::Load)
+        {
+            c.scope = Savegames::scopeOf(c.number);
+        }
+        else if (c.kind == Savegames::Command::Kind::LoadHero)
+        {
+            c.scope = Savegames::heroScopeOf(c.number);
+        }
+        {
+            std::lock_guard lock(g_commandLock);
+            if (g_commands.size() < 32)
+            {
+                g_commands.push_back(std::move(c));
+            }
+        }
+        g_armaPlay(command, edx);
+    }
+}
+
+std::string Savegames::scopeOf(uint32_t slot)
+{
+    char name[24];
+    sprintf_s(name, "GAME%02u", slot);
+    const std::string tag = folderTag();
+    return tag.empty() ? std::string(name) : tag + "-" + name;
+}
+
+std::string Savegames::heroScopeOf(uint32_t number)
+{
+    char name[24];
+    sprintf_s(name, "HERO%02u", number);
+    return name;
+}
+
+void Savegames::noteLoad(uint32_t slot)
+{
+    Command c;
+    c.kind = Command::Kind::Load;
+    c.number = slot;
+    c.scope = scopeOf(slot);
+    std::lock_guard lock(g_commandLock);
+    if (g_commands.size() < 32)
+    {
+        g_commands.push_back(std::move(c));
+    }
+}
+
+bool Savegames::install()
+{
+    if (!Gear::Addr::armaPlayExecute)
+    {
+        LOG("Savegames: the load command was not found: no savegame.load / savegame.new");
+        return false;
+    }
+    return Patch::hook(g_armaPlay, Gear::Addr::armaPlayExecute, hookArmaPlay, "cCommand_armaPlay_execute");
+}
+
+bool Savegames::take(Command& out)
+{
+    std::lock_guard lock(g_commandLock);
+    if (g_commands.empty())
+    {
+        return false;
+    }
+    out = std::move(g_commands.front());
+    g_commands.pop_front();
     return true;
 }

@@ -40,6 +40,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cUI_TextLines_add", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC A4 00 00 00 53 55", 0, Sig::Take::Match, &Gear::Addr::cUI_TextLines_add}, // 007237D0, 00723060
     {"cStats_setGoldCall", "E8 ?? ?? ?? ?? 8B 85 00 02 00 00 8B 8D A0 03 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_setGoldCall}, // 00461B74, 00461E64
     {"heroSave", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC A8 00 00 00", 0, Sig::Take::Match, &Gear::Addr::heroSave}, // 0061CD00, 0061CDA0
+    {"armaPlayExecute", "56 8B F1 66 8B 46 04 66 3D 01 00 75 13", 0, Sig::Take::Match, &Gear::Addr::armaPlayExecute}, // 007561E0, 00755AC0
     {"heroLoad", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 2C 53 33 DB", 0, Sig::Take::Match, &Gear::Addr::heroLoad}, // 0061D0F0, 0061D190
     {"g_heroFileFlag", "8B CF 66 89 B7 52 01 00 00 C6 05 ?? ?? ?? ?? 01", 11, Sig::Take::Abs32, &Gear::Addr::g_heroFileFlag}, // 0182EE50, 0182CDD0
     {"cUI_InventoryTab_vtable", "C7 44 24 14 00 00 00 00 C7 06 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 78 14", 10, Sig::Take::Abs32, &Gear::Addr::cUI_InventoryTab_vtable}, // 008965C4, 008945C4

@@ -63,4 +63,77 @@ function S.file(name, default, opts)
     return h
 end
 
+local function copy(v)
+    if type(v) ~= 'table' then return v end
+    local out = {}
+    for k, x in pairs(v) do out[k] = copy(x) end
+    return out
+end
+
+-- A file of the savegame being played: what the mod keeps about this character / game (totals, progress, a log), not
+-- settings or things shared by all games. The same handle as `file` (handle.data, changed(), save(), flush()), but the
+-- data belongs to the savegame: a save into a slot keeps it for that slot, loading a slot brings back what was kept
+-- for it, a new game starts with `default` again (see gear.savegame). Progress since the last save is gone after a load,
+-- as the game's own progress is. handle.data is replaced then: always reach the data through the handle.
+-- opts as for `file`, and:
+--   on_change  function(handle, kind, scope): the handle holds the data of another game now (kind 'load', 'hero' or
+--              'new'; the handler of 'savegame.changed' of the mod runs after it)
+--   migrate    true: a file `name` of the mod's folder from before the mod used per game data is taken once, by the first
+--              loaded savegame that has no data yet (it is what the mod collected so far, so it goes to the game that is
+--              continued); a marker file <name>.migrated.txt records that
+function S.game(name, default, opts)
+    opts = opts or {}
+    local h = {name = name, dirty = false, per_game = true}
+    local marker = (name:gsub('%.json$', '')) .. '.migrated.txt'
+    local function load()
+        local text = gear.savegame.read(name)
+        local data
+        if text and text ~= '' then
+            local ok, value = pcall(gear.json.decode, text)
+            if ok and value ~= nil and not (type(default) == 'table' and type(value) ~= 'table') then data = value
+            else warn(name, 'not readable, the defaults are used') end
+        elseif opts.migrate and (gear.savegame.kind() == 'load' or gear.savegame.kind() == 'hero')
+            and gear.read(marker) == nil then
+            local old = S.load(name, nil)
+            if old ~= nil then
+                gear.save(marker, tostring(gear.savegame.scope()))
+                data = old
+                h.dirty = true
+            end
+        end
+        if opts.check then data = opts.check(data == nil and copy(default) or data) end
+        if data == nil then data = copy(default) end
+        h.data = data
+    end
+    load()
+    function h:changed() self.dirty = true end
+    function h:save()
+        self.dirty = false
+        local value = self.data
+        if opts.value then value = opts.value() end
+        local ok, text = pcall(gear.json.encode, value)
+        if not ok then warn(self.name, text) return false, text end
+        local saved, err = gear.savegame.write(self.name, text)
+        if not saved then warn(self.name, err) return false, err end
+        return true
+    end
+    function h:flush()
+        if self.dirty then return self:save() end
+        return true
+    end
+    local every = tonumber(opts.every) or 30
+    if every > 0 then gear.every(every, function() h:flush() end) end
+    gear.on('unload', function() h:flush() end)
+    -- Before the working copy is kept for a savegame: write what changed. After the game changed: read what it holds.
+    gear.on('savegame.saving', function() h:flush() end)
+    gear.on('savegame.changed', function(kind, scope)
+        h.dirty = false
+        load()
+        if opts.on_change then opts.on_change(h, kind, scope) end
+        if h.dirty then h:flush() end
+    end)
+    if h.dirty then h:flush() end
+    return h
+end
+
 return S
