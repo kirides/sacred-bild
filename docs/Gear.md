@@ -596,7 +596,7 @@ faults returns nil and a message instead of crashing the game.
 
 ### Examples
 
-User documentation of the session mods and of the client mods of the game server's Lua mods (install, hotkeys, settings, panels): [Session mods](GearSessionMods.md) and [the docs of sacred-gear-mods](https://github.com/kirides/sacred-gear-mods/tree/main/docs).
+User documentation of the session mods and of the client mods of the game server's Lua mods (install, hotkeys, settings, panels): [the docs of sacred-gear-mods](https://github.com/kirides/sacred-gear-mods/tree/main/docs).
 
 `gear/examples` in the repository (the mods players use, such as the loot filter, the layout editor, the realm picker, the Twitch Integration and the server mod clients, live in [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods); copy them from there or from its release zip):
 
@@ -610,9 +610,6 @@ User documentation of the session mods and of the client mods of the game server
 | `scrolltest` | An automation run: a scroll area of 100 lines (wheel, a line scrolled out of sight takes no click, thumb drag) and a dropdown of 30 entries whose open list lies over text and a button drawn after it (`-gear-mods=scrolltest`). |
 | `tooltiptest` | An automation run: tooltips of buttons at the screen's edges and corners, with screenshots (`gear.ui.tooltip_rect`). |
 | `droptest` | An automation run of the drop hooks (`gear.drops`): the engine's loot function is run a few hundred times per phase with vanilla settings, a doubled and a zero chance, rarity weights, a veto, a replaced item, the fair, a seeded and a Lua generator; 31 checks. Use a copy of the game folder: the items stay in the world. See [Gear drops](GearDrops.md). |
-| `sessiontracker` | Time played, kills, gold and experience gained this session with per-hour rates, lifetime totals and the last sessions (F2). See [Session mods](GearSessionMods.md). |
-| `lootlog` | A log of what dropped near the hero and what reached the backpack, filterable by quality, category and kind, kept in `lootlog.json` (F3). See [Session mods](GearSessionMods.md). |
-| `damagemeter` | Damage dealt and taken by the hero from the `damage` event, DPS, biggest hit, damage by monster type, kills per minute (F7). See [Session mods](GearSessionMods.md). |
 | `selftest` | An automation run: loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `GearAutomation\selftest.json` and `types.txt`, screenshots, quits with 0 or 1. |
 | `shared-stash` (in the sacred-gear-mods repository) | A stash shared by all heroes of the player, in a panel beside the chest window, built on `gear.inv`: items are copied to `stash.json` in the mod's folder and back, the file written first on a deposit and last on a withdrawal. |
 
