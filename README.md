@@ -53,9 +53,13 @@ right now, and a short note confirms each save.
 
 ![An autosave note](docs/images/gear-autosave.jpg)
 
-The loot filter, the layout editor, the shared stash, the autosave and
-more are in [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods). A mod is a folder in the game's `mods`
-folder: copy it in, press F11, switch it on. Writing your own is covered in [Sacred Gear](docs/Gear.md).
+All the mods live in their own repository, [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods), with a page for each (how to use it, settings, keys):
+[Loot filter](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/lootfilter.md), [Loot log](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/lootlog.md), [Damage meter](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/damagemeter.md), [Session tracker](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/sessiontracker.md), [Layout editor](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/layout.md), [Realm picker](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/realms.md), [Autosave](https://github.com/kirides/sacred-gear-mods/blob/main/docs/Autosave.md), [Shared stash](https://github.com/kirides/sacred-gear-mods/blob/main/docs/SharedStash.md), [Better SaveLoad](https://github.com/kirides/sacred-gear-mods/blob/main/src/better-saveload/README.md), [Drop tuning](https://github.com/kirides/sacred-gear-mods/blob/main/docs/DropTuning.md), [Auction house](https://github.com/kirides/sacred-gear-mods/blob/main/src/auction-house/README.md), [Achievements](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/achievements.md), [Bounty board](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/bounty.md), [Build sharer](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/buildsharer.md), [Quest helper](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/questhelper.md), [Server feed](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/serverfeed.md), [Twitch Integration](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/twitch_integration.md).
+
+**Easiest way:** download `sacred-gear-mods-<version>.zip` from the [mods releases](https://github.com/kirides/sacred-gear-mods/releases/latest) and extract it into
+the game folder. It contains a ready `mods` folder; delete the mods you do not want. A mod is a folder in `mods`:
+press F11 in game and switch it on or off. Writing your own is covered in [Sacred Gear](docs/Gear.md); the `gear/examples`
+folder here only holds small feature examples and automation tests.
 
 ### Install
 
