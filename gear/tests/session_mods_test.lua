@@ -184,7 +184,7 @@ do
     G.ground = {old}
     frames(G, 1)                                           -- baseline: not logged
     fire(G, 'drops.roll', {creature = 12, level = 3})
-    local sword = {id = 6, type = 2, type_name = 'Blade', quality = 'magic', category = 'weapon', tip = '\\c00FFFFFF Blade of Haste\nLevel 3'}
+    local sword = {id = 6, type = 2, type_name = 'Blade', quality = 'magic', category = 'weapon', tip = '\\gffffffff     19e\\cffefefef Blade of Haste \n\\cffa020f0Dunkelelf\nPreis: 320\n\\gffffffff000000cd'}
     local plain = {id = 7, type = 3, type_name = 'Rag', quality = 'normal', category = 'armor'}
     local unique = {id = 8, type = 4, type_name = 'Excalibur', quality = 'unique', category = 'weapon'}
     G.ground = {old, sword, plain, unique}
