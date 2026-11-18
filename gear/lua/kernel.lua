@@ -407,6 +407,7 @@ data.abilities = abilities
 -- needs, +0x34 the boss flag, +0x38 the kills left, +0x3C the region id. Entries the game never set up have 0 kills
 -- needed. `kills_needed` and `kills_left` can be written (whole numbers 0 .. REGION_MAX).
 ---------------------------------------------------------------------------------------------------------------
+do
 local REGION_MAX = 1000000
 local REGION_FIELDS = {
     kills_needed = {0x30, 'u32', true}, boss = {0x34, 'u8'}, kills_left = {0x38, 'u32', true}, id = {0x3C, 'u8'},
@@ -446,6 +447,22 @@ function regions:get(index)
     return setmetatable({__index = index}, region_mt)
 end
 data.regions = regions
+-- The record of the region the sector `sector` (a sector word: creature:sector(), position.sector) lies in, and the
+-- region byte the map files give the sector; nil if the game has no region there (or the engine is not ready).
+function regions:of_sector(sector)
+    if type(sector) ~= 'number' then return nil end
+    local index, code = native.region_of_sector(sector)
+    if not index then return nil end
+    return self:get(index), code
+end
+-- The region a creature (a hero) is in.
+function regions:of_creature(creature)
+    if type(creature) ~= 'table' or type(creature.sector) ~= 'function' then return nil end
+    local ok, sector = pcall(creature.sector, creature)
+    if not ok then return nil end
+    return self:of_sector(sector)
+end
+end
 
 -- Read-only views of kernel tables: mods share `data`, `json` and the world functions, so none may change them
 -- for the others. Nested tables are wrapped too (once each).

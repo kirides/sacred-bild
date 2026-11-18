@@ -30,6 +30,13 @@ namespace Tables
     // index or offset is out of range, or the memory cannot be written. `value` must fit the kind (integers whole).
     bool write(std::string_view name, size_t index, size_t offset, Kind kind, double value);
 
+    // The region a sector belongs to (what the game's HUD does, 006C6C50: object manager -> its first member, the sector
+    // manager, whose +0x240 vector holds the sector objects by sector id; a sector object's +0x17C record has the
+    // region byte at +0xD7; the region table record whose first 32 bytes hold that byte is the region). `sector` is the
+    // sector word of a position (0: none). `index` is the region record (1 ..), `code` the region byte; false if the
+    // sector, its record or a region is not there.
+    bool regionOfSector(uint32_t sector, size_t& index, uint8_t& code);
+
     // The game's text for a text id (as UTF-8); false if the game's text table is not there or the id has no text.
     bool text(uint32_t id, std::string& out);
 

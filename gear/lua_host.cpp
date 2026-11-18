@@ -273,6 +273,22 @@ namespace
         return 2;
     }
 
+    // native.region_of_sector(sector) -> region record index, region byte | nil
+    int nativeRegionOfSector(lua_State* L)
+    {
+        const lua_Number sector = luaL_checknumber(L, 1);
+        size_t index = 0;
+        uint8_t code = 0;
+        if (!(sector >= 0 && sector < 65536) || !Tables::regionOfSector(static_cast<uint32_t>(sector), index, code))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, static_cast<lua_Number>(index));
+        lua_pushnumber(L, code);
+        return 2;
+    }
+
     // native.table_read(name, index, offset, kind) -> number | nil
     int nativeTableRead(lua_State* L)
     {
@@ -3032,6 +3048,7 @@ namespace
             {"time", nativeTime},
             {"reset_budget", nativeResetBudget},
             {"table_info", nativeTableInfo},
+            {"region_of_sector", nativeRegionOfSector},
             {"table_read", nativeTableRead},
             {"table_string", nativeTableString},
             {"table_write", nativeTableWrite},

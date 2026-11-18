@@ -308,3 +308,15 @@ function GearRegions:count() end
 ---@param index integer
 ---@return GearRegion?
 function GearRegions:get(index) end
+
+--- The region a sector lies in (a sector word, as `creature:sector()` gives). nil where the game has no region.
+---@param sector integer
+---@return GearRegion?
+---@return integer? code The region byte the map files give the sector.
+function GearRegions:of_sector(sector) end
+
+--- The region a creature (for example the hero) is in.
+---@param creature Creature
+---@return GearRegion?
+---@return integer? code
+function GearRegions:of_creature(creature) end

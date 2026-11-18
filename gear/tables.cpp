@@ -314,3 +314,38 @@ bool Tables::text(uint32_t id, std::string& out)
     WideCharToMultiByte(CP_UTF8, 0, wide, length, out.data(), bytes, nullptr, nullptr);
     return true;
 }
+
+bool Tables::regionOfSector(uint32_t sector, size_t& index, uint8_t& code)
+{
+    uintptr_t manager = 0, world = 0, range[2] = {}, object = 0, record = 0;
+    if (sector == 0 || !Gear::Addr::g_pObjectManager ||
+        !safeCopy(&manager, Gear::Addr::g_pObjectManager.get(), sizeof(manager)) || !manager ||
+        !safeCopy(&world, reinterpret_cast<const void*>(manager), sizeof(world)) || !world ||
+        !safeCopy(range, reinterpret_cast<const void*>(world + 0x240), sizeof(range)) || !range[0] || range[1] < range[0] ||
+        sector >= (range[1] - range[0]) / sizeof(uintptr_t) ||
+        !safeCopy(&object, reinterpret_cast<const void*>(range[0] + sector * sizeof(uintptr_t)), sizeof(object)) || !object ||
+        !safeCopy(&record, reinterpret_cast<const void*>(object + 0x17C), sizeof(record)) || !record ||
+        !safeCopy(&code, reinterpret_cast<const void*>(record + 0xD7), 1))
+    {
+        return false;
+    }
+    Span span;
+    if (!locateRegions(span))
+    {
+        return false;
+    }
+    for (size_t i = 1; i < span.count; ++i)
+    {
+        uint8_t chars[32] = {};
+        if (!safeCopy(chars, reinterpret_cast<const void*>(span.first + i * kRegionStride), sizeof(chars)))
+        {
+            return false;
+        }
+        if (std::find(std::begin(chars), std::end(chars), code) != std::end(chars))
+        {
+            index = i;
+            return true;
+        }
+    }
+    return false;
+}

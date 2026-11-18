@@ -856,6 +856,22 @@ The record `index` (1 .. count - 1).
 - `index`: `integer`
 - returns `GearRegion?`
 
+#### `GearRegions:of_sector(sector) -> GearRegion?, integer?`
+
+The region a sector lies in (a sector word, as `creature:sector()` gives). nil where the game has no region.
+
+- `sector`: `integer`
+- returns `GearRegion?`
+- returns `code` `integer?` - The region byte the map files give the sector.
+
+#### `GearRegions:of_creature(creature) -> GearRegion?, integer?`
+
+The region a creature (for example the hero) is in.
+
+- `creature`: `Creature`
+- returns `GearRegion?`
+- returns `code` `integer?`
+
 ## World (gear.world)
 
 ### GearClassInfo
