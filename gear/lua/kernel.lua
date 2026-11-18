@@ -4039,7 +4039,7 @@ function uis.make_input(mod)
             end
             local b = parse_binding(r.from)
             if not b then error('rule ' .. i .. ': from is not a key: ' .. tostring(r.from), 2) end
-            local entry = {from = b.vk, ctrl = b.ctrl, shift = b.shift, alt = b.alt, id = r.id and (mod.id .. ' ' .. r.id) or ''}
+            local entry = {from = b.vk, ctrl = b.ctrl, shift = b.shift, alt = b.alt, id = r.id and (mod.id .. ':' .. r.id) or ''}
             if r.block then
                 entry.any = true
             else
@@ -4115,7 +4115,7 @@ function uis.input_poll()
     end
     if native.input_events and next(I.rules) then
         for _, ev in ipairs(native.input_events()) do
-            local mid, id = ev.id:match('^(.-)%z(.*)$')
+            local mid, id = ev.id:match('^([^:]*):(.*)$')
             for _, h in ipairs({unpack(I.handlers)}) do
                 if h.mod.id == mid and not h.mod.disabled then call(h.mod, 'input ' .. id, h.fn, id, ev.down, ev['repeat']) end
             end
