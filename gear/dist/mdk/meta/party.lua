@@ -24,6 +24,12 @@ function GearParty.available() end
 ---@return Creature[]
 function GearParty.heroes() end
 
+--- The game's own mercenaries that follow the party's heroes (they follow the hero the player controls). The
+--- creature orders (`order_move`, `order_attack`, `order_ability`), `abilities`, `action` and `equipment` work for
+--- them as for the heroes; their quests and scripts stay the game's.
+---@return Creature[]
+function GearParty.mercenaries() end
+
 --- The hero the player controls (the same as `gear.world.hero()`).
 ---@return Creature?
 function GearParty.leader() end
@@ -40,6 +46,35 @@ function GearParty.companions() end
 ---@return Creature? companion
 ---@return string? error `'the party is full'` (ids 3 to 16 taken), or why not.
 function GearParty.recruit(class, opts) end
+
+--- The hero files a companion can come from: the network game's characters (`Save\HeroNN.pax`) and the files
+--- `export_hero` wrote into this mod's `heroes` folder. Each file's header is read: call it when a screen opens.
+---@return GearHeroFile[]
+function GearParty.hero_files() end
+
+--- Brings a hero from a hero file into the party, where the leader stands (or at `opts.x`, `opts.y`): everything it had
+--- (level, attributes, skills, combat arts, combos, equipment, backpack) comes along, through the engine's own hero
+--- loader. The file stays as it is (the companion is a copy).
+---@param file string `hero_files()[i].file`.
+---@param opts? GearRecruitOpts
+---@return Creature? companion
+---@return string? error
+function GearParty.recruit_hero(file, opts) end
+
+--- Writes the hero the player controls to `heroes\<name>.pax` in this mod's folder (the network game's hero file
+--- format, through the engine's own writer), so another savegame can bring it into its party.
+---@param name string Letters, digits, `_`, `-` (others become `_`), at most 48.
+---@return string? file The file for `recruit_hero`.
+---@return string? error
+function GearParty.export_hero(name) end
+
+--- A hero file, as `hero_files` lists it.
+---@class GearHeroFile
+---@field file string `'save:Hero03.pax'` (the game's Save folder) or `'mod:heroes/<name>.pax'` (this mod's folder).
+---@field name string The hero's name.
+---@field class? GearClassName
+---@field class_id integer
+---@field level integer
 
 --- Removes a companion from the world for good, with what it wears. Refused for the controlled hero and while its
 --- backpack holds items (take them first).

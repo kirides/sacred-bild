@@ -1452,6 +1452,19 @@ namespace
         return 1;
     }
 
+    // native.party_mercenaries() -> {id, ...}
+    int nativePartyMercenaries(lua_State* L)
+    {
+        const std::vector<uint32_t> ids = Party::mercenaries();
+        lua_createtable(L, static_cast<int>(ids.size()), 0);
+        for (size_t i = 0; i < ids.size(); ++i)
+        {
+            lua_pushnumber(L, ids[i]);
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
     // native.party_recruit(class, x, y, layer) -> id | nil, message
     int nativePartyRecruit(lua_State* L)
     {
@@ -1616,6 +1629,28 @@ namespace
         return 1;
     }
 
+    // native.party_equipment(id) -> {[slot] = item id} (slots 0..18 that hold an item) | nil
+    int nativePartyEquipment(lua_State* L)
+    {
+        uint32_t slots[19] = {};
+        if (!Party::equipment(checkId(L, 1), slots))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_newtable(L);
+        for (int i = 0; i < 19; ++i)
+        {
+            World::Item item;
+            if (slots[i] && World::item(slots[i], item))
+            {
+                lua_pushnumber(L, slots[i]);
+                lua_rawseti(L, -2, i);
+            }
+        }
+        return 1;
+    }
+
     // native.party_state(id) -> action, movement | nil
     int nativePartyState(lua_State* L)
     {
@@ -1659,6 +1694,138 @@ namespace
         {
             lua_pushboolean(L, r);
         }
+        return 1;
+    }
+
+    // Hero files. A spec names one: "save:Hero03.pax" (the game's Save folder) or "mod:heroes/x.pax" (the mod's folder).
+    std::wstring heroFilePath(const char* dir, size_t dirLen, const std::string& spec)
+    {
+        if (spec.rfind("save:", 0) == 0)
+        {
+            const std::wstring name = widen(spec.data() + 5, spec.size() - 5);
+            if (name.empty() || name.find_first_of(L"\\/:") != std::wstring::npos || name.size() < 5 ||
+                _wcsicmp(name.c_str() + name.size() - 4, L".pax") != 0)
+            {
+                return {};
+            }
+            return g_gameDir + L"\\Save\\" + name;
+        }
+        if (spec.rfind("mod:", 0) == 0)
+        {
+            const std::wstring p = modPath(dir, dirLen, spec.data() + 4, spec.size() - 4);
+            return p.size() > 4 && _wcsicmp(p.c_str() + p.size() - 4, L".pax") == 0 ? p : std::wstring{};
+        }
+        return {};
+    }
+
+    void pushHeroFile(lua_State* L, const std::string& spec, const Party::HeroFile& f)
+    {
+        lua_createtable(L, 0, 4);
+        lua_pushlstring(L, spec.data(), spec.size());
+        lua_setfield(L, -2, "file");
+        const std::string name = narrow(f.name);
+        lua_pushlstring(L, name.data(), name.size());
+        lua_setfield(L, -2, "name");
+        lua_pushnumber(L, f.heroClass);
+        lua_setfield(L, -2, "class_id");
+        lua_pushnumber(L, f.level);
+        lua_setfield(L, -2, "level");
+    }
+
+    // native.party_hero_files(dir) -> {{file, name, class_id, level}, ...}: Save\Hero*.pax and the mod's heroes\*.pax
+    int nativePartyHeroFiles(lua_State* L)
+    {
+        size_t dirLen = 0;
+        const char* dir = luaL_checklstring(L, 1, &dirLen);
+        lua_newtable(L);
+        int n = 0;
+        auto scan = [&](const std::wstring& folder, const char* prefix) {
+            WIN32_FIND_DATAW fd;
+            HANDLE h = FindFirstFileW((folder + L"\\*.pax").c_str(), &fd);
+            if (h == INVALID_HANDLE_VALUE)
+            {
+                return;
+            }
+            do
+            {
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                {
+                    continue;
+                }
+                Party::HeroFile f;
+                if (Party::readHeroFile(folder + L"\\" + fd.cFileName, f) && n < 200)
+                {
+                    pushHeroFile(L, std::string(prefix) + narrow(fd.cFileName), f);
+                    lua_rawseti(L, -2, ++n);
+                }
+            } while (FindNextFileW(h, &fd));
+            FindClose(h);
+        };
+        scan(g_gameDir + L"\\Save", "save:");
+        const std::wstring mine = modPath(dir, dirLen, "heroes", 6);
+        if (!mine.empty())
+        {
+            scan(mine, "mod:heroes/");
+        }
+        return 1;
+    }
+
+    // native.party_import(dir, spec, x, y, layer) -> id | nil, message
+    int nativePartyImport(lua_State* L)
+    {
+        size_t dirLen = 0;
+        const char* dir = luaL_checklstring(L, 1, &dirLen);
+        const std::wstring path = heroFilePath(dir, dirLen, luaL_checkstring(L, 2));
+        World::Position at;
+        if (path.empty())
+        {
+            return pushFailure(L, "no such hero file");
+        }
+        if (!checkPosition(L, 3, at))
+        {
+            return pushFailure(L, "bad position");
+        }
+        const char* error = nullptr;
+        const uint32_t id = Party::importHero(path, at, error);
+        if (!id)
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushnumber(L, id);
+        return 1;
+    }
+
+    // native.party_export(dir, name) -> spec | nil, message: the controlled hero to the mod's heroes\<name>.pax
+    int nativePartyExport(lua_State* L)
+    {
+        size_t dirLen = 0;
+        const char* dir = luaL_checklstring(L, 1, &dirLen);
+        std::string name = luaL_checkstring(L, 2);
+        for (char& ch : name)
+        {
+            const bool ok = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-';
+            if (!ok)
+            {
+                ch = '_';
+            }
+        }
+        if (name.empty() || name.size() > 48)
+        {
+            return pushFailure(L, "the name must be 1 to 48 characters");
+        }
+        const std::string rel = "heroes/" + name + ".pax";
+        const std::wstring path = modPath(dir, dirLen, rel.data(), rel.size());
+        if (path.empty())
+        {
+            return pushFailure(L, "bad file name");
+        }
+        const char* error = nullptr;
+        if (!Party::exportHero(path, error))
+        {
+            return pushFailure(L, error);
+        }
+        const std::string spec = "mod:" + rel;
+        lua_pushlstring(L, spec.data(), spec.size());
         return 1;
     }
 
@@ -3387,6 +3554,7 @@ namespace
             {"set_gold", nativeSetGold},
             {"party_available", nativePartyAvailable},
             {"party_heroes", nativePartyHeroes},
+            {"party_mercenaries", nativePartyMercenaries},
             {"party_recruit", nativePartyRecruit},
             {"party_dismiss", nativePartyDismiss},
             {"party_control", nativePartyControl},
@@ -3394,11 +3562,15 @@ namespace
             {"party_abilities", nativePartyAbilities},
             {"party_state", nativePartyState},
             {"party_combos", nativePartyCombos},
+            {"party_equipment", nativePartyEquipment},
             {"party_set_combo", nativePartySetCombo},
             {"party_add_exp", nativePartyAddExp},
             {"party_hostile", nativePartyHostile},
             {"party_portrait", nativePartyPortrait},
             {"party_set_name", nativePartySetName},
+            {"party_hero_files", nativePartyHeroFiles},
+            {"party_import", nativePartyImport},
+            {"party_export", nativePartyExport},
             {"party_share", nativePartyShare},
             {"pipe_open", nativePipeOpen},
             {"pipe_close", nativePipeClose},

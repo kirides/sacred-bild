@@ -176,6 +176,33 @@ gear.task(function()
     end
     A.screenshot('party-3-loaded')
 
+    -- Hero files: write the controlled hero to one, bring it into the party as a copy.
+    local spec, xerr = party.export_hero('partytest')
+    check('export_hero', spec == 'mod:heroes/partytest.pax', xerr or spec)
+    local found
+    for _, f in ipairs(party.hero_files()) do if f.file == spec then found = f end end
+    check('hero_files lists it', found ~= nil and found.class ~= nil and found.level >= 1,
+        found and (found.class .. ' ' .. found.level))
+    local copy, ierr = found and party.recruit_hero(found.file)
+    check('recruit_hero', copy ~= nil, ierr)
+    if copy then
+        local played = party.leader()
+        check('the copy has the class and level', copy:class() == played:class() and copy:level() == played:level(),
+            tostring(copy:class()) .. ' ' .. tostring(copy:level()))
+        check('the copy has abilities', #(copy:abilities() or {}) == #(played:abilities() or {}))
+        check('three heroes', #party.heroes() == 3)
+    end
+
+    -- Mercenaries: the save's own follow the controlled hero and take orders.
+    local mercs = party.mercenaries()
+    check('mercenaries()', #mercs >= 1, #mercs)
+    if mercs[1] then
+        local m = mercs[1]
+        local x, y = m:position()
+        check('a mercenary takes a move order', m:order_move(x + 80, y + 40))
+        check('a mercenary has an action', m:action() ~= nil)
+    end
+
     -- Back to the main hero (id 1) and dismiss the companion.
     local first = gear.world.object(1)
     check('control the main hero', first ~= nil and party.control(first))
@@ -184,7 +211,7 @@ gear.task(function()
     local companion = party.companions()[1]
     check('dismiss', companion ~= nil and party.dismiss(companion))
     gear.wait(1)
-    check('one hero again', #party.heroes() == 1)
+    check('one companion fewer', #party.heroes() == (copy and 2 or 1))
     A.screenshot('party-4-done')
     finish()
 end)

@@ -106,6 +106,32 @@ namespace
         return o && readAt(o, kType, type) && type >= 1 && type <= 9 && World::heroClass(id) ? o : 0;
     }
 
+    bool sameOwnerAsLocal(uintptr_t o);
+
+    // A party member: a hero (heroObject), or a mercenary of the local player (a creature whose leader, +0x251, is
+    // one of the local player's heroes) that the local computer runs.
+    uintptr_t memberObject(uint32_t id)
+    {
+        if (const uintptr_t h = heroObject(id))
+        {
+            return h;
+        }
+        if (id <= Party::kLastHeroId)
+        {
+            return 0;
+        }
+        World::Object info;
+        int32_t master = 0;
+        const uintptr_t o = World::objectAddress(id);
+        if (!o || !World::object(id, info) || !info.creature || !readAt(o, kMaster, master) || master < 1 ||
+            master > static_cast<int32_t>(Party::kLastHeroId))
+        {
+            return 0;
+        }
+        const uintptr_t leader = heroObject(static_cast<uint32_t>(master));
+        return leader && sameOwnerAsLocal(leader) && sameOwnerAsLocal(o) ? o : 0;
+    }
+
     bool sameOwnerAsLocal(uintptr_t o)
     {
         uint8_t owner = 0;
@@ -194,6 +220,69 @@ namespace
         DWORD ignored = 0;
         VirtualProtect(s1, 0x1000, old, &ignored);
         return ok;
+    }
+
+    // The backpack tab of the inventory window keeps the hero id it was built for: find it under the UI manager's
+    // in-game windows (their children and the tab panel a window keeps at +0x154) and point it at `id`.
+    bool retargetTab(uintptr_t control, uint32_t id, int depth)
+    {
+        uintptr_t vtable = 0;
+        if (!control || !readAt(control, 0, vtable))
+        {
+            return false;
+        }
+        if (vtable == Addr::cUI_InventoryTab_vtable)
+        {
+            return writeAt(control, 0x154, id) && writeAt(control, 0x158, static_cast<uint16_t>(id));
+        }
+        if (depth <= 0)
+        {
+            return false;
+        }
+        bool found = false;
+        // The inventory window's tab panel (+0x154, a cUI_TabControl) keeps its pages in an inner window at +0x78.
+        uintptr_t panel = 0, inner = 0;
+        if (readAt(control, 0x154, panel) && panel && panel != control)
+        {
+            found = retargetTab(panel, id, depth - 1) || found;
+        }
+        if (readAt(control, 0x78, inner) && inner && inner != control && inner != panel)
+        {
+            found = retargetTab(inner, id, depth - 1) || found;
+        }
+        uintptr_t range[3] = {};
+        if (readAt(control, 0x78, range) && range[0] && range[1] >= range[0] && range[2] >= range[1] &&
+            (range[1] - range[0]) % 4 == 0 && (range[1] - range[0]) / 4 <= 256)
+        {
+            for (uintptr_t p = range[0]; p < range[1]; p += 4)
+            {
+                uintptr_t child = 0;
+                if (readAt(p, 0, child) && child != control)
+                {
+                    found = retargetTab(child, id, depth - 1) || found;
+                }
+            }
+        }
+        return found;
+    }
+
+    bool retargetInventory(uint32_t id)
+    {
+        uintptr_t ui = 0;
+        if (!Addr::cUI_InventoryTab_vtable || !Addr::g_pUiManager || !safeCopy(&ui, Addr::g_pUiManager.get(), sizeof(ui)) || !ui)
+        {
+            return false;
+        }
+        bool found = false;
+        for (int i = 0; i < 23; ++i)
+        {
+            uintptr_t w = 0;
+            if (readAt(ui, 0x80 + i * 4, w) && w)
+            {
+                found = retargetTab(w, id, 3) || found;
+            }
+        }
+        return found;
     }
 
     // Moves the mercenaries (the follower vector, whose members follow and fight for its owner) from one hero to
@@ -368,6 +457,11 @@ namespace
     }
 }
 
+namespace
+{
+    uint32_t freeCompanionId();
+}
+
 void Party::install()
 {
     if (!Addr::cStats_addExperience)
@@ -384,6 +478,14 @@ void Party::frame()
     if (World::networkGame())
     {
         return;
+    }
+    // The backpack page follows the local id (a load puts it back to 1; the UI may be rebuilt).
+    static ULONGLONG nextTab = 0;
+    const uint32_t localNow = World::localId();
+    if (localNow && GetTickCount64() >= nextTab)
+    {
+        nextTab = GetTickCount64() + 2000;
+        retargetInventory(localNow);
     }
     const uintptr_t e = engine();
     const uint32_t local = World::localId();
@@ -435,6 +537,30 @@ std::vector<uint32_t> Party::heroes()
     return out;
 }
 
+std::vector<uint32_t> Party::mercenaries()
+{
+    std::vector<uint32_t> out;
+    for (uint32_t hero : heroes())
+    {
+        const uintptr_t h = heroObject(hero);
+        uintptr_t range[2] = {};
+        if (!h || !readAt(h, kFollowers, range) || !range[0] || range[1] < range[0] || range[1] - range[0] > 9 * 64)
+        {
+            continue;
+        }
+        for (uintptr_t e = range[0]; e + 9 <= range[1]; e += 9)
+        {
+            uint32_t id = 0;
+            if (readAt(e, 0, id) && memberObject(id) && id > kLastHeroId &&
+                std::find(out.begin(), out.end(), id) == out.end())
+            {
+                out.push_back(id);
+            }
+        }
+    }
+    return out;
+}
+
 bool Party::isHero(uint32_t id)
 {
     return heroObject(id) != 0;
@@ -451,14 +577,7 @@ uint32_t Party::recruit(uint32_t heroClass, const World::Position& at, const cha
         error = "no such hero class";
         return 0;
     }
-    uint32_t id = 0;
-    for (uint32_t i = kFirstCompanionId; i <= kLastHeroId && !id; ++i)
-    {
-        if (!World::objectAddress(i) && Inventory::items(i).empty())
-        {
-            id = i;
-        }
-    }
+    const uint32_t id = freeCompanionId();
     if (!id)
     {
         error = "the party is full";
@@ -488,6 +607,208 @@ uint32_t Party::recruit(uint32_t heroClass, const World::Position& at, const cha
     callInitSpells(o + kStats);
     LOG("Party: recruited a hero of class {} as id {}", heroClass, id);
     return id;
+}
+
+namespace
+{
+    std::string narrowPath(const std::wstring& path)
+    {
+        // The engine opens files with the ANSI functions: the short path survives characters the code page lacks.
+        wchar_t shortPath[MAX_PATH * 2] = {};
+        const DWORD n = GetShortPathNameW(path.c_str(), shortPath, static_cast<DWORD>(std::size(shortPath)));
+        const std::wstring& use = n > 0 && n < std::size(shortPath) ? std::wstring(shortPath, n) : path;
+        const int len = WideCharToMultiByte(CP_ACP, 0, use.c_str(), static_cast<int>(use.size()), nullptr, 0, nullptr, nullptr);
+        std::string out(static_cast<size_t>(len > 0 ? len : 0), '\0');
+        if (len > 0)
+        {
+            WideCharToMultiByte(CP_ACP, 0, use.c_str(), static_cast<int>(use.size()), out.data(), len, nullptr, nullptr);
+        }
+        return out;
+    }
+
+    bool callHeroLoad(const char* path, uint32_t id)
+    {
+        __try
+        {
+            return (Addr::heroLoad(path, id, 0) & 0xFF) != 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    int callHeroSave(const char* path)
+    {
+        __try
+        {
+            return Addr::heroSave(path) ? 1 : 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+
+    uint32_t freeCompanionId()
+    {
+        for (uint32_t i = Party::kFirstCompanionId; i <= Party::kLastHeroId; ++i)
+        {
+            if (!World::objectAddress(i) && Inventory::items(i).empty())
+            {
+                return i;
+            }
+        }
+        return 0;
+    }
+}
+
+bool Party::readHeroFile(const std::wstring& path, HeroFile& out)
+{
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE)
+    {
+        return false;
+    }
+    std::vector<uint8_t> head(0x100 + 16 * 12);
+    DWORD got = 0;
+    bool ok = ReadFile(h, head.data(), static_cast<DWORD>(head.size()), &got, nullptr) && got == head.size() &&
+              head[0] == 'A' && head[1] == 'M' && head[2] == 'H' && head[3] == 0x1B;
+    uint8_t c3[0x22C] = {};
+    if (ok)
+    {
+        ok = false;
+        for (int i = 0; i < 16 && !ok; ++i)
+        {
+            uint32_t rec[3];
+            std::memcpy(rec, head.data() + 0x100 + i * 12, sizeof(rec));
+            if (rec[0] == 0xC3 && rec[2] >= sizeof(c3))
+            {
+                LARGE_INTEGER at;
+                at.QuadPart = rec[1];
+                ok = SetFilePointerEx(h, at, nullptr, FILE_BEGIN) && ReadFile(h, c3, sizeof(c3), &got, nullptr) && got == sizeof(c3);
+            }
+        }
+    }
+    CloseHandle(h);
+    if (!ok)
+    {
+        return false;
+    }
+    std::memcpy(&out.level, c3, 4);
+    std::memcpy(&out.heroClass, c3 + 4, 4);
+    const wchar_t* name = reinterpret_cast<const wchar_t*>(c3 + 8);
+    size_t n = 0;
+    while (n < 0x40 && name[n])
+    {
+        ++n;
+    }
+    out.name.assign(name, n);
+    out.path = path;
+    return out.heroClass >= 1 && out.heroClass <= 9 && out.heroClass != 7;
+}
+
+uint32_t Party::importHero(const std::wstring& path, const World::Position& at, const char*& error)
+{
+    if (!available(error))
+    {
+        return 0;
+    }
+    HeroFile file;
+    if (!readHeroFile(path, file))
+    {
+        error = "not a hero file";
+        return 0;
+    }
+    if (!Addr::heroLoad || !Addr::cObjectManager_unlink || !Addr::cObjectManager_pop)
+    {
+        error = "the game's hero file functions were not found";
+        return 0;
+    }
+    const uint32_t id = freeCompanionId();
+    if (!id)
+    {
+        error = "the party is full";
+        return 0;
+    }
+    const uint32_t local = World::localId();
+    const uint32_t made = World::createObject(file.heroClass, at, false, error, id);
+    if (made != id || !World::objectAddress(id))
+    {
+        if (made)
+        {
+            World::destroyObject(made);
+        }
+        if (!error || !*error)
+        {
+            error = "the game did not create the hero";
+        }
+        return 0;
+    }
+    // As the engine's own developer command does it (0x614230): create the hero, load the file into it, then put it
+    // back into the world where it should stand.
+    const std::string ansi = narrowPath(path);
+    uint8_t flag = 0;
+    const bool keepFlag = Addr::g_heroFileFlag && safeCopy(&flag, Addr::g_heroFileFlag.get(), 1);
+    const bool loaded = !ansi.empty() && callHeroLoad(ansi.c_str(), id);
+    if (keepFlag)
+    {
+        safeCopy(Addr::g_heroFileFlag.get(), &flag, 1);
+    }
+    if (!loaded)
+    {
+        World::destroyObject(id);
+        error = "the game could not read the hero file";
+        return 0;
+    }
+    const uintptr_t o = World::objectAddress(id);
+    if (!o)
+    {
+        error = "the hero file did not load";
+        return 0;
+    }
+    // The file may carry another player's id: the companion is the local player's, at its own id.
+    writeAt(o, kId, id);
+    writeAt(o, kOwner, static_cast<uint8_t>(local));
+    const char* placeError = nullptr;
+    World::teleport(id, at, placeError);
+    uint8_t pos[13] = {};
+    if (safeCopy(pos, reinterpret_cast<const void*>(o + kPos), sizeof(pos)))
+    {
+        safeCopy(reinterpret_cast<void*>(o + kHome), pos, sizeof(pos));
+    }
+    LOG("Party: imported a hero of class {} level {} as id {}", file.heroClass, file.level, id);
+    return id;
+}
+
+bool Party::exportHero(const std::wstring& path, const char*& error)
+{
+    if (!available(error))
+    {
+        return false;
+    }
+    if (!Addr::heroSave)
+    {
+        error = "the game's hero file function was not found";
+        return false;
+    }
+    // The engine opens the file itself: make sure it can be created (folder exists).
+    const std::wstring dir = path.substr(0, path.find_last_of(L"\\/"));
+    CreateDirectoryW(dir.c_str(), nullptr);
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE)
+    {
+        error = "cannot write the hero file";
+        return false;
+    }
+    CloseHandle(h);
+    const std::string ansi = narrowPath(path);
+    if (ansi.empty() || callHeroSave(ansi.c_str()) <= 0)
+    {
+        error = "the game could not write the hero file";
+        return false;
+    }
+    return true;
 }
 
 bool Party::dismiss(uint32_t id, const char*& error)
@@ -578,6 +899,10 @@ bool Party::control(uint32_t id, const char*& error)
         writeAt(e, kEngineControlled, id);
     }
     moveFollowers(from, to, id);
+    if (!retargetInventory(id))
+    {
+        LOG("Party: the inventory window's backpack page was not found");
+    }
     if (!refreshShadow(to))
     {
         LOG("Party: the anti-cheat shadow could not be refreshed");
@@ -594,7 +919,7 @@ bool Party::order(uint32_t id, const Order& o, const char*& error)
         error = why;
         return false;
     }
-    const uintptr_t c = heroObject(id);
+    const uintptr_t c = memberObject(id);
     if (!c || !sameOwnerAsLocal(c))
     {
         error = "not a party hero";
@@ -693,7 +1018,7 @@ bool Party::order(uint32_t id, const Order& o, const char*& error)
 bool Party::abilities(uint32_t id, std::vector<Ability>& out)
 {
     out.clear();
-    const uintptr_t c = heroObject(id);
+    const uintptr_t c = memberObject(id);
     uintptr_t range[2] = {};
     if (!c || !readAt(c, kAbilities, range) || !range[0] || range[1] < range[0] || range[1] - range[0] > kAbilitySize * 512)
     {
@@ -717,6 +1042,12 @@ bool Party::abilities(uint32_t id, std::vector<Ability>& out)
         }
     }
     return true;
+}
+
+bool Party::equipment(uint32_t id, uint32_t (&slots)[19])
+{
+    const uintptr_t c = memberObject(id);
+    return c && readAt(c, 0x1A4, slots);
 }
 
 bool Party::combos(uint32_t id, std::vector<Combo>& out)
@@ -797,7 +1128,7 @@ bool Party::setCombo(uint32_t id, uint32_t slot, const std::vector<uint16_t>& ar
 
 bool Party::state(uint32_t id, State& out)
 {
-    const uintptr_t c = heroObject(id);
+    const uintptr_t c = memberObject(id);
     return c && readAt(c, kAction, out.action) && readAt(c, kMovement, out.movement);
 }
 

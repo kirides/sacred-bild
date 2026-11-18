@@ -1268,6 +1268,12 @@ One of the hero's combat arts or spells, nil if it does not know it.
 - `id`: `integer`
 - returns `GearHeroAbility?`
 
+#### `creature:equipment() -> {slot: integer, item: GearItem}[]?`
+
+What a hero wears: its equipment slots that hold an item (the game's slot numbers 0 to 18), nil for other creatures.
+
+- returns `{slot: integer, item: GearItem}[]?`
+
 #### `creature:combos() -> GearHeroCombo[]?`
 
 A hero's combos (the combo master's slots that hold arts), nil for other creatures. Use one with `order_ability(combo.id, target)`.
@@ -1367,6 +1373,12 @@ The player's heroes in the world, the controlled one first (never another player
 
 - returns `Creature[]`
 
+#### `gear.party.mercenaries() -> Creature[]`
+
+The game's own mercenaries that follow the party's heroes (they follow the hero the player controls). The creature orders (`order_move`, `order_attack`, `order_ability`), `abilities`, `action` and `equipment` work for them as for the heroes; their quests and scripts stay the game's.
+
+- returns `Creature[]`
+
 #### `gear.party.leader() -> Creature?`
 
 The hero the player controls (the same as `gear.world.hero()`).
@@ -1387,6 +1399,41 @@ Creates a companion of `class` where the leader stands (or at `opts.x`, `opts.y`
 - `opts`: `GearRecruitOpts` (optional)
 - returns `companion` `Creature?`
 - returns `error` `string?` - `'the party is full'` (ids 3 to 16 taken), or why not.
+
+#### `gear.party.hero_files() -> GearHeroFile[]`
+
+The hero files a companion can come from: the network game's characters (`Save\HeroNN.pax`) and the files `export_hero` wrote into this mod's `heroes` folder. Each file's header is read: call it when a screen opens.
+
+- returns `GearHeroFile[]`
+
+#### `gear.party.recruit_hero(file, opts) -> Creature?, string?`
+
+Brings a hero from a hero file into the party, where the leader stands (or at `opts.x`, `opts.y`): everything it had (level, attributes, skills, combat arts, combos, equipment, backpack) comes along, through the engine's own hero loader. The file stays as it is (the companion is a copy).
+
+- `file`: `string` - `hero_files()[i].file`.
+- `opts`: `GearRecruitOpts` (optional)
+- returns `companion` `Creature?`
+- returns `error` `string?`
+
+#### `gear.party.export_hero(name) -> string?, string?`
+
+Writes the hero the player controls to `heroes\<name>.pax` in this mod's folder (the network game's hero file format, through the engine's own writer), so another savegame can bring it into its party.
+
+- `name`: `string` - Letters, digits, `_`, `-` (others become `_`), at most 48.
+- returns `file` `string?` - The file for `recruit_hero`.
+- returns `error` `string?`
+
+### GearHeroFile
+
+A hero file, as `hero_files` lists it.
+
+| Field | Type | |
+|---|---|---|
+| `file` | `string` | `'save:Hero03.pax'` (the game's Save folder) or `'mod:heroes/<name>.pax'` (this mod's folder). |
+| `name` | `string` | The hero's name. |
+| `class` | `GearClassName` |  (optional) |
+| `class_id` | `integer` |  |
+| `level` | `integer` |  |
 
 #### `gear.party.dismiss(companion) -> boolean?, string?`
 
