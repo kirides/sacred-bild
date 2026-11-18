@@ -99,6 +99,9 @@
 ---@field clipboard GearClipboard The Windows clipboard: copy text out of the game.
 ---@field realm GearRealmApi The online play server (realms): list, switch, add.
 ---@field lookup GearLookup Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window.
+---@field fmt GearFmt Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed).
+---@field toast GearToast Short messages that stack up on the screen and fade; the layout editor moves them.
+---@field store GearStore The mod's own data in JSON files of its folder: load with defaults, save, save when changed.
 ---@field mp GearMp Players of a network game, the host, the mod channel and the `kill` event.
 ---@field net GearNet Custom net messages: named channels between computers and the game server.
 ---@field settings GearSettings This mod's settings (declared in `mod.lua`, changed by the player in the mod manager).
@@ -184,6 +187,15 @@ function gear.wait(seconds) end
 ---@param timeout? number Default 30.
 ---@return boolean satisfied True when `test()` returned true, false after the timeout.
 function gear.wait_until(test, timeout) end
+
+--- A function that calls `fn` with its arguments and catches its errors: the first error of each `where` is logged with its
+--- traceback, later ones are not, and none of them counts against the mod (a mod is switched off after many errors). Use it
+--- for handlers that run every frame: `gear.on('draw', gear.guard('draw', draw))`. Returns fn's first result, nil after an error.
+---@generic F: function
+---@param where string A name for the log line, e.g. `'draw'`.
+---@param fn F
+---@return F
+function gear.guard(where, fn) end
 
 --- A line in `SacredGear.log`, prefixed with the mod's id. Same as `print`.
 ---@param ... any

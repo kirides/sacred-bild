@@ -1766,6 +1766,85 @@ do
     ok(G.world.item_color({id = 50}) == 0xFFF0E040 and G.world.item_color(51) == nil, 'world.item_color')
 end
 
+-- The libraries shipped in the DLL (gear/lua/<name>.lua): loaded on first use, in the mod's environment; gear.guard,
+-- settings.get with a fallback, ui.toggle_panel.
+do
+    local function source(name)
+        local f = io.open('gear/lua/' .. name .. '.lua', 'rb')
+        if not f then return nil end
+        local text = f:read('*a')
+        f:close()
+        return text
+    end
+    local saved_builtin = native.builtin
+    native.builtin = function(name) if name ~= 'modmanager' then return source(name) end end
+    files.libs = {
+        ['mod.lua'] = "return {id = 'libs', name = 'Libs', settings = {{id = 'n', type = 'number', min = 0, max = 10, default = 4}}}",
+        ['data.json'] = '{"a": 1}',
+        ['bad.json'] = 'not json',
+        ['main.lua'] = [[
+            lrec = {gear = gear, before = rawget(gear, 'fmt')}
+            lrec.fmt = gear.fmt
+            lrec.calls = 0
+            lrec.guarded = gear.guard('boom', function(x) lrec.calls = lrec.calls + 1; if x then error('bad') end; return 'fine' end)
+            gear.on('frame', function() end)
+        ]],
+    }
+    state_file = nil
+    local k = new_kernel()
+    k.load()
+    local L = handler_global(k, 'frame', 'lrec')
+    ok(L and L.before == nil and type(L.fmt) == 'table', 'libraries: loaded on first use')
+    local F = L.fmt
+    ok(F.number(1234567) == '1,234,567' and F.number(-1000) == '-1,000' and F.number(999) == '999' and F.number(nil) == '0'
+        and F.number(1234.6, '.') == '1.235', 'fmt.number')
+    ok(F.duration(3725) == '1:02:05' and F.clock(125) == '2:05' and F.span(12) == '12s' and F.span(185) == '3m 05s'
+        and F.span(3720) == '1h 02m' and F.span(2 * 86400 + 3 * 3600) == '2d 03h', 'fmt: times')
+    ok(F.fit(nil) == '' and F.fit('a\nb') == 'a b' and F.fit('abcdefgh', 6) == 'abc...' and F.fit('abc', 6) == 'abc', 'fmt.fit')
+    ok(F.fit('\195\164\195\164\195\164\195\164', 6) == '\195\164...', 'fmt.fit: whole UTF-8 characters')
+    ok(F.plain('\\cFFFF0000Sword\\r ') == 'Sword' and F.plain('a\\xb') == nil and F.plain('a\\xb', true) == 'a\\xb'
+        and F.plain('') == nil, 'fmt.plain')
+    ok(F.count(1, 'kill') == '1 kill' and F.count(2, 'kill') == '2 kills', 'fmt.count')
+    local G = L.gear
+    ok(G.fmt == F, 'libraries: one instance per mod')
+    ok(L.guarded() == 'fine' and L.guarded(true) == nil and L.guarded(true) == nil and L.calls == 3, 'guard: runs, catches')
+    local boom = 0
+    for _, l in ipairs(logs) do if l:find('boom failed', 1, true) then boom = boom + 1 end end
+    ok(boom == 1, 'guard: the first error is logged, once')
+    ok(G.settings.get('n') == 4 and G.settings.get('n', 9) == 4 and G.settings.get('nope', 7) == 7
+        and not pcall(G.settings.get, 'nope'), 'settings.get: a fallback for undeclared ids')
+    ok(G.ui.toggle_panel('p') == false and G.ui.panel_open('p') == false and G.ui.toggle_panel('p') == true, 'ui.toggle_panel')
+    local St = G.store
+    local d, why = St.load('data.json', {})
+    ok(d.a == 1 and why == nil, 'store.load')
+    local d2, why2 = St.load('missing.json', {x = 1})
+    local d3, why3 = St.load('bad.json', {y = 1})
+    ok(d2.x == 1 and why2 == 'missing' and d3.y == 1 and why3 == 'invalid', 'store.load: defaults')
+    ok(St.save('out.json', {b = 2}) == true and files.libs['out.json'] and files.libs['out.json']:find('"b"'), 'store.save')
+    local h = St.file('kept.json', {n = 0}, {every = 0})
+    h.data.n = 5
+    ok(files.libs['kept.json'] == nil, 'store.file: nothing written before a change is saved')
+    h:changed()
+    ok(h:flush() == true and files.libs['kept.json'] and files.libs['kept.json']:find('5'), 'store.file: flush writes a change')
+    ok(St.file('kept.json', {}).data.n == 5, 'store.file: loads what was written')
+    local T = G.toast
+    T.show('Title', nil, 'line', '')
+    T.show({title = 'Second', lines = {'x'}})
+    ok(T.count() == 2, 'toast.show')
+    T.options({max = 1})
+    T.show('Third')
+    ok(T.count() == 1, 'toast: max')
+    T.clear()
+    ok(T.count() == 0, 'toast.clear')
+    ok(G.nothing == nil and G.mod.id == 'libs', 'libraries: other names stay nil')
+    for _ = 1, 3 do k.tick(0.016) end
+    for _, l in ipairs(logs) do
+        if l:find('%[libs%] error') or l:find('gear%.toast') then ok(false, 'library error: ' .. l:sub(1, 300)) end
+    end
+    files.libs = nil
+    native.builtin = saved_builtin
+end
+
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

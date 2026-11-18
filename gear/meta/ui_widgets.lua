@@ -316,6 +316,11 @@ function GearUi.show_panel(id, open) end
 ---@return boolean
 function GearUi.panel_open(id) end
 
+--- Opens a closed panel, closes an open one. Returns whether it is open now.
+---@param id string|integer
+---@return boolean open
+function GearUi.toggle_panel(id) end
+
 -- ## Layout: persistent panels, movable game windows
 
 --: Every panel has the id `mod_id:panel_id`. Where the player drags it (and how large they make it, with

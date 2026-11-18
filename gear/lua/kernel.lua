@@ -2744,6 +2744,12 @@ local function make_ui(mod)
     function ui.panel_open(id)
         return not (panels[id] and panels[id].closed)
     end
+    -- ui.toggle_panel(id) -> open: shows a hidden panel, hides a shown one.
+    function ui.toggle_panel(id)
+        local open = not ui.panel_open(id)
+        ui.show_panel(id, open)
+        return open
+    end
     function ui.panel(id, title, x, y, w, h, opts)
         opts = opts or {}
         local p = panels[id] or {}
@@ -3961,10 +3967,18 @@ local function make_settings_api(mod)
         return native.setting(key)
     end
     -- get(id): the value of a setting this mod declares; an undeclared UPPER_CASE name is a Settings.cfg key and gives that text (nil if absent).
-    function api.get(id)
+    -- get(id, fallback): with a fallback, an undeclared id gives the fallback instead of an error, and so does a nil value.
+    function api.get(id, fallback)
         local d = mod.settings_by_id[id]
-        if not d and type(id) == 'string' and id:match('^[A-Z0-9_]+$') then return native.setting(id) end
-        return setting_value(mod.entry, d or def_of(id))
+        if not d and type(id) == 'string' and id:match('^[A-Z0-9_]+$') then
+            local v = native.setting(id)
+            if v == nil then return fallback end
+            return v
+        end
+        if not d and fallback ~= nil then return fallback end
+        local v = setting_value(mod.entry, d or def_of(id))
+        if v == nil then return fallback end
+        return v
     end
     function api.set(id, value)
         return settings_set(mod.entry, def_of(id), value)
@@ -4624,16 +4638,41 @@ local function make_env(mod)
         if h.event == 'combat.branch' and #list == 0 then native.branch_active(false) end
         if h.event == 'drops.roll' or h.event == 'drops.select' then D.dirty = true end
     end
-    env.gear = gear
-    -- gear.lookup: a library shipped in the DLL (lua/lookup.lua), run in this mod's environment.
-    do
-        local source = native.builtin and native.builtin('lookup')
-        local chunk = source and native.load(source, '@gear/lookup.lua', env)
-        if chunk then
-            local ok, lib = pcall(chunk)
-            if ok then gear.lookup = lib else native.log('[' .. mod.id .. '] gear.lookup: ' .. tostring(lib)) end
+    -- gear.guard(where, fn) -> a function that calls fn and catches its errors: the first error of each `where` is logged,
+    -- later ones are not, and none counts against the mod (a broken draw does not switch the whole mod off).
+    local guard_warned = {}
+    function gear.guard(where, fn)
+        assert(type(fn) == 'function', 'guard(where, fn)')
+        where = tostring(where)
+        return function(...)
+            local ok, err = xpcall(fn, traceback, ...)
+            if not ok and not guard_warned[where] then
+                guard_warned[where] = true
+                log('[%s] %s failed: %s', mod.id, where, tostring(err))
+            end
+            if ok then return err end
         end
     end
+    env.gear = gear
+    -- The libraries shipped in the DLL (lua/<name>.lua): each is run in this mod's environment the first time the mod
+    -- touches gear.<name>, so a mod that never uses one pays nothing for it.
+    local LIBRARIES = {lookup = true, fmt = true, toast = true, store = true}
+    local library_failed = {}
+    setmetatable(gear, {__index = function(t, name)
+        if not LIBRARIES[name] or library_failed[name] then return nil end
+        local source = native.builtin and native.builtin(name)
+        local chunk, err = nil, 'not in this SacredGear.dll'
+        if source then chunk, err = native.load(source, '@gear/' .. name .. '.lua', env) end
+        local ok, lib = false, err
+        if chunk then ok, lib = pcall(chunk) end
+        if not ok or lib == nil then
+            library_failed[name] = true
+            native.log('[' .. mod.id .. '] gear.' .. name .. ': ' .. tostring(lib))
+            return nil
+        end
+        rawset(t, name, lib)
+        return lib
+    end})
     return env
 end
 

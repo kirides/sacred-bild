@@ -34,3 +34,6 @@ IDR_GEAR_KERNEL RCDATA "lua/kernel.lua"
 // The mod manager screen (Lua, loaded by the kernel as a mod of its own).
 IDR_GEAR_MODMANAGER RCDATA "lua/modmanager.lua"
 IDR_GEAR_LOOKUP RCDATA "lua/lookup.lua"
+IDR_GEAR_FMT RCDATA "lua/fmt.lua"
+IDR_GEAR_TOAST RCDATA "lua/toast.lua"
+IDR_GEAR_STORE RCDATA "lua/store.lua"

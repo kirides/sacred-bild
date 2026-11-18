@@ -84,6 +84,10 @@ def main():
     gear |= set(re.findall(r'(?<![\w.])gear\.(\w+)\s*=(?!=)', env))
     ctor = between(env, r'^\s*local gear = \{', r'^\s*\}\s*$', 'the gear table constructor')
     gear |= set(re.findall(r'^\s{8}(\w+)\s*=', ctor, re.M))
+    # the libraries loaded on first use: local LIBRARIES = {lookup = true, ...}
+    libs = re.search(r'local LIBRARIES = (\{[^}]*\})', env)
+    if libs:
+        gear |= keys_of_table_line(libs.group(1))
     compare('gear', gear, members('Gear'))
 
     gear_info = re.search(r'mod = (\{[^\n]*\})', env)
