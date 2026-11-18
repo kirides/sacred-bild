@@ -1,5 +1,6 @@
 #include "chat.h"
 #include "log.h"
+#include "netmsg.h"
 #include "patch.h"
 #include "game/gear_addr.h"
 
@@ -13,7 +14,7 @@
 namespace
 {
     constexpr uint32_t kMainList = 0x14C;       // the UI manager's message list (0075A770: add ecx, 0x14C)
-    constexpr uint32_t kNames = 0x384C;         // net object: the players' names, a wstring {begin, end, cap} per slot
+    constexpr uint32_t kNames = 0x384C;         // the players' object (g_pNetPlayers): the names the chat shows, a wstring {begin, end, cap} per slot
     constexpr size_t kMaxUnits = 2048;
     constexpr size_t kQueueMax = 512;
     constexpr DWORD kHideMs = 500;
@@ -108,7 +109,7 @@ namespace
     {
         __try
         {
-            const uint8_t* net = *Gear::Addr::g_pNet.get();
+            const uint8_t* net = *Gear::Addr::g_pNetPlayers.get();
             if (!net)
             {
                 return false;
@@ -126,11 +127,18 @@ namespace
     {
         std::wstring out;
         WStr s{};
-        if (slot < 1 || slot > 16 || !Gear::Addr::g_pNet || !nameEntry(slot, s) || s.end < s.begin || s.end - s.begin > 64)
+        if (slot < 1 || slot > 16)
         {
             return out;
         }
-        copyWide(s.begin, s.end, out);
+        if (Gear::Addr::g_pNetPlayers && nameEntry(slot, s) && s.begin <= s.end && s.end - s.begin <= 64)
+        {
+            copyWide(s.begin, s.end, out);
+        }
+        if (out.empty())
+        {
+            out = NetMsg::heroName(slot);
+        }
         return out;
     }
 

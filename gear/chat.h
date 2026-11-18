@@ -15,8 +15,8 @@
 //
 // Who sent a chat line: the receive dispatcher's chat case (types 3 private, 4 team, 5 everyone; gear/netmsg.cpp) hands
 // each message to Chat::noteNet before the game formats and adds it (ENG 007ED4A0, on the same thread, at once); the
-// line that ends with that message's text is paired with its type and sender slot (the name as the game shows it, from
-// the net object's names at +0x384C + slot * 12).
+// line that ends with that message's text is paired with its type and sender slot (the name as the game shows it, the
+// players' object's names at +0x384C + slot * 12, else the hero's name).
 namespace Chat
 {
     // Inside the Patch transaction. False if the function was not found (no lines then).

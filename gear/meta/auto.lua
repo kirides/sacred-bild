@@ -201,7 +201,8 @@ function GearAuto.hero_from_server(on) end
 function GearAuto.chat_add(text, channel, color) end
 
 --- Sends a chat message on the network as the game's chat does (a network game only): `'private'` to `target` (a slot),
---- `'team'` or `'global'`. For self tests of `gear.chat` with two instances.
+--- `'team'` or `'global'`. For self tests of `gear.chat`: a private message to the own slot goes out to the game
+--- server and comes back like another player's.
 ---@param kind 'private'|'team'|'global'
 ---@param target integer The slot for `'private'` (0 otherwise).
 ---@param text string At most 127 characters.

@@ -3238,7 +3238,7 @@ Adds a line to the game's message list as the game itself does (through Gear's h
 
 #### `gear.auto.chat_send(kind, target, text) -> boolean`
 
-Sends a chat message on the network as the game's chat does (a network game only): `'private'` to `target` (a slot), `'team'` or `'global'`. For self tests of `gear.chat` with two instances.
+Sends a chat message on the network as the game's chat does (a network game only): `'private'` to `target` (a slot), `'team'` or `'global'`. For self tests of `gear.chat`: a private message to the own slot goes out to the game server and comes back like another player's.
 
 - `kind`: `'private'|'team'|'global'`
 - `target`: `integer` - The slot for `'private'` (0 otherwise).
