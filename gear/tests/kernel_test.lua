@@ -1828,6 +1828,13 @@ do
     ok(G.settings.get('n') == 4 and G.settings.get('n', 9) == 4 and G.settings.get('nope', 7) == 7
         and not pcall(G.settings.get, 'nope'), 'settings.get: a fallback for undeclared ids')
     ok(G.ui.toggle_panel('p') == false and G.ui.panel_open('p') == false and G.ui.toggle_panel('p') == true, 'ui.toggle_panel')
+    G.ui.show_panel('p', false)
+    kernel.tick(0.016)
+    ok(layout_file:find('"open":false', 1, true) and layout_file:find('UI_WND_INVENTORY', 1, true), 'ui.show_panel: the state is kept in the layout')
+    G.ui.persist_panel('p', false)
+    kernel.tick(0.016)
+    ok(not layout_file:find('p":{"open', 1, true), 'ui.persist_panel(false): the state is dropped from the layout')
+    G.ui.show_panel('p', true)
     local St = G.store
     local d, why = St.load('data.json', {})
     ok(d.a == 1 and why == nil, 'store.load')

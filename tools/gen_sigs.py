@@ -171,6 +171,7 @@ SACRED = [
     ('textResources_get', 0x00672C90, 'func'),
     ('g_pFontManager', 0x00CDCA70, 'data'),
     ('g_hasAddon', 0x0182EBEC, 'data'),
+    ('g_gameSettings', 0x0182EE78, 'data'),
     ('g_portalTexts', 0x017EA420, 'data'),
     ('g_characterSlotLocked', 0x017EA3D0, 'data'),
     ('cUI_NetworkInfo_cellRect', 0x006F7130, 'func'),

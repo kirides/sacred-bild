@@ -983,6 +983,11 @@
    "451BBE74": "0182CB6C",
    "451BBE74:sacredreborn.exe": "0182CB6C"
   },
+  "g_gameSettings": {
+   "452F85C7": "0182EE78",
+   "451BBE74": "0182CDF8",
+   "451BBE74:sacredreborn.exe": "0182CDF8"
+  },
   "g_portalTexts": {
    "452F85C7": "017EA420",
    "451BBE74": "017E83A0",
