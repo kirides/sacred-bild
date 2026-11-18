@@ -65,10 +65,14 @@ namespace
         }
     }
 
+    // The engine is only valid while its render thread runs: leaving a game for the main menu ends the thread and the
+    // game then frees the engine, while the menus go on presenting frames from the main thread (logGameState,
+    // Controller and the others ask FrameHooks::engine() every frame). A pointer left behind read freed memory there.
     void __fastcall hookRenderThreadRun(cEngine* engine)
     {
         g_engine = engine;
         g_origRenderThreadRun(engine);
+        g_engine = nullptr;
     }
 
     int64_t qpcNow()

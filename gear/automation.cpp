@@ -453,6 +453,16 @@ namespace
         return TRUE;
     }
 
+    // A new or newly shown window lands on top of the z-order, over whatever the player is working in. Isolated
+    // runs send it to the bottom without activating it (HWND_BOTTOM is no topmost, so nothing is covered).
+    void sendBehind(HWND w)
+    {
+        if (w && g_origSetWindowPos)
+        {
+            g_origSetWindowPos(w, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    }
+
     BOOL WINAPI hookShowWindow(HWND w, int cmd)
     {
         if (isolated())
@@ -465,7 +475,12 @@ namespace
             default: break;
             }
         }
-        return g_origShowWindow(w, cmd);
+        const BOOL result = g_origShowWindow(w, cmd);
+        if (isolated() && cmd != SW_HIDE && ownWindow(w) && !(GetWindowLongW(w, GWL_STYLE) & WS_CHILD))
+        {
+            sendBehind(w);
+        }
+        return result;
     }
 
     BOOL WINAPI hookSetWindowPos(HWND w, HWND after, int x, int y, int cx, int cy, UINT flags)
@@ -473,7 +488,7 @@ namespace
         if (isolated())
         {
             flags |= SWP_NOACTIVATE;
-            if (after == HWND_TOPMOST || after == HWND_TOP)
+            if (after == HWND_TOPMOST || after == HWND_TOP || after == HWND_NOTOPMOST)
             {
                 flags |= SWP_NOZORDER;      // not over the player's windows
             }
@@ -499,6 +514,7 @@ namespace
             g_origCreateWindowExA(exStyle, cls, name, style, x, y, w, h, parent, menu, instance, param);
         if (created && isolated() && !(style & WS_CHILD))
         {
+            sendBehind(created);
             HWND v = g_virtualForeground.load();
             if (!v || !IsWindow(v))
             {
