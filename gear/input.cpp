@@ -10,6 +10,7 @@ namespace
 {
     std::mutex g_lock;
     std::vector<Input::Rule> g_rules;
+    std::atomic<bool> g_anyPoll{false};
     std::vector<Input::Event> g_events;
     constexpr size_t kEventsMax = 256;
 
@@ -143,6 +144,12 @@ void Input::setRules(std::vector<Rule> rules)
 {
     std::lock_guard guard(g_lock);
     g_rules = std::move(rules);
+    bool any = false;
+    for (const Rule& r : g_rules)
+    {
+        any = any || r.poll;
+    }
+    g_anyPoll.store(any);
 }
 
 std::vector<Input::Event> Input::takeEvents()
@@ -296,23 +303,80 @@ void Input::filter(MSG& m, bool consume)
     {
         return;
     }
+    const int to = rule->poll ? 0 : rule->to;
     if (consume)
     {
-        g_held[vk] = {rule->to, rule->id};
+        g_held[vk] = {to, rule->id};
         note(rule->id, true, repeat);
-        if (rule->to)
+        if (to)
         {
-            g_charVk = rule->to;
+            g_charVk = to;
             g_charUntil = GetTickCount64() + 100;
         }
     }
-    if (rule->to)
+    if (to)
     {
-        asKey(m, rule->to, true, repeat);
+        asKey(m, to, true, repeat);
         g_hiding.store(true, std::memory_order_relaxed);
     }
     else
     {
         m.message = WM_NULL;
     }
+}
+
+bool Input::polled(int vk, bool real)
+{
+    if (!g_anyPoll.load(std::memory_order_relaxed))
+    {
+        return real;
+    }
+    std::vector<Rule> rules;
+    {
+        std::lock_guard guard(g_lock);
+        rules = g_rules;
+    }
+    bool mapped = false, released = false;
+    for (const Rule& r : rules)
+    {
+        if (!r.poll)
+        {
+            continue;
+        }
+        if (r.to == vk)
+        {
+            mapped = true;
+        }
+        else if (!r.to && r.from == vk)
+        {
+            released = true;
+        }
+    }
+    if (!mapped && !released)
+    {
+        return real;
+    }
+    if (!context())
+    {
+        return real;
+    }
+    if (mapped)
+    {
+        const bool ctrl = Ui::keyDown(VK_CONTROL), shift = Ui::keyDown(VK_SHIFT), alt = Ui::keyDown(VK_MENU);
+        for (const Rule& r : rules)
+        {
+            if (!r.poll || r.to != vk || !Ui::keyDown(r.from))
+            {
+                continue;
+            }
+            // The modifiers named must be the ones held, not counting the key itself when it is a modifier.
+            const bool c = r.from == VK_CONTROL ? r.ctrl : ctrl, s = r.from == VK_SHIFT ? r.shift : shift,
+                       a = r.from == VK_MENU ? r.alt : alt;
+            if (r.anyModifiers || (r.ctrl == c && r.shift == s && r.alt == a))
+            {
+                return true;
+            }
+        }
+    }
+    return released ? false : real && !mapped;
 }

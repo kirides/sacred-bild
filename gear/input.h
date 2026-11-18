@@ -25,6 +25,10 @@ namespace Input
         bool alt = false;
         bool anyModifiers = false;
         int to = 0;             // the game's key; 0: swallow the input
+        // The game reads some keys by polling (Alt shows names, Ctrl stands still, numpad +/- zoom), not through messages.
+        // poll with `to`: the game's poll of key `to` sees `from` (the messages of `from` are swallowed); poll without `to`:
+        // the game's poll of key `from` sees it released.
+        bool poll = false;
     };
 
     // Replaces all rules (any thread).
@@ -47,6 +51,8 @@ namespace Input
     // keyblock.cpp's hooks, for every message the game fetches: may turn it into another (a mouse button into a key)
     // or into WM_NULL. `consume`: the message is being taken off the queue.
     void filter(MSG& msg, bool consume);
+    // keyblock.cpp's hooks of the game's key state queries: what the game should see for `vk` (`real`: the key's state).
+    bool polled(int vk, bool real);
     // While the message the game handles now was made by a rule, the modifiers look released to its key queries.
     bool hidingModifiers();
 }

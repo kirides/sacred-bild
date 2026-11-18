@@ -11,12 +11,13 @@
 --: open; elsewhere every key is the game's own. Inputs are keys (the names of `gear.ui.key_pressed`, with `f13` to
 --: `f24` for the extra keys of mice and keyboards) and the mouse buttons `mouse3` (middle), `mouse4` and `mouse5`
 --: (the side buttons), alone or with `ctrl+`, `shift+` and `alt+`; the modifiers named must be the only ones held.
---: Mouse buttons 1 and 2 and Esc cannot be rebound. The declared keys of `mod.lua` take the same names, so the mod
+--: A modifier alone is a binding too (`alt`), for the keys the game polls. Mouse buttons 1 and 2 and Esc cannot be rebound. The declared keys of `mod.lua` take the same names, so the mod
 --: manager's rebinding screen (F11, with the controller's key picker) offers them.
 
 ---@class GearInputRule
 ---@field from string The input: `'x'`, `'f13'`, `'mouse4'`, `'shift+z'`.
----@field to? string The game's key it becomes (a key name without modifiers); not with `block`.
+---@field to? string The game's key it becomes (a key name without modifiers); not with `block`. `ctrl`, `shift`, `alt`, `add` and `subtract` are keys the game polls (Alt shows names, Ctrl attacks in place, numpad +/- zoom): its poll sees the input held instead, and the input's messages go nowhere.
+---@field release? string Instead of the others: the game's poll of this polled key (`ctrl`, `shift`, `alt`, `add`, `subtract`) sees it released (its own key of an action moved elsewhere).
 ---@field block? boolean The input does nothing in game (with any modifiers held); the original key of a moved action.
 ---@field id? string Reports the press and release of this input to the handler of `gear.input.on`.
 

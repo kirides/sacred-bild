@@ -3683,7 +3683,8 @@ local function parse_binding(text)
     if #parts == 0 then return nil end
     local key = parts[#parts]
     local vk = UI_VK[key]
-    if not vk or MOD_ALIAS[key] or key == 'escape' then return nil end
+    -- A modifier alone is a binding too (Alt shows the names, Ctrl stands still): only for what the game polls.
+    if not vk or (MOD_ALIAS[key] and #parts > 1) or key == 'escape' then return nil end
     local b = {key = key, vk = vk}
     for i = 1, #parts - 1 do
         local m = MOD_ALIAS[parts[i]]
@@ -3998,7 +3999,9 @@ local function make_keys_api(mod)
 end
 
 -- gear.input: the game's own keys, remapped (gear/input.cpp). State lives in `uis` (the main chunk is at its locals limit).
-uis.input = {rules = {}, handlers = {}, dirty = false, owned = {}}
+uis.input = {rules = {}, handlers = {}, dirty = false, owned = {},
+    -- keys the game reads by polling, not through key messages
+    POLLED = {ctrl = 0x11, control = 0x11, shift = 0x10, alt = 0x12, add = 0x6B, subtract = 0x6D}}
 function uis.make_input(mod)
     local api = {}
     local function vk_of(name, what)
@@ -4018,23 +4021,37 @@ function uis.make_input(mod)
         local list = {}
         for i, r in ipairs(rules) do
             assert(type(r) == 'table', 'rule ' .. i .. ' must be a table')
+            if r.release then
+                -- {release = 'alt'}: the game's own poll of that key sees it released
+                local vk = uis.input.POLLED[tostring(r.release):lower()]
+                if not vk then error('rule ' .. i .. ': release must be ctrl, shift, alt, add or subtract', 2) end
+                list[#list + 1] = {from = vk, poll = true, any = true, id = ''}
+                goto continue
+            end
             local b = parse_binding(r.from)
             if not b then error('rule ' .. i .. ': from is not a key: ' .. tostring(r.from), 2) end
             local entry = {from = b.vk, ctrl = b.ctrl, shift = b.shift, alt = b.alt, id = r.id and (mod.id .. ' ' .. r.id) or ''}
             if r.block then
                 entry.any = true
             else
-                entry.to = vk_of(r.to, 'rule ' .. i .. ': to')
+                local to = tostring(r.to):lower()
+                if uis.input.POLLED[to] then
+                    -- a key the game polls: its poll sees the input (the input's messages go nowhere)
+                    entry.to, entry.poll = uis.input.POLLED[to], true
+                else
+                    entry.to = vk_of(r.to, 'rule ' .. i .. ': to')
+                end
             end
             entry.owns = not (b.ctrl or b.shift or b.alt) and b.key or nil
             -- "this key is that same key" changes nothing, unless events are wanted: it only keeps the key from the game's
             -- other uses for the mod (see the conflicts)
-            if not (entry.to == entry.from and not (entry.ctrl or entry.shift or entry.alt) and entry.id == '') then
+            if entry.poll or not (entry.to == entry.from and not (entry.ctrl or entry.shift or entry.alt) and entry.id == '') then
                 list[#list + 1] = entry
             elseif entry.owns then
                 list.owned = list.owned or {}
                 list.owned[entry.owns] = true
             end
+            ::continue::
         end
         uis.input.rules[mod] = (#list > 0 or list.owned) and list or nil
         uis.input.dirty = true
@@ -4960,8 +4977,9 @@ end
 
 -- Rebinding: capture_start() remembers which keys are down; capture() then returns the binding ('ctrl+m') of the first
 -- key pressed since, or nil.
-local capture_keys, capture_prev = nil, {}
+local capture_keys, capture_prev, capture_alone = nil, {}, {}
 function admin.capture_start()
+    capture_alone = {}
     if not capture_keys then
         capture_keys = {}
         local names = {}
@@ -4986,7 +5004,19 @@ function admin.capture()
         if down and not capture_prev[k.vk] and not hit then hit = k end
         capture_prev[k.vk] = down
     end
-    if not hit then return nil end
+    if not hit then
+        -- A modifier pressed and let go on its own is the binding ('alt'): for what the game polls.
+        for _, m in ipairs(MOD_ORDER) do
+            local down = native.key_down(UI_VK[m]) == true
+            if down then capture_alone[m] = true
+            elseif capture_alone[m] then
+                capture_alone = {}
+                return m
+            end
+        end
+        return nil
+    end
+    capture_alone = {}
     local parts = {}
     for _, m in ipairs(MOD_ORDER) do
         if native.key_down(UI_VK[m]) then parts[#parts + 1] = m end

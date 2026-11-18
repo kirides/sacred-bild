@@ -2060,6 +2060,9 @@ namespace
                 lua_getfield(L, -1, "any");
                 r.anyModifiers = lua_toboolean(L, -1) != 0;
                 lua_pop(L, 1);
+                lua_getfield(L, -1, "poll");
+                r.poll = lua_toboolean(L, -1) != 0;
+                lua_pop(L, 1);
                 if (r.from > 0 && r.from < 256)
                 {
                     rules.push_back(std::move(r));

@@ -138,13 +138,23 @@ namespace
     SHORT WINAPI hookAsync(int vk)
     {
         const SHORT real = g_origAsync(vk);
-        return hide(vk, (real & 0x8000) != 0) ? SHORT(0) : real;
+        if (hide(vk, (real & 0x8000) != 0))
+        {
+            return SHORT(0);
+        }
+        const bool down = Input::polled(vk, (real & 0x8000) != 0);
+        return down == ((real & 0x8000) != 0) ? real : (down ? SHORT(0x8000) : SHORT(0));
     }
 
     SHORT WINAPI hookState(int vk)
     {
         const SHORT real = g_origState(vk);
-        return hide(vk, (real & 0x8000) != 0) ? SHORT(0) : real;
+        if (hide(vk, (real & 0x8000) != 0))
+        {
+            return SHORT(0);
+        }
+        const bool down = Input::polled(vk, (real & 0x8000) != 0);
+        return down == ((real & 0x8000) != 0) ? real : (down ? SHORT(0x8000) : SHORT(0));
     }
 
     BOOL WINAPI hookKeyboard(PBYTE keys)
@@ -157,6 +167,15 @@ namespace
                 if (hide(i, (keys[i] & 0x80) != 0))
                 {
                     keys[i] = 0;
+                }
+                else
+                {
+                    const bool real = (keys[i] & 0x80) != 0;
+                    const bool down = Input::polled(i, real);
+                    if (down != real)
+                    {
+                        keys[i] = down ? 0x80 : 0;
+                    }
                 }
             }
         }
