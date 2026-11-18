@@ -3,6 +3,7 @@
 #   src/ddraw9/skin.hlsl (both variants) -> src/ddraw9/skin_shaders.inc
 #   src/ddraw9/ground.hlsl               -> src/ddraw9/ground_shaders.inc
 #   src/ddraw9/smaa.hlsl (vs_3_0/ps_3_0, low/medium/high presets) -> src/ddraw9/smaa_shaders.inc
+#   src/ddraw9/sharp.hlsl (ps_2_a, the world's sharp bilinear sampling) -> src/ddraw9/sharp_shaders.inc
 # Usage: python tools/gen_shaders.py   (FXC = path to fxc.exe if it is not found in the Windows Kits folder)
 import glob, os, subprocess, sys, tempfile
 
@@ -22,6 +23,7 @@ SHADERS = [
     ('skin.hlsl', 'skin_shaders.inc', [('kSkinShader', []), ('kSkinShaderDiffuse', ['/D', 'DIFFUSE=1'])]),
     ('ground.hlsl', 'ground_shaders.inc', [('kGroundShader', [])]),
     ('smaa.hlsl', 'smaa_shaders.inc', SMAA_VARIANTS),
+    ('sharp.hlsl', 'sharp_shaders.inc', [('kSharpShader', [], 'ps_2_a', 'main')]),
 ]
 
 

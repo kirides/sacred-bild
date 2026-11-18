@@ -169,6 +169,11 @@ namespace DDraw9
         // Creates the ground shader, its declaration and the quad index buffer once; false if the device can't.
         bool initGround();
         void releaseGround();
+        // Sharp bilinear sampling (sharp.hlsl): before a world draw, binds the pixel shader if the draw's stage 0 is one
+        // it reproduces and sets the samplers of stages whose filter is Config::Render::sharpFilter (bilinear with the
+        // shader, point without), else unbinds it.
+        void updateSharp();
+        bool sharpEligible(const char*& reason) const;
         void recapture(StateBlock& block) const;
         void apply(const StateBlock& block);
         StateBlock* stateBlock(DWORD handle);
@@ -251,6 +256,15 @@ namespace DDraw9
         d9::IDirect3DIndexBuffer9* m_quadIndices = nullptr;     // 0 1 2 2 1 3 for every 4 vertices
         float m_groundConstants[2][4] = {};
         bool m_groundConstantsSet = false;
+
+        // Sharp bilinear.
+        int m_sharpState = 0;                   // 0 not tried, 1 ready, -1 unavailable
+        d9::IDirect3DPixelShader9* m_sharpShader = nullptr;
+        bool m_psKnown = false;                 // m_psBound is what Direct3D 9 has
+        d9::IDirect3DPixelShader9* m_psBound = nullptr;
+        float m_sharpConstants[8][4] = {};
+        bool m_sharpConstantsSet = false;
+        std::vector<const char*> m_sharpLogged; // fall-back reasons already logged
 
         std::vector<uint8_t> m_scratch;
         std::vector<std::unique_ptr<StateBlock>> m_stateBlocks;

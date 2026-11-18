@@ -254,7 +254,10 @@ void ConfigFile::load(const std::wstring& gameDir)
             : _wcsicmp(smaa.c_str(), L"High") == 0               ? 3
                                                                  : 0;
     }
-    Config::render.bilinear = _wcsicmp(readString(ini, L"Render", L"TextureFilter", L"Point").c_str(), L"Bilinear") == 0;
+    {
+        const std::wstring filter = readString(ini, L"Render", L"TextureFilter", L"Point");
+        Config::render.textureFilter = _wcsicmp(filter.c_str(), L"Sharp") == 0 ? 1 : _wcsicmp(filter.c_str(), L"Bilinear") == 0 ? 2 : 0;
+    }
     Config::render.gpuSkinning = readInt(ini, L"Render", L"GpuSkinning", Config::render.gpuSkinning) != 0;
     Config::render.offscreenPoses = readInt(ini, L"Render", L"OffscreenPoses", Config::render.offscreenPoses);
     Config::render.asyncAnimation = readInt(ini, L"Render", L"AsyncAnimation", Config::render.asyncAnimation) != 0;
@@ -304,7 +307,7 @@ void ConfigFile::load(const std::wstring& gameDir)
         Config::ui.scaleMenus ? "Full" : "InGame", Config::ui.linearFilter, Config::ui.anchor,
         Config::render.textureBudgetMB, Config::render.batch, Config::render.batchNoClip, Config::render.batchVertexBuffer,
         Config::render.batchModels, Config::render.batchGround, Config::render.batchSprites, Config::render.groundMesh, Config::render.gpuSkinning,
-        std::array{"off", "low", "medium", "high"}[std::clamp(Config::render.smaa, 0, 3)], Config::render.bilinear ? "bilinear" : "point", Config::render.offscreenPoses, Config::render.asyncAnimation, Config::render.animationThreads, Config::render.recordIndex, Config::render.soundLock, Config::render.fastMath, Config::render.warmFileCache, Config::render.atlas, Config::render.atlasPageSize, Config::render.atlasPages,
+        std::array{"off", "low", "medium", "high"}[std::clamp(Config::render.smaa, 0, 3)], std::array{"point", "sharp", "bilinear"}[std::clamp(Config::render.textureFilter, 0, 2)], Config::render.offscreenPoses, Config::render.asyncAnimation, Config::render.animationThreads, Config::render.recordIndex, Config::render.soundLock, Config::render.fastMath, Config::render.warmFileCache, Config::render.atlas, Config::render.atlasPageSize, Config::render.atlasPages,
         Config::render.atlasMaxTextureSize, Config::screenshot.jpeg ? "jpg" : "png", Config::net.relay, Config::net.port, Config::net.hosts, Config::net.noDelay, Config::net.joinTimeout, Config::net.udp, Config::net.matchmaker, Config::net.publish, Config::net.preferIpv6 ? "IPv6" : "IPv4", Config::debug.d3dStats, Config::debug.profiler, Config::debug.profilerIntervalUs, Config::debug.uiTrace, Config::debug.crashDump, Config::debug.movieFallback, Config::debug.skinCheck, Config::debug.animationCheck);
     LOG("Config: Controller Enabled={} Deadzone={} CursorSpeed={} MoveRadius={} AimRange={} AimCone={} ArtClick={} Walk={} Prompts={}",
         Config::controller.enabled, Config::controller.deadzone, Config::controller.cursorSpeed, Config::controller.moveRadius,

@@ -5,6 +5,7 @@
 #include "ddraw9/surface.h"
 #include "ddraw9/vertex_buffer.h"
 #include "render/fvf.h"
+#include "config/render.h"
 #include "log.h"
 
 #include <intrin.h>
@@ -21,6 +22,8 @@ namespace DDraw9
     namespace
     {
         const void* g_deviceVtable = nullptr;
+
+#include "ddraw9/sharp_shaders.inc"
 
         // Direct3D 7 render states that Direct3D 9 has under the same number with the same meaning.
         bool sharedRenderState(DWORD state)
@@ -252,6 +255,10 @@ namespace DDraw9
         }
         releaseSkin();
         releaseGround();
+        if (m_sharpShader)
+        {
+            m_sharpShader->Release();
+        }
         m_dev->Release();
         m_ddraw->Release();
     }
@@ -636,6 +643,149 @@ namespace DDraw9
             m_fvf9 = fvf;
             m_dev->SetFVF(fvf);
         }
+        updateSharp();
+    }
+
+    bool Device::sharpEligible(const char*& reason) const
+    {
+        const DWORD sharp = static_cast<DWORD>(Config::Render::sharpFilter);
+        auto arg = [](DWORD a) { return a == D3DTA_DIFFUSE || a == D3DTA_CURRENT || a == D3DTA_TEXTURE || a == D3DTA_TFACTOR; };
+        auto op = [](DWORD o) { return o >= D3DTOP_SELECTARG1 && o <= D3DTOP_ADD; };    // SELECTARG1 .. ADD
+        reason = nullptr;
+        const bool second = m_tss[1][D3DTSS_COLOROP] != D3DTOP_DISABLE;
+        for (DWORD stage = 0; stage < (second ? 2u : 1u) && !reason; ++stage)
+        {
+            const DWORD* s = m_tss[stage];
+            if (!m_textures[stage] || !m_textures9[stage])
+            {
+                reason = "no texture in an enabled stage";
+            }
+            else if (m_textures[stage]->width() == 0 || m_textures[stage]->height() == 0)
+            {
+                reason = "texture without a size";
+            }
+            else if (s[D3DTSS_MAGFILTER] != sharp || s[D3DTSS_MINFILTER] != sharp)
+            {
+                reason = "a stage with a filter of its own";
+            }
+            else if (!op(s[D3DTSS_COLOROP]) || !op(s[D3DTSS_ALPHAOP]))
+            {
+                reason = "color or alpha operation other than SELECTARG1/2, MODULATE(2X/4X), ADD";
+            }
+            else if (!arg(s[D3DTSS_COLORARG1]) || !arg(s[D3DTSS_COLORARG2]) || !arg(s[D3DTSS_ALPHAARG1]) || !arg(s[D3DTSS_ALPHAARG2]))
+            {
+                reason = "texture argument with a modifier or the specular color";
+            }
+            else if (s[D3DTSS_TEXTURETRANSFORMFLAGS] & D3DTTFF_PROJECTED)
+            {
+                reason = "projected texture coordinates";
+            }
+        }
+        if (!reason && m_tss[2][D3DTSS_COLOROP] != D3DTOP_DISABLE && second)
+        {
+            reason = "stage 2 in use";
+        }
+        else if (!reason && m_rs[D3DRENDERSTATE_FOGENABLE])
+        {
+            reason = "fog";
+        }
+        return !reason;
+    }
+
+    void Device::updateSharp()
+    {
+        const DWORD sharp = static_cast<DWORD>(Config::Render::sharpFilter);
+        bool sharpStage = false;
+        for (DWORD stage = 0; stage < 2; ++stage)
+        {
+            sharpStage = sharpStage || m_tss[stage][D3DTSS_MAGFILTER] == sharp || m_tss[stage][D3DTSS_MINFILTER] == sharp;
+        }
+        d9::IDirect3DPixelShader9* wanted = nullptr;
+        if (sharpStage)
+        {
+            if (m_sharpState == 0)
+            {
+                const d9::D3DCAPS9& caps = Gpu::caps();
+                // ps_2_a: derivative instructions (D3DPS20CAPS_GRADIENTINSTRUCTIONS) and the instruction count.
+                m_sharpState = -1;
+                if (caps.PixelShaderVersion >= D3DPS_VERSION(2, 0) && (caps.PS20Caps.Caps & 0x2) &&
+                    SUCCEEDED(m_dev->CreatePixelShader(reinterpret_cast<const DWORD*>(kSharpShader), &m_sharpShader)))
+                {
+                    m_sharpState = 1;
+                    LOG("Direct3D 9: sharp bilinear texture sampling: ready");
+                }
+                else
+                {
+                    LOG("Direct3D 9: sharp bilinear texture sampling: off (no ps_2_a), world textures are point sampled");
+                }
+            }
+            const char* reason = nullptr;
+            if (m_sharpState == 1)
+            {
+                if (sharpEligible(reason))
+                {
+                    wanted = m_sharpShader;
+                }
+                else if (std::find(m_sharpLogged.begin(), m_sharpLogged.end(), reason) == m_sharpLogged.end())
+                {
+                    m_sharpLogged.push_back(reason);
+                    LOG("Direct3D 9: sharp bilinear: point sampled draws: {}", reason);
+                }
+            }
+            // The samplers: bilinear where the shader works, point where it doesn't.
+            for (DWORD stage = 0; stage < 2; ++stage)
+            {
+                const DWORD filter = wanted && (stage == 0 || m_tss[1][D3DTSS_COLOROP] != D3DTOP_DISABLE) ? d9::D3DTEXF_LINEAR
+                                                                                                 : d9::D3DTEXF_POINT;
+                if (m_tss[stage][D3DTSS_MAGFILTER] == sharp)
+                {
+                    setSamplerState9(stage, d9::D3DSAMP_MAGFILTER, filter);
+                }
+                if (m_tss[stage][D3DTSS_MINFILTER] == sharp)
+                {
+                    setSamplerState9(stage, d9::D3DSAMP_MINFILTER, filter);
+                }
+            }
+        }
+        if (wanted)
+        {
+            const DWORD factor = m_rs[D3DRENDERSTATE_TEXTUREFACTOR];
+            float constants[8][4] = {};
+            for (DWORD stage = 0; stage < 2; ++stage)
+            {
+                const DWORD* s = m_tss[stage];
+                const Surface* texture = m_textures[stage];
+                const bool used = stage == 0 || s[D3DTSS_COLOROP] != D3DTOP_DISABLE;
+                const float w = used ? static_cast<float>(texture->width()) : 1.0f;
+                const float h = used ? static_cast<float>(texture->height()) : 1.0f;
+                const float size[4] = {w, h, 1.0f / w, 1.0f / h};
+                const float color[4] = {static_cast<float>(s[D3DTSS_COLOROP]), static_cast<float>(s[D3DTSS_COLORARG1]),
+                    static_cast<float>(s[D3DTSS_COLORARG2]), 0};
+                const float alpha[4] = {static_cast<float>(s[D3DTSS_ALPHAOP]), static_cast<float>(s[D3DTSS_ALPHAARG1]),
+                    static_cast<float>(s[D3DTSS_ALPHAARG2]), 0};
+                const UINT base = stage == 0 ? 0 : 4;
+                std::memcpy(constants[base], size, sizeof(size));
+                std::memcpy(constants[base + 1], color, sizeof(color));
+                std::memcpy(constants[base + 2], alpha, sizeof(alpha));
+            }
+            constants[3][0] = ((factor >> 16) & 255) / 255.0f;
+            constants[3][1] = ((factor >> 8) & 255) / 255.0f;
+            constants[3][2] = (factor & 255) / 255.0f;
+            constants[3][3] = (factor >> 24) / 255.0f;
+            constants[7][0] = m_rs[D3DRENDERSTATE_SPECULARENABLE] ? 1.0f : 0.0f;
+            if (!m_sharpConstantsSet || std::memcmp(constants, m_sharpConstants, sizeof(constants)) != 0)
+            {
+                m_dev->SetPixelShaderConstantF(0, &constants[0][0], 8);
+                std::memcpy(m_sharpConstants, constants, sizeof(constants));
+                m_sharpConstantsSet = true;
+            }
+        }
+        if (!m_psKnown || wanted != m_psBound)
+        {
+            m_dev->SetPixelShader(wanted);
+            m_psBound = wanted;
+            m_psKnown = true;
+        }
     }
 
     void Device::syncOverlay()
@@ -646,6 +796,8 @@ namespace DDraw9
             return;
         }
         m_overlayEpoch = epoch;
+        m_psKnown = false;
+        m_sharpConstantsSet = false;
         // What was set on Direct3D 9 (shadowed to skip repeats) is set again, whatever the overlay's state block
         // did or did not bring back.
         for (DWORD state = 1; state < kRenderStates; ++state)

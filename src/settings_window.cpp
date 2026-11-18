@@ -246,11 +246,14 @@ namespace
                  L"edges and cost a little more GPU time. Needs the SacredBild (Direct3D 9) renderer.");
 
         ui.combo(L"Texture filtering:", {L"Render", L"TextureFilter"},
-              {{L"Point (original, sharp)", L"Point"}, {L"Bilinear (smoother when zoomed in)", L"Bilinear"}},
-              Config::render.bilinear ? L"Bilinear" : L"Point")
+              {{L"Point (original, sharp)", L"Point"}, {L"Sharp (crisp texels, soft edges)", L"Sharp"},
+               {L"Bilinear (smoother when zoomed in)", L"Bilinear"}},
+              std::array{L"Point", L"Sharp", L"Bilinear"}[std::clamp(Config::render.textureFilter, 0, 2)])
             .tip(L"How the game world's textures are sampled. Point is the original look: sharp, blocky when zoomed in. "
-                 L"Bilinear smooths the ground and sprites when zoomed in, but can show faint seams or dark fringes where a "
-                 L"texture sheet's neighbouring images or colour-keyed edges blend in. The interface follows 'Smooth UI scaling'.");
+                 L"Sharp keeps the texels crisp and softens only the edges between them (SacredBild Direct3D 9 renderer; "
+                 L"draws it can't do that way stay point sampled). Bilinear smooths the ground and sprites when zoomed in, "
+                 L"but can show faint seams or dark fringes where a texture sheet's neighbouring images or colour-keyed "
+                 L"edges blend in. The interface follows 'Smooth UI scaling'.");
 
         ui.page(L"Advanced");
         ui.group(L"Frame timing");

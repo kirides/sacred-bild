@@ -7,6 +7,7 @@
 #include "game/ui_state.h"
 #include "game/ui_windows.h"
 #include "render/fvf.h"
+#include "config/ddraw.h"
 #include "config/render.h"
 #include "config/ui.h"
 #include "log.h"
@@ -286,7 +287,17 @@ DWORD DeviceProxy::uiFilter(DWORD value) const
 
 DWORD DeviceProxy::worldFilter(DWORD value) const
 {
-    return Config::render.bilinear && value == D3DTFG_POINT ? D3DTFG_LINEAR : value;
+    if (value != D3DTFG_POINT)
+    {
+        return value;
+    }
+    // Sharp bilinear is the Direct3D 9 backend's: it samples with a pixel shader where it can and with points where
+    // it can't (D3DTFG_POINT and D3DTFN_POINT are both 1, so one value serves both filters).
+    if (Config::render.textureFilter == 1)
+    {
+        return Config::ddraw.d3d9 ? static_cast<DWORD>(Config::Render::sharpFilter) : value;
+    }
+    return Config::render.textureFilter == 2 ? D3DTFG_LINEAR : value;
 }
 
 void DeviceProxy::beginUi()
