@@ -152,11 +152,27 @@ namespace
                locateAbilities(out, Gear::Addr::abilityTable2First.get(), Gear::Addr::abilityTable2End.get(), kAbility2Stride);
     }
 
+    // Region kill table: 32 static records of 0x40 bytes (record 0 unused). +0x30 the kills a region needs, +0x34 the boss
+    // flag, +0x38 the kills left (the boss comes when it reaches 0), +0x3C the region id.
+    constexpr size_t kRegionStride = 0x40;
+    constexpr size_t kRegionCount = 32;
+
+    bool locateRegions(Span& out)
+    {
+        if (!Gear::Addr::regionTable)
+        {
+            return false;
+        }
+        out = {reinterpret_cast<uintptr_t>(Gear::Addr::regionTable.get()), kRegionCount};
+        return true;
+    }
+
     constexpr Table kTables[] = {
         {"creature_types", kCreatureStride, &locateCreatureTypes, false},
         {"object_types", kObjectTypeStride, &locateObjectTypes, false},
         {"ability_t1", kAbility1Stride, &locateAbility1, true},
         {"ability_t2", kAbility2Stride, &locateAbility2, true},
+        {"regions", kRegionStride, &locateRegions, true},
     };
 
     const Table* find(std::string_view name)

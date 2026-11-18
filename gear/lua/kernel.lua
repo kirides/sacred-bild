@@ -401,6 +401,52 @@ end
 setmetatable(abilities, abilities_mt)
 data.abilities = abilities
 
+---------------------------------------------------------------------------------------------------------------
+-- The region kill table (gear.data.regions): the engine's countdown per region, which brings the region boss when
+-- it reaches 0 (32 records of 0x40 bytes, record 0 unused). +0x10 the name (32 bytes), +0x30 the kills a region
+-- needs, +0x34 the boss flag, +0x38 the kills left, +0x3C the region id. Entries the game never set up have 0 kills
+-- needed. `kills_needed` and `kills_left` can be written (whole numbers 0 .. REGION_MAX).
+---------------------------------------------------------------------------------------------------------------
+local REGION_MAX = 1000000
+local REGION_FIELDS = {
+    kills_needed = {0x30, 'u32', true}, boss = {0x34, 'u8'}, kills_left = {0x38, 'u32', true}, id = {0x3C, 'u8'},
+}
+local region_mt = {}
+function region_mt.__index(self, field)
+    local info = rawget(self, '__index')
+    if field == 'index' then return info end
+    if field == 'name' then return native.table_string('regions', info, 0x10, 32) end
+    local f = REGION_FIELDS[field]
+    if not f then return nil end
+    local v = native.table_read('regions', info, f[1], f[2])
+    if field == 'boss' and v ~= nil then return v ~= 0 end
+    return v
+end
+function region_mt.__newindex(self, field, value)
+    local f = REGION_FIELDS[field]
+    if not f or not f[3] then error(("region field '%s' is read only or unknown"):format(tostring(field)), 2) end
+    if type(value) ~= 'number' or value % 1 ~= 0 or value < 0 or value > REGION_MAX then
+        error(("field '%s' needs a whole number from 0 to %d"):format(field, REGION_MAX), 2)
+    end
+    if not native.table_write('regions', rawget(self, '__index'), f[1], f[2], value) then
+        error('the region table is not available', 2)
+    end
+end
+region_mt.__metatable = false
+
+local regions = {__writable_view = true}
+function regions:count()
+    local count = native.table_info('regions')
+    return count or 0
+end
+-- The record `index` (1 .. count - 1; 0 is unused); nil if out of range or the table is not there.
+function regions:get(index)
+    local count = native.table_info('regions')
+    if not count or type(index) ~= 'number' or index < 1 or index >= count or index % 1 ~= 0 then return nil end
+    return setmetatable({__index = index}, region_mt)
+end
+data.regions = regions
+
 -- Read-only views of kernel tables: mods share `data`, `json` and the world functions, so none may change them
 -- for the others. Nested tables are wrapped too (once each).
 local frozen = setmetatable({}, {__mode = 'k'})

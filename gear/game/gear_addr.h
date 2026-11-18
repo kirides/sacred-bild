@@ -251,6 +251,8 @@ namespace Gear::Addr
     inline Sacred::Global<uint8_t> abilityTable1End{};
     inline Sacred::Global<uint8_t> abilityTable2First{};
     inline Sacred::Global<uint8_t> abilityTable2End{};
+    // ENG 00AAAD28: the region kill table (32 records of 0x40 bytes; gear/tables.cpp "regions").
+    inline Sacred::Global<uint8_t> regionTable{};
     // The game's text table (ENG 006725E0: the instance, cdecl; 00672C90: thiscall (instance, text id) -> a pointer to
     // the wide string's pointer; an id the table does not have gives an empty string). Text ids are the ones the data
     // tables hold (not the keys of global.res).

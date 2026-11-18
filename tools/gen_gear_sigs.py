@@ -158,6 +158,10 @@ GEAR = [
     ('abilityTable1End', 0x00952A38, 'data', 0x004D1B08),
     ('abilityTable2First', 0x00952ACC, 'data', 0x004D231A),
     ('abilityTable2End', 0x00955344, 'data', 0x004D232A),
+    # The region kill table (gear/tables.cpp "regions"): 32 records of 0x40 bytes at 0x00AAAD28 (record 0 unused), +0x30
+    # the kills a region needs (initRegionKill, 0x42534F), +0x34 the boss flag, +0x38 the kills left, +0x3C the
+    # region id. 0x425430 (the lookup by region id) starts with `mov ecx, 00AAAD28`.
+    ('regionTable', 0x00AAAD28, 'data', 0x00425437),
     ('textResources_instance', 0x006725E0, 'func'),
     ('textResources_get', 0x00672C90, 'func'),
     # Realms (gear/realm.cpp). The network object (g_pNetPlayers, 0x7D7A70) holds the lobby fields: +0x38 an IP override,

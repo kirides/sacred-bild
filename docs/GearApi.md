@@ -206,7 +206,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `version` | `string` | Sacred Gear's version. |
 | `mod` | `GearModInfo` | This mod's identity. |
 | `config` | `table<string, any>` | This mod's settings: the manifest's `config`, overridden by `config.lua`. |
-| `data` | `GearData` | The engine's data tables (read only, except the abilities). |
+| `data` | `GearData` | The engine's data tables (read only, except the abilities and regions). |
 | `text` | `GearText` | The game's texts by id. |
 | `files` | `GearFiles` | The mod's file overlay. |
 | `hooks` | `GearHooks` | The engine hooks that ask mods for values. |
@@ -462,6 +462,7 @@ The engine's data tables: read only, except the abilities.
 | `object_types` | `GearObjectTypes` | The type records every object refers to (0x80 bytes; id = index, 1..0x7E5F). |
 | `creature_types` | `GearTable` | `Pak\Creature.pak`'s records (0x56 bytes). |
 | `abilities` | `GearAbilities` | The ability tables of the exe by id (skills, combat arts, spells), which a mod can change. |
+| `regions` | `GearRegions` | The engine's region kill countdowns (the Region Boss quest), which a mod can read and change. |
 
 ### GearRecord
 
@@ -822,6 +823,38 @@ Sends a message; false if the pipe is closed or not connected.
 #### `pipe:close()`
 
 Closes the pipe for good.
+
+### GearRegion
+
+Written `regions` in the signatures.
+
+One region of the kill countdown: when `kills_left` reaches 0 the region boss comes.
+
+| Field | Type | |
+|---|---|---|
+| `index` | `integer` | The record's index (1 ..). |
+| `id` | `integer` | The region id the game uses. |
+| `name` | `string` | The region's name (may be empty). |
+| `boss` | `boolean` | The boss flag of the record. |
+| `kills_needed` | `integer` | The kills the region needs; 0 for a record the game did not set up. Writable (0 .. 1000000). |
+| `kills_left` | `integer` | The kills left before the boss. Writable (0 .. 1000000). |
+
+### GearRegions
+
+The region kill table. The game keeps its progress in memory only: it is not in savegames, and the game resets it when a region is left.
+
+#### `GearRegions:count() -> integer`
+
+The number of records (32; record 0 is unused), 0 if the table is not available.
+
+- returns `integer`
+
+#### `GearRegions:get(index) -> GearRegion?`
+
+The record `index` (1 .. count - 1).
+
+- `index`: `integer`
+- returns `GearRegion?`
 
 ## World (gear.world)
 
