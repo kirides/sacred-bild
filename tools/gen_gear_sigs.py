@@ -202,6 +202,9 @@ GEAR = [
     # with the engine's allocator): the network lobby names the heroes so (0x7EDC50, ids 0x2700 + slot - 1).
     ('textResources_set', 0x00672A60, 'func'),
     ('cStats_initSpells', 0x0055FC00, 'func'),
+    # A hero's combo slot (thiscall (stats, index, u32 arts[4]*, u16 levels[4]*, combo id), ret 0x10): what the combo
+    # master writes; the hero creation clears the four slots with it (ids 0x200..0x203, 0x55E30F).
+    ('cStats_setCombo', 0x005813D0, 'func'),
     ('cCreature_isEnemy', 0x00548F60, 'func'),
     ('creaturePortraitImage', 0x00435D30, 'func'),
     ('g_creatureEventVtable', 0x0089095C, 'data'),

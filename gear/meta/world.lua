@@ -290,6 +290,19 @@ function Creature:abilities() end
 ---@return GearHeroAbility?
 function Creature:ability(id) end
 
+--- A hero's combos (the combo master's slots that hold arts), nil for other creatures. Use one with
+--- `order_ability(combo.id, target)`.
+---@return GearHeroCombo[]?
+function Creature:combos() end
+
+--- Writes a combo slot of a party hero as the combo master does: up to four combat arts it knows, at the levels it has
+--- them (an empty list clears the slot). Single player.
+---@param slot integer 0 to 3.
+---@param arts integer[]
+---@return boolean? ok
+---@return string? error
+function Creature:set_combo(slot, arts) end
+
 --- What a party hero does now, and the game's raw action and movement states.
 ---@return GearHeroAction? action
 ---@return integer? action_state
@@ -314,8 +327,9 @@ function Creature:order_stop() end
 ---@return string? error
 function Creature:order_attack(target) end
 
---- Orders a party hero to use a combat art or spell it knows on a creature (`target`) or a spot (`x`, `y`), as the
---- skill slot does for the controlled one. The game refuses it while the ability regenerates (`ability(id).ready`).
+--- Orders a party hero to use a combat art or spell it knows, or one of its combos (`combos()`, ids 0x200 + slot), on
+--- a creature (`target`) or a spot (`x`, `y`), as the skill slot does for the controlled one. The game refuses it while
+--- the ability regenerates (`ability(id).ready`, `combo.ready`).
 ---@param ability integer
 ---@param target Creature|integer|number A creature, or the x of a spot.
 ---@param y? number The y of a spot.

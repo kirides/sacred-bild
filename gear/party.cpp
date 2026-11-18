@@ -32,6 +32,9 @@ namespace
     constexpr uintptr_t kAbilities = kStats + 0x102;   // vector {begin, end} of 0x16-byte entries
     constexpr uintptr_t kAbilityId = 4, kAbilityLevel = 6, kAbilityBonus = 7, kAbilityRegenMax = 0x0A,
                         kAbilityRegen = 0x12, kAbilitySize = 0x16;
+    constexpr uintptr_t kCombos = kStats + 0x10E;      // vector {begin, end} of 0x26-byte combo slots
+    constexpr uintptr_t kComboId = 0, kComboArts = 2, kComboLevels = 0x12, kComboTotal = 0x1A, kComboCharge = 0x22,
+                        kComboSize = 0x26;
     constexpr uintptr_t kShadowCopy = 0x3B0;       // the stats words the anti-cheat shadow keeps (0x3B dwords + 1 word)
     constexpr uint32_t kFlagGone = 0x10;
     constexpr uintptr_t kEngineControlled = 0x13C; // the creature the world mouse handler commands
@@ -282,6 +285,19 @@ namespace
         __try
         {
             fn(reinterpret_cast<void*>(stats), nullptr, amount);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    bool callSetCombo(uintptr_t stats, uint32_t slot, const uint32_t* ids, const uint16_t* levels)
+    {
+        __try
+        {
+            Addr::cStats_setCombo(reinterpret_cast<void*>(stats), slot, ids, levels, 0x200 + slot);
             return true;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -644,7 +660,10 @@ bool Party::order(uint32_t id, const Order& o, const char*& error)
         }
         std::vector<Ability> known;
         abilities(id, known);
-        if (std::none_of(known.begin(), known.end(), [&](const Ability& a) { return a.id == o.ability; }))
+        std::vector<Combo> combo;
+        combos(id, combo);
+        if (std::none_of(known.begin(), known.end(), [&](const Ability& a) { return a.id == o.ability; }) &&
+            std::none_of(combo.begin(), combo.end(), [&](const Combo& c) { return c.id == o.ability; }))
         {
             error = "the hero does not know that combat art or spell";
             return false;
@@ -655,7 +674,7 @@ bool Party::order(uint32_t id, const Order& o, const char*& error)
         ev[6] = static_cast<uint32_t>(at.x);
         ev[7] = static_cast<uint32_t>(at.y);
         ev[10] = 100;
-        ev[11] = o.ability >= 1000 ? 1 : 0;    // a combat art (ids from 1000) or a spell
+        ev[11] = o.ability >= 1000 ? 1 : o.ability >= 0x200 && o.ability < 0x204 ? 2 : 0;    // a combat art (ids from 1000), a combo (0x200 + slot) or a spell
         ev[12] = o.ability;
         ev[13] = at.layer;
         break;
@@ -694,6 +713,82 @@ bool Party::abilities(uint32_t id, std::vector<Ability>& out)
             }
             out.push_back(a);
         }
+    }
+    return true;
+}
+
+bool Party::combos(uint32_t id, std::vector<Combo>& out)
+{
+    out.clear();
+    const uintptr_t c = heroObject(id);
+    uintptr_t range[2] = {};
+    if (!c || !readAt(c, kCombos, range) || !range[0] || range[1] < range[0] || range[1] - range[0] > kComboSize * 16)
+    {
+        return false;
+    }
+    uint32_t slot = 0;
+    for (uintptr_t e = range[0]; e + kComboSize <= range[1]; e += kComboSize, ++slot)
+    {
+        Combo k;
+        k.slot = slot;
+        uint32_t arts[4] = {};
+        if (!readAt(e, kComboId, k.id) || !readAt(e, kComboArts, arts) || !readAt(e, kComboLevels, k.levels) ||
+            !readAt(e, kComboTotal, k.total) || !readAt(e, kComboCharge, k.charge))
+        {
+            continue;
+        }
+        bool any = false;
+        for (int i = 0; i < 4; ++i)
+        {
+            k.arts[i] = static_cast<uint16_t>(arts[i]);
+            any = any || k.arts[i] != 0;
+        }
+        if (any && k.id)
+        {
+            out.push_back(k);
+        }
+    }
+    return true;
+}
+
+bool Party::setCombo(uint32_t id, uint32_t slot, const std::vector<uint16_t>& arts, const char*& error)
+{
+    if (!available(error))
+    {
+        return false;
+    }
+    const uintptr_t c = heroObject(id);
+    uintptr_t range[2] = {};
+    if (!c || !sameOwnerAsLocal(c) || !readAt(c, kCombos, range) || !range[0])
+    {
+        error = "not a party hero";
+        return false;
+    }
+    const uint32_t slots = static_cast<uint32_t>((range[1] - range[0]) / kComboSize);
+    if (slot >= slots || slot > 3 || arts.size() > 4)
+    {
+        error = "a combo has slots 0 to 3 and at most four combat arts";
+        return false;
+    }
+    std::vector<Ability> known;
+    abilities(id, known);
+    uint32_t ids[4] = {};
+    uint16_t levels[4] = {};
+    for (size_t i = 0; i < arts.size(); ++i)
+    {
+        const auto a = std::find_if(known.begin(), known.end(), [&](const Ability& k) { return k.id == arts[i]; });
+        if (a == known.end() || arts[i] < 1000)
+        {
+            error = "a combo takes combat arts the hero knows";
+            return false;
+        }
+        ids[i] = arts[i];
+        levels[i] = static_cast<uint16_t>(a->level + a->bonus);
+    }
+    if (!Addr::cStats_setCombo || !callSetCombo(c + kStats, slot, ids, levels))
+    {
+        error = "the game's combo function was not found or faulted";
+        return false;
     }
     return true;
 }

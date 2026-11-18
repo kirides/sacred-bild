@@ -891,6 +891,18 @@ do
             if a.id == id then return a end
         end
     end
+    -- The hero's combos (the combo master's slots with arts): {id, slot, arts, levels, total, charge, ready}; id is what
+    -- order_ability takes.
+    function creature_mt:combos()
+        local list = native.party_combos(self.id)
+        if not list then return nil end
+        for _, k in ipairs(list) do k.ready = k.charge >= k.total end
+        return list
+    end
+    function creature_mt:set_combo(slot, arts)
+        assert(type(slot) == 'number' and type(arts) == 'table', 'expected a slot (0..3) and a list of combat arts')
+        return native.party_set_combo(self.id, slot, arts)
+    end
     -- What the hero does: 'idle', 'walking', 'attacking', 'ability' or 'busy', and the raw action and movement states.
     function creature_mt:action()
         local action, movement = native.party_state(self.id)

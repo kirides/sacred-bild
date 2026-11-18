@@ -308,6 +308,9 @@ namespace Gear::Addr
     // +0x18 takes. ENG 0182EE5C / 0182EE60: the two anti-cheat shadow pages of the local hero (see party.cpp).
     inline Sacred::Thiscall<void(void* stats, uint32_t amount)> cStats_addExperience{};
     inline Sacred::Thiscall<void(void* stats, uint32_t a, int32_t b)> cStats_initSpells{};
+    // ENG 005813D0: a combo slot, thiscall (stats, index, u32 arts[4]*, u16 levels[4]*, combo id 0x200 + index), ret
+    // 0x10: the arts, their levels, and the regeneration time (their sum, +0x1A).
+    inline Sacred::Thiscall<void(void* stats, uint32_t index, const uint32_t* arts, const uint16_t* levels, uint32_t comboId)> cStats_setCombo{};
     inline Sacred::Thiscall<uint32_t(void* creature, void* target)> cCreature_isEnemy{};
     inline uintptr_t creaturePortraitImage{};   // stdcall (type) -> index
     // ENG 00672A60: stdcall (text id, wchar_t* begin, end, capacity end), ret 0x10: sets a text resource; the buffer

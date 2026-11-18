@@ -97,6 +97,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cStats_addExperience", "55 8B EC 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 38 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_addExperience}, // 0057E160, 0057E020
     {"textResources_set", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 53 55 56 57 8B 44 24 24 33 DB", 0, Sig::Take::Match, &Gear::Addr::textResources_set}, // 00672A60, 00672D40
     {"cStats_initSpells", "83 EC 10 53 55 8B 6C 24 1C 56 57 33 FF", 0, Sig::Take::Match, &Gear::Addr::cStats_initSpells}, // 0055FC00, 0055FAC0
+    {"cStats_setCombo", "51 53 8B D9 8B 0D ?? ?? ?? ?? 56 8B 43 08 50 E8 ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::cStats_setCombo}, // 005813D0, 00581290
     {"cCreature_isEnemy", "8B 44 24 04 85 C0 74 3E 66 83 B8 FC 00 00 00 09", 0, Sig::Take::Match, &Gear::Addr::cCreature_isEnemy}, // 00548F60, 00548DD0
     {"creaturePortraitImage", "8B 4C 24 04 33 C0 49 81 F9 C9 02 00 00", 0, Sig::Take::Match, &Gear::Addr::creaturePortraitImage}, // 00435D30, 00435C00
     {"g_creatureEventVtable", "C7 44 24 18 ?? ?? ?? ?? 89 7C 24 2C 89 7C 24 30", 4, Sig::Take::Abs32, &Gear::Addr::g_creatureEventVtable}, // 0089095C, 0088E95C

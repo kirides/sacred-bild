@@ -1268,6 +1268,21 @@ One of the hero's combat arts or spells, nil if it does not know it.
 - `id`: `integer`
 - returns `GearHeroAbility?`
 
+#### `creature:combos() -> GearHeroCombo[]?`
+
+A hero's combos (the combo master's slots that hold arts), nil for other creatures. Use one with `order_ability(combo.id, target)`.
+
+- returns `GearHeroCombo[]?`
+
+#### `creature:set_combo(slot, arts) -> boolean?, string?`
+
+Writes a combo slot of a party hero as the combo master does: up to four combat arts it knows, at the levels it has them (an empty list clears the slot). Single player.
+
+- `slot`: `integer` - 0 to 3.
+- `arts`: `integer[]`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:action() -> GearHeroAction?, integer?, integer?`
 
 What a party hero does now, and the game's raw action and movement states.
@@ -1302,7 +1317,7 @@ Orders a party hero to attack `target` with its weapon (it walks there first), a
 
 #### `creature:order_ability(ability, target, y) -> boolean?, string?`
 
-Orders a party hero to use a combat art or spell it knows on a creature (`target`) or a spot (`x`, `y`), as the skill slot does for the controlled one. The game refuses it while the ability regenerates (`ability(id).ready`).
+Orders a party hero to use a combat art or spell it knows, or one of its combos (`combos()`, ids 0x200 + slot), on a creature (`target`) or a spot (`x`, `y`), as the skill slot does for the controlled one. The game refuses it while the ability regenerates (`ability(id).ready`, `combo.ready`).
 
 - `ability`: `integer`
 - `target`: `Creature|integer|number` - A creature, or the x of a spot.
@@ -1418,6 +1433,20 @@ What `creature:abilities()` lists.
 | `regen_max` | `number` | Its regeneration time in seconds. |
 | `art` | `boolean` | A combat art (id from 1000). |
 | `ready` | `boolean` | `regen` is 0. |
+
+### GearHeroCombo
+
+What `creature:combos()` lists.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | What `order_ability` takes (0x200 + slot). |
+| `slot` | `integer` | 0 to 3. |
+| `arts` | `integer[]` | The combat arts, in order. |
+| `levels` | `integer[]` | Their levels. |
+| `total` | `number` | The regeneration time of the combo (the arts' together), seconds. |
+| `charge` | `number` | How far it has regenerated. |
+| `ready` | `boolean` | `charge >= total`. |
 
 ### GearHeroAction
 

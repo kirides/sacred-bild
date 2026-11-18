@@ -1549,6 +1549,73 @@ namespace
         return 1;
     }
 
+    // native.party_combos(id) -> {{id, slot, arts = {...}, levels = {...}, total, charge}, ...} | nil
+    int nativePartyCombos(lua_State* L)
+    {
+        std::vector<Party::Combo> list;
+        if (!Party::combos(checkId(L, 1), list))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        for (size_t i = 0; i < list.size(); ++i)
+        {
+            const Party::Combo& k = list[i];
+            lua_createtable(L, 0, 6);
+            lua_pushnumber(L, k.id);
+            lua_setfield(L, -2, "id");
+            lua_pushnumber(L, k.slot);
+            lua_setfield(L, -2, "slot");
+            lua_createtable(L, 4, 0);   // arts
+            lua_createtable(L, 4, 0);   // levels
+            int n = 0;
+            for (int j = 0; j < 4; ++j)
+            {
+                if (!k.arts[j])
+                {
+                    continue;
+                }
+                ++n;
+                lua_pushnumber(L, k.arts[j]);
+                lua_rawseti(L, -3, n);
+                lua_pushnumber(L, k.levels[j]);
+                lua_rawseti(L, -2, n);
+            }
+            lua_setfield(L, -3, "levels");
+            lua_setfield(L, -2, "arts");
+            lua_pushnumber(L, k.total);
+            lua_setfield(L, -2, "total");
+            lua_pushnumber(L, k.charge);
+            lua_setfield(L, -2, "charge");
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.party_set_combo(id, slot, {art, ...}) -> true | nil, message
+    int nativePartySetCombo(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const uint32_t slot = static_cast<uint32_t>(luaL_checknumber(L, 2));
+        luaL_checktype(L, 3, LUA_TTABLE);
+        std::vector<uint16_t> arts;
+        const size_t n = lua_objlen(L, 3);
+        for (size_t i = 1; i <= n && i <= 8; ++i)
+        {
+            lua_rawgeti(L, 3, static_cast<int>(i));
+            arts.push_back(static_cast<uint16_t>(lua_tonumber(L, -1)));
+            lua_pop(L, 1);
+        }
+        const char* error = nullptr;
+        if (!Party::setCombo(id, slot, arts, error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.party_state(id) -> action, movement | nil
     int nativePartyState(lua_State* L)
     {
@@ -3326,6 +3393,8 @@ namespace
             {"party_order", nativePartyOrder},
             {"party_abilities", nativePartyAbilities},
             {"party_state", nativePartyState},
+            {"party_combos", nativePartyCombos},
+            {"party_set_combo", nativePartySetCombo},
             {"party_add_exp", nativePartyAddExp},
             {"party_hostile", nativePartyHostile},
             {"party_portrait", nativePartyPortrait},

@@ -68,6 +68,22 @@ namespace Party
     };
     bool abilities(uint32_t id, std::vector<Ability>& out);
 
+    // A combo slot (the combo master's): its id (0x200 + slot, what an Ability order takes), up to four combat arts with
+    // their levels, the regeneration time and how far it has regenerated (ready when charge >= total).
+    struct Combo
+    {
+        uint16_t id = 0;
+        uint32_t slot = 0;
+        uint16_t arts[4] = {};
+        uint16_t levels[4] = {};
+        float total = 0;
+        float charge = 0;
+    };
+    // The combos with at least one art.
+    bool combos(uint32_t id, std::vector<Combo>& out);
+    // Writes combo slot `slot` (0..3) as the combo master does: up to four arts the hero knows (at the levels it has).
+    bool setCombo(uint32_t id, uint32_t slot, const std::vector<uint16_t>& arts, const char*& error);
+
     struct State
     {
         uint16_t action = 0;    // +0xFC: 0 idle, 1 attack, 2 walk order, 4 approach to attack, 0xB ability, ...

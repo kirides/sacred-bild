@@ -79,6 +79,16 @@ function GearParty.share_experience(share, radius) end
 ---@field art boolean A combat art (id from 1000).
 ---@field ready boolean `regen` is 0.
 
+--- What `creature:combos()` lists.
+---@class GearHeroCombo
+---@field id integer What `order_ability` takes (0x200 + slot).
+---@field slot integer 0 to 3.
+---@field arts integer[] The combat arts, in order.
+---@field levels integer[] Their levels.
+---@field total number The regeneration time of the combo (the arts' together), seconds.
+---@field charge number How far it has regenerated.
+---@field ready boolean `charge >= total`.
+
 ---@alias GearHeroAction
 ---| 'idle'
 ---| 'walking'

@@ -128,6 +128,26 @@ gear.task(function()
     end
     party.share_experience(0)
 
+    -- A combo: the companion gets one (the combo master's slot 0) and uses it on an enemy next to it.
+    local art = (comp:abilities() or {})[1]
+    check('set_combo', art ~= nil and comp:set_combo(0, {art.id, art.id}))
+    local combo = (comp:combos() or {})[1]
+    check('combos()', combo ~= nil and combo.id == 0x200 and #combo.arts == 2 and combo.total > 0, combo and combo.total)
+    local foe2 = enemy_near(comp, 3000)
+    if combo and foe2 then
+        local fx, fy = foe2:position()
+        for _, o in ipairs({{120, 120}, {250, 250}, {-150, 0}, {0, -150}, {150, 0}, {0, 150}}) do
+            if comp:teleport(fx + o[1], fy + o[2]) then break end
+        end
+        local ready = gear.wait_until(function() local k = (comp:combos() or {})[1] return k and k.ready end, combo.total + 5)
+        check('combo regenerated', ready)
+        check('order the combo', comp:order_ability(combo.id, foe2))
+        gear.wait(1.5)
+        local k = (comp:combos() or {})[1]
+        check('the combo ran (regenerates again)', k ~= nil and not k.ready, k and k.charge)
+    end
+    check('set_combo clears', comp:set_combo(0, {}) and #(comp:combos() or {}) == 0)
+
     -- Save while the companion is controlled, load, the party is still there.
     local slot = gear.config.save_slot
     check('save', gear.game.save(slot, 'partytest'))
