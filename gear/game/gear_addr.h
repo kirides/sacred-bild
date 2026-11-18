@@ -30,6 +30,9 @@ namespace Gear::Addr
         cObjectManager_create{};
     // ENG 005FCCB0 ("cObjectManager::pop"): places object `id` at `pos` (teleports it); false if it could not.
     inline Sacred::Thiscall<uint32_t(void* manager, uint32_t id, void* pos)> cObjectManager_pop{};
+    // ENG 005FC8B0: takes object `id` out of its sector's object list (+0x14 bit 2 "out of the world"); pop places only
+    // such objects (the engine unlinks a creature before it destroys or parks it).
+    inline Sacred::Thiscall<void(void* manager, uint32_t id)> cObjectManager_unlink{};
     // ENG 0084A961: MSVC's __RTDynamicCast; with the two type descriptors (ENG 008EB648 cObject, 008EB660
     // cCreature) it tells creatures from other objects.
     inline Sacred::Cdecl<void*(void* object, long vfDelta, void* source, void* target, int isReference)>
@@ -296,4 +299,24 @@ namespace Gear::Addr
     inline uintptr_t rarityFn485C10{};
     inline uintptr_t rarityFn4AC940{};
     inline uintptr_t rarityFn5D57C0{};
+
+    // Party (gear/party.cpp). ENG 0057E160: a stats block (creature +0x3A8) gains experience and levels up with the
+    // skill points, thiscall (stats, amount), ret 4. ENG 0055FC00: the last step of the engine's own hero creation
+    // (0060D9F0), thiscall (stats, 0, -1), ret 8. ENG 00548F60: whether `target` is alive and hostile to the
+    // creature, thiscall, ret 4. ENG 00435D30: the UI image index of a creature type's portrait (the party window's),
+    // stdcall (type), ret 4. ENG 0089095C: the vtable of the 0x44-byte creature events (orders) a creature's vtable
+    // +0x18 takes. ENG 0182EE5C / 0182EE60: the two anti-cheat shadow pages of the local hero (see party.cpp).
+    inline Sacred::Thiscall<void(void* stats, uint32_t amount)> cStats_addExperience{};
+    inline Sacred::Thiscall<void(void* stats, uint32_t a, int32_t b)> cStats_initSpells{};
+    // ENG 005813D0: a combo slot, thiscall (stats, index, u32 arts[4]*, u16 levels[4]*, combo id 0x200 + index), ret
+    // 0x10: the arts, their levels, and the regeneration time (their sum, +0x1A).
+    inline Sacred::Thiscall<void(void* stats, uint32_t index, const uint32_t* arts, const uint16_t* levels, uint32_t comboId)> cStats_setCombo{};
+    inline Sacred::Thiscall<uint32_t(void* creature, void* target)> cCreature_isEnemy{};
+    inline uintptr_t creaturePortraitImage{};   // stdcall (type) -> index
+    // ENG 00672A60: stdcall (text id, wchar_t* begin, end, capacity end), ret 0x10: sets a text resource; the buffer
+    // (engine_alloc) becomes the engine's, which frees it. The heroes' names are the texts 0x26FF + hero id.
+    inline uintptr_t textResources_set{};
+    inline Sacred::Global<uint8_t> g_creatureEventVtable{};
+    inline Sacred::Global<uint32_t*> g_antiCheatShadow1{};
+    inline Sacred::Global<uint32_t*> g_antiCheatShadow2{};
 }

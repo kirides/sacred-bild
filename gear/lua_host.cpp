@@ -16,6 +16,7 @@
 #include "realm.h"
 #include "replace.h"
 #include "overlay.h"
+#include "party.h"
 #include "padnav.h"
 #include "pipe.h"
 #include "save.h"
@@ -1422,6 +1423,277 @@ namespace
         }
         lua_pushboolean(L, 1);
         return 1;
+    }
+
+    // Party (gear/party.cpp). native.party_available() -> true | false, why
+    int nativePartyAvailable(lua_State* L)
+    {
+        const char* why = nullptr;
+        const bool ok = Party::available(why);
+        lua_pushboolean(L, ok);
+        if (ok)
+        {
+            return 1;
+        }
+        lua_pushstring(L, why ? why : "not available");
+        return 2;
+    }
+
+    // native.party_heroes() -> {id, ...}, the controlled hero first
+    int nativePartyHeroes(lua_State* L)
+    {
+        const std::vector<uint32_t> ids = Party::heroes();
+        lua_createtable(L, static_cast<int>(ids.size()), 0);
+        for (size_t i = 0; i < ids.size(); ++i)
+        {
+            lua_pushnumber(L, ids[i]);
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.party_recruit(class, x, y, layer) -> id | nil, message
+    int nativePartyRecruit(lua_State* L)
+    {
+        const uint32_t heroClass = static_cast<uint32_t>(luaL_checknumber(L, 1));
+        World::Position at;
+        if (!checkPosition(L, 2, at))
+        {
+            return pushFailure(L, "bad position");
+        }
+        const char* error = nullptr;
+        const uint32_t id = Party::recruit(heroClass, at, error);
+        if (!id)
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushnumber(L, id);
+        return 1;
+    }
+
+    // native.party_dismiss(id) / native.party_control(id) -> true | nil, message
+    int nativePartyDismiss(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Party::dismiss(checkId(L, 1), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    int nativePartyControl(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Party::control(checkId(L, 1), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.party_order(id, kind, target, x, y, layer, ability) -> true | nil, message; kind 'move', 'attack',
+    // 'ability', 'stop'
+    int nativePartyOrder(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const std::string kind = luaL_checkstring(L, 2);
+        Party::Order o;
+        o.kind = kind == "move" ? Party::OrderKind::Move
+               : kind == "attack" ? Party::OrderKind::Attack
+               : kind == "ability" ? Party::OrderKind::Ability
+                                   : Party::OrderKind::Stop;
+        o.target = static_cast<uint32_t>(luaL_optnumber(L, 3, 0));
+        if (lua_isnumber(L, 4) && !checkPosition(L, 4, o.at))
+        {
+            return pushFailure(L, "bad position");
+        }
+        o.ability = static_cast<uint32_t>(luaL_optnumber(L, 7, 0));
+        const char* error = nullptr;
+        if (!Party::order(id, o, error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.party_abilities(id) -> {{id, level, bonus, regen, regen_max}, ...} | nil
+    int nativePartyAbilities(lua_State* L)
+    {
+        std::vector<Party::Ability> list;
+        if (!Party::abilities(checkId(L, 1), list))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        for (size_t i = 0; i < list.size(); ++i)
+        {
+            const Party::Ability& a = list[i];
+            lua_createtable(L, 0, 5);
+            lua_pushnumber(L, a.id);
+            lua_setfield(L, -2, "id");
+            lua_pushnumber(L, a.level);
+            lua_setfield(L, -2, "level");
+            lua_pushnumber(L, a.bonus);
+            lua_setfield(L, -2, "bonus");
+            lua_pushnumber(L, a.regen);
+            lua_setfield(L, -2, "regen");
+            lua_pushnumber(L, a.regenMax);
+            lua_setfield(L, -2, "regen_max");
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.party_combos(id) -> {{id, slot, arts = {...}, levels = {...}, total, charge}, ...} | nil
+    int nativePartyCombos(lua_State* L)
+    {
+        std::vector<Party::Combo> list;
+        if (!Party::combos(checkId(L, 1), list))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        for (size_t i = 0; i < list.size(); ++i)
+        {
+            const Party::Combo& k = list[i];
+            lua_createtable(L, 0, 6);
+            lua_pushnumber(L, k.id);
+            lua_setfield(L, -2, "id");
+            lua_pushnumber(L, k.slot);
+            lua_setfield(L, -2, "slot");
+            lua_createtable(L, 4, 0);   // arts
+            lua_createtable(L, 4, 0);   // levels
+            int n = 0;
+            for (int j = 0; j < 4; ++j)
+            {
+                if (!k.arts[j])
+                {
+                    continue;
+                }
+                ++n;
+                lua_pushnumber(L, k.arts[j]);
+                lua_rawseti(L, -3, n);
+                lua_pushnumber(L, k.levels[j]);
+                lua_rawseti(L, -2, n);
+            }
+            lua_setfield(L, -3, "levels");
+            lua_setfield(L, -2, "arts");
+            lua_pushnumber(L, k.total);
+            lua_setfield(L, -2, "total");
+            lua_pushnumber(L, k.charge);
+            lua_setfield(L, -2, "charge");
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.party_set_combo(id, slot, {art, ...}) -> true | nil, message
+    int nativePartySetCombo(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const uint32_t slot = static_cast<uint32_t>(luaL_checknumber(L, 2));
+        luaL_checktype(L, 3, LUA_TTABLE);
+        std::vector<uint16_t> arts;
+        const size_t n = lua_objlen(L, 3);
+        for (size_t i = 1; i <= n && i <= 8; ++i)
+        {
+            lua_rawgeti(L, 3, static_cast<int>(i));
+            arts.push_back(static_cast<uint16_t>(lua_tonumber(L, -1)));
+            lua_pop(L, 1);
+        }
+        const char* error = nullptr;
+        if (!Party::setCombo(id, slot, arts, error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.party_state(id) -> action, movement | nil
+    int nativePartyState(lua_State* L)
+    {
+        Party::State s;
+        if (!Party::state(checkId(L, 1), s))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, s.action);
+        lua_pushnumber(L, s.movement);
+        return 2;
+    }
+
+    // native.party_add_exp(id, amount) -> true | nil, message
+    int nativePartyAddExp(lua_State* L)
+    {
+        const lua_Number n = luaL_checknumber(L, 2);
+        if (!(n >= 1 && n <= 2e9))
+        {
+            return pushFailure(L, "the amount must be 1 to 2,000,000,000");
+        }
+        const char* error = nullptr;
+        if (!Party::addExperience(checkId(L, 1), static_cast<uint32_t>(n), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.party_hostile(id, other) -> bool | nil
+    int nativePartyHostile(lua_State* L)
+    {
+        const int r = Party::hostile(checkId(L, 1), checkId(L, 2));
+        if (r < 0)
+        {
+            lua_pushnil(L);
+        }
+        else
+        {
+            lua_pushboolean(L, r);
+        }
+        return 1;
+    }
+
+    // native.party_set_name(id, name) -> true | nil, message
+    int nativePartySetName(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Party::setName(checkId(L, 1), luaL_checkstring(L, 2), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.party_portrait(type) -> UI image index | nil
+    int nativePartyPortrait(lua_State* L)
+    {
+        const int r = Party::portraitImage(static_cast<uint32_t>(luaL_checknumber(L, 1)));
+        if (r < 0)
+        {
+            lua_pushnil(L);
+        }
+        else
+        {
+            lua_pushnumber(L, r);
+        }
+        return 1;
+    }
+
+    // native.party_share(share, radius)
+    int nativePartyShare(lua_State* L)
+    {
+        Party::setExperienceShare(luaL_checknumber(L, 1), luaL_optnumber(L, 2, 0));
+        return 0;
     }
 
     // native.set_health(id, hp) / native.set_gold(id, gold) -> true | nil, message
@@ -3113,6 +3385,21 @@ namespace
             {"remove", nativeRemove},
             {"set_health", nativeSetHealth},
             {"set_gold", nativeSetGold},
+            {"party_available", nativePartyAvailable},
+            {"party_heroes", nativePartyHeroes},
+            {"party_recruit", nativePartyRecruit},
+            {"party_dismiss", nativePartyDismiss},
+            {"party_control", nativePartyControl},
+            {"party_order", nativePartyOrder},
+            {"party_abilities", nativePartyAbilities},
+            {"party_state", nativePartyState},
+            {"party_combos", nativePartyCombos},
+            {"party_set_combo", nativePartySetCombo},
+            {"party_add_exp", nativePartyAddExp},
+            {"party_hostile", nativePartyHostile},
+            {"party_portrait", nativePartyPortrait},
+            {"party_set_name", nativePartySetName},
+            {"party_share", nativePartyShare},
             {"pipe_open", nativePipeOpen},
             {"pipe_close", nativePipeClose},
             {"pipe_send", nativePipeSend},

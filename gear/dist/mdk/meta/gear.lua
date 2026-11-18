@@ -22,6 +22,7 @@
 ---| 'mp_message' # A message of the mod channel (`gear.mp.send`) arrived: `(from, channel, payload)`.
 ---| 'net_caps' # The custom net messages became available, or the list of players who can use them changed (gear.net): `(caps)`, see `GearNetCaps`.
 ---| 'chat.line' # The game added a chat or message line: `(line)`, see `GearChatLine` (gear.chat).
+---| 'party.control' # `gear.party.control` gave the player another hero: `(from, to)` (creatures).
 ---| 'realm.changed' # `gear.realm.use` switched the online play server: `(realm)`.
 ---| 'combat.constant' # The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it.
 ---| 'skillslot.key' # A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it.
@@ -98,6 +99,7 @@
 ---@field chat GearChat The game's chat and message lines: who sent them, the session's history, the game's overlay.
 ---@field clipboard GearClipboard The Windows clipboard: copy text out of the game.
 ---@field realm GearRealmApi The online play server (realms): list, switch, add.
+---@field party GearParty Companion heroes in single player: recruit, switch control, orders.
 ---@field lookup GearLookup Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window.
 ---@field fmt GearFmt Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed).
 ---@field toast GearToast Short messages that stack up on the screen and fade; the layout editor moves them.
@@ -131,6 +133,7 @@ gear = {}
 ---@overload fun(event: 'mp_message', fn: fun(from: GearPlayer, channel: string, payload: table|string)): GearHandler
 ---@overload fun(event: 'net_caps', fn: fun(caps: GearNetCaps)): GearHandler
 ---@overload fun(event: 'chat.line', fn: fun(line: GearChatLine)): GearHandler
+---@overload fun(event: 'party.control', fn: fun(from: Creature, to: Creature)): GearHandler
 ---@overload fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler
 ---@overload fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler
 ---@overload fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler

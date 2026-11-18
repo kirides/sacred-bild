@@ -120,6 +120,7 @@ To check the examples against the annotations with LuaLS: `lua-language-server -
 | `'mp_message'` | A message of the mod channel (`gear.mp.send`) arrived: `(from, channel, payload)`. |
 | `'net_caps'` | The custom net messages became available, or the list of players who can use them changed (gear.net): `(caps)`, see `GearNetCaps`. |
 | `'chat.line'` | The game added a chat or message line: `(line)`, see `GearChatLine` (gear.chat). |
+| `'party.control'` | `gear.party.control` gave the player another hero: `(from, to)` (creatures). |
 | `'realm.changed'` | `gear.realm.use` switched the online play server: `(realm)`. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'skillslot.key'` | A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it. |
@@ -219,6 +220,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `chat` | `GearChat` | The game's chat and message lines: who sent them, the session's history, the game's overlay. |
 | `clipboard` | `GearClipboard` | The Windows clipboard: copy text out of the game. |
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
+| `party` | `GearParty` | Companion heroes in single player: recruit, switch control, orders. |
 | `lookup` | `GearLookup` | Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window. |
 | `fmt` | `GearFmt` | Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed). |
 | `toast` | `GearToast` | Short messages that stack up on the screen and fade; the layout editor moves them. |
@@ -255,6 +257,7 @@ Forms:
 - `fun(event: 'mp_message', fn: fun(from: GearPlayer, channel: string, payload: table|string)): GearHandler`
 - `fun(event: 'net_caps', fn: fun(caps: GearNetCaps)): GearHandler`
 - `fun(event: 'chat.line', fn: fun(line: GearChatLine)): GearHandler`
+- `fun(event: 'party.control', fn: fun(from: Creature, to: Creature)): GearHandler`
 - `fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
 - `fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler`
@@ -1232,6 +1235,228 @@ Moves the creature. Single player only.
 - `layer`: `integer` (optional) - Default: the current layer.
 - returns `ok` `boolean?`
 - returns `error` `string?`
+
+#### `creature:is_hero() -> boolean`
+
+Whether the creature is a hero (a player's or a companion).
+
+- returns `boolean`
+
+#### `creature:is_enemy(other) -> boolean?`
+
+Whether `other` is alive and hostile to this creature (what the cursor's attack symbol shows). Nil when one of them is not a creature.
+
+- `other`: `Creature|integer`
+- returns `boolean?`
+
+#### `creature:portrait() -> integer?`
+
+The image of the creature's portrait as the party window draws it (an id for `gear.ui.image`), nil if it has none.
+
+- returns `integer?`
+
+#### `creature:abilities() -> GearHeroAbility[]?`
+
+A hero's combat arts and spells (see `gear.party`), nil for other creatures.
+
+- returns `GearHeroAbility[]?`
+
+#### `creature:ability(id) -> GearHeroAbility?`
+
+One of the hero's combat arts or spells, nil if it does not know it.
+
+- `id`: `integer`
+- returns `GearHeroAbility?`
+
+#### `creature:combos() -> GearHeroCombo[]?`
+
+A hero's combos (the combo master's slots that hold arts), nil for other creatures. Use one with `order_ability(combo.id, target)`.
+
+- returns `GearHeroCombo[]?`
+
+#### `creature:set_combo(slot, arts) -> boolean?, string?`
+
+Writes a combo slot of a party hero as the combo master does: up to four combat arts it knows, at the levels it has them (an empty list clears the slot). Single player.
+
+- `slot`: `integer` - 0 to 3.
+- `arts`: `integer[]`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:action() -> GearHeroAction?, integer?, integer?`
+
+What a party hero does now, and the game's raw action and movement states.
+
+- returns `action` `GearHeroAction?`
+- returns `action_state` `integer?`
+- returns `movement_state` `integer?`
+
+#### `creature:order_move(x, y) -> boolean?, string?`
+
+Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground does for the controlled one.
+
+- `x`: `number`
+- `y`: `number`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:order_stop() -> boolean?, string?`
+
+Orders a party hero to stop.
+
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:order_attack(target) -> boolean?, string?`
+
+Orders a party hero to attack `target` with its weapon (it walks there first), as a click on an enemy does.
+
+- `target`: `Creature|integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:order_ability(ability, target, y) -> boolean?, string?`
+
+Orders a party hero to use a combat art or spell it knows, or one of its combos (`combos()`, ids 0x200 + slot), on a creature (`target`) or a spot (`x`, `y`), as the skill slot does for the controlled one. The game refuses it while the ability regenerates (`ability(id).ready`, `combo.ready`).
+
+- `ability`: `integer`
+- `target`: `Creature|integer|number` - A creature, or the x of a spot.
+- `y`: `number` (optional) - The y of a spot.
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:set_name(name) -> boolean?, string?`
+
+Sets the name the game shows for a party hero (1 to 30 characters, UTF-8). The game keeps a companion's name only until the next savegame load: a mod sets it again (the player's own hero keeps the name the savegame has).
+
+- `name`: `string`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:add_experience(amount) -> boolean?, string?`
+
+Gives a party hero experience through the game's own gain (it levels up with skill points). Not shared.
+
+- `amount`: `number`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+## Party (gear.party)
+
+Companions are more heroes of the player, at the hero ids 3 to 16, the way a network game holds the players' heroes: each has its own backpack, equipment, attributes, skills, combat arts, spells and experience. The player controls one of them at a time (`control`); the others stand where they are until a mod gives them orders (`creature:order_move`, `order_attack`, `order_ability`). Companions are saved with the savegame like everything in the world. Single player only: in a network game the functions refuse. Loading a savegame gives control back to the hero with id 1.
+
+### GearParty
+
+Reached as `gear.party`.
+
+| Field | Type | |
+|---|---|---|
+| `FIRST_ID` | `integer` | The first companion id (3; id 2 is never used: the engine moves object 2 with the arrow keys in single player). |
+| `LAST_ID` | `integer` | The last hero id (16). |
+
+#### `gear.party.available() -> boolean, string?`
+
+Whether the party works now: a single player game with a hero.
+
+- returns `ok` `boolean`
+- returns `reason` `string?` - Why not.
+
+#### `gear.party.heroes() -> Creature[]`
+
+The player's heroes in the world, the controlled one first (never another player's hero in a network game).
+
+- returns `Creature[]`
+
+#### `gear.party.leader() -> Creature?`
+
+The hero the player controls (the same as `gear.world.hero()`).
+
+- returns `Creature?`
+
+#### `gear.party.companions() -> Creature[]`
+
+The heroes the player does not control right now.
+
+- returns `Creature[]`
+
+#### `gear.party.recruit(class, opts) -> Creature?, string?`
+
+Creates a companion of `class` where the leader stands (or at `opts.x`, `opts.y`), as the engine creates the player's own hero, with the lowest free id from 3 on. It starts at level 1 without items; `opts.experience` is given through the game's own experience gain, so it levels up with skill points to spend.
+
+- `class`: `GearClassName|integer`
+- `opts`: `GearRecruitOpts` (optional)
+- returns `companion` `Creature?`
+- returns `error` `string?` - `'the party is full'` (ids 3 to 16 taken), or why not.
+
+#### `gear.party.dismiss(companion) -> boolean?, string?`
+
+Removes a companion from the world for good, with what it wears. Refused for the controlled hero and while its backpack holds items (take them first).
+
+- `companion`: `Creature|integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.party.control(hero) -> boolean?, string?`
+
+Gives the player control of a party hero: the camera, the HUD, the windows (inventory, skills, combat arts), the mouse, the keys and the controller then serve it, and the hero ids of the game follow (`gear.world.hero()`). The gold goes with control (the party's purse), and the mercenaries follow the controlled hero. Every mod gets `party.control` `(from, to)` afterwards.
+
+- `hero`: `Creature|integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.party.share_experience(share, radius)`
+
+Experience a party hero gains from the game (kills, quests) also goes to the other living party heroes within `radius` world units (0 or nil: anywhere), times `share` (1: the same amount, 0: off, the default).
+
+- `share`: `number`
+- `radius`: `number` (optional)
+
+### GearRecruitOpts
+
+| Field | Type | |
+|---|---|---|
+| `x` | `number` | Where to create it (default: where the leader stands). (optional) |
+| `y` | `number` |  (optional) |
+| `layer` | `integer` |  (optional) |
+| `experience` | `number` | Experience to start with, given through the game's own gain (levels up with skill points). (optional) |
+
+### GearHeroAbility
+
+What `creature:abilities()` lists.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | The ability: combat arts from 1000, spells below (`gear.data.abilities[id]`). |
+| `level` | `integer` | The level from read runes. |
+| `bonus` | `integer` | Levels from items. |
+| `regen` | `number` | Seconds until it can be used again (0: ready). |
+| `regen_max` | `number` | Its regeneration time in seconds. |
+| `art` | `boolean` | A combat art (id from 1000). |
+| `ready` | `boolean` | `regen` is 0. |
+
+### GearHeroCombo
+
+What `creature:combos()` lists.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | What `order_ability` takes (0x200 + slot). |
+| `slot` | `integer` | 0 to 3. |
+| `arts` | `integer[]` | The combat arts, in order. |
+| `levels` | `integer[]` | Their levels. |
+| `total` | `number` | The regeneration time of the combo (the arts' together), seconds. |
+| `charge` | `number` | How far it has regenerated. |
+| `ready` | `boolean` | `charge >= total`. |
+
+### GearHeroAction
+
+| Value | |
+|---|---|
+| `'idle'` |  |
+| `'walking'` |  |
+| `'attacking'` |  |
+| `'ability'` | Using a combat art or spell. |
+| `'busy'` | Something else (a state the API does not name). |
 
 ## Drops (gear.drops)
 

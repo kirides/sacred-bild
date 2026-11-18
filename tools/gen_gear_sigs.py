@@ -25,6 +25,10 @@ GEAR = [
     ('cObjectManager_hero', 0x00603E30, 'func'),
     ('cObjectManager_create', 0x005FBA40, 'func'),
     ('cObjectManager_pop', 0x005FCCB0, 'func'),
+    # cObjectManager::unlink (thiscall (id), ret 4): takes an object out of its sector's list and marks it out of the world
+    # (+0x14 bit 2); pop places only such objects, so a teleport of a creature in the world unlinks it first, as the
+    # engine does before it destroys one (0x5FB530).
+    ('cObjectManager_unlink', 0x005FC8B0, 'func'),
     ('rtDynamicCast', 0x0084A961, 'func'),
     ('cObject_typeDescriptor', 0x008EB648, 'data'),
     ('cCreature_typeDescriptor', 0x008EB660, 'data'),
@@ -186,6 +190,26 @@ GEAR = [
     ('rangeRand', 0x00443B20, 'func'),
     ('cItem_pickType', 0x005C7FA0, 'func'),
     ('g_rarityTable', 0x00AD4438, 'data', 0x0055A106),
+    # Party (gear/party.cpp): companion heroes. A hero's stats block (creature +0x3A8) gains experience through
+    # addExperience (thiscall (stats, amount), ret 4: levels up with the skill points, as a kill does); the engine's
+    # own hero creation (0x60D9F0) finishes a new hero with initSpells (thiscall (stats, 0, -1), ret 8). isEnemy
+    # (thiscall (creature, target) -> bool, ret 4) is the cursor's attack test; portraitImage (stdcall (type) ->
+    # UI image index, ret 4) is the portrait the party window draws for a creature type. Orders reach a creature as
+    # 0x44-byte events of this class through its vtable +0x18. The anti-cheat shadows (0x590730 checks them against
+    # hero()) are two pages of XOR-keyed copies of experience, gold, level and the stats block.
+    ('cStats_addExperience', 0x0057E160, 'func'),
+    # A text resource's new text (stdcall (id, wchar begin, end, capacity end), ret 0x10; takes the buffer, which it frees
+    # with the engine's allocator): the network lobby names the heroes so (0x7EDC50, ids 0x2700 + slot - 1).
+    ('textResources_set', 0x00672A60, 'func'),
+    ('cStats_initSpells', 0x0055FC00, 'func'),
+    # A hero's combo slot (thiscall (stats, index, u32 arts[4]*, u16 levels[4]*, combo id), ret 0x10): what the combo
+    # master writes; the hero creation clears the four slots with it (ids 0x200..0x203, 0x55E30F).
+    ('cStats_setCombo', 0x005813D0, 'func'),
+    ('cCreature_isEnemy', 0x00548F60, 'func'),
+    ('creaturePortraitImage', 0x00435D30, 'func'),
+    ('g_creatureEventVtable', 0x0089095C, 'data'),
+    ('g_antiCheatShadow1', 0x0182EE5C, 'data'),
+    ('g_antiCheatShadow2', 0x0182EE60, 'data'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]
