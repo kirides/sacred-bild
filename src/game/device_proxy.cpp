@@ -1263,6 +1263,14 @@ HRESULT DeviceProxy::GetTextureStageState(DWORD stage, D3DTEXTURESTAGESTATETYPE 
 {
     Scope p{TProxy};
     CallLock lock(*this, _ReturnAddress());
+    // The game's own filter, not the UI's bilinear stand-in: code that saves and restores states around its drawing
+    // (Sacred Gear's overlay, the escape menu's Mods button) would otherwise store the stand-in as the game's filter,
+    // and the world would be drawn bilinear after the UI pass (soft ground, dark seams around sprites).
+    if (stage < 2 && (type == D3DTSS_MAGFILTER || type == D3DTSS_MINFILTER) && value)
+    {
+        *value = m_filters[stage][type == D3DTSS_MAGFILTER ? 0 : 1];
+        return D3D_OK;
+    }
     if (batching())
     {
         return m_batcher->getStageState(stage, type, value);
