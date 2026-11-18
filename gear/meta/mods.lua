@@ -54,10 +54,12 @@
 local GearSettings = {}
 
 --- The value of a setting. An undeclared UPPER_CASE name is a key of the game's `Settings.cfg` and gives that file's text
---- (see `game`), nil if it has no such key; any other undeclared name is an error.
+--- (see `game`), nil if it has no such key; any other undeclared name is an error. With a `fallback`, an undeclared name
+--- (or a nil value) gives the fallback instead.
 ---@param id string
+---@param fallback? any
 ---@return boolean|number|string
-function GearSettings.get(id) end
+function GearSettings.get(id, fallback) end
 
 --- The value of `key` in the game's `Settings.cfg` (`KEY : value` lines) as text, nil if the file has no such key.
 --- Read each time, so it is what the file says now.

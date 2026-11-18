@@ -2940,24 +2940,33 @@ namespace
         return resourceSource(IDR_GEAR_KERNEL, text, size);
     }
 
-    // native.builtin(name) -> the Lua source of a part of Sacred Gear that is shipped inside the DLL ("modmanager"), or nil.
+    // native.builtin(name) -> the Lua source of a part of Sacred Gear that is shipped inside the DLL (the mod manager and the
+    // libraries every mod gets: gear.lookup, gear.fmt, gear.toast, gear.store), or nil.
     int nativeBuiltin(lua_State* L)
     {
+        static const struct
+        {
+            const char* name;
+            int id;
+        } builtins[] = {
+            {"modmanager", IDR_GEAR_MODMANAGER},
+            {"lookup", IDR_GEAR_LOOKUP},
+            {"fmt", IDR_GEAR_FMT},
+            {"toast", IDR_GEAR_TOAST},
+            {"store", IDR_GEAR_STORE},
+        };
         const char* name = luaL_checkstring(L, 1);
         const char* text = nullptr;
         size_t size = 0;
-        if (std::strcmp(name, "modmanager") == 0 && resourceSource(IDR_GEAR_MODMANAGER, text, size))
+        for (const auto& b : builtins)
         {
-            lua_pushlstring(L, text, size);
+            if (std::strcmp(name, b.name) == 0 && resourceSource(b.id, text, size))
+            {
+                lua_pushlstring(L, text, size);
+                return 1;
+            }
         }
-        else if (std::strcmp(name, "lookup") == 0 && resourceSource(IDR_GEAR_LOOKUP, text, size))
-        {
-            lua_pushlstring(L, text, size);
-        }
-        else
-        {
-            lua_pushnil(L);
-        }
+        lua_pushnil(L);
         return 1;
     }
 

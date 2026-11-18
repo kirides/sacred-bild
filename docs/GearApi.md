@@ -220,6 +220,9 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `clipboard` | `GearClipboard` | The Windows clipboard: copy text out of the game. |
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
 | `lookup` | `GearLookup` | Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window. |
+| `fmt` | `GearFmt` | Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed). |
+| `toast` | `GearToast` | Short messages that stack up on the screen and fade; the layout editor moves them. |
+| `store` | `GearStore` | The mod's own data in JSON files of its folder: load with defaults, save, save when changed. |
 | `mp` | `GearMp` | Players of a network game, the host, the mod channel and the `kill` event. |
 | `net` | `GearNet` | Custom net messages: named channels between computers and the game server. |
 | `settings` | `GearSettings` | This mod's settings (declared in `mod.lua`, changed by the player in the mod manager). |
@@ -322,6 +325,14 @@ Inside a task: waits until `test()` returns true, at most `timeout` seconds.
 - `test`: `fun(): boolean`
 - `timeout`: `number` (optional) - Default 30.
 - returns `satisfied` `boolean` - True when `test()` returned true, false after the timeout.
+
+#### `gear.guard(where, fn) -> F`
+
+A function that calls `fn` with its arguments and catches its errors: the first error of each `where` is logged with its traceback, later ones are not, and none of them counts against the mod (a mod is switched off after many errors). Use it for handlers that run every frame: `gear.on('draw', gear.guard('draw', draw))`. Returns fn's first result, nil after an error.
+
+- `where`: `string` - A name for the log line, e.g. `'draw'`.
+- `fn`: `F`
+- returns `F`
 
 #### `gear.log(...)`
 
@@ -1888,11 +1899,12 @@ Reached as `gear.settings`.
 
 This mod's declared settings (`settings` in `mod.lua`) with the player's values. Values are checked against the declaration: a number is clamped and put on the step grid, a choice must be one of the choices.
 
-#### `gear.settings.get(id) -> boolean|number|string`
+#### `gear.settings.get(id, fallback) -> boolean|number|string`
 
-The value of a setting. An undeclared UPPER_CASE name is a key of the game's `Settings.cfg` and gives that file's text (see `game`), nil if it has no such key; any other undeclared name is an error.
+The value of a setting. An undeclared UPPER_CASE name is a key of the game's `Settings.cfg` and gives that file's text (see `game`), nil if it has no such key; any other undeclared name is an error. With a `fallback`, an undeclared name (or a nil value) gives the fallback instead.
 
 - `id`: `string`
+- `fallback`: `any` (optional)
 - returns `boolean|number|string`
 
 #### `gear.settings.game(key) -> string?`
@@ -2421,6 +2433,208 @@ The id of the text field that has the focus, nil if none.
 #### `gear.lookup.unfocus()`
 
 Takes the focus away from the text field.
+
+## Formatting (gear.fmt)
+
+Small helpers that many mods need for their panels: a number with thousands separators, seconds as a clock or in words, a text from outside cut to a length (by characters or by its width on screen), the game's colour and image markup taken out of a line. The library is shipped in the DLL (`gear/lua/fmt.lua`) and runs once per mod, the first time the mod uses `gear.fmt`.
+
+### GearFmt
+
+Reached as `gear.fmt`.
+
+Numbers, times and texts made ready to show.
+
+#### `gear.fmt.number(n, sep) -> string`
+
+A whole number with thousands separators: `1234567` -> `'1,234,567'` (rounded; nil and non-numbers count as 0).
+
+- `n`: `number`
+- `sep`: `string` (optional) - The separator (default `','`).
+- returns `string`
+
+#### `gear.fmt.duration(seconds) -> string`
+
+Seconds as a clock with hours: `3725` -> `'1:02:05'`.
+
+- `seconds`: `number`
+- returns `string`
+
+#### `gear.fmt.clock(seconds) -> string`
+
+Seconds as minutes and seconds: `125` -> `'2:05'` (the minutes grow past 59).
+
+- `seconds`: `number`
+- returns `string`
+
+#### `gear.fmt.span(seconds) -> string`
+
+Seconds in the two biggest units: `'2d 03h'`, `'1h 02m'`, `'3m 05s'`, `'12s'`.
+
+- `seconds`: `number`
+- returns `string`
+
+#### `gear.fmt.fit(text, max) -> string`
+
+A text for one line: nil becomes `''`, control characters become spaces, and a text longer than `max` bytes is cut with `'...'` (never inside a UTF-8 character). Use it for texts that come from a server or another player.
+
+- `text`: `any`
+- `max`: `integer` (optional) - Without it the text is not cut.
+- returns `string`
+
+#### `gear.fmt.fit_width(text, width, size) -> string`
+
+`text` cut with `'...'` so that it is at most `width` wide in the font of `size` (measured with `gear.ui.text_size`, cached).
+
+- `text`: `string`
+- `width`: `number`
+- `size`: `number` (optional) - Default 12.
+- returns `string`
+
+#### `gear.fmt.plain(line, keep_unknown) -> string?`
+
+A line without the game's text markup (`\cAARRGGBB` colours, `\g...` inline images, `\r`, `\w`) and without leading and trailing spaces. nil when nothing is left, and when other backslash codes remain (unless `keep_unknown`).
+
+- `line`: `string`
+- `keep_unknown`: `boolean` (optional)
+- returns `string?`
+
+#### `gear.fmt.count(n, one, many) -> string`
+
+A number and a noun: `(1, 'kill')` -> `'1 kill'`, `(3, 'kill')` -> `'3 kills'`.
+
+- `n`: `number`
+- `one`: `string`
+- `many`: `string` (optional) - Default `one .. 's'`.
+- returns `string`
+
+## Toasts (gear.toast)
+
+A toast is a short message (a title and a few lines) that shows at the top of the screen, stacks under the ones before it and fades after a few seconds: an unlocked achievement, a finished bounty. The stack is a bare panel of the mod (`'toasts'`, layout key `<mod id>:toasts`): the layout editor moves it, and shows a sample while it is on; the mouse and the controller go on to the game. A toast's age counts in-game frames. The library is shipped in the DLL (`gear/lua/toast.lua`) and runs once per mod, the first time the mod uses `gear.toast`.
+
+### GearToastSpec
+
+A toast given as a table to `show`.
+
+| Field | Type | |
+|---|---|---|
+| `title` | `string` |  |
+| `lines` | `string[]` |  (optional) |
+| `color` | `integer` | The accent bar's colour (0xAARRGGBB). (optional) |
+
+### GearToastOpts
+
+The options of `options`.
+
+| Field | Type | |
+|---|---|---|
+| `seconds` | `number\|fun(): number` | How long a toast stays (default 6); a function is asked every frame (e.g. a setting). (optional) |
+| `max` | `integer` | How many toasts at once (default 4); the oldest goes first. (optional) |
+| `width` | `number` | The width of a toast in layout units (default 360). (optional) |
+| `when` | `fun(state: GearUiState): boolean` | Whether toasts are drawn now (default: `state.mode == 'game'`). (optional) |
+
+### GearToast
+
+Reached as `gear.toast`.
+
+This mod's toasts.
+
+#### `gear.toast.show(title, ...)`
+
+Shows a toast: a title and lines (nil and `''` are left out), or a `GearToastSpec`.
+
+- `title`: `string|GearToastSpec`
+- `...`: `string` (optional)
+
+#### `gear.toast.options(opts)`
+
+Changes this mod's toast options (each one is kept until changed).
+
+- `opts`: `GearToastOpts`
+
+#### `gear.toast.clear()`
+
+Removes this mod's toasts.
+
+#### `gear.toast.count() -> integer`
+
+How many of this mod's toasts are on the screen.
+
+- returns `integer`
+
+## Stored data (gear.store)
+
+A mod keeps its own data (a log, totals, saved lists) in JSON files of its folder (`gear.read` / `gear.save`). `load` and `save` do the reading, decoding, encoding and writing with defaults and one log line per broken file; `file` loads a table once and saves it when it changed, every few seconds and when the mod unloads. The library is shipped in the DLL (`gear/lua/store.lua`) and runs once per mod, the first time the mod uses `gear.store`.
+
+### GearStoreOpts
+
+The options of `file`.
+
+| Field | Type | |
+|---|---|---|
+| `every` | `number` | Seconds between saves of a changed file (default 30; 0: only on unload and `save`). (optional) |
+| `check` | `fun(data: any): any` | Repairs or replaces what was loaded (called once). (optional) |
+| `value` | `fun(): any` | What is written (default `handle.data`). (optional) |
+
+### GearStoreFile
+
+A file of `gear.store.file`.
+
+| Field | Type | |
+|---|---|---|
+| `name` | `string` |  |
+| `data` | `any` | The loaded table (or the default); change it, then call `changed`. |
+| `dirty` | `boolean` |  |
+
+#### `GearStoreFile:changed()`
+
+Marks the data as changed: it is written at the next save.
+
+#### `GearStoreFile:save() -> boolean, string?`
+
+Writes the file now.
+
+- returns `ok` `boolean`
+- returns `error` `string?`
+
+#### `GearStoreFile:flush() -> boolean, string?`
+
+Writes the file if it changed.
+
+- returns `ok` `boolean`
+- returns `error` `string?`
+
+### GearStore
+
+Reached as `gear.store`.
+
+JSON files of the mod's folder.
+
+#### `gear.store.load(name, default) -> T, ('missing'|'invalid')?`
+
+The decoded file, or `default` when it is missing, not JSON, or not a table while `default` is one. The second result is `'missing'` or `'invalid'` when the default was taken.
+
+- `name`: `string`
+- `default`: `T`
+- returns `data` `T`
+- returns `why` `('missing'|'invalid')?`
+
+#### `gear.store.save(name, value) -> boolean, string?`
+
+Writes `value` as JSON. The first failure of each file is logged.
+
+- `name`: `string`
+- `value`: `any`
+- returns `ok` `boolean`
+- returns `error` `string?`
+
+#### `gear.store.file(name, default, opts) -> GearStoreFile`
+
+Loads `name` (or takes `default`) and keeps it: the handle saves it when it changed (see `GearStoreOpts`) and on unload.
+
+- `name`: `string`
+- `default`: `any`
+- `opts`: `GearStoreOpts` (optional)
+- returns `GearStoreFile`
 
 ## Drawing (gear.ui)
 
@@ -3142,6 +3356,13 @@ Opens or closes a panel.
 
 - `id`: `string|integer`
 - returns `boolean`
+
+#### `gear.ui.toggle_panel(id) -> boolean`
+
+Opens a closed panel, closes an open one. Returns whether it is open now.
+
+- `id`: `string|integer`
+- returns `open` `boolean`
 
 ## Layout: persistent panels, movable game windows
 
