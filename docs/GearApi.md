@@ -14,6 +14,11 @@ editor completes and checks mod code (VS Code with the "Lua" extension by sumnek
 In this repository nothing is needed: `.luarc.json` at the root points LuaLS at `gear/meta`, so the examples in
 `gear/examples` get completion and checks.
 
+**Without this repository: the MDK.** Each release has `sacred-gear-mdk.zip`, a mod development kit built from
+`gear/meta` by `tools/gen_gear_mdk.py` (so it is always current): the definitions, this reference, `Gear.md`, a mod
+template, a few examples and scripts to create and pack a mod. Extract it, open the folder in VS Code and run
+`tools/new-mod.ps1`; `.luarc.json` is already set up.
+
 **In a mod repository** (for instance `sacred-gear-mods`, next to a checkout of this one): copy
 `gear/meta/luarc.template.json` to `.luarc.json` in the root of the mod repository and set `workspace.library` to the
 `gear/meta` folder (a relative path from that root, or an absolute one). That is all.
@@ -2027,6 +2032,67 @@ One installed mod, or nil.
 
 - `id`: `string`
 - returns `GearModListing?`
+
+## Remapping the game's keys (gear.input)
+
+The game's keys are fixed: I opens the inventory, 6 selects combat art 1, Space drinks the healing potion. A mod that lets the player choose other keys (or mouse buttons) for those actions gives Sacred Gear rules: "this input is that game key". Sacred Gear applies them to the messages the game reads, before any of its handlers, so the game reacts to the new key as if the player had pressed its own, and never sees the original. A rule without target makes an input do nothing (the original key of an action that was moved elsewhere). Rules apply only while the game has the keyboard: in game, with no message box, escape menu, savegame, options or character screen, and no chat line open; elsewhere every key is the game's own. Inputs are keys (the names of `gear.ui.key_pressed`, with `f13` to `f24` for the extra keys of mice and keyboards) and the mouse buttons `mouse3` (middle), `mouse4` and `mouse5` (the side buttons), alone or with `ctrl+`, `shift+` and `alt+`; the modifiers named must be the only ones held. A modifier alone is a binding too (`alt`), for the keys the game polls. Mouse buttons 1 and 2 and Esc cannot be rebound. The declared keys of `mod.lua` take the same names, so the mod manager's rebinding screen (F11, with the controller's key picker) offers them.
+
+### GearInputRule
+
+| Field | Type | |
+|---|---|---|
+| `from` | `string` | The input: `'x'`, `'f13'`, `'mouse4'`, `'shift+z'`. |
+| `to` | `string` | The game's key it becomes (a key name without modifiers); not with `block`. `ctrl`, `shift`, `alt`, `add` and `subtract` are keys the game polls (Alt shows names, Ctrl attacks in place, numpad +/- zoom): its poll sees the input held instead, and the input's messages go nowhere. (optional) |
+| `release` | `string` | Instead of the others: the game's poll of this polled key (`ctrl`, `shift`, `alt`, `add`, `subtract`) sees it released (its own key of an action moved elsewhere). (optional) |
+| `block` | `boolean` | The input does nothing in game (with any modifiers held); the original key of a moved action. (optional) |
+| `id` | `string` | Reports the press and release of this input to the handler of `gear.input.on`. (optional) |
+
+### GearInput
+
+Reached as `gear.input`.
+
+#### `gear.input.remap(rules)`
+
+Sets this mod's rules (replacing its earlier ones; `{}` removes them). A rule `{from, to}` for a key the game already has under that name (`{from = '6', to = '6'}`) changes nothing; it marks the key as taken over by the mod, so the mod manager does not warn that the game uses it. An exact rule for an input goes before a `block` rule of the same key.
+
+- `rules`: `GearInputRule[]`
+
+#### `gear.input.on(fn) -> table`
+
+Calls `fn(id, down, repeating)` when the input of one of this mod's rules with an `id` is pressed or released (`repeating`: a held key's auto repeat). The game has the key it was turned into at that time.
+
+- `fn`: `fun(id: string, down: boolean, repeating: boolean)`
+- returns `handle` `table`
+
+#### `gear.input.off(handle)`
+
+Removes a handler of `on`.
+
+- `handle`: `table`
+
+#### `gear.input.context() -> boolean, boolean`
+
+Whether the rules apply now, and whether the chat line is open.
+
+- returns `applies` `boolean`
+- returns `typing` `boolean`
+
+#### `gear.input.capture_start()`
+
+Rebinding screens: remembers which inputs are down, so `capture` returns the first one pressed after it. Call `gear.ui.capture_keys(true)` as well, so the pressed key does not reach the game.
+
+#### `gear.input.capture() -> string?`
+
+The binding (`'ctrl+mouse4'`) of the first key or mouse button pressed since `capture_start`, or nil.
+
+- returns `string?`
+
+#### `gear.input.normalize(text) -> string?`
+
+The canonical text of a binding (`'Ctrl+Z'` gives `'ctrl+z'`; `''` stays), or nil if it is not one.
+
+- `text`: `string`
+- returns `string?`
 
 ## Inventories (gear.inv)
 
