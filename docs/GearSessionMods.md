@@ -38,9 +38,20 @@ There is no pickup or drop event in the API, so it is inferred:
 
 Uses the `damage` event, which gives the final damage of each hit and the creature TYPES of attacker and victim (no
 ids, no skill, no overkill clipping). Dealt = attacker type is the hero's type, taken = victim type is the hero's type.
-It shows fight DPS (a fight ends after 5 s without damage), DPS of the last 10 s, totals, biggest hits, average
-hit, fighting time, kills and kills per minute of fighting, a 30 second bar graph, the biggest targets and damage
-sources.
+Three views (setting "View", the View button in the panel, the `view` key, or "Damage meter: next view" in the
+controller's mod menu; the choice is kept in the mod's `view.txt`):
+
+- **Compact** (default): one row per character, name and DPS (the last seconds while a fight runs, else the average of the
+  last fight). Alone: one line with a large number. In a network game each player's copy of the mod sends its own
+  numbers over the mod channel (`damagemeter`, once a second, setting "Share my DPS"), so the party is listed; players
+  without the mod are not.
+- **Extended**: per character DPS, DPS taken and total damage dealt, plus the local hero's biggest hit, fighting time and
+  average DPS.
+- **Detailed**: the full panel of the local hero: fight DPS (a fight ends after 5 s without damage), DPS of the last
+  10 s, totals, biggest hits, average hit, fighting time, kills and kills per minute of fighting, a 30 second bar graph,
+  the biggest targets and damage sources.
+
+The panel is an ordinary Gear panel: the layout editor moves it, its buttons are controller stops. The size follows the view.
 
 Limits: in a network game another hero of the same class counts as the local hero; pets, traps and effects are not
 "dealt" (the hook cannot say whose they are); the number is the engine's computed damage, not the hit points removed;
@@ -54,7 +65,7 @@ checked in a running game.
 Mods screen (F11) lists them with their settings and keys; choices are saved in `mods\gear_mods.json`.
 
 **Hotkeys** (rebindable in the Mods screen, Keys page): `sessiontracker` F2 (`panel`), `lootlog` F3 (`panel`), `damagemeter` F7
-(`panel`) and `reset` (unbound by default). F7 is also the default of the server mods `achievements`, `serverfeed` and
+(`panel`), `view` and `reset` (both unbound by default). F7 is also the default of the server mods `achievements`, `serverfeed` and
 `buildsharer`: if you run those too, both fire on one press, so rebind one side (see [mods/README.md](mods/README.md#hotkeys-and-the-clashes-in-the-defaults)).
 
 **Settings** (Mods screen, Settings page):
@@ -68,6 +79,8 @@ Mods screen (F11) lists them with their settings and keys; choices are saved in 
 | `lootlog` | Log plain (normal quality) items | off | Off: only magic, rare, set, unique and quest items |
 | `lootlog` | Log gold piles | off | Piles are logged as drops only (the amount is not exposed) |
 | `damagemeter` | A fight ends after | 5 s (2 to 30) | Seconds without damage |
+| `damagemeter` | View | Compact | Compact, extended or detailed (the View button changes it too) |
+| `damagemeter` | Share my DPS with the other players | on | Network game: send this hero's numbers to the other players' meters |
 | `damagemeter` | Rolling DPS window | 10 s (3 to 30) | The "Last N s" row |
 
 **Panels** (no screenshots exist: they are drawn inside the running game, and none was available; this is read from the code, in the

@@ -19,6 +19,9 @@ local function make_gear(mod_dir, opts)
     G.ground = {}          -- items lying around
     G.backpack, G.chest = {}, {}
     G.settings_map = {}
+    for k, v in pairs(opts.settings or {}) do G.settings_map[k] = v end
+    G.sent = {}
+    G.mp_state = opts.mp or {active = false}
 
     local hero = {}
     function hero:gold() return G.hero_state.gold end
@@ -45,6 +48,11 @@ local function make_gear(mod_dir, opts)
         TILE = 53.7,
         hero = function() if G.hero_state.present then return hero end end,
         items_near = function() return G.ground end,
+    }
+    gear.mp = {
+        active = function() return G.mp_state.active end,
+        local_player = function() return {name = 'Aria', slot = 1, is_local = true} end,
+        send = function(channel, payload, to) G.sent[#G.sent + 1] = {channel = channel, payload = payload, to = to}; return true end,
     }
     gear.inv = {container = function(which)
         local list = which == 'backpack' and G.backpack or which == 'chest' and G.chest or nil
@@ -251,7 +259,7 @@ end
 
 -- Damage meter -----------------------------------------------------------------------------------------------
 do
-    local G = load_mod('damagemeter')
+    local G = load_mod('damagemeter', {settings = {view = 'detailed'}})
     frames(G, 1)                                          -- learns the hero type (77)
     fire(G, 'damage', {damage = 100, victim_type = 5, attacker_type = 77})
     fire(G, 'damage', {damage = 300, victim_type = 5, attacker_type = 77})
@@ -290,6 +298,63 @@ do
     G.keys.reset()
     G.keys.panel()
     ok(#G.logs == 0, 'damage: no errors on the main path: ' .. table.concat(G.logs, '|'))
+end
+
+-- Damage meter: compact view (the default), view switching, party sharing
+do
+    local G = load_mod('damagemeter')
+    frames(G, 1)
+    fire(G, 'damage', {damage = 500, victim_type = 5, attacker_type = 77})
+    frames(G, 1)
+    G.texts = {}
+    fire(G, 'draw', {mode = 'game'})
+    local t = joined(G)
+    ok(t:find('Aria', 1, true) and t:find('DPS', 1, true), 'compact: name and DPS shown alone: ' .. t)
+    ok(not t:find('Biggest hit', 1, true), 'compact: nothing of the detailed view')
+    ok(#G.sent == 0, 'compact: nothing sent in single player')
+    -- the View button cycles compact -> extended -> detailed -> compact
+    G.buttons_pressed.view = true
+    fire(G, 'draw', {mode = 'game'})
+    G.buttons_pressed.view = nil
+    G.texts = {}; fire(G, 'draw', {mode = 'game'})
+    ok(joined(G):find('Biggest hit (you)', 1, true), 'view: extended after one press: ' .. joined(G))
+    G.buttons_pressed.view = true
+    fire(G, 'draw', {mode = 'game'})
+    G.buttons_pressed.view = nil
+    G.texts = {}; fire(G, 'draw', {mode = 'game'})
+    ok(joined(G):find('Fight (', 1, true), 'view: detailed after the second press')
+    G.keys.view()
+    G.texts = {}; fire(G, 'draw', {mode = 'game'})
+    ok(not joined(G):find('Fight (', 1, true) and joined(G):find('Aria', 1, true), 'view: key cycles back to compact')
+    ok(G.files['view.txt'] == 'compact', 'view: choice saved')
+    ok(#G.logs == 0, 'compact: no errors: ' .. table.concat(G.logs, '|'))
+end
+
+do
+    local G = load_mod('damagemeter', {mp = {active = true}})
+    frames(G, 1)
+    fire(G, 'damage', {damage = 900, victim_type = 5, attacker_type = 77})
+    frames(G, 2)
+    ok(#G.sent >= 1 and G.sent[1].channel == 'damagemeter' and G.sent[1].to == 'all', 'party: own numbers sent to all')
+    ok(G.sent[#G.sent].payload.dealt == 900, 'party: payload carries the damage dealt')
+    fire(G, 'mp_message', {slot = 2, name = 'Bran', is_local = false}, 'damagemeter', {dps = 321, tdps = 5, dealt = 4000, taken = 10, fighting = true})
+    fire(G, 'mp_message', {slot = 3, name = 'Cora', is_local = false}, 'damagemeter', {dps = 'x', dealt = -5})
+    fire(G, 'mp_message', {slot = 1, name = 'Aria', is_local = true}, 'damagemeter', {dps = 9999, dealt = 99999})
+    fire(G, 'mp_message', {slot = 4, name = 'Ignored'}, 'other', {dps = 1})
+    fire(G, 'mp_message', nil, 'damagemeter', 'garbage')
+    fire(G, 'mp_message', 'x', 'damagemeter', {})
+    G.texts = {}
+    fire(G, 'draw', {mode = 'game'})
+    local t = joined(G)
+    ok(t:find('Bran', 1, true) and t:find('321', 1, true), 'party: other player listed with DPS: ' .. t)
+    ok(t:find('Cora', 1, true), 'party: bad numbers become 0')
+    ok(not t:find('9999', 1, true) and not t:find('Ignored', 1, true), 'party: own echo and other channels ignored')
+    ok(t:find('Aria', 1, true), 'party: local hero listed')
+    frames(G, 20)
+    G.texts = {}
+    fire(G, 'draw', {mode = 'game'})
+    ok(not joined(G):find('Bran', 1, true), 'party: silent player dropped after a while')
+    ok(#G.logs == 0, 'party: no errors: ' .. table.concat(G.logs, '|'))
 end
 
 -- Damage meter: no hero, bad data

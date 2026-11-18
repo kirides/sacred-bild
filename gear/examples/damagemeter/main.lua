@@ -1,6 +1,14 @@
 -- Damage meter: damage dealt and taken by the hero, DPS, the biggest hit, damage by monster type, kills per minute.
 -- The panel is on F7; the Reset button (or the 'reset' key, unbound by default) starts over.
 --
+-- Views (setting 'View', the View button, the 'view' key or the controller's mod menu cycle through them):
+--   compact   (default) one row per character: name and DPS. Alone: a single line. In a network game every player's
+--             copy of the mod sends its own numbers over the mod channel ('damagemeter'), so the party is listed;
+--             players without the mod are not.
+--   extended  per character: DPS, DPS taken, damage dealt; below, the biggest hit and fighting time of the local hero.
+--   detailed  the original full panel of the local hero (fight and rolling DPS, totals, graph, targets, sources).
+-- The panel is an ordinary Gear panel: the layout editor moves it, and its buttons are stops of the controller's D-pad.
+--
 -- The data: the Gear event 'damage' (a hook in the engine's damage resolution) hands over, for every hit, the final
 -- damage (after resistances, before the engine applies it) and the creature TYPES of the victim and the attacker
 -- (GearHit: damage, victim_type, attacker_type, site). That is all there is, and it sets the limits:
@@ -209,28 +217,229 @@ end
 
 local function num(n) return tostring(math.floor((tonumber(n) or 0) + 0.5)) end
 
+
+local function short(n)
+    n = tonumber(n) or 0
+    if n >= 1e6 then return ('%.1fM'):format(n / 1e6) end
+    if n >= 1e4 then return ('%.1fk'):format(n / 1e3) end
+    return num(n)
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- Views and sharing
+---------------------------------------------------------------------------------------------------------------
+local VIEWS = {'compact', 'extended', 'detailed'}
+local VIEW_LABEL = {compact = 'Compact', extended = 'Extended', detailed = 'Detailed'}
+
+local function valid_view(v)
+    for _, name in ipairs(VIEWS) do if v == name then return name end end
+    return nil
+end
+
+local view = 'compact'
+local function load_view()
+    local ok, text = pcall(gear.read, 'view.txt')       -- the view the player last chose with the button
+    local v = ok and type(text) == 'string' and valid_view((text:gsub('%s+', ''))) or nil
+    if not v then
+        local ok2, s = pcall(gear.settings.get, 'view')
+        v = ok2 and valid_view(s) or nil
+    end
+    view = v or 'compact'
+end
+load_view()
+
+local function set_view(v)
+    view = valid_view(v) or 'compact'
+    pcall(gear.save, 'view.txt', view)
+end
+
+local function next_view()
+    for i, name in ipairs(VIEWS) do
+        if name == view then set_view(VIEWS[i % #VIEWS + 1]); return end
+    end
+    set_view('compact')
+end
+
+gear.on('settings.changed', guard('settings', function(id, v)
+    if id == 'view' and valid_view(v) then set_view(v) end
+end))
+
+-- What this hero shows as its DPS: the last seconds while a fight runs, else the average of the last fight.
+local function current_numbers()
+    local f = T.fight
+    local dealt_dps, taken_dps
+    if f then
+        dealt_dps, taken_dps = rolling(T.bucket_dealt), rolling(T.bucket_taken)
+    else
+        local last = T.fights[1]
+        if last then dealt_dps, taken_dps = last.dealt / last.dur, last.taken / last.dur else dealt_dps, taken_dps = 0, 0 end
+    end
+    return {dps = dealt_dps, tdps = taken_dps, dealt = T.dealt, taken = T.taken, fighting = f ~= nil}
+end
+
+local CHANNEL = 'damagemeter'
+local SEND_EVERY = 1
+local STALE = 15                    -- seconds without news after which a party member is dropped from the list
+local peers = {}                    -- slot -> {name, dps, tdps, dealt, taken, fighting, seen}
+local next_send = 0
+
+local function mp() return gear.mp end
+
+local function network_game()
+    local m = mp()
+    if not (m and m.active) then return false end
+    local ok, active = pcall(m.active)
+    return ok and active == true
+end
+
+local function local_name()
+    local m = mp()
+    local ok, p = false, nil
+    if m and m.local_player then ok, p = pcall(m.local_player) end
+    if ok and type(p) == 'table' and type(p.name) == 'string' and p.name ~= '' then return p.name end
+    local hero = W.hero()
+    if hero then
+        local ok2, n = pcall(hero.name, hero)
+        if ok2 and type(n) == 'string' and n ~= '' then return n end
+    end
+    return 'Hero'
+end
+
+local function clean_number(v)
+    v = tonumber(v)
+    if not v or v ~= v or v < 0 or v > 1e9 then return 0 end
+    return v
+end
+
+gear.on('mp_message', guard('mp_message', function(from, channel, payload)
+    if channel ~= CHANNEL or type(payload) ~= 'table' or type(from) ~= 'table' then return end
+    if from.is_local or type(from.slot) ~= 'number' or from.slot < 1 then return end
+    peers[from.slot] = {
+        name = type(from.name) == 'string' and from.name or ('hero ' .. tostring(from.slot)),
+        dps = clean_number(payload.dps), tdps = clean_number(payload.tdps),
+        dealt = clean_number(payload.dealt), taken = clean_number(payload.taken),
+        fighting = payload.fighting == true, seen = clock,
+    }
+end))
+
+-- Sends the local numbers once a second while other players are in the game.
+local function share()
+    if not network_game() then peers = {}; return end
+    local ok, on = pcall(gear.settings.get, 'share')
+    if ok and on == false then return end
+    if clock < next_send then return end
+    next_send = clock + SEND_EVERY
+    local n = current_numbers()
+    pcall(mp().send, CHANNEL, {dps = n.dps, tdps = n.tdps, dealt = n.dealt, taken = n.taken, fighting = n.fighting}, 'all')
+end
+
+gear.on('frame', guard('share', function()
+    if hero_type then share() end
+    for slot, e in pairs(peers) do if clock - e.seen > STALE then peers[slot] = nil end end
+end))
+
+-- The characters to list, sorted by damage dealt: {name, dps, tdps, dealt, taken, fighting, mine}.
+local function characters()
+    local list = {}
+    if hero_type then
+        local n = current_numbers()
+        n.name, n.mine = local_name(), true
+        list[1] = n
+    end
+    if network_game() then
+        for _, e in pairs(peers) do list[#list + 1] = e end
+    end
+    table.sort(list, function(a, b)
+        if a.dealt ~= b.dealt then return a.dealt > b.dealt end
+        if (a.mine or false) ~= (b.mine or false) then return a.mine or false end
+        return a.name < b.name
+    end)
+    return list
+end
+
+local function fit_name(name, max)
+    name = tostring(name or '?')
+    if #name > max then return name:sub(1, max - 1) .. '.' end
+    return name
+end
+
 ---------------------------------------------------------------------------------------------------------------
 -- The panel
 ---------------------------------------------------------------------------------------------------------------
 local DIM = 0xFFB0B0B0
 local RED = 0xFFFF8080
 local GREEN = 0xFF90E090
+local WHITE = 0xFFFFFFFF
+local GOLD = 0xFFFFE6A0
+local MAX_ROWS = 8
+local ROW = 17
 
 local function row(x, y, w, label, value, color)
     ui.text(label, x, y, {color = DIM})
-    ui.text(value, x, y, {width = w, align = 'right', color = color or 0xFFFFFFFF})
+    ui.text(value, x, y, {width = w, align = 'right', color = color or WHITE})
 end
 
-local function draw_panel()
-    local p = ui.panel('meter', 'Damage meter (F7)', 700, 200, 290, 420, {})
-    if not p.open then return end
-    local x, y = p.content_x or 0, p.content_y or 0
-    local w = p.content_w or 270
-    local accent = ui.COLORS and ui.COLORS.accent
-    if not hero_type then
+-- Height of a view's content, from the number of characters.
+local function content_height(n)
+    local rows = math.max(1, math.min(MAX_ROWS, n))
+    if view == 'compact' then return n <= 1 and not network_game() and 38 or rows * ROW + 4 end
+    if view == 'extended' then return 16 + rows * ROW + 6 + 3 * ROW + 4 end
+    return 366
+end
+
+-- The footer shared by every view: View cycles the views, Reset clears the counters.
+local function footer(x, y, w)
+    local vw = math.min(78, w - 54 - 8)          -- the compact panel is narrow
+    if ui.button('view', x, y, vw, 18, VIEW_LABEL[view], {tooltip = 'Next view (compact, extended, detailed)'}) then next_view() end
+    if ui.button('reset', x + w - 54, y, 54, 18, 'Reset', {tooltip = 'Clears every counter'}) then reset() end
+end
+
+local function draw_compact(x, y, w, list)
+    if #list == 0 then
+        ui.text('no hero', x, y, {color = DIM})
+    elseif #list == 1 and not network_game() then
+        -- Alone: one line, the number big enough to read in a fight.
+        local e = list[1]
+        ui.text(fit_name(e.name, 16), x, y + 2, {color = DIM})
+        ui.text(num(e.dps), x, y, {width = w, align = 'right', color = e.fighting and GREEN or WHITE, size = 18})
+        ui.text('DPS', x, y + 20, {width = w, align = 'right', color = DIM, size = 11})
+    else
+        for i = 1, math.min(MAX_ROWS, #list) do
+            local e = list[i]
+            local yy = y + (i - 1) * ROW
+            ui.text(fit_name(e.name, 14), x, yy, {color = e.mine and GOLD or WHITE})
+            ui.text(num(e.dps), x, yy, {width = w, align = 'right', color = e.fighting and GREEN or DIM})
+        end
+    end
+end
+
+local function draw_extended(x, y, w, list)
+    if #list == 0 then
         ui.text('no hero', x, y, {color = DIM})
         return
     end
+    local right = x + w
+    ui.text('DPS', right - 210, y, {width = 60, align = 'right', color = DIM, size = 11})
+    ui.text('Taken', right - 140, y, {width = 60, align = 'right', color = DIM, size = 11})
+    ui.text('Dealt', right - 70, y, {width = 70, align = 'right', color = DIM, size = 11})
+    local n = math.min(MAX_ROWS, #list)
+    for i = 1, n do
+        local e = list[i]
+        local yy = y + 16 + (i - 1) * ROW
+        ui.text(fit_name(e.name, 12), x, yy, {color = e.mine and GOLD or WHITE})
+        ui.text(num(e.dps), right - 210, yy, {width = 60, align = 'right', color = e.fighting and GREEN or WHITE})
+        ui.text(num(e.tdps), right - 140, yy, {width = 60, align = 'right', color = RED})
+        ui.text(short(e.dealt), right - 70, yy, {width = 70, align = 'right', color = DIM})
+    end
+    local yy = y + 16 + n * ROW + 6
+    local active = total_active()
+    row(x, yy, w, 'Biggest hit (you)', num(T.max_dealt))
+    row(x, yy + ROW, w, 'Fighting time (you)', num(active) .. ' s')
+    row(x, yy + 2 * ROW, w, 'Average DPS (you)', active > 0 and num(T.dealt / active) or '-')
+end
+
+local function draw_detailed(x, y, w)
+    local accent = ui.COLORS and ui.COLORS.accent
     local f = T.fight
     local fd, ft = fight_dps(f)
     ui.label('l-fight', f and 'Fight (running)' or 'Fight (last)', x, y, {color = accent})
@@ -273,16 +482,37 @@ local function draw_panel()
     ui.text('30 s, peak ' .. num(peak), x + gw + 6, gy, {color = DIM})
 
     ui.label('l-top', 'Biggest targets', x, y + 266, {color = accent})
-    local targets = top(T.by_victim, 3)
-    for i, e in ipairs(targets) do
+    for i, e in ipairs(top(T.by_victim, 3)) do
         row(x, y + 266 + i * 16, w, e.name, num(e.damage) .. ' (' .. num(e.hits) .. ')')
     end
     ui.label('l-src', 'Biggest damage sources', x, y + 330, {color = accent})
-    local sources = top(T.by_attacker, 2)
-    for i, e in ipairs(sources) do
+    for i, e in ipairs(top(T.by_attacker, 2)) do
         row(x, y + 330 + i * 16, w, e.name, num(e.damage) .. ' (' .. num(e.hits) .. ')')
     end
-    if ui.button('reset', x + w - 70, y + 354, 70, 20, 'Reset', {tooltip = 'Clears every counter'}) then reset() end
+end
+
+-- Panel width (layout units) per view; the height is the content plus the title bar and the footer.
+local WIDTH = {compact = 150, extended = 290, detailed = 290}
+local CHROME = 56
+
+local function draw_panel()
+    local list = characters()
+    local content_h = content_height(#list)
+    local title = view == 'compact' and 'DPS' or 'Damage meter (F7)'
+    local p = ui.panel('meter', title, 700, 200, WIDTH[view], content_h + CHROME, {})
+    if not p.open then return end
+    local x, y = p.content_x or 0, p.content_y or 0
+    local w = p.content_w or (WIDTH[view] - 20)
+    if view == 'compact' then
+        draw_compact(x, y, w, list)
+    elseif view == 'extended' then
+        draw_extended(x, y, w, list)
+    elseif hero_type then
+        draw_detailed(x, y, w)
+    else
+        ui.text('no hero', x, y, {color = DIM})
+    end
+    footer(x, y + content_h + 4, w)
 end
 
 gear.on('draw', guard('draw', function(state)
@@ -295,3 +525,10 @@ gear.keys.on('panel', guard('key', function()
     ui.show_panel('meter', not ui.panel_open('meter'))
 end))
 gear.keys.on('reset', guard('key', reset))
+gear.keys.on('view', guard('key', next_view))
+
+-- The controller reaches the same things through its mod menu.
+if ui.menu_item then
+    pcall(ui.menu_item, 'meter', 'Damage meter: show / hide', function() ui.show_panel('meter', not ui.panel_open('meter')) end)
+    pcall(ui.menu_item, 'meter_view', 'Damage meter: next view', next_view)
+end
