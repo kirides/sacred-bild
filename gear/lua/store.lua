@@ -83,6 +83,7 @@ end
 --              continued); a marker file <name>.migrated.txt records that
 function S.game(name, default, opts)
     opts = opts or {}
+    if not gear.savegame then return S.file(name, default, opts) end    -- a host without per savegame data: one file for all
     local h = {name = name, dirty = false, per_game = true}
     local marker = (name:gsub('%.json$', '')) .. '.migrated.txt'
     local function load()

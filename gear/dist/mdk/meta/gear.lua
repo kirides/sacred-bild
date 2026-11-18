@@ -16,6 +16,7 @@
 ---| 'session.stop' # That hero is gone.
 ---| 'game.saved' # A save `gear.game.save` asked for is written.
 ---| 'savegame.changed' # The game loaded a savegame or hero file, or started a new game: `(kind, scope, number)` (see `gear.savegame`).
+---| 'savegame.leaving' # Another savegame is loading (or a new game starts) and the running one ends: `(scope, kind)`; the data kept for `scope` can still be written with `gear.savegame.write_saved`. Fires before `savegame.changed`.
 ---| 'savegame.saving' # A savegame was written and the data of the running game is about to be kept for it: `(scope)`; write what changed now.
 ---| 'game.save_failed' # It could not be written.
 ---| 'game.saved_other' # A save the game or the player made: the quicksave, the savegame window, the game's own Auto-Save.
@@ -132,6 +133,7 @@ gear = {}
 ---@overload fun(event: 'game.save_failed', fn: fun(slot: integer, message: string)): GearHandler
 ---@overload fun(event: 'game.saved_other', fn: fun(slot: integer)): GearHandler
 ---@overload fun(event: 'savegame.changed', fn: fun(kind: 'load'|'hero'|'new', scope: string?, number: integer)): GearHandler
+---@overload fun(event: 'savegame.leaving', fn: fun(scope: string?, kind: 'load'|'hero'|'new')): GearHandler
 ---@overload fun(event: 'savegame.saving', fn: fun(scope: string)): GearHandler
 ---@overload fun(event: 'game.hero_saved', fn: fun(slot: integer, network: boolean)): GearHandler
 ---@overload fun(event: 'kill', fn: fun(kill: GearKill)): GearHandler
