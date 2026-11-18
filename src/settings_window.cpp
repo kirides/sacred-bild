@@ -245,6 +245,13 @@ namespace
             .tip(L"Smooths jagged edges in the game world with SMAA (the interface stays sharp). Higher presets find more "
                  L"edges and cost a little more GPU time. Needs the SacredBild (Direct3D 9) renderer.");
 
+        ui.combo(L"Texture filtering:", {L"Render", L"TextureFilter"},
+              {{L"Point (original, sharp)", L"Point"}, {L"Bilinear (smoother when zoomed in)", L"Bilinear"}},
+              Config::render.bilinear ? L"Bilinear" : L"Point")
+            .tip(L"How the game world's textures are sampled. Point is the original look: sharp, blocky when zoomed in. "
+                 L"Bilinear smooths the ground and sprites when zoomed in, but can show faint seams or dark fringes where a "
+                 L"texture sheet's neighbouring images or colour-keyed edges blend in. The interface follows 'Smooth UI scaling'.");
+
         ui.page(L"Advanced");
         ui.group(L"Frame timing");
         ui.combo(L"In the background:", {L"Display", L"FpsLimitInactive"}, {0, 10, 15, 20, 30, 60},

@@ -161,6 +161,7 @@ private:
     bool beginOverlay3D(Overlay3D& restore);
     void endOverlay3D(const Overlay3D& restore);
     DWORD uiFilter(DWORD value) const;
+    DWORD worldFilter(DWORD value) const;
 
     IDirect3DDevice7* m_real;
     LPDIRECTDRAWSURFACE7 m_texture0 = nullptr;
