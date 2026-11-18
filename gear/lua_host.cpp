@@ -2950,6 +2950,10 @@ namespace
         {
             lua_pushlstring(L, text, size);
         }
+        else if (std::strcmp(name, "lookup") == 0 && resourceSource(IDR_GEAR_LOOKUP, text, size))
+        {
+            lua_pushlstring(L, text, size);
+        }
         else
         {
             lua_pushnil(L);

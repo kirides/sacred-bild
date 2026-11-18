@@ -98,6 +98,7 @@
 ---@field chat GearChat The game's chat and message lines: who sent them, the session's history, the game's overlay.
 ---@field clipboard GearClipboard The Windows clipboard: copy text out of the game.
 ---@field realm GearRealmApi The online play server (realms): list, switch, add.
+---@field lookup GearLookup Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window.
 ---@field mp GearMp Players of a network game, the host, the mod channel and the `kill` event.
 ---@field net GearNet Custom net messages: named channels between computers and the game server.
 ---@field settings GearSettings This mod's settings (declared in `mod.lua`, changed by the player in the mod manager).
