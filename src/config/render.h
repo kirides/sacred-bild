@@ -31,6 +31,9 @@ namespace Config
         // SMAA antialiasing of the world view, before the UI is drawn (Direct3D 9 backend only): 0 off, 1 low,
         // 2 medium, 3 high (SMAA's presets).
         int smaa = 0;
+        // Filtering of the game world's textures: false the game's own point sampling (sharp), true bilinear (smoother
+        // when zoomed in; the interface follows [UI] LinearFilter).
+        bool bilinear = false;
         // Skeletons not drawn in the last frames are posed every Nth frame instead of every frame (1 = every frame).
         int offscreenPoses = 4;
         // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.

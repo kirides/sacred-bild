@@ -284,6 +284,11 @@ DWORD DeviceProxy::uiFilter(DWORD value) const
     return Config::ui.linearFilter && value == D3DTFG_POINT ? D3DTFG_LINEAR : value;
 }
 
+DWORD DeviceProxy::worldFilter(DWORD value) const
+{
+    return Config::render.bilinear && value == D3DTFG_POINT ? D3DTFG_LINEAR : value;
+}
+
 void DeviceProxy::beginUi()
 {
     CallLock lock(*this, _ReturnAddress());
@@ -337,8 +342,8 @@ void DeviceProxy::endUi()
     m_real->SetViewport(&m_savedViewport);
     for (DWORD stage = 0; stage < 2; ++stage)
     {
-        m_real->SetTextureStageState(stage, D3DTSS_MAGFILTER, m_filters[stage][0]);
-        m_real->SetTextureStageState(stage, D3DTSS_MINFILTER, m_filters[stage][1]);
+        m_real->SetTextureStageState(stage, D3DTSS_MAGFILTER, worldFilter(m_filters[stage][0]));
+        m_real->SetTextureStageState(stage, D3DTSS_MINFILTER, worldFilter(m_filters[stage][1]));
     }
     if (batching())
     {
@@ -1287,10 +1292,7 @@ HRESULT DeviceProxy::SetTextureStageState(DWORD stage, D3DTEXTURESTAGESTATETYPE 
     if (stage < 2 && (type == D3DTSS_MAGFILTER || type == D3DTSS_MINFILTER))
     {
         m_filters[stage][type == D3DTSS_MAGFILTER ? 0 : 1] = value;
-        if (m_ui)
-        {
-            value = uiFilter(value);
-        }
+        value = m_ui ? uiFilter(value) : worldFilter(value);
     }
     if (batching())
     {
