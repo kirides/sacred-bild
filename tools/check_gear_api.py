@@ -140,8 +140,14 @@ def main():
             fields('GearData'))
     abil = set(re.findall(r'^function abilities:(\w+)\(', kernel, re.M))
     compare('gear.data.abilities', abil, {f.name for f in model.classes['GearAbilities'].funcs})
-    abil_fields = set(re.findall(r"(\w+) = \{0x[0-9A-Fa-f]+, '", kernel)) | {'table', 'index', 'kind'}
+    abil_src = between(kernel, r'^local ABILITY_TABLES', r'^local ability_index', 'ability tables')
+    abil_fields = set(re.findall(r"(\w+) = \{0x[0-9A-Fa-f]+, '", abil_src)) | {'table', 'index', 'kind'}
     compare('ability record', abil_fields, fields('GearAbility'))
+    region_src = between(kernel, r'^local REGION_FIELDS', r'^local region_mt', 'region fields')
+    region_fields = set(re.findall(r"(\w+) = \{0x[0-9A-Fa-f]+, '", region_src)) | {'index', 'name'}
+    compare('region record', region_fields, fields('GearRegion'))
+    regions = set(re.findall(r'^function regions:(\w+)\(', kernel, re.M))
+    compare('gear.data.regions', regions, {f.name for f in model.classes['GearRegions'].funcs})
     text_src = re.search(r'^\s{8}text = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
     compare('gear.text', set(re.findall(r'^\s{12}(\w+) = function', text_src.group(1), re.M)) if text_src else set(), members('GearText'))
     files_src = re.search(r'^\s{8}files = \{(.*?)^\s{8}\},', kernel, re.M | re.S)
