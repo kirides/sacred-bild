@@ -264,6 +264,36 @@ function GearUi.panel(id, title, x, y, w, h, opts) end
 ---@param on boolean
 function GearUi.nav_modal(on) end
 
+--- Replaces the game's window `name` with the mod's own screen: while the window is open, the game neither draws it
+--- nor gives it the mouse or the keys; it still opens and closes as it always does (hotkeys, the escape menu), so the
+--- game's state stays the one it expects. Names: the in-game windows by control name (`UI_WND_SAVEGAME`, ...) and the
+--- menus' screens `UI_MENU_MAIN`, `UI_MENU_CHARACTER`, `UI_MENU_OPTIONS`, `UI_MENU_LOADGAME`, `UI_MENU_NETWORK`.
+--- One mod per window. The game's window comes back by itself when the mod does not draw its screen: call `replaced`
+--- every tick it does; 1.5 s after the window opened without it, or 0.5 s after the last call, the game's window shows
+--- until it closes. A mod that is off or unloaded replaces nothing. `on = false` gives the window back.
+---@param name string
+---@param on? boolean
+---@return boolean ok
+---@return string? error
+function GearUi.replace_window(name, on) end
+
+--- Call it every tick the mod draws its screen for a replaced window: true while the game's window is open and the
+--- mod's screen takes its place (draw it then); false when the window is closed or the game's own shows.
+---@param name string
+---@return boolean
+function GearUi.replaced(name) end
+
+--- Whether the game's window (an in-game control name or a menu screen, as for `replace_window`) is open.
+---@param name string
+---@return boolean
+function GearUi.window_open(name) end
+
+--- Closes the game's window as its own Back button or Esc does (the savegame window in the menus brings the start
+--- menu back). False if it is not open.
+---@param name string
+---@return boolean
+function GearUi.close_window(name) end
+
 --- The controller's B was pressed: true once per press (consumed). B closes an open dropdown and the topmost closable
 --- panel by itself; a `nav_modal` screen or a panel with `back = false` asks here.
 ---@return boolean

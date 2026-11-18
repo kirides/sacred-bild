@@ -187,6 +187,11 @@ namespace Gear::Addr
     // the slot (uint16 at engine+0x68) and sets bit 0x40 of the dword at engine+0x54 (already set: returns at once,
     // busy); the render thread loop (0060E350) then writes "SAVE\GAME%02d.PAK" (00619BF0) and clears bits 0xC0.
     inline Sacred::Global<uint8_t> cSaveEvent_vtable{};
+    // Replaced menus (gear/replace.cpp, gear/savegames.cpp). ENG 0071CC90: the savegame window's commands
+    // (cUI_Savegame, in game the manager's window 11, in the menus menus[3]; thiscall (window, command), ret 4): 8
+    // deletes the selected savegame's file and refreshes the list (10), 0xC is its Back button (hides the window; in
+    // the menus it brings the start menu back).
+    inline Sacred::Thiscall<void(void* window, uint32_t command)> cUI_Savegame_command{};
     // The ability tables (gear/tables.cpp), static arrays in .data: T1 (ENG 0094FE28..00952A38, 0x78-byte records, ids from
     // 1000, scanned by 004D1AF0) and T2 (ENG 00952ACC..00955344, 0x94-byte records, ids from 1, scanned by 004D2310). Each
     // is the address of the first record / one past the last (found in the lookups' own code).

@@ -114,7 +114,7 @@ function GearUi.frame(x, y, w, h, color, thickness, opts) end
 function GearUi.text(text, x, y, opts) end
 
 --- A UI image; `w`, `h` default to its own size. Images are filtered linearly.
----@param id integer An id from `images`.
+---@param id integer An id from `images`, or a picture id (`gear.game.save_picture`).
 ---@param x number
 ---@param y number
 ---@param w? number

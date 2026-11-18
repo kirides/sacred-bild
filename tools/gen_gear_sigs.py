@@ -142,6 +142,11 @@ GEAR = [
     # the slot and sets bit 0x40 of the engine's flags (+0x54), which the render thread loop turns into the write of
     # Save\GAMEnn.PAK. The engine is called through its vtable: SacredBild hooks the function's first bytes.
     ('cSaveEvent_vtable', 0x00890B38, 'data'),
+    # Replaced menus (gear/replace.cpp, gear/savegames.cpp): the savegame window's commands (cUI_Savegame, 0x71CC90,
+    # thiscall (window, command), ret 4; what its buttons and message box answers run): 8 deletes the selected
+    # savegame and refreshes the list, 10 refreshes the list, 0xC is its Back (closes it; in the menus the start
+    # menu comes back).
+    ('cUI_Savegame_command', 0x0071CC90, 'func'),
     # The ability tables (gear/tables.cpp): T1 (ids from 1000, 0x78-byte records) and T2 (ids from 1, 0x94-byte
     # records) are static arrays that 0x4D1AF0 / 0x4D2310 scan by id; the lookups load the first record and compare
     # against the end (0x952A38 and 0x955344 are the end of T1 and of T2). The text lookup (the text table's instance

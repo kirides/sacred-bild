@@ -1,4 +1,5 @@
 #include "save.h"
+#include "replace.h"
 #include "ui.h"
 #include "world.h"
 #include "game/gear_addr.h"
@@ -76,6 +77,19 @@ namespace
         }
     }
 
+    bool hideWindow(uintptr_t window)
+    {
+        __try
+        {
+            A::cUI_Control_clearFlags(reinterpret_cast<void*>(window), 1);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
     // The engine call; no C++ objects here (__try).
     bool sendEvent(void* engine, SaveEvent* event)
     {
@@ -145,9 +159,34 @@ bool Save::pending()
     return g_job.active || (engineFlags(flags) && (flags & kBusyBits) != 0);
 }
 
+// The checks of blocked() but the windows': for a save from the savegame window (it is open then).
+static const char* blockedBesidesWindows();
+
 const char* Save::blocked()
 {
-    if (!available())
+    if (const char* why = blockedBesidesWindows())
+    {
+        return why;
+    }
+    const Ui::State s = Ui::state();
+    if (!s.exclusive.empty())
+    {
+        return "a window is open";
+    }
+    if (s.escapeMenu)
+    {
+        return "the escape menu is open";
+    }
+    if (s.messageBox)
+    {
+        return "a message box is open";
+    }
+    return nullptr;
+}
+
+static const char* blockedBesidesWindows()
+{
+    if (!Save::available())
     {
         return "saving is not available (no game running or the engine was not found)";
     }
@@ -155,7 +194,7 @@ const char* Save::blocked()
     {
         return "not a single player game";
     }
-    if (pending())
+    if (Save::pending())
     {
         return "a save or load is pending";
     }
@@ -169,18 +208,6 @@ const char* Save::blocked()
     if (!s.available || std::string_view(s.mode) != "game")
     {
         return std::string_view(s.mode) == "cinematic" ? "a cinematic is playing" : "not in the game";
-    }
-    if (!s.exclusive.empty())
-    {
-        return "a window is open";
-    }
-    if (s.escapeMenu)
-    {
-        return "the escape menu is open";
-    }
-    if (s.messageBox)
-    {
-        return "a message box is open";
     }
     return nullptr;
 }
@@ -201,14 +228,34 @@ Save::FileInfo Save::fileInfo(uint32_t slot)
     return info;
 }
 
-bool Save::request(uint32_t slot, const std::string& name, bool thumbnail, const char*& error)
+bool Save::request(uint32_t slot, const std::string& name, bool thumbnail, const char*& error, bool fromWindow)
 {
     if (slot > kMaxSlot)
     {
         error = "the slot is 0..509";
         return false;
     }
-    if (const char* why = blocked())
+    const uintptr_t window = fromWindow ? Replace::object("UI_WND_SAVEGAME") : 0;
+    if (fromWindow)
+    {
+        if (const char* why = blockedBesidesWindows())
+        {
+            error = why;
+            return false;
+        }
+        if (!window || !Replace::open("UI_WND_SAVEGAME"))
+        {
+            error = "the savegame window is not open";
+            return false;
+        }
+        if (Ui::state().messageBox)
+        {
+            error = "a message box is open";
+            return false;
+        }
+        thumbnail = false;      // the window's picture, taken when it opened
+    }
+    else if (const char* why = blocked())
     {
         error = why;
         return false;
@@ -226,7 +273,7 @@ bool Save::request(uint32_t slot, const std::string& name, bool thumbnail, const
     event.sub = 2;
     event.slot = slot;
     event.thumbnail = thumbnail ? 1 : 0;
-    event.checkWindows = 1;
+    event.checkWindows = fromWindow ? 0 : 1;   // the window's own request (0071CC90 command 2) does not check
     event.name = text;
 
     const FileInfo before = fileInfo(slot);
@@ -242,6 +289,10 @@ bool Save::request(uint32_t slot, const std::string& name, bool thumbnail, const
         return false;
     }
     g_job = Job{true, slot, before, GetTickCount64()};
+    if (window && A::cUI_Control_clearFlags)
+    {
+        hideWindow(window);     // as the window does after its request
+    }
     return true;
 }
 

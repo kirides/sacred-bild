@@ -1295,6 +1295,7 @@ What `save` can be told.
 | Field | Type | |
 |---|---|---|
 | `thumbnail` | `boolean` | Let the engine capture the savegame's picture first (default false: the savegame keeps no new picture). (optional) |
+| `window` | `boolean` | Save as the open savegame window's own Save button does, for a mod that replaces the window (`gear.ui.replace_window`): only while that window is open in game; the picture is the one the game took when it opened, and the window closes once the engine took the request. (optional) |
 
 #### `gear.game.save(slot, name, opts) -> boolean?, string?`
 
@@ -1341,6 +1342,56 @@ The savegame file of `slot`: nil for a slot outside 0..509, else a table whose `
 
 - `slot`: `integer`
 - returns `GearSaveInfo?`
+
+### GearSavegame
+
+A savegame as `saves` lists it: what the file says about itself.
+
+| Field | Type | |
+|---|---|---|
+| `slot` | `integer` | The number in its file name (`GAME05.PAK`: 5); 0 is the quicksave. |
+| `file` | `string` | The file name, e.g. `GAME05.PAK`. |
+| `name` | `string` | The savegame's name (ASCII; may be empty, the game writes `QUICKSAVE` or its "empty" text). |
+| `hero` | `string` | The hero's name (UTF-8); nil if the file does not say. (optional) |
+| `class` | `GearClassName` | The hero's class; nil if unknown. (optional) |
+| `class_id` | `integer` | The hero's class number (1 seraphim .. 9 daemon), 0 if unknown. |
+| `level` | `integer` | The hero's level, 0 if unknown. |
+| `version` | `integer` | The savegame format (0x1B for Sacred Gold). |
+| `compatible` | `boolean` | Whether this game can load it (`version` is 0x1B). |
+| `time` | `number` | When it was saved (unix seconds, from the time the game wrote into it); 0 in old savegames. |
+| `mtime` | `number` | The file's last write (unix seconds). |
+| `size` | `number` | Bytes. |
+| `world_date` | `string` | The game world's date and time as the game shows it. |
+| `picture` | `boolean` | Whether it has a picture (`save_picture`). |
+
+#### `gear.game.saves() -> GearSavegame[]`
+
+Every savegame in the game's `Save` folder (or the folder a mod's overlay puts it in), sorted by file name like the game's own list. Each file is read for its header: call it when a screen opens, not every frame.
+
+- returns `GearSavegame[]`
+
+#### `gear.game.save_picture(slot) -> integer?`
+
+The savegame's picture (128 x 96, what the game captured when it was saved) as an id for `gear.ui.image`; made on the first call and kept while the file stays the same. nil if it has none.
+
+- `slot`: `integer`
+- returns `picture` `integer?`
+
+#### `gear.game.load(slot) -> boolean?, string?`
+
+Loads a savegame, as the savegame window's Load does: in a single player game or from the menus (the open savegame window closes). Refuses a savegame of another version.
+
+- `slot`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.game.delete_save(slot) -> boolean?, string?`
+
+Deletes a savegame's file (the game's savegame windows read their lists again).
+
+- `slot`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
 
 ## Clipboard (gear.clipboard)
 
@@ -2169,7 +2220,7 @@ Text, UTF-8, lines break at `\n`. By default in a vector UI font (Segoe UI) rast
 
 A UI image; `w`, `h` default to its own size. Images are filtered linearly.
 
-- `id`: `integer` - An id from `images`.
+- `id`: `integer` - An id from `images`, or a picture id (`gear.game.save_picture`).
 - `x`: `number`
 - `y`: `number`
 - `w`: `number` (optional)
@@ -2665,6 +2716,36 @@ A window: its title bar drags it (the position is kept in the layout), its X clo
 The controller: while on, the mod's screen has the pad alone. Only its widgets are D-pad stops (the game's controls and other mods' are not), the cursor starts on its first widget, and B is `back_pressed()`. Switch it off when the screen closes (it is also dropped when the mod unloads).
 
 - `on`: `boolean`
+
+#### `gear.ui.replace_window(name, on) -> boolean, string?`
+
+Replaces the game's window `name` with the mod's own screen: while the window is open, the game neither draws it nor gives it the mouse or the keys; it still opens and closes as it always does (hotkeys, the escape menu), so the game's state stays the one it expects. Names: the in-game windows by control name (`UI_WND_SAVEGAME`, ...) and the menus' screens `UI_MENU_MAIN`, `UI_MENU_CHARACTER`, `UI_MENU_OPTIONS`, `UI_MENU_LOADGAME`, `UI_MENU_NETWORK`. One mod per window. The game's window comes back by itself when the mod does not draw its screen: call `replaced` every tick it does; 1.5 s after the window opened without it, or 0.5 s after the last call, the game's window shows until it closes. A mod that is off or unloaded replaces nothing. `on = false` gives the window back.
+
+- `name`: `string`
+- `on`: `boolean` (optional)
+- returns `ok` `boolean`
+- returns `error` `string?`
+
+#### `gear.ui.replaced(name) -> boolean`
+
+Call it every tick the mod draws its screen for a replaced window: true while the game's window is open and the mod's screen takes its place (draw it then); false when the window is closed or the game's own shows.
+
+- `name`: `string`
+- returns `boolean`
+
+#### `gear.ui.window_open(name) -> boolean`
+
+Whether the game's window (an in-game control name or a menu screen, as for `replace_window`) is open.
+
+- `name`: `string`
+- returns `boolean`
+
+#### `gear.ui.close_window(name) -> boolean`
+
+Closes the game's window as its own Back button or Esc does (the savegame window in the menus brings the start menu back). False if it is not open.
+
+- `name`: `string`
+- returns `boolean`
 
 #### `gear.ui.back_pressed() -> boolean`
 

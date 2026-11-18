@@ -100,6 +100,13 @@ namespace Ui
     uint32_t imageCount();          // ids 1 .. count-1
     bool imageInfo(uint32_t id, ImageInfo& out);
 
+    // Pictures: images of Gear's own (a savegame's thumbnail), drawn like the UI images (Kind::Image) by an id from
+    // kPictureBase on. Lua thread: pictureCreate keeps the pixels (ARGB 4444, rows top to bottom) and returns the id;
+    // the texture is made when it is first drawn. pictureRelease drops it (its texture goes with the next frame).
+    constexpr uint32_t kPictureBase = 0x40000000;
+    uint32_t pictureCreate(int width, int height, std::vector<uint16_t> pixels);
+    void pictureRelease(uint32_t id);
+
     // The UI fonts.
     uint32_t fontCount();
     // The text's size in the font (the widest line, the lines' height); false if the font cannot measure. Call it on
