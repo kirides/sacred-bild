@@ -539,6 +539,14 @@ The internal name of type `id` (nil if it has none).
 - `id`: `integer`
 - returns `string?`
 
+#### `gear.data.object_types:display_name(id) -> string?, string?`
+
+The localized name of item type `id` as the game's tooltip shows it (the first line, colour codes removed), nil if the type is not an item or has no name. Made from a scratch item (nothing is registered or sent); the names are cached.
+
+- `id`: `integer`
+- returns `name` `string?`
+- returns `error` `string?`
+
 #### `gear.data.object_types:kind(id) -> integer?`
 
 The kind (the type record's byte +0x2E) of type `id`.

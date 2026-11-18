@@ -243,6 +243,34 @@ bool ItemTip::text(uint32_t id, std::wstring& out, const char*& error)
     return true;
 }
 
+bool ItemTip::textForType(uint32_t type, std::wstring& out, const char*& error)
+{
+    if (!Addr::cObjectFactory_create || !available())
+    {
+        error = "the tooltip functions were not found";
+        return false;
+    }
+    const uint32_t kind = kindOfType(type);
+    uintptr_t object = 0;
+    if (!kind || callFactory(kind, type, object) <= 0 || !object)
+    {
+        error = "no item of that type can be made";
+        return false;
+    }
+    wchar_t buffer[4096];
+    Capture capture{buffer, 4096, 0};
+    int w = 0, h = 0;
+    const int r = callShow(object, 0, 0, &w, &h, &capture);
+    callDelete(object);
+    if (r <= 0)
+    {
+        error = r < 0 ? "the game faulted while building the tooltip" : "no tooltip popup is available now";
+        return false;
+    }
+    out.assign(buffer, capture.length);
+    return true;
+}
+
 bool ItemTip::textExported(const std::string& bytes, std::wstring& out, const char*& error)
 {
     wchar_t buffer[4096];

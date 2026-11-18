@@ -15,6 +15,8 @@ namespace ItemTip
     // The tooltip's text (with the game's colour codes) instead of a popup: of an item, or of exported bytes.
     bool text(uint32_t id, std::wstring& out, const char*& error);
     bool textExported(const std::string& bytes, std::wstring& out, const char*& error);
+    // The tooltip's text of a new scratch item of item type `type` (no data filled in: the name and the plain lines), for the type's localized name.
+    bool textForType(uint32_t type, std::wstring& out, const char*& error);
 
     // The same for an exported item.
     bool showExported(const std::string& bytes, int x, int y, int& width, int& height, const char*& error);
