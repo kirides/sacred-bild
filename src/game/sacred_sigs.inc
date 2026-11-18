@@ -196,6 +196,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"textResources_get", "8B 44 24 04 56 83 F8 FF 8B F1 74 4A", 0, Sig::Take::Match, &Sacred::Addr::textResources_get}, // 00672C90, 00672F70, 00672F70
     {"g_pFontManager", "64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 24", 9, Sig::Take::Abs32, &Sacred::Addr::g_pFontManager}, // 00CDCA70, 00CDA9F0, 00CDA9F0
     {"g_hasAddon", "0F 94 44 24 13 EB 04 8B 74 24 14 A0 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::g_hasAddon}, // 0182EBEC, 0182CB6C, 0182CB6C
+    {"g_gameSettings", "89 5D C8 03 C2 89 45 C4 A0 ?? ?? ?? ?? DF 6D C4", 9, Sig::Take::Abs32, &Sacred::Addr::g_gameSettings}, // 0182EE78, 0182CDF8, 0182CDF8
     {"g_portalTexts", "C7 44 24 14 ?? ?? ?? ?? EB 04 8B 5C 24 18 8B 17", 4, Sig::Take::Abs32, &Sacred::Addr::g_portalTexts}, // 017EA420, 017E83A0, 017E83A0
     {"g_characterSlotLocked", "0F BE C3 8A 88 ?? ?? ?? ?? 84 C9 75 0B 6A 01 8B CE", 5, Sig::Take::Abs32, &Sacred::Addr::g_characterSlotLocked}, // 017EA3D0, 017E8350, 017E8350
     {"cUI_NetworkInfo_cellRect", "83 EC 0C 8D 44 24 00 56 8B F1 50 E8 ?? ?? ?? ?? 8B B6 54 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_NetworkInfo_cellRect}, // 006F7130, 006F6DF0, 006F6DF0

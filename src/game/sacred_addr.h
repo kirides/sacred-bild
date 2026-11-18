@@ -318,6 +318,9 @@ namespace Sacred::Addr
     inline Global<cFontManager*> g_pFontManager{};      // ENG 00CDCA70
     // The Underworld add-on is there (the portal message box lists its 14th portal, the island).
     inline Global<uint8_t> g_hasAddon{};                // ENG 0182EBEC
+    // The loaded Settings.cfg (loader 0x81C870): byte +2 is FSAA_FILTER, which the sprite passes read to pull their
+    // texture coordinates in by a fraction of a texel.
+    inline Global<uint8_t[4]> g_gameSettings{};         // ENG 0182EE78
     // The portal message box's text ids, made on its first render: the 14 surface portals, then the 14 underworld ones.
     inline Global<uint32_t> g_portalTexts{};            // ENG 017EA420
     // A byte per slot of the character screens: set, the slot can't be chosen.

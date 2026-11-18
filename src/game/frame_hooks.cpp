@@ -12,6 +12,7 @@
 #include "game/ui_canvas.h"
 #include "game/ui_state.h"
 #include "game/ui_windows.h"
+#include "config/ddraw.h"
 #include "config/debug.h"
 #include "config/display.h"
 #include "config/render.h"
@@ -277,6 +278,15 @@ namespace
         if (proxy && device == proxy)
         {
             proxy->beginBatch();
+        }
+        // Bilinear sampling bleeds across the edges of the sprite pieces cut from their sheets (a grid of thin lines);
+        // the game's FSAA_FILTER option pulls their texture coordinates in against that, so it counts as on then.
+        if (Config::render.textureFilter == 2 || (Config::render.textureFilter == 1 && Config::ddraw.d3d9))
+        {
+            if (Addr::g_gameSettings.address)
+            {
+                (*Addr::g_gameSettings)[2] = 1;
+            }
         }
         GroundMesh::beginFrame(self, device);
         g_origWorldRender(self, edx, device);
