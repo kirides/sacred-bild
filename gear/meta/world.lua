@@ -349,6 +349,14 @@ function Creature:order_ability(ability, target, y) end
 ---@return string? error
 function Creature:set_name(name) end
 
+--- Brings a fallen party hero back (`gear.party`). The engine removes a fallen companion from the world (with what
+--- it wears and carries) about 25 seconds after it fell, as a network game removes a dead player's hero: revive it
+--- before that.
+---@param hp? number Hit points (1 to the maximum; default a quarter of the maximum).
+---@return boolean? ok
+---@return string? error
+function Creature:revive(hp) end
+
 --- Gives a party hero experience through the game's own gain (it levels up with skill points). Not shared.
 ---@param amount number
 ---@return boolean? ok

@@ -115,6 +115,11 @@ namespace Party
     };
     bool state(uint32_t id, State& out);
 
+    // Brings a fallen party hero back with `health` hit points (1..max): the death states are cleared as for a living
+    // hero. The engine removes a fallen companion from the world about 25 s after it fell (as a network game removes a
+    // dead player's hero), so a mod revives it before that.
+    bool revive(uint32_t id, int32_t health, const char*& error);
+
     // Experience through the engine's own gain (levels up with skill points). Not shared with the party.
     bool addExperience(uint32_t id, uint32_t amount, const char*& error);
 

@@ -1132,6 +1132,37 @@ bool Party::state(uint32_t id, State& out)
     return c && readAt(c, kAction, out.action) && readAt(c, kMovement, out.movement);
 }
 
+bool Party::revive(uint32_t id, int32_t health, const char*& error)
+{
+    if (!available(error))
+    {
+        return false;
+    }
+    const uintptr_t c = heroObject(id);
+    int32_t hp = 0, maxHp = 0;
+    if (!c || !sameOwnerAsLocal(c) || !readAt(c, kHealth, hp) || !readAt(c, 0x4D4, maxHp))
+    {
+        error = "not a party hero";
+        return false;
+    }
+    if (hp > 0)
+    {
+        error = "the hero is not fallen";
+        return false;
+    }
+    health = std::clamp<int32_t>(health, 1, std::max<int32_t>(maxHp, 1));
+    // Dead: action 9 (+0xFC), movement 6 (+0x150); their sub-states and the timer the dead state keeps (+0xFE, +0x152,
+    // +0x104) start over.
+    const uint16_t zero = 0;
+    const bool ok = writeAt(c, kAction, zero) && writeAt(c, 0xFE, zero) && writeAt(c, kMovement, zero) &&
+                    writeAt(c, 0x152, zero) && writeAt(c, 0x104, uint32_t{0}) && writeAt(c, kHealth, health);
+    if (!ok)
+    {
+        error = "cannot write the hero";
+    }
+    return ok;
+}
+
 bool Party::addExperience(uint32_t id, uint32_t amount, const char*& error)
 {
     if (!available(error))

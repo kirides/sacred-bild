@@ -1339,6 +1339,14 @@ Sets the name the game shows for a party hero (1 to 30 characters, UTF-8). The g
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:revive(hp) -> boolean?, string?`
+
+Brings a fallen party hero back (`gear.party`). The engine removes a fallen companion from the world (with what it wears and carries) about 25 seconds after it fell, as a network game removes a dead player's hero: revive it before that.
+
+- `hp`: `number` (optional) - Hit points (1 to the maximum; default a quarter of the maximum).
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:add_experience(amount) -> boolean?, string?`
 
 Gives a party hero experience through the game's own gain (it levels up with skill points). Not shared.
