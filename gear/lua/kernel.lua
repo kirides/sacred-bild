@@ -2193,8 +2193,15 @@ local function layout_get()
     return layout
 end
 
+-- A panel's open / closed state (`open`) lives in its entry too and outlives moves, resizes and resets of the place.
 local function layout_set(key, entry)
-    layout_get()[key] = entry
+    local lay = layout_get()
+    local old = lay[key]
+    if old and old.open ~= nil then
+        entry = entry or {}
+        entry.open = old.open
+    end
+    lay[key] = entry
     layout_dirty = true
 end
 
@@ -2799,10 +2806,48 @@ local function make_ui(mod)
     -- not reach the game.
     -- Panels: a mod's windows. The layout keeps each one's place (and size, if resizable) under "mod_id:id".
     local panels = {}
+    -- The open / closed state is kept in the layout (mods\gear_layout.json, "open": true / false) and comes back at the next
+    -- start, after the mod's main.lua ran (its own show_panel calls there are the defaults). ui.persist_panel(id, false)
+    -- takes a panel out (for screens that only make sense with a state of the mod: a dialog, a keyboard).
+    local function remember_open(id, open)
+        local p = panels[id]
+        if mod.loading or (p and p.nopersist) then return end
+        local key = mod.id .. ':' .. tostring(id)
+        local lay = layout_get()
+        local e = lay[key]
+        if not e then e = {}; lay[key] = e end
+        if e.open ~= open then e.open = open; layout_dirty = true end
+    end
     function ui.show_panel(id, open)
         local p = panels[id] or {}
         panels[id] = p
         p.closed = open == false
+        remember_open(id, not p.closed)
+    end
+    function ui.persist_panel(id, on)
+        local p = panels[id] or {}
+        panels[id] = p
+        p.nopersist = on == false or nil
+        if on == false then
+            local e = layout_get()[mod.id .. ':' .. tostring(id)]
+            if e and e.open ~= nil then
+                e.open = nil
+                if next(e) == nil then layout_get()[mod.id .. ':' .. tostring(id)] = nil end
+                layout_dirty = true
+            end
+        end
+    end
+    -- Called by the kernel after main.lua: the kept states win over the defaults the mod set.
+    function mod.restore_panels()
+        local prefix = mod.id .. ':'
+        for key, e in pairs(layout_get()) do
+            if key:sub(1, #prefix) == prefix and type(e) == 'table' and e.open ~= nil then
+                local id = key:sub(#prefix + 1)
+                local p = panels[id] or {}
+                panels[id] = p
+                if not p.nopersist then p.closed = e.open == false end
+            end
+        end
     end
     function ui.panel_open(id)
         return not (panels[id] and panels[id].closed)
@@ -2820,6 +2865,7 @@ local function make_ui(mod)
         if p.closed then return {open = false} end
         local key = mod.id .. ':' .. tostring(id)
         local saved = layout_get()[key]
+        if saved and not saved.x then saved = nil end
         if saved then
             x, y = from_virtual(saved.x, saved.y)
             if opts.resizable and saved.w then w, h = size_from_virtual(saved.w, saved.h) end
@@ -2887,7 +2933,7 @@ local function make_ui(mod)
             local cr = region(tostring(id) .. '#close', x + w - 21, y + 2, 18, 18, {layer = opts.layer, tooltip = 'Close'})
             ui.text('x', x + w - 21, y + 2, {width = 18, height = 18, align = 'center', valign = 'middle',
                 color = cr.hover and 0xFFFF8080 or C.text, layer = opts.layer})
-            if cr.clicked then p.closed = true end
+            if cr.clicked then p.closed = true; remember_open(id, false) end
             -- The pad's B closes the topmost closable panel (opts.back == false: the mod handles B itself).
             if opts.back ~= false and not opts.passive then
                 ui_window_open = true
@@ -2898,6 +2944,7 @@ local function make_ui(mod)
                     end
                     if top == key or (top == nil) then
                         p.closed = true
+                        remember_open(id, false)
                         ui_pad.back = ui_pad.back - 1
                     end
                 end
@@ -3067,7 +3114,9 @@ local function make_ui(mod)
     -- The stored layout: {key = {x, y, w, h}} in the virtual 4096 x 4096 screen.
     function ui.layout()
         local out = {}
-        for k, v in pairs(layout_get()) do out[k] = {x = v.x, y = v.y, w = v.w, h = v.h} end
+        for k, v in pairs(layout_get()) do
+            if v.x then out[k] = {x = v.x, y = v.y, w = v.w, h = v.h, open = v.open} end
+        end
         return out
     end
     function ui.to_virtual(x, y) return to_virtual(x, y) end
@@ -4989,7 +5038,10 @@ local function load_mod(e, initial)
     end
     mods[#mods + 1] = m
     e.loaded = true
+    m.loading = true
     local ok = call(m, 'main.lua', chunk)
+    m.loading = nil
+    if ok and m.restore_panels then pcall(m.restore_panels) end
     if ok then
         log('mod %s %s loaded (mods\\%s)', m.id, m.version, m.dir)
     else

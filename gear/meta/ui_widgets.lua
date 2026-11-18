@@ -307,10 +307,18 @@ function GearUi.back_pressed() end
 ---@param fn fun()
 function GearUi.menu_item(id, label, fn) end
 
---- Opens or closes a panel.
+--- Opens or closes a panel. Whether a panel is open is kept in the layout (`mods\gear_layout.json`) and comes back at the
+--- next start: what a mod sets with `show_panel` in its `main.lua` is only the default for a first start, after that the
+--- player's last state wins. `persist_panel(id, false)` opts a panel out.
 ---@param id string|integer
 ---@param open boolean
 function GearUi.show_panel(id, open) end
+
+--- Whether a panel's open / closed state is kept across starts (default: yes). Call it in `main.lua` with `false` for a panel
+--- that only makes sense with a state of the mod (a dialog, an on-screen keyboard); it then always starts as the mod sets it.
+---@param id string|integer
+---@param on boolean
+function GearUi.persist_panel(id, on) end
 
 ---@param id string|integer
 ---@return boolean
