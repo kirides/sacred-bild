@@ -1,6 +1,7 @@
 #include "game/controller.h"
 #include "game/aim_assist.h"
 #include "game/focus.h"
+#include "game/window_fit.h"
 #include "game/frame_hooks.h"
 #include "game/gear_nav.h"
 #include "game/hero_move.h"
@@ -240,6 +241,7 @@ namespace
         if (HWND window = Focus::window())
         {
             ScreenToClient(window, &p);
+            p = WindowFit::clientToGame(p);     // a resized window
         }
         g_x = static_cast<float>(p.x);
         g_y = static_cast<float>(p.y);

@@ -1,6 +1,7 @@
 #include "game/focus.h"
 #include "game/controller.h"
 #include "game/gear_nav.h"
+#include "game/window_fit.h"
 #include "game/zoom.h"
 #include "game/sacred_addr.h"
 #include "input/inject.h"
@@ -90,7 +91,13 @@ namespace
     // Not while the controller has the cursor: the game warps it to keep it on its world spot as the view scrolls.
     BOOL WINAPI hookSetCursorPos(int x, int y)
     {
-        return active() && !Controller::ownsCursor() ? g_origSetCursorPos(x, y) : TRUE;
+        if (!active() || Controller::ownsCursor())
+        {
+            return TRUE;
+        }
+        // The game's screen coordinates (WindowFit): the real cursor goes to that spot of the scaled frame.
+        const POINT target = WindowFit::gameToScreen({x, y});
+        return g_origSetCursorPos(target.x, target.y);
     }
 
     // The player's own input (never the controller's injected messages): who is in charge, the controller or the
@@ -169,6 +176,11 @@ namespace
         if (Inject::unwrap(window, message, wParam, lParam, g_origWindowProc.load(), injected))
         {
             return injected;
+        }
+        LRESULT fitted = 0;
+        if (WindowFit::message(window, message, wParam, lParam, fitted))
+        {
+            return fitted;
         }
         noteInput(message, wParam);
         // Over a mod's widget the wheel scrolls it (Sacred Gear), not the game.

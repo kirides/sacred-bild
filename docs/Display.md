@@ -10,6 +10,7 @@ Default: the desktop resolution, instead of the hard-coded 1024x768.
 - Back buffer and window at the target size: borderless when it fills the screen, otherwise with a frame (caption
   and system menu: it can be moved and minimized) around a client area of that size (`[Display] Borderless`). Its
   close button is disabled so a stray click doesn't end the game (Alt+F4 still quits).
+- A window with a frame can be resized (`[Display] Resizable`, [see below](#resizable-window)).
 - Automation runs (`-gear-auto`) always use a framed 1600x900 window at the work area's bottom-right, whatever the
   settings say; `-gear-window=WxH[+X+Y]` overrides ([Gear](Gear.md#automation)).
 - World view: orthographic projection (including its depth range), visible area, culling and overhead-label layout
@@ -29,6 +30,32 @@ Default: the desktop resolution, instead of the hard-coded 1024x768.
   thumbnails taken from the screen center.
 - The cinematic letterbox bars run across the whole screen.
 - Always a 32-bit display mode (`GFX32 : 0` in `Settings.cfg` is ignored).
+
+## Resizable window
+
+A window with a frame (not the borderless one) has a sizing border and a maximize button. The game keeps its
+resolution and its back buffer: changing those while the game runs would mean releasing and recreating every
+Direct3D 9 resource of the game, which its two presenting threads don't survive. So Windows stretches the presented
+frame to the client area (the flip model's compositor, or Direct3D 9's own stretch with `VSync=0`), and SacredBild
+only keeps that from distorting the picture and the mouse from missing it:
+
+- The window keeps the aspect ratio of the game's resolution: dragging an edge or corner, snapping and
+  programs' `SetWindowPos` calls all end at a client area of that ratio (within a pixel). The smallest window is a
+  quarter of the resolution.
+- "Maximize" (the button, a double click on the title bar, Alt+Space, dragging to the top edge) makes the largest
+  such window that fits the monitor's work area, centered; maximizing again restores the size before. It is not
+  Windows' maximized state, which would stretch the frame over the whole work area.
+- The game reads and sets the cursor in screen pixels (`GetCursorPos`, `SetCursorPos`, also to keep it on its
+  world spot while the view scrolls): both are converted between the window and the game's frame, so the UI, the
+  world pick and the controller's cursor see the pixels of the frame. SacredBild's own code and the window itself
+  keep the real coordinates (`ClipCursor`, the settings screens, whose ImGui is drawn in the back buffer and
+  stretched with the frame).
+- The back buffer, the UI canvas and anchors, SMAA and the texture filter work in the game's resolution and are
+  not touched: to see more of the world, set `Width` / `Height`.
+
+No game function is replaced for this: `GetCursorPos` is the game's import (wrapped the way Sacred Gear's
+automation wraps it), `SetCursorPos` the one `Focus` already wraps, and the rest is the window procedure of the
+main window that SacredBild already subclasses.
 
 ## Screenshots
 

@@ -11,6 +11,7 @@
 #include <imgui_impl_win32.h>
 #include <imgui_internal.h>
 
+#include <windowsx.h>
 #include <atomic>
 #include <initializer_list>
 #include <mutex>
@@ -28,6 +29,10 @@ namespace
     d9::IDirect3DDevice9Ex* g_device = nullptr;     // ImGui's backends are initialized for it
     HWND g_window = nullptr;
     float g_scale = 1.0f;
+    // The back buffer's size: ImGui's screen is drawn in it. A resized window (WindowFit) stretches it to a client
+    // area of another size, so the mouse comes in client pixels and is converted.
+    std::atomic<int> g_backWidth{0};
+    std::atomic<int> g_backHeight{0};
 
     struct Message
     {
@@ -124,6 +129,8 @@ namespace
         d9::D3DSURFACE_DESC desc = {};
         backBuffer->GetDesc(&desc);
         g_scale = desc.Height > 0 ? desc.Height / 768.0f : 1.0f;
+        g_backWidth = static_cast<int>(desc.Width);
+        g_backHeight = static_cast<int>(desc.Height);
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -219,6 +226,10 @@ namespace
         ImGuiIO& io = ImGui::GetIO();
         ImGui_ImplDX9_NewFrame();
         ImGui_ImplWin32_NewFrame();
+        if (g_backWidth > 0 && g_backHeight > 0)
+        {
+            io.DisplaySize = ImVec2(static_cast<float>(g_backWidth), static_cast<float>(g_backHeight));   // not the client's
+        }
         dropBackendGamepad();
         if (g_gamepadNavigation.load(std::memory_order_relaxed))
         {
@@ -346,11 +357,22 @@ bool Overlay::isOpen()
     return true;
 }
 
-bool Overlay::message(HWND, UINT message, WPARAM wParam, LPARAM lParam)
+bool Overlay::message(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
     if (!isOpen() || !isInput(message))
     {
         return false;
+    }
+    RECT client = {};
+    const int backWidth = g_backWidth, backHeight = g_backHeight;
+    if (message >= WM_MOUSEFIRST && message <= WM_MOUSELAST && message != WM_MOUSEWHEEL && message != WM_MOUSEHWHEEL &&
+        backWidth > 0 && backHeight > 0 && GetClientRect(window, &client) && client.right > 0 && client.bottom > 0 &&
+        (client.right != backWidth || client.bottom != backHeight))
+    {
+        // Client pixels of a resized window to back buffer pixels.
+        const int x = GET_X_LPARAM(lParam) * backWidth / client.right;
+        const int y = GET_Y_LPARAM(lParam) * backHeight / client.bottom;
+        lParam = MAKELPARAM(static_cast<WORD>(static_cast<SHORT>(x)), static_cast<WORD>(static_cast<SHORT>(y)));
     }
     std::scoped_lock lock(g_queueLock);
     if (g_queue.size() < 4096)

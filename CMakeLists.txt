@@ -71,6 +71,7 @@ set(DDRAW_SOURCES
   src/system_ddraw.cpp
   src/game/build.cpp
   src/game/focus.cpp
+  src/game/window_fit.cpp
   src/game/frame_hooks.cpp
   src/game/gameserver.cpp
   src/game/granny_async.cpp

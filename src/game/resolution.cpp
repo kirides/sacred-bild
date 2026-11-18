@@ -2,6 +2,7 @@
 #include "game/build.h"
 #include "game/focus.h"
 #include "game/ui_canvas.h"
+#include "game/window_fit.h"
 #include "config/ddraw.h"
 #include "config/display.h"
 #include "config/render.h"
@@ -247,6 +248,7 @@ namespace
     HWND g_mainWindow = nullptr;
     bool g_framed = false;
     constexpr DWORD kFramedStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    constexpr DWORD kResizableStyle = WS_THICKFRAME | WS_MAXIMIZEBOX;
 
     bool wantFrame()
     {
@@ -355,7 +357,7 @@ namespace
             g_framed = wantFrame();
             if (g_framed)
             {
-                style = (style & WS_VISIBLE) | kFramedStyle;
+                style = (style & WS_VISIBLE) | kFramedStyle | (Config::display.resizable ? kResizableStyle : 0);
             }
             LOG("Main window: {}", g_framed ? "framed" : "borderless");
         }
@@ -364,6 +366,10 @@ namespace
         {
             g_mainWindow = window;
             Focus::windowCreated(window);
+            if (g_framed && Config::display.resizable)
+            {
+                WindowFit::windowCreated(window);
+            }
         }
         return window;
     }
