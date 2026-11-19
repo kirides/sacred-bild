@@ -24,6 +24,12 @@
 ---@field types integer[] Their type ids.
 ---@field names string[] The localized names of those types (the player's language, no duplicates), which the search matches as well.
 
+--- A thing of the built-in kind `'creature_type'`: one monster type.
+---@class GearLookupCreatureType
+---@field id integer The type id (save this).
+---@field name string The localized name (the internal one if the game has no text for it).
+---@field internal string The internal name (the model name).
+
 --- A thing of the built-in kind `'ability'`.
 ---@class GearLookupAbility
 ---@field id integer
@@ -58,7 +64,7 @@ local GearLookup = {}
 ---@param def GearLookupKind
 function GearLookup.register(kind, def) end
 
---- The names of the kinds: `'ability'`, `'creature'`, `'item'` and the registered ones.
+--- The names of the kinds: `'ability'`, `'creature'`, `'creature_type'`, `'item'` and the registered ones.
 ---@return string[]
 function GearLookup.kinds() end
 

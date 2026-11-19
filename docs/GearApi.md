@@ -597,6 +597,13 @@ What to show the player for type `id`: `display_name`, else `name`, else `'type 
 - `id`: `integer`
 - returns `string`
 
+#### `gear.data.object_types:resolve(spec) -> integer?`
+
+The type id that `spec` stands for: a number that is a type, an internal name (any case), or the localized name of a creature type (any case); nil if it names nothing. For turning names that an older version of a mod saved into ids (see "Names and IDs" in Gear.md).
+
+- `spec`: `integer|string`
+- returns `integer?`
+
 #### `gear.data.object_types:kind(id) -> integer?`
 
 The kind (the type record's byte +0x2E) of type `id`.
@@ -2999,6 +3006,16 @@ A thing of the built-in kind `'creature'`: a word of monster type names.
 | `types` | `integer[]` | Their type ids. |
 | `names` | `string[]` | The localized names of those types (the player's language, no duplicates), which the search matches as well. |
 
+### GearLookupCreatureType
+
+A thing of the built-in kind `'creature_type'`: one monster type.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | The type id (save this). |
+| `name` | `string` | The localized name (the internal one if the game has no text for it). |
+| `internal` | `string` | The internal name (the model name). |
+
 ### GearLookupAbility
 
 A thing of the built-in kind `'ability'`.
@@ -3050,7 +3067,7 @@ Adds or replaces a kind of things to look up.
 
 #### `gear.lookup.kinds() -> string[]`
 
-The names of the kinds: `'ability'`, `'creature'`, `'item'` and the registered ones.
+The names of the kinds: `'ability'`, `'creature'`, `'creature_type'`, `'item'` and the registered ones.
 
 - returns `string[]`
 

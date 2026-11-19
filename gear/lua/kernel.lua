@@ -140,6 +140,28 @@ function data.object_types:label(id)
     return self:display_name(id) or self:name(id) or ('type ' .. tostring(id))
 end
 
+-- The type id a saved or typed spec stands for: a number (checked to be a type), an internal name (any case), or the localized name
+-- of a creature type (any case); nil if it names nothing. For migrating names that older versions of a mod saved to ids.
+do
+local by_localized
+function data.object_types:resolve(spec)
+    if type(spec) == 'number' then return self:get(spec) and spec or nil end
+    if type(spec) ~= 'string' or spec == '' then return nil end
+    local id = self:find(spec)
+    if id then return id end
+    if not by_localized then
+        by_localized = {}
+        for t = 1, self:count() - 1 do
+            if self:kind(t) == 3 then
+                local shown = self:display_name(t)
+                if shown and not by_localized[shown:lower()] then by_localized[shown:lower()] = t end
+            end
+        end
+    end
+    return by_localized[spec:lower()]
+end
+end
+
 function data.object_types:kind(id)
     local r = self:get(id)
     return r and r:u8(OBJECT_TYPE_KIND)

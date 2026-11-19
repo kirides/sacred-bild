@@ -155,6 +155,25 @@ errors is switched off until it is switched on again in the Mods screen. A handl
 a loop the JIT compiled may not be caught. The game's functions that Gear calls for a mod run under a fault guard: a
 call that faults returns nil and a message instead of crashing the game.
 
+### Names and IDs
+
+The game's texts follow the player's language, so a name is never a key. A mod that keeps something between runs (its
+settings, a file, a savegame's data, a message to a server) follows these rules:
+
+- **Save ids.** An object type is its number (`creature:type()`, `item.type`, the `type` of `drops.roll` and the kill event),
+  stable in every language and install; an ability, a region or a sector likewise. Save `{type = 38}`, not `"Orkkrieger"` and not
+  `"ORC_WARRIOR.GRN"`. A *pattern* that is meant to match a family ("any creature whose model name has the word orc") is not a
+  name: it may be saved as the word, but then the mod must say so in its docs and never show it as a name.
+- **Show names.** What the player reads comes from `gear.data.object_types:label(id)` (the localized name, else the internal
+  one, else `type N`), `creature:display_name()` or the kill event's `display_name`; items also from `gear.ui.item_tooltip_text`.
+  A name saved next to an id (a log entry's text) is a snapshot: draw the label of the id when there is one.
+- **Search by name.** A picker searches the localized names and the internal words: `gear.lookup.pick('creature_type')`,
+  `'creature'` (families) and `'item'` do. Hand the result's `id` on, not its name.
+- **Migrate on load.** Data from an older version may hold names. Turn each into an id with `object_types:resolve(name)` (a
+  number, an internal name or a localized creature name), write the new form with the next save, and keep an entry that
+  resolves to nothing as it is, so it survives an update that adds the type. The reader accepts both forms for good.
+- **Protocols.** What a server understands stays what it understands: add the id next to the name instead of replacing it.
+
 ## Replacing game files (file overlay)
 
 A mod can ship data files that the game opens instead of its own. `mods/<id>/overlay.txt` has one rule per line
