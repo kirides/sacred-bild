@@ -159,6 +159,27 @@ class Tests(unittest.TestCase):
         self.assertFalse(bv.is_test_path('main.cpp'))
 
 
+class HookTests(unittest.TestCase):
+    def test_post_merge_hook_bumps_during_a_real_merge(self):
+        tools = os.path.dirname(os.path.abspath(__file__))
+        root = os.path.dirname(tools)
+        r = Repo()
+        self.addCleanup(r.tmp.cleanup)
+        r.commit('start', {BILD: '1.2.3\n', GEAR: '0.9\n', 'src/main.cpp': '//\n', 'mod-index.json': '{}\n'})
+        for f in ('bump_versions.py', 'make_mod_index.py'):
+            r.write('tools/' + f, open(os.path.join(tools, f), encoding='utf-8').read())
+        for f in ('_python.sh', 'post-merge'):
+            r.write('.githooks/' + f, open(os.path.join(root, '.githooks', f), encoding='utf-8', newline='').read().replace('\r\n', '\n'))
+            os.chmod(os.path.join(r.dir, '.githooks', f), 0o755)
+        r.git('add', '-A'); r.git('commit', '-q', '-m', 'tools'); r.git('config', 'core.hooksPath', '.githooks')
+        r.git('checkout', '-q', '-b', 'f'); r.touch('src/x.cpp', 'feat(bild): x'); r.git('checkout', '-q', 'main'); r.touch('notes.txt', 'other work')
+        subprocess.run(['git', '-C', r.dir, 'merge', '--no-ff', '-m', 'merge f', 'f'], capture_output=True, text=True, env=ENV, check=True)
+        self.assertEqual(r.read(BILD), '1.3.0\n')
+        self.assertIn('bump version 1.2.3 -> 1.3.0', r.git('log', '-1', '--format=%s', '--', BILD))
+        self.assertEqual(r.git('status', '--porcelain', '--untracked-files=no').strip(), '')
+        self.assertFalse(os.path.exists(os.path.join(r.dir, '.git', 'MERGE_HEAD')))
+
+
 class IndexTests(unittest.TestCase):
     def test_index_follows_the_version_files(self):
         r = Repo()

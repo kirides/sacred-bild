@@ -134,6 +134,15 @@ def plan(repo, ref):
     return out
 
 
+def commit_paths(repo, paths, message):
+    """Commit exactly these files on HEAD with plumbing. `git commit -- <path>` refuses ("partial commit during a merge") when it runs in the
+    post-merge hook, where MERGE_HEAD still exists, and a plain `git commit` would make a second merge commit."""
+    git(repo, 'add', '--', *paths)
+    tree = git(repo, 'write-tree').strip()
+    sha = git(repo, 'commit-tree', tree, '-p', 'HEAD', '-m', message).strip()
+    git(repo, 'update-ref', '-m', 'commit: ' + message.splitlines()[0], 'HEAD', sha)
+
+
 def write_version(repo, comp, new):
     path = os.path.join(repo, comp.version_file)
     with open(path, 'rb') as fh:
@@ -184,15 +193,13 @@ def main(argv=None):
         comp = r['comp']
         write_version(repo, comp, r['new'])
         if o.commit:
-            git(repo, 'add', '--', comp.version_file)
-            git(repo, 'commit', '-m', 'chore(%s): bump version %s -> %s (%s)' % (comp.id, r['version'], r['new'], r['level']), '--', comp.version_file)
+            commit_paths(repo, [comp.version_file], 'chore(%s): bump version %s -> %s (%s)' % (comp.id, r['version'], r['new'], r['level']))
     index = os.path.join(repo, 'mod-index.json')
     tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'make_mod_index.py')
     if not o.no_index and os.path.isfile(index) and os.path.isfile(tool):
         subprocess.run([sys.executable, tool, '--repo', repo], check=False)
         if o.commit and git(repo, 'status', '--porcelain', '--', 'mod-index.json').strip():
-            git(repo, 'add', '--', 'mod-index.json')
-            git(repo, 'commit', '-m', 'chore: refresh mod-index.json after version bumps', '--', 'mod-index.json')
+            commit_paths(repo, ['mod-index.json'], 'chore: refresh mod-index.json after version bumps')
     print('%d component(s) %s' % (len(pending), 'bumped and committed' if o.commit else 'bumped (not committed)'))
     return 0
 
