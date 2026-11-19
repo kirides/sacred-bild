@@ -1119,6 +1119,16 @@ do
         if type(item_type) ~= 'number' then error('equip_slot wants an item or an item type', 2) end
         return native.item_equip_slot(self.id, item_type)
     end
+    -- creature:learn(id, level) / creature:forget(id): add or remove an art (id from 1000) or spell of a hero's abilities with the
+    -- engine's own function; true, or nil and a reason (it knows it already / does not know it / not a hero).
+    function creature_mt:learn(ability, level)
+        assert(type(ability) == 'number', 'expected an ability id')
+        return native.creature_learn(self.id, ability, level or 1)
+    end
+    function creature_mt:forget(ability)
+        assert(type(ability) == 'number', 'expected an ability id')
+        return native.creature_forget(self.id, ability)
+    end
     function creature_mt:set_combo(slot, arts)
         assert(type(slot) == 'number' and type(arts) == 'table', 'expected a slot (0..3) and a list of combat arts')
         return native.party_set_combo(self.id, slot, arts)
@@ -5174,6 +5184,33 @@ local function make_env(mod)
     end
     w.pickup_refused = function() return native.pickup_refused() end
     gear.world = w
+    -- gear.models: the models' motion slot tables (Models.tmp). `body` is a hero type (1..9) or its name ('seraphim').
+    gear.models = {}
+    local function body_type(body)
+        if type(body) == 'number' then return body end
+        for _, c in ipairs(CLASSES) do if c.name == body then return c.id end end
+        error('unknown body ' .. tostring(body), 3)
+    end
+    -- has_motion(body, slot): whether the body's model has a clip for the slot (0..255).
+    function gear.models.has_motion(body, slot) return native.model_has_motion(body_type(body), slot) end
+    -- motion(body, slot): the motion record index the slot maps to (0: none), nil if the model was not found.
+    function gear.models.motion(body, slot) return native.model_motion(body_type(body), slot) end
+    -- set_motion(body, slot, record): maps the slot of the body's model to a motion record (the index motion() of any body
+    -- returns, so a body can play another's clip); for every creature of that model, until restore() or the game ends.
+    function gear.models.set_motion(body, slot, record)
+        local t = body_type(body)
+        local saved = kernel.model_saved
+        if not saved then saved = {}; kernel.model_saved = saved end
+        local key = t * 256 + slot
+        if saved[key] == nil then saved[key] = native.model_motion(t, slot) or false end
+        return native.model_set_motion(t, slot, record)
+    end
+    function gear.models.restore()
+        for key, was in pairs(kernel.model_saved or {}) do
+            if was then native.model_set_motion(math.floor(key / 256), key % 256, was) end
+        end
+        kernel.model_saved = nil
+    end
     gear.party = {}
     for k, v in pairs(kernel.party) do gear.party[k] = v end
     -- Hero files (the network game's Save\HeroNN.pax and the mod's own heroes\*.pax): list, bring one into the party,
@@ -5372,6 +5409,8 @@ local function make_env(mod)
         if event == 'level.factor' then native.level_factor_active(true) end
         if event == 'combat.constant' then native.combat_constant_active(true) end
         if event == 'creature.ability' then native.creature_ability_active(true) end
+        if event == 'ability.route' then native.route_active(true) end
+        if event == 'motion.select' then native.motion_active(true) end
         if event == 'damage' then native.damage_active(true) end
         if event == 'effect.add' then native.effect_active(true) end
         if event == 'bonus.constant' then native.bonus_active(true) end
@@ -5390,6 +5429,8 @@ local function make_env(mod)
         if h.event == 'level.factor' and #list == 0 then native.level_factor_active(false) end
         if h.event == 'combat.constant' and #list == 0 then native.combat_constant_active(false) end
         if h.event == 'creature.ability' and #list == 0 then native.creature_ability_active(false) end
+        if h.event == 'ability.route' and #list == 0 then native.route_active(false) end
+        if h.event == 'motion.select' and #list == 0 then native.motion_active(false) end
         if h.event == 'damage' and #list == 0 then kernel.boss.sync() end
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
         if h.event == 'bonus.constant' and #list == 0 then native.bonus_active(false) end
@@ -5999,6 +6040,36 @@ function kernel.creature_ability(type_id, vanilla, index, address)
         local h = list[i]
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, 'creature.ability', h.fn, type_id, vanilla, index, address)
+            if ok and type(result) == 'number' then return math.floor(result) end
+        end
+    end
+    return nil
+end
+
+-- `ability.route`: a hero of `type` has the combat art `art` in flight and the engine asks which hero class runs it; `vanilla` is the
+-- class it would pick for the type, `action` the creature's action word, `id` the object id. A handler returns a hero type 1..9
+-- (the class whose handler runs the art) or nil.
+function kernel.ability_route(type_id, art, vanilla, action, id)
+    local list = handlers['ability.route']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'ability.route', h.fn, type_id, art, vanilla, action, id)
+            if ok and type(result) == 'number' then return math.floor(result) end
+        end
+    end
+    return nil
+end
+
+-- `motion.select`: a hero of `type` is about to play motion slot `slot`; a handler returns another slot (0..255) or nil.
+function kernel.motion_select(type_id, slot, id)
+    local list = handlers['motion.select']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'motion.select', h.fn, type_id, slot, id)
             if ok and type(result) == 'number' then return math.floor(result) end
         end
     end

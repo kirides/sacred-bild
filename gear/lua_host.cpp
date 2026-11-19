@@ -1,6 +1,7 @@
 #include "lua_host.h"
 #include "automation.h"
 #include "chat.h"
+#include "classes.h"
 #include "drops.h"
 #include "gamecfg.h"
 #include "gear.h"
@@ -599,6 +600,64 @@ namespace
     {
         SiteHook::setAbilityActive(lua_toboolean(L, 1) != 0);
         return 0;
+    }
+
+    uint32_t checkId(lua_State* L, int arg);
+    int pushFailure(lua_State* L, const char* error);
+
+    // native.route_active(bool) / native.motion_active(bool): whether some mod handles `ability.route` / `motion.select`
+    int nativeRouteActive(lua_State* L)
+    {
+        Classes::setRouteActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+    int nativeMotionActive(lua_State* L)
+    {
+        Classes::setMotionActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.creature_learn(id, ability, level) / native.creature_forget(id, ability) -> true | nil, message
+    int nativeCreatureLearn(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Classes::learn(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), static_cast<uint32_t>(luaL_optnumber(L, 3, 1)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    int nativeCreatureForget(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Classes::forget(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.model_motion(type, slot) -> record index (0: none) | nil; native.model_set_motion(type, slot, record) -> bool;
+    // native.model_has_motion(type, slot) -> bool | nil
+    int nativeModelMotion(lua_State* L)
+    {
+        const int r = Classes::motionRecord(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<uint32_t>(luaL_checknumber(L, 2)));
+        if (r < 0) { lua_pushnil(L); } else { lua_pushnumber(L, r); }
+        return 1;
+    }
+    int nativeModelSetMotion(lua_State* L)
+    {
+        lua_pushboolean(L, Classes::setMotionRecord(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<uint32_t>(luaL_checknumber(L, 2)),
+                                                    static_cast<uint32_t>(luaL_checknumber(L, 3))));
+        return 1;
+    }
+    int nativeModelHasMotion(lua_State* L)
+    {
+        const int r = Classes::hasMotion(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<uint32_t>(luaL_checknumber(L, 2)));
+        if (r < 0) { lua_pushnil(L); } else { lua_pushboolean(L, r); }
+        return 1;
     }
 
     // native.combat_constant_active(bool): whether some mod handles `combat.constant`
@@ -3821,6 +3880,13 @@ namespace
             {"combat_constant_active", nativeCombatConstantActive},
             {"difficulty", nativeDifficulty},
             {"creature_ability_active", nativeCreatureAbilityActive},
+            {"route_active", nativeRouteActive},
+            {"motion_active", nativeMotionActive},
+            {"creature_learn", nativeCreatureLearn},
+            {"creature_forget", nativeCreatureForget},
+            {"model_motion", nativeModelMotion},
+            {"model_set_motion", nativeModelSetMotion},
+            {"model_has_motion", nativeModelHasMotion},
             {"damage_active", nativeDamageActive},
             {"effect_active", nativeEffectActive},
             {"bonus_active", nativeBonusActive},
@@ -4225,6 +4291,93 @@ LuaHost::Answer LuaHost::creatureAbility(int type, int vanilla, int index, int a
             out = static_cast<int>(v);
             answer = Answer::Value;
         }
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+
+LuaHost::Answer LuaHost::abilityRoute(int type, int art, int vanilla, int action, uint32_t id, int& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "ability_route");
+    lua_remove(L, -2);
+    lua_pushnumber(L, type);
+    lua_pushnumber(L, art);
+    lua_pushnumber(L, vanilla);
+    lua_pushnumber(L, action);
+    lua_pushnumber(L, id);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 5, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.ability_route failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        out = static_cast<int>(lua_tonumber(L, -1));
+        answer = Answer::Value;
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::motionSelect(int type, int slot, uint32_t id, int& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "motion_select");
+    lua_remove(L, -2);
+    lua_pushnumber(L, type);
+    lua_pushnumber(L, slot);
+    lua_pushnumber(L, id);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 3, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.motion_select failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        out = static_cast<int>(lua_tonumber(L, -1));
+        answer = Answer::Value;
     }
     lua_pop(L, 1);
     return answer;

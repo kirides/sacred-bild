@@ -236,6 +236,14 @@ GEAR = [
     ('g_creatureEventVtable', 0x0089095C, 'data'),
     ('g_antiCheatShadow1', 0x0182EE5C, 'data'),
     ('g_antiCheatShadow2', 0x0182EE60, 'data'),
+    # Custom classes (gear/classes.cpp). classOf (fastcall (creature) -> hero class 1..9) picks the action handler of a hero's
+    # combat arts; the motion player (thiscall (creature, slot, three floats), ret 0x10) starts a motion slot; the learn function
+    # (thiscall (stats, 0x16-byte entry by value), ret 0x18) appends an ability; the model manager (global pointer) holds the
+    # Models.tmp records.
+    ('cCreature_classOf', 0x005500D0, 'func'),
+    ('cCreature_playMotion', 0x00593320, 'func'),
+    ('cStats_learnAbility', 0x00580750, 'func'),
+    ('g_pModelManager', 0x00AA4538, 'data'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

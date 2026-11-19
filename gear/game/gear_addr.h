@@ -343,4 +343,14 @@ namespace Gear::Addr
     inline Sacred::Global<uint8_t> g_creatureEventVtable{};
     inline Sacred::Global<uint32_t*> g_antiCheatShadow1{};
     inline Sacred::Global<uint32_t*> g_antiCheatShadow2{};
+
+    // Custom classes (gear/classes.cpp). ENG 005500D0: the hero class (1..9) the action handlers of a creature's combat arts
+    // follow (fastcall: the creature in ECX). ENG 00593320: starts a motion slot (thiscall (creature, slot, three floats), ret
+    // 0x10). ENG 00580750: appends an ability to a hero's stats (thiscall (stats, the 0x16-byte entry by value), ret 0x18).
+    // ENG 00AA4538: the model manager (Models.tmp records at +0x48, 0x4AA bytes each, motion slots at +0x70).
+    struct LearnEntry { uint8_t bytes[0x18]; };
+    inline Sacred::Thiscall<int(void* creature)> cCreature_classOf{};
+    inline Sacred::Thiscall<void(void* creature, int slot, float a, float b, float c)> cCreature_playMotion{};
+    inline Sacred::Thiscall<void(void* stats, LearnEntry entry)> cStats_learnAbility{};
+    inline Sacred::Global<void*> g_pModelManager{};
 }

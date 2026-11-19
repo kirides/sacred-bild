@@ -112,6 +112,10 @@ static const Sig::Entry kGearSigs[] = {
     {"g_creatureEventVtable", "C7 44 24 18 ?? ?? ?? ?? 89 7C 24 2C 89 7C 24 30", 4, Sig::Take::Abs32, &Gear::Addr::g_creatureEventVtable}, // 0089095C, 0088E95C
     {"g_antiCheatShadow1", "8B 0D ?? ?? ?? ?? 8A 47 38 8B F0 8B 11 C1 E6 08", 2, Sig::Take::Abs32, &Gear::Addr::g_antiCheatShadow1}, // 0182EE5C, 0182CDDC
     {"g_antiCheatShadow2", "8B 86 B4 03 00 00 8B 0D ?? ?? ?? ?? D1 E7 8B D7", 8, Sig::Take::Abs32, &Gear::Addr::g_antiCheatShadow2}, // 0182EE60, 0182CDE0
+    {"cCreature_classOf", "8B 41 10 3D CC 00 00 00 7F 28 74 6C", 0, Sig::Take::Match, &Gear::Addr::cCreature_classOf}, // 005500D0, 0054FF40
+    {"cCreature_playMotion", "55 8B EC 83 E4 F8 83 EC 44 D9 45 14", 0, Sig::Take::Match, &Gear::Addr::cCreature_playMotion}, // 00593320, 00593290
+    {"cStats_learnAbility", "83 EC 38 53 8B D9 89 5C 24 08 55 8B 93 06 01 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_learnAbility}, // 00580750, 00580610
+    {"g_pModelManager", "A1 ?? ?? ?? ?? 85 C0 75 44 68 38 A3 01 00 E8 ?? ?? ?? ?? 83 C4 04", 1, Sig::Take::Abs32, &Gear::Addr::g_pModelManager}, // 00AA4538, 00AA24B8
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
     {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270
