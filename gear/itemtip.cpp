@@ -313,6 +313,47 @@ bool ItemTip::textExported(const std::string& bytes, std::wstring& out, const ch
     return true;
 }
 
+bool ItemTip::bonusLine(uint32_t id, uint32_t entry, uint32_t slot, std::wstring& out)
+{
+    out.clear();
+    const uintptr_t o = World::itemObject(id);
+    if (!o || slot > 7 || !Addr::cItem_bonusLine)
+    {
+        return false;
+    }
+    uint8_t record[0x82];
+    __try
+    {
+        if (entry == 0)
+        {
+            std::memcpy(record, reinterpret_cast<const void*>(o + 0x118), sizeof(record));
+        }
+        else
+        {
+            const uintptr_t begin = *reinterpret_cast<const uintptr_t*>(o + 0x100);
+            const uintptr_t end = *reinterpret_cast<const uintptr_t*>(o + 0x104);
+            if (end < begin || (end - begin) % 0x82 || (end - begin) / 0x82 > 64 || entry > (end - begin) / 0x82)
+            {
+                return false;
+            }
+            std::memcpy(record, reinterpret_cast<const void*>(begin + (entry - 1) * 0x82), sizeof(record));
+        }
+        wchar_t buffer[512] = {};
+        wchar_t* cursor = buffer;
+        Addr::cItem_bonusLine(nullptr, &cursor, record, slot, nullptr);
+        if (cursor >= buffer && cursor <= buffer + 500)
+        {
+            out.assign(buffer, cursor);
+        }
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        out.clear();
+        return false;
+    }
+}
+
 bool ItemTip::hovered(Hover& out)
 {
     // The engine shows an item's tooltip during the window render of a frame, after the tick: shown in frame N, the tick of frame N + 1

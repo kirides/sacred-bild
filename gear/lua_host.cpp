@@ -3229,6 +3229,24 @@ namespace
         return 7;
     }
 
+    // native.item_bonus_text(item id, entry, slot) -> text (UTF-8) | nil
+    int nativeItemBonusText(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const lua_Number entry = luaL_checknumber(L, 2), slot = luaL_checknumber(L, 3);
+        std::wstring text;
+        if (!id || entry < 0 || entry > 64 || slot < 0 || slot > 7 ||
+            !ItemTip::bonusLine(id, static_cast<uint32_t>(entry), static_cast<uint32_t>(slot), text))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        char utf8[4096];
+        const int n = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), utf8, sizeof(utf8), nullptr, nullptr);
+        lua_pushlstring(L, utf8, n > 0 ? n : 0);
+        return 1;
+    }
+
     // native.item_equip_slot(creature id, item type) -> slot (0..18) | nil
     int nativeItemEquipSlot(lua_State* L)
     {
@@ -3968,6 +3986,7 @@ namespace
             {"item_type_text", nativeItemTypeText},
             {"item_hover", nativeItemHover},
             {"item_equip_slot", nativeItemEquipSlot},
+            {"item_bonus_text", nativeItemBonusText},
             {"inv_export", nativeInvExport},
             {"inv_import", nativeInvImport},
             {"realm_get", nativeRealmGet},

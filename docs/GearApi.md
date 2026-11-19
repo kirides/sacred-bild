@@ -2636,6 +2636,82 @@ Copies an item to a binary string: its type and its own data, not where it is. `
 - returns `bytes` `string?`
 - returns `error` `string?`
 
+### GearItemRequirements
+
+| Field | Type | |
+|---|---|---|
+| `level` | `integer` |  |
+| `strength` | `integer` |  |
+| `dexterity` | `integer` |  |
+| `charisma` | `integer` |  |
+| `endurance` | `integer` |  |
+| `skill` | `integer` | The required skill's number (0: none). |
+| `skill_level` | `integer` |  |
+
+### GearItemBonus
+
+| Field | Type | |
+|---|---|---|
+| `slot` | `integer` | 0..7, the bonus slot in its record (what `GearInv.bonus_text` takes). |
+| `entry` | `integer` | 0 for the item's own record, 1..n for a merged record (see `GearItemValues.entries`). |
+| `code` | `integer` | The bonus's number: 801..808 elemental damage / resistance, 809 attack, 810 defense, 600..798 a skill, 811..868 the named bonuses (`global.res` texts), 1..~140 a combat art, 0x321..0x364 protection groups. |
+| `attribute` | `integer` | The hero attribute the stored value is scaled by (1 strength, 2 dexterity, 3 charisma, 4 endurance ... 0: not scaled). |
+| `flags` | `integer` | The bonus's type word (low byte: the target kind, bits 8..11 the attribute / element selector, 0x2000 spells only, 0x4000 weapon damage only, 0x8000 resistance for codes 801..808). |
+| `value` | `integer` | The stored value (percent or points, by the bonus), as the record keeps it. |
+
+### GearItemRecord
+
+| Field | Type | |
+|---|---|---|
+| `type` | `integer` | The object type the record was made for. |
+| `flags` | `integer` | Raw flags (class bits among them). |
+| `price` | `integer` |  |
+| `level` | `integer` | The item's level. |
+| `requirements` | `GearItemRequirements` |  |
+| `attack` | `integer` |  |
+| `defense` | `integer` |  |
+| `bw` | `integer` |  |
+| `protection` | `{physical: integer, fire: integer, magic: integer, poison: integer}` |  |
+| `damage` | `{min: integer[], max: integer[]}` | Four values each (the four damage kinds), as stored. |
+| `sockets` | `integer[]` | Eight socket kinds (0 none, 1..4 sockets that hold a rune or gem). |
+| `bonuses` | `GearItemBonus[]` | The record's own bonus slots that are in use. |
+| `blacksmith_level` | `integer` |  |
+
+### GearItemSocketRecord
+
+Includes everything of `GearItemRecord`.
+
+| Field | Type | |
+|---|---|---|
+| `entry` | `integer` | 1..n, the order of `export`. |
+| `active` | `boolean` | The engine merges this record into the item (its socket kind is 1..4). |
+
+### GearItemValues
+
+Includes everything of `GearItemRecord`.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | The item's id when read by id. (optional) |
+| `entries` | `GearItemSocketRecord[]` | The merged records of the item's sockets and random properties. |
+
+#### `gear.inv.values(item) -> GearItemValues?, string?`
+
+The item's resolved value record decoded (`export`'s block: level, requirements, damage, attack / defense / protection, the eight bonus slots) with the records its sockets merged into it. The numbers are as stored, which is what the game derives its tooltip lines from: bonuses scaled by a hero attribute show the stored percentage times the hero's attribute (use `bonus_text` for the game's own line). Pass an item id or `export`'s bytes.
+
+- `item`: `integer|string`
+- returns `values` `GearItemValues?`
+- returns `message` `string?`
+
+#### `gear.inv.bonus_text(item_id, entry, slot) -> string?`
+
+The game's own tooltip line of one bonus: slot 0..7 of the item's own record (`entry` 0) or of one of its merged records (1..n), UTF-8 with the game's colour codes, in the game's language, as the tooltip builds it (the controlled hero's attributes included). nil when the item or entry does not exist; empty when the slot has no bonus.
+
+- `item_id`: `integer`
+- `entry`: `integer` (optional) - Default 0.
+- `slot`: `integer` (optional) - Default 0.
+- returns `string?`
+
 #### `gear.inv.create(bytes) -> integer?, string?`
 
 Makes a new item from `export`'s bytes, lying at the hero's feet (single player only). Put it into a container or `destroy` it.

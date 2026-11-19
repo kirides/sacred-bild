@@ -93,6 +93,64 @@ function GearInv.socket(item_id, upgrade_id) end
 ---@return string? error
 function GearInv.export(item_id) end
 
+---@class GearItemRequirements
+---@field level integer
+---@field strength integer
+---@field dexterity integer
+---@field charisma integer
+---@field endurance integer
+---@field skill integer The required skill's number (0: none).
+---@field skill_level integer
+
+---@class GearItemBonus
+---@field slot integer 0..7, the bonus slot in its record (what `GearInv.bonus_text` takes).
+---@field entry integer 0 for the item's own record, 1..n for a merged record (see `GearItemValues.entries`).
+---@field code integer The bonus's number: 801..808 elemental damage / resistance, 809 attack, 810 defense, 600..798 a skill, 811..868 the named bonuses (`global.res` texts), 1..~140 a combat art, 0x321..0x364 protection groups.
+---@field attribute integer The hero attribute the stored value is scaled by (1 strength, 2 dexterity, 3 charisma, 4 endurance ... 0: not scaled).
+---@field flags integer The bonus's type word (low byte: the target kind, bits 8..11 the attribute / element selector, 0x2000 spells only, 0x4000 weapon damage only, 0x8000 resistance for codes 801..808).
+---@field value integer The stored value (percent or points, by the bonus), as the record keeps it.
+
+---@class GearItemRecord
+---@field type integer The object type the record was made for.
+---@field flags integer Raw flags (class bits among them).
+---@field price integer
+---@field level integer The item's level.
+---@field requirements GearItemRequirements
+---@field attack integer
+---@field defense integer
+---@field bw integer
+---@field protection {physical: integer, fire: integer, magic: integer, poison: integer}
+---@field damage {min: integer[], max: integer[]} Four values each (the four damage kinds), as stored.
+---@field sockets integer[] Eight socket kinds (0 none, 1..4 sockets that hold a rune or gem).
+---@field bonuses GearItemBonus[] The record's own bonus slots that are in use.
+---@field blacksmith_level integer
+
+---@class GearItemSocketRecord : GearItemRecord
+---@field entry integer 1..n, the order of `export`.
+---@field active boolean The engine merges this record into the item (its socket kind is 1..4).
+
+---@class GearItemValues : GearItemRecord
+---@field id? integer The item's id when read by id.
+---@field entries GearItemSocketRecord[] The merged records of the item's sockets and random properties.
+
+--- The item's resolved value record decoded (`export`'s block: level, requirements, damage, attack / defense / protection, the
+--- eight bonus slots) with the records its sockets merged into it. The numbers are as stored, which is what the game derives its
+--- tooltip lines from: bonuses scaled by a hero attribute show the stored percentage times the hero's attribute (use `bonus_text`
+--- for the game's own line). Pass an item id or `export`'s bytes.
+---@param item integer|string
+---@return GearItemValues? values
+---@return string? message
+function GearInv.values(item) end
+
+--- The game's own tooltip line of one bonus: slot 0..7 of the item's own record (`entry` 0) or of one of its merged records
+--- (1..n), UTF-8 with the game's colour codes, in the game's language, as the tooltip builds it (the controlled hero's attributes
+--- included). nil when the item or entry does not exist; empty when the slot has no bonus.
+---@param item_id integer
+---@param entry? integer Default 0.
+---@param slot? integer Default 0.
+---@return string?
+function GearInv.bonus_text(item_id, entry, slot) end
+
 --- Makes a new item from `export`'s bytes, lying at the hero's feet (single player only). Put it into a container
 --- or `destroy` it.
 ---@param bytes string

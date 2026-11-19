@@ -39,6 +39,11 @@ namespace ItemTip
     bool install();
     void frame();
 
+    // The engine's own line of bonus `slot` (0..7) of an item's value record (entry 0: the item's own, 1..n: the merged records of its
+    // sockets and random properties, in the order gear.inv.export lists them): UTF-16, with the game's colour codes; empty when the
+    // slot has no bonus. False when the item or entry does not exist.
+    bool bonusLine(uint32_t id, uint32_t entry, uint32_t slot, std::wstring& out);
+
     // The same for an exported item.
     bool showExported(const std::string& bytes, int x, int y, int& width, int& height, const char*& error);
 }

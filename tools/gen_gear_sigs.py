@@ -148,6 +148,8 @@ GEAR = [
     ('cUI_Popup_show', 0x00732550, 'func'),
     ('cUI_Control_clearFlags', 0x007325C0, 'func'),
     ('cUI_Popup_setOwner', 0x006E81C0, 'func'),
+    # Item values (gear/itemtip.cpp): the item description's bonus line (stdcall (wchar_t** cursor, record, slot, context), ret 0x10).
+    ('cItem_bonusLine', 0x005C4450, 'func'),
     # Item comparison (gear/itemtip.cpp): cCreature::equipSlot (thiscall (creature, item type) -> slot 0..0x12, 0x13 none, ret 4): the
     # equipment slot an item type goes to for this creature (the first free one of a group of rings, amulets or hands).
     ('cCreature_equipSlot', 0x0054ACC0, 'func'),
