@@ -16,6 +16,7 @@ local LAYER = {layer = 'top'}
 
 local RED, AMBER, GREEN, DIM = 0xFFFF7070, 0xFFFFC060, 0xFF90E890, C.text_dim
 
+local NAME_OPTS = {size = 14, bold = true}
 local screen = {
     open = false, view = 'list', page = 1, mod = nil, tab = 'settings', tab_page = 1,
     capture = nil, edit = nil, edit_text = '', restart = false,
@@ -182,7 +183,7 @@ local function draw_row(e, x, y, w, h, status, color)
     local dim = e.state == 'off' or e.state == 'blocked'
     -- switch | name, version and author | Settings | Keys; the description and the status under the name.
     local t = ui.table('row:' .. sid, x + 8, y + 8, w - 18, {
-        columns = {44, {width = 'auto', max = 280}, '*', 80, 80},
+        columns = {44, math.min(math.ceil(text_w(e.name, NAME_OPTS)) + 1, 280), '*', 80, 80},
         spacing = {6, 2}, row_heights = {22, 16, 14}, layer = 'top',
     })
     t:row()
