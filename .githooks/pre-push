@@ -1,0 +1,21 @@
+#!/bin/sh
+# Pushing main (or a v* tag) with a pending version bump is refused: the release carries the version in its file name and in the mod index.
+# Bypass (knowingly): git push --no-verify
+. "$(dirname "$0")/_python.sh"
+zero=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+  case "$remote_ref" in
+    refs/heads/main|refs/tags/v*)
+      $PY tools/bump_versions.py --check --ref "$local_sha" >/dev/null || {
+        echo "push refused: a version bump is pending for $remote_ref. Run on main:  python tools/bump_versions.py --commit  (then push again)" >&2
+        exit 1
+      }
+      $PY tools/make_mod_index.py --check >/dev/null || {
+        echo "push refused: mod-index.json is out of date. Run:  python tools/make_mod_index.py" >&2
+        exit 1
+      }
+      ;;
+  esac
+done
+exit 0

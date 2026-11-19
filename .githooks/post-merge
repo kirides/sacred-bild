@@ -1,0 +1,7 @@
+#!/bin/sh
+# After a merge into main: raise the Sacred-Bild / Sacred Gear versions (tools/bump_versions.py) so that nobody has to remember it.
+# Only on main, only when something is pending; the bump is its own commit ("chore(sacred-gear): bump version ...").
+[ "$(git symbolic-ref --short -q HEAD)" = main ] || exit 0
+. "$(dirname "$0")/_python.sh"
+$PY tools/bump_versions.py --commit || echo "post-merge: tools/bump_versions.py failed, run it by hand" >&2
+exit 0
