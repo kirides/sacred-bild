@@ -224,6 +224,8 @@ local native = {
     realm_valid_host = function(h) return #h >= 1 and #h <= 120 and h:match('^[%w%.%-_]+$') ~= nil end,
     layout_read = function() return layout_file end,
     layout_write = function(text) layout_file = text; return true end,
+    scope_of = function(slot) return "slot" .. tostring(slot) end,
+    hero_scope_of = function(slot) return "slot" .. tostring(slot) end,
     ui_block_keys = function(on) keys_blocked_by_native = on end,
     ui_can_move_windows = function() return true end,
     ui_move_window = function(slot, x, y, set) moved_windows[slot] = set and {x, y} or nil; return true end,
@@ -382,6 +384,10 @@ files.ab = {
         abil.set_view = not pcall(function() A[1] = {} end)
         abil.restored = A:restore()
         abil.after_restore = {A[1001].effect_base, A[1001].effect_per_level, A[1001].unk_30, A[2].value1_base, A[2].target_mode}
+        abil.names = {pcall(function() A[1001].approach_distance = 3; A[1001].param_a_base = 4; A[2].damage_physical_base = 9; A[2].class_mask = 8; A[2].flags = 1 end)}
+        abil.names_read = {A[1001].approach_distance, A[1001].param_a_base, A[2].value0_base, A[2].damage_physical_base, A[2].class_mask, A[2].flags}
+        abil.names_wrong_table = not pcall(function() A[1001].damage_physical_base = 1 end)
+        A:restore()
         abil.text = gear.text.get(8193)
         abil.no_text = gear.text.get(99)
         abil.overlay = gear.files.overlay()
@@ -625,6 +631,7 @@ ok(abil.skills and abil.skills.start[1] == 14 and abil.skills.start[2] == 2 and 
 ok(abil.skills_set[1] == true and abil.skills_after.start[1] == 5 and #abil.skills_after.available == 3, 'gear.classes.set_hero_skills writes the lists')
 ok(abil.skills_bad[1] == nil and abil.skills_back.start[1] == 14 and #abil.skills_back.available == 15, 'set_hero_skills checks, restore_hero_skills undoes')
 ok(abil.copy and abil.copy[1] == 2001 and abil.copy[2] == 1001 and abil.copy[3] == 'combat_art' and abil.copy[4] == 5, 'gear.classes.copy_ability makes a record with its own id')
+ok(abil.names[1] and abil.names_read[1] == 3 and abil.names_read[2] == 4 and abil.names_read[3] == 9 and abil.names_read[4] == 9 and abil.names_read[5] == 8 and abil.names_read[6] == 1 and abil.names_wrong_table, 'new ability field names and old aliases address the right table')
 ok(abil.copy_fail[1] == nil and abil.copy_in_ids, 'copy_ability refuses a missing base; the copy is in ids()')
 ok(abil.text_id == 0x100000 and abil.models[1] == true and abil.models[2] == false and abil.models[3] == 1428 and abil.models[4] == true, 'gear.text.add and gear.models')
 ok(ability_active == true, 'registering creature.ability tells the host')

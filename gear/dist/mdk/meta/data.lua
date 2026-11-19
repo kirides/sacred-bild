@@ -152,9 +152,12 @@ function GearAbilities:restore() end
 
 -- path ability
 --- One ability record. Reading a field of a table the ability is not in (or an unknown name) gives nil; writing one is an
---- error, as is writing a value that does not fit the field or the `id`. Both have `id`, `name_text`, `description_text`,
---- `target_mode` and the `unk_` fields; T1 also `effect_base`, `effect_per_level`, `effect2_base` and `effect2_per_level`; T2 also
---- `value0_base` .. `value3_per_level`.
+--- error, as is writing a value that does not fit the field or the `id`. Every byte of a record has a name (reverse engineered,
+--- docs/CustomClasses.md "Ability record fields"; the editor's data/ability-fields.json has labels, units and formulas per art);
+--- the older `unk_<offset>` names still work. A value at level L is `base + L * per_level` for every `*_base` / `*_per_level` pair.
+--- Both tables have `id`, `name_text`, `description_text`, `target_mode`, `regen_*`, `class_mask` and `flags`. T1: `effect_base`,
+--- `effect_per_level`, `effect2_*`, `param_a_*`, `param_b_*` (what they mean depends on the art), `approach_distance`. T2: the damage
+--- pairs `value0..3_*` (= `damage_physical/fire/magic/poison_*`), `attack_mod_*`, `defense_mod_*`, `res_*_*`, `speed_mod_*`, `param0..2_*` and caps.
 ---@class GearAbility
 ---@field table string `'T1'` or `'T2'`.
 ---@field index integer The record's index in its table.
@@ -163,7 +166,7 @@ function GearAbilities:restore() end
 ---@field base integer The id of the ability whose code runs (a copy's base; the game's own abilities: their own id).
 ---@field name_text integer The text id of the name (`gear.text.get`).
 ---@field description_text integer The text id of the description.
----@field target_mode integer How the ability is aimed (the engine passes it on to the targeting code).
+---@field target_mode integer How the ability is aimed: see `gear.classes.target_modes` (0 free, 1 hostile creature, 2 self or friend, 3 ground position, 4 corpse, 5 self centred).
 ---@field regen_base number The regeneration time in seconds is `regen_base + level * regen_per_level` (T1: f32 at +0x40, T2: whole seconds at +0x3E).
 ---@field regen_per_level number
 ---@field effect_base number T1: the first effect is `effect_base + level * effect_per_level` (level 1..100).
@@ -178,6 +181,99 @@ function GearAbilities:restore() end
 ---@field value2_per_level integer T2.
 ---@field value3_base integer T2.
 ---@field value3_per_level integer T2.
+---@field icon_frame_a integer T1: GUI icon index A (atlas index).
+---@field icon_frame_b integer T1: GUI icon index B (atlas index).
+---@field icon_frame_main integer T1: GUI icon index (main) (atlas index).
+---@field design_value_j integer T1: Spreadsheet column J (unused).
+---@field approach_distance integer T1: Approach distance (world units (50 = 1 m)).
+---@field effect_base number T1: Effect 1 (base) (depends on the art).
+---@field effect_per_level number T1: Effect 1 (per level) (depends on the art).
+---@field effect2_base number T1: Effect 2 (base) (depends on the art).
+---@field effect2_per_level number T1: Effect 2 (per level) (depends on the art).
+---@field param_a_base integer T1: Parameter A (base) (depends on the art).
+---@field param_a_per_level integer T1: Parameter A (per level) (depends on the art).
+---@field param_b_base integer T1: Parameter B (base) (depends on the art).
+---@field param_b_per_level integer T1: Parameter B (per level) (depends on the art).
+---@field class_mask integer T1/T2: Class mask.
+---@field flags integer T1/T2: Flags.
+---@field icon_frame_normal integer T2: Icon frame index (normal) (sprite index).
+---@field icon_frame_hover integer T2: Icon frame index (hover) (sprite index).
+---@field icon_frame_pressed integer T2: Icon frame index (pressed) (sprite index).
+---@field launch_type integer T2: Targeting (launch type).
+---@field cooldown_base integer T2: Regeneration time (base) (seconds).
+---@field cooldown_per_level integer T2: Regeneration time (per level) (seconds).
+---@field damage_physical_base integer T2: Physical damage (base) (damage points).
+---@field value0_base integer T2: Physical damage (base) (damage points).
+---@field damage_physical_per_level integer T2: Physical damage (per level) (damage points).
+---@field value0_per_level integer T2: Physical damage (per level) (damage points).
+---@field value1_base integer T2: Fire damage (base) (damage points).
+---@field damage_fire_base integer T2: Fire damage (base) (damage points).
+---@field damage_fire_per_level integer T2: Fire damage (per level) (damage points).
+---@field value1_per_level integer T2: Fire damage (per level) (damage points).
+---@field value2_base integer T2: Magic damage (base) (damage points).
+---@field damage_magic_base integer T2: Magic damage (base) (damage points).
+---@field damage_magic_per_level integer T2: Magic damage (per level) (damage points).
+---@field value2_per_level integer T2: Magic damage (per level) (damage points).
+---@field value3_base integer T2: Poison damage (base) (damage points).
+---@field damage_poison_base integer T2: Poison damage (base) (damage points).
+---@field value3_per_level integer T2: Poison damage (per level) (damage points).
+---@field damage_poison_per_level integer T2: Poison damage (per level) (damage points).
+---@field attack_mod_base integer T2: Attack modifier (base) (percent (buffs) / reduction value (Dread)).
+---@field attack_bonus_base integer T2: Attack modifier (base) (percent (buffs) / reduction value (Dread)).
+---@field attack_bonus_per_level integer T2: Attack modifier (per level) (percent (buffs) / reduction value (Dread)).
+---@field attack_mod_per_level integer T2: Attack modifier (per level) (percent (buffs) / reduction value (Dread)).
+---@field defense_bonus_base integer T2: Defense modifier (base) (percent (buffs) / value).
+---@field defense_mod_base integer T2: Defense modifier (base) (percent (buffs) / value).
+---@field defense_mod_per_level integer T2: Defense modifier (per level) (percent (buffs) / value).
+---@field defense_bonus_per_level integer T2: Defense modifier (per level) (percent (buffs) / value).
+---@field res_physical_base integer T2: Physical resistance (base) (resistance points).
+---@field resist_physical_base integer T2: Physical resistance (base) (resistance points).
+---@field resist_physical_per_level integer T2: Physical resistance (per level) (resistance points).
+---@field res_physical_per_level integer T2: Physical resistance (per level) (resistance points).
+---@field resist_fire_base integer T2: Fire resistance (base) (resistance points).
+---@field res_fire_base integer T2: Fire resistance (base) (resistance points).
+---@field res_fire_per_level integer T2: Fire resistance (per level) (resistance points).
+---@field resist_fire_per_level integer T2: Fire resistance (per level) (resistance points).
+---@field res_magic_base integer T2: Magic resistance (base) (resistance points).
+---@field resist_magic_base integer T2: Magic resistance (base) (resistance points).
+---@field resist_magic_per_level integer T2: Magic resistance (per level) (resistance points).
+---@field res_magic_per_level integer T2: Magic resistance (per level) (resistance points).
+---@field res_poison_base integer T2: Poison resistance (base) (resistance points).
+---@field resist_poison_base integer T2: Poison resistance (base) (resistance points).
+---@field res_poison_per_level integer T2: Poison resistance (per level) (resistance points).
+---@field resist_poison_per_level integer T2: Poison resistance (per level) (resistance points).
+---@field speed_mod_base integer T2: Speed modifier (base) (percent).
+---@field speed_bonus_base integer T2: Speed modifier (base) (percent).
+---@field speed_bonus_per_level integer T2: Speed modifier (per level) (percent).
+---@field speed_mod_per_level integer T2: Speed modifier (per level) (percent).
+---@field mental_regen_bonus_base integer T2: Mental regeneration modifier (base) (percent).
+---@field mental_regen_mod_base integer T2: Mental regeneration modifier (base) (percent).
+---@field mental_regen_mod_per_level integer T2: Mental regeneration modifier (per level) (percent).
+---@field mental_regen_bonus_per_level integer T2: Mental regeneration modifier (per level) (percent).
+---@field physical_regen_bonus_base integer T2: Physical regeneration modifier (base) (percent).
+---@field physical_regen_mod_base integer T2: Physical regeneration modifier (base) (percent).
+---@field physical_regen_bonus_per_level integer T2: Physical regeneration modifier (per level) (percent).
+---@field physical_regen_mod_per_level integer T2: Physical regeneration modifier (per level) (percent).
+---@field param0_base integer T2: Parameter 0 (base) (spell dependent (see spell notes)).
+---@field value_a_base integer T2: Parameter 0 (base) (spell dependent (see spell notes)).
+---@field value_a_per_level integer T2: Parameter 0 (per level) (spell dependent (see spell notes)).
+---@field param0_per_level integer T2: Parameter 0 (per level) (spell dependent (see spell notes)).
+---@field value_b_base integer T2: Parameter 1 (base) (spell dependent (see spell notes)).
+---@field param1_base integer T2: Parameter 1 (base) (spell dependent (see spell notes)).
+---@field value_b_per_level integer T2: Parameter 1 (per level) (spell dependent (see spell notes)).
+---@field param1_per_level integer T2: Parameter 1 (per level) (spell dependent (see spell notes)).
+---@field param2_base integer T2: Parameter 2 (base) (spell dependent (see spell notes)).
+---@field value_c_base integer T2: Parameter 2 (base) (spell dependent (see spell notes)).
+---@field value_c_per_level integer T2: Parameter 2 (per level) (spell dependent (see spell notes)).
+---@field param2_per_level integer T2: Parameter 2 (per level) (spell dependent (see spell notes)).
+---@field value_a_cap integer T2: Parameter 0 cap (same as parameter 0).
+---@field param0_cap integer T2: Parameter 0 cap (same as parameter 0).
+---@field value_b_cap integer T2: Parameter 1 cap (same as parameter 1).
+---@field param1_cap integer T2: Parameter 1 cap (same as parameter 1).
+---@field param2_cap integer T2: Parameter 2 cap (same as parameter 2).
+---@field value_c_cap integer T2: Parameter 2 cap (same as parameter 2).
+---@field element integer T2: Element / school.
+---@field mount_flags integer T2: Flags.
 local GearAbility = {}
 
 -- ## Game text (gear.text)

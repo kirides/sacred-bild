@@ -246,34 +246,72 @@ end
 -- for type and range, and are remembered per mod so they can be undone (`restore`, and when the mod is switched off).
 ---------------------------------------------------------------------------------------------------------------
 local KIND_SIZE = {u8 = 1, i8 = 1, u16 = 2, i16 = 2, u32 = 4, i32 = 4, f32 = 4}
+-- Field names follow the reverse engineering of the ability records (docs/CustomClasses.md, "Ability record fields"): every
+-- byte of a record belongs to a named field; fields that have two names (the older name and the descriptive one) are the same
+-- bytes. The unk_<offset> names of the first version still work (they read and write the same bytes).
 local ABILITY_TABLES = {
     T1 = {
         native = 'ability_t1', stride = 0x78, unknown = {kind = 'u32', size = 4},
+        old_named = {id = 0x00, name_text = 0x04, description_text = 0x08, target_mode = 0x4C, effect_base = 0x50, effect_per_level = 0x54,
+            effect2_base = 0x58, effect2_per_level = 0x5C, regen_base = 0x40, regen_per_level = 0x44},
         fields = {
-            id = {0x00, 'i16'}, name_text = {0x04, 'u32'}, description_text = {0x08, 'u32'}, target_mode = {0x4C, 'u32'},
-            effect_base = {0x50, 'f32'}, effect_per_level = {0x54, 'f32'},
-            effect2_base = {0x58, 'f32'}, effect2_per_level = {0x5C, 'f32'},
-            regen_base = {0x40, 'f32'}, regen_per_level = {0x44, 'f32'},
+            id = {0x00, 'i16'}, name_text = {0x04, 'u32'},
+            description_text = {0x08, 'u32'}, icon_frame_a = {0x30, 'i32'},
+            icon_frame_b = {0x34, 'i32'},
+            icon_frame_main = {0x38, 'i32'}, design_value_j = {0x3C, 'u32'},
+            regen_base = {0x40, 'f32'}, regen_per_level = {0x44, 'f32'}, approach_distance = {0x48, 'i32'},
+            target_mode = {0x4C, 'u32'}, effect_base = {0x50, 'f32'}, effect_per_level = {0x54, 'f32'},
+            effect2_base = {0x58, 'f32'}, effect2_per_level = {0x5C, 'f32'}, param_a_base = {0x60, 'i32'},
+            param_a_per_level = {0x64, 'i32'}, param_b_base = {0x68, 'i32'}, param_b_per_level = {0x6C, 'i32'},
+            class_mask = {0x70, 'u32'}, flags = {0x74, 'u32'},
         },
     },
     T2 = {
         native = 'ability_t2', stride = 0x94, unknown = {kind = 'u16', size = 2},
+        old_named = {id = 0x00, name_text = 0x04, description_text = 0x08, target_mode = 0x3C, value0_base = 0x42, value0_per_level = 0x44,
+            value1_base = 0x46, value1_per_level = 0x48, value2_base = 0x4A, value2_per_level = 0x4C, value3_base = 0x4E, value3_per_level = 0x50,
+            regen_base = 0x3E, regen_per_level = 0x40},
         fields = {
-            id = {0x00, 'i16'}, name_text = {0x04, 'u32'}, description_text = {0x08, 'u32'}, target_mode = {0x3C, 'u8'},
-            value0_base = {0x42, 'i16'}, value0_per_level = {0x44, 'i16'},
-            value1_base = {0x46, 'i16'}, value1_per_level = {0x48, 'i16'},
-            value2_base = {0x4A, 'i16'}, value2_per_level = {0x4C, 'i16'},
-            value3_base = {0x4E, 'i16'}, value3_per_level = {0x50, 'i16'},
-            regen_base = {0x3E, 'u16'}, regen_per_level = {0x40, 'u16'},
+            id = {0x00, 'i16'}, name_text = {0x04, 'u32'},
+            description_text = {0x08, 'u32'}, icon_frame_normal = {0x30, 'i32'},
+            icon_frame_hover = {0x34, 'i32'}, icon_frame_pressed = {0x38, 'i32'},
+            launch_type = {0x3C, 'u8'}, target_mode = {0x3C, 'u8'},
+            regen_base = {0x3E, 'u16'}, cooldown_base = {0x3E, 'u16'},
+            regen_per_level = {0x40, 'u16'}, cooldown_per_level = {0x40, 'u16'}, value0_base = {0x42, 'i16'},
+            damage_physical_base = {0x42, 'i16'}, damage_physical_per_level = {0x44, 'i16'}, value0_per_level = {0x44, 'i16'},
+            value1_base = {0x46, 'i16'}, damage_fire_base = {0x46, 'i16'}, value1_per_level = {0x48, 'i16'},
+            damage_fire_per_level = {0x48, 'i16'}, damage_magic_base = {0x4A, 'i16'}, value2_base = {0x4A, 'i16'},
+            damage_magic_per_level = {0x4C, 'i16'}, value2_per_level = {0x4C, 'i16'}, value3_base = {0x4E, 'i16'},
+            damage_poison_base = {0x4E, 'i16'}, value3_per_level = {0x50, 'i16'}, damage_poison_per_level = {0x50, 'i16'},
+            attack_bonus_base = {0x52, 'i16'}, attack_mod_base = {0x52, 'i16'}, attack_mod_per_level = {0x54, 'i16'},
+            attack_bonus_per_level = {0x54, 'i16'}, defense_mod_base = {0x56, 'i16'}, defense_bonus_base = {0x56, 'i16'},
+            defense_mod_per_level = {0x58, 'i16'}, defense_bonus_per_level = {0x58, 'i16'}, res_physical_base = {0x5A, 'i16'},
+            resist_physical_base = {0x5A, 'i16'}, res_physical_per_level = {0x5C, 'i16'}, resist_physical_per_level = {0x5C, 'i16'},
+            resist_fire_base = {0x5E, 'i16'}, res_fire_base = {0x5E, 'i16'}, res_fire_per_level = {0x60, 'i16'},
+            resist_fire_per_level = {0x60, 'i16'}, res_magic_base = {0x62, 'i16'}, resist_magic_base = {0x62, 'i16'},
+            resist_magic_per_level = {0x64, 'i16'}, res_magic_per_level = {0x64, 'i16'}, res_poison_base = {0x66, 'i16'},
+            resist_poison_base = {0x66, 'i16'}, res_poison_per_level = {0x68, 'i16'}, resist_poison_per_level = {0x68, 'i16'},
+            speed_mod_base = {0x6A, 'i16'}, speed_bonus_base = {0x6A, 'i16'}, speed_bonus_per_level = {0x6C, 'i16'},
+            speed_mod_per_level = {0x6C, 'i16'}, mental_regen_mod_base = {0x6E, 'i16'}, mental_regen_bonus_base = {0x6E, 'i16'},
+            mental_regen_mod_per_level = {0x70, 'i16'}, mental_regen_bonus_per_level = {0x70, 'i16'}, physical_regen_bonus_base = {0x72, 'i16'},
+            physical_regen_mod_base = {0x72, 'i16'}, physical_regen_mod_per_level = {0x74, 'i16'}, physical_regen_bonus_per_level = {0x74, 'i16'},
+            value_a_base = {0x76, 'i16'}, param0_base = {0x76, 'i16'}, value_a_per_level = {0x78, 'i16'},
+            param0_per_level = {0x78, 'i16'}, value_b_base = {0x7A, 'i16'}, param1_base = {0x7A, 'i16'},
+            value_b_per_level = {0x7C, 'i16'}, param1_per_level = {0x7C, 'i16'}, value_c_base = {0x7E, 'i16'},
+            param2_base = {0x7E, 'i16'}, value_c_per_level = {0x80, 'i16'}, param2_per_level = {0x80, 'i16'},
+            value_a_cap = {0x82, 'u16'}, param0_cap = {0x82, 'u16'}, param1_cap = {0x84, 'u16'},
+            value_b_cap = {0x84, 'u16'}, param2_cap = {0x86, 'u16'}, value_c_cap = {0x86, 'u16'},
+            element = {0x88, 'u16'},
+            class_mask = {0x8C, 'u32'}, flags = {0x90, 'u8'}, mount_flags = {0x90, 'u8'},
         },
     },
 }
 do
-    -- every byte not covered by a named field belongs to an unk_<offset> slot
+    -- the unk_<offset> slots of the first version (every aligned slot the old named fields did not cover) stay as aliases
     for _, t in pairs(ABILITY_TABLES) do
         local covered = {}
-        for _, f in pairs(t.fields) do
-            for b = f[1], f[1] + KIND_SIZE[f[2]] - 1 do covered[b] = true end
+        for name, off in pairs(t.old_named) do
+            for b = off, off + KIND_SIZE[t.fields[name][2]] - 1 do covered[b] = true end
         end
         local size = t.unknown.size
         for off = size, t.stride - size, size do
@@ -281,8 +319,10 @@ do
             for b = off, off + size - 1 do
                 if covered[b] then free = false end
             end
-            if free then t.fields[('unk_%02x'):format(off)] = {off, t.unknown.kind} end
+            local name = ('unk_%02x'):format(off)
+            if free and not t.fields[name] then t.fields[name] = {off, t.unknown.kind} end
         end
+        t.old_named = nil
     end
 end
 
@@ -1324,6 +1364,7 @@ do
         for id, owner in pairs(kernel.alias_owner) do
             if owner == mod then
                 kernel.alias_owner[id] = nil
+                if kernel.art_spell_alias then kernel.art_spell_alias[id] = nil end
                 native.alias_remove(id)
             end
         end
@@ -5564,7 +5605,15 @@ local function make_env(mod)
     -- gear.ui.texture_image(name): see meta/ui.lua
     function gear.classes.copy_ability(alias, base, values)
         assert(type(alias) == 'number' and type(base) == 'number', 'expected an alias id (2000..4999 for an art, 100..199 for a spell) and the base ability id')
-        if base < 1000 then return nil, 'copies of spells are not supported: the engine does not run a spell under an id of its own' end
+        if base < 1000 then return nil, 'copies of spells are not supported: the engine does not run a spell under an id of its own (use values.spell to change the spell record of an art that is linked to one)' end
+        local spell_values
+        if values and values.spell ~= nil then
+            spell_values = values.spell
+            local plain = {}
+            for k, v in pairs(values) do if k ~= 'spell' then plain[k] = v end end
+            values = plain
+            if type(spell_values) ~= 'table' then return nil, 'values.spell must be a table of spell record fields' end
+        end
         local owner = kernel.alias_owner[alias]
         if owner and owner ~= mod then return nil, 'the alias belongs to another mod' end
         if not owner then
@@ -5577,10 +5626,48 @@ local function make_env(mod)
             local written, problems = data.abilities:apply({[alias] = values})
             if not written then return nil, table.concat(problems, '; ') end
         end
+        if spell_values then
+            -- the numbers of arts like Poison Mist live in a spell record (gear.classes.linked_spell(base)): the copy gets a copy of
+            -- that record too (an alias 100..199 that only this art copy uses) and the fields of values.spell go there
+            local spell = native.linked_spell(base)
+            if spell == 0 then return nil, 'art ' .. base .. ' takes no numbers from a spell record' end
+            local sid = kernel.art_spell_alias and kernel.art_spell_alias[alias]
+            if not sid then
+                for id = 100, 199 do
+                    if not kernel.alias_owner[id] then sid = id; break end
+                end
+                if not sid then return nil, 'no free spell alias (100..199)' end
+                local ok, err = native.alias_create(sid, spell)
+                if not ok then return nil, err end
+                kernel.alias_owner[sid] = mod
+                kernel.art_spell_alias = kernel.art_spell_alias or {}
+                kernel.art_spell_alias[alias] = sid
+                local linked, lerr = native.alias_link(alias, sid)
+                if not linked then return nil, lerr end
+            end
+            local written, problems = data.abilities:apply({[sid] = spell_values})
+            if not written then return nil, table.concat(problems, '; ') end
+        end
         return record
+    end
+    gear.classes.target_modes = {free = 0, hostile_creature = 1, self_or_friend = 2, ground_position = 3, corpse = 4, self_centered = 5}
+    gear.classes.ability_flags = {no_cast_mounted = 1, mounted_needs_bow = 2, two_handed_only = 4}
+    gear.classes.ability_classes = {seraphim = 0x1, gladiator = 0x2, battle_mage = 0x4, dark_elf = 0x8, wood_elf = 0x10, vampiress = 0x20,
+        dwarf = 0x400000, daemon = 0x800000}
+    -- linked_spell(art_id): the id of the spell record an art takes its numbers from (Poison Mist 1052 -> 12), nil if none.
+    function gear.classes.linked_spell(art)
+        local s = native.linked_spell(art)
+        return s ~= 0 and s or nil
     end
     function gear.classes.remove_ability(alias)
         if kernel.alias_owner[alias] ~= mod then return false end
+        local sid = kernel.art_spell_alias and kernel.art_spell_alias[alias]
+        if sid then
+            native.alias_link(alias, 0)
+            kernel.alias_owner[sid] = nil
+            native.alias_remove(sid)
+            kernel.art_spell_alias[alias] = nil
+        end
         kernel.alias_owner[alias] = nil
         return native.alias_remove(alias)
     end

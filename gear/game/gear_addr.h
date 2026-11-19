@@ -367,4 +367,6 @@ namespace Gear::Addr
     inline Sacred::Cdecl<uint8_t*(int16_t id)> abilityLookup2{};
     inline Sacred::Thiscall<uint32_t(uint8_t* record, uint32_t heroType, char flag)> abilityUsable1{};
     inline Sacred::Thiscall<uint32_t(uint8_t* record, uint32_t heroType, char flag)> abilityUsable2{};
+    // ENG 004D1E10: the spell record id an art takes its numbers from (thiscall, ECX = art record; 0 for arts without a spell).
+    inline Sacred::Thiscall<uint32_t(uint8_t* record)> abilityLinkedSpell{};
 }

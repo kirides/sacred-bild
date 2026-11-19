@@ -39,11 +39,16 @@ namespace Classes
     // base id in its first word, so the class handlers (they switch on it) run the base ability's code; every lookup by the
     // alias id returns the copy. The hero's abilities, the art window, runes and savegames use the alias id.
     // The engine refuses an art in flight with an id above 5000 (0x4FD0F0): art aliases are 2000..4999 (copies of arts 1000..1999).
-    // Spell aliases (100..199, copies of spells) can be made but the engine does not run a spell under such an id: the Lua API
-    // refuses them.
+    // Spell aliases (100..199, copies of spells) are only useful as the linked spell of an art alias (aliasLink): the engine does not
+    // run a spell cast under such an id.
     constexpr uint32_t kAliasArtFirst = 2000, kAliasArtLast = 4999, kAliasSpellFirst = 100, kAliasSpellLast = 199;
     bool aliasCreate(uint32_t alias, uint32_t base, const char*& error);
     bool aliasRemove(uint32_t alias);
+    // Makes the art alias take its numbers from the spell alias `spellAlias` (a copy of the spell record the art's base art is linked to
+    // by the engine's map 0x4D1E10: Poison Mist, Battle Fog, Energy Bolts, ...); 0 removes the link. linkedSpell(base) is that spell
+    // id for the game's own art `base` (0 if none).
+    bool aliasLink(uint32_t artAlias, uint32_t spellAlias, const char*& error);
+    uint32_t linkedSpell(uint32_t base);
     void aliasClear();
     // The alias table `which` (1: arts, 2: spells) as the tables module sees it (first record, records in use).
     bool aliasPool(int which, uintptr_t& first, size_t& count);

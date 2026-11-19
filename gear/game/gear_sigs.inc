@@ -122,6 +122,7 @@ static const Sig::Entry kGearSigs[] = {
     {"abilityLookup2", "66 8B 54 24 04 B9 01 00 00 00 B8 ?? ?? ?? ?? 66 39 10 74 10", 0, Sig::Take::Match, &Gear::Addr::abilityLookup2}, // 004D2310, 004D2150
     {"abilityUsable1", "8A 44 24 08 84 C0 0F 84 ?? ?? ?? ?? 8B 44 24 04 83 F8 01 75 09", 0, Sig::Take::Match, &Gear::Addr::abilityUsable1}, // 004D1B20, 004D1960
     {"abilityUsable2", "8A 44 24 08 84 C0 0F 84 ?? ?? ?? ?? 8B 44 24 04 83 F8 01 75 0C", 0, Sig::Take::Match, &Gear::Addr::abilityUsable2}, // 004D24C0, 004D2300
+    {"abilityLinkedSpell", "33 C0 66 8B 01 05 06 FC FF FF 83 F8 23", 0, Sig::Take::Match, &Gear::Addr::abilityLinkedSpell}, // 004D1E10, 004D1C50
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
     {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270

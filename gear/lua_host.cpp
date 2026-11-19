@@ -711,6 +711,22 @@ namespace
         lua_pushboolean(L, Classes::aliasRemove(static_cast<uint32_t>(luaL_checknumber(L, 1))));
         return 1;
     }
+    // native.alias_link(art_alias, spell_alias | 0) -> true | nil, message; native.linked_spell(base art id) -> spell id | 0
+    int nativeAliasLink(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Classes::aliasLink(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<uint32_t>(luaL_checknumber(L, 2)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    int nativeLinkedSpell(lua_State* L)
+    {
+        lua_pushinteger(L, Classes::linkedSpell(static_cast<uint32_t>(luaL_checknumber(L, 1))));
+        return 1;
+    }
     int nativeAliasClear(lua_State*)
     {
         Classes::aliasClear();
@@ -4118,6 +4134,8 @@ namespace
             {"alias_create", nativeAliasCreate},
             {"alias_remove", nativeAliasRemove},
             {"alias_clear", nativeAliasClear},
+            {"alias_link", nativeAliasLink},
+            {"linked_spell", nativeLinkedSpell},
             {"alias_list", nativeAliasList},
             {"hero_record", nativeHeroRecord},
             {"hero_record_set", nativeHeroRecordSet},

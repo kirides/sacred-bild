@@ -52,10 +52,34 @@ function GearClasses.runes() end
 --- when the mod is switched off.
 ---@param alias integer
 ---@param base integer
----@param values? table<string, number>
+--- `values.spell` (a table of T2 field names) changes the spell record of an art whose numbers live in a spell (see `linked_spell`:
+--- Poison Mist 1052 takes damage and duration from spell 12): the copy gets its own copy of that spell record, so the original art
+--- and spell keep their numbers.
+--- (The handlers push the spell id as a constant: Gear answers that lookup with the alias while the hero has the copy in flight. Tested in a game for Poison Mist; the other spell-linked arts use the same lookup but were not tested.)
+---@param values? table<string, number|table<string, number>>
 ---@return GearAbility? record
 ---@return string? error
 function GearClasses.copy_ability(alias, base, values) end
+
+--- The id of the spell record the game's art `art` takes its numbers from (the engine's map 0x4D1E10: 1018 -> 8, 1019 -> 51, 1044 -> 47,
+--- 1049 -> 45, 1050 -> 6, 1051 -> 48, 1052 -> 12, 1053 -> 46), nil for arts that use their own record.
+---@param art integer
+---@return integer?
+function GearClasses.linked_spell(art) end
+
+--- The values of the `target_mode` field of both ability tables (proved by the engine's launch check 0x51D840 and the loader's
+--- ECF_* names): `free` 0, `hostile_creature` 1, `self_or_friend` 2, `ground_position` 3, `corpse` 4, `self_centered` 5.
+---@type table<string, integer>
+GearClasses.target_modes = {}
+
+--- The bits of the `flags` field (T1 +0x74, T2 +0x90): `no_cast_mounted` 1, `mounted_needs_bow` 2, `two_handed_only` 4.
+---@type table<string, integer>
+GearClasses.ability_flags = {}
+
+--- The bits of the `class_mask` field (T1 +0x70, T2 +0x8C): seraphim 1, gladiator 2, battle_mage 4, dark_elf 8, wood_elf 0x10,
+--- vampiress 0x20, dwarf 0x400000, daemon 0x800000.
+---@type table<string, integer>
+GearClasses.ability_classes = {}
 
 --- Removes a copy this mod made.
 ---@param alias integer

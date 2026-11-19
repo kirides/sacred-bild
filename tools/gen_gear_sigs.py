@@ -256,6 +256,8 @@ GEAR = [
     ('abilityLookup2', 0x004D2310, 'func'),
     ('abilityUsable1', 0x004D1B20, 'func'),
     ('abilityUsable2', 0x004D24C0, 'func'),
+    # Arts whose numbers live in a spell record (thiscall (art record) -> spell id, 0 = none): 0x4D1E10 maps 0x3FA, 0x3FB, 0x414, 0x419..0x41D.
+    ('abilityLinkedSpell', 0x004D1E10, 'func'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]
