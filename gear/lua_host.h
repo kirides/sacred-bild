@@ -36,6 +36,16 @@ namespace LuaHost
     // event `creature.ability`: the ability id for a creature of `type` (the AI's vanilla id, -1 where the site has none), at site `index` / `address`.
     Answer creatureAbility(int type, int vanilla, int index, int address, int& out);
 
+    // event `ability.route`: which hero class (1..9) runs the combat art `art` in flight for a hero of `type` (the engine's class
+    // `vanilla`, the action word `action`, object `id`).
+    Answer abilityRoute(int type, int art, int vanilla, int action, uint32_t id, int& out);
+
+    // event `rune.usable`: whether a hero of `type` may learn `ability` (the engine's answer `vanilla`, 0/1); `out` 0/1.
+    Answer runeUsable(int type, int ability, int vanilla, int& out);
+
+    // event `motion.select`: the motion slot to play for a hero of `type` that is about to play `slot`.
+    Answer motionSelect(int type, int slot, uint32_t id, int& out);
+
     // event `effect.add`: the engine adds a value to a creature's effect entry. `info` is what it is about to do, `answer` what the mod wants.
     struct EffectInfo
     {

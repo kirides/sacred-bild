@@ -171,6 +171,8 @@ if(SACREDGEAR)
     gear/main.cpp
     gear/hooks.cpp
     gear/lua_host.cpp
+    gear/classes.cpp
+    gear/classes_alias.cpp
     gear/party.cpp
     gear/tables.cpp
     gear/overlay.cpp

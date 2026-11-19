@@ -36,6 +36,9 @@
 ---| 'drops.select' # The loot function asks the equipment type picker for an item; a handler may change the category, level or quality, or name the item type.
 ---| 'effect.add' # The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`).
 ---| 'damage' # The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534).
+---| 'ability.route' # A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil.
+---| 'motion.select' # A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil.
+---| 'rune.usable' # A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it.
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
 ---| 'level.factor' # The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers).
 
@@ -105,6 +108,8 @@
 ---@field clipboard GearClipboard The Windows clipboard: copy text out of the game.
 ---@field realm GearRealmApi The online play server (realms): list, switch, add.
 ---@field party GearParty Companion heroes in single player: recruit, switch control, orders.
+---@field classes GearClasses Custom hero classes: the tier of each art for each body, ability copies, hero skills.
+---@field models GearModels The models' motion slots (which clips a body has, giving it another's).
 ---@field lookup GearLookup Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window.
 ---@field fmt GearFmt Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed).
 ---@field toast GearToast Short messages that stack up on the screen and fade; the layout editor moves them.
@@ -153,6 +158,9 @@ gear = {}
 ---@overload fun(event: 'drops.select', fn: fun(ev: GearDropSelect)): GearHandler
 ---@overload fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler
 ---@overload fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler
+---@overload fun(event: 'ability.route', fn: fun(type: integer, art: integer, vanilla: integer, action: integer, id: integer): integer?): GearHandler
+---@overload fun(event: 'motion.select', fn: fun(type: integer, slot: integer, id: integer): integer?): GearHandler
+---@overload fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler
 ---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler
 ---@overload fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler
 ---@param event string

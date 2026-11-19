@@ -19,6 +19,7 @@ local objects = {}
 local pipe_events = {}
 local sent = {}
 local ability_store = {}
+local route_active, motion_active, usable_active, hero_bytes, aliases = nil, nil, nil, nil, {}
 local ability_active, damage_active, effect_active, bonus_active, slot_active, branch_active, key_active
 local clicks = 0
 clipboard_text = nil
@@ -65,11 +66,17 @@ local native = {
         if name == 'object_types' then return 4, 0x80 end
         if name == 'creature_types' then return 2, 0x56 end
         if name == 'ability_t1' then return 2, 0x78 end
+        if name == 'ability_a1' then return #aliases, 0x78 end
         if name == 'ability_t2' then return 2, 0x94 end
     end,
     table_read = function(name, index, offset, kind)
         if name == 'object_types' and offset == 0x2E then return index == 2 and 3 or 8 end
         if name == 'object_types' and offset == 0x20 then return index end
+        if name == 'ability_a1' then
+            local v = ability_store[name .. ':' .. index .. ':' .. offset]
+            if v ~= nil then return v end
+            return offset == 0 and 1001 or 0
+        end
         if name == 'ability_t1' or name == 'ability_t2' then
             if offset == 0 then return ({ability_t1 = {1000, 1001}, ability_t2 = {1, 2}})[name][index + 1] end
             local v = ability_store[name .. ':' .. index .. ':' .. offset]
@@ -90,6 +97,31 @@ local native = {
     level_factor_active = function(v) level_active = v end,
     combat_constant_active = function(v) constant_active = v end,
     creature_ability_active = function(v) ability_active = v end,
+    route_active = function(v) route_active = v end,
+    motion_active = function(v) motion_active = v end,
+    usable_active = function(v) usable_active = v end,
+    alias_create = function(alias, base)
+        if base ~= 1001 then return nil, 'no such base' end
+        aliases[#aliases + 1] = {id = alias, base = base, table = 1, index = #aliases}
+        return true
+    end,
+    alias_remove = function(alias)
+        for i, a in ipairs(aliases) do if a.id == alias then table.remove(aliases, i) return true end end
+        return false
+    end,
+    alias_list = function() return aliases end,
+    hero_record = function(t)
+        if not hero_bytes then hero_bytes = string.char(1, 0, 0, 0) .. string.rep('\0', 0x10) .. string.char(14, 2, 14, 2, 12, 25, 1, 3, 4, 10, 9, 22, 6, 11, 7, 8, 21, 0) .. string.rep('\0', 0x56 - 0x26) end
+        return hero_bytes
+    end,
+    hero_record_set = function(t, offset, bytes)
+        hero_bytes = hero_bytes:sub(1, offset) .. bytes .. hero_bytes:sub(offset + #bytes + 1)
+        return true
+    end,
+    text_add = function(text) return 0x100000 end,
+    model_motion = function(t, slot) return slot == 154 and 1428 or 0 end,
+    model_has_motion = function(t, slot) return slot == 154 end,
+    model_set_motion = function() return true end,
     damage_active = function(v) damage_active = v end,
     effect_active = function(v) effect_active = v end,
     bonus_active = function(v) bonus_active = v end,
@@ -355,6 +387,24 @@ files.ab = {
         abil.no_setting = gear.settings.get('NOPE')
         -- the level.factor site hook: tiers of 12 levels, and no answer above 40
         gear.on('creature.ability', function(t, vanilla, index) if t == 7 then return vanilla + 1 end end)
+        gear.on('ability.route', function(t, art) if t == 1 and art == 1059 then return 2 end end)
+        gear.on('motion.select', function(t, slot) if slot == 201 then return 207 end end)
+        gear.on('rune.usable', function(t, ab, v) if ab == 1059 then return true end if ab == 5 then return false end end)
+        abil.tiers = {gear.classes.tier(5, 'seraphim'), gear.classes.tier(1059, 'seraphim'), gear.classes.tier(1059, 'gladiator'),
+                      gear.classes.tier(1022, 1), gear.classes.tier(1090, 1), table.concat(gear.classes.homes(1059), ',')}
+        abil.skills = gear.classes.hero_skills('seraphim')
+        abil.skills_set = {gear.classes.set_hero_skills(1, {5, 6}, {5, 6, 7})}
+        abil.skills_after = gear.classes.hero_skills(1)
+        abil.skills_bad = {gear.classes.set_hero_skills(1, {5}, {})}
+        gear.classes.restore_hero_skills()
+        abil.skills_back = gear.classes.hero_skills(1)
+        local copy, why = gear.classes.copy_ability(2001, 1001, {effect_base = 5})
+        abil.copy = copy and {copy.id, copy.base, copy.kind, copy.effect_base}
+        abil.copy_fail = {gear.classes.copy_ability(2002, 9999)}
+        abil.copy_in_ids = false
+        for _, id in ipairs(gear.data.abilities:ids()) do if id == 2001 then abil.copy_in_ids = true end end
+        abil.text_id = gear.text.add({en = 'x'})
+        abil.models = {gear.models.has_motion('seraphim', 154), gear.models.has_motion(1, 155), gear.models.motion(1, 154), gear.models.set_motion(1, 154, 5)}
         gear.on('skillslot.key', function(c) if c == 0x36 then return {0, 'select'} elseif c == 0x39 then return false elseif c == 0x31 then return 2 end end)
         gear.on('combat.branch', function(name, vanilla, index) if name == 'hit.secondary' then return true end end)
         gear.on('skillslot.select', function(index) if index == 2 then gear.game.cursor_click() end end)
@@ -559,6 +609,18 @@ ok(effect_active == true, 'registering effect.add tells the host')
 ok(kernel.effect_add({ability = 7, value = 2}).finish == true and kernel.effect_add({ability = 8}) == nil, 'effect.add answers with the handler table')
 ok(damage_active == true, 'registering damage tells the host')
 ok(kernel.damage(10, 3, 5, 0) == 20 and kernel.damage(10, 4, 5, 0) == nil, 'damage answers with the handler')
+ok(route_active == true and motion_active == true and usable_active == true, 'registering ability.route, motion.select and rune.usable tells the host')
+ok(kernel.ability_route(1, 1059, 1, 9, 3) == 2 and kernel.ability_route(2, 1059, 2, 8, 3) == nil, 'ability.route answers with the handler')
+ok(kernel.motion_select(1, 201, 3) == 207 and kernel.motion_select(1, 202, 3) == nil, 'motion.select answers with the handler')
+ok(kernel.rune_usable(1, 1059, false) == true and kernel.rune_usable(1, 5, true) == false and kernel.rune_usable(1, 6, true) == nil, 'rune.usable answers with the handler')
+ok(abil.tiers[1] == 'A' and abil.tiers[2] == 'B' and abil.tiers[3] == 'home' and abil.tiers[4] == 'C' and abil.tiers[5] == 'D' and abil.tiers[6] == '2',
+   'gear.classes.tier and homes')
+ok(abil.skills and abil.skills.start[1] == 14 and abil.skills.start[2] == 2 and #abil.skills.available == 15, 'gear.classes.hero_skills reads the record')
+ok(abil.skills_set[1] == true and abil.skills_after.start[1] == 5 and #abil.skills_after.available == 3, 'gear.classes.set_hero_skills writes the lists')
+ok(abil.skills_bad[1] == nil and abil.skills_back.start[1] == 14 and #abil.skills_back.available == 15, 'set_hero_skills checks, restore_hero_skills undoes')
+ok(abil.copy and abil.copy[1] == 2001 and abil.copy[2] == 1001 and abil.copy[3] == 'combat_art' and abil.copy[4] == 5, 'gear.classes.copy_ability makes a record with its own id')
+ok(abil.copy_fail[1] == nil and abil.copy_in_ids, 'copy_ability refuses a missing base; the copy is in ids()')
+ok(abil.text_id == 0x100000 and abil.models[1] == true and abil.models[2] == false and abil.models[3] == 1428 and abil.models[4] == true, 'gear.text.add and gear.models')
 ok(ability_active == true, 'registering creature.ability tells the host')
 ok(kernel.creature_ability(7, 25, 0, 0) == 26 and kernel.creature_ability(8, 25, 0, 0) == nil, 'creature.ability answers with the handler')
 ok(abil.emit_level and abil.emit_constant, 'mods cannot emit level.factor or combat.constant')

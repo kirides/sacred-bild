@@ -1,5 +1,6 @@
 #include "hooks.h"
 #include "chat.h"
+#include "classes.h"
 #include "itemtip.h"
 #include "drops.h"
 #include "lua_host.h"
@@ -43,6 +44,7 @@ bool Hooks::install()
     NetMsg::install();
     Chat::install();
     Party::install();
+    Classes::install();
     Savegames::install();
     ItemTip::install();
     const bool committed = Patch::commit();
