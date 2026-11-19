@@ -113,6 +113,7 @@ SacredBild's `ddraw.dll` and creates `SacredBild.ini` if there is none. `uninsta
 | [Sacred Gear](docs/Gear.md) | The mod kit: install, writing a mod, the file overlay, the mod manager, automation |
 | [Gear API reference](docs/GearApi.md) | Every function, option and event a mod can use (generated from `gear/meta`) |
 | [Gear drops](docs/GearDrops.md) | `gear.drops`: how the engine rolls drops and what each setting changes |
+| [Custom classes](docs/CustomClasses.md) | `gear.classes`, `gear.models`, ability copies: what the engine binds to a hero class, and which arts work on which body |
 | [Gear in network games](docs/GearMultiplayer.md) | Sacred's multiplayer messages, the mod channel, `gear.net` channels |
 | [Development](docs/Development.md) | Source files, tools, the game-launch lock, build; Sacred Gear's sources and API annotations |
 | [RE notes](docs/RE_NOTES.md) | What the game's code does, as far as SacredBild and Sacred Gear need it |

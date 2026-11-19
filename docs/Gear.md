@@ -12,6 +12,7 @@ repository next to SacredBild but independent of it: it works with SacredBild, w
   template and examples, ready to open in VS Code.
 - **[sacred-gear-mods](https://github.com/kirides/sacred-gear-mods)**: the mods players use (loot filter, layout editor,
   shared stash, autosave, server mod clients, ...), each with its own page.
+- **[Custom classes](https://github.com/kirides/sacred-bild/blob/main/docs/CustomClasses.md)**: hero classes of your own, ability copies, the class and motion hooks (`gear.classes`, `gear.models`).
 - **[Sacred Gear in network games](https://github.com/kirides/sacred-bild/blob/main/docs/GearMultiplayer.md)**: how mods work in LAN and online games.
 
 Supported executable: the **English** GOG `Sacred.exe` (PE timestamp `0x452F85C7`). Sacred Gear finds the game's code
@@ -407,6 +408,7 @@ of the game folder.
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
 | `scrolltest`, `tooltiptest`, `uitest`, `chesttest`, `padnavtest` | Scroll areas and dropdowns; tooltips at the screen's edges; the UI in game; shop windows at a fixed UI scale; the controller path of the mod UI. |
 | `partytest` | `gear.party`: recruit, orders, switching control, shared experience, save and load with a companion (`-gear-load=N`, a savegame with an enemy nearby; writes savegame 63). |
+| `classtest` | `gear.classes`, `gear.models`, `gear.text.add`, `creature:learn` / `forget`: catalog and tiers, hero skills, an ability copy used by a recruited Gladiator; 26 checks. `classspike` is the first run of the class and motion hooks. See [Custom classes](https://github.com/kirides/sacred-bild/blob/main/docs/CustomClasses.md). |
 | `droptest` | The drop hooks: the loot function run a few hundred times per phase with changed chances, rarity weights, a veto, a replaced item and the generators; 31 checks. See [Gear drops](https://github.com/kirides/sacred-bild/blob/main/docs/GearDrops.md). |
 | `bosstest` | Creature modifiers: health, damage dealt and taken, reflection, regeneration, spawn with modifiers, save and load with a boss (a savegame with a hostile creature 1266; 24 checks). |
 | `savegametest` | Per-savegame data (`gear.store.game`) across saves and loads. |
