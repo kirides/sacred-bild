@@ -103,14 +103,15 @@ end
 
 local function paging(id, x, y, w, page, pages)
     -- [<]  Page x/y  [>] centered in w; returns the new page.
-    local cx = x + w / 2
-    if ui.button(id .. '<', cx - 90, y, 30, 22, '<', {layer = 'top', enabled = page > 1, tooltip = 'Previous page'}) then
+    local t = ui.table('pg:' .. id, x + math.floor(w / 2) - 90, y, 180,
+        {columns = {30, '*', 30}, spacing = {5, 0}, row_height = FOOTER_ITEM_H, layer = 'top'})
+    t:row()
+    if t:button(1, '<', {id = id .. '<', enabled = page > 1, tooltip = 'Previous page'}) then
         page = page - 1
         stop_input()
     end
-    ui.text(('Page %d / %d'):format(page, pages), cx - 55, y, {width = 110, height = 22, align = 'center',
-        valign = 'middle', color = C.text, layer = 'top'})
-    if ui.button(id .. '>', cx + 60, y, 30, 22, '>', {layer = 'top', enabled = page < pages, tooltip = 'Next page'}) then
+    t:label(2, ('Page %d / %d'):format(page, pages), {id = id .. '#n', halign = 'center', color = C.text})
+    if t:button(3, '>', {id = id .. '>', enabled = page < pages, tooltip = 'Next page'}) then
         page = page + 1
         stop_input()
     end
@@ -141,36 +142,46 @@ local function key_conflicts_of(e)
 end
 
 local function draw_row(e, x, y, w)
-    local h = ROW_H
     local bad = e.state == 'error' or e.state == 'invalid'
-    ui.rect(x, y, w, h, bad and 0x60401818 or 0x50181824, LAYER)
-    ui.frame(x, y, w, h, bad and 0xFF804040 or C.edge_dim, 1, LAYER)
+    ui.rect(x, y, w, ROW_H, bad and 0x60401818 or 0x50181824, LAYER)
+    ui.frame(x, y, w, ROW_H, bad and 0xFF804040 or C.edge_dim, 1, LAYER)
     local sid = e.id
-    -- switch
     local dim = e.state == 'off' or e.state == 'blocked'
+    local name_opts = {size = 14, bold = true}
+    -- switch | name, version and author | Settings | Keys; the description and the status under the name.
+    local t = ui.table('row:' .. sid, x + 8, y + 8, w - 18, {
+        columns = {44, math.min(text_w(e.name, name_opts), 280), '*', 80, 80},
+        spacing = {6, 2}, row_heights = {22, 16, 14}, layer = 'top',
+    })
+    t:row()
     if e.builtin or e.state == 'invalid' then
-        ui.text(e.builtin and 'Core' or '', x + 8, y + 8, {width = 44, height = 20, align = 'center', valign = 'middle',
-            color = DIM, layer = 'top'})
+        t:label(1, e.builtin and 'Core' or '', {halign = 'center', color = DIM})
     else
         local on = e.enabled
-        if ui.button('en:' .. sid, x + 8, y + 8, 44, 20, on and 'On' or 'Off',
-            {layer = 'top', color = on and GREEN or RED, tooltip = on and 'Switch this mod off' or 'Switch this mod on'}) then
+        if t:button(1, on and 'On' or 'Off', {id = 'en:' .. sid, height = 20, color = on and GREEN or RED,
+            tooltip = on and 'Switch this mod off' or 'Switch this mod on'}) then
             local ok, why = admin.set_enabled(sid, not on)
             if not ok then screen.message = why end
         end
     end
-    -- name, version, author
-    local name_opts = {size = 14, bold = true}
-    ui.text(fit(e.name, 280, name_opts), x + 62, y + 5, {size = 14, bold = true, color = dim and DIM or C.accent, layer = 'top'})
-    local nx = x + 62 + math.min(text_w(e.name, name_opts), 280) + 8
+    t:label(2, e.name, {size = 14, bold = true, color = dim and DIM or C.accent})
     local meta = ''
     if e.version ~= '' then meta = 'v' .. e.version end
     if e.author ~= '' then meta = meta .. (meta ~= '' and '  by ' or 'by ') .. e.author end
-    ui.text(fit(meta, x + w - 190 - nx, {size = 11}), nx, y + 8, {size = 11, color = DIM, layer = 'top'})
-    -- description, status
-    local text_width = w - 62 - 186
-    ui.text(fit(e.description ~= '' and e.description or '(no description)', text_width), x + 62, y + 24,
-        {color = dim and DIM or C.text, layer = 'top'})
+    t:label(3, meta, {size = 11, color = DIM})
+    local can_settings = e.state ~= 'invalid' and (e.has_settings or e.has_page)
+    if t:button(4, 'Settings', {id = 'set:' .. sid, enabled = can_settings,
+        tooltip = can_settings and nil or 'This mod has no settings'}) then
+        screen.view, screen.mod, screen.tab, screen.tab_page = 'mod', sid, (e.has_settings and 'settings' or 'page'), 1
+        stop_input()
+    end
+    if t:button(5, 'Keys', {id = 'keys:' .. sid, enabled = e.has_keys,
+        tooltip = e.has_keys and nil or 'This mod declares no keys'}) then
+        screen.view, screen.mod, screen.tab, screen.tab_page = 'mod', sid, 'keys', 1
+        stop_input()
+    end
+    t:row()
+    t:label(2, e.description ~= '' and e.description or '(no description)', {span = 2, color = dim and DIM or C.text})
     local status, color = status_of(e)
     if not status then
         local conflicts = key_conflicts_of(e)
@@ -181,29 +192,18 @@ local function draw_row(e, x, y, w)
         end
     end
     if status then
-        ui.text(fit(status, w - 62 - 8), x + 62, y + 40, {size = 11, color = color, layer = 'top'})
-    end
-    -- buttons
-    local can_settings = e.state ~= 'invalid' and (e.has_settings or e.has_page)
-    if ui.button('set:' .. sid, x + w - 176, y + 8, 80, 22, 'Settings',
-        {layer = 'top', enabled = can_settings, tooltip = can_settings and nil or 'This mod has no settings'}) then
-        screen.view, screen.mod, screen.tab, screen.tab_page = 'mod', sid, (e.has_settings and 'settings' or 'page'), 1
-        stop_input()
-    end
-    if ui.button('keys:' .. sid, x + w - 90, y + 8, 80, 22, 'Keys',
-        {layer = 'top', enabled = e.has_keys, tooltip = e.has_keys and nil or 'This mod declares no keys'}) then
-        screen.view, screen.mod, screen.tab, screen.tab_page = 'mod', sid, 'keys', 1
-        stop_input()
+        t:row()
+        t:label(2, status, {span = 4, size = 11, color = color})
     end
 end
 
 local function draw_list(p)
     local list = admin.entries()
     local x, y, w = p.content_x, p.content_y, p.content_w
-    ui.text(('%d installed'):format(#list - 1), x, y, {height = 20, valign = 'middle', color = DIM, layer = 'top'})
-    if screen.message then
-        ui.text(fit(screen.message, w - 120), x + 90, y, {height = 20, valign = 'middle', color = AMBER, layer = 'top'})
-    end
+    local head = ui.table('list_head', x, y, w, {columns = {90, '*'}, spacing = {0, 0}, row_height = 20, layer = 'top'})
+    head:row()
+    head:label(1, ('%d installed'):format(#list - 1), {color = DIM})
+    if screen.message then head:label(2, screen.message, {color = AMBER}) end
     y = y + 24
     local per_page = rows_fitting(p, y, ROW_STEP, ROW_H)
     local pages = math.max(1, math.ceil(#list / per_page))
@@ -214,10 +214,14 @@ local function draw_list(p)
         if not e then break end
         draw_row(e, x, y + (i - 1) * ROW_STEP, w)
     end
-    local fy = footer_y(p)
-    screen.page = paging('lp', x, fy, w, screen.page, pages)
-    ui.text('Saved in mods\\gear_mods.json', x, fy, {height = FOOTER_ITEM_H, valign = 'middle', size = 11, color = DIM, layer = 'top'})
-    if ui.button('close', x + w - 80, fy, 80, FOOTER_ITEM_H, 'Close', LAYER) then close_screen() end
+    -- footer: a note at the left, the pager in the middle, Close at the right
+    local foot = ui.table('list_foot', x, footer_y(p), w, {columns = {'*', 180, '*'}, spacing = {0, 0},
+        row_height = FOOTER_ITEM_H, layer = 'top'})
+    foot:row()
+    foot:label(1, 'Saved in mods\\gear_mods.json', {size = 11, color = DIM})
+    local cx, cy, cw = foot:cell(2)
+    screen.page = paging('lp', cx, cy, cw, screen.page, pages)
+    if foot:button(3, 'Close', {id = 'close', width = 80, halign = 'right'}) then close_screen() end
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -271,35 +275,40 @@ local function game_names(text)
     end))
 end
 
-local function setting_row(m, d, x, y, w)
+local function setting_row(t, m, d)
     local id = 's:' .. m .. ':' .. d.id
     local value = admin.get(m, d.id)
     local label = game_names(d.label) .. (d.restart and '  (after restart)' or '')
     -- a label longer than its column is cut (the whole of it in the tooltip), so it never runs into the control
-    local shown = fit(label, 278)
     local tip = game_names(d.tooltip)
-    if shown ~= label then tip = label .. (tip and ('\n' .. tip) or '') end
-    ui.label(id .. '#l', shown, x + 6, y, {tooltip = tip, height = 24, valign = 'middle', layer = 'top'})
-    local cx = x + 290
+    local _, _, lw = t:cell(1)
+    if text_w(label) > lw then tip = label .. (tip and ('\n' .. tip) or '') end
+    t:label(1, label, {id = id .. '#l', tooltip = tip})
     local changed, nv = false, value
     if d.type == 'bool' then
-        changed, nv = ui.checkbox(id, cx, y + 4, value and 'On' or 'Off', value, LAYER)
+        changed, nv = t:checkbox(2, value and 'On' or 'Off', value, {id = id})
     elseif d.type == 'number' then
-        changed, nv = ui.slider(id, cx, y + 4, 200, d.min, d.max, value, {step = d.step, layer = 'top'})
+        changed, nv = t:slider(2, d.min, d.max, value, {id = id, width = 200, step = d.step})
     elseif d.type == 'choice' then
         local labels, index = {}, 1
         for i, c in ipairs(d.choices) do
             labels[i] = c.label
             if c.value == value then index = i end
         end
-        local ch, i = ui.dropdown(id, cx, y + 3, 220, labels, index, LAYER)
+        local ch, i = t:dropdown(2, labels, index, {id = id, width = 220, height = 18})
         if ch then changed, nv = true, d.choices[i].value end
     elseif d.type == 'text' then
+        -- the field (200 x 20) and the on-screen keyboard button, in a table of their own inside the cell
+        local cx, cy, cw = t:cell(2)
+        local f = ui.table(id .. '#f', cx, cy, cw, {columns = {200, 40}, spacing = {4, 0}, row_height = 24, layer = 'top'})
+        f:row()
+        local fx, fy = f:cell(1)
+        fy = fy + 2
         local focused = screen.edit == id
-        local r = ui.region(id, cx, y + 2, 200, 20, LAYER)
-        ui.rect(cx, y + 2, 200, 20, focused and 0xF0202030 or C.bg, LAYER)
-        ui.frame(cx, y + 2, 200, 20, (focused or r.hover) and C.edge or C.edge_dim, 1, LAYER)
-        if ui.button(id .. '#kbd', cx + 204, y + 2, 40, 20, 'Kbd', {layer = 'top',
+        local r = ui.region(id, fx, fy, 200, 20, LAYER)
+        ui.rect(fx, fy, 200, 20, focused and 0xF0202030 or C.bg, LAYER)
+        ui.frame(fx, fy, 200, 20, (focused or r.hover) and C.edge or C.edge_dim, 1, LAYER)
+        if f:button(2, 'Kbd', {id = id .. '#kbd', height = 20,
             tooltip = 'Type with an on-screen keyboard (for a controller)'}) then
             screen.osk = {mode = 'text', mod = m, def = d, label = d.label, text = value, max = d.max_length or 64}
             screen.edit, screen.capture = nil, nil
@@ -310,7 +319,7 @@ local function setting_row(m, d, x, y, w)
         end
         local shown = focused and screen.edit_text or value
         local blink = focused and math.floor(gear.time() * 2) % 2 == 0 and '|' or ''
-        ui.text(fit(shown, 188) .. blink, cx + 5, y + 2, {height = 20, valign = 'middle', layer = 'top'})
+        ui.text(fit(shown, 188) .. blink, fx + 5, fy, {height = 20, valign = 'middle', layer = 'top'})
         if focused then
             if ui.key_pressed('enter') or ui.key_pressed('tab') then
                 screen.edit = nil
@@ -319,14 +328,20 @@ local function setting_row(m, d, x, y, w)
             end
         end
     elseif d.type == 'color' then
+        -- the swatch and four channel sliders, again a table inside the cell
         local a, r, g, b = bit.rshift(value, 24) % 256, bit.rshift(value, 16) % 256, bit.rshift(value, 8) % 256, value % 256
-        ui.rect(cx, y + 3, 22, 18, ui.rgba(255, 255, 255, 255), LAYER)
-        ui.rect(cx, y + 3, 22, 18, value, LAYER)
-        ui.frame(cx, y + 3, 22, 18, C.edge, 1, LAYER)
+        local cx, cy, cw = t:cell(2)
+        local f = ui.table(id .. '#c', cx, cy, cw, {columns = {22, 54, 54, 54, 54}, spacing = {8, 0}, row_height = 24,
+            layer = 'top'})
+        f:row()
+        local sx, sy = f:cell(1)
+        ui.rect(sx, sy + 3, 22, 18, ui.rgba(255, 255, 255, 255), LAYER)
+        ui.rect(sx, sy + 3, 22, 18, value, LAYER)
+        ui.frame(sx, sy + 3, 22, 18, C.edge, 1, LAYER)
         local chans = {{'a', 'Alpha', a}, {'r', 'Red', r}, {'g', 'Green', g}, {'b', 'Blue', b}}
         for i, c in ipairs(chans) do
-            local ch, v = ui.slider(id .. c[1], cx + 30 + (i - 1) * 62, y + 4, 54, 0, 255, c[3],
-                {step = 1, format = false, layer = 'top', tooltip = c[2] .. ' ' .. c[3]})
+            local ch, v = f:slider(1 + i, 0, 255, c[3], {id = id .. c[1], step = 1, format = false,
+                tooltip = c[2] .. ' ' .. c[3]})
             if ch then
                 chans[i][3] = v
                 changed = true
@@ -339,7 +354,7 @@ local function setting_row(m, d, x, y, w)
         if d.restart then screen.restart = true end
     end
     if value ~= admin.default(m, d.id) then
-        if ui.button(id .. '#reset', x + w - 54, y + 2, 50, 20, 'Reset', {layer = 'top', tooltip = 'Back to the default'}) then
+        if t:button(3, 'Reset', {id = id .. '#reset', height = 20, tooltip = 'Back to the default'}) then
             admin.set(m, d.id, admin.default(m, d.id))
         end
     end
@@ -375,43 +390,44 @@ local function draw_settings(p, e)
     local pages = setting_pages(defs)
     screen.tab_page = math.max(1, math.min(#pages, screen.tab_page))
     local items = pages[screen.tab_page]
-    -- Dropdowns last, from the bottom row up, so an open list lies over (and takes the clicks of) the rows below it.
-    local order = {}
-    for i, item in ipairs(items) do if item.type ~= 'choice' then order[#order + 1] = i end end
-    for i = #items, 1, -1 do if items[i].type == 'choice' then order[#order + 1] = i end end
-    for _, i in ipairs(order) do
-        local item = items[i]
-        local ry = y + (i - 1) * 32
+    -- label | control | Reset: the controls start 290 in. (An open dropdown's list is drawn on top by itself.)
+    local t = ui.table('settings', x + 6, y, w - 10, {columns = {278, '*', 50}, spacing = {6, 8}, row_height = 24,
+        layer = 'top'})
+    for _, item in ipairs(items) do
+        t:row()
         if item.header then
-            ui.text(item.header, x + 2, ry + 2, {size = 13, bold = true, color = C.accent, height = 24, valign = 'middle', layer = 'top'})
-            ui.rect(x + 2 + text_w(item.header, {size = 13, bold = true}) + 8, ry + 13, w - text_w(item.header, {size = 13, bold = true}) - 14, 1,
-                C.edge_dim, LAYER)
+            local hx, hy, hw = t:cell(1, 3)
+            t:label(1, item.header, {id = 'h:' .. item.header, span = 3, size = 13, bold = true, color = C.accent})
+            local tw = text_w(item.header, {size = 13, bold = true})
+            ui.rect(hx + tw + 8, hy + 11, hw - tw - 8, 1, C.edge_dim, LAYER)
         elseif item.note_row then
-            ui.text(fit(item.note_row, w - 12, {size = 12}), x + 6, ry + 2, {size = 12, color = C.dim or 0xFFA0A0A0, height = 24,
-                valign = 'middle', layer = 'top'})
+            t:label(1, item.note_row, {id = 'note:' .. item.note_row, span = 3, size = 12, color = C.dim or 0xFFA0A0A0})
         else
-            setting_row(e.id, item, x, ry, w)
+            setting_row(t, e.id, item)
         end
     end
-    local fy = footer_y(p)
-    if ui.button('reset_all', x, fy, 130, 22, 'Reset to defaults', {layer = 'top', tooltip = 'Every setting of this mod back to its default'}) then
+    local foot = ui.table('settings_foot', x, footer_y(p), w, {columns = {'*', 180, '*'}, spacing = {0, 0},
+        row_height = FOOTER_ITEM_H, layer = 'top'})
+    foot:row()
+    if foot:button(1, 'Reset to defaults', {id = 'reset_all', width = 130,
+        tooltip = 'Every setting of this mod back to its default'}) then
         admin.reset(e.id)
-        if #defs > 0 then screen.restart = screen.restart end
     end
     if #pages > 1 then
-        screen.tab_page = paging('sp', x + 80, fy, w - 160, screen.tab_page, #pages)
+        local cx, cy, cw = foot:cell(2)
+        screen.tab_page = paging('sp', cx, cy, cw, screen.tab_page, #pages)
     end
     if screen.restart then
-        ui.text('Some changes apply after a restart', x + w - 230, fy, {width = 230, height = 22, valign = 'middle',
-            align = 'right', size = 11, color = AMBER, layer = 'top'})
+        foot:label(3, 'Some changes apply after a restart', {id = 'restart', halign = 'right', size = 11, color = AMBER})
     end
 end
 
 ---------------------------------------------------------------------------------------------------------------
 -- Key binds of one mod
 ---------------------------------------------------------------------------------------------------------------
--- One slot of a key row: the binding's button (click, then press the new key) and the pick button for a controller.
-local function key_slot(e, k, id, x, ry, w, conflicts)
+-- One slot of a key row: the binding's button (click, then press the new key) and the pick button for a controller,
+-- in columns `col` and `col + 1` of the row's table.
+local function key_slot(t, col, e, k, id, conflicts)
     local binding = admin.binding(e.id, k.id)
     local capturing = screen.capture and screen.capture.mod == e.id and screen.capture.key == k.id
     local text = capturing and 'Press a key...' or format_binding(binding)
@@ -421,13 +437,13 @@ local function key_slot(e, k, id, x, ry, w, conflicts)
         for _, c in ipairs(conflicts) do names[#names + 1] = c.name .. ' / ' .. c.label end
         tip = 'Conflicts with: ' .. table.concat(names, ', ')
     end
-    if ui.button(id, x, ry + 1, w, 20, text,
-        {layer = 'top', color = capturing and C.accent or (#conflicts > 0 and AMBER or nil), tooltip = tip}) then
+    if t:button(col, text, {id = id, height = 20,
+        color = capturing and C.accent or (#conflicts > 0 and AMBER or nil), tooltip = tip}) then
         screen.capture = {mod = e.id, key = k.id}
         screen.edit = nil
         admin.capture_start()
     end
-    if ui.button(id .. '#pick', x + w + 2, ry + 1, 22, 20, '...', {layer = 'top',
+    if t:button(col + 1, '...', {id = id .. '#pick', height = 20,
         tooltip = 'Choose the key from an on-screen list (for a controller)'}) then
         screen.osk = {mode = 'key', mod = e.id, key = k.id, label = k.label, ctrl = false, shift = false, alt = false}
         screen.capture, screen.edit = nil, nil
@@ -462,38 +478,45 @@ local function draw_keys(p, e)
         local row = rows[first + i]
         if not row then break end
         local ry = y + (i - 1) * 24
+        local second = row.key and row.key.second and admin.key_def(e.id, row.key.second) or nil
+        -- label | slot, pick | (slot, pick) | Default
+        local cols = {'*'}
+        if row.key then cols = second and {214, 96, 22, 96, 22, 58} or {214, 150, 22, 58} end
+        local t = ui.table('kr:' .. i, x + 6, ry, w - 10, {columns = cols, spacing = {4, 0}, row_height = 22, layer = 'top'})
+        t:row()
         if row.head then
-            ui.text(row.head, x + 6, ry, {height = 22, valign = 'middle', color = C.accent, layer = 'top'})
+            t:label(1, row.head, {id = 'kh:' .. row.head, color = C.accent})
         else
             local k = row.key
             local id = 'k:' .. e.id .. ':' .. k.id
-            local second = k.second and admin.key_def(e.id, k.second) or nil
             local conflicts = admin.conflicts(e.id, k.id)
             local conflicts2 = second and admin.conflicts(e.id, second.id) or {}
             local names = {}
             for _, list in ipairs({conflicts, conflicts2}) do
                 for _, c in ipairs(list) do names[#names + 1] = c.name .. ' / ' .. c.label end
             end
-            ui.label(id .. '#l', k.label, x + 6, ry, {height = 22, valign = 'middle', layer = 'top',
-                color = #names > 0 and AMBER or nil,
+            t:label(1, k.label, {id = id .. '#l', color = #names > 0 and AMBER or nil,
                 tooltip = (#names > 0 and ('Conflicts with: ' .. table.concat(names, ', ') .. '. ') or '') ..
                     'Default: ' .. format_binding(admin.default_binding(e.id, k.id))})
-            local sw = second and 96 or 150
-            key_slot(e, k, id, x + 220, ry, sw, conflicts)
-            if second then key_slot(e, second, 'k:' .. e.id .. ':' .. second.id, x + 220 + sw + 28, ry, sw, conflicts2) end
+            key_slot(t, 2, e, k, id, conflicts)
+            if second then key_slot(t, 4, e, second, 'k:' .. e.id .. ':' .. second.id, conflicts2) end
             local changed = admin.binding(e.id, k.id) ~= admin.default_binding(e.id, k.id) or
                 (second and admin.binding(e.id, second.id) ~= admin.default_binding(e.id, second.id))
-            if changed and ui.button(id .. '#reset', x + 220 + (second and 2 * sw + 56 or sw + 28) + 4, ry + 1, 58, 20, 'Default',
-                {layer = 'top', tooltip = 'Back to the default key' .. (second and 's' or '')}) then
+            if changed and t:button(#cols, 'Default', {id = id .. '#reset', height = 20,
+                tooltip = 'Back to the default key' .. (second and 's' or '')}) then
                 admin.set_binding(e.id, k.id, nil)
                 if second then admin.set_binding(e.id, second.id, nil) end
             end
         end
     end
-    local fy = footer_y(p)
-    ui.text('Click a key, then press the new one. Esc cancels, Backspace unbinds.', x, fy,
-        {height = 22, valign = 'middle', size = 11, color = DIM, layer = 'top'})
-    if pages > 1 then screen.tab_page = paging('kp', x + w - 280, fy, 200, screen.tab_page, pages) end
+    local foot = ui.table('keys_foot', x, footer_y(p), w, {columns = {'*', 200, 80}, spacing = {0, 0},
+        row_height = FOOTER_ITEM_H, layer = 'top'})
+    foot:row()
+    foot:label(1, 'Click a key, then press the new one. Esc cancels, Backspace unbinds.', {size = 11, color = DIM})
+    if pages > 1 then
+        local cx, cy, cw = foot:cell(2)
+        screen.tab_page = paging('kp', cx, cy, cw, screen.tab_page, pages)
+    end
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -503,13 +526,6 @@ local function draw_mod(p)
     local e = find_entry(screen.mod)
     if not e then screen.view = 'list'; return end
     local x, y, w = p.content_x, p.content_y, p.content_w
-    if ui.button('back', x, y, 70, 22, '< Back', LAYER) then
-        screen.view = 'list'
-        stop_input()
-        return
-    end
-    ui.text(fit(e.name, 220, {size = 14, bold = true}), x + 80, y, {size = 14, bold = true, color = C.accent, height = 22,
-        valign = 'middle', layer = 'top'})
     local tabs = {}
     if e.has_settings then tabs[#tabs + 1] = {'settings', 'Settings'} end
     if e.has_keys then tabs[#tabs + 1] = {'keys', 'Keys'} end
@@ -517,14 +533,27 @@ local function draw_mod(p)
     local present = false
     for _, t in ipairs(tabs) do if t[1] == screen.tab then present = true end end
     if not present and tabs[1] then screen.tab = tabs[1][1] end
+    -- [< Back]  the mod's name ........................ [tab] [tab] [tab]
+    local cols = {70, '*'}
+    for _ = 1, #tabs do cols[#cols + 1] = 80 end
+    local head = ui.table('mod_head', x, y, w - 4, {columns = cols, spacing = {4, 0}, row_height = 22, layer = 'top'})
+    head:row()
+    if head:button(1, '< Back', {id = 'back'}) then
+        screen.view = 'list'
+        stop_input()
+        return
+    end
+    head:label(2, e.name, {size = 14, bold = true, color = C.accent})
     for i, t in ipairs(tabs) do
-        local tx = x + w - (#tabs - i + 1) * 84
         local active = screen.tab == t[1]
-        if ui.button('tab:' .. t[1], tx, y, 80, 22, t[2], {layer = 'top', color = active and C.accent or nil}) and not active then
+        if head:button(2 + i, t[2], {id = 'tab:' .. t[1], color = active and C.accent or nil}) and not active then
             screen.tab, screen.tab_page = t[1], 1
             stop_input()
         end
-        if active then ui.rect(tx, y + 22, 80, 2, C.accent, LAYER) end
+        if active then
+            local tx, ty, tw, th = head:cell(2 + i)
+            ui.rect(tx, ty + th, tw, 2, C.accent, LAYER)
+        end
     end
     if #tabs == 0 then
         ui.text('Nothing to set here.', x + 6, y + 40, {color = DIM, layer = 'top'})
@@ -551,14 +580,18 @@ local OSK_SPECIAL = {'space', 'tab', 'enter', 'insert', 'delete', 'home', 'end',
                      'left', 'right'}
 local OSK_SHORT = {space = 'Spc', pageup = 'PgUp', pagedown = 'PgDn', insert = 'Ins', delete = 'Del'}
 
--- A row of buttons centered in the panel's content; returns the key clicked.
+-- A row of keys `kw` wide, centered in the panel's content; returns the key clicked.
 local function osk_row(p, id, y, list, kw, label)
     local gap = 3
+    local cols = {}
+    for i = 1, #list do cols[i] = kw end
     local total = #list * kw + (#list - 1) * gap
-    local x = p.content_x + (p.content_w - total) / 2
+    local t = ui.table('osk:' .. id, p.content_x + math.floor((p.content_w - total) / 2), y, total,
+        {columns = cols, spacing = {gap, 0}, row_height = 26, layer = 'top'})
+    t:row()
     local hit
     for i, k in ipairs(list) do
-        if ui.button('osk:' .. id .. k, x + (i - 1) * (kw + gap), y, kw, 26, label and label(k) or k, LAYER) then hit = k end
+        if t:button(i, label and label(k) or k, {id = 'osk:' .. id .. k}) then hit = k end
     end
     return hit
 end
@@ -585,32 +618,36 @@ local function draw_osk(p)
             end
             y = y + 30
         end
-        if ui.button('osk:shift', x + 40, y, 90, 26, o.shift and 'SHIFT' or 'Shift', {layer = 'top',
-            color = o.shift and C.accent or nil}) then o.shift = not o.shift end
-        if ui.button('osk:space', x + 138, y, 180, 26, 'Space', LAYER) and #o.text < o.max then
+        local t = ui.table('osk:bottom', x + 40, y, nil, {columns = {90, 180, 110, 110}, spacing = {8, 0}, row_height = 26,
+            layer = 'top'})
+        t:row()
+        if t:button(1, o.shift and 'SHIFT' or 'Shift', {id = 'osk:shift', color = o.shift and C.accent or nil}) then
+            o.shift = not o.shift
+        end
+        if t:button(2, 'Space', {id = 'osk:space'}) and #o.text < o.max then
             o.text = o.text .. ' '
             admin.set(o.mod, o.def.id, o.text)
         end
-        if ui.button('osk:back', x + 326, y, 110, 26, 'Backspace', LAYER) then
+        if t:button(3, 'Backspace', {id = 'osk:back'}) then
             o.text = o.text:sub(1, -2)
             admin.set(o.mod, o.def.id, o.text)
         end
-        if ui.button('osk:done', x + 444, y, 110, 26, 'Done', LAYER) then screen.osk = nil end
+        if t:button(4, 'Done', {id = 'osk:done'}) then screen.osk = nil end
     else
         local names = {ctrl = 'Ctrl', shift = 'Shift', alt = 'Alt'}
-        local bx = x + 40
-        for _, m in ipairs({'ctrl', 'shift', 'alt'}) do
-            if ui.button('osk:mod' .. m, bx, y, 80, 26, names[m], {layer = 'top', color = o[m] and C.accent or nil}) then
-                o[m] = not o[m]
-            end
-            bx = bx + 88
+        -- the modifiers, a gap, Unbind and Cancel
+        local t = ui.table('osk:mods', x + 40, y, nil, {columns = {80, 80, 80, 12, 110, 110}, spacing = {8, 0},
+            row_height = 26, layer = 'top'})
+        t:row()
+        for i, m in ipairs({'ctrl', 'shift', 'alt'}) do
+            if t:button(i, names[m], {id = 'osk:mod' .. m, color = o[m] and C.accent or nil}) then o[m] = not o[m] end
         end
-        if ui.button('osk:none', bx + 20, y, 110, 26, 'Unbind', LAYER) then
+        if t:button(5, 'Unbind', {id = 'osk:none'}) then
             admin.set_binding(o.mod, o.key, '')
             screen.osk = nil
             return
         end
-        if ui.button('osk:cancel', bx + 138, y, 110, 26, 'Cancel', LAYER) then
+        if t:button(6, 'Cancel', {id = 'osk:cancel'}) then
             screen.osk = nil
             return
         end
@@ -656,27 +693,26 @@ local function draw_menu()
         return
     end
     local first = (menu.page - 1) * MENU_ROWS
+    local list = ui.table('menu', p.content_x, p.content_y, p.content_w, {columns = {'*'}, spacing = {0, 4},
+        row_height = 26, layer = 'top'})
     for i = 1, MENU_ROWS do
         local en = entries[first + i]
         if not en then break end
-        local tip = en.mod and ('From ' .. en.mod) or nil
-        if ui.button('menu:' .. (first + i), p.content_x, p.content_y + (i - 1) * 30, p.content_w, 26,
-            fit(en.label, p.content_w - 12), {layer = 'top', tooltip = tip}) then
+        list:row()
+        if list:button(1, fit(en.label, p.content_w - 12), {id = 'menu:' .. (first + i),
+            tooltip = en.mod and ('From ' .. en.mod) or nil}) then
             menu.open = false
             en.run()
             return
         end
     end
     if pages > 1 then
-        local fy = p.y + p.h - 34
-        if ui.button('menu:<', p.x + p.w / 2 - 70, fy, 30, 24, '<', {layer = 'top', enabled = menu.page > 1}) then
-            menu.page = menu.page - 1
-        end
-        ui.text(menu.page .. ' / ' .. pages, p.x + p.w / 2 - 36, fy, {width = 72, height = 24, align = 'center',
-            valign = 'middle', layer = 'top'})
-        if ui.button('menu:>', p.x + p.w / 2 + 40, fy, 30, 24, '>', {layer = 'top', enabled = menu.page < pages}) then
-            menu.page = menu.page + 1
-        end
+        local pager = ui.table('menu_pager', p.x + math.floor(p.w / 2) - 68, p.y + p.h - 34, 136,
+            {columns = {30, 72, 30}, spacing = {4, 0}, row_height = 24, layer = 'top'})
+        pager:row()
+        if pager:button(1, '<', {id = 'menu:<', enabled = menu.page > 1}) then menu.page = menu.page - 1 end
+        pager:label(2, menu.page .. ' / ' .. pages, {id = 'menu:n', halign = 'center'})
+        if pager:button(3, '>', {id = 'menu:>', enabled = menu.page < pages}) then menu.page = menu.page + 1 end
     end
 end
 

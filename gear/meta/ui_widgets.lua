@@ -140,7 +140,7 @@
 ---@class GearUiTableSliderOpts : GearUiTableCellOpts
 ---@field step? number
 ---@field format? string|false
----@field value_width? number The room kept for the number at the cell's right end (default 44).
+---@field value_width? number The room kept for the number at the cell's right end (default 44); not with `width`: the slider is then that wide and the number lies beside it.
 
 ---@class GearUiTableImageOpts : GearImageOpts
 ---@field id? string|integer
