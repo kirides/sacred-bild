@@ -1429,6 +1429,14 @@ Takes up the weapons of weapon slot `n` (1-based), as the keys 1-5 do for the he
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:experience_range() -> integer?, integer?, integer?`
+
+A hero's experience, the experience its level started at and the experience the next level starts at (the game's own levels), for a gauge: `(now - from) / (to - from)`. Nil for other creatures.
+
+- returns `experience` `integer?`
+- returns `from` `integer?`
+- returns `to` `integer?`
+
 #### `creature:carried() -> {slot: integer, item: GearItem}[]?`
 
 What any creature carries in its equipment slots (0 to 18): monsters, mercenaries and heroes alike. A monster holds the gear that the Disarming skill takes from it there. Nil if the creature is gone.
@@ -3826,6 +3834,7 @@ Includes everything of `GearDrawOpts`.
 | `fit` | `GearImageFit` | `'stretch'` (default: fills the box), `'contain'` (the whole image, aspect kept, centered), `'cover'` (fills the box, aspect kept, the overhang cut off). (optional) |
 | `flip` | `'h'\|'v'\|'hv'` | Mirrored left-right (`'h'`), upside down (`'v'`) or both. (optional) |
 | `color` | `GearColor` | Tint: white as is; the alpha makes it translucent. (optional) |
+| `crop` | `number[]` | `{left, top, right, bottom}` as fractions of the image (default `{0, 0, 1, 1}`): only that part is drawn, where it would be in the box. `{0, 0.6, 1, 1}` draws the lower 40 % (a gauge). (optional) |
 
 ### GearImageInfo
 

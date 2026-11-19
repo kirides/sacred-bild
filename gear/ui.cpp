@@ -844,6 +844,25 @@ namespace
         {
             return;
         }
+        // A crop draws only that part of the image, where it would be in the box (a gauge: the lower part of a ring).
+        if (c.crop[0] > 0 || c.crop[1] > 0 || c.crop[2] < 1 || c.crop[3] < 1)
+        {
+            const float l = std::clamp(c.crop[0], 0.0f, 1.0f), t = std::clamp(c.crop[1], 0.0f, 1.0f);
+            const float rr = std::clamp(c.crop[2], l, 1.0f), b = std::clamp(c.crop[3], t, 1.0f);
+            const float du = u1 - u0, dv = v1 - v0;
+            x += w * l;
+            y += h * t;
+            w *= rr - l;
+            h *= b - t;
+            u1 = u0 + du * rr;
+            u0 = u0 + du * l;
+            v1 = v0 + dv * b;
+            v0 = v0 + dv * t;
+            if (w <= 0 || h <= 0)
+            {
+                return;
+            }
+        }
         if (c.flip & 1)
         {
             std::swap(u0, u1);

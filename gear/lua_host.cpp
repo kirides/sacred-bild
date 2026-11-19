@@ -2389,6 +2389,21 @@ namespace
         return 1;
     }
 
+    // native.party_exp_range(id) -> experience, level start, next level start | nil
+    int nativePartyExpRange(lua_State* L)
+    {
+        uint32_t now = 0, from = 0, to = 0;
+        if (!Party::experienceRange(checkId(L, 1), now, from, to))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, now);
+        lua_pushnumber(L, from);
+        lua_pushnumber(L, to);
+        return 3;
+    }
+
     int nativePartyShare(lua_State* L)
     {
         Party::setExperienceShare(luaL_checknumber(L, 1), luaL_optnumber(L, 2, 0));
@@ -2611,6 +2626,10 @@ namespace
         c.color = toColor(luaL_checknumber(L, 8));
         c.fit = static_cast<Ui::Fit>(fit);
         c.flip = static_cast<uint8_t>((static_cast<int>(mode) >> 2) & 3);
+        for (int i = 0; i < 4; ++i)
+        {
+            c.crop[i] = static_cast<float>(luaL_optnumber(L, 10 + i, i < 2 ? 0.0 : 1.0));
+        }
         lua_pushboolean(L, ok && Ui::add(std::move(c)));
         return 1;
     }
@@ -4430,6 +4449,7 @@ namespace
             {"party_import", nativePartyImport},
             {"party_export", nativePartyExport},
             {"party_share", nativePartyShare},
+            {"party_exp_range", nativePartyExpRange},
             {"party_weapon_slots", nativePartyWeaponSlots},
             {"party_use_weapon_slot", nativePartyUseWeaponSlot},
             {"buff_apply", nativeBuffApply},

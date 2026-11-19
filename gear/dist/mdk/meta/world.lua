@@ -375,6 +375,13 @@ function Creature:weapon_slots() end
 ---@return string? error
 function Creature:use_weapon_slot(n) end
 
+--- A hero's experience, the experience its level started at and the experience the next level starts at (the game's
+--- own levels), for a gauge: `(now - from) / (to - from)`. Nil for other creatures.
+---@return integer? experience
+---@return integer? from
+---@return integer? to
+function Creature:experience_range() end
+
 --- What any creature carries in its equipment slots (0 to 18): monsters, mercenaries and heroes alike. A monster holds the gear that
 --- the Disarming skill takes from it there. Nil if the creature is gone.
 ---@return {slot: integer, item: GearItem}[]?

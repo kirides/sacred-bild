@@ -1609,6 +1609,10 @@ do
     function creature_mt:use_weapon_slot(n)
         return native.party_use_weapon_slot(self.id, n - 1)
     end
+    -- A hero's experience and where its level starts and the next begins (the game's own table).
+    function creature_mt:experience_range()
+        return native.party_exp_range(self.id)
+    end
     function creature_mt:drink_potion(kind)
         local k = kind == nil and 1 or kind == 'health' and 1 or kind
         assert(type(k) == 'number', "kind must be 'health' or a number")
@@ -3272,6 +3276,11 @@ local function make_ui(mod)
             fit = fit + flip
         end
         ui_count(mod)
+        local cr = opts.crop
+        if cr then
+            return native.ui_image(layer, slot, id, x, y, w or 0, h or 0, ui_color(opts.color, 0xFFFFFFFF), fit,
+                cr[1] or 0, cr[2] or 0, cr[3] or 1, cr[4] or 1)
+        end
         return native.ui_image(layer, slot, id, x, y, w or 0, h or 0, ui_color(opts.color, 0xFFFFFFFF), fit)
     end
     -- ui.item_icon(item_or_type, x, y, w, h, {layer, window}): what the inventory shows for an item (its own 3D model),

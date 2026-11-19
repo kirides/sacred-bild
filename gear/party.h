@@ -26,6 +26,10 @@ namespace Party
     // Makes weapon slot `slot` (0-based) the active one, as the keys 1-5 do for the controlled hero.
     bool useWeaponSlot(uint32_t id, uint32_t slot, const char*& error);
 
+    // The experience a hero has, the experience its level started at and the experience the next level starts at
+    // (the game's getLevelOnExp searched). False for other creatures.
+    bool experienceRange(uint32_t id, uint32_t& now, uint32_t& from, uint32_t& to);
+
     // Hooks the engine's experience gain (for the party's shared experience).
     void install();
     // Once per frame: keeps the engine's mouse target in step after a savegame was loaded.
