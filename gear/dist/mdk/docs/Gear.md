@@ -407,7 +407,7 @@ of the game folder.
 | `itemicontest` | `gear.ui.item_icon` by type id and from live items. |
 | `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
 | `scrolltest`, `tooltiptest`, `uitest`, `chesttest`, `padnavtest` | Scroll areas and dropdowns; tooltips at the screen's edges; the UI in game; shop windows at a fixed UI scale; the controller path of the mod UI. |
-| `tabletest` | `gear.ui.table`: a panel with a table of labels, dropdowns, checkboxes, sliders and buttons in columns (and a scrolling table); the self test checks the geometry and clicks every kind of cell. |
+| `tabletest` | `gear.ui.table`: tables of labels, dropdowns, checkboxes, sliders and buttons in columns, a scrolling table, an auto column, borders, row and column spans and alignments; the self test checks the geometry and clicks the cells (24 checks). |
 | `partytest` | `gear.party`: recruit, orders, switching control, shared experience, save and load with a companion (`-gear-load=N`, a savegame with an enemy nearby; writes savegame 63). |
 | `classtest` | `gear.classes`, `gear.models`, `gear.text.add`, `creature:learn` / `forget`: catalog and tiers, hero skills, an ability copy used by a recruited Gladiator; 26 checks. `classspike` is the first run of the class and motion hooks. See [Custom classes](https://github.com/kirides/sacred-bild/blob/main/docs/CustomClasses.md). |
 | `droptest` | The drop hooks: the loot function run a few hundred times per phase with changed chances, rarity weights, a veto, a replaced item and the generators; 31 checks. See [Gear drops](https://github.com/kirides/sacred-bild/blob/main/docs/GearDrops.md). |

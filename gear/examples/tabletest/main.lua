@@ -5,11 +5,12 @@
 -- counts the controller's stops.
 local ui = gear.ui
 
-local PX, PY, PW, PH = 140, 100, 700, 520
+local PX, PY, PW, PH = 10, 100, 560, 520
+local QX, QY, QW, QH = 580, 100, 430, 300
 local CLASSES = {'Gladiator', 'Battle Mage', 'Wood Elf', 'Seraphim'}
 local ROWS = 30
 
-local T = {press = {}, class = {1, 2, 3}, on = {true, false, true}, vol = {30, 60, 90}, scrolled = {}, rects = {}}
+local T = {press = {}, class = {1, 2, 3}, on = {true, false, true}, vol = {30, 60, 90}, scrolled = {}, rects = {}, q = {}}
 
 local function rect(tag, t, col)
     local x, y, w, h = t:cell(col)
@@ -68,6 +69,46 @@ gear.on('draw', function(state)
     end
     T.scroll_h = s:height()
     ui.scroll_end(s:height())
+
+    -- A second window: an auto column, borders, a cell that spans two rows, alignments, a row that spans all columns.
+    local q = ui.panel('win2', 'Table test 2', QX, QY, QW, QH, {closable = false, draggable = false})
+    if not q.open then return end
+    local g = ui.table('grid', q.content_x, q.content_y, q.content_w, {
+        columns = {{title = 'Key', width = 'auto'}, {title = 'Value', width = '*'}, {title = 'Act', width = 80}},
+        borders = true,
+        spacing = {10, 6},
+        row_heights = {22, 22, 44},
+    })
+    T.grid = g
+    g:row()
+    g:label(1, 'Name')
+    g:label(2, 'Alice (centred)', {halign = 'center'})
+    if g:button(3, 'Edit', {rowspan = 2}) then T.q.edit = (T.q.edit or 0) + 1 end
+    T.q.span = {g:cell(3, 1, 2)}
+    g:row()
+    g:label(1, 'A longer key')
+    g:label(2, 'right', {halign = 'right'})
+    g:row()
+    g:label(1, 'Tall')
+    g:label(2, 'top', {valign = 'top'})
+    T.q.place = {g:place(3, {width = 50, height = 18, halign = 'center', valign = 'bottom'})}
+    T.q.cell3 = {g:cell(3)}
+    if g:button(3, 'Small', {width = 50, height = 18, halign = 'center', valign = 'bottom'}) then
+        T.q.small = (T.q.small or 0) + 1
+    end
+    g:row(30, nil, {columns = false})
+    g:label(1, 'A row across all columns', {span = 3, halign = 'center', color = ui.COLORS.text_dim})
+    g:finish()
+    T.q.grid_h = g:height()
+
+    -- A table without a width: as wide as its auto columns.
+    local a = ui.table('shrink', q.content_x, q.content_y + g:height() + 16, nil, {
+        columns = {{width = 'auto'}, {width = 'auto'}},
+    })
+    a:row()
+    a:label(1, 'Sized by')
+    a:label(2, 'its cells')
+    T.q.auto_w = a:width()
 end)
 
 if not gear.auto then return end
@@ -152,6 +193,33 @@ gear.task(function()
     A.screenshot('table-scrolled')
     local n = A.nav()
     check('the widgets are stops of the controller', n >= 15, n)
+
+    -- The second table.
+    local q = T.q
+    local w1 = ui.text_size('A longer key')
+    local g = T.grid
+    local kx, kw = g:column(1)
+    check('an auto column is as wide as its widest cell', kw ~= nil and math.abs(kw - math.ceil(w1)) <= 1,
+        ('%s vs %s'):format(kw, w1))
+    check('a cell reaches over two rows', q.span[4] == 22 + 6 + 22, q.span[4])
+    local cx, cy, cw, ch = unpack(q.cell3)
+    local px, py, pw, ph = unpack(q.place)
+    check('halign centre and valign bottom place a small widget', pw == 50 and ph == 18 and py + ph == cy + ch
+        and px == cx + math.floor((cw - 50) / 2), ('%s,%s %sx%s in %s,%s %sx%s'):format(px, py, pw, ph, cx, cy, cw, ch))
+    local sx, sy, sw, sh = unpack(q.span)
+    A.ui_click(sx + sw / 2, sy + sh - 6)       -- the lower half: row 2's part of the spanning button
+    gear.wait(0.5)
+    check('the spanning button takes clicks in the second row too', q.edit == 1, tostring(q.edit))
+    A.ui_click(px + pw / 2, py + ph / 2)
+    gear.wait(0.5)
+    check('a small bottom-aligned button takes its own place', q.small == 1, tostring(q.small))
+    check('the height counts the rows, the gaps and the taller rows', q.grid_h == (22 + 6 + 1) + (22 + 6) + (22 + 6) + (44 + 6) + 30,
+        q.grid_h)
+    local aw1 = ui.text_size('Sized by')
+    local aw2 = ui.text_size('its cells')
+    check('a table without a width is its auto columns and the gap', math.abs(q.auto_w - (math.ceil(aw1) + 8 + math.ceil(aw2))) <= 2,
+        ('%s vs %s'):format(q.auto_w, aw1 + aw2 + 8))
+    A.screenshot('table-grid')
 
     print(('%d passed, %d failed'):format(passed, failed))
     if gear.config.quit then A.quit(failed == 0 and 0 or 1) end
