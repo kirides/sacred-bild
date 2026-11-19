@@ -5099,7 +5099,8 @@ local function parse_settings(list)
         end
         local d = {id = s.id, type = s.type, label = type(s.label) == 'string' and s.label or s.id,
                    section = type(s.section) == 'string' and s.section or nil,
-                   tooltip = type(s.tooltip) == 'string' and s.tooltip or nil, restart = s.restart == true}
+                   tooltip = type(s.tooltip) == 'string' and s.tooltip or nil, restart = s.restart == true,
+                   note = type(s.note) == 'string' and s.note or nil}
         local fallback
         if d.type == 'number' then
             d.min = type(s.min) == 'number' and s.min or 0

@@ -28,7 +28,7 @@
 ---@class GearSettingDef
 ---@field id string Letters, digits, `_`, `-` and `.`; unique in the mod.
 ---@field type GearSettingType
----@field label? string Shown in the screen (default: the id).
+---@field label? string Shown in the screen (default: the id). `{ability:N}` shows the game's name of combat art or spell N in its language; a label longer than its column is cut (whole in the tooltip).
 ---@field default? any The default value, of the setting's type (default: false, `min`, the first choice, `''`, opaque white).
 ---@field min? number For `number` (default 0).
 ---@field max? number For `number` (default 100).
@@ -37,6 +37,7 @@
 ---@field max_length? integer For `text`.
 ---@field section? string A heading: settings in a row with the same section are shown under it.
 ---@field tooltip? string Shown when the cursor rests on the label.
+---@field note? string A line of explanation shown above this setting (on a section's first setting: what the section is about). `{ability:N}` as in `label`.
 ---@field restart? boolean The mod only reads it at start: the screen says "after restart" (the mod still gets `settings.changed`).
 
 --- An entry of `keys` in `mod.lua`: a key bind the player can change.
