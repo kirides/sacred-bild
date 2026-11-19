@@ -17,6 +17,7 @@
 #include "realm.h"
 #include "replace.h"
 #include "overlay.h"
+#include "buffs.h"
 #include "party.h"
 #include "padnav.h"
 #include "pipe.h"
@@ -2194,6 +2195,158 @@ namespace
     }
 
     // native.party_share(share, radius)
+    // native.buff_apply(id, key, mods {{offset, factor, value}...}, seconds, overlay, source, ability) -> true | nil, message
+    int nativeBuffApply(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        Buffs::Buff b;
+        b.key = luaL_checkstring(L, 2);
+        luaL_checktype(L, 3, LUA_TTABLE);
+        const int n = static_cast<int>(lua_objlen(L, 3));
+        for (int i = 1; i <= n; ++i)
+        {
+            lua_rawgeti(L, 3, i);
+            if (lua_istable(L, -1))
+            {
+                Buffs::Mod m;
+                lua_rawgeti(L, -1, 1);
+                m.offset = static_cast<uint16_t>(lua_tonumber(L, -1));
+                lua_pop(L, 1);
+                lua_rawgeti(L, -1, 2);
+                m.factor = lua_toboolean(L, -1) != 0;
+                lua_pop(L, 1);
+                lua_rawgeti(L, -1, 3);
+                m.value = static_cast<float>(lua_tonumber(L, -1));
+                lua_pop(L, 1);
+                b.mods.push_back(m);
+            }
+            lua_pop(L, 1);
+        }
+        b.seconds = luaL_optnumber(L, 4, 0);
+        b.overlay = static_cast<int>(luaL_optnumber(L, 5, 0));
+        b.source = static_cast<uint32_t>(luaL_optnumber(L, 6, 0));
+        b.ability = static_cast<int>(luaL_optnumber(L, 7, 0));
+        const char* error = "no such creature";
+        if (!id || !Buffs::apply(id, b, error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.buff_remove(id, key) -> bool
+    int nativeBuffRemove(lua_State* L)
+    {
+        lua_pushboolean(L, Buffs::remove(checkId(L, 1), luaL_checkstring(L, 2)));
+        return 1;
+    }
+
+    // native.buff_list(id) -> {{key, seconds, left, overlay, source, ability, mods = {{offset, factor, value}...}}...}
+    int nativeBuffList(lua_State* L)
+    {
+        const std::vector<Buffs::Buff> list = Buffs::list(checkId(L, 1));
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        int i = 0;
+        for (const Buffs::Buff& b : list)
+        {
+            lua_createtable(L, 0, 7);
+            lua_pushstring(L, b.key.c_str());
+            lua_setfield(L, -2, "key");
+            lua_pushnumber(L, b.seconds);
+            lua_setfield(L, -2, "seconds");
+            lua_pushnumber(L, b.left);
+            lua_setfield(L, -2, "left");
+            lua_pushnumber(L, b.overlay);
+            lua_setfield(L, -2, "overlay");
+            lua_pushnumber(L, b.source);
+            lua_setfield(L, -2, "source");
+            lua_pushnumber(L, b.ability);
+            lua_setfield(L, -2, "ability");
+            lua_createtable(L, static_cast<int>(b.mods.size()), 0);
+            int j = 0;
+            for (const Buffs::Mod& m : b.mods)
+            {
+                lua_createtable(L, 3, 0);
+                lua_pushnumber(L, m.offset);
+                lua_rawseti(L, -2, 1);
+                lua_pushboolean(L, m.factor);
+                lua_rawseti(L, -2, 2);
+                lua_pushnumber(L, m.value);
+                lua_rawseti(L, -2, 3);
+                lua_rawseti(L, -2, ++j);
+            }
+            lua_setfield(L, -2, "mods");
+            lua_rawseti(L, -2, ++i);
+        }
+        return 1;
+    }
+
+    // native.buff_ended() -> {{id, key}...} since the last call
+    int nativeBuffEnded(lua_State* L)
+    {
+        const auto ended = Buffs::takeEnded();
+        lua_createtable(L, static_cast<int>(ended.size()), 0);
+        int i = 0;
+        for (const auto& [id, key] : ended)
+        {
+            lua_createtable(L, 2, 0);
+            lua_pushnumber(L, id);
+            lua_rawseti(L, -2, 1);
+            lua_pushstring(L, key.c_str());
+            lua_rawseti(L, -2, 2);
+            lua_rawseti(L, -2, ++i);
+        }
+        return 1;
+    }
+
+    // native.buff_clear(): every Gear buff ends (a savegame was loaded)
+    int nativeBuffClear(lua_State* L)
+    {
+        Buffs::clear();
+        return 0;
+    }
+
+    // native.buff_fields(id) -> {[offset] = value} | nil: the stats block's float fields cStats::recalc works out
+    int nativeBuffFields(lua_State* L)
+    {
+        std::vector<std::pair<uint16_t, float>> f;
+        if (!Buffs::fields(checkId(L, 1), f))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, static_cast<int>(f.size()));
+        for (const auto& [offset, value] : f)
+        {
+            lua_pushnumber(L, value);
+            lua_rawseti(L, -2, offset);
+        }
+        return 1;
+    }
+
+    // native.buff_overlay(id) -> which, seconds | nil;  native.buff_set_overlay(id, which, seconds) -> bool
+    int nativeBuffOverlay(lua_State* L)
+    {
+        int which = 0;
+        float seconds = 0;
+        if (!Buffs::overlay(checkId(L, 1), which, seconds))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, which);
+        lua_pushnumber(L, seconds);
+        return 2;
+    }
+
+    int nativeBuffSetOverlay(lua_State* L)
+    {
+        lua_pushboolean(L, Buffs::setOverlay(checkId(L, 1), static_cast<int>(luaL_checknumber(L, 2)),
+            static_cast<float>(luaL_optnumber(L, 3, 30))));
+        return 1;
+    }
+
     int nativePartyShare(lua_State* L)
     {
         Party::setExperienceShare(luaL_checknumber(L, 1), luaL_optnumber(L, 2, 0));
@@ -4234,6 +4387,14 @@ namespace
             {"party_import", nativePartyImport},
             {"party_export", nativePartyExport},
             {"party_share", nativePartyShare},
+            {"buff_apply", nativeBuffApply},
+            {"buff_remove", nativeBuffRemove},
+            {"buff_list", nativeBuffList},
+            {"buff_ended", nativeBuffEnded},
+            {"buff_clear", nativeBuffClear},
+            {"buff_fields", nativeBuffFields},
+            {"buff_overlay", nativeBuffOverlay},
+            {"buff_set_overlay", nativeBuffSetOverlay},
             {"pipe_open", nativePipeOpen},
             {"pipe_close", nativePipeClose},
             {"pipe_send", nativePipeSend},

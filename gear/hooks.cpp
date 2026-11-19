@@ -5,6 +5,7 @@
 #include "drops.h"
 #include "lua_host.h"
 #include "netmsg.h"
+#include "buffs.h"
 #include "party.h"
 #include "patch.h"
 #include "pickup.h"
@@ -28,6 +29,7 @@ namespace
         ItemTip::frame();
         Drops::frame();
         Party::frame();
+        Buffs::frame();
         LuaHost::frame(dt);
     }
 }
@@ -44,6 +46,7 @@ bool Hooks::install()
     NetMsg::install();
     Chat::install();
     Party::install();
+    Buffs::install();
     Classes::install();
     Savegames::install();
     ItemTip::install();

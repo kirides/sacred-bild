@@ -334,6 +334,8 @@ namespace Gear::Addr
     // stdcall (type), ret 4. ENG 0089095C: the vtable of the 0x44-byte creature events (orders) a creature's vtable
     // +0x18 takes. ENG 0182EE5C / 0182EE60: the two anti-cheat shadow pages of the local hero (see party.cpp).
     inline Sacred::Thiscall<void(void* stats, uint32_t amount)> cStats_addExperience{};
+    // ENG 005796A0: the stats block works out its combat values anew, thiscall (stats, 0, 1), ret 8 (gear/buffs.cpp).
+    inline Sacred::Thiscall<void(void* stats, uint32_t a, uint32_t b)> cStats_recalc{};
     inline Sacred::Thiscall<void(void* stats, uint32_t a, int32_t b)> cStats_initSpells{};
     // ENG 005DA8C0 / 0054AA80: what the potion keys do (0x612FA0): a container's potion of a kind (1 healing; the
     // third argument 1 picks the size by the controlled hero's missing health), then the creature uses the item;
