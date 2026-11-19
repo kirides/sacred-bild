@@ -34,6 +34,7 @@
 
 ---@class GearDropdownOpts : GearWidgetOpts
 ---@field max_rows? integer The open list shows at most this many entries and scrolls (default 12).
+---@field height? number The closed box's height (default 18): 22 matches a 22 high button in the same row.
 
 ---@class GearScrollOpts
 ---@field step? number One line: Up / Down, an arrow button and the D-pad move it, a wheel notch three (default 20).
