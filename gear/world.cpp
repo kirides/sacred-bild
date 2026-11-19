@@ -8,7 +8,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <atomic>
 #include <cstring>
+#include <mutex>
+#include <vector>
 
 namespace
 {
@@ -97,18 +100,61 @@ namespace
         }
     }
 
+    // --- creations the engine itself makes (creature.created) ---------------------------------------------------------------------
+    // The engine's create (0x005FBA40) is hooked so that mods can see the creatures it spawns by itself (sector fills, spawn
+    // tables, scripts). The hook only records {id, type, position} while a mod listens; the Lua side drains the list on the next
+    // tick, when the creature is complete. Creations made by Gear (`callCreate`), by a savegame or network read (a wanted id)
+    // and the heroes are left out.
+    using CreateFn = uint32_t(__fastcall*)(void* self, void* edx, uint32_t type, WorldPos* pos, int want, int broadcast, int extra);
+    CreateFn g_origCreate = nullptr;
+    std::atomic<bool> g_createdActive{false};
+    thread_local bool t_ownCreate = false;
+    std::mutex g_createdLock;
+    std::vector<World::Created> g_created;
+    uint64_t g_createdDropped = 0;
+    constexpr size_t kCreatedMax = 2048;
+
+    uint32_t __fastcall hookCreate(void* self, void* edx, uint32_t type, WorldPos* pos, int want, int broadcast, int extra)
+    {
+        const uint32_t id = g_origCreate(self, edx, type, pos, want, broadcast, extra);
+        if (id > kHeroIds && !want && !t_ownCreate && g_createdActive.load(std::memory_order_relaxed))
+        {
+            World::Created c{id, type, 0, 0, 0};
+            WorldPos p{};
+            if (pos && safeCopy(&p, pos, sizeof(p)))
+            {
+                c.x = p.x;
+                c.y = p.y;
+                c.layer = p.layer;
+            }
+            std::lock_guard<std::mutex> lock(g_createdLock);
+            if (g_created.size() < kCreatedMax)
+            {
+                g_created.push_back(c);
+            }
+            else
+            {
+                ++g_createdDropped;
+            }
+        }
+        return id;
+    }
+
     // 1: created (id in `id`), 0: the game returned 0, -1: fault.
     // `want`: the id the object should get (0: the next free one; a taken id's object is destroyed first, as the
     // engine's create does).
     int callCreate(void* m, uint32_t type, WorldPos* pos, bool broadcast, uint32_t want, uint32_t& id)
     {
+        t_ownCreate = true;
         __try
         {
             id = Addr::cObjectManager_create(m, type, pos, static_cast<int>(want), broadcast ? 1 : 0, 0);
+            t_ownCreate = false;
             return id ? 1 : 0;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
+            t_ownCreate = false;
             return -1;
         }
     }
@@ -792,4 +838,36 @@ bool World::carried(uint32_t id, uint32_t (&slots)[19])
 {
     const uintptr_t o = objectAddress(id);
     return o && callIsCreature(o) && readAt(o, 0x1A4, slots);
+}
+
+bool World::installCreateHook()
+{
+    if (!Addr::cObjectManager_create)
+    {
+        LOG("World: the object create function was not found: creature.created is off");
+        return false;
+    }
+    return Patch::hook(g_origCreate, Addr::cObjectManager_create, hookCreate, "cObjectManager_create");
+}
+
+void World::setCreatedActive(bool on)
+{
+    g_createdActive.store(on, std::memory_order_relaxed);
+    if (!on)
+    {
+        std::lock_guard<std::mutex> lock(g_createdLock);
+        g_created.clear();
+    }
+}
+
+std::vector<World::Created> World::takeCreated(uint64_t* dropped)
+{
+    std::vector<Created> out;
+    std::lock_guard<std::mutex> lock(g_createdLock);
+    out.swap(g_created);
+    if (dropped)
+    {
+        *dropped = g_createdDropped;
+    }
+    return out;
 }

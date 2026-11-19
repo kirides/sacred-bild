@@ -85,6 +85,22 @@ namespace World
     // Ids of the creatures within `radius` world units of (x, y) on `layer`, nearest first, at most `limit`.
     std::vector<uint32_t> creaturesNear(const Position& at, double radius, size_t limit);
 
+    // Objects the engine's own code created (sector fills, spawn tables, scripts): not Gear's own spawns, not objects read from a
+    // savegame or the network (those ask for an id), not heroes. Recorded only while setCreatedActive(true); the caller checks
+    // that the object is still a live creature when it drains the list (the hook runs inside the create call).
+    struct Created
+    {
+        uint32_t id;
+        uint32_t type;
+        int32_t x;
+        int32_t y;
+        uint8_t layer;
+    };
+    bool installCreateHook();
+    void setCreatedActive(bool on);
+    // The creations since the last call (at most 2048 are kept; `dropped` is the running count of the ones that did not fit).
+    std::vector<Created> takeCreated(uint64_t* dropped = nullptr);
+
     // Creates an object of type `type` at `at`; its id, or 0 with `error` set.
     uint32_t spawn(uint32_t type, const Position& at, const char*& error);
 

@@ -14,6 +14,7 @@
 #include "savegames.h"
 #include "sitehook.h"
 #include "ui.h"
+#include "world.h"
 #include "game/gear_addr.h"
 
 namespace
@@ -43,6 +44,7 @@ bool Hooks::install()
     Pickup::install();
     Realm::install(LuaHost::stateFilePath(L"gear_realm.txt"));
     Drops::install();
+    World::installCreateHook();
     NetMsg::install();
     Chat::install();
     Party::install();

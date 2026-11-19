@@ -6445,6 +6445,7 @@ local function make_env(mod)
         if event == 'level.factor' then native.level_factor_active(true) end
         if event == 'combat.constant' then native.combat_constant_active(true) end
         if event == 'creature.ability' then native.creature_ability_active(true) end
+        if event == 'creature.created' then native.created_active(true) end
         if event == 'ability.route' then native.route_active(true) end
         if event == 'rune.usable' then native.usable_active(true) end
         if event == 'motion.select' then native.motion_active(true) end
@@ -6466,6 +6467,7 @@ local function make_env(mod)
         if h.event == 'level.factor' and #list == 0 then native.level_factor_active(false) end
         if h.event == 'combat.constant' and #list == 0 then native.combat_constant_active(false) end
         if h.event == 'creature.ability' and #list == 0 then native.creature_ability_active(false) end
+        if h.event == 'creature.created' and #list == 0 then native.created_active(false) end
         if h.event == 'ability.route' and #list == 0 then native.route_active(false) end
         if h.event == 'rune.usable' and #list == 0 then native.usable_active(false) end
         if h.event == 'motion.select' and #list == 0 then native.motion_active(false) end
@@ -7318,6 +7320,20 @@ end
 -- The kills this client sent (gear/netmsg.cpp) as the event 'kill' (ev): killer (a player, nil if a creature killed
 -- it), victim (a creature handle), type, type_name (nil if the object is already gone), award (experience),
 -- by_local (the local hero killed it).
+-- `creature.created`: the creatures the engine's own code made since the last tick (sector fills, spawn tables, scripts; see
+-- World::takeCreated). Only polled while a mod listens; the engine's list holds 2048 at most per tick (more are dropped).
+function kernel.poll_created()
+    local list = handlers['creature.created']
+    if not list or #list == 0 then return end
+    local made = native.take_created()
+    for i = 1, #made do
+        local c = made[i]
+        kernel.dispatch('creature.created', {
+            creature = wrap(c.id), id = c.id, type = c.type, x = c.x, y = c.y, layer = c.layer,
+        })
+    end
+end
+
 function kernel.poll_kills()
     while true do
         local k = native.net_kill and native.net_kill()
@@ -7415,6 +7431,7 @@ function kernel.tick(dt)
     poll_saves()
     uis.chat_poll()
     kernel.poll_kills()
+    kernel.poll_created()
     kernel.boss.poll()
     kernel.buffs.poll()
     kernel.poll_mp(dt)

@@ -1710,6 +1710,45 @@ namespace
         return 1;
     }
 
+    // native.created_active(bool): whether some mod handles `creature.created` (the engine's create is recorded only then)
+    int nativeCreatedActive(lua_State* L)
+    {
+        World::setCreatedActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.take_created() -> {{id, type, x, y, layer}, ...}, dropped: the objects the engine itself created since the last call
+    // that are still live creatures (not heroes), and how many creations did not fit into the list so far.
+    int nativeTakeCreated(lua_State* L)
+    {
+        uint64_t dropped = 0;
+        const std::vector<World::Created> list = World::takeCreated(&dropped);
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        int n = 0;
+        for (const World::Created& c : list)
+        {
+            World::Object o;
+            if (!World::object(c.id, o) || !o.creature)
+            {
+                continue;
+            }
+            lua_createtable(L, 0, 5);
+            lua_pushnumber(L, c.id);
+            lua_setfield(L, -2, "id");
+            lua_pushnumber(L, c.type);
+            lua_setfield(L, -2, "type");
+            lua_pushnumber(L, o.position.x);
+            lua_setfield(L, -2, "x");
+            lua_pushnumber(L, o.position.y);
+            lua_setfield(L, -2, "y");
+            lua_pushnumber(L, o.position.layer);
+            lua_setfield(L, -2, "layer");
+            lua_rawseti(L, -2, ++n);
+        }
+        lua_pushnumber(L, static_cast<lua_Number>(dropped));
+        return 2;
+    }
+
     // native.teleport(id, x, y, layer) -> true | nil, message
     int nativeTeleport(lua_State* L)
     {
@@ -4415,6 +4454,8 @@ namespace
             {"ui_close_window", nativeUiCloseWindow},
             {"game_config", nativeGameConfig},
             {"net_kill", nativeNetKill},
+            {"created_active", nativeCreatedActive},
+            {"take_created", nativeTakeCreated},
             {"mp_send_frame", nativeMpSendFrame},
             {"mp_take_frame", nativeMpTakeFrame},
             {"net_ops", nativeNetOps},
