@@ -282,8 +282,7 @@ local function setting_row(t, m, d)
     -- a label longer than its column is cut (the whole of it in the tooltip), so it never runs into the control
     local tip = game_names(d.tooltip)
     local _, _, lw = t:cell(1)
-    if text_w(label) > lw then tip = label .. (tip and ('
-' .. tip) or '') end
+    if text_w(label) > lw then tip = label .. (tip and ('\n' .. tip) or '') end
     t:label(1, label, {id = id .. '#l', tooltip = tip})
     local changed, nv = false, value
     if d.type == 'bool' then
