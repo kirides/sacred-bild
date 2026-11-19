@@ -1227,6 +1227,64 @@ do
         skills_saved = {}
     end
 
+    -- The icon texture name of an ability (the string at record +0x0C: GUI_MOVE_RUNDUM.TGA), nil if it has none.
+    function C.icon_name(id)
+        local rec = data.abilities[id]
+        if not rec then return nil end
+        local kind = rec.kind
+        local chars = {}
+        if kind == 'combat_art' then
+            for off = 0x0C, 0x2C, 4 do
+                local v = rec[('unk_%02x'):format(off)] or 0
+                for i = 0, 3 do chars[#chars + 1] = v % 256; v = math.floor(v / 256) end
+            end
+        else
+            for off = 0x0C, 0x2E, 2 do
+                local v = rec[('unk_%02x'):format(off)] or 0
+                chars[#chars + 1] = v % 256
+                chars[#chars + 1] = math.floor(v / 256)
+            end
+        end
+        local out = {}
+        for _, b in ipairs(chars) do
+            if b == 0 then break end
+            out[#out + 1] = string.char(b)
+        end
+        local name = table.concat(out)
+        return name ~= '' and name or nil
+    end
+
+    -- The image id (for gear.ui.image) of an ability's icon: the game's own texture, 64 x 64; nil if it has none. Copies use their
+    -- base's icon (a copy's record is a copy of the base's).
+    function C.art_icon(id)
+        local name = C.icon_name(id)
+        local image = name and native.texture_image(name) or nil
+        if not image then return nil end
+        -- the game's icons are grey discs; the combat arts' are drawn gold, the spells' a pale blue
+        return image, id >= 1000 and 0xFFFFD060 or 0xFFB8D0FF
+    end
+
+    -- A hero skill by id (the u8 ids of Creature.pak's skill lists): {id, name, description} from the game's texts (the skills window's
+    -- own: name text 0x24B7 + id, description 0x24E9 + id); nil if the game has no skill with that id. The game has no icons for skills.
+    function C.skill(id)
+        if type(id) ~= 'number' or id < 1 or id > 255 then return nil end
+        local name = native.text_get(0x24B7 + id)
+        if not name or name == '' or name:find('EMPTY', 1, true) then return nil end
+        local desc = native.text_get(0x24E9 + id)
+        if desc and desc:find('EMPTY', 1, true) then desc = nil end
+        return {id = id, name = name, description = desc}
+    end
+
+    -- Every skill the game has, by id.
+    function C.skills()
+        local out = {}
+        for id = 1, 64 do
+            local s = C.skill(id)
+            if s then out[#out + 1] = s end
+        end
+        return out
+    end
+
     local rune_cache
     -- {[ability id] = {item type, ...}}: the rune items that teach an ability (item types whose record names one: type record +0x6A).
     function C.runes()
@@ -3150,6 +3208,11 @@ local function make_ui(mod)
             end
         end
         return out
+    end
+    -- ui.texture_image(name): the id of a texture of the game's Texture.pak (by file name, any case) for ui.image; nil if there is none.
+    function ui.texture_image(name)
+        assert(type(name) == 'string', 'name must be a string')
+        return native.texture_image(name)
     end
     function ui.fonts() return native.ui_font_count() end
 
@@ -5498,6 +5561,7 @@ local function make_env(mod)
     -- gear.models: the models' motion slot tables (Models.tmp). `body` is a hero type (1..9) or its name ('seraphim').
     gear.classes = {}
     for k, v in pairs(kernel.classes) do gear.classes[k] = v end
+    -- gear.ui.texture_image(name): see meta/ui.lua
     function gear.classes.copy_ability(alias, base, values)
         assert(type(alias) == 'number' and type(base) == 'number', 'expected an alias id (2000..4999 for an art, 100..199 for a spell) and the base ability id')
         if base < 1000 then return nil, 'copies of spells are not supported: the engine does not run a spell under an id of its own' end

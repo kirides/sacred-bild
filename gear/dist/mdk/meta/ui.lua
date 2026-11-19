@@ -193,6 +193,13 @@ function GearUi.hovered_item() end
 ---@return ('right'|'left')? side
 function GearUi.tooltip_anchor(w, h, opts) end
 
+--- A texture of the game's Texture.pak by its file name (`GUI_MOVE_RUNDUM.TGA`, any case) as an image id for `image`; nil if the
+--- game has none. The engine loads it and it keeps its own size. The icons of combat arts and spells are such textures
+--- (`gear.classes.art_icon`).
+---@param name string
+---@return integer? id
+function GearUi.texture_image(name) end
+
 --- The UI images whose sheet name contains `filter` (any case), all of them without a filter.
 ---@param filter? string
 ---@return GearImageInfo[]

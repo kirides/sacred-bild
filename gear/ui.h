@@ -98,6 +98,9 @@ namespace Ui
         int width = 0, height = 0;  // pixels at the 1024x768 layout
         bool loaded = false;        // its sheet has a texture now
     };
+    // A texture of PAK\Texture.pak by its file name (GUI_MOVE_RUNDUM.TGA, any case) as an image id for gear.ui.image, 0 if the
+    // game has none. The engine loads it (the icons of abilities and skills are such textures); it keeps its own size.
+    uint32_t textureImage(const std::string& name);
     uint32_t imageCount();          // ids 1 .. count-1
     bool imageInfo(uint32_t id, ImageInfo& out);
 

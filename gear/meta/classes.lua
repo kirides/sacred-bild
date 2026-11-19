@@ -62,6 +62,35 @@ function GearClasses.copy_ability(alias, base, values) end
 ---@return boolean removed
 function GearClasses.remove_ability(alias) end
 
+--- The texture file name of an ability's icon (`GUI_MOVE_RUNDUM.TGA`), nil if it has none.
+---@param id integer
+---@return string?
+function GearClasses.icon_name(id) end
+
+--- The image id (for `gear.ui.image`) of an ability's icon, the game's own 64 x 64 texture, and the tint to draw it with (the
+--- game's icons are grey discs: combat arts gold, spells pale blue); nil if it has none. A copy has its base's icon (give it
+--- another with `gear.ui.texture_image(name)` and the record's icon string).
+---@param id integer
+---@return integer? image
+---@return integer? color
+function GearClasses.art_icon(id) end
+
+--- One hero skill.
+---@class GearSkill
+---@field id integer
+---@field name string
+---@field description string?
+
+--- A hero skill by its id (the u8 ids of the skill lists of `hero_skills`): name and description from the game's own texts, in the
+--- game's language. The game has no skill icons. nil if there is no such skill.
+---@param id integer
+---@return GearSkill?
+function GearClasses.skill(id) end
+
+--- Every skill the game has, by id.
+---@return GearSkill[]
+function GearClasses.skills() end
+
 --- The raw Creature.pak hero record (0x56 bytes) of a body.
 ---@param body integer|string
 ---@return string? record

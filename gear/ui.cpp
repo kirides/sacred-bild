@@ -315,6 +315,60 @@ namespace
         return g_imageCount;
     }
 
+    // ---- Texture images: a texture of PAK\Texture.pak by its name (the game's own ability and skill icons are such textures).
+    //      PAK\Texture.TMP lists them (0x118 bytes of header, then 0x50-byte records: name char[0x20], u16 width and height at
+    //      +0x20 / +0x22); the record's index is the texture manager's handle, so the engine loads and decodes the texture. ----
+    constexpr uint32_t kTextureImageBase = 0x20000000, kTextureImageMax = 0x10000;
+    struct TextureEntry
+    {
+        uint16_t width = 0, height = 0;
+    };
+    std::map<std::string, uint32_t> g_textureIndex;     // upper case name -> handle
+    std::vector<TextureEntry> g_textureEntries;
+    std::once_flag g_textureOnce;
+
+    void loadTextureIndex()
+    {
+        std::call_once(g_textureOnce, [] {
+            wchar_t path[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, path, MAX_PATH);
+            std::wstring p = path;
+            const size_t slash = p.find_last_of(L"\\/");
+            p = (slash == std::wstring::npos ? L"" : p.substr(0, slash + 1)) + L"PAK\\Texture.TMP";
+            HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (h == INVALID_HANDLE_VALUE)
+            {
+                LOG("UI: PAK\\Texture.TMP not found: no texture images");
+                return;
+            }
+            const DWORD size = GetFileSize(h, nullptr);
+            std::vector<uint8_t> data(size);
+            DWORD got = 0;
+            ReadFile(h, data.data(), size, &got, nullptr);
+            CloseHandle(h);
+            const uint32_t count = got > 0x118 ? (got - 0x118) / 0x50 : 0;
+            g_textureEntries.resize(count);
+            for (uint32_t i = 0; i < count && i < kTextureImageMax; ++i)
+            {
+                const uint8_t* r = data.data() + 0x118 + i * 0x50;
+                char name[0x21] = {};
+                std::memcpy(name, r, 0x20);
+                if (!name[0])
+                {
+                    continue;
+                }
+                for (char& c : name)
+                {
+                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                }
+                g_textureIndex.emplace(name, i);
+                std::memcpy(&g_textureEntries[i].width, r + 0x20, 2);
+                std::memcpy(&g_textureEntries[i].height, r + 0x22, 2);
+            }
+            LOG("UI: {} textures in Texture.TMP", g_textureIndex.size());
+        });
+    }
+
     struct ImageRecord
     {
         uint32_t texture;
@@ -324,6 +378,16 @@ namespace
 
     bool imageRecord(uint32_t id, ImageRecord& out)
     {
+        if (id >= kTextureImageBase && id < kTextureImageBase + kTextureImageMax)
+        {
+            const uint32_t handle = id - kTextureImageBase;
+            if (handle >= g_textureEntries.size() || !g_textureEntries[handle].width)
+            {
+                return false;
+            }
+            out = {handle, 0.0f, 0.0f, 1.0f, 1.0f, g_textureEntries[handle].width, g_textureEntries[handle].height};
+            return true;
+        }
         const uintptr_t t = imageTable();
         if (!t || id == 0 || id >= countImages())
         {
@@ -1330,6 +1394,18 @@ bool Ui::install()
         LOG("UI: the mouse wheel over mod UI comes from SacredBild");
     }
     return ok;
+}
+
+uint32_t Ui::textureImage(const std::string& name)
+{
+    loadTextureIndex();
+    std::string key = name;
+    for (char& c : key)
+    {
+        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    const auto it = g_textureIndex.find(key);
+    return it == g_textureIndex.end() ? 0 : kTextureImageBase + it->second;
 }
 
 uint32_t Ui::imageCount() { return countImages(); }

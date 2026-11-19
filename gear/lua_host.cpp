@@ -782,6 +782,19 @@ namespace
         return 1;
     }
 
+    // native.texture_image(name) -> image id for gear.ui.image | nil
+    int nativeTextureImage(lua_State* L)
+    {
+        const uint32_t id = Ui::textureImage(luaL_checkstring(L, 1));
+        if (!id)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, id);
+        return 1;
+    }
+
     // native.text_set(id, utf8) -> true | nil, message
     int nativeTextSet(lua_State* L)
     {
@@ -4110,6 +4123,7 @@ namespace
             {"hero_record_set", nativeHeroRecordSet},
             {"text_set", nativeTextSet},
             {"text_add", nativeTextAdd},
+            {"texture_image", nativeTextureImage},
             {"motion_active", nativeMotionActive},
             {"creature_learn", nativeCreatureLearn},
             {"creature_forget", nativeCreatureForget},

@@ -72,3 +72,12 @@ Gladiator art 1059 with changed numbers learned and used by a recruited Gladiato
 * Ability copies (`gear.classes.copy_ability`) were run by a Gladiator (copy of 1059 with new numbers and its own name), and a chain
   built on them (a copy of its first step, the next steps ordered by the mod).
 * The ability regeneration is `regen_base + level * regen_per_level` of the record (T1 f32 at +0x40 / +0x44, T2 u16 at +0x3E / +0x40).
+
+## Icons, skills and texts (UI)
+
+* The icons of abilities are textures of `PAK	exture.pak` named in the ability record (`+0x0C`, e.g. `GUI_MOVE_RUNDUM.TGA`, 64 x 64 grey discs).
+  `PAK\Texture.TMP` lists every texture; a record's index is the texture manager's handle, so the engine loads and decodes it.
+  `gear.ui.texture_image(name)` gives an image id for `gear.ui.image`; `gear.classes.art_icon(id)` does it for an ability and also
+  returns a tint (arts gold, spells pale blue). Copies have their base's icon.
+* Skills have no table in the exe: the skills window computes the name text id as `0x24B7 + skill id` and the description as
+  `0x24E9 + skill id`. `gear.classes.skill(id)` / `skills()` return them in the game's language. The game has no skill icons.

@@ -1737,6 +1737,44 @@ Removes a copy this mod made.
 - `alias`: `integer`
 - returns `removed` `boolean`
 
+#### `gear.classes.icon_name(id) -> string?`
+
+The texture file name of an ability's icon (`GUI_MOVE_RUNDUM.TGA`), nil if it has none.
+
+- `id`: `integer`
+- returns `string?`
+
+#### `gear.classes.art_icon(id) -> integer?, integer?`
+
+The image id (for `gear.ui.image`) of an ability's icon, the game's own 64 x 64 texture, and the tint to draw it with (the game's icons are grey discs: combat arts gold, spells pale blue); nil if it has none. A copy has its base's icon (give it another with `gear.ui.texture_image(name)` and the record's icon string).
+
+- `id`: `integer`
+- returns `image` `integer?`
+- returns `color` `integer?`
+
+### GearSkill
+
+One hero skill.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` |  |
+| `name` | `string` |  |
+| `description` | `string` |  (optional) |
+
+#### `gear.classes.skill(id) -> GearSkill?`
+
+A hero skill by its id (the u8 ids of the skill lists of `hero_skills`): name and description from the game's own texts, in the game's language. The game has no skill icons. nil if there is no such skill.
+
+- `id`: `integer`
+- returns `GearSkill?`
+
+#### `gear.classes.skills() -> GearSkill[]`
+
+Every skill the game has, by id.
+
+- returns `GearSkill[]`
+
 #### `gear.classes.hero_record(body) -> string?`
 
 The raw Creature.pak hero record (0x56 bytes) of a body.
@@ -3758,6 +3796,13 @@ Where a panel goes to sit flush against the game's item tooltip: the top-left co
 - returns `x` `number?`
 - returns `y` `number?`
 - returns `side` `('right'|'left')?`
+
+#### `gear.ui.texture_image(name) -> integer?`
+
+A texture of the game's Texture.pak by its file name (`GUI_MOVE_RUNDUM.TGA`, any case) as an image id for `image`; nil if the game has none. The engine loads it and it keeps its own size. The icons of combat arts and spells are such textures (`gear.classes.art_icon`).
+
+- `name`: `string`
+- returns `id` `integer?`
 
 #### `gear.ui.images(filter) -> GearImageInfo[]`
 
