@@ -766,7 +766,12 @@ uint32_t World::heroClass(uint32_t id)
     void* m = available() ? manager() : nullptr;
     const uintptr_t o = id >= 1 && id <= kHeroIds ? live(m, id) : 0;
     uint32_t type = 0;
-    return o && callIsCreature(o) && readAt(o, kType, type) && type >= 1 && type <= 9 ? type : 0;
+    if (!o || !callIsCreature(o) || !readAt(o, kType, type) || type < 1 || type > 9)
+    {
+        return 0;
+    }
+    // Type 7 is a Vampiress in her vampire form (Vampirform, ability 1022) until she changes back: still a Vampiress.
+    return type == 7 ? 6 : type;
 }
 
 uint32_t World::classBit(uint32_t heroClass)
