@@ -266,6 +266,33 @@ namespace
         return found;
     }
 
+    bool callTaskbarSetHero(uintptr_t taskbar, uint32_t id)
+    {
+        __try
+        {
+            Addr::cUI_Taskbar2_setHero(reinterpret_cast<void*>(taskbar), id, 0);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    // The taskbar keeps the hero id it shows (weapon and combat art slots, belt): point it at `id` when it differs.
+    bool retargetTaskbar(uint32_t id)
+    {
+        uintptr_t ui = 0, taskbar = 0, vtable = 0;
+        uint32_t shown = 0;
+        if (!Addr::cUI_Taskbar2_vtable || !Addr::cUI_Taskbar2_setHero || !Addr::g_pUiManager ||
+            !safeCopy(&ui, Addr::g_pUiManager.get(), sizeof(ui)) || !ui || !readAt(ui, 0x80, taskbar) || !taskbar ||
+            !readAt(taskbar, 0, vtable) || vtable != Addr::cUI_Taskbar2_vtable || !readAt(taskbar, 0x154, shown))
+        {
+            return false;
+        }
+        return shown == id || callTaskbarSetHero(taskbar, id);
+    }
+
     bool retargetInventory(uint32_t id)
     {
         uintptr_t ui = 0;
@@ -486,6 +513,7 @@ void Party::frame()
     {
         nextTab = GetTickCount64() + 2000;
         retargetInventory(localNow);
+        retargetTaskbar(localNow);
     }
     const uintptr_t e = engine();
     const uint32_t local = World::localId();
@@ -902,6 +930,10 @@ bool Party::control(uint32_t id, const char*& error)
     if (!retargetInventory(id))
     {
         LOG("Party: the inventory window's backpack page was not found");
+    }
+    if (!retargetTaskbar(id))
+    {
+        LOG("Party: the taskbar was not found");
     }
     if (!refreshShadow(to))
     {
