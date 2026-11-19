@@ -38,8 +38,9 @@ namespace Classes
     // `base`, which a mod may change field by field (tables "ability_a1" / "ability_a2", see tables.cpp). The record keeps the
     // base id in its first word, so the class handlers (they switch on it) run the base ability's code; every lookup by the
     // alias id returns the copy. The hero's abilities, the art window, runes and savegames use the alias id.
-    // The engine refuses an art in flight with an id above 5000 (0x4FD0F0), and treats 200..999 apart: art aliases are 2000..4999
-    // (copies of arts 1000..1999), spell aliases 100..199 (copies of spells 1..99).
+    // The engine refuses an art in flight with an id above 5000 (0x4FD0F0): art aliases are 2000..4999 (copies of arts 1000..1999).
+    // Spell aliases (100..199, copies of spells) can be made but the engine does not run a spell under such an id: the Lua API
+    // refuses them.
     constexpr uint32_t kAliasArtFirst = 2000, kAliasArtLast = 4999, kAliasSpellFirst = 100, kAliasSpellLast = 199;
     bool aliasCreate(uint32_t alias, uint32_t base, const char*& error);
     bool aliasRemove(uint32_t alias);

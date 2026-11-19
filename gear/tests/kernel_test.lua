@@ -370,8 +370,8 @@ files.ab = {
         -- a write through the record and through apply
         abil.t1.effect_base = 1.5
         abil.after = abil.t1.effect_base
-        abil.n, abil.problems = A:apply({[1001] = {effect_per_level = 0.25, unk_40 = 7}, [2] = {value1_base = 12, target_mode = 3}})
-        abil.applied = {A[1001].effect_per_level, A[1001].unk_40, A[2].value1_base, A[2].target_mode}
+        abil.n, abil.problems = A:apply({[1001] = {effect_per_level = 0.25, unk_30 = 7}, [2] = {value1_base = 12, target_mode = 3}})
+        abil.applied = {A[1001].effect_per_level, A[1001].unk_30, A[2].value1_base, A[2].target_mode}
         -- nothing is written when one entry is wrong
         abil.bad_n, abil.bad_problems = A:apply({[1001] = {effect_base = 9}, [2] = {nope = 1}, [7777] = {x = 1}})
         abil.unchanged = A[1001].effect_base
@@ -381,7 +381,7 @@ files.ab = {
         abil.range = not pcall(function() A[2].target_mode = 300 end)
         abil.set_view = not pcall(function() A[1] = {} end)
         abil.restored = A:restore()
-        abil.after_restore = {A[1001].effect_base, A[1001].effect_per_level, A[1001].unk_40, A[2].value1_base, A[2].target_mode}
+        abil.after_restore = {A[1001].effect_base, A[1001].effect_per_level, A[1001].unk_30, A[2].value1_base, A[2].target_mode}
         abil.text = gear.text.get(8193)
         abil.no_text = gear.text.get(99)
         abil.overlay = gear.files.overlay()

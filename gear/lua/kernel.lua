@@ -253,6 +253,7 @@ local ABILITY_TABLES = {
             id = {0x00, 'i16'}, name_text = {0x04, 'u32'}, description_text = {0x08, 'u32'}, target_mode = {0x4C, 'u32'},
             effect_base = {0x50, 'f32'}, effect_per_level = {0x54, 'f32'},
             effect2_base = {0x58, 'f32'}, effect2_per_level = {0x5C, 'f32'},
+            regen_base = {0x40, 'f32'}, regen_per_level = {0x44, 'f32'},
         },
     },
     T2 = {
@@ -263,6 +264,7 @@ local ABILITY_TABLES = {
             value1_base = {0x46, 'i16'}, value1_per_level = {0x48, 'i16'},
             value2_base = {0x4A, 'i16'}, value2_per_level = {0x4C, 'i16'},
             value3_base = {0x4E, 'i16'}, value3_per_level = {0x50, 'i16'},
+            regen_base = {0x3E, 'u16'}, regen_per_level = {0x40, 'u16'},
         },
     },
 }
@@ -5163,6 +5165,20 @@ local function make_mods_api(mod)
         local e = catalog[id]
         return e and not e.invalid and mod_info(e) or nil
     end
+    -- read(id, relative) -> text | nil, message: a file of an installed mod's folder (read only; this mod's own too).
+    function api.read(id, relative)
+        assert(type(id) == 'string' and type(relative) == 'string', 'expected a mod id and a path')
+        local e = catalog[id]
+        if not e or e.invalid then return nil, 'no such mod' end
+        return native.read_file(e.dir, relative)
+    end
+    -- files(id, folder) -> {file name, ...}: the files directly in a folder of an installed mod ('' : the mod's folder), sorted.
+    function api.files(id, folder)
+        assert(type(id) == 'string', 'expected a mod id')
+        local e = catalog[id]
+        if not e or e.invalid then return nil, 'no such mod' end
+        return native.list_mod_dir(e.dir, folder or '')
+    end
     return api
 end
 
@@ -5484,6 +5500,7 @@ local function make_env(mod)
     for k, v in pairs(kernel.classes) do gear.classes[k] = v end
     function gear.classes.copy_ability(alias, base, values)
         assert(type(alias) == 'number' and type(base) == 'number', 'expected an alias id (2000..4999 for an art, 100..199 for a spell) and the base ability id')
+        if base < 1000 then return nil, 'copies of spells are not supported: the engine does not run a spell under an id of its own' end
         local owner = kernel.alias_owner[alias]
         if owner and owner ~= mod then return nil, 'the alias belongs to another mod' end
         if not owner then

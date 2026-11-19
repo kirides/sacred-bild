@@ -52,7 +52,7 @@ gear.task(function()
     if rec then rec.name_text = tid end
     check('name text', rec and gear.text.get(rec.name_text), rec and gear.text.get(rec.name_text))
     local r2, e2 = gear.classes.copy_ability(101, 5, {value0_base = 77})
-    check('spell alias', r2 and r2.kind == 'spell' and r2.value0_base == 77, e2)
+    check('spell copies are refused', r2 == nil and e2 ~= nil, e2)
     check('bad base', select(2, gear.classes.copy_ability(2003, 9999)) ~= nil)
     check('bad alias id', select(2, gear.classes.copy_ability(5, 1059)) ~= nil)
 

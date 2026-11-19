@@ -164,6 +164,8 @@ function GearAbilities:restore() end
 ---@field name_text integer The text id of the name (`gear.text.get`).
 ---@field description_text integer The text id of the description.
 ---@field target_mode integer How the ability is aimed (the engine passes it on to the targeting code).
+---@field regen_base number The regeneration time in seconds is `regen_base + level * regen_per_level` (T1: f32 at +0x40, T2: whole seconds at +0x3E).
+---@field regen_per_level number
 ---@field effect_base number T1: the first effect is `effect_base + level * effect_per_level` (level 1..100).
 ---@field effect_per_level number T1.
 ---@field effect2_base number T1: the second effect.

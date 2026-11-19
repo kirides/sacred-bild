@@ -222,6 +222,54 @@ namespace
         return 1;
     }
 
+    // native.list_mod_dir(dir, subfolder) -> {file name, ...} | nil, message: the files directly in a subfolder of a mod folder
+    // (names only, sorted; "" is the mod folder itself)
+    int nativeListModDir(lua_State* L)
+    {
+        size_t dirLen = 0, relLen = 0;
+        const char* dir = luaL_checklstring(L, 1, &dirLen);
+        const char* rel = luaL_optlstring(L, 2, "", &relLen);
+        const std::wstring path = modPath(dir, dirLen, relLen ? rel : ".", relLen ? relLen : 1);
+        std::wstring folder = path;
+        if (relLen == 0)
+        {
+            folder = g_modsDir + L"\\" + widen(dir, dirLen);
+        }
+        if (path.empty() && relLen != 0)
+        {
+            lua_pushnil(L);
+            lua_pushstring(L, "path outside the mod's folder");
+            return 2;
+        }
+        std::vector<std::string> names;
+        WIN32_FIND_DATAW data;
+        HANDLE h = FindFirstFileW((folder + L"\\*").c_str(), &data);
+        if (h != INVALID_HANDLE_VALUE)
+        {
+            do
+            {
+                if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+                {
+                    char utf8[MAX_PATH * 3];
+                    const int n = WideCharToMultiByte(CP_UTF8, 0, data.cFileName, -1, utf8, sizeof(utf8), nullptr, nullptr);
+                    if (n > 1)
+                    {
+                        names.emplace_back(utf8, static_cast<size_t>(n - 1));
+                    }
+                }
+            } while (FindNextFileW(h, &data));
+            FindClose(h);
+        }
+        std::sort(names.begin(), names.end());
+        lua_newtable(L);
+        for (size_t i = 0; i < names.size(); ++i)
+        {
+            lua_pushlstring(L, names[i].data(), names[i].size());
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
     // native.load(text, chunkname, env) -> function | nil, message. Text only: LuaJIT bytecode is not verified and
     // could break out of the sandbox.
     int nativeLoad(lua_State* L)
@@ -4033,6 +4081,7 @@ namespace
             {"clipboard_get", nativeClipboardGet},
             {"mod_dirs", nativeModDirs},
             {"read_file", nativeReadFile},
+            {"list_mod_dir", nativeListModDir},
             {"load", nativeLoad},
             {"time", nativeTime},
             {"reset_budget", nativeResetBudget},

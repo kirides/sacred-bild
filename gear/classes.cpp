@@ -56,13 +56,20 @@ namespace
         uint32_t type = 0;
         uint16_t art = 0;
         if (!readAt(reinterpret_cast<uintptr_t>(creature), kType, type) || !isHeroType(type) ||
-            !readAt(reinterpret_cast<uintptr_t>(creature), kArtInFlight, art) || art < 1000)
+            !readAt(reinterpret_cast<uintptr_t>(creature), kArtInFlight, art))
+        {
+            return vanilla;
+        }
+        if (art < 100)
         {
             return vanilla;
         }
         uint16_t action = 0;
         readAt(reinterpret_cast<uintptr_t>(creature), kAction, action);
         g_routeCalls.fetch_add(1, std::memory_order_relaxed);
+        if (g_routeCalls.load() < 400)
+        {
+        }
         int answer = 0;
         uint32_t id = 0;
         readAt(reinterpret_cast<uintptr_t>(creature), 0x0C, id);

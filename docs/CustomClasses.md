@@ -19,7 +19,7 @@ what was measured (English GOG `Sacred.exe`, test: `gear/examples/classspike`, a
 ## What Gear adds (sacred-bild)
 
 * `ability.route(type, art, vanilla_class, action, id)` : hook on `classOf`. Asked only for hero types (1..9) while an art
-  (id >= 1000) is in flight; the handler returns the hero class whose code runs the art, or nil.
+  (id >= 1000) or a spell copy (100..199) is in flight (the game's own spells 1..99 never ask); the handler returns the hero class whose code runs the art, or nil.
 * `motion.select(type, slot, id)` : hook on the motion player (hero types only); the handler returns another slot or nil.
 * `gear.models.has_motion(body, slot)`, `motion(body, slot)`, `set_motion(body, slot, record)`, `restore()` : the slot tables.
 * `creature:learn(id, level)`, `creature:forget(id)`.
@@ -57,9 +57,18 @@ Reference: [GearApi.md](GearApi.md) (`gear.classes`, `gear.models`, `creature:le
 * Ability copies (`gear.classes.copy_ability`). The class handlers `switch` on the first word of the ability record that the lookups 0x4D1AF0
   (arts) and 0x4D2310 (spells) return. Gear hooks both: for a copy's id they return a copy of the base record with the base id left in the
   first word, so the base ability's code runs and the copy has its own numbers, name and description. Limits found on the way: the engine
-  refuses an art in flight with an id above 5000 (0x4FD0F0), so art copies are 2000..4999 and spell copies 100..199. The engine's text
+  refuses an art in flight with an id above 5000 (0x4FD0F0), so art copies are 2000..4999. Copies of spells (100..199) were tried: the engine accepts the order and does nothing, so
+  `copy_ability` refuses them. The engine's text
   table only changes texts that exist, so `gear.text.add` serves new texts (ids from 0x100000) from the text lookup (0x672C90).
 * `creature:learn` calls the engine's own append (0x580750); `forget` removes the entry from the abilities vector.
 
 Tested: `gear/examples/classtest` (26 checks, one run in a copy of the game folder): catalog with tiers and rune items, hero skills, a copy of
 Gladiator art 1059 with changed numbers learned and used by a recruited Gladiator, copy of a spell, text, forget.
+
+## Notes from the mod's runs
+
+* A Gladiator art ordered for a Seraphim with the class's routing runs as an `ability` action (the plain attack without it). Whether
+  it hits was not isolated: arts that need a weapon do nothing for an unarmed hero in any case, so treat tier B as "the class's code runs".
+* Ability copies (`gear.classes.copy_ability`) were run by a Gladiator (copy of 1059 with new numbers and its own name), and a chain
+  built on them (a copy of its first step, the next steps ordered by the mod).
+* The ability regeneration is `regen_base + level * regen_per_level` of the record (T1 f32 at +0x40 / +0x44, T2 u16 at +0x3E / +0x40).

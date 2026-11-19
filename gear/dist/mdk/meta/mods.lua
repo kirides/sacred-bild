@@ -163,6 +163,20 @@ local GearMods = {}
 ---@param fn? fun(x: number, y: number, w: number, h: number): number?
 function GearMods.page(fn) end
 
+--- A file of an installed mod's folder, read only (`relative` is a path inside it, e.g. `arts/venom.json`).
+---@param id string
+---@param relative string
+---@return string? text
+---@return string? error
+function GearMods.read(id, relative) end
+
+--- The names of the files directly in a folder of an installed mod (`''`: the mod's own folder), sorted.
+---@param id string
+---@param folder? string
+---@return string[]? names
+---@return string? error
+function GearMods.files(id, folder) end
+
 --- Every installed mod, sorted by name.
 ---@return GearModListing[]
 function GearMods.list() end
