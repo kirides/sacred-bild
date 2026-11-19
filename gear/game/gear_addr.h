@@ -297,6 +297,10 @@ namespace Gear::Addr
     // "visible": the window's vtable +0x24 is told). ret 4. The automation helper that shows or hides a window uses both.
     inline Sacred::Thiscall<void(void* control, uint32_t bits)> cUI_Control_clearFlags{};
     inline Sacred::Thiscall<void(void* popup, uint32_t itemId)> cUI_Popup_setOwner{};
+    // ENG 005C4450 (stdcall (wchar_t** cursor, const void* record, uint32_t slot, void* context or 0), ret 0x10): writes the tooltip line of
+    // bonus `slot` (0..7) of an item's 0x82-byte value record at *cursor, with the game's own colour codes and text, and moves the cursor
+    // past it. It is what the item's description does for each bonus; it is used (ECX unused) as a thiscall with an ignored `this`.
+    inline Sacred::Thiscall<void(void* unused, wchar_t** cursor, const void* record, uint32_t slot, void* context)> cItem_bonusLine{};
     // ENG 0054ACC0 (thiscall (creature, item type), ret 4): the equipment slot (0..0x12) an item type goes to for the creature; the first
     // free slot of a group (rings 8..0xB, amulets 6, 7, hands 0xC, 0xD), 0x13 when none is free or the creature cannot wear it.
     inline Sacred::Thiscall<uint32_t(void* creature, uint32_t itemType)> cCreature_equipSlot{};

@@ -2111,6 +2111,70 @@ function inv.export(item_id)
     return native.inv_export(item_id)
 end
 
+-- inv.values(item_id_or_bytes) -> table | nil, message: the item's resolved value record decoded (its own 0x82-byte block of
+-- sWeaponInfo: level, requirements, damage, attack / defense / protection, the eight bonus slots) plus the records its sockets
+-- and random properties merged into it, from `export`'s bytes (or the item's id). Numbers as stored: what the item's tooltip
+-- derives its lines from (a bonus scaled by a hero attribute shows its stored percentage times the hero's attribute).
+do      -- (a block: the chunk's local variables are nearly used up)
+local function u8(s, i) return s:byte(i + 1) or 0 end
+local function u16(s, i) return u8(s, i) + u8(s, i + 1) * 256 end
+local function i16(s, i) local v = u16(s, i) return v >= 32768 and v - 65536 or v end
+local function u32(s, i) return u16(s, i) + u16(s, i + 2) * 65536 end
+local function decode_record(s, at)
+    local r = {
+        type = u32(s, at), flags = u32(s, at + 4), price = u32(s, at + 8),
+        level = u8(s, at + 25),
+        requirements = {level = u8(s, at + 20), strength = u8(s, at + 21), dexterity = u8(s, at + 22), charisma = u8(s, at + 23),
+            endurance = u8(s, at + 24), skill = u8(s, at + 26), skill_level = u8(s, at + 27)},
+        attack = i16(s, at + 44), defense = i16(s, at + 46), bw = i16(s, at + 48),
+        protection = {physical = i16(s, at + 50), fire = i16(s, at + 52), magic = i16(s, at + 54), poison = i16(s, at + 56)},
+        damage = {min = {}, max = {}}, sockets = {}, bonuses = {},
+        blacksmith_level = u8(s, at + 129),
+    }
+    for i = 0, 3 do
+        r.damage.min[i + 1] = u16(s, at + 28 + i * 2)
+        r.damage.max[i + 1] = i16(s, at + 36 + i * 2)
+    end
+    for i = 0, 7 do
+        r.sockets[i + 1] = u8(s, at + 12 + i)
+        local group, kind, value = u32(s, at + 74 + i * 4), u16(s, at + 58 + i * 2), i16(s, at + 106 + i * 2)
+        if group ~= 0 or kind ~= 0 then
+            r.bonuses[#r.bonuses + 1] = {slot = i, code = group % 65536, attribute = math.floor(group / 65536) % 256,
+                flags = kind, value = value}
+        end
+    end
+    return r
+end
+function inv.values(item)
+    local bytes = item
+    local id
+    if type(item) == 'number' then id = item bytes = native.inv_export(item) end
+    if type(bytes) ~= 'string' then return nil, 'no such item' end
+    if #bytes < 6 + 130 then return nil, 'not an item export' end
+    local n = u16(bytes, 4)
+    if #bytes < 6 + (n + 1) * 130 then return nil, 'not an item export' end
+    local v = decode_record(bytes, 6 + n * 130)
+    v.id = id
+    v.entries = {}
+    -- A socket record i (1-based) counts when the item's socket kind i is 1..4 (the engine's rule for merging them).
+    for i = 1, n do
+        local e = decode_record(bytes, 6 + (i - 1) * 130)
+        e.entry = i
+        e.active = v.sockets[i] ~= nil and v.sockets[i] >= 1 and v.sockets[i] <= 4
+        v.entries[i] = e
+        for _, b in ipairs(e.bonuses) do b.entry = i end
+    end
+    for _, b in ipairs(v.bonuses) do b.entry = 0 end
+    return v
+end
+end
+
+-- inv.bonus_text(item_id, entry, slot) -> text | nil: the game's own line for a bonus: slot 0..7 of the item's record (entry 0) or of
+-- one of its merged records (1..n), UTF-8 with the game's colour codes, as the tooltip shows it (the hero's attributes included).
+function inv.bonus_text(item_id, entry, slot)
+    return native.item_bonus_text(item_id, entry or 0, slot or 0)
+end
+
 -- inv.create(bytes) -> item_id | nil, message: a new item from export's bytes, lying at the hero's feet.
 function inv.create(bytes)
     return native.inv_import(bytes)
