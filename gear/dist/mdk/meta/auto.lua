@@ -106,6 +106,16 @@ function GearAuto.type(text) end
 ---@return integer|string? py The pixel, or the error message when `px` is nil.
 function GearAuto.ui_to_pixels(x, y) end
 
+--- Where a mod's widget was drawn in the last tick (UI layout coordinates, as `ui_click` takes them), found by the id it was
+--- given (`gear.ui.button('save', ...)`, a table cell's `id`); clipped to its scroll area. Nil when it was not drawn.
+---@param id string|integer
+---@param mod_id? string The mod that drew it (default: this mod).
+---@return number? x
+---@return number? y
+---@return number? w
+---@return number? h
+function GearAuto.widget(id, mod_id) end
+
 --- In a task: clicks a point in UI layout coordinates, or a node's center.
 ---@param x number|GearAutoUiNode
 ---@param y? number|GearMouseButton With a node: the button.

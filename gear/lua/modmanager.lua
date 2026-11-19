@@ -6,7 +6,7 @@
 local ui = gear.ui
 local C = ui.COLORS
 
-local ROW_H, ROW_STEP = 66, 70   -- a mod's row in the list and the distance between rows
+local ROW_H, ROW_H_STATUS, ROW_GAP = 52, 66, 4   -- a mod's entry in the list (taller with a status line) and the gap between entries
 local SETTING_ROWS = 9      -- rows of settings per page (section headers count)
 local KEY_ROWS = 12         -- rows (key binds and headings) per page
 local W, H_MAX = 640, 482   -- the panel: its height is the most it takes, less on a small screen
@@ -28,10 +28,6 @@ local screen = {
 -- sit on one line; the lists end above the band.
 local function footer_y(p) return p.y + p.h - FOOTER_TOP + math.floor((FOOTER_TOP - 10 - FOOTER_ITEM_H) / 2) + 4 end
 local function footer_top(p) return p.y + p.h - FOOTER_TOP end
--- How many rows of ROW_STEP fit between `top` and the footer band (a gap of 6 above the band).
-local function rows_fitting(p, top, step, row_h)
-    return math.max(1, math.floor((footer_top(p) - 6 - top - row_h) / step) + 1)
-end
 local measured = {}
 local function text_w(text, opts)
     local key = text .. '\0' .. tostring(opts and opts.size) .. tostring(opts and opts.bold)
@@ -142,10 +138,46 @@ local function key_conflicts_of(e)
     return n
 end
 
-local function draw_row(e, x, y, w)
+-- The line under an entry's description: why it is not running, a key conflict, or what it requires; nil for none. The
+-- key conflicts cost a scan of every mod's keys, so a mod's line is kept for half a second.
+local status_cache = {}
+local function entry_status(e)
+    local now = gear.time()
+    local c = status_cache[e.id]
+    if c and now - c.at < 0.5 and c.state == e.state then return c.status, c.color end
+    local status, color = status_of(e)
+    if not status then
+        if key_conflicts_of(e) > 0 then
+            status, color = 'Key conflict: another mod or the game uses the same key (see Keys)', AMBER
+        elseif #e.requires > 0 then
+            status, color = 'Requires ' .. table.concat(e.requires, ', '), DIM
+        end
+    end
+    status_cache[e.id] = {at = now, state = e.state, status = status, color = color}
+    return status, color
+end
+
+-- The entries of the list in pages: a page takes entries (each as tall as it needs) until the next would not fit in
+-- `avail`, so a taller entry moves to the next page instead of reaching into the footer.
+local function list_pages(list, avail)
+    local pages, cur, used = {}, {}, 0
+    for _, e in ipairs(list) do
+        local status, color = entry_status(e)
+        local h = status and ROW_H_STATUS or ROW_H
+        if #cur > 0 and used + h > avail then
+            pages[#pages + 1], cur, used = cur, {}, 0
+        end
+        cur[#cur + 1] = {e = e, h = h, status = status, color = color}
+        used = used + h + ROW_GAP
+    end
+    pages[#pages + 1] = cur
+    return pages
+end
+
+local function draw_row(e, x, y, w, h, status, color)
     local bad = e.state == 'error' or e.state == 'invalid'
-    ui.rect(x, y, w, ROW_H, bad and 0x60401818 or 0x50181824, LAYER)
-    ui.frame(x, y, w, ROW_H, bad and 0xFF804040 or C.edge_dim, 1, LAYER)
+    ui.rect(x, y, w, h, bad and 0x60401818 or 0x50181824, LAYER)
+    ui.frame(x, y, w, h, bad and 0xFF804040 or C.edge_dim, 1, LAYER)
     local sid = e.id
     local dim = e.state == 'off' or e.state == 'blocked'
     -- switch | name, version and author | Settings | Keys; the description and the status under the name.
@@ -182,15 +214,6 @@ local function draw_row(e, x, y, w)
     end
     t:row()
     t:label(2, e.description ~= '' and e.description or '(no description)', {span = 2, color = dim and DIM or C.text})
-    local status, color = status_of(e)
-    if not status then
-        local conflicts = key_conflicts_of(e)
-        if conflicts > 0 then
-            status, color = 'Key conflict: another mod or the game uses the same key (see Keys)', AMBER
-        elseif #e.requires > 0 then
-            status, color = 'Requires ' .. table.concat(e.requires, ', '), DIM
-        end
-    end
     if status then
         t:row()
         t:label(2, status, {span = 4, size = 11, color = color})
@@ -205,14 +228,11 @@ local function draw_list(p)
         ui.text(fit(screen.message, w - 120), x + 90, y, {height = 20, valign = 'middle', color = AMBER, layer = 'top'})
     end
     y = y + 24
-    local per_page = rows_fitting(p, y, ROW_STEP, ROW_H)
-    local pages = math.max(1, math.ceil(#list / per_page))
-    screen.page = math.max(1, math.min(pages, screen.page))
-    local first = (screen.page - 1) * per_page
-    for i = 1, per_page do
-        local e = list[first + i]
-        if not e then break end
-        draw_row(e, x, y + (i - 1) * ROW_STEP, w)
+    local pages = list_pages(list, footer_top(p) - 6 - y)
+    screen.page = math.max(1, math.min(#pages, screen.page))
+    for _, it in ipairs(pages[screen.page]) do
+        draw_row(it.e, x, y, w, it.h, it.status, it.color)
+        y = y + it.h + ROW_GAP
     end
     -- footer: a note at the left, the pager in the middle, Close at the right
     local foot = ui.table('list_foot', x, footer_y(p), w, {columns = {'*', 180, '*'}, spacing = {0, 0},
@@ -220,7 +240,7 @@ local function draw_list(p)
     foot:row()
     foot:label(1, 'Saved in mods\\gear_mods.json', {size = 11, color = DIM})
     local cx, cy, cw = foot:cell(2)
-    screen.page = paging('lp', cx, cy, cw, screen.page, pages)
+    screen.page = paging('lp', cx, cy, cw, screen.page, #pages)
     if foot:button(3, 'Close', {id = 'close', width = 80, halign = 'right'}) then close_screen() end
 end
 

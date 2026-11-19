@@ -41,31 +41,15 @@ local function click(x, y, wait)
     gear.wait(wait or 0.4)
 end
 
--- The list's metrics (modmanager.lua): rows of 66 every 70 from the panel's top + 52, down to 6 above the footer
--- band, which is the panel's last 42; the footer's controls are 22 tall at the panel's bottom - 33.
+-- The footer band is the panel's last 42; its controls are 22 tall at the panel's bottom - 33. Entries are found by the
+-- ids of their widgets (gear.auto.widget), so their heights may vary.
 local function footer_rect()
     local p = panel()
     return {y = p.y + p.h - 42, h = 42, controls_y = p.y + p.h - 33, controls_h = 22}
 end
-local function per_page()
-    local p = panel()
-    return math.max(1, math.floor((p.y + p.h - 42 - 6 - (p.y + 52) - 66) / 70) + 1)
-end
-local function row_rect(slot)
-    local p = panel()
-    return {y = p.y + 52 + (slot - 1) * 70, h = 66}
-end
-
--- The row of a mod in the list: page and place on it (sorted by name, the manager itself last).
-local function row_of(id)
-    local n = 0
-    local pp = per_page()
-    for _, m in ipairs(gear.mods.list()) do
-        if not m.builtin then
-            n = n + 1
-            if m.id == id then return math.ceil(n / pp), (n - 1) % pp + 1, n end
-        end
-    end
+-- Where a mod's entry is on the page showing now: its Settings button (nil when not on this page).
+local function entry_button(id, what)
+    return A.widget((what or 'set') .. ':' .. id, 'gear-mods')
 end
 local function list_page(page)
     local g = geo()
@@ -74,7 +58,13 @@ local function list_page(page)
     for _ = 1, 6 do click(mid - 75, fy + 11, 0.15) end            -- back to page 1
     for _ = 2, page do click(mid + 75, fy + 11, 0.25) end
 end
-local function row_y(slot) return geo().y + 24 + (slot - 1) * 70 end
+-- Pages through the list until the mod's entry shows; returns its page.
+local function goto_entry(id)
+    for page = 1, 12 do
+        list_page(page)
+        if entry_button(id) then return page end
+    end
+end
 
 local function open_list()
     local g = geo()
@@ -106,15 +96,18 @@ gear.task(function()
     local inv = ui.window('UI_WND_INVENTORY')
     check('a game hotkey (I) does nothing while the screen is open', not (inv and inv.drawn), inv and inv.drawn)
     A.screenshot('mm-1-list')
-    -- Layout: no row reaches into the footer band, the footer controls lie inside the panel, below the rows.
+    -- Layout: no entry reaches into the footer band, the footer controls lie inside the panel, below the entries.
     do
-        local pp, fr, p = per_page(), footer_rect(), panel()
-        local clash
-        for slot = 1, pp do
-            local r = row_rect(slot)
-            if r.y + r.h > fr.y or r.y < p.y then clash = slot end
+        local fr, p = footer_rect(), panel()
+        local clash, shown = nil, 0
+        for _, m in ipairs(gear.mods.list()) do
+            local bx, by, bw, bh = entry_button(m.id)
+            if bx then
+                shown = shown + 1
+                if by + bh > fr.y or by < p.y then clash = m.id end
+            end
         end
-        check('no row of the list intersects the footer', clash == nil and pp >= 1, ('rows %d, footer at %d, last row ends %d'):format(pp, fr.y, row_rect(pp).y + 66))
+        check('no entry of the list intersects the footer', clash == nil and shown >= 1, ('%d entries, footer at %d'):format(shown, fr.y))
         check('the footer controls are inside the panel', fr.controls_y >= fr.y and fr.controls_y + fr.controls_h <= p.y + p.h, fr.controls_y)
         check('the panel fits the screen', p.y >= 0 and p.y + p.h <= select(4, ui.screen()), ('%d..%d'):format(p.y, p.y + p.h))
     end
@@ -124,25 +117,25 @@ gear.task(function()
     list_page(1)
 
     -- Switch the helper off and on from its row; the mod that requires it goes with it.
-    local page, slot = row_of('mmtest-aux')
+    local page = goto_entry('mmtest-aux')
     check('the helper is listed', page ~= nil)
     check('helper and dependent run', listing('mmtest-aux').loaded and listing('mmtest-dep').loaded)
-    list_page(page)
     A.screenshot('mm-3-before-switch')
-    click(g.x + 8 + 22, row_y(slot) + 8 + 10, 0.8)
+    local ex, ey, ew, eh = entry_button('mmtest-aux', 'en')
+    click(ex + ew / 2, ey + eh / 2, 0.8)
     check('switch the helper off: unloaded', listing('mmtest-aux').loaded == false and listing('mmtest-aux').state == 'off',
         listing('mmtest-aux').state)
     check('the dependent is off with it', listing('mmtest-dep').loaded == false and listing('mmtest-dep').state == 'blocked',
         listing('mmtest-dep').state)
     A.screenshot('mm-3-helper-off')
-    click(g.x + 8 + 22, row_y(slot) + 8 + 10, 0.8)
+    click(ex + ew / 2, ey + eh / 2, 0.8)
     check('switch the helper on: loaded again', listing('mmtest-aux').loaded == true, listing('mmtest-aux').state)
     check('the dependent is back', listing('mmtest-dep').loaded == true, listing('mmtest-dep').state)
 
     -- This mod's own settings page.
-    page, slot = row_of('modmanagertest')
-    list_page(page)
-    click(g.x + g.w - 176 + 40, row_y(slot) + 8 + 11, 0.5)
+    page = goto_entry('modmanagertest')
+    local sx, sy, sw, sh = entry_button('modmanagertest')
+    click(sx + sw / 2, sy + sh / 2, 0.5)
     A.screenshot('mm-4-settings')
     local y0 = g.y + 34
     local function ry(i) return y0 + (i - 1) * 32 end
@@ -193,10 +186,11 @@ gear.task(function()
     A.screenshot('mm-9-conflict')
     -- Back to the list: the conflict shows there too.
     click(g.x + 35, g.y + 11, 0.5)
-    list_page(page)
+    page = goto_entry('modmanagertest')
     A.screenshot('mm-10-list-conflict')
     -- Rebind to ctrl+j again via the Keys button and use it with the screen closed.
-    click(g.x + g.w - 90 + 40, row_y(slot) + 8 + 11, 0.5)
+    local kx, ky2, kw, kh = entry_button('modmanagertest', 'keys')
+    click(kx + kw / 2, ky2 + kh / 2, 0.5)
     click(g.x + 290 + 75, ky + 1 + 11, 0.4)
     A.key_down('control')
     gear.wait(0.15)

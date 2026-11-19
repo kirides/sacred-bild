@@ -5056,6 +5056,17 @@ In a task: the client pixel for the UI layout point (x, y); the mapping is measu
 - returns `px` `integer?`
 - returns `py` `integer|string?` - The pixel, or the error message when `px` is nil.
 
+#### `gear.auto.widget(id, mod_id) -> number?, number?, number?, number?`
+
+Where a mod's widget was drawn in the last tick (UI layout coordinates, as `ui_click` takes them), found by the id it was given (`gear.ui.button('save', ...)`, a table cell's `id`); clipped to its scroll area. Nil when it was not drawn.
+
+- `id`: `string|integer`
+- `mod_id`: `string` (optional) - The mod that drew it (default: this mod).
+- returns `x` `number?`
+- returns `y` `number?`
+- returns `w` `number?`
+- returns `h` `number?`
+
 #### `gear.auto.ui_click(x, y, button) -> boolean?, string?`
 
 In a task: clicks a point in UI layout coordinates, or a node's center.
