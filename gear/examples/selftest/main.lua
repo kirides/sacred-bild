@@ -83,6 +83,12 @@ gear.task(function()
     check('label of a creature type', gob and types:label(gob) == types:display_name(gob), gob and types:label(gob))
     local found = gear.lookup.search('creature', types:display_name(gob) or '?', 5)
     check('lookup finds a creature by its localized name', #found > 0, found[1] and found[1].word)
+    -- Ids are what a mod saves: a name of either language resolves to the type, and the creature type picker finds it by that name.
+    check('resolve: internal name, localized name, id', types:resolve('gob_warrior.grn') == gob and types:resolve(types:display_name(gob)) == gob
+        and types:resolve(gob) == gob and types:resolve('no-such-type') == nil)
+    local picked = gear.lookup.search('creature_type', types:display_name(gob) or '?', 5)
+    check('lookup finds a creature type by its localized name', picked[1] and picked[1].id == gob and picked[1].name == types:label(gob),
+        picked[1] and picked[1].name)
     for _, model in ipairs({'gob_warrior.grn', 'ORC_WARRIOR.GRN'}) do
         local id = types:find(model)
         local shown = id and types:display_name(id)

@@ -235,6 +235,24 @@ L.register('creature', {
     detail = function(t) return t.count .. (t.count == 1 and ' type' or ' types') end,
 })
 
+-- Single creature types by name (the player's language and the internal one): {id, name (localized, else internal), internal}.
+-- What a bounty or event picks when it means one kind of creature: save `id`, never the name.
+L.register('creature_type', {
+    label = 'Creature types',
+    things = function()
+        local list, types = {}, gear.data.object_types
+        for id = 1, 0x7E5F do
+            if types:kind(id) == KIND_MONSTER then
+                local internal = types:name(id)
+                if internal then list[#list + 1] = {id = id, name = types:label(id), internal = internal} end
+            end
+        end
+        return list
+    end,
+    text = function(t) return t.name .. ' ' .. t.internal end,
+    detail = function(t) return t.internal end,
+})
+
 -- Abilities (combat arts and spells), named in the game's texts: {id, name, kind = 'combat_art' | 'spell'}.
 L.register('ability', {
     label = 'Abilities',

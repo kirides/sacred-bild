@@ -87,6 +87,13 @@ function GearObjectTypes:display_name(id) end
 ---@return string
 function GearObjectTypes:label(id) end
 
+--- The type id that `spec` stands for: a number that is a type, an internal name (any case), or the localized name of a creature
+--- type (any case); nil if it names nothing. For turning names that an older version of a mod saved into ids (see "Names and IDs" in
+--- Gear.md).
+---@param spec integer|string
+---@return integer?
+function GearObjectTypes:resolve(spec) end
+
 --- The kind (the type record's byte +0x2E) of type `id`.
 ---@param id integer
 ---@return integer?

@@ -317,6 +317,8 @@ files.a = {
         record.goblin = gear.data.object_types:find('goblin')
         record.search = #gear.data.object_types:search('o')
         record.creature_name = gear.data.object_types:display_name(2)
+        do local T = gear.data.object_types
+           record.resolve = {T:resolve(2), T:resolve('GOBLIN'), T:resolve('goblin-krieger'), T:resolve('nope') or 'nil', T:resolve(99) or 'nil', T:resolve({}) or 'nil'} end
         record.label_creature, record.label_none = gear.data.object_types:label(2), gear.data.object_types:label(3)
         gear.on('draw', function(state)
             record.draw_mode = state and state.mode
@@ -553,6 +555,7 @@ ok(rec.auto_instance == 'test', 'gear.auto.instance')
 ok(rec.goblin == 2, 'type by name')
 ok(rec.search == 2, 'type search')
 ok(rec.label_creature == 'Goblin-Krieger' and rec.label_none == 'type 3', 'object_types:label: localized, else internal, else type id: ' .. tostring(rec.label_creature) .. '/' .. tostring(rec.label_none))
+ok(rec.resolve and rec.resolve[1] == 2 and rec.resolve[2] == 2 and rec.resolve[3] == 2 and rec.resolve[4] == 'nil' and rec.resolve[5] == 'nil' and rec.resolve[6] == 'nil', 'object_types:resolve: id, internal name, localized creature name; else nil')
 ok(rec.creature_name == 'Goblin-Krieger', 'display_name of a creature type is the game text of its resource id: ' .. tostring(rec.creature_name))
 
 
