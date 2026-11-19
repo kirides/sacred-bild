@@ -1651,6 +1651,28 @@ namespace
         return 1;
     }
 
+    // native.object_carried(id) -> {[slot] = item id} | nil: what any live creature carries (the equipment words at +0x1A4)
+    int nativeObjectCarried(lua_State* L)
+    {
+        uint32_t slots[19] = {};
+        if (!World::carried(checkId(L, 1), slots))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_newtable(L);
+        for (int i = 0; i < 19; ++i)
+        {
+            World::Item item;
+            if (slots[i] && World::item(slots[i], item))
+            {
+                lua_pushnumber(L, slots[i]);
+                lua_rawseti(L, -2, i);
+            }
+        }
+        return 1;
+    }
+
     // native.party_state(id) -> action, movement | nil
     int nativePartyState(lua_State* L)
     {
@@ -3865,6 +3887,7 @@ namespace
             {"party_state", nativePartyState},
             {"party_combos", nativePartyCombos},
             {"party_equipment", nativePartyEquipment},
+            {"object_carried", nativeObjectCarried},
             {"party_set_combo", nativePartySetCombo},
             {"party_add_exp", nativePartyAddExp},
             {"party_revive", nativePartyRevive},
@@ -4357,6 +4380,7 @@ LuaHost::Answer LuaHost::dropRoll(const DropRoll& info, DropRollAnswer& answer)
         lua_setfield(L, -2, key);
     };
     num("creature", info.creatureType);
+    num("id", info.objectId);
     num("level", info.level);
     num("forced", info.forced);
     num("bonus", info.bonus);

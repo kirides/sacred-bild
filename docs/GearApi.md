@@ -1337,6 +1337,12 @@ What a hero wears: its equipment slots that hold an item (the game's slot number
 
 - returns `{slot: integer, item: GearItem}[]?`
 
+#### `creature:carried() -> {slot: integer, item: GearItem}[]?`
+
+What any creature carries in its equipment slots (0 to 18): monsters, mercenaries and heroes alike. A monster holds the gear that the Disarming skill takes from it there. Nil if the creature is gone.
+
+- returns `{slot: integer, item: GearItem}[]?`
+
 #### `creature:equip_slot(item) -> integer?`
 
 The equipment slot (0..18) an item goes to for this hero, by the engine's own rule: for a group of slots the first one (amulets 6, 7; rings 8 to 11; weapons 12; shields and off-hand items 13), whatever the hero wears. Nil when the hero cannot wear it or it is no equipment.
@@ -1599,6 +1605,7 @@ The event table of `drops.roll`: a creature's loot function is about to run. Fie
 
 | Field | Type | |
 |---|---|---|
+| `id` | `integer` | The object id of the source (the dying creature; chests and other sources have ids too), for `gear.world.object(id)` and `creature:carried()`. |
 | `creature` | `integer` | The dying creature's type (an index into `gear.data.object_types`). |
 | `level` | `integer` | Its level. |
 | `forced` | `integer` | The item type of an authored drop (the creature's drop list, a quest item ...), 0 for a random drop. |

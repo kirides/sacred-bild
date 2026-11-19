@@ -1100,6 +1100,18 @@ do
         end
         return out
     end
+    -- What any creature carries: the items in its equipment words (monsters hold the gear a hero can disarm from them there).
+    function creature_mt:carried()
+        local slots = native.object_carried(self.id)
+        if not slots then return nil end
+        local out = {}
+        for slot = 0, 18 do
+            local id = slots[slot]
+            local it = id and world.item(id)
+            if it then out[#out + 1] = {slot = slot, item = it} end
+        end
+        return out
+    end
     -- The equipment slot (0..18) an item goes to for this hero (the engine's own rule: the first slot of the item's group, i.e.
     -- 6 for amulets (6, 7), 8 for rings (8..11), 12 for weapons, 13 for shields), nil if it cannot wear it.
     function creature_mt:equip_slot(item)

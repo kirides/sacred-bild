@@ -59,7 +59,7 @@ namespace LuaHost
     // cancel the roll or change the rarity bonus.
     struct DropRoll
     {
-        uint32_t creatureType = 0, level = 0, forced = 0, bonus = 0, killer = 0;
+        uint32_t creatureType = 0, level = 0, forced = 0, bonus = 0, killer = 0, objectId = 0;
         float survival = 0;
         bool network = false;
     };

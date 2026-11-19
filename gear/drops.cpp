@@ -350,6 +350,7 @@ namespace
             readU32(self, 0x3FC, levelWord);        // the level word is at +0x3FE
             LuaHost::DropRoll info;
             info.creatureType = type;
+            readU32(self, 0x0C, info.objectId);     // the source's object id (kId)
             info.level = levelWord >> 16;
             info.forced = static_cast<uint32_t>(forced);
             info.bonus = bonus;

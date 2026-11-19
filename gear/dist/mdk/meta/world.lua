@@ -341,6 +341,11 @@ function Creature:ability(id) end
 ---@return {slot: integer, item: GearItem}[]?
 function Creature:equipment() end
 
+--- What any creature carries in its equipment slots (0 to 18): monsters, mercenaries and heroes alike. A monster holds the gear that
+--- the Disarming skill takes from it there. Nil if the creature is gone.
+---@return {slot: integer, item: GearItem}[]?
+function Creature:carried() end
+
 --- The equipment slot (0..18) an item goes to for this hero, by the engine's own rule: for a group of slots the first one
 --- (amulets 6, 7; rings 8 to 11; weapons 12; shields and off-hand items 13), whatever the hero wears. Nil when the hero cannot
 --- wear it or it is no equipment.

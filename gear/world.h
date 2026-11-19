@@ -136,6 +136,10 @@ namespace World
     // loot self test calls the engine's loot function with a creature). Valid until the object is destroyed.
     uintptr_t objectAddress(uint32_t id);
 
+    // The 19 item ids a live creature carries (its equipment words at +0x1A4; heroes, monsters and mercenaries share the layout), 0 for an empty
+    // slot. False if there is no such creature.
+    bool carried(uint32_t id, uint32_t (&slots)[19]);
+
     // The local player's hero id as the players object keeps it (+0x14; 1 in single player unless gear.party switched
     // control), 0 if there is none. Objects tick only on the computer whose id is their owner byte (+0x39).
     uint32_t localId();

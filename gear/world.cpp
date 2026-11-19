@@ -782,3 +782,9 @@ uintptr_t World::objectAddress(uint32_t id)
 {
     return World::available() ? live(manager(), id) : 0;
 }
+
+bool World::carried(uint32_t id, uint32_t (&slots)[19])
+{
+    const uintptr_t o = objectAddress(id);
+    return o && callIsCreature(o) && readAt(o, 0x1A4, slots);
+}

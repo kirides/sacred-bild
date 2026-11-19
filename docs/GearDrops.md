@@ -69,7 +69,7 @@ multipliers apply to it.
 | `rarity_weights({...})` | multiplies table rows (quality 1 .. 14, `special0`, `special1`), written once per change | none |
 | `rng('fair')` / `{seed=n}` | PCG32 for the loot function's draws: `% 1000` draws come from 0 .. 31999 (exact for 1000, 100, 10, 2 ...), the rarity rolls are exact `1 .. 10000` | a mutex per draw (a few dozen per loot roll) |
 | `rng(fn)` | a Lua function returning [0, 1) per draw (`lua_draws` counts them; if Lua is busy the fair generator answers) | a Lua call per draw |
-| event `drops.roll` | per loot function call: change `bonus`, or return `false` to cancel (also tells authored from random drops via `forced`) | a Lua call per roll |
+| event `drops.roll` | per loot function call: change `bonus`, or return `false` to cancel (also tells authored from random drops via `forced`, and names the source's object `id`: with `gear.world.object(id):carried()` a handler sees the gear a dying creature carries in its equipment slots, +0x1A4, the items the Disarming skill takes) | a Lua call per roll |
 | event `drops.select` | per item pick: change category / level / quality, or set `type` to replace the item type | a Lua call per pick |
 
 The settings of all mods are merged: multipliers multiply, the first mod in load order that chose a generator wins. They are pushed to

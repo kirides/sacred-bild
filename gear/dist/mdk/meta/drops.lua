@@ -5,6 +5,7 @@
 
 --- The event table of `drops.roll`: a creature's loot function is about to run. Fields you set are read back; the others are for information.
 ---@class GearDropRoll
+---@field id integer The object id of the source (the dying creature; chests and other sources have ids too), for `gear.world.object(id)` and `creature:carried()`.
 ---@field creature integer The dying creature's type (an index into `gear.data.object_types`).
 ---@field level integer Its level.
 ---@field forced integer The item type of an authored drop (the creature's drop list, a quest item ...), 0 for a random drop.
