@@ -138,6 +138,11 @@ Rules that hold across the API:
   to the right of the game's item tooltip (on its left near the screen's edge; `gear.ui.hovered_item()` reports the
   tooltip's visible rectangle in the layout `gear.ui` draws in). Further pieces (rings, bars) are added as styles to the same table. See
   [The game's own look](GearApi.md#the-games-own-look-gearuinative).
+- **Item data:** `gear.inv.values(item)` decodes an item's resolved value record (level, requirements, damage, attack, defense,
+  protection, the eight bonus slots with code, attribute and stored value, and the records its sockets merged in), and
+  `gear.inv.bonus_text(item, entry, slot)` gives the game's own tooltip line for one bonus slot (the engine's routine, so the
+  game's language, colours and numbers). Numbers the engine derives (the "expected" damage and protection of the hero, the
+  movement speed, the price, set bonuses) are not in the record: read them from `gear.ui.item_tooltip_text`.
 - **Mouse and keys:** a click over a mod's widget or panel is taken from the game, and the game's windows do not see
   the cursor there. Mods must not take the game's own keys (see [Mod manager](#mod-manager)); `gear.input` remaps the
   game's keys instead.
