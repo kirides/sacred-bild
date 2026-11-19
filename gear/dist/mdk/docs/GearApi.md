@@ -4306,6 +4306,173 @@ A panel's state. When closed only `open` (false) is set.
 | `content_w` | `number` |  (optional) |
 | `content_h` | `number` |  (optional) |
 
+### GearUiTableColumn
+
+One column of a table. A bare number or string in `columns` is a column of that `width`.
+
+| Field | Type | |
+|---|---|---|
+| `width` | `number\|string` | A number: that many layout units. `'*'` or `'2*'`: a share of what the fixed columns and the gaps leave (default `'*'`). (optional) |
+| `min` | `number` | For a share column: never narrower. (optional) |
+| `max` | `number` | For a share column: never wider. (optional) |
+| `align` | `'left'\|'center'\|'right'` | Where the column's labels (and narrower widgets) sit (default left). (optional) |
+| `title` | `string` | A header over the column; with any title the table draws a header row (bold, a line under it) by itself. (optional) |
+
+### GearUiTableOpts
+
+| Field | Type | |
+|---|---|---|
+| `columns` | `(GearUiTableColumn\|number\|string)[]` |  |
+| `spacing` | `number\|number[]` | Between the columns and the rows: one number, or `{columns, rows}` (default `{8, 4}`). (optional) |
+| `row_height` | `number` | Default 22: as high as a button, so buttons, dropdowns and labels line up. (optional) |
+| `header` | `boolean` | `false`: no header row even though columns have titles. (optional) |
+| `header_height` | `number` | Default `row_height`. (optional) |
+| `stripes` | `boolean\|GearColor` | Shade every second row (true: a faint white). (optional) |
+| `layer` | `GearLayer` | The layer of everything the table draws; default `'hud'`. (optional) |
+
+### GearUiTableCellOpts
+
+Includes everything of `GearWidgetOpts`.
+
+The widgets' common options as the table's cells take them.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string\|integer` | The widget's id (default: the table's id, the row and the column, so give one when rows come and go and a widget has a state, like a dropdown's open list). (optional) |
+| `span` | `integer` | Columns the cell covers (default 1). (optional) |
+| `width` | `number` | Narrower than the cell (default: fills it; checkboxes and sliders take their own size). (optional) |
+| `height` | `number` | Default: the row's height (a checkbox: 16, a slider: 16); centred in the row. (optional) |
+| `align` | `'left'\|'center'\|'right'` | Where a narrower widget sits in the cell (default: the column's `align`). (optional) |
+
+### GearUiTableLabelOpts
+
+Includes everything of `GearLabelOpts`.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string\|integer` |  (optional) |
+| `span` | `integer` |  (optional) |
+| `align` | `'left'\|'center'\|'right'` |  (optional) |
+| `ellipsis` | `boolean` | Default true: a text wider than the cell is cut with `...` (the whole text then shows as the tooltip). (optional) |
+
+### GearUiTableSliderOpts
+
+Includes everything of `GearUiTableCellOpts`.
+
+| Field | Type | |
+|---|---|---|
+| `step` | `number` |  (optional) |
+| `format` | `string\|false` |  (optional) |
+| `value_width` | `number` | The room kept for the number at the cell's right end (default 44). (optional) |
+
+### GearUiTableImageOpts
+
+Includes everything of `GearImageOpts`.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string\|integer` |  (optional) |
+| `span` | `integer` |  (optional) |
+| `width` | `number` |  (optional) |
+| `height` | `number` |  (optional) |
+| `align` | `'left'\|'center'\|'right'` |  (optional) |
+
+### GearUiTable
+
+A table: a grid for a window's rows, so that labels, buttons, dropdowns and checkboxes line up without hand-counted coordinates. It only places things: the widgets are the ordinary ones (same look, same controller stops, ids), nothing is kept between frames, so build it every frame. Inside a scroll area pass `area.content_x`, `area.content_y` and `area.w`, and `t:height()` is the content height.
+
+#### `GearUiTable:row(height, background) -> integer`
+
+Starts the next row, `height` high (default `row_height`), with an optional background colour (`stripes` shades every second row by itself). Call it before the row's cells; the first call starts the first row under the header.
+
+- `height`: `number` (optional)
+- `background`: `GearColor` (optional)
+- returns `row` `integer` - The row's number, counted from 1 without the header.
+
+#### `GearUiTable:column(col) -> number, number`
+
+A column's x and width (canvas coordinates).
+
+- `col`: `integer`
+- returns `x` `number`
+- returns `w` `number`
+
+#### `GearUiTable:cell(col, span) -> number, number, number, number`
+
+The rectangle of a cell in the current row (`span` columns with the gaps between them), for drawing or widgets of your own.
+
+- `col`: `integer`
+- `span`: `integer` (optional)
+- returns `x` `number`
+- returns `y` `number`
+- returns `w` `number`
+- returns `h` `number`
+
+#### `GearUiTable:height() -> number`
+
+The height of the header and the rows so far, without a trailing gap: the content height for `scroll_end`, or what to place the next thing under.
+
+- returns `number`
+
+#### `GearUiTable:label(col, text, opts) -> boolean`
+
+A label in the current row's cell (vertically centred, the UI font).
+
+- `col`: `integer`
+- `text`: `any`
+- `opts`: `GearUiTableLabelOpts` (optional)
+- returns `drawn` `boolean`
+
+#### `GearUiTable:button(col, text, opts) -> boolean`
+
+A button that fills the cell (the row's height) unless `opts.width`, `height` or `align` say otherwise.
+
+- `col`: `integer`
+- `text`: `any`
+- `opts`: `GearUiTableCellOpts|GearButtonOpts` (optional)
+- returns `clicked` `boolean`
+
+#### `GearUiTable:checkbox(col, text, checked, opts) -> boolean, boolean`
+
+- `col`: `integer`
+- `text`: `any`
+- `checked`: `boolean`
+- `opts`: `GearUiTableCellOpts` (optional)
+- returns `changed` `boolean`
+- returns `checked` `boolean`
+
+#### `GearUiTable:dropdown(col, options, index, opts) -> boolean, integer`
+
+A dropdown as wide as the cell and as high as the row, so it matches the buttons beside it.
+
+- `col`: `integer`
+- `options`: `string[]`
+- `index`: `integer`
+- `opts`: `GearUiTableCellOpts|GearDropdownOpts` (optional)
+- returns `changed` `boolean`
+- returns `index` `integer`
+
+#### `GearUiTable:slider(col, min, max, value, opts) -> boolean, number`
+
+A slider that fills the cell less the room for its number.
+
+- `col`: `integer`
+- `min`: `number`
+- `max`: `number`
+- `value`: `number`
+- `opts`: `GearUiTableSliderOpts` (optional)
+- returns `changed` `boolean`
+- returns `value` `number`
+
+#### `GearUiTable:image(col, image, opts) -> boolean`
+
+An image in the cell (`fit` default `'contain'`).
+
+- `col`: `integer`
+- `image`: `integer`
+- `opts`: `GearUiTableImageOpts` (optional)
+- returns `drawn` `boolean`
+
 #### `gear.ui.region(id, x, y, w, h, opts) -> GearRegionState`
 
 A rectangle that takes the mouse, for widgets of a mod's own. A left click (press and release) over a mod's region is taken from the game: neither its windows nor the world see it. Regions on the world and hud layers take nothing while the escape menu or a message box is up.
@@ -4475,6 +4642,17 @@ The text broken into lines that fit `width` (at spaces; a word longer than the w
 - `opts`: `GearSliderOpts` (optional)
 - returns `changed` `boolean` - True while dragged.
 - returns `value` `number`
+
+#### `gear.ui.table(id, x, y, w, opts) -> GearUiTable`
+
+A table layout for a window's rows: `local t = gear.ui.table('items', x, y, w, {columns = {{title = 'Name', width = '2*'}, '*', 70}})`, then per row `t:row()` and `t:label(1, ...)`, `t:dropdown(2, ...)`, `t:button(3, ...)`. Columns are fixed widths and shares of the rest (with min / max), the gaps and the row height are the table's, so everything in a column shares one left edge and widgets of a row one height. Immediate mode like the widgets: build it every frame. See `GearUiTable`.
+
+- `id`: `string|integer` - Prefixes the ids of the cells' widgets.
+- `x`: `number`
+- `y`: `number`
+- `w`: `number`
+- `opts`: `GearUiTableOpts`
+- returns `GearUiTable`
 
 #### `gear.ui.panel(id, title, x, y, w, h, opts) -> GearPanel`
 

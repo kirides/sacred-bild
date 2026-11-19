@@ -3847,6 +3847,242 @@ local function make_ui(mod)
         return changed, value
     end
 
+    do
+        ---------------------------------------------------------------------------------------------------------
+        -- Tables: ui.table(id, x, y, w, opts{columns, spacing, row_height, stripes, header_height, layer}) -> table.
+        -- Pure layout on top of the widgets: it resolves the columns' widths once (fixed numbers and shares of the rest,
+        -- with min / max), then t:row() starts a row and t:label / t:button / t:dropdown / t:checkbox / t:slider / t:image /
+        -- t:cell put one thing into a column of it. The widgets are the ordinary ones (same look, same controller stops);
+        -- nothing is retained, so draw it every frame and inside a scroll area use area.content_x / content_y.
+        ---------------------------------------------------------------------------------------------------------
+        local Table = {}
+        Table.__index = Table
+        local TABLE_ELLIPSIS = '...'
+        local table_fit_cache, table_fit_n = {}, 0
+
+        local function table_star(width, level)
+            if width == nil or width == '*' then return 1 end
+            local s = tostring(width)
+            local n = tonumber(s:match('^(%d*%.?%d*)%*$') or '')
+            if not n or n <= 0 then
+                error('column width is a number, "*" or "N*" (a share of the remaining width)', level + 1)
+            end
+            return n
+        end
+
+        -- {x, w} of every column for a table w wide: fixed widths first, then the rest shared out by the stars; a column
+        -- that would pass its min / max is pinned there and the others share what is left.
+        local function table_columns(columns, w, gap, level)
+            local n = #columns
+            if n == 0 then error('a table needs columns', level + 1) end
+            local specs, free = {}, w - gap * (n - 1)
+            for i, c in ipairs(columns) do
+                if type(c) ~= 'table' then c = {width = c} end
+                local s = {c = c}
+                if type(c.width) == 'number' then
+                    s.w = c.width
+                    free = free - c.width
+                else
+                    s.star = table_star(c.width, level + 1)
+                end
+                specs[i] = s
+            end
+            local open = {}
+            for _, s in ipairs(specs) do if s.star then open[#open + 1] = s end end
+            while #open > 0 do
+                local total = 0
+                for _, s in ipairs(open) do total = total + s.star end
+                local pinned, rest = false, {}
+                for _, s in ipairs(open) do
+                    local v = math.max(0, free) * s.star / total
+                    local lo, hi = s.c.min, s.c.max
+                    if lo and v < lo then s.w, pinned = lo, true; free = free - lo
+                    elseif hi and v > hi then s.w, pinned = hi, true; free = free - hi
+                    else rest[#rest + 1] = s end
+                end
+                if not pinned then
+                    for _, s in ipairs(rest) do s.w = math.max(0, free) * s.star / total end
+                    break
+                end
+                open = rest
+            end
+            local cols, cx = {}, 0
+            for i, s in ipairs(specs) do
+                -- Whole units: the edges are rounded, so neighbours never overlap or leave a hairline.
+                local x0, x1 = math.floor(cx + 0.5), math.floor(cx + s.w + 0.5)
+                cols[i] = {x = x0, w = x1 - x0, align = s.c.align, title = s.c.title}
+                cx = cx + s.w + gap
+            end
+            return cols
+        end
+
+        function ui.table(id, x, y, w, opts)
+            opts = opts or {}
+            local gap = opts.spacing
+            local gx, gy
+            if type(gap) == 'table' then gx, gy = gap[1] or 8, gap[2] or 4 else gx, gy = gap or 8, gap or 4 end
+            local t = setmetatable({id = tostring(id), x = x, y = y, w = w, gx = gx, gy = gy, opts = opts,
+                row_h = opts.row_height or 22, next_y = y, row_n = 0, body_n = 0, cy = y, ch = 0,
+                cols = table_columns(opts.columns or {}, w, gx, 2)}, Table)
+            local titled = false
+            for _, c in ipairs(t.cols) do if c.title then titled = true end end
+            if titled and opts.header ~= false then
+                t.row_n = 1
+                t.cy, t.ch = y, opts.header_height or t.row_h
+                for i, c in ipairs(t.cols) do
+                    if c.title then
+                        t:label(i, c.title, {bold = true, color = C.accent, id = t.id .. '#head' .. i})
+                    end
+                end
+                ui.rect(x, t.cy + t.ch + math.floor(gy / 2), w, 1, C.edge_dim, {layer = opts.layer})
+                t.next_y = t.cy + t.ch + gy + 1
+            end
+            return t
+        end
+
+        -- t:row(height?, background?) -> row number (of the body, 1-based): the next row, `height` high (default the
+        -- table's row_height), with an optional background colour (opts.stripes shades every second row by itself).
+        function Table:row(height, background)
+            self.cy = self.next_y
+            self.ch = height or self.row_h
+            self.next_y = self.cy + self.ch + self.gy
+            self.row_n, self.body_n = self.row_n + 1, self.body_n + 1
+            local fill = background
+            if not fill and self.opts.stripes and self.body_n % 2 == 0 then
+                fill = self.opts.stripes == true and 0x30FFFFFF or self.opts.stripes
+            end
+            if fill then
+                local pad = math.floor(self.gy / 2)
+                ui.rect(self.x, self.cy - pad, self.w, self.ch + 2 * pad, fill, {layer = self.opts.layer})
+            end
+            return self.body_n
+        end
+
+        -- t:column(col) -> x, w of the column (canvas coordinates).
+        function Table:column(col)
+            local c = self.cols[col]
+            if not c then error('no column ' .. tostring(col) .. ' (the table has ' .. #self.cols .. ')', 3) end
+            return self.x + c.x, c.w
+        end
+
+        -- t:cell(col, span?) -> x, y, w, h of the column (or `span` columns from it, with the gaps between) in this row.
+        function Table:cell(col, span)
+            local x0 = self:column(col)
+            local last = col + (span or 1) - 1
+            if last > #self.cols then error('the span passes the last column', 2) end
+            local x1, w1 = self:column(last)
+            return x0, self.cy, x1 + w1 - x0, self.ch
+        end
+
+        -- t:height() -> the height of everything so far (the header and the rows, without a trailing gap); the content
+        -- height for scroll_end.
+        function Table:height()
+            if self.next_y == self.y then return 0 end
+            return self.next_y - self.gy - self.y
+        end
+
+        -- The place of a widget in its cell: opts.width / opts.height (else `nw` / `nh`, else the cell's), opts.align
+        -- (left, center, right) when narrower, vertically centred.
+        function Table:place(col, opts, nw, nh)
+            local x, y, w, h = self:cell(col, opts.span)
+            local ww = math.min(w, opts.width or nw or w)
+            local hh = opts.height or nh or h
+            local al = opts.align or self.cols[col].align or 'left'
+            local px = x
+            if al == 'right' then px = x + w - ww elseif al == 'center' then px = x + math.floor((w - ww) / 2) end
+            return px, y + math.floor((h - hh) / 2), ww, hh
+        end
+
+        -- A copy of the widget's options with the table's layer and an automatic id.
+        function Table:wopts(col, opts)
+            local o = {}
+            for k, v in pairs(opts or {}) do o[k] = v end
+            o.layer = o.layer or self.opts.layer
+            o.id = o.id or (self.id .. '#' .. self.row_n .. ',' .. col)
+            return o
+        end
+
+        -- Text cut to `w` with "..." (cached).
+        local function table_fit(text, w, mo)
+            local tw = ui_measure(text, mo)
+            if not tw or tw <= w then return text, tw end
+            local key = table.concat({text, w, mo.size or 0, mo.face or '', mo.bold and 1 or 0, mo.italic and 1 or 0}, '\1')
+            local hit = table_fit_cache[key]
+            if hit then return hit[1], hit[2] end
+            local lo, hi = 0, #text
+            while lo < hi do
+                local mid = math.ceil((lo + hi) / 2)
+                -- never cut inside a UTF-8 sequence
+                while mid > 0 and (text:byte(mid + 1) or 0) >= 0x80 and (text:byte(mid + 1) or 0) < 0xC0 do mid = mid - 1 end
+                if mid <= lo then break end
+                local mw = ui_measure(text:sub(1, mid) .. TABLE_ELLIPSIS, mo)
+                if mw and mw <= w then lo = mid else hi = mid - 1 end
+            end
+            local cut = text:sub(1, lo) .. TABLE_ELLIPSIS
+            local cw = ui_measure(cut, mo)
+            if table_fit_n > 512 then table_fit_cache, table_fit_n = {}, 0 end
+            table_fit_cache[key], table_fit_n = {cut, cw}, table_fit_n + 1
+            return cut, cw
+        end
+
+        -- t:label(col, text, opts) -> drawn. opts: the label's (font, size, bold, color, tooltip, ...), align, span,
+        -- ellipsis (default true: too long a text is cut with "..." and shows whole as the tooltip).
+        function Table:label(col, text, opts)
+            local o = self:wopts(col, opts)
+            local x, y, w, h = self:cell(col, o.span)
+            text = tostring(text)
+            local shown, tw = text, nil
+            if o.ellipsis ~= false then shown, tw = table_fit(text, w, o) else tw = ui_measure(text, o) end
+            local al = o.align or self.cols[col].align or 'left'
+            local px = x
+            if tw and al == 'right' then px = x + w - tw elseif tw and al == 'center' then px = x + math.floor((w - tw) / 2) end
+            o.height, o.valign = o.height or h, o.valign or 'middle'
+            if o.tooltip == nil and shown ~= text then o.tooltip = text end
+            return ui.label(o.id, shown, px, y, o)
+        end
+
+        -- t:button(col, text, opts) -> clicked. Fills the cell unless opts.width / height / align say otherwise.
+        function Table:button(col, text, opts)
+            local o = self:wopts(col, opts)
+            local x, y, w, h = self:place(col, o)
+            return ui.button(o.id, x, y, w, h, text, o)
+        end
+
+        -- t:checkbox(col, text, checked, opts) -> changed, checked
+        function Table:checkbox(col, text, checked, opts)
+            local o = self:wopts(col, opts)
+            local tw = ui_measure(tostring(text), {}) or 60
+            local x, y = self:place(col, o, 20 + tw, 16)
+            return ui.checkbox(o.id, x, y, text, checked, o)
+        end
+
+        -- t:dropdown(col, options, index, opts) -> changed, index. As high as the row (opts.height otherwise).
+        function Table:dropdown(col, options, index, opts)
+            local o = self:wopts(col, opts)
+            local x, y, w, h = self:place(col, o)
+            o.height = h
+            return ui.dropdown(o.id, x, y, w, options, index, o)
+        end
+
+        -- t:slider(col, min, max, value, opts) -> changed, value. The number (unless opts.format == false) takes
+        -- opts.value_width (default 44) at the cell's right end.
+        function Table:slider(col, min, max, value, opts)
+            local o = self:wopts(col, opts)
+            local x, y, w = self:place(col, o, nil, 16)
+            if o.format ~= false then w = math.max(10, w - (o.value_width or 44)) end
+            return ui.slider(o.id, x, y, w, min, max, value, o)
+        end
+
+        -- t:image(col, image, opts) -> drawn. opts: ui.image's (fit defaults to 'contain'), width, height, align.
+        function Table:image(col, image, opts)
+            local o = self:wopts(col, opts)
+            local x, y, w, h = self:place(col, o)
+            o.fit = o.fit or 'contain'
+            return ui.image(image, x, y, w, h, o)
+        end
+
+    end
+
     -- ui.panel(id, title, x, y, w, h, opts{closable, draggable, layer, bare}) -> panel {x, y, w, h, open, content_x,
     -- content_y}. A window of the mod's: the title bar drags it (it keeps the position for the session), its X
     -- closes it (panel.open false; ui.show_panel(id) opens it again). Its body takes the mouse, so clicks on it do
