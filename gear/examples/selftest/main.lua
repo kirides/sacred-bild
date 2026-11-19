@@ -76,6 +76,14 @@ gear.task(function()
 
     local count = dump_types()
     check('object types', count > 0, count .. ' named types')
+    -- Creature types have a localized name (the game's text for the record's resource id), not the model name.
+    local types = gear.data.object_types
+    for _, model in ipairs({'gob_warrior.grn', 'ORC_WARRIOR.GRN'}) do
+        local id = types:find(model)
+        local shown = id and types:display_name(id)
+        check('creature display name ' .. model, type(shown) == 'string' and shown ~= '' and not shown:lower():find('%.grn$')
+            and shown:lower() ~= model:lower(), tostring(shown))
+    end
 
     if cfg.spawn_type ~= '' then
         local sx, sy = gear.world.around(x, y, 380, 520)

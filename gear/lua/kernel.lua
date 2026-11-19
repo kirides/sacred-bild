@@ -138,20 +138,33 @@ function data.object_types:kind(id)
     return r and r:u8(OBJECT_TYPE_KIND)
 end
 
--- The localized name of item type `id`: the first line of the tooltip of a scratch item of that type (colour codes removed).
+-- The localized name of type `id`. Items: the first line of the tooltip of a scratch item of that type. Creatures (kind 3):
+-- the game's text for the id in the type record's dword +0x20 (the "resource id"; for every creature type the shipped data holds
+-- it is the type id itself, and the text table takes it as it is). Colour codes are removed.
 do
 local display_names = {}
+local OBJECT_TYPE_RESOURCE, CREATURE_KIND = 0x20, 3
+local function clean(text)
+    local BS = string.char(92)       -- the game's codes: BS g + 16 characters (image), BS c / BS w + 8 hex digits (colour), BS + one letter
+    local line = text:match('^[^' .. string.char(10, 13) .. ']*') or ''
+    line = line:gsub(BS .. 'g' .. string.rep('.', 16), ''):gsub(BS .. '[cw]' .. string.rep('%x', 8), ''):gsub(BS .. '%w', '')
+    return (line:gsub('%s*%(%d+/%d+%)%s*$', ''):gsub('^%s+', ''):gsub('%s+$', ''))
+end
 function data.object_types:display_name(id)
     assert(type(id) == 'number', 'id must be a number')
     local cached = display_names[id]
     if cached ~= nil then return cached or nil end
-    local text, err = native.item_type_text(id)
+    local text, err
+    if self:kind(id) == CREATURE_KIND then
+        local rid = self:get(id):u32(OBJECT_TYPE_RESOURCE)      -- bit 31 set: a hash key, not a text id
+        text = rid ~= 0 and rid < 0x80000000 and native.text_get(rid) or nil
+        err = 'the creature has no name text'
+    else
+        text, err = native.item_type_text(id)
+    end
     if not text then return nil, err end
-    local BS = string.char(92)       -- the game's codes: BS g + 16 characters (image), BS c / BS w + 8 hex digits (colour), BS + one letter
-    local line = text:match('^[^' .. string.char(10, 13) .. ']*') or ''
-    line = line:gsub(BS .. 'g' .. string.rep('.', 16), ''):gsub(BS .. '[cw]' .. string.rep('%x', 8), ''):gsub(BS .. '%w', '')
-    line = line:gsub('%s*%(%d+/%d+%)%s*$', ''):gsub('^%s+', ''):gsub('%s+$', '')
-    if line == '' then display_names[id] = false return nil, 'the item has no name' end
+    local line = clean(text)
+    if line == '' then display_names[id] = false return nil, 'the type has no name' end
     display_names[id] = line
     return line
 end
