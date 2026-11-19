@@ -86,27 +86,24 @@ jobs:
         id: package
         shell: pwsh
         run: |
-          if ($env:GITHUB_REF_TYPE -eq "tag") {
-            $tagOrGitShortHash = $env:GITHUB_REF_NAME
-          } else {
-            $shortHash = $env:GITHUB_SHA.Substring(0, 9)
-            $tagOrGitShortHash = "git-$shortHash"
-          }
-          $relDir = "SacredBild-$tagOrGitShortHash"
+          # The version comes from src/SacredBild_version.txt (tools/bump_versions.py); the mod index looks for SacredBild-v*.zip.
+          $version = (Get-Content "src/SacredBild_version.txt" -Raw).Trim()
+          $relDir = "SacredBild-v$version"
           $buildDir = "out/build/msvc-x86/RelWithDebInfo"
 
           # Laid out like the game folder, so the zip extracts directly on top of it.
           New-Item -Path "$relDir/SacredBild" -ItemType Directory -Force | Out-Null
-          Copy-Item -Path "$buildDir/ddraw.dll", "$buildDir/ddraw.pdb", "$buildDir/ddraw.map", "dist/SacredBild.ini" -Destination $relDir
+          Copy-Item -Path "$buildDir/ddraw.dll", "$buildDir/ddraw.pdb", "$buildDir/ddraw.map", "dist/SacredBild.ini", "src/SacredBild_version.txt" -Destination $relDir
           Copy-Item -Path "LICENSE" -Destination "$relDir/SacredBild"
 
           "release-dir=$relDir" >> $env:GITHUB_OUTPUT
+          "debug-dir=SacredBild-debug-v$version" >> $env:GITHUB_OUTPUT
 
       - name: Upload debug artifact (with PDB and map)
         id: artifact-upload-debug
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.package.outputs.release-dir }}-debug
+          name: ${{ steps.package.outputs.debug-dir }}
           path: ${{ steps.package.outputs.release-dir }}
           if-no-files-found: error
 
@@ -129,17 +126,12 @@ jobs:
         id: package-gear
         shell: pwsh
         run: |
-          if ($env:GITHUB_REF_TYPE -eq "tag") {
-            $tagOrGitShortHash = $env:GITHUB_REF_NAME
-          } else {
-            $shortHash = $env:GITHUB_SHA.Substring(0, 9)
-            $tagOrGitShortHash = "git-$shortHash"
-          }
-          $relDir = "SacredGear-$tagOrGitShortHash"
+          $version = (Get-Content "gear/SacredGear_version.txt" -Raw).Trim()
+          $relDir = "SacredGear-v$version"
           $buildDir = "out/build/msvc-x86/RelWithDebInfo"
 
           New-Item -Path "$relDir/mods" -ItemType Directory -Force | Out-Null
-          Copy-Item -Path "$buildDir/SacredGear.dll", "$buildDir/SacredGear.pdb" -Destination $relDir
+          Copy-Item -Path "$buildDir/SacredGear.dll", "$buildDir/SacredGear.pdb", "gear/SacredGear_version.txt" -Destination $relDir
           Copy-Item -Path "gear/examples/hello" -Destination "$relDir/mods/hello" -Recurse
           Copy-Item -Path "docs/Gear.md", "LICENSE" -Destination $relDir
 
@@ -166,6 +158,20 @@ jobs:
           name: sacred-gear-mdk
           path: gear/dist/mdk
           if-no-files-found: error
+
+  # The mod index must match the version files (tools/make_mod_index.py), and the versioning tools have tests.
+  versions:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Test the versioning tools
+        run: python3 tools/test_bump_versions.py
+
+      - name: Check mod-index.json
+        run: python3 tools/make_mod_index.py --check
 
   # The matchmaking server (Go): tested, then built for the systems people run servers on.
   matchmaker:
