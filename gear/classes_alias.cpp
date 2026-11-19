@@ -431,27 +431,36 @@ bool Classes::cursor(uint32_t exclude, Cursor& out)
 {
     if (!Addr::g_uiEventTarget || !Addr::cWorldView_pick || !Addr::g_pApp)
     {
+        LOG("Classes: cursor: addresses missing");
         return false;
     }
     uintptr_t engine = 0, view = 0;
-    uint32_t index = 0;
+    uint16_t index = 0;
     uint8_t* app = *Addr::g_pApp.get();
     HWND window = nullptr;
     if (!readAt(Addr::g_uiEventTarget.address, 0, engine) || !engine || !readAt(engine, 0x48, index) || index >= 8 ||
         !readAt(engine, 8 + index * 4, view) || !view || !app || !readAt(reinterpret_cast<uintptr_t>(app), 0xB0, window) || !window)
     {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 3)
+        {
+            LOG("Classes: cursor: engine {:08x} index {} view {:08x} app {:08x} window {:08x}", engine, index, view, reinterpret_cast<uintptr_t>(app),
+                reinterpret_cast<uintptr_t>(window));
+        }
         return false;
     }
     POINT p{};
     if (!GetCursorPos(&p) || !ScreenToClient(window, &p))
     {
+        LOG("Classes: cursor: no cursor position ({})", GetLastError());
         return false;
     }
     out.pixelX = p.x;
     out.pixelY = p.y;
     __try
     {
-        out.object = Addr::cWorldView_pick(reinterpret_cast<void*>(view), p.x, p.y, exclude, nullptr);
+        using PickFn = uint32_t(__fastcall*)(void* view, void* edx, int x, int y, uint32_t exclude, int32_t* rect);
+        out.object = reinterpret_cast<PickFn>(Addr::cWorldView_pick - 0x30)(reinterpret_cast<void*>(view), nullptr, p.x, p.y, exclude, nullptr);
         struct Point
         {
             uint8_t head[4];
@@ -471,6 +480,7 @@ bool Classes::cursor(uint32_t exclude, Cursor& out)
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
+        LOG("Classes: cursor: the game faulted on the pick or the view");
         return false;
     }
 }

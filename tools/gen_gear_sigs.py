@@ -252,7 +252,8 @@ GEAR = [
     # The world under the mouse (gear/classes.cpp: gear.world.cursor): the world view's pick (thiscall (view, x, y, exclude id, rect*) ->
     # object id under physical pixel (x, y), ret 0x10); the view comes from the engine (g_uiEventTarget: +8 the views, +0x48 the index)
     # and its vtable +0x18 turns pixels into a world point.
-    ('cWorldView_pick', 0x00626C50, 'func'),
+    # SacredBild detours the pick's first bytes (aim assist): found by a window 0x30 bytes inside, called from the entry (through its detour).
+    ('cWorldView_pick', 0x00626C80, 'code'),
     # Ability lookups by id (cdecl (short id) -> record*, T1 0x78-byte records / T2 0x94-byte records; the record's first word is
     # the id the class handlers switch on) and the class checks a rune read makes (thiscall (record, hero type, flag) -> bool,
     # ret 8).
