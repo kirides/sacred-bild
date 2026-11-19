@@ -353,4 +353,10 @@ namespace Gear::Addr
     inline Sacred::Thiscall<void(void* creature, int slot, float a, float b, float c)> cCreature_playMotion{};
     inline Sacred::Thiscall<void(void* stats, LearnEntry entry)> cStats_learnAbility{};
     inline Sacred::Global<void*> g_pModelManager{};
+    // ENG 004D1AF0 / 004D2310: an ability record by id (T1 combat arts 0x78 bytes, T2 spells 0x94 bytes), null if none. ENG
+    // 004D1B20 / 004D24C0: whether a hero type may learn the ability (the record's class mask at +0x70 / +0x8C).
+    inline Sacred::Cdecl<uint8_t*(int16_t id)> abilityLookup1{};
+    inline Sacred::Cdecl<uint8_t*(int16_t id)> abilityLookup2{};
+    inline Sacred::Thiscall<uint32_t(uint8_t* record, uint32_t heroType, char flag)> abilityUsable1{};
+    inline Sacred::Thiscall<uint32_t(uint8_t* record, uint32_t heroType, char flag)> abilityUsable2{};
 }

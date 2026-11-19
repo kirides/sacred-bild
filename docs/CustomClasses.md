@@ -43,3 +43,23 @@ give an eligible weapon. Arts tied to class state stay tier C (Vampiress forms 1
 1097-1100, Dwarf firearms and stance arts) and monster-only actions tier D. The editor shows the tier per body from this
 table; arts that were not run in the spike are rated from the home class' handler and the clips the body has, and stay
 "untested" until a profile run confirms them.
+
+## The API (stage 1)
+
+Reference: [GearApi.md](GearApi.md) (`gear.classes`, `gear.models`, `creature:learn`, `gear.text.add`, the events).
+
+* `rune.usable(type, ability, vanilla)` hooks the two class checks of a rune read (0x4D1B20 for arts, 0x4D24C0 for spells; the mask is at
+  +0x70 / +0x8C of the ability record). A handler answers true or false per hero type and ability.
+* `gear.classes.set_hero_skills(body, start, available)` writes the two start skills (+0x14) and the 16 available skills (+0x16) of the
+  Creature.pak hero record of a body (u8 ids). The record belongs to the body, so it applies to every hero of that body at the same time;
+  the `custom-classes` mod switches it when the controlled hero changes. This replaces the planned per-hero `hero.skills` event: the
+  record reads are spread over many functions, one record write is exact.
+* Ability copies (`gear.classes.copy_ability`). The class handlers `switch` on the first word of the ability record that the lookups 0x4D1AF0
+  (arts) and 0x4D2310 (spells) return. Gear hooks both: for a copy's id they return a copy of the base record with the base id left in the
+  first word, so the base ability's code runs and the copy has its own numbers, name and description. Limits found on the way: the engine
+  refuses an art in flight with an id above 5000 (0x4FD0F0), so art copies are 2000..4999 and spell copies 100..199. The engine's text
+  table only changes texts that exist, so `gear.text.add` serves new texts (ids from 0x100000) from the text lookup (0x672C90).
+* `creature:learn` calls the engine's own append (0x580750); `forget` removes the entry from the abilities vector.
+
+Tested: `gear/examples/classtest` (26 checks, one run in a copy of the game folder): catalog with tiers and rune items, hero skills, a copy of
+Gladiator art 1059 with changed numbers learned and used by a recruited Gladiator, copy of a spell, text, forget.

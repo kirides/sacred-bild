@@ -403,6 +403,21 @@ function Creature:order_attack(target) end
 ---@return string? error
 function Creature:order_ability(ability, target, y) end
 
+--- Adds the art (id from 1000) or spell `ability` to a hero's abilities at `level` (default 1), with the game's own function (a
+--- rune read does the same). For heroes of the local player and the party (ids 1 to 16). Returns true, or nil and why
+--- (`the hero knows it already`).
+---@param ability integer
+---@param level? integer
+---@return boolean? ok
+---@return string? error
+function Creature:learn(ability, level) end
+
+--- Removes an art or spell from a hero's abilities.
+---@param ability integer
+---@return boolean? ok
+---@return string? error
+function Creature:forget(ability) end
+
 --- Sets the name the game shows for a party hero (1 to 30 characters, UTF-8). The game keeps a companion's name only
 --- until the next savegame load: a mod sets it again (the player's own hero keeps the name the savegame has).
 ---@param name string

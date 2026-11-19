@@ -77,6 +77,8 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [Named pipes (gear.pipe)](#named-pipes-gearpipe)
 - [World (gear.world)](#world-gearworld)
 - [Party (gear.party)](#party-gearparty)
+- [Classes (gear.classes)](#classes-gearclasses)
+- [Models (gear.models)](#models-gearmodels)
 - [Drops (gear.drops)](#drops-geardrops)
 - [Saving (gear.game)](#saving-geargame)
 - [Clipboard (gear.clipboard)](#clipboard-gearclipboard)
@@ -136,6 +138,9 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'drops.select'` | The loot function asks the equipment type picker for an item; a handler may change the category, level or quality, or name the item type. |
 | `'effect.add'` | The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`). |
 | `'damage'` | The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534). |
+| `'ability.route'` | A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil. |
+| `'motion.select'` | A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil. |
+| `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
 | `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
 
@@ -228,6 +233,8 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `clipboard` | `GearClipboard` | The Windows clipboard: copy text out of the game. |
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
 | `party` | `GearParty` | Companion heroes in single player: recruit, switch control, orders. |
+| `classes` | `GearClasses` | Custom hero classes: the tier of each art for each body, ability copies, hero skills. |
+| `models` | `GearModels` | The models' motion slots (which clips a body has, giving it another's). |
 | `lookup` | `GearLookup` | Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window. |
 | `fmt` | `GearFmt` | Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed). |
 | `toast` | `GearToast` | Short messages that stack up on the screen and fade; the layout editor moves them. |
@@ -279,6 +286,9 @@ Forms:
 - `fun(event: 'drops.select', fn: fun(ev: GearDropSelect)): GearHandler`
 - `fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler`
 - `fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler`
+- `fun(event: 'ability.route', fn: fun(type: integer, art: integer, vanilla: integer, action: integer, id: integer): integer?): GearHandler`
+- `fun(event: 'motion.select', fn: fun(type: integer, slot: integer, id: integer): integer?): GearHandler`
+- `fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
 - `fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler`
 
@@ -664,7 +674,8 @@ One ability record. Reading a field of a table the ability is not in (or an unkn
 | `table` | `string` | `'T1'` or `'T2'`. |
 | `index` | `integer` | The record's index in its table. |
 | `kind` | `string` | `'combat_art'` (T1: ids from 1000) or `'spell'` (T2: ids from 1): what the names in the game's texts say they are. |
-| `id` | `integer` | The ability's id. |
+| `id` | `integer` | The ability's id (a copy's own id). |
+| `base` | `integer` | The id of the ability whose code runs (a copy's base; the game's own abilities: their own id). |
 | `name_text` | `integer` | The text id of the name (`gear.text.get`). |
 | `description_text` | `integer` | The text id of the description. |
 | `target_mode` | `integer` | How the ability is aimed (the engine passes it on to the targeting code). |
@@ -695,6 +706,23 @@ The text for `id` (UTF-8), nil if the game has none.
 
 - `id`: `integer`
 - returns `string?`
+
+#### `gear.text.set(id, text) -> boolean?, string?`
+
+Replaces the text of an id the game has (a text is a string or `{en = ..., de = ..., ru = ...}`: the game's language, else `en`, else any). Ids from 0x100000 are Gear's own (`add`). Ids the game does not have are refused.
+
+- `id`: `integer`
+- `text`: `string|table<string, string>`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.text.add(text) -> integer?, string?`
+
+Makes a new text of Gear's own and returns its id (from 0x100000), which the game's text lookup serves: for the `name_text` and `description_text` of ability copies.
+
+- `text`: `string|table<string, string>`
+- returns `id` `integer?`
+- returns `error` `string?`
 
 ## Files (gear.files)
 
@@ -1409,6 +1437,23 @@ Orders a party hero to use a combat art or spell it knows, or one of its combos 
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:learn(ability, level) -> boolean?, string?`
+
+Adds the art (id from 1000) or spell `ability` to a hero's abilities at `level` (default 1), with the game's own function (a rune read does the same). For heroes of the local player and the party (ids 1 to 16). Returns true, or nil and why (`the hero knows it already`).
+
+- `ability`: `integer`
+- `level`: `integer` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:forget(ability) -> boolean?, string?`
+
+Removes an art or spell from a hero's abilities.
+
+- `ability`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:set_name(name) -> boolean?, string?`
 
 Sets the name the game shows for a party hero (1 to 30 characters, UTF-8). The game keeps a companion's name only until the next savegame load: a mod sets it again (the player's own hero keeps the name the savegame has).
@@ -1598,6 +1643,158 @@ What `creature:combos()` lists.
 | `'attacking'` |  |
 | `'ability'` | Using a combat art or spell. |
 | `'busy'` | Something else (a state the API does not name). |
+
+## Classes (gear.classes)
+
+A custom class is a profile on top of one of the 8 hero bodies (creature types 1 to 9, `gear.world.CLASSES`): its skills, the arts it can learn (from any class, and monster spells) and the clips it plays. These functions are the engine side of it; the mod `custom-classes` builds the profiles on them. What the engine does, and which arts work on which body (the tiers): [CustomClasses.md](CustomClasses.md). Events: `ability.route`, `motion.select`, `rune.usable`.
+
+### GearClasses
+
+Reached as `gear.classes`.
+
+Hero classes, combat arts and ability copies.
+
+### GearCatalogEntry
+
+One entry of `catalog()`.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | The ability id (combat arts from 1000, spells below; copies: 2000 to 4999 and 100 to 199). |
+| `kind` | `'combat_art'\|'spell'` |  |
+| `name` | `string` | The game's name text. (optional) |
+| `name_text` | `integer` |  |
+| `description_text` | `integer` |  |
+| `target_mode` | `integer` | How it is aimed (`gear.data.abilities`). |
+| `homes` | `integer[]` | The hero types whose action handlers know the art (empty for spells and monster-only actions). |
+| `tiers` | `table<integer, string>` | By hero type: `'home'`, `'A'` (spell: works as is), `'B'` (needs `ability.route` and a motion remap), `'C'` (class state: stays with its class) or `'D'` (no hero handler). |
+| `runes` | `integer[]` | Item types of the runes that teach it. |
+| `alias` | `integer` | The base ability id, for a copy made by `copy_ability`. (optional) |
+
+#### `gear.classes.catalog() -> GearCatalogEntry[]`
+
+Every ability with its home classes, its portability tier for each body and the runes that teach it.
+
+- returns `GearCatalogEntry[]`
+
+#### `gear.classes.homes(art) -> integer[]`
+
+The hero types (1 to 9) whose action handlers know a combat art.
+
+- `art`: `integer`
+- returns `integer[]`
+
+#### `gear.classes.tier(art, body) -> string`
+
+The tier of an ability for a body (`'home'`, `'A'`, `'B'`, `'C'`, `'D'`, see `GearCatalogEntry.tiers`).
+
+- `art`: `integer`
+- `body`: `integer|string` - A hero type or its name (`'seraphim'`).
+- returns `string`
+
+#### `gear.classes.runes() -> table<integer, integer[]>`
+
+The rune items that teach abilities: `{[ability id] = {item type, ...}}`.
+
+- returns `table<integer, integer[]>`
+
+#### `gear.classes.copy_ability(alias, base, values) -> GearAbility?, string?`
+
+Makes a copy of an ability: a new ability `alias` with its own record (a copy of `base`'s), which `values` change (the field names of `gear.data.abilities`: `effect_base`, `value0_base`, `name_text` ...). A copy of an art has an id in 2000 to 4999, a copy of a spell one in 100 to 199 (the engine refuses art ids above 5000). The copy runs the base ability's code (its record keeps the base id, which the class handlers switch on); the hero's abilities, the art window, runes and savegames use the copy's id. `gear.text.add` makes texts for `name_text` and `description_text`. The copies are removed when the mod is switched off.
+
+- `alias`: `integer`
+- `base`: `integer`
+- `values`: `table<string, number>` (optional)
+- returns `record` `GearAbility?`
+- returns `error` `string?`
+
+#### `gear.classes.remove_ability(alias) -> boolean`
+
+Removes a copy this mod made.
+
+- `alias`: `integer`
+- returns `removed` `boolean`
+
+#### `gear.classes.hero_record(body) -> string?`
+
+The raw Creature.pak hero record (0x56 bytes) of a body.
+
+- `body`: `integer|string`
+- returns `record` `string?`
+
+### GearHeroSkills
+
+The skills of a body's hero record: two start skills and up to 16 available skills (ids 1 to 255).
+
+| Field | Type | |
+|---|---|---|
+| `start` | `integer[]` |  |
+| `available` | `integer[]` |  |
+
+#### `gear.classes.hero_skills(body) -> GearHeroSkills?`
+
+- `body`: `integer|string`
+- returns `GearHeroSkills?`
+
+#### `gear.classes.set_hero_skills(body, start, available) -> boolean?, string?`
+
+Replaces the skill lists in the game's hero record. It is the record of the body, so it applies to every hero of that body (a mod switches it when the controlled hero changes) until `restore_hero_skills`.
+
+- `body`: `integer|string`
+- `start`: `integer[]` - Two skill ids.
+- `available`: `integer[]` - Up to 16.
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.classes.restore_hero_skills()`
+
+Puts the original skill lists back.
+
+#### `gear.classes.body_id(body) -> integer`
+
+Hero type from its name or number.
+
+- `body`: `integer|string`
+- returns `integer`
+
+## Models (gear.models)
+
+Models.tmp gives every model 256 motion slots, each the index of a motion record (a clip) or 0 for none. The heroes share one biped skeleton, so one body can play another's clip. Changes are for every creature of that model.
+
+### GearModels
+
+Reached as `gear.models`.
+
+The models' motion slot tables.
+
+#### `gear.models.has_motion(body, slot) -> boolean?`
+
+Whether the body's model has a clip for the slot (0 to 255); nil if the model was not found.
+
+- `body`: `integer|string`
+- `slot`: `integer`
+- returns `boolean?`
+
+#### `gear.models.motion(body, slot) -> integer?`
+
+The motion record the slot maps to (0: none), nil if the model was not found.
+
+- `body`: `integer|string`
+- `slot`: `integer`
+- returns `integer?`
+
+#### `gear.models.set_motion(body, slot, record) -> boolean`
+
+Maps the slot of the body's model to a motion record (what `motion()` of any body returns), undone by `restore`.
+
+- `body`: `integer|string`
+- `slot`: `integer`
+- `record`: `integer`
+- returns `boolean`
+
+#### `gear.models.restore()`
+
+Puts back the slots `set_motion` changed.
 
 ## Drops (gear.drops)
 

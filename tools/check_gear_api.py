@@ -141,7 +141,7 @@ def main():
     abil = set(re.findall(r'^function abilities:(\w+)\(', kernel, re.M))
     compare('gear.data.abilities', abil, {f.name for f in model.classes['GearAbilities'].funcs})
     abil_src = between(kernel, r'^local ABILITY_TABLES', r'^local ability_index', 'ability tables')
-    abil_fields = set(re.findall(r"(\w+) = \{0x[0-9A-Fa-f]+, '", abil_src)) | {'table', 'index', 'kind'}
+    abil_fields = set(re.findall(r"(\w+) = \{0x[0-9A-Fa-f]+, '", abil_src)) | {'table', 'index', 'kind', 'base'}
     compare('ability record', abil_fields, fields('GearAbility'))
     region_src = between(kernel, r'^local REGION_FIELDS', r'^local region_mt', 'region fields')
     region_fields = set(re.findall(r"(\w+) = \{0x[0-9A-Fa-f]+, '", region_src)) | {'index', 'name'}

@@ -146,7 +146,8 @@ function GearAbilities:restore() end
 ---@field table string `'T1'` or `'T2'`.
 ---@field index integer The record's index in its table.
 ---@field kind string `'combat_art'` (T1: ids from 1000) or `'spell'` (T2: ids from 1): what the names in the game's texts say they are.
----@field id integer The ability's id.
+---@field id integer The ability's id (a copy's own id).
+---@field base integer The id of the ability whose code runs (a copy's base; the game's own abilities: their own id).
 ---@field name_text integer The text id of the name (`gear.text.get`).
 ---@field description_text integer The text id of the description.
 ---@field target_mode integer How the ability is aimed (the engine passes it on to the targeting code).
@@ -175,6 +176,21 @@ local GearText = {}
 ---@param id integer
 ---@return string?
 function GearText.get(id) end
+
+--- Replaces the text of an id the game has (a text is a string or `{en = ..., de = ..., ru = ...}`: the game's language, else
+--- `en`, else any). Ids from 0x100000 are Gear's own (`add`). Ids the game does not have are refused.
+---@param id integer
+---@param text string|table<string, string>
+---@return boolean? ok
+---@return string? error
+function GearText.set(id, text) end
+
+--- Makes a new text of Gear's own and returns its id (from 0x100000), which the game's text lookup serves: for the
+--- `name_text` and `description_text` of ability copies.
+---@param text string|table<string, string>
+---@return integer? id
+---@return string? error
+function GearText.add(text) end
 
 -- ## Files (gear.files)
 

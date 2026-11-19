@@ -1,4 +1,5 @@
 #include "tables.h"
+#include "classes.h"
 #include "game/gear_addr.h"
 
 #include <windows.h>
@@ -152,6 +153,25 @@ namespace
                locateAbilities(out, Gear::Addr::abilityTable2First.get(), Gear::Addr::abilityTable2End.get(), kAbility2Stride);
     }
 
+    // The alias records of custom classes (classes_alias.cpp): copies of ability records, in two static pools.
+    bool locateAlias1(Span& out)
+    {
+        uintptr_t first = 0;
+        size_t count = 0;
+        Classes::aliasPool(1, first, count);
+        out = {first, count};
+        return true;
+    }
+
+    bool locateAlias2(Span& out)
+    {
+        uintptr_t first = 0;
+        size_t count = 0;
+        Classes::aliasPool(2, first, count);
+        out = {first, count};
+        return true;
+    }
+
     // Region kill table: 32 static records of 0x40 bytes (record 0 unused). +0x30 the kills a region needs, +0x34 the boss
     // flag, +0x38 the kills left (the boss comes when it reaches 0), +0x3C the region id.
     constexpr size_t kRegionStride = 0x40;
@@ -172,6 +192,8 @@ namespace
         {"object_types", kObjectTypeStride, &locateObjectTypes, false},
         {"ability_t1", kAbility1Stride, &locateAbility1, true},
         {"ability_t2", kAbility2Stride, &locateAbility2, true},
+        {"ability_a1", kAbility1Stride, &locateAlias1, true},
+        {"ability_a2", kAbility2Stride, &locateAlias2, true},
         {"regions", kRegionStride, &locateRegions, true},
     };
 

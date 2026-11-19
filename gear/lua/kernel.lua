@@ -76,6 +76,7 @@ local function call(mod, what, fn, ...)
         if mod.errors >= MAX_ERRORS and not mod.disabled then
             mod.disabled = true
             if restore_abilities then restore_abilities(mod) end
+            if kernel.release_aliases then kernel.release_aliases(mod) end
             log('[%s] %d errors: the mod is switched off until the game restarts', mod.id, mod.errors)
         end
     end
@@ -242,7 +243,10 @@ do
     end
 end
 
+ABILITY_TABLES.A1 = {native = 'ability_a1', stride = 0x78, unknown = ABILITY_TABLES.T1.unknown, fields = ABILITY_TABLES.T1.fields}
+ABILITY_TABLES.A2 = {native = 'ability_a2', stride = 0x94, unknown = ABILITY_TABLES.T2.unknown, fields = ABILITY_TABLES.T2.fields}
 local ability_index         -- id -> {table = 'T1'|'T2', index = n}
+kernel.alias_owner = {}     -- alias id -> mod that made it (copies of abilities, gear.classes.copy_ability)
 local ability_journal = {}  -- mod -> {[table:index:offset] = {native, index, offset, kind, original}}
 
 local function build_ability_index()
@@ -259,6 +263,19 @@ local function build_ability_index()
     end
     ability_index = index
     return index
+end
+
+-- The table and record of ability `id`: the game's own, or an alias made by gear.classes.copy_ability.
+function kernel.ability_entry(id)
+    local index = build_ability_index()
+    local e = index and index[id]
+    if e then return e end
+    if kernel.alias_owner[id] then
+        for _, a in ipairs(native.alias_list()) do
+            if a.id == id then return {table = a.table == 1 and 'A1' or 'A2', index = a.index, base = a.base} end
+        end
+    end
+    return nil
 end
 
 local function ability_write(mod, t, index, field, value)
@@ -281,7 +298,9 @@ function ability_mt.__index(self, field)
     local info = rawget(self, '__info')
     if field == 'table' then return info.table end
     if field == 'index' then return info.index end
-    if field == 'kind' then return info.table == 'T1' and 'combat_art' or 'spell' end
+    if field == 'kind' then return (info.table == 'T1' or info.table == 'A1') and 'combat_art' or 'spell' end
+    if field == 'id' then return rawget(self, '__id') end
+    if field == 'base' then return info.base or rawget(self, '__id') end
     local t = ABILITY_TABLES[info.table]
     local f = t.fields[field]
     if not f then return nil end
@@ -307,8 +326,7 @@ local abilities = {__writable_view = true}
 local abilities_mt = {}
 function abilities_mt.__index(self, id)
     if type(id) ~= 'number' then return rawget(abilities, id) end
-    local index = build_ability_index()
-    local entry = index and index[id]
+    local entry = kernel.ability_entry(id)
     if not entry then return nil end
     return setmetatable({__info = entry, __id = id}, ability_mt)
 end
@@ -320,14 +338,14 @@ function abilities:ids()
     local index = build_ability_index()
     local out = {}
     for id in pairs(index or {}) do out[#out + 1] = id end
+    for id in pairs(kernel.alias_owner) do out[#out + 1] = id end
     table.sort(out)
     return out
 end
 
 -- {{name, offset, kind}, ...}: the fields of the ability `id`'s table, by offset; nil if there is no such ability.
 function abilities:fields(id)
-    local index = build_ability_index()
-    local entry = index and index[id]
+    local entry = kernel.ability_entry(id)
     if not entry then return nil end
     local out = {}
     for name, f in pairs(ABILITY_TABLES[entry.table].fields) do
@@ -345,7 +363,7 @@ function abilities:apply(edits)
     if not index then return nil, {'the ability tables are not available'} end
     local problems, plan = {}, {}
     for id, fields in pairs(edits) do
-        local entry = index[id]
+        local entry = kernel.ability_entry(id)
         if not entry then
             problems[#problems + 1] = ('ability %s does not exist'):format(tostring(id))
         else
@@ -1050,6 +1068,165 @@ local CLASSES = {
 local CLASS_INFO = {by_id = {}, all = 0xC0003F}   -- one local: the main chunk is at Lua's 200-locals limit
 for _, c in ipairs(CLASSES) do CLASS_INFO.by_id[c.id] = c end
 world.CLASSES = CLASSES
+
+-- Custom classes: which hero classes' action handlers know a combat art (read from the handlers' switch cases in the exe:
+-- Seraphim 0x5038F0, Gladiator 0x4FF0B0, Battle Mage 0x50CD10, Dark Elf 0x506770, Wood Elf 0x50AC00, Vampiress 0x50E6C0, Dwarf
+-- 0x514790, Daemon 0x5192E0), the arts tied to class state (forms, firearms) and the arts' tiers for a body. Spells (ids below
+-- 1000) go through the spell engine and belong to nobody.
+kernel.classes = {}
+-- A text given as a string or {en = ..., de = ...}: the string for the game's language (else en, else any).
+function kernel.pick_text(text)
+    if type(text) == 'table' then
+        local lang = tostring(native.game_config().LANGUAGE or 'EN'):lower()
+        local pick = text[lang] or text.en
+        if pick == nil then pick = select(2, next(text)) end
+        text = pick
+    end
+    assert(type(text) == 'string', 'text must be a string or a table of languages')
+    return text
+end
+do
+    local C = kernel.classes
+    local RANGES = {
+        {1, {1003, 1013, 1017, 1018, 1019, 1020, 1021, 1054, 1069, 1070, 1071, 1072}},
+        {2, {1003, 1010, 1012, 1013, 1014, 1015, 1016, 1054, 1057, 1058, 1059, 1060}},
+        {3, {1000, 1001, 1002}},
+        {4, {1042, 1043, 1044, 1045, 1046, 1047, 1048, 1049, 1050, 1051, 1052, 1053, 1065, 1066, 1067, 1068}},
+        {5, {1003, 1004, 1005, 1006, 1007, 1008, 1061, 1062, 1063}},
+        {6, {1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030, 1031, 1032, 1033, 1034, 1035, 1036, 1037, 1038, 1039, 1040, 1041,
+             1073, 1074, 1075, 1076}},
+        {8, {1078, 1079, 1080, 1082, 1083, 1084, 1085, 1086, 1087, 1088, 1089}},
+        {9, {1091, 1092, 1094, 1095, 1096, 1097, 1098, 1099, 1100, 1101, 1102, 1103}},
+    }
+    local HOME = {}
+    for _, r in ipairs(RANGES) do
+        for _, id in ipairs(r[2]) do
+            local list = HOME[id]
+            if not list then list = {}; HOME[id] = list end
+            list[#list + 1] = r[1]
+        end
+    end
+    -- class state: Vampiress forms and night arts, Daemon forms, Dwarf firearms and stances
+    local STATE = {}
+    for _, id in ipairs({1022, 1023, 1030, 1031, 1032, 1033, 1034, 1035, 1036, 1037, 1073, 1074, 1075, 1076, 1085, 1086, 1087, 1097,
+                         1098, 1099, 1100, 1101, 1102, 1103}) do STATE[id] = true end
+
+    -- The hero types (1..9) whose handlers know the art.
+    function C.homes(art)
+        local out = {}
+        for i, t in ipairs(HOME[art] or {}) do out[i] = t end
+        return out
+    end
+
+    -- The tier of an ability for a body (a hero type 1..9 or its name): 'home' (the body's own art), 'A' (a spell, or an art
+    -- that works as is), 'B' (needs ability.route and motion remap), 'C' (class state: stays with its class), 'D' (no hero
+    -- handler knows it). Spells and other classes' arts: see docs/CustomClasses.md.
+    function C.tier(art, body)
+        local t = body
+        if type(body) == 'string' then
+            for _, c in ipairs(CLASSES) do if c.name == body then t = c.id end end
+        end
+        if art < 1000 then return 'A' end
+        local homes = HOME[art]
+        if not homes then return 'D' end
+        for _, h in ipairs(homes) do
+            if h == t or (t == 7 and h == 6) then return 'home' end
+        end
+        if STATE[art] then return 'C' end
+        return 'B'
+    end
+
+    local function body_id(body)
+        if type(body) == 'number' then return body end
+        for _, c in ipairs(CLASSES) do if c.name == body then return c.id end end
+        error('unknown body ' .. tostring(body), 3)
+    end
+    C.body_id = body_id
+
+    -- The raw Creature.pak hero record (0x56 bytes) of a body, as a string.
+    function C.hero_record(body) return native.hero_record(body_id(body)) end
+
+    -- The skills of a body's Creature.pak record: {start = {2 skill ids}, available = {up to 16 skill ids}} (u8 ids; offsets +0x14
+    -- and +0x16 of the 0x56-byte record; the available list includes the two start skills).
+    function C.hero_skills(body)
+        local r = native.hero_record(body_id(body))
+        if not r or #r < 0x26 then return nil end
+        local available = {}
+        for i = 0x17, 0x26 do
+            local b = r:byte(i)
+            if b ~= 0 then available[#available + 1] = b end
+        end
+        return {start = {r:byte(0x15), r:byte(0x16)}, available = available}
+    end
+
+    local skills_saved = {}   -- body type -> the original 18 bytes (+0x14 .. +0x25)
+    -- Replaces a body's skill lists in the game's hero record (every hero of that body, until restore_hero_skills or the game ends).
+    -- `start` are two skill ids, `available` up to 16 (0 pads). Returns true, or nil and a reason.
+    function C.set_hero_skills(body, start, available)
+        local t = body_id(body)
+        if type(start) ~= 'table' or #start ~= 2 or type(available) ~= 'table' or #available > 16 then
+            return nil, 'expected two start skills and at most 16 available skills'
+        end
+        local r = native.hero_record(t)
+        if not r or #r < 0x26 then return nil, 'no hero record for that body' end
+        local bytes = {start[1], start[2]}
+        for i = 1, 16 do bytes[#bytes + 1] = available[i] or 0 end
+        for _, v in ipairs(bytes) do
+            if type(v) ~= 'number' or v < 0 or v > 255 or v ~= math.floor(v) then return nil, 'skill ids are whole numbers 0..255' end
+        end
+        if not skills_saved[t] then skills_saved[t] = r:sub(0x15, 0x26) end
+        return native.hero_record_set(t, 0x14, string.char(unpack(bytes)))
+    end
+
+    function C.restore_hero_skills()
+        for t, bytes in pairs(skills_saved) do native.hero_record_set(t, 0x14, bytes) end
+        skills_saved = {}
+    end
+
+    local rune_cache
+    -- {[ability id] = {item type, ...}}: the rune items that teach an ability (item types whose record names one: type record +0x6A).
+    function C.runes()
+        if rune_cache then return rune_cache end
+        local out = {}
+        for t = 1, 0x7E5F do
+            local id = native.table_read('object_types', t, 0x6A, 'u16')
+            if id and id ~= 0 and (native.table_read('object_types', t, 0x2E, 'u8') == 0x1C or id >= 1 and id < 1200) then
+                local list = out[id]
+                if not list then list = {}; out[id] = list end
+                list[#list + 1] = t
+            end
+        end
+        rune_cache = out
+        return out
+    end
+
+    -- Every ability: {id, kind = 'combat_art'|'spell', name (the game's text), name_text, description_text, target_mode, homes = {types},
+    -- tiers = {[hero type] = tier}, runes = {item types}, alias = base id | nil}.
+    function C.catalog()
+        local list, runes = {}, C.runes()
+        local A = data.abilities
+        for _, id in ipairs(A:ids()) do
+            local a = A[id]
+            local tiers = {}
+            for _, c in ipairs(CLASSES) do tiers[c.id] = C.tier(id, c.id) end
+            list[#list + 1] = {
+                id = id, kind = a.kind, name = native.text_get(a.name_text), name_text = a.name_text, description_text = a.description_text,
+                target_mode = a.target_mode, homes = C.homes(id), tiers = tiers, runes = runes[id] or {},
+                alias = kernel.alias_owner[id] and a.base or nil,
+            }
+        end
+        return list
+    end
+
+    function kernel.release_aliases(mod)
+        for id, owner in pairs(kernel.alias_owner) do
+            if owner == mod then
+                kernel.alias_owner[id] = nil
+                native.alias_remove(id)
+            end
+        end
+    end
+end
 
 -- The hero's class: name ('darkelf' ...) and id, nil for other creatures.
 function creature_mt:class()
@@ -5113,6 +5290,15 @@ local function make_env(mod)
                 assert(type(id) == 'number', 'id must be a number')
                 return native.text_get(id)
             end,
+            -- set(id, text): replaces the game's text; text is a string or {en = ..., de = ..., ru = ...} (the game's language, else en,
+            -- else any). Returns true, or nil and a reason.
+            set = function(id, text)
+                assert(type(id) == 'number', 'id must be a number')
+                return native.text_set(id, kernel.pick_text(text))
+            end,
+            -- add(text) -> id | nil, reason: a new text of Gear's own (id from 0x100000) that the game's text lookup serves, for the
+            -- names and descriptions of ability copies (`copy.name_text = gear.text.add('Venom')`); same text forms as set.
+            add = function(text) return native.text_add(kernel.pick_text(text)) end,
         },
         -- The mod's file overlay (mods/<id>/overlay.txt, applied when Sacred Gear starts).
         files = {
@@ -5185,6 +5371,29 @@ local function make_env(mod)
     w.pickup_refused = function() return native.pickup_refused() end
     gear.world = w
     -- gear.models: the models' motion slot tables (Models.tmp). `body` is a hero type (1..9) or its name ('seraphim').
+    gear.classes = {}
+    for k, v in pairs(kernel.classes) do gear.classes[k] = v end
+    function gear.classes.copy_ability(alias, base, values)
+        assert(type(alias) == 'number' and type(base) == 'number', 'expected an alias id (2000..4999 for an art, 100..199 for a spell) and the base ability id')
+        local owner = kernel.alias_owner[alias]
+        if owner and owner ~= mod then return nil, 'the alias belongs to another mod' end
+        if not owner then
+            local ok, err = native.alias_create(alias, base)
+            if not ok then return nil, err end
+            kernel.alias_owner[alias] = mod
+        end
+        local record = data.abilities[alias]
+        if values then
+            local written, problems = data.abilities:apply({[alias] = values})
+            if not written then return nil, table.concat(problems, '; ') end
+        end
+        return record
+    end
+    function gear.classes.remove_ability(alias)
+        if kernel.alias_owner[alias] ~= mod then return false end
+        kernel.alias_owner[alias] = nil
+        return native.alias_remove(alias)
+    end
     gear.models = {}
     local function body_type(body)
         if type(body) == 'number' then return body end
@@ -5410,6 +5619,7 @@ local function make_env(mod)
         if event == 'combat.constant' then native.combat_constant_active(true) end
         if event == 'creature.ability' then native.creature_ability_active(true) end
         if event == 'ability.route' then native.route_active(true) end
+        if event == 'rune.usable' then native.usable_active(true) end
         if event == 'motion.select' then native.motion_active(true) end
         if event == 'damage' then native.damage_active(true) end
         if event == 'effect.add' then native.effect_active(true) end
@@ -5430,6 +5640,7 @@ local function make_env(mod)
         if h.event == 'combat.constant' and #list == 0 then native.combat_constant_active(false) end
         if h.event == 'creature.ability' and #list == 0 then native.creature_ability_active(false) end
         if h.event == 'ability.route' and #list == 0 then native.route_active(false) end
+        if h.event == 'rune.usable' and #list == 0 then native.usable_active(false) end
         if h.event == 'motion.select' and #list == 0 then native.motion_active(false) end
         if h.event == 'damage' and #list == 0 then kernel.boss.sync() end
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
@@ -6057,6 +6268,21 @@ function kernel.ability_route(type_id, art, vanilla, action, id)
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, 'ability.route', h.fn, type_id, art, vanilla, action, id)
             if ok and type(result) == 'number' then return math.floor(result) end
+        end
+    end
+    return nil
+end
+
+-- `rune.usable`: a hero of `type` is checked for the class mask of `ability` (reading a rune); `vanilla` is the engine's answer. A handler
+-- returns true or false, or nil to leave it.
+function kernel.rune_usable(type_id, ability, vanilla)
+    local list = handlers['rune.usable']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'rune.usable', h.fn, type_id, ability, vanilla)
+            if ok and type(result) == 'boolean' then return result end
         end
     end
     return nil

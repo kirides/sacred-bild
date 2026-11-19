@@ -135,7 +135,7 @@ namespace
         __try
         {
             const char* source = reinterpret_cast<const char*>(types + kTypeNames + type * kTypeSize);
-            std::strncpy(name, source, 0x40);
+            strncpy_s(name, source, 0x3F);
             name[0x3F] = 0;
             uintptr_t begin = 0, end = 0;
             std::memcpy(&begin, reinterpret_cast<const void*>(models + kModels), 4);
@@ -168,6 +168,7 @@ bool Classes::install()
     }
     bool ok = Patch::hook(g_origClassOf, Addr::cCreature_classOf, hookClassOf, "cCreature_classOf");
     ok = Patch::hook(g_origPlayMotion, Addr::cCreature_playMotion, hookPlayMotion, "cCreature_playMotion") && ok;
+    ok = installAliases() && ok;
     return ok;
 }
 

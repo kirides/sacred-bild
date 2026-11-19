@@ -40,6 +40,9 @@ namespace LuaHost
     // `vanilla`, the action word `action`, object `id`).
     Answer abilityRoute(int type, int art, int vanilla, int action, uint32_t id, int& out);
 
+    // event `rune.usable`: whether a hero of `type` may learn `ability` (the engine's answer `vanilla`, 0/1); `out` 0/1.
+    Answer runeUsable(int type, int ability, int vanilla, int& out);
+
     // event `motion.select`: the motion slot to play for a hero of `type` that is about to play `slot`.
     Answer motionSelect(int type, int slot, uint32_t id, int& out);
 
