@@ -2529,6 +2529,33 @@ local function ui_push_nav()
     native.ui_nav(out, flags)
 end
 
+-- Widest a tooltip's text gets before it wraps, in layout units.
+uis.TOOLTIP_MAX_W = 360
+
+-- text broken at spaces (and at \n) into lines no wider than `width`; a word wider than that keeps a line of its own.
+-- Returns the lines and the width of the widest. (A field of uis: the kernel is at Lua's limit of 200 locals.)
+function uis.tooltip_wrap(text, width)
+    local lines, widest = {}, 0
+    for para in (text .. '\n'):gmatch('(.-)\n') do
+        local line, lw = nil, 0
+        for word in para:gmatch('%S+') do
+            local try = line and (line .. ' ' .. word) or word
+            local tw = ui_measure(try, {}) or (#try * 6)
+            if tw <= width or not line then
+                line, lw = try, tw
+            else
+                lines[#lines + 1] = line
+                widest = math.max(widest, lw)
+                line = word
+                lw = ui_measure(word, {}) or (#word * 6)
+            end
+        end
+        lines[#lines + 1] = line or ''
+        widest = math.max(widest, lw)
+    end
+    return lines, widest
+end
+
 local function ui_end_tick()
     -- What must lie over everything: open dropdown lists, drawn after all draw handlers, outside any clip.
     uis.clip_stack = {}
@@ -2544,16 +2571,29 @@ local function ui_end_tick()
     ui_push_nav()
     local t = ui_tooltip
     if not t then return end
-    local w = (ui_measure(t.text, {}) or (#t.text * 6)) + 12
     local s = ui_tick_state or {}
-    local x, y = tooltip_place(w, 20, ui_mouse.x, ui_mouse.y,
-        {s.screen_left or 0, s.screen_top or 0, s.screen_right or 1024, s.screen_bottom or 768}, UI_CURSOR_W, UI_CURSOR_H, 4)
-    native.ui_rect(2, -1, x, y, w, 20, 0xE0101018)
+    local bl, bt = s.screen_left or 0, s.screen_top or 0
+    local br, bb = s.screen_right or 1024, s.screen_bottom or 768
+    -- wrap to at most uis.TOOLTIP_MAX_W units of text, and never wider than the screen less a margin
+    local max_text = math.max(60, math.min(uis.TOOLTIP_MAX_W, (br - bl) - 24 - 12))
+    local lines, tw = uis.tooltip_wrap(tostring(t.text), max_text)
+    local _, line_h = ui_measure('Ag', {})
+    line_h = math.max(line_h or 20, 14)
+    local w = math.ceil(tw) + 12
+    local h = #lines * line_h + math.max(0, 20 - line_h)
+    local x, y = tooltip_place(w, h, ui_mouse.x, ui_mouse.y, {bl, bt, br, bb}, UI_CURSOR_W, UI_CURSOR_H, 4)
+    native.ui_rect(2, -1, x, y, w, h, 0xE0101018)
     native.ui_rect(2, -1, x, y, w, 1, 0xFFC8AA5A)
-    native.ui_rect(2, -1, x, y + 19, w, 1, 0xFFC8AA5A)
-    native.ui_rect(2, -1, x, y, 1, 20, 0xFFC8AA5A)
-    native.ui_rect(2, -1, x + w - 1, y, 1, 20, 0xFFC8AA5A)
-    native.ui_text(2, -1, t.text, x + 6, y, 0, 20, 0xFFF0F0F0, -1, 0, 0, 0, nil, UI_TEXT_SIZE, 0, 1)
+    native.ui_rect(2, -1, x, y + h - 1, w, 1, 0xFFC8AA5A)
+    native.ui_rect(2, -1, x, y, 1, h, 0xFFC8AA5A)
+    native.ui_rect(2, -1, x + w - 1, y, 1, h, 0xFFC8AA5A)
+    local ty = y + math.floor(math.max(0, 20 - line_h) / 2)
+    for i, line in ipairs(lines) do
+        if line ~= '' then
+            native.ui_text(2, -1, line, x + 6, ty + (i - 1) * line_h, 0, line_h, 0xFFF0F0F0, -1, 0, 0, 0, nil,
+                UI_TEXT_SIZE, 0, 1)
+        end
+    end
 end
 
 -- The layout (mods\gear_layout.json): where the player put the mods' panels ("mod_id:panel_id") and the game's

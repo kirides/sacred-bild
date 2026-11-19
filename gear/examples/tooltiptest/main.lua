@@ -24,7 +24,9 @@ gear.on('draw', function()
     for _, place in ipairs(PLACES) do
         local x, y = spot(place)
         ui.button('tip:' .. place, x, y, BW, BH, (place:gsub('%-', ' ')):sub(1, 9),
-            {layer = 'top', tooltip = 'Tooltip of the ' .. place .. ' button, long enough to need room'})
+            {layer = 'top', tooltip = 'Tooltip of the ' .. place .. ' button, long enough to need room and to wrap: '
+                .. 'how often the items of an icon set are picked among the drops, relative to the other sets. 0 never, '
+                .. '1 as often as the game does it, higher is more often.\nA second paragraph after a line break.'})
     end
 end)
 
