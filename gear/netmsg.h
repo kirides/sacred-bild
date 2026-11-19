@@ -4,7 +4,7 @@
 // - kills: a hero's kill is sent as 0x127 (experience award: hero id, amount) and, within the same moment, 0x17D
 //   (creature death: victim id); NetMsg::takeKill hands them to the Lua host as the event `kill`;
 // - trace: with the environment variable GEAR_NETTRACE=1 the first few messages of every id are logged (id, size,
-//   sender slot, start of the payload), to map messages (docs/GearServerMods.md).
+//   sender slot, start of the payload), to map messages (docs/GearMultiplayer.md).
 // The hook only looks at the messages; the game's call goes on unchanged.
 // - the mod channel (gear.mp.send): frames of UTF-16 units sent as private chat (0x003) to a slot, and the frames
 //   other clients sent this one, taken out of the receive dispatcher's chat case before the chat box sees them. A

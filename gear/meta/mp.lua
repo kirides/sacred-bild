@@ -5,7 +5,7 @@
 --: In a network game every player is a hero object (slots 1 to 16 are the object ids of the heroes). A mod runs on
 --: every player's computer; the `kill` event runs on the computer of the player who made the kill. Mods on different
 --: computers talk through the mod channel (`gear.mp.send` and the `mp_message` event), which rides the game's own
---: connection. Design and what is still to come (per-player storage, announcements): `docs/GearServerMods.md`.
+--: connection. How it works and the messages it builds on: `docs/GearMultiplayer.md`.
 --:
 --: The host is the player whose game started the server. In single player the local player is the host and slot 1.
 

@@ -23,6 +23,11 @@ def cell(text):
     return text.replace('|', '\\|').replace('\n', ' ')
 
 
+def anchor(title):
+    # GitHub's heading ids: lower case, punctuation other than - and _ dropped, spaces to -.
+    return re.sub(r'[^\w\- ]', '', title.lower()).replace(' ', '-')
+
+
 def sig(model, fn):
     cls = model.classes.get(fn.owner) if fn.owner else None
     if cls is not None:
@@ -114,6 +119,11 @@ def generate():
         with open(HEAD, encoding='utf-8') as f:
             out.append(f.read().rstrip('\n'))
         out.append('')
+    out.append('## Contents')
+    out.append('')
+    for sec in model.sections:
+        out.append(f'- [{sec.title}](#{anchor(sec.title)})')
+    out.append('')
     for sec in model.sections:
         out.append(f'## {sec.title}')
         out.append('')

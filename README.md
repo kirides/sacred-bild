@@ -4,120 +4,73 @@
 GOG / Steam Sacred Gold (also the German build and Sacred ReBorn). You copy them into the game folder; nothing else
 about your install changes.
 
-## For players
-
-### What you get from SacredBild (`ddraw.dll`)
-
-- **Your monitor's resolution**: 1440p, 4K, ultrawide. The world shows more at its original sharpness, and the old
-  1024x768 interface is scaled and centered with its windows at the screen edges.
-- **Smooth frame rates**: a new renderer (Direct3D 9Ex) with merged draw calls, the ground kept on the GPU and
-  characters animated on several threads. Walking through a town with many characters no longer stutters.
-- **Controller support**: Xbox, PlayStation and Switch pads: walk with the stick, aim-assisted attacks and combat arts,
-  cursor and D-pad menus, button prompts on screen.
-- **Multiplayer that works today**: LAN games over a VPN, a UDP connection instead of TCP, and a matchmaker so friends
-  can find and join your game without port forwarding.
-- **Any language**: one install runs every language you have text and speech files for.
-- Small things that add up: input only while the game is focused, the cursor kept in the window, a frame limiter
-  that does not burn a CPU core, full-screen screenshots, crash dumps.
-
-### What you get from Sacred Gear (`SacredGear.dll`)
-
-Sacred Gear lets the game run **mods** (small Lua scripts) and ships with some. It works with SacredBild or on its own.
-
-**Mod manager** (F11, or the *Mods* button under the escape menu): see every installed mod, switch each on or off,
-change its settings and re-bind its keys, with a warning when two mods want the same key.
-
-![The in-game mod manager](docs/images/gear-mod-manager.jpg)
-
-**Layout editor**, like the edit mode of an MMO: hold **Alt** (the game shows its labels) and click *Edit layout*
-at the top left. Every game window and mod panel gets an overlay; click one and drag it anywhere, it snaps to screen
-edges and to other windows, the arrow keys nudge it, and your layout is remembered. *Done* leaves the edit mode.
-
-![The layout editor](docs/images/gear-layout-editor.jpg)
-
-**Loot filter** (settings in game with F5): your hero picks up only what is worth it: items for its class, above a
-quality you choose, per category (weapons, armor, jewelry, runes, ...) and per potion type. Filtered items' labels
-are dimmed so the good drops stand out, and while you hold Alt an overlay shows the active rules (switch it off with
-*Show overlay* in the Mods screen).
-
-![The loot filter settings](docs/images/gear-loot-filter.jpg)
-
-**Shared stash** (F10, from the extra mods): one stash for all your heroes. Put an item in with one hero, take it
-out with another, with its random properties and runes intact.
-
-![The shared stash beside the inventory](docs/images/gear-shared-stash.jpg)
-
-**Autosave** (from the extra mods): saves the game every few minutes of play (5 by default, set it in the Mods
-screen) into its own slots 97 to 99, oldest first, so a crash or a bad fight costs minutes, not an hour. F6 saves
-right now, and a short note confirms each save.
-
-![An autosave note](docs/images/gear-autosave.jpg)
-
-All the mods live in their own repository, [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods), with a page for each (how to use it, settings, keys):
-[Loot filter](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/lootfilter.md), [Loot log](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/lootlog.md), [Damage meter](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/damagemeter.md), [Session tracker](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/sessiontracker.md), [Layout editor](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/layout.md), [Realm picker](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/realms.md), [Autosave](https://github.com/kirides/sacred-gear-mods/blob/main/docs/Autosave.md), [Shared stash](https://github.com/kirides/sacred-gear-mods/blob/main/docs/SharedStash.md), [Better SaveLoad](https://github.com/kirides/sacred-gear-mods/blob/main/src/better-saveload/README.md), [Drop tuning](https://github.com/kirides/sacred-gear-mods/blob/main/docs/DropTuning.md), [Auction house](https://github.com/kirides/sacred-gear-mods/blob/main/src/auction-house/README.md), [Achievements](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/achievements.md), [Bounty board](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/bounty.md), [Build sharer](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/buildsharer.md), [Quest helper](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/questhelper.md), [Server feed](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/serverfeed.md), [Twitch Integration](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/twitch_integration.md).
-
-**Easiest way:** download `sacred-gear-mods-<version>.zip` from the [mods releases](https://github.com/kirides/sacred-gear-mods/releases/latest) and extract it into
-the game folder. It contains a ready `mods` folder; delete the mods you do not want. A mod is a folder in `mods`:
-press F11 in game and switch it on or off. Writing your own is covered in [Sacred Gear](docs/Gear.md); the `gear/examples`
-folder here only holds small feature examples and automation tests.
-
-### Install
-
-Download a [release](../../releases) (tagged versions, plus a nightly of every push to `main`) and extract the zip
-into the Sacred Gold folder. `SacredGear.dll` next to the game loads with SacredBild. Mods go into `mods`. The
-[Install](#install-1) section below has the details, Steam, Wine and DDrawCompat included.
-
----
-
-## Technical overview
-
 > **AI disclosure:** SacredBild is developed with an AI coding assistant (Anthropic's Claude). Most of the code,
 > the reverse engineering notes and this documentation were written with it, at the maintainer's direction; the
 > maintainer decides what goes in and tests the changes in the game. The source is kept to what the features need
 > and documented so that people can review it: see [Development](docs/Development.md).
 
-A `ddraw.dll` hook for **Sacred Gold** that runs the game at modern resolutions and instruments its
-renderer, as groundwork for replacing the slow parts. It runs the game's DirectDraw / Direct3D 7 on Direct3D 9Ex
-itself (or loads [DDrawCompat](https://github.com/narzoul/DDrawCompat) behind itself, `Backend=chain`), and patches
-the game's internals (the approach of [GD3D11](https://github.com/kirides/GD3D11) for Gothic).
+## SacredBild (`ddraw.dll`)
 
-Supported executables: the **English** GOG `Sacred.exe` (PE timestamp `0x452F85C7`) and the **German**
-`sacred.exe` 2.0 (`0x451BBE74`), with their `gameserver.exe`. SacredBild finds what it patches by byte signatures, not
-fixed addresses, so other builds with the same code should work too; if a signature isn't found, it only passes
-ddraw calls through and logs which one.
+A `ddraw.dll` that runs the game's DirectDraw / Direct3D 7 on its own Direct3D 9Ex backend and patches the game's
+internals (the approach of [GD3D11](https://github.com/kirides/GD3D11) for Gothic).
 
-**Sacred ReBorn** (`SacredReborn.exe`, the German build with patched code) is supported too. It patches the
-game's resolution code itself (`SR_HD_WIDTH` / `SR_HD_HEIGHT` with `SR_HD_ENABLE`, or `SR_WIDTH` / `SR_HEIGHT`, in `Settings.cfg`, set by its config tool); SacredBild's
-`[Display] Width` / `Height` (default: the screen) is the size when those are unset, and the UI scaling and the
-other modules work on top of it. ReBorn loads the language files from disk, so there is no language import. Install into its folder like any
-other: `.\install.ps1 -GameDir "...\sacred gold ReBorn"`.
-
-## What it does
-
-- **Any resolution and a scalable UI**: the world shows more at its original pixel density, the 1024x768 UI is
-  scaled into a centered canvas, and the HUD windows sit at the screen edges. Also: input only while the game is in
-  the foreground, the cursor kept in the window, drawing in the background, a frame limiter that doesn't spin, and
-  full-screen screenshots. See [Display, UI and input](docs/Display.md).
-- **Faster rendering**: DirectDraw / Direct3D 7 on SacredBild's own Direct3D 9Ex backend, the world's draw calls
-  merged, the ground kept on the GPU, characters skinned on the GPU and animated on several threads, movies through Media Foundation, frame statistics, a profiler and crash
-  dumps. See [Rendering](docs/Rendering.md).
-- **Controller** (Xbox, PlayStation, Switch; through SDL3): walking with the stick, aim-assisted attacks and combat
-  arts, a cursor and D-pad navigation for menus and windows, button prompts on screen, bindings set in game. See
+- **Your monitor's resolution**: 1440p, 4K, ultrawide. The world shows more at its original sharpness, the 1024x768
+  interface is scaled into a centered canvas and the HUD windows sit at the screen edges. Also: input only while the
+  game is in the foreground, the cursor kept in the window, drawing in the background, a frame limiter that doesn't
+  spin, full-screen screenshots. See [Display, UI and input](docs/Display.md).
+- **Smooth frame rates**: merged draw calls, the ground kept on the GPU, characters skinned on the GPU and animated on
+  several threads, SMAA, movies through Media Foundation; frame statistics, a profiler and crash dumps. See
+  [Rendering](docs/Rendering.md).
+- **Controller support** (Xbox, PlayStation, Switch; through SDL3): walking with the stick, aim-assisted attacks and
+  combat arts, a cursor and D-pad navigation for menus and windows, button prompts on screen, bindings set in game. See
   [Controller](docs/Controller.md).
-- **Multiplayer**: LAN games over VPNs, the game connection over UDP instead of TCP, and a matchmaker that lists
-  everyone's games in the LAN list and connects players without port forwarding (IPv4 and IPv6). See
+- **Multiplayer that works today**: LAN games over VPNs, the game connection over UDP instead of TCP, and a matchmaker
+  that lists everyone's games in the LAN list and connects players without port forwarding (IPv4 and IPv6). See
   [Multiplayer](docs/Multiplayer.md).
-- **Languages**: one install runs every language you have the text and speech files for. See
+- **Any language**: one install runs every language you have the text and speech files for. See
   [Languages](docs/Languages.md).
+
+Every setting is in the settings window before the game starts and in `SacredBild.ini`: [Configuration](docs/Configuration.md).
+
+## Sacred Gear (`SacredGear.dll`)
+
+Sacred Gear lets the game run **mods** (small Lua scripts). It works with SacredBild or on its own.
+
+**Mod manager** (F11, or *Mods* under the escape menu): every installed mod, on or off, its settings and its keys,
+with a warning when two mods want the same key.
+
+![The in-game mod manager](docs/images/gear-mod-manager.jpg)
+
+**Layout editor**: hold **Alt** and click *Edit layout* at the top left. Drag any game window or mod panel anywhere; it
+snaps to screen edges and other windows, the arrow keys nudge it, and the layout is remembered.
+
+![The layout editor](docs/images/gear-layout-editor.jpg)
+
+**Loot filter** (F5): your hero picks up only what is worth it, by class, quality, category and potion type; filtered
+items' labels are dimmed so the good drops stand out.
+
+![The loot filter settings](docs/images/gear-loot-filter.jpg)
+
+**Shared stash**: one stash for all your heroes, opened with the chest, items kept with their properties and runes.
+
+![The shared stash beside the inventory](docs/images/gear-shared-stash.jpg)
+
+**Autosave**: saves every few minutes of play into its own slots 97 to 99, oldest first; F6 saves right now.
+
+![An autosave note](docs/images/gear-autosave.jpg)
+
+The mods live in [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods), each with a page:
+[Loot filter](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/lootfilter.md), [Loot log](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/lootlog.md), [Damage meter](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/damagemeter.md), [Session tracker](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/sessiontracker.md), [Layout editor](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/layout.md), [Realm picker](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/realms.md), [Autosave](https://github.com/kirides/sacred-gear-mods/blob/main/docs/Autosave.md), [Shared stash](https://github.com/kirides/sacred-gear-mods/blob/main/docs/SharedStash.md), [Better SaveLoad](https://github.com/kirides/sacred-gear-mods/blob/main/src/better-saveload/README.md), [Drop tuning](https://github.com/kirides/sacred-gear-mods/blob/main/docs/DropTuning.md), [Auction house](https://github.com/kirides/sacred-gear-mods/blob/main/src/auction-house/README.md), [Achievements](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/achievements.md), [Bounty board](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/bounty.md), [Build sharer](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/buildsharer.md), [Quest helper](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/questhelper.md), [Server feed](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/serverfeed.md), [Twitch Integration](https://github.com/kirides/sacred-gear-mods/blob/main/docs/mods/twitch_integration.md).
+The easiest way to get them: extract `sacred-gear-mods-<version>.zip` from the
+[mods releases](https://github.com/kirides/sacred-gear-mods/releases/latest) into the game folder and delete the mods
+you do not want. Writing your own: [Sacred Gear](docs/Gear.md).
 
 ## Install
 
-From a [release](../../releases) (tagged versions, and a nightly prerelease of every push to `main`): extract the
-zip into the game folder. It replaces the `ddraw.dll` there (if that is DDrawCompat, move it to
-`SacredBild\DDrawCompat.dll` first) and an existing `SacredBild.ini`.
-
-The Steam version works the same way: its `Sacred.exe` is the English GOG exe inside Steam's DRM wrapper
-(SteamStub), and SacredBild starts once the wrapper has decoded the game's code.
+Download a [release](../../releases) (tagged versions, and a nightly prerelease of every push to `main`) and extract
+the zip into the game folder. It replaces the `ddraw.dll` there (if that is DDrawCompat, move it to
+`SacredBild\DDrawCompat.dll` first) and an existing `SacredBild.ini`. `SacredGear.dll` next to the game is loaded by
+SacredBild; other loaders: [Sacred Gear, Install](docs/Gear.md#install). Mods go into `mods`.
 
 From a build (see [Build](docs/Development.md#build)):
 
@@ -125,32 +78,47 @@ From a build (see [Build](docs/Development.md#build)):
 .\install.ps1 -GameDir "B:\Spiele\GOG Games\Sacred Gold"
 ```
 
-This backs up the current `ddraw.dll`, moves an existing DDrawCompat to `SacredBild\DDrawCompat.dll`,
-copies SacredBild's `ddraw.dll` and creates `SacredBild.ini` if there is none. `uninstall.ps1` restores the backup.
-DDrawCompat is only used with `[DDraw] Backend=chain`; without it, that falls back to Windows' own `ddraw.dll`
-(whose Direct3D 7 runtime refuses render targets over 2048 pixels; SacredBild works around that).
+This backs up the current `ddraw.dll`, moves an existing DDrawCompat to `SacredBild\DDrawCompat.dll`, copies
+SacredBild's `ddraw.dll` and creates `SacredBild.ini` if there is none. `uninstall.ps1` restores the backup.
 
-The Direct3D 9 backend runs on any `d3d9.dll`: `[DDraw] D3D9`, else a `d3d9.dll` next to the game exe (e.g.
-[DXVK](https://github.com/doitsujin/dxvk)'s 32-bit one), else Windows' own. `SacredBild.log` names the one in use
-(`Direct3D 9: using ...`). Under Wine / Proton, SacredBild's `ddraw.dll` only loads with a native override:
-`WINEDLLOVERRIDES="ddraw=n,b"`.
+- **Steam**: its `Sacred.exe` is the English GOG exe inside Steam's DRM wrapper (SteamStub); SacredBild starts once
+  the wrapper has decoded the game's code.
+- **Wine / Proton**: SacredBild's `ddraw.dll` only loads with a native override, `WINEDLLOVERRIDES="ddraw=n,b"`.
+- **Another `d3d9.dll`** (e.g. [DXVK](https://github.com/doitsujin/dxvk)'s 32-bit one): `[DDraw] D3D9`, or put it next
+  to the game exe. **DDrawCompat** instead of SacredBild's backend: `[DDraw] Backend=chain`. See
+  [Rendering](docs/Rendering.md#direct3d-9ex-backend).
+
+## Supported games
+
+- The **English** GOG `Sacred.exe` (PE timestamp `0x452F85C7`) and the **German** `sacred.exe` 2.0 (`0x451BBE74`),
+  with their `gameserver.exe`. SacredBild finds what it patches by byte signatures, not fixed addresses, so other
+  builds with the same code should work too; if a signature isn't found, it passes the ddraw calls through and logs
+  which one.
+- **Sacred ReBorn** (`SacredReborn.exe`, the German build with patched code). It sets its resolution itself
+  (`SR_HD_WIDTH` / `SR_HD_HEIGHT` with `SR_HD_ENABLE`, or `SR_WIDTH` / `SR_HEIGHT`, in `Settings.cfg`, set by its config
+  tool); SacredBild's `[Display] Width` / `Height` apply when those are unset, and the UI scaling and the other modules
+  work on top. ReBorn loads the language files from disk, so there is no language import. Install into its folder like
+  any other: `.\install.ps1 -GameDir "...\sacred gold ReBorn"`.
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
 | [Configuration](docs/Configuration.md) | The settings window and every key of `SacredBild.ini` |
-| [Display, UI and input](docs/Display.md) | Resolution, UI canvas and HUD layout, screenshots, focus and cursor handling, frame limits |
-| [Rendering](docs/Rendering.md) | The Direct3D 9Ex backend, movies, batching, GPU skinning, diagnostics |
+| [Display, UI and input](docs/Display.md) | Resolution, UI canvas and HUD layout, resizable window, screenshots, focus and cursor, frame limits |
+| [Rendering](docs/Rendering.md) | The Direct3D 9Ex backend, movies, batching, ground and characters on the GPU, SMAA, diagnostics |
 | [Controller](docs/Controller.md) | Button layout, menus and windows, button prompts, controller settings |
 | [Multiplayer](docs/Multiplayer.md) | LAN games over VPNs, the UDP connection, online games through the matchmaker |
 | [Languages](docs/Languages.md) | Text and speech of other languages, `import-language.ps1` |
-| [Development](docs/Development.md) | Reading the code, source files, tools, build |
-| [RE notes](docs/RE_NOTES.md) | What the game's code does, as far as SacredBild needs it |
+| [Sacred Gear](docs/Gear.md) | The mod kit: install, writing a mod, the file overlay, the mod manager, automation |
+| [Gear API reference](docs/GearApi.md) | Every function, option and event a mod can use (generated from `gear/meta`) |
+| [Gear drops](docs/GearDrops.md) | `gear.drops`: how the engine rolls drops and what each setting changes |
+| [Gear in network games](docs/GearMultiplayer.md) | Sacred's multiplayer messages, the mod channel, `gear.net` channels |
+| [Development](docs/Development.md) | Source files, tools, the game-launch lock, build; Sacred Gear's sources and API annotations |
+| [RE notes](docs/RE_NOTES.md) | What the game's code does, as far as SacredBild and Sacred Gear need it |
+| [UI system](docs/UI_SYSTEM.md) | The game's UI manager: windows, named UI events, event and draw order, focus |
 | [UDP protocol](docs/UDP_PROTOCOL.md) | The UDP connection's and the matchmaker's wire formats |
 | [Matchmaker](matchmaker/README.md) | Running a matchmaking server |
-| [Sacred Gear](docs/Gear.md) | The LuaJIT mod kit, a separate DLL from this repository (works with or without SacredBild) |
-| [Gear drops](docs/GearDrops.md) | `gear.drops`: drop chance, rarity weights, item replacement and the random numbers of drops; how the engine rolls them |
 
 ## Credits
 
@@ -158,7 +126,8 @@ SacredBild builds on:
 
 - [Detours](https://github.com/microsoft/Detours) (hooks), [gtl](https://github.com/greg7mdp/gtl) (hash maps),
   [Dear ImGui](https://github.com/ocornut/imgui) (SacredBild's own screens), [SDL3](https://www.libsdl.org)
-  (controllers) and [KCP](https://github.com/skywind3000/kcp) (the UDP connection), linked in;
+  (controllers), [KCP](https://github.com/skywind3000/kcp) (the UDP connection) and [LuaJIT](https://luajit.org)
+  (Sacred Gear), linked in;
 - [SMAA](https://github.com/iryoku/smaa) by Jorge Jimenez et al. (MIT, `src/ddraw9/smaa/`): the antialiasing;
 - [Input Prompts](https://github.com/meritite-union/input-prompts) by the Meritite Union (CC0): the controller
   button images of the button prompts;

@@ -2,8 +2,9 @@
 
 # Sacred Gear Lua API reference
 
-The reference of everything a mod can call, generated from the LuaLS annotations in `gear/meta/`. The guide to writing
-a mod (install, events, examples, automation, engine notes) is [Gear.md](Gear.md).
+Everything a mod can call, by area: functions, options, fields and events. It is generated from the LuaLS annotations
+in `gear/meta/` (how to change them: `docs/Development.md`, "The Lua API annotations"). The guide to writing a mod
+(install, `mod.lua`, events, the file overlay, the mod manager, automation, examples) is [Gear.md](Gear.md).
 
 ## Editor support (Lua Language Server)
 
@@ -62,41 +63,41 @@ Not covered by the annotations: values a mod gets from a custom event (`gear.emi
 of `gear.config` (declare your own with `---@type {my_setting: number}` on a local), and the runtime rule that
 `gear.auto` exists only in automation runs.
 
-## Maintaining the annotations
+## Contents
 
-The annotations are part of the API: a change to what the Lua side offers is not done until `gear/meta` says so.
-
-1. Change the code (`gear/lua/kernel.lua`, and the native tables in `gear/lua_host.cpp`).
-2. Change the matching annotation in `gear/meta/*.lua`: a new function gets a description, `---@param` and
-   `---@return` lines; a new field of a table gets a `---@field`; a new option goes into the options class of the
-   function; a new event gets a `gear.on` overload and a `GearEventName` entry.
-3. Run `python tools/gen_gear_api_docs.py` (rewrites this file) and `python tools/check_gear_api.py` (exit code 0:
-   the annotations and the code agree).
-
-`tools/check_gear_api.py` reads `kernel.lua` and `lua_host.cpp` as text and compares names, both ways: a function,
-field, event, option or manifest key in the code but not in the annotations, and one in the annotations but not in the
-code. It checks names, not types or signatures; those are reviewed by hand. It fails if this file is not what the
-generator produces. If the check cannot find a place in the code it expects, the code changed shape: update the
-check rather than silence it.
-
-The format of `gear/meta/*.lua`:
-
-- One file per area (`gear.lua`, `data.lua`, `world.lua`, `ui.lua`, `ui_widgets.lua`, `auto.lua`; the list is `FILES`
-  in `tools/gear_meta.py`). Every file starts with `---@meta _`.
-- `-- ## Title` starts a section of the reference; `--: text` lines right under it are the section's introduction.
-  Both are plain comments to LuaLS.
-- A namespace or object type is a `---@class` followed by a local table (`local GearWorld = {}`); its functions are
-  `function GearWorld.hero() end` (static) or `function Creature:hp() end` (method). The `gear` and `os` globals are
-  `gear = {}` and `os = {}` after their class.
-- A plain comment `-- path gear.world` right above the class's doc block says how it is reached; the reference prints
-  signatures with it (`gear.world.hero()`, `creature:hp()`).
-- Options tables are classes whose name ends in `Opts` (`GearTextOpts`); every `opts.x` the kernel reads must be a field
-  of one, and `GearPickupRules` holds the keys of `pickup_rules`. Enumerated strings are `---@alias` with `---| 'value' # meaning`.
-- Return a value or `nil` and a message as `---@return Creature? creature` and `---@return string? error`.
-- Descriptions use the same words as [Gear.md](Gear.md); the guide explains, the reference lists.
-
-To check the examples against the annotations with LuaLS: `lua-language-server --check gear/examples
---configpath .luarc.json` from the repository root (needs the language server installed; not part of the build).
+- [The gear global](#the-gear-global)
+- [The manifest (mod.lua)](#the-manifest-modlua)
+- [The standard library a mod gets](#the-standard-library-a-mod-gets)
+- [Data tables (gear.data)](#data-tables-geardata)
+- [Abilities (gear.data.abilities)](#abilities-geardataabilities)
+- [Game text (gear.text)](#game-text-geartext)
+- [Files (gear.files)](#files-gearfiles)
+- [Engine hooks (gear.hooks)](#engine-hooks-gearhooks)
+- [JSON (gear.json)](#json-gearjson)
+- [Named pipes (gear.pipe)](#named-pipes-gearpipe)
+- [World (gear.world)](#world-gearworld)
+- [Party (gear.party)](#party-gearparty)
+- [Drops (gear.drops)](#drops-geardrops)
+- [Saving (gear.game)](#saving-geargame)
+- [Clipboard (gear.clipboard)](#clipboard-gearclipboard)
+- [Realms (gear.realm)](#realms-gearrealm)
+- [Multiplayer (gear.mp)](#multiplayer-gearmp)
+- [Custom net messages (gear.net)](#custom-net-messages-gearnet)
+- [Chat lines (gear.chat)](#chat-lines-gearchat)
+- [Settings, key binds and the mod manager](#settings-key-binds-and-the-mod-manager)
+- [Remapping the game's keys (gear.input)](#remapping-the-games-keys-gearinput)
+- [Inventories (gear.inv)](#inventories-gearinv)
+- [Lookups (gear.lookup)](#lookups-gearlookup)
+- [Formatting (gear.fmt)](#formatting-gearfmt)
+- [Toasts (gear.toast)](#toasts-geartoast)
+- [Stored data (gear.store)](#stored-data-gearstore)
+- [Per savegame data (gear.savegame)](#per-savegame-data-gearsavegame)
+- [Hooks between mods (gear.events)](#hooks-between-mods-gearevents)
+- [Drawing (gear.ui)](#drawing-gearui)
+- [State queries](#state-queries)
+- [Widgets and input](#widgets-and-input)
+- [Layout: persistent panels, movable game windows](#layout-persistent-panels-movable-game-windows)
+- [Automation (gear.auto)](#automation-gearauto)
 
 ## The gear global
 
@@ -700,7 +701,7 @@ The text for `id` (UTF-8), nil if the game has none.
 
 Reached as `gear.files`.
 
-The file overlay: a mod's own data files served where the game opens the original ones, and the mod's own save folder. Declared in `mods/<id>/overlay.txt` (`game\path = dataile` per line, `saves = save`), read when Sacred Gear starts because the game opens its data files before any Lua runs. See [Gear.md](Gear.md).
+The file overlay: a mod's own data files served where the game opens the original ones, and the mod's own save folder. Declared in `mods/<id>/overlay.txt` (`game\path = data\file` per line, `saves = save`), read when Sacred Gear starts because the game opens its data files before any Lua runs. The rules and the patch formats: [Gear.md](Gear.md#replacing-game-files-file-overlay).
 
 #### `gear.files.overlay() -> GearOverlayInfo?`
 
@@ -1056,7 +1057,7 @@ The number of pickups refused so far.
 
 ### GearModifiers
 
-Boss modifiers of one creature (`creature:set_modifiers`). A field left out does nothing. The health is written into the creature (maximum and current value); the rest is applied by Gear's `damage` hook on every hit the engine resolves, so it holds for melee, arrows and spells alike as far as they reach the hook. Modifiers exist for this session only, are not saved with a savegame and are forgotten when a savegame is loaded (see docs/Gear.md, "Creature modifiers").
+Boss modifiers of one creature (`creature:set_modifiers`). A field left out does nothing. The health is written into the creature (maximum and current value); the rest is applied by Gear's `damage` hook on every hit the engine resolves, so it holds for melee, arrows and spells alike as far as they reach the hook. Modifiers exist for this session only: they are forgotten when a savegame is loaded (object ids then mean other creatures). A savegame written while a boss exists keeps it as a plain strong creature (its boosted maximum and current health); to keep the boss, store its id, type and `base_hp` in `gear.store.game` and call `set_modifiers{health = ..., base_hp = ...}` after the load (the world-events mod does). Not available: size, movement speed and resistances other than `taken`. Test: `gear/examples/bosstest`.
 
 | Field | Type | |
 |---|---|---|
@@ -1942,7 +1943,7 @@ Chooses the realm for the next Closed or Open Internet and saves the choice. Rai
 
 ## Multiplayer (gear.mp)
 
-In a network game every player is a hero object (slots 1 to 16 are the object ids of the heroes). A mod runs on every player's computer; the `kill` event runs on the computer of the player who made the kill. Mods on different computers talk through the mod channel (`gear.mp.send` and the `mp_message` event), which rides the game's own connection. Design and what is still to come (per-player storage, announcements): `docs/GearServerMods.md`.
+In a network game every player is a hero object (slots 1 to 16 are the object ids of the heroes). A mod runs on every player's computer; the `kill` event runs on the computer of the player who made the kill. Mods on different computers talk through the mod channel (`gear.mp.send` and the `mp_message` event), which rides the game's own connection. How it works and the messages it builds on: `docs/GearMultiplayer.md`.
 
 The host is the player whose game started the server. In single player the local player is the host and slot 1.
 
@@ -2525,7 +2526,7 @@ The canonical text of a binding (`'Ctrl+Z'` gives `'ctrl+z'`; `''` stays), or ni
 
 ## Inventories (gear.inv)
 
-The game keeps the hero's backpack, the chest and the shops' stock as grids of cells, "containers" (32 of them). The backpack of the hero with object id n is container n (the local hero in single player: 1), the chest is container 17. An item takes w x h cells; `col` and `row` are its top-left cell, counted from 0. Everything that changes an inventory works in single player only (`gear.world.can_change()`); the calls go through the game's own inventory and object code, so the cells, the items' owners and the object lists stay as when the player moves an item. `export` copies an item to bytes (its type and own data: the random properties), `add` makes it again, so that an item can leave the game and come back unchanged (see the `shared-stash` mod).
+The game keeps the hero's backpack, the chest and the shops' stock as grids of cells, "containers" (32 of them). The backpack of the hero with object id n is container n (the local hero in single player: 1), the chest is container 17. An item takes w x h cells; `col` and `row` are its top-left cell, counted from 0. Everything that changes an inventory works in single player (`gear.world.can_change()`) and, in a network game, on the local hero's backpack and the chest (`can_change()` below); the calls go through the game's own inventory and object code, so the cells, the items' owners and the object lists stay as when the player moves an item. `export` copies an item to bytes (its type and own data: the random properties), `add` makes it again, so that an item can leave the game and come back unchanged (see the `shared-stash` mod).
 
 ### GearContainer
 

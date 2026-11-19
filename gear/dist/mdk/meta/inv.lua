@@ -5,8 +5,9 @@
 --: The game keeps the hero's backpack, the chest and the shops' stock as grids of cells, "containers" (32 of them). The
 --: backpack of the hero with object id n is container n (the local hero in single player: 1), the chest is container
 --: 17. An item takes w x h cells; `col` and `row` are its top-left cell, counted from 0. Everything that changes an
---: inventory works in single player only (`gear.world.can_change()`); the calls go through the game's own inventory
---: and object code, so the cells, the items' owners and the object lists stay as when the player moves an item.
+--: inventory works in single player (`gear.world.can_change()`) and, in a network game, on the local hero's backpack
+--: and the chest (`can_change()` below); the calls go through the game's own inventory and object code, so the cells,
+--: the items' owners and the object lists stay as when the player moves an item.
 --: `export` copies an item to bytes (its type and own data: the random properties), `add` makes it again, so that an
 --: item can leave the game and come back unchanged (see the `shared-stash` mod).
 

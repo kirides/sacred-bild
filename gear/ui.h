@@ -38,7 +38,7 @@ namespace Ui
         // Text
         std::wstring text;
         uint16_t font = 0;
-        uint32_t flags = 0;         // the font's: 1 centered, 4 right, 0x20 curved (see docs/Gear.md)
+        uint32_t flags = 0;         // the font's: 1 centered, 4 right, 0x20 curved (see docs/RE_NOTES.md, "The UI pass, fonts and images")
         uint8_t valign = 0;         // in the height: 0 top, 1 middle, 2 bottom, 3 y is the baseline (vector fonts)
         bool vector = false;        // a vector font (style), drawn for the screen's pixels, instead of game font `font`
         Text::Style style;

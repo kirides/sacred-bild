@@ -8,8 +8,7 @@ this page says what the engine does, what each setting touches, and what was tes
 Addresses are the English GOG `Sacred.exe` (the signatures in `gear/game/gear_sigs.inc` find the same code in other
 builds). They were read from the decompile (`B:\DevDrive\sources\decomp-sacred`) and checked against
 [SacredEngineRemake](https://github.com/Aytackydln/SacredEngineRemake), whose "Gold" addresses are the same as ours; its
-`Sacred.Core/Loot` classes are a faithful description of the same code. (The C++ reconstruction of the game that John pointed to,
-`sacred-decomp`, does not cover loot.)
+`Sacred.Core/Loot` classes are a faithful description of the same code.
 
 ## Where drops are decided
 
@@ -19,7 +18,7 @@ it only relays the objects. A creature is simulated by its owner client (the hos
 in a game the host started), and that client runs the loot function when the creature dies and sends the new item objects to the others.
 So the hooks live in `SacredGear.dll` inside `sacred.exe` and the mod must be on the machine that owns the creature (the host, for
 most monsters); a mod on a pure client changes nothing for monsters it does not own. GameServer mods (see
-[GearServerMods](GearServerMods.md)) are not needed for drops.
+[Sacred Gear in network games](GearMultiplayer.md)) are not needed for drops.
 
 ## The engine's drop code (ENG addresses)
 
@@ -94,8 +93,7 @@ source that dropped a rune or jewellery). Container loot (`0x5D57C0`) shares the
   authored potions of a forced roll; weights x25 on the qualities 1 .. 4 move their share from 7% to 89% and back when cleared; the veto, the replaced item type; the fair generator, a Lua
   generator (0.999 always fails every chance roll: no drops), the seed repeating the generator's numbers (and, in a fresh process, the same 600-roll run: 122 picks, 3507 draws, twice);
   the fair generator's uniformity (chi-square of 200000 draws in 100 buckets). With `special0` / `special1` at x1000 the items on the ground afterwards were
-  rare (rarity 13 / 14) and unique (rarity 15) for `special0` and set items for `special1`.
-  Result of the last run: 31 passed, 0 failed (also `selftest`: 12 passed, 0 failed, with the new constant handling in place).
+  rare (rarity 13 / 14) and unique (rarity 15) for `special0` and set items for `special1`. 31 checks.
 * Not tested: a network game (a LAN host rolling for monsters a client killed, two machines), the container and the other two rarity paths
   in play (they are redirected and checked at install: each `call` is verified to target the engine's own `rand` / range function before it is patched),
   Sacred ReBorn.

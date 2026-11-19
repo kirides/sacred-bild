@@ -107,18 +107,20 @@ Reverse engineering helpers (how addresses and offsets were found):
 
 ## Game-launch lock
 
-Several agents share the game folders. Launches of `Sacred.exe` / `SacredReborn.exe` run in parallel: each gets a unique `-gear-instance=NAME`, and Gear writes its outputs to `GearAutomation\NAME\`. What still collides is copying DLLs and mods into the game folder (a running game holds them, and one agent would overwrite another's build), so that step goes through the machine-wide lock `tools/game-lock.ps1`. The lock is one file, `%ProgramData%\sacred-bild\game.lock` (override: `-LockPath` or `SACRED_GAME_LOCK`), holding the owner's `-Id` (unique text per agent, e.g. `agent-uitest-1`), PID and start time. It is created atomically, waiters log the wait every 5 s.
-
-Hold the lock only for the copy, then release it before launching:
+Several agents share the game folders. Launches run in parallel (each with its own `-gear-instance=NAME`, see
+[Parallel runs](Gear.md#parallel-runs)); only copying DLLs and mods into a game folder collides, so that step takes the
+machine-wide lock `tools/game-lock.ps1` (`%ProgramData%\sacred-bild\game.lock`; override with `-LockPath` or
+`SACRED_GAME_LOCK`). Hold it only for the copy:
 
     powershell -NoProfile -File tools\game-lock.ps1 acquire -Id <agent-id>
     ... copy ddraw.dll / SacredGear.dll / mods ...
     powershell -NoProfile -File tools\game-lock.ps1 release -Id <agent-id>
     Sacred.exe -gear-instance=<agent-id> ...
 
-Or in one step: `powershell -NoProfile -File tools\game-lock.ps1 run -Id <agent-id> -- <copy command> [args]` (acquires, runs, releases, exits with the command's exit code).
-
-`status` shows the holder. `release` refuses (exit 3) if another id holds it; `-Force` overrides. Acquire exits 2 on timeout (`-TimeoutSeconds`, default 3600). A lock is stale and taken over after `-MaxAgeMinutes` (default 30), or when its owner PID is gone (`run` records the wrapper's PID; with `acquire` pass `-OwnerPid` of a long-lived process, otherwise only the age applies). Always release.
+or `game-lock.ps1 run -Id <agent-id> -- <copy command> [args]` (acquires, runs, releases, exits with the command's exit
+code). `status` shows the holder; `release` refuses (exit 3) if another id holds it, `-Force` overrides; `acquire`
+exits 2 on timeout (`-TimeoutSeconds`, default 3600). A lock is taken over after `-MaxAgeMinutes` (default 30) or when
+its owner PID is gone (`run` records its own PID; with `acquire` pass `-OwnerPid`).
 
 ## Build
 
@@ -138,3 +140,93 @@ vcpkg builds SDL3 with its gamepad support only (`triplets/x86-windows-static.cm
 For development, symlink `ddraw.dll`/`ddraw.pdb` in the game folder to the build output instead of installing.
 `.github/workflows/` builds every push and pull request; pushes to `main` publish a nightly prerelease, `v*` tags a
 release.
+
+## Sacred Gear
+
+Sources are in `gear/`. Sacred Gear links the code it shares with SacredBild (log, patches and hooks, signature search)
+from the `sacred_core` library. Building: part of the normal build (`out/build/msvc-x86/RelWithDebInfo/SacredGear.dll`;
+`-DSACREDGEAR=OFF` leaves it out); vcpkg provides LuaJIT, statically linked. The engine facts it relies on are in
+[RE notes](RE_NOTES.md#objects-items-saving-and-the-ui-pass-sacred-gear).
+
+| Path | What it is |
+|---|---|
+| `gear/main.cpp` | DLL entry: one instance per process, signatures, hooks; headless in `gameserver.exe` (file overlay only) |
+| `gear/lua_host.*` | The LuaJIT state on the engine thread, native functions for the kernel, time budget |
+| `gear/lua/kernel.lua` | The trusted Lua side (embedded as a resource): manifests, load order, sandboxes, events, table views, the mod catalog (settings, key binds, live load and unload, `gear_mods.json`) |
+| `gear/lua/modmanager.lua` | The Mods screen, loaded as the mod `gear-mods`; the only mod that gets the kernel's `admin` table |
+| `gear/lua/*.lua` | Libraries shipped in the DLL (`fmt`, `lookup`, `store`, `toast`, ...) |
+| `gear/hooks.*` | The engine hooks: the per-frame tick (the game's per-frame zoom function: anything replacing that call must still let it run) |
+| `gear/world.*`, `party.*`, `inventory.*` | Objects through the game's object manager; companions; containers and item export |
+| `gear/ui.*`, `itemicon.*`, `replace.*` | Mod drawing (draw commands, the hooks in the UI pass, Direct3D 7 quads with the game's states saved and restored, fonts and UI images, window and UI state queries); item icons; replaced windows |
+| `gear/pickup.*`, `drops.*` | Pickup rules; drop hooks ([Gear drops](GearDrops.md)) |
+| `gear/overlay.*` | The file overlay and delta patches |
+| `gear/netmsg.*`, `gear/realm.*` | Custom net messages; the lobby host and port of the network menu |
+| `gear/chat.*`, `input.*`, `padnav.*`, `itemtip.*`, `text.*`, `gamecfg.*`, `sitehook.*` | Chat lines; remapping the game's keys; the controller on mod UI; item tooltips; game text; `Settings.cfg`; engine hook sites (`gear.hooks`) |
+| `gear/save.*`, `savegames.*` | Saving and loading; the savegame list and per-savegame mod data |
+| `gear/keyblock.*`, `gear/pipe.*` | The keyboard kept from the game while a screen captures it; named pipe clients |
+| `gear/automation.*` | Automation: options, input isolation, UI state, savegame loading, screenshots |
+| `gear/tables.*` | The engine's data tables, read in place with bounds and fault checks |
+| `gear/game/gear_addr.h`, `gear_sigs.inc` | The sacred.exe addresses Sacred Gear uses; their signatures (generated by `tools/gen_gear_sigs.py`) |
+| `gear/meta/*.lua` | The LuaLS annotations of the API: the source of `docs/GearApi.md` and of the MDK |
+| `gear/mdk/`, `gear/dist/mdk/` | The MDK's own files (README, template, tools); the generated kit (committed) |
+| `gear/examples/`, `gear/tests/kernel_test.lua` | Example mods and automation tests; the kernel's tests with the native side mocked (`luajit gear/tests/kernel_test.lua`) |
+
+**With SacredBild.** `ddraw.dll` exports `SacredBild_UiPushFrame(window, confine)`, `SacredBild_UiPopFrame()`,
+`SacredBild_UiScreenBounds(float[4])`, `SacredBild_UiSetWindowFrame(slot, x, y, set)`,
+`SacredBild_UiGetWindowFrame(slot, float*, float*)`, `SacredBild_UiPlacement(float[3])` (screen pixels per layout unit
+and the frame's screen origin: vector text is rasterized for it, rectangles and images snap to its pixels),
+`SacredBild_UiGetWindowBounds(slot, float[4])` (where a window drew in the last frame) and
+`SacredBild_UiSetCursorFilter(fn(x, y))` (Gear tells where mod UI lies; SacredBild hides the cursor from the game's UI
+reads there and blocks the world pick). Gear draws a command with `window` in that window's UI frame and the others in
+the unconfined canvas; game windows are moved by giving them a UI frame of their own. The mouse wheel over mod UI comes
+through SacredBild's window procedure (also the controller's right stick), without SacredBild through a message hook
+on the game window's thread. Sacred Gear exports `SacredGear_IsolatedForeground()` for isolated automation runs.
+Without SacredBild the layout is drawn as the game draws it and game windows stay where they are.
+
+### The Lua API annotations
+
+The annotations in `gear/meta/*.lua` are part of the API: a change to what the Lua side offers is not done until
+they say so.
+
+1. Change the code (`gear/lua/kernel.lua`, and the native tables in `gear/lua_host.cpp`).
+2. Change the matching annotation: a new function gets a description, `---@param` and `---@return` lines; a new
+   field a `---@field`; a new option goes into the options class of the function; a new event gets a `gear.on`
+   overload and a `GearEventName` entry.
+3. Run `python tools/gen_gear_api_docs.py` (rewrites `docs/GearApi.md`; never edit that file), `python
+   tools/gen_gear_mdk.py` (rewrites `gear/dist/mdk`) and `python tools/check_gear_api.py`.
+
+`check_gear_api.py` reads `kernel.lua` and `lua_host.cpp` as text and compares names both ways (functions, fields,
+events, options, manifest keys); types and signatures are reviewed by hand. It also fails if `docs/GearApi.md` is not
+what the generator produces. If it cannot find a place in the code it expects, the code changed shape: update the check
+rather than silence it. CI runs `gen_gear_mdk.py --check`.
+
+The format:
+
+- One file per area; the list is `FILES` in `tools/gear_meta.py`. Every file starts with `---@meta _`.
+- `-- ## Title` starts a section of the reference; `--: text` lines right under it are the section's introduction (plain
+  comments to LuaLS). Concepts that hold for a whole area go there, not into `docs/Gear.md`.
+- A namespace or object type is a `---@class` followed by a local table (`local GearWorld = {}`); its functions are
+  `function GearWorld.hero() end` (static) or `function Creature:hp() end` (method). The `gear` and `os` globals are
+  `gear = {}` and `os = {}` after their class.
+- A plain comment `-- path gear.world` right above the class's doc block says how it is reached; the reference prints
+  signatures with it (`gear.world.hero()`, `creature:hp()`).
+- Options tables are classes whose name ends in `Opts` (`GearTextOpts`); every `opts.x` the kernel reads must be a field
+  of one, and `GearPickupRules` holds the keys of `pickup_rules`. Enumerated strings are `---@alias` with
+  `---| 'value' # meaning`.
+- Return a value or `nil` and a message as `---@return Creature? creature` and `---@return string? error`.
+
+To check the examples with LuaLS: `lua-language-server --check gear/examples --configpath .luarc.json` from the
+repository root (not part of the build).
+
+### Tools
+
+Python 3 with `pefile` and `capstone`, `SACRED_ENG` as for SacredBild's tools:
+
+| Tool | Does |
+|---|---|
+| `tools/gen_gear_sigs.py` | Writes `gear/game/gear_sigs.inc` from the entries listed in it |
+| `tools/check_gear_overlap.py` | Fails if a Sacred Gear signature window overlaps one SacredBild patches, or the other way round |
+| `tools/check_gear_api.py` | Fails if the annotations and the Lua API disagree, or `docs/GearApi.md` is out of date |
+| `tools/gen_gear_api_docs.py` | Writes `docs/GearApi.md` from `gear/meta/*.lua` and `docs/GearApi.head.md` |
+| `tools/gen_gear_mdk.py` | Writes `gear/dist/mdk` (`--check`: fails if it is stale; `--zip`: the release zip) |
+

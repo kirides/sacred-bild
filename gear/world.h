@@ -105,7 +105,7 @@ namespace World
     {
         uint32_t id = 0;
         uint32_t type = 0;
-        uint8_t kind = 0;           // the type record's +0x2E (docs/Gear.md, "Items")
+        uint8_t kind = 0;           // the type record's +0x2E (docs/RE_NOTES.md, "Items, inventories and pickup")
         uint32_t flags = 0;         // the object's +0x14
         uint32_t typeFlags = 0;     // the type record's +0
         bool onGround = false;      // lying in the world (not in an inventory, not being picked up)

@@ -10,7 +10,7 @@
 #include <cmath>
 #include <cstring>
 
-// Party companions (docs/Gear.md, "Party"; RE notes in docs/RE_NOTES.md, "Party").
+// Party companions (gear.party in docs/GearApi.md; RE notes in docs/RE_NOTES.md, "Party").
 //
 // A network game holds up to 16 heroes (object ids 1..16), each played on the computer whose id the players object
 // keeps as the local one (+0x14); an object ticks (walks, fights, runs its AI) only on the computer whose id is its

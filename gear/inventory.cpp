@@ -12,7 +12,7 @@ namespace
 {
     using namespace Gear;
 
-    // Container layout (docs/Gear.md, "Engine notes"): 0x1180 bytes each; +0x18 + cell * 12 the cells, +0x115C
+    // Container layout (docs/RE_NOTES.md, "Items, inventories and pickup"): 0x1180 bytes each; +0x18 + cell * 12 the cells, +0x115C
     // columns, +0x115E rows, +0x1160 the container's number. A cell: dword item id (on an item's top-left cell),
     // byte flags at +4 (bit 0 taken), at +5 / +6 the item's width / height (its top-left cell) or the column / row of
     // its top-left cell (the others).

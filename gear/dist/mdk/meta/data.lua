@@ -180,8 +180,8 @@ function GearText.get(id) end
 
 -- path gear.files
 --- The file overlay: a mod's own data files served where the game opens the original ones, and the mod's own save folder.
---- Declared in `mods/<id>/overlay.txt` (`game\path = dataile` per line, `saves = save`), read when Sacred Gear starts
---- because the game opens its data files before any Lua runs. See [Gear.md](Gear.md).
+--- Declared in `mods/<id>/overlay.txt` (`game\path = data\file` per line, `saves = save`), read when Sacred Gear starts
+--- because the game opens its data files before any Lua runs. The rules and the patch formats: [Gear.md](Gear.md#replacing-game-files-file-overlay).
 ---@class GearFiles
 local GearFiles = {}
 

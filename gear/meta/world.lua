@@ -124,8 +124,11 @@ function GearWorld.pickup_refused() end
 --- Boss modifiers of one creature (`creature:set_modifiers`). A field left out does nothing.
 --- The health is written into the creature (maximum and current value); the rest is applied by Gear's `damage` hook
 --- on every hit the engine resolves, so it holds for melee, arrows and spells alike as far as they reach the hook.
---- Modifiers exist for this session only, are not saved with a savegame and are forgotten when a savegame is loaded
---- (see docs/Gear.md, "Creature modifiers").
+--- Modifiers exist for this session only: they are forgotten when a savegame is loaded (object ids then mean other
+--- creatures). A savegame written while a boss exists keeps it as a plain strong creature (its boosted maximum and current
+--- health); to keep the boss, store its id, type and `base_hp` in `gear.store.game` and call
+--- `set_modifiers{health = ..., base_hp = ...}` after the load (the world-events mod does). Not available: size, movement
+--- speed and resistances other than `taken`. Test: `gear/examples/bosstest`.
 ---@class GearModifiers
 ---@field health? number Maximum health as a multiple of the creature's own (0.01 to 100000); the creature starts at full health.
 ---@field max_hp? integer Maximum health as an absolute number (wins over `health`).

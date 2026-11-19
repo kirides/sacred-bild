@@ -6,6 +6,8 @@ Target: the English GOG `Sacred.exe`, PE timestamp `0x452F85C7`, image base `0x4
 addresses: around the renderer DE = ENG + `0x130`, elsewhere the offset differs. SacredBild supports both through
 byte signatures (`tools/gen_sigs.py`; `tools/data/addresses.json` lists every patched address in both builds).
 
+Contents: [Big picture](#big-picture), [dxDriver7](#dxdriver7-global-g_pdxdriver--0xcdca1c), [What the game needs from DirectDraw](#what-the-game-needs-from-directdraw-sacredbilds-direct3d-9-backend-srcddraw9), [World view](#world-view-cworldview-vtables-0x89209c-cworldview0-0x8920f8), [Draw calls and batching](#draw-calls-and-batching), [Character skinning](#character-skinning-grannydll-granny-1x), [UI](#ui-cui_control2--cui_window2--cui_manager), [Things that read the back buffer](#things-that-read-the-back-buffer), [Hard-coded 1024x768 elsewhere](#hard-coded-1024x768-elsewhere), [Networking: LAN games](#networking-lan-games), [Networking: game connection and the "data flow"](#networking-game-connection-and-the-data-flow-isdn--lan-setting), [Input, the world pick and the options window](#input-the-world-pick-and-the-options-window-controller), [Objects, items, saving and the UI pass](#objects-items-saving-and-the-ui-pass-sacred-gear), [Language files](#language-files).
+
 ## Big picture
 
 Sacred is *not* a CPU blitter at its core: it renders with **Direct3D 7 (TnL HAL)** through a thin
@@ -328,7 +330,7 @@ texture than the one before, so the game's own batching rarely gets past one qua
 SacredBild batches the world view (`src/render/batcher.*`, active inside `cWorldView0_render`): state calls
 are recorded; at each pretransformed triangle draw the recorded state is compared with the device, and
 draws that match are appended to one pending triangle-list `DrawIndexedPrimitive`. Small textures are used
-through copies in 4096x4096 atlas pages with a one-texel gutter (`src/render/atlas.*`), with texture
+through copies in 8192x8192 atlas pages with a one-texel gutter (`src/render/atlas.*`), with texture
 coordinates remapped, when the draw's coordinates stay within half a texel of the texture. The gutter holds
 the opposite edge for wrap addressing and repeats the edge for clamp/mirror (identical that close to the edge).
 Copies are refreshed when a texture's uniqueness value changes; destroyed textures are noticed through
@@ -336,8 +338,7 @@ private data (`DDSPD_IUNKNOWNPOINTER`). 3D models (strided draws), Clear, EndSce
 draw the pending batch first. Merged draws go out with `D3DDP_DONOTCLIP` (`BatchNoClip`): after merging,
 Direct3D still spent about 20 ns per vertex (200k vertices per zoomed-out frame), and the GPU clips anyway.
 First measurement (1920x1200, zoom 2.0): 9,500 game draws -> ~780 device draws (~390 batches, the rest
-3D model parts), world view 30.5 ms -> 14.5 ms. The frame rate stays at 60 because of DDrawCompat's
-`FpsLimiter = flipstart(60)` in the user's DDrawCompat overlay config.
+3D model parts), world view 30.5 ms -> 14.5 ms.
 
 Profile after batching (2560x1440, zoom 2.0, ~46 fps, render thread): granny.dll 23 %, SacredBild 15 %,
 AMD user-mode driver 12 %, DDrawCompat 10 %, ntdll 9 %, msvcrt 6 % (memcpy), d3dim700 5 %, sacred.exe 16 %.
@@ -369,8 +370,8 @@ AMD user-mode driver 12 %, DDrawCompat 10 %, ntdll 9 %, msvcrt 6 % (memcpy), d3d
   `RecordIndex` puts a `gtl::flat_hash_map` (id -> node) in front, behind a reader/writer lock; it is dropped
   whenever the map's head or size differs from what the index last saw (eviction, clear, new object).
 - `0x66FA00`/`0x66FA10` wrap `WaitForSingleObject`/`ReleaseMutex` on kernel mutexes (~2 %).
-- With two 4096 atlas pages, ~1,100 batches per frame ended on a switch between the pages (430 textures per
-  frame do not fit one page): pages are 8192 now.
+- Atlas pages are 8192 wide: with 4096 pages, ~1,100 batches per frame ended on a switch between pages (~430
+  textures per frame do not fit one).
 
 Model batching (`BatchModels`): untransformed draws (characters FVF `0x112`/`0x152`, shadows `0x142`,
 ~400 per zoomed-out frame) are gathered from their strided streams into the batch and drawn from a vertex
@@ -462,7 +463,7 @@ Scene advance (`0x10007080`): clock += seconds; `0x10007420` walks the control l
 control active between the old and new time samples and blends into its skeleton (virtual `+8`), finished ones are
 unlinked and deleted; `0x10007500` poses the skeleton list (scene `+0x10`) with `0x1006DC58` set, then increments
 the pose counter `0x1006DC54`. The game's only call (`0x401953`, in `0x401920`, handle = `this+8`) comes at the
-start of the render loop's frame. Starting it after the world view instead (tried 2026-10-07) does not help: the
+start of the render loop's frame. Starting it after the world view instead does not help: the
 UI draws items as 3D models every frame (`0x40E9C0`, `GrannySetSequencePosition`; taskbar, inventory, equipment,
 cursor) and waited for the whole advance there.
 
@@ -792,11 +793,7 @@ second; SacredBild makes that `[Net] JoinTimeout`, 30 s by default); loading may
   `Sacred::cUI_Options` in `src/sacred/ui.h` (the fourth slider is MINIMAP_ALPHA). The main menu uses the same
   class. Labels are text keys (`UI_CFG_*`) looked up by `0x672740`: id = hash of the key (`0x80EAA0`: upper case,
   `id = (c + id * 0x71) % 0x3B9AC9F7` in signed 32-bit arithmetic, then `& 0x7FFFFFFF`), searched in the text table.
-- UI manager windows: `createGameWindows` (`0x759AF0`) fills `+0x80` taskbar, `+0x84` inventory, `+0x88` equipment,
-  `+0x8C` blacksmith, `+0x90` merchant, `+0x94` megamap, `+0x98` overview map (Tab), `+0x9C` minimap, `+0xA0` stats,
-  `+0xA4` console, `+0xA8` questbook, `+0xB0` escape menu, `+0xB4` purchase, `+0xB8` master, `+0xAC` savegame,
-  `+0xBC` options, `+0xC0` chest, `+0xC4` horse, `+0xCC` net portraits, `+0xD0` character, `+0xD4` cube, `+0xD8`
-  trade. The menus (flags `0x01`) are the windows at `+0x130` .. `+0x140`; `+0x144` is drawn over both when set.
+- UI manager windows: the table of `createGameWindows` (`0x759AF0`) is in [UI_SYSTEM.md](UI_SYSTEM.md#3-the-in-game-window-table).
   Window children: std::vector of controls at `+0x78` / `+0x7C`. Hit tests (`+0x1C`, `0x732420`) add the parents'
   positions (`+0x50`) like `getAbsoluteRect` (`0x732350`).
 - Game menu `cUI_EscMenu` (vtable `0x8964DC`, rect 380,284 264x200): `0x6BBBD0` builds its five entries as
@@ -832,6 +829,96 @@ second; SacredBild makes that `[Net] JoinTimeout`, 30 s by default); loading may
   hit-tests the tabs at their absolute rect moved 4 pixels down, visible or not.
 - The cursor (`cMouse_renderCursor` `0x655450`, image `0x6548A0`): while it carries an item (cursor image flag 2)
   it draws the item's model in 3D at the cursor, projected into the UI's 1024x768 viewport.
+
+## Objects, items, saving and the UI pass (Sacred Gear)
+
+What Sacred Gear's Lua API stands on. The code is in `gear/` (`gear/game/gear_addr.h` lists the addresses).
+
+### Objects and creatures
+
+- Object manager: `*0x00AD5C40`; +4 / +8 the object vector by id (ids 1..16 the heroes). Objects: +0x0C id, +0x10 type, +0x14 flags (0x10 freed or parked), +0x18 position `{u16 sector, i32 x, i32 y, u8 layer}`. Creatures: +0x3B4 experience, +0x3EE gold, +0x3FE level, +0x4D4 / +0x4D8 maximum / current health.
+- `cObjectManager::create` (`0x005FBA40`): thiscall (type, position*, 0, broadcast, x) -> id; the hero is created with (type, pos, 0, 1, 0), the script command CreateNPC with (type, pos, 0, 0, x).
+- `cObjectManager::pop` (`0x005FCCB0`): thiscall (id, position*): places an object (teleport); ParkCreature (0x006073D0) moves one far away with it.
+- Object types: `*0x00AAB5E4` + id * 0x80 (0 < id < 0x7E60): +0x2E kind, +0x37 name.
+- Network game: the byte at `0x0182EBEC` is the engine's network flag (its object and inventory code test it); in a
+  network game (also a host nobody has joined yet) the engine tells the peers about every object it creates or
+  destroys. `gear.world.can_change()` reads it, not the number of heroes.
+- Boss modifiers (`creature:set_modifiers`) write the maximum and current health (`+0x4D4`, `+0x4D8`) and apply the
+  damage factors in Gear's damage hook, which sees every hit the engine resolves through its damage site (damage over
+  time and spell reflection by items change health elsewhere). The engine recomputes a creature's maximum health when
+  it levels up; Gear notices within half a second and writes the boss maximum again (`max_hp_resets`). A savegame keeps
+  a boss as a plain creature with its boosted health.
+
+### Party
+
+- The players object `*0x0182EBE8` +0x14 is the local hero id; an object ticks only where its owner byte (+0x39) is the local id. Switching control (gear/party.cpp) rewrites the owner of everything the old id owned, sets +0x14 and the engine's mouse target (`*0x00AD6EF8` +0x13C; a savegame load resets +0x14 to 1 but not this), swaps the follower vector (+0x39C, 9-byte entries, mercenary leader at +0x251) and rewrites the anti-cheat shadows (`*0x0182EE5C` and `*0x0182EE60`, checked by 0x00590730 against `hero()`: experience, gold, level XOR the hero's byte +0x38 x4 (doubled for the second page), then the dwords from +0x3B0).
+- A hero is created with `create(type 1..9, pos, id, 0, 0)` and finished as 0x0060D9F0 does (+0x18 copied to +0x2B9, 0x0055FC00 (stats, 0, -1)). Stats block +0x3A8: abilities vector at +0x102 (0x16-byte entries: +4 id, +6 level, +7 bonus, +0xA regeneration time, +0x12 seconds left), experience gain 0x0057E160 (stats, amount) levels up. Combo slots: stats +0x10E vector of 0x26-byte entries (+0 id 0x200 + slot, +2 four art ids (dwords), +0x12 four levels, +0x1A regeneration time, +0x22 charge), written by 0x005813D0 (stats, slot, arts*, levels*, id).
+- Orders are 0x44-byte events (vtable 0x0089095C) through the creature's vtable +0x18: move type 4 (+0x14 mode 2, +0x18 x, +0x1C y), attack 7 (+0x18 target, +0x1C x, +0x20 y), ability 0x105 (+0x10 target, +0x14 sector, +0x18 x, +0x1C y, +0x28 100, +0x2C 1 art / 0 spell / 2 combo, +0x30 id, +0x34 layer).
+- 0x006107BC drives object 2 with the arrow keys in single player.
+- Hero files: `0x0061D0F0` (path, id, 0) loads one into hero `id` (it also sets the game byte `0x0182EE50` from the file: Gear keeps the running game's value), `0x0061CD00` (path) writes the controlled hero; header record 0xC3 holds level, class and name.
+- The inventory window's backpack page (cUI_InventoryTab, vtable `0x008965C4`, in the tab panel at window +0x154, pages in its inner window at +0x78) keeps the hero id it shows at +0x154 / +0x158: a switch rewrites it. So does the taskbar (UI manager +0x80, cUI_Taskbar2 `0x00896AC0`: weapon and combat art slots, belt): a switch calls its setHero `0x006E0070` (hero id, 0).
+- Equipped items: creature +0x1A4, 19 dword item ids.
+
+### Items, inventories and pickup
+
+- Items: An item is a `cItemBase` (RTTI type descriptor 0x0094EBC0). Its +0x118 holds a copy of its item record's data; the dword +0x11C: class mask (bits 0-5 Seraphim, Gladiator, Battle Mage, Dark Elf, Wood Elf, Vampiress; 0x400000 Dwarf; 0x800000 Daemon; 0 or 0xC0003F every class) and rarity (bits 16-19). Item records: `*(typeManager + 0x563004) + index * 0x102` (index: the type record's +0x18; count at +0x563000), +0x23 nonzero: set item. Object flags +0x14: 0x02 not in the world (inventory, being picked up), 0x10 freed. Type record +0x00 bit 24: quest item. Gold: types 0x140C-0x140F. Potions: 0x13C0-0x13C8 health / mana / stamina bottles (three sizes each); 0x1411, 0x1416, 0x1430: large, medium, small coloured potions (black, blue, green, red, yellow); which colour does what is not checked. The hero's class is its type (1..9, 7 unused).
+- Inventories: `*0x00AD4448`: the inventory manager (made by 0x005DEBC0), 32 containers of 0x1180 bytes (0x005DEC90 (index) returns one). Container: +0x18 + cell * 12 the cells, +0x115C columns, +0x115E rows, +0x1160 its number; cell = row * columns + column: dword item id on an item's top-left cell (0 on its other cells), byte +4 flags (bit 0 taken), +5 / +6 the item's width / height there, on its other cells the column / row of its top-left cell. Container n (1..16) is the backpack of the hero with object id n; 17 the chest (`UI_WND_CHEST`, 20 x 10, made by 0x006ACB40); 18, 25..27 are small grids (3 x 5, 3 x 5, 7 x 5, 7 x 5) whose use is not examined; 20..22 hold the shops' stock in the test savegame. `0x005DABA0` (thiscall (w, h, slot*, byRow) -> bool) finds room, `0x005D9F00` (slot, id, w, h, notify) puts an item in (takes it out of the world: flag 2 at +0x14; tells the item its owner), `0x005DA630` (id, notify) takes it out of the container (the object stays), `0x00428D60` (stdcall (type, w*, h*)) is a type's size in cells, `0x005FBDB0` (id, 1, 0, 0) destroys an object (the engine does this after taking an item out, e.g. on using a potion, 0x005BFF60). An item (cItemBase) keeps its own state in a vector of 0x82-byte entries (+0x100 begin, +0x104 end, +0x108 capacity), 0x82 bytes at +0x118 (the record copy: class mask and rarity at +0x11C) and a number made from them at +0x120 (0x0042BF20 (record) -> hash, set after reading an item, 0x005C7690); the network read of an item (vtable slot 8, 0x005C7A50) restores exactly the entries and the record. Gear copies those to bytes (type, count, entries, record) and rebuilds an item by creating one of the type (0x005FBA40) and overwriting them (growing the vector with 0x005C9230).
+- Inventory changes in a network game take the engine's announcing variants, the sequence its own loot generation
+  and inventory use: an item made is announced as created (message 0x16F, `create` with broadcast) and then updated
+  with its data (0x16C, `0x005C0810`), put into and taken out of a container with the announcing flag (0x13F / 0x13E)
+  and destroyed with `0x005FBDB0 (id, 1, 0, 0)` (0x167).
+- Item export (`gear.inv.export`): type, entries (the random properties, and one entry per socketed rune) and record
+  (the bonuses, which a socketing has already added): a socketed item is 6 + 130 * entries + 130 bytes; weapons add
+  16 bytes (the four dwords cWeapon3D keeps, copied as the engine's save does) and the export carries the item's own
+  name id (object `+0x3C`). An item made again is byte for byte the same (checked with 55 backpack items, armour with
+  one and two runes, a unique sword with a rune).
+- Item tooltips: The equipment window's hover (0x006B7700) takes the UI manager's reserved popup (u16 at manager +0x54, `0x0075B1E0` (index) -> cUI_Popup*), builds the text with the item's virtual function 17 (thiscall (std::vector<wchar_t>* out, record or 0, 0, 0x5F), ret 0x10; the vector's buffer comes from `0x008321A0` and is freed with `0x0041D3B0` (ptr, count)), then `0x006E8860` (0xA: clamp to the screen and `x` / `y` are the top-left corner), `x` / `y` at popup +0x24 / +0x28, `0x006E6EA0` (0, vector*, 0) sets the text (SacredBild detours its first five bytes: Gear finds it by its body and calls entry = body - 0x36), `0x00732550` (1) shows it. The popup's size from its last layout is at +0x2C / +0x2E. Every tooltip of an item ties the popup to it with `0x006E81C0` (item id: +0x21D0, flag 0x40 at +0x154), called during the window's render each frame the cursor rests on the item (the popup's visible bit is not a hover test: it is not set at tick time): Gear detours that function (`ItemTip::install`) and notes the item id and the frame, which is `ui.hovered_item()` (a tooltip of Gear's own has owner 0 and is not recorded). `0x0054ACC0` (thiscall (creature, item type), ret 4) is the equipment slot of an item type for a creature (0..0x12, 0x13 none; the first free slot of a group: amulets 6 / 7, rings 8..11, weapons 12, others 13): Gear asks it about a copy of the hero with empty slots. Tooltip lines: `\cAARRGGBB` colour, `\wAARRGGBB` wave colour, `\gAARRGGBB` + 8 characters an inline image; label text ids (the same in every language): 1055 price, 1070 level, 1108 "Minimum", 1176 / 1177 expected damage / protection, 1074 attack, 1075 defense. Weapons (cWeapon3D, slot 8 = `0x005CF2D0`) write four dwords (+0x19C, +0x1AC, +0x1A0, +0x1BC) after the common item data; socketing is `0x005BFF60` (item, upgrade id, socket) -> bool.
+- A tooltip for an export needs no registered object: the object factory (`0x00451300`, stdcall (kind, type, id),
+  kind = the type record's `+0x2E`) constructs an item without registering it (no id, no object manager, no sector
+  list, nothing sent), Gear fills in the export's entries, record, weapon extras and name id, asks virtual function 17
+  for the text and deletes it with its destructor (vtable slot 0, flag 1).
+- Item icons: the inventory's `cInventoryEntry_render` (`0x5DC430`) hands the item's Granny model to the model
+  renderer (singleton `0x401660`, draw `0x40E9C0`: `device, model0, model1, x, y, type, scale, 0, flags, 0, 0`,
+  centered at (x, y) of the 1024x768 layout, scale 1 for 32 units a cell). A live item uses its own model state and
+  flags (`+0xB0 & 0xF00000`: the rarity tint). For a type alone the model pair comes from the model loader (`0x004115D0`
+  singleton, `0x00412590 (loader, name, out[2], description)` with the type's model name and description from
+  `0x00426250` / `0x004262B0`) and is released with `0x00403E10`; Gear caches at most 160 types. A type the loader
+  cannot load is drawn from a temporary item put at once into container 31, destroyed after the frame (in a network
+  game local only: `0x005FBDB0 (id, 0, 0, 0)`), at most 48 types a frame.
+- Pickup: `cCreature::pickupItem` 0x00558080 (thiscall (creature, item id) -> 1 / 0, ret 4) is the only code that moves a world item to a creature: the click pickup (0x0053CEB0), the collect behaviour (0x004ECF69, 0x004ED095) and the host's message 0x20C call it and ignore the result. Gear returns 0 there for a blocked item and the local hero. The collect behaviour's filter 0x004EC330 (thiscall (creature, cObject*) -> bool; settings.cfg PICKUPAUTO) returns false for them. A network client sends message 0x141 instead (0x0053A170). Item label colour: 0x005C13C0 (thiscall (item, record or 0) -> ARGB): set green 0xFF15FF25; rarity 0-4 0xFFEFEFEF, 5-11 0xFFA0A0FF, 12-14 0xFFF0E040, 15 0xFFC19A33; class-restricted items take their class's colour unless UNIQUE_COLOR is on.
+
+### Saving and loading
+
+- Saving: The savegame window (0x0071CC90 action 2) sends a 0x24-byte event (vtable 0x00890B38, +4 code 0xF, +8 sub 2, +0xC slot, +0x10 stored in the header, +0x14 capture the picture first, +0x18 check that no trade or chest window blocks (the engine logs AUTOSAVE and refuses otherwise), +0x20 the display name, copied into the engine's 64 bytes at +0x6A) to `cEngine::receiveEvent` (0x00618090, thiscall (event)). It stores the slot at engine +0x68 and sets 0x40 in the engine's flags (+0x54), unless that bit is already set. The render thread loop (0x0060E350) writes `SAVE\GAME%02d.PAK` (0x00619BF0) when `flags & 0xC0` and clears them; 0x200 is a queued load. Byte `*0x0182EBE8` +4 is 0 in single player.
+- The game's Auto-Save: `Settings.cfg` `AUTOSAVE : 1` (options window UI_CFG_AUTOSAVE, 0x0071B5FA; the options map at `0x182EE88` holds the keys, the getter 0x0081B6F0 returns the AUTOSAVE flag). The script interpreter's command 0x79 (0x00475680 case 0x79 -> 0x004AC740) takes the value of the script's last parameter (`+0xA880`, into engine+0xAC, the save header), and if AUTOSAVE is on and `*0x0182EBEC` is 0 (single player) sends event 0xF sub 3 (capture the picture) and then sub 2 with slot 0xFFFFFFFF (the first free `GAMEnn` from 1, 0x00619B80) and +0x18 = 0 (no window check, no name). Saves nothing if bit 0x40 of engine+0x54 is already set.
+- Loading a savegame: The menu (0x0071CC90 action 6) sets the players object's (`*0x0182EBE8`) +0x14 to 1 and posts message 0x8002 (wParam 1, lParam the savegame number) to the game window (`*0x00CDCA1C` +0xB0) (0x007561E0).
+
+### The UI pass, fonts and images
+
+- UI manager: `*0x017EEBBC`: +0x08 flags (1 menus, 4 in game, 0x10 cinematic, 0x200 help), +0x80 the in-game windows, +0x130 the five menu screens, +0x144 the message box. The window table and the rules of drawing and input: [UI_SYSTEM.md](UI_SYSTEM.md).
+- UI pass (mod drawing): `cUI_Manager_render` (0x00758ED0, arg: the IDirect3DDevice7 the UI draws with; SacredBild hooks it) draws pretransformed FVF 0x1C4 quads in the 1024x768 layout. Gear draws from: the popup pass 0x00758DC0 (thiscall (device, flag), "hud", before the original), the call at 0x0075934F (the party arrows 0x006D01F0, cdecl (device), "world", before the original; reached in game only) and the call at 0x00759585 (`call 0x649BE0`, after the escape menu and the message box in every mode, EBX = device; "top"). Every render state, texture stage state and the stage 0 texture it changes are read before and set back after, so the game's state cache (0x00643430) and SacredBild's state shadow stay right; text runs through the game's font with the game's states.
+- Fonts: `*0x00CDCA70`: a vector of `cFont*` by id. Vtable +0x18 `draw(device, cRect*, const wchar_t*, ARGB, flags)` (cRect: i32 x, y, i16 w, h; flags 1 centered and 4 right-aligned in the rect's width, 0x20 curved, 0x200 measure only), +0x28 `lineHeight(ch)`, +0x2C `textWidth(text)` (cFontTTF2 only). Backslash codes in the text: `\c` color, `\g` an inline UI image, `\r` reset, `\w`.
+- UI images: 0x54-byte records from 0x009ECEB0 (ids = indices, 1..1885; 1886 is "INVALID_MAX"): +0x08 the sheet's TGA name, +0x28 texture handle (`cTextureManager_get` 0x0065ED90 on `*0x013E7838`, +0x14 the surface), +0x2C..+0x38 u0, v0, u1, v1 (pixels until 0x761580 normalizes them), +0x4C / +0x50 width / height.
+- Item and object labels shown (Alt held): the flag the label pass sets, `0x00627180`.
+- Clicks on mod UI: the UI manager's event handler (`0x00757840`) reports a left click over a mod region handled, so
+  neither the game's windows nor the world see it, and the release that follows goes to the same region.
+- Replaced windows (`gear.ui.replace_window`): `render` and `receiveEvent` (vtable slots 5 and 4 of the window's
+  class, patched only once a mod claims the window, after SacredBild wrapped them) draw nothing and swallow mouse and
+  key events; named UI events still reach the window, so it opens and closes as usual.
+
+### Online mode and the lobby server
+
+- `gear.mp.mode()` reads the engine's net object: `+0x3818` (the menu's Internet entries were used), `+0x3819` (the
+  announcement's "lobby identity checked" bit), and watches the dispatcher's case for message 0x132 (the character
+  block the game server delivers in Closed Net).
+- `gear.realm` hooks the network menu's steps that read `NETWORK_LOBBY` / `NETWORK_LOBBYPORT` for Closed and Open
+  Internet, and the options object's write-back to `Settings.cfg`, which keeps the game's own values (`gear/realm.*`).
+
+### One game at a time
+
+The start-up (`0x817B30`) creates the mutex `SACRED_INSTANCE`; a second `sacred.exe` that finds it shows "ERROR:
+Sacred is already running" and exits. There is no window class or title check for the main window; the game only
+looks for its gameserver's window class (`SACREDGAMESERVERCLASS`, LAN games).
 
 ## Language files
 

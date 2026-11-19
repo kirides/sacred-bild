@@ -1,7 +1,8 @@
 # Sacred Gear Lua API reference
 
-The reference of everything a mod can call, generated from the LuaLS annotations in `gear/meta/`. The guide to writing
-a mod (install, events, examples, automation, engine notes) is [Gear.md](Gear.md).
+Everything a mod can call, by area: functions, options, fields and events. It is generated from the LuaLS annotations
+in `gear/meta/` (how to change them: `docs/Development.md`, "The Lua API annotations"). The guide to writing a mod
+(install, `mod.lua`, events, the file overlay, the mod manager, automation, examples) is [Gear.md](Gear.md).
 
 ## Editor support (Lua Language Server)
 
@@ -59,40 +60,3 @@ end)
 Not covered by the annotations: values a mod gets from a custom event (`gear.emit` and its handlers take `...`), keys
 of `gear.config` (declare your own with `---@type {my_setting: number}` on a local), and the runtime rule that
 `gear.auto` exists only in automation runs.
-
-## Maintaining the annotations
-
-The annotations are part of the API: a change to what the Lua side offers is not done until `gear/meta` says so.
-
-1. Change the code (`gear/lua/kernel.lua`, and the native tables in `gear/lua_host.cpp`).
-2. Change the matching annotation in `gear/meta/*.lua`: a new function gets a description, `---@param` and
-   `---@return` lines; a new field of a table gets a `---@field`; a new option goes into the options class of the
-   function; a new event gets a `gear.on` overload and a `GearEventName` entry.
-3. Run `python tools/gen_gear_api_docs.py` (rewrites this file) and `python tools/check_gear_api.py` (exit code 0:
-   the annotations and the code agree).
-
-`tools/check_gear_api.py` reads `kernel.lua` and `lua_host.cpp` as text and compares names, both ways: a function,
-field, event, option or manifest key in the code but not in the annotations, and one in the annotations but not in the
-code. It checks names, not types or signatures; those are reviewed by hand. It fails if this file is not what the
-generator produces. If the check cannot find a place in the code it expects, the code changed shape: update the
-check rather than silence it.
-
-The format of `gear/meta/*.lua`:
-
-- One file per area (`gear.lua`, `data.lua`, `world.lua`, `ui.lua`, `ui_widgets.lua`, `auto.lua`; the list is `FILES`
-  in `tools/gear_meta.py`). Every file starts with `---@meta _`.
-- `-- ## Title` starts a section of the reference; `--: text` lines right under it are the section's introduction.
-  Both are plain comments to LuaLS.
-- A namespace or object type is a `---@class` followed by a local table (`local GearWorld = {}`); its functions are
-  `function GearWorld.hero() end` (static) or `function Creature:hp() end` (method). The `gear` and `os` globals are
-  `gear = {}` and `os = {}` after their class.
-- A plain comment `-- path gear.world` right above the class's doc block says how it is reached; the reference prints
-  signatures with it (`gear.world.hero()`, `creature:hp()`).
-- Options tables are classes whose name ends in `Opts` (`GearTextOpts`); every `opts.x` the kernel reads must be a field
-  of one, and `GearPickupRules` holds the keys of `pickup_rules`. Enumerated strings are `---@alias` with `---| 'value' # meaning`.
-- Return a value or `nil` and a message as `---@return Creature? creature` and `---@return string? error`.
-- Descriptions use the same words as [Gear.md](Gear.md); the guide explains, the reference lists.
-
-To check the examples against the annotations with LuaLS: `lua-language-server --check gear/examples
---configpath .luarc.json` from the repository root (needs the language server installed; not part of the build).
-

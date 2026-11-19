@@ -7,7 +7,7 @@ editor help.
 |---|---|
 | `meta/` | LuaLS definitions of the `gear` API: completion, parameter help and type checks in the editor. Generated from the same sources as the API reference. |
 | `docs/GearApi.md` | The API reference. |
-| `docs/Gear.md` | The guide to writing a mod: events, `mod.lua`, automation, engine notes. |
+| `docs/Gear.md` | The guide to writing a mod: `mod.lua`, events, the file overlay, the mod manager, automation. |
 | `example-mod/` | A small mod to start from: `mod.lua` (manifest with a setting and a key bind) and `main.lua` (draws text). `new-mod.ps1` copies it. |
 | `examples/` | Small working mods (`hello`, `uidemo`, `saveinfo`, `hooks`: reacting to other mods' hooks). |
 | `tools/` | `new-mod.ps1` makes a mod from `example-mod`; `pack-mod.ps1` zips a mod for players. |

@@ -1058,7 +1058,7 @@ function creature_mt:class()
     if c then return c.name, c.id end
 end
 
--- Party (gear.party): companion heroes in single player, see docs/Gear.md, "Party". Kept in kernel.party: the main
+-- Party (gear.party): companion heroes in single player, see docs/GearApi.md, "Party". Kept in kernel.party: the main
 -- chunk is at Lua's 200-locals limit.
 kernel.party = {}
 do
@@ -1252,7 +1252,7 @@ do
     end
 end
 
--- Multiplayer (gear.mp). A player is a hero object: slots 1..16 are the heroes' object ids. See docs/GearServerMods.md.
+-- Multiplayer (gear.mp). A player is a hero object: slots 1..16 are the heroes' object ids. See docs/GearMultiplayer.md.
 local mp = {}
 do
 local player_mt = {}
@@ -1518,7 +1518,7 @@ function C.receive(slot, s)
     C.deliver(slot, table.concat(out))
 end
 
--- Net channels (gear.net, docs/GearServerMods.md): channels with a name. Their messages ride on the chat carrier (frames
+-- Net channels (gear.net, docs/GearMultiplayer.md): channels with a name. Their messages ride on the chat carrier (frames
 -- of kind n/k, to a player slot or to slot 0, the game server) and, when the server agrees, on two message types above
 -- the stock range. The handshake is on the chat carrier too: the client announces itself ('h') on entering the game, the server
 -- answers with a query 'q' with the numbers it offers, the client answers 'a' (accepts or declines), and on an accept sends HELLO on the agreed control type;

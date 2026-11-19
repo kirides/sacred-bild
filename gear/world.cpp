@@ -14,7 +14,7 @@ namespace
 {
     using namespace Gear;
 
-    // Object layout (ENG; see docs/Gear.md, "Engine notes"): +0x0C id, +0x10 type, +0x14 flags, +0x18 the world
+    // Object layout (ENG; see docs/RE_NOTES.md, "Objects and creatures"): +0x0C id, +0x10 type, +0x14 flags, +0x18 the world
     // position (WorldPos). Creatures: +0x3B4 experience, +0x3EE gold, +0x3FE level (the "External Data Transfer"
     // dump, 007F49A0, reads them so), +0x4D4 maximum and +0x4D8 current health (the hero portrait, 006D73D0).
     constexpr uintptr_t kId = 0x0C, kType = 0x10, kFlags = 0x14, kPos = 0x18;

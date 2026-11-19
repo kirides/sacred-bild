@@ -1,34 +1,15 @@
-# How Sacred builds, draws, and routes input for its UI
+# Sacred's UI system
 
-Analysis of `Sacred.exe` (Gold, GOG, English, 11,919,360 bytes, image base 0x400000). All addresses are virtual
-addresses in that build. Names are the ones used in `src/sacred/ui.h` / `docs/RE_NOTES.md` where they exist, else the
-class names from the exe's RTTI, else Ghidra's `FUN_<va>`.
+How `Sacred.exe` builds its UI, draws it and routes input to it: the UI manager, the window table, the named UI
+events that open and close windows, the event and draw order, focus and popups. Addresses are the English GOG build's
+(image base 0x400000); names are those of `src/sacred/ui.h` and [RE_NOTES.md](RE_NOTES.md) where they exist, else the
+RTTI class names, else Ghidra's `FUN_<va>`. Confidence: **[V]** read in the decompile, **[I]** inferred from several
+call sites, **[?]** not verified (listed in section 13).
 
-Goal of this document: (a) tell Sacred Gear mods where to hook the existing UI and how to line their own UI up with it;
-(b) give Sacred Bild a source of truth for "which UI is open, drawn, interactive, focused" so it can drop heuristics.
-
-Confidence markers: **[V]** read directly in the decompile, **[I]** inferred from several call sites, **[?]** not
-verified (listed again in the last section).
-
-## 0. Method and a gap in the existing decompile
-
-`B:\DevDrive\sources\decomp-sacred` was exported with Ghidra's default analysis. Ghidra never turned **code that is only
-reached through a vtable** into functions, nor about 1 MB of aligned code in gaps between functions. For the UI this
-meant that the manager's `receiveEvent` (0x757840), almost every window's `render`/`receiveEvent`/`show`, the escape
-handler, etc. were absent from `src/`.
-
-What was added (additive, the Ghidra project was opened `-readOnly`):
-
-| Path in decomp-sacred | Content |
-|---|---|
-| `tools/ExportExtra.java` | Creates functions at vtable targets and 16-aligned code in gaps, decompiles them |
-| `src_extra/<va>>16>/<va>_FUN_<va>.c` | 4,269 more functions (1,082 vtable targets, 3,187 gap functions), 0 failures |
-| `index/functions_extra.csv` | Index of those (`name,va,size,reason,status,source_file`) |
-| `index/vtables.csv` | Every RTTI class: `class, vtable_va, this_offset, slot, target, in_original_export` (2,977 slots) |
-| `index/vtable_targets_missing.txt`, `index/code_gaps_original.txt` | Inputs for the above |
-
-Look a function up in `src/` first, then `src_extra/`. Decompiler output for the new functions is thiscall-annotated
-but, as everywhere in this decompile, the `this` pointer is often shown as an unnamed first parameter or missing.
+Many of these functions are reached only through vtables, which Ghidra's default analysis never turned into functions.
+They are in `src_extra/` of the decompile (`B:\DevDrive\sources\decomp-sacred`, made by `tools/ExportExtra.java`,
+indexed in `index/functions_extra.csv`; every RTTI vtable slot is in `index/vtables.csv`). Look a function up in `src/`
+first, then in `src_extra/`.
 
 ## 1. Architecture in one page
 
@@ -45,7 +26,7 @@ but, as everywhere in this decompile, the `this` pointer is often shown as an un
 * **Window state is a flag word at control `+0x10`**, changed by named **UI events** (kind 5, section 5). A window is
   "open" when bit 0 is set. There is no z-order list: **draw order and event order are hard-coded call sequences** in
   `render` (`0x758ED0`) and `receiveEvent` (`0x757840`), different per mode, and some windows are drawn *alone*.
-* Everything is laid out in a fixed 1024x768 space. Sacred Bild maps that into a canvas (see `RE_NOTES.md`,
+* Everything is laid out in a fixed 1024x768 space. SacredBild maps that into a canvas (see `RE_NOTES.md`,
   "SacredBild UI canvas"); nothing below depends on it.
 
 ## 2. `cUI_Manager` layout
@@ -68,8 +49,8 @@ Offsets from the manager pointer [V unless marked].
 | `+0x124/+0x128/+0x12C` | `std::vector<cUI_Popup*>` (tooltips, hints, NPC dialog). Entry type is `cUI_Tooltip` (vtable `0x896B3C`) |
 | `+0x130..+0x140` | menu screens: `[0]` `cUI_MainMenu` ("UI_MAINMENU", ctor `0x7119B0`), `[1]` `cUI_Character` (character select, `0x70C1D0`), `[2]` `cUI_Options` (`0x716D30`), `[3]` `cUI_Savegame` (`0x71BD40`, load; `+0x154` byte = 0), `[4]` `cUI_Network` (`0x70B1D0`, size 0x178) |
 | `+0x144` | **modal message box** `cUI_BusyDlg` (ctor `0x720540`, 0x644 bytes), exists in every mode |
-| `+0x148` | **keyboard focus**: pointer to the focused control, written by the FOCUS event (section 8). Not in `ui.h` today |
-| `+0x14C` | **embedded** `cUI_TextLines` ("UI_WND_TEXTLINES", ctor `0x722D80`, rect 0,0,1024,768): the scrolling game/system message lines. It is an object *inside* the manager, not a pointer. `ui.h` calls this `other` and types it as a pointer; its first dword is really the vtable |
+| `+0x148` | **keyboard focus**: pointer to the focused control, written by the FOCUS event (section 8); `cUI_Manager::focus` in `ui.h` |
+| `+0x14C` | **embedded** `cUI_TextLines` ("UI_WND_TEXTLINES", ctor `0x722D80`, rect 0,0,1024,768): the scrolling game/system message lines. It is an object *inside* the manager, not a pointer (`cUI_Manager::textLines()` in `ui.h`) |
 | `+0x2E0` | dword, set to 1 by event subtype `0x3E` |
 
 ### Manager flags (`+0x08`)
@@ -301,7 +282,7 @@ at (969, 752).
 6. If `0x40`: the **message box** (`+0x144`) renders on top.
 7. `+0x04` tooltip control: forced visible-flag `0x8000`, rendered, flag restored.
 
-Important consequences for Sacred Bild:
+Important consequences for SacredBild:
 
 * **"visible" is not "drawn" is not "interactive".** While the megamap, savegame, options or character window is up,
   the HUD windows (taskbar, inventory, stats, ...) **keep their visible bit set but are neither drawn nor given
@@ -337,7 +318,7 @@ Bild's own `Overlay::isOpen()` handling in `focus.cpp` is about the OS window fo
 * `popups` vector at `+0x124`: `cUI_Tooltip` objects (`cUI_Popup` in `ui.h`); drawn by `0x758DC0` after the windows,
   **not** part of the event chain; asked by `isCursorOverUi`. Layout (`0x6E7AF0`): centered on x/y, clamped to
   16..1008 x 16..752, or centered on screen by flag.
-* NPC dialog = a popup whose `answers[]` (`+0x217C`) are set; Sacred Bild's `npcDialog()` finds it by scanning the
+* NPC dialog = a popup whose `answers[]` (`+0x217C`) are set; SacredBild's `npcDialog()` finds it by scanning the
   vector for a visible `cUI_Tooltip` with an answer. That is correct but linear and class-name based; a hook on the
   setter (`0x6E6D20`) would give open/close for free.
 * Help screen: flag `0x200` + `showHelp(0x75B4F0)`; the screen id follows the windows (section 7).
@@ -349,69 +330,27 @@ Bild's own `Overlay::isOpen()` handling in `focus.cpp` is about the OS window fo
 sub-screens (`screen` at `+0x158`, section `ui.h`). The message box (`+0x144`) works the same in menus (draw: last;
 events: first).
 
-## 11. Where Sacred Bild is brittle today, and the fix
+## 11. How SacredBild uses it
 
-Observed in `src/game` (all `visible()`-bit based unless noted):
+`UiState` (`src/game/ui_state.*`) mirrors the rules above on the manager's live state: the mode (section 4), the window
+the manager draws alone (section 7), whether a window is actually drawn (`shown`: visible and not hidden by that window),
+the message box (modal), the escape menu, the keyboard focus and text input (section 8), the help screen and the input
+block. The window pointers are read only while manager flag `0x08` is set. The canvas, the HUD anchoring, the
+controller and its D-pad navigation ask `UiState` instead of testing visible bits or rects.
 
-| Code | Heuristic | Failure mode |
-|---|---|---|
-| `ui_canvas.cpp fullScreenWindowOpen` | any `windows[]` entry visible with rect covering 1023x767 | Correct set of windows, but ignores that the *manager* draws only the first exclusive one; fine in practice, would break if a mod window is added |
-| `controller.cpp windowOpen` | visible bit of every window except a hand-picked skip list | Counts HUD windows that are visible but hidden behind an exclusive window; the skip list must be kept in sync by hand |
-| `ui_nav.cpp controls()` | hand-written copy of the draw order (`savegame, options, character, megamap` alone, else all but overviewMap/console) | Drift from the engine; misses that horse/purchase are `render2` windows and that netPortraits/console are not hit-tested |
-| `UiNav::modal()` | message box via `messageBox()` + escape menu visible | Misses the real rule (any visible message box swallows all mouse/key events) only if `messageBox()` differs from `+0x144` |
-| `UiNav::npcDialog()` | scan popups by class name | Works; O(n) per query and relies on RTTI string compare |
-| `controller.cpp detect()` | flags + `engine->flags & loading` + the above | No notion of "hold-off" frames (`DAT_009EC530`), `0x80` input-block, cinematic fade phase `0x20` |
-
-### Proposal: one `UiState` snapshot, taken once per frame
-
-Take it at the entry of `cUI_Manager_render` (already hooked for the canvas) and expose `UiState::get()`:
-
-```cpp
-struct UiState {
-    enum class Mode { None, Cinematic, Menus, Game } mode;     // 0x10 > 0x01 > 0x04, else None
-    bool inputBlocked;        // flags & 0x80, or *(int*)0x9EC530 != 0
-    bool windowsExist;        // flags & 0x08
-    // In game: what the manager will draw this frame (mirrors 0x758ED0)
-    enum class Exclusive { None, Savegame, Options, Character, Megamap } exclusive;
-    uint32_t hudOpen;         // bit per Window enum: visible bit AND not hidden by 'exclusive'
-    bool escapeMenu;          // window(escapeMenu) visible
-    bool messageBox;          // *(cUI_Window2**)(m+0x144) visible  -> modal, swallows kinds 1-4
-    bool helpScreen;          // flags & 0x200
-    cUI_Control2* focus;      // *(m + 0x148)
-    bool textInput;           // focus && (focus->flags & 0x8000) && RTTI is edit control || console visible
-    int  helpScreenId;        // 1..7 as computed in 0x758ED0
-    bool cursorOverUi;        // manager->isCursorOverUi(cursor) -- or the order list in section 6
-    bool heldItem;            // cMouse +0x68 != 0
-};
-```
-
-Rules to implement, all taken from the code above:
-
-1. `windowsExist = flags & 8`; **never dereference `windows[]` unless it is set** (`0x75A250` nulls them on return
-   to the menu; the pointers are valid again only after `0x759AF0`).
-2. `exclusive` = first visible of savegame, options, character, megamap (in that order, as the render does).
-3. `hudOpen[w]` = visible bit && `exclusive == None`.
-4. `modal` = messageBox visible; escapeMenu visible is *semi*-modal (it is checked first among windows for
-   the savegame/options/character cases, but HUD windows below it still draw).
-5. Replace `windowOpen()` / `controls()` / `fullScreenWindowOpen()` with queries on the snapshot, delete the skip lists.
-
-To avoid polling and to react to the exact frame a window changes, hook the `show` slot (vtable slot 9) of the
-classes in the table (or `0x732550`/`0x7325C0`/`0x731CE0`) and bump a generation counter; the render-entry snapshot
-then recomputes only when the counter moved or flags changed.
-
-## 12. Hook points for Sacred Gear (mods)
+## 12. Hook points for mods
 
 | Need | Hook / API | Notes |
 |---|---|---|
-| Know whether a window is open | `UiState` above; stable id = control name (`UI_WND_*`) at `+0x30` | |
+| Know whether a window is open | `UiState` (section 11); stable id = control name (`UI_WND_*`) at `+0x30` | |
 | Open/close a window | build `cEventUI2` (subtype `0x11`/`0x12`/`0x13`, mask 5, target name) and call `manager->vtable[0]` | Same path as the hotkeys |
 | React to open/close | patch vtable slot 9 (`show`) per class, or `0x732550`/`0x7325C0`/`0x731CE0` | Called before the visible bit is set when opening |
 | Intercept all mouse/key input before the UI | `cEngine_receiveEvent` (`0x618090`, already hooked by `ui_canvas`) or `manager->vtable[0]` (`0x757840`) | Return true to swallow. Respect `messageBox` modal and `inputBlocked` |
-| Stop world clicks through a mod panel | hook `cUI_Manager_isCursorOverUi` (`0x75AA90`) and OR in the panel's rect | Already redirected once by Sacred Bild (`0x611EE3`) |
+| Stop world clicks through a mod panel | hook `cUI_Manager_isCursorOverUi` (`0x75AA90`) and OR in the panel's rect | Already redirected once by SacredBild (`0x611EE3`) |
 | Draw a mod panel *under* tooltips, over windows | hook the popup pass `0x758DC0` (draw first, then original) | Skip when `exclusive != None` if the panel is HUD-like |
-| Draw *over everything* in the manager's UI space | after `cUI_Manager_render` (`0x758ED0`) returns | Drawn inside Sacred Bild's UI scope so it follows the canvas |
+| Draw *over everything* in the manager's UI space | after `cUI_Manager_render` (`0x758ED0`) returns | Drawn inside SacredBild's UI scope so it follows the canvas |
 | Draw a text/popup-like element with game styling | push a `cUI_Tooltip` into the popups vector (`+0x124`) and set its text with `0x6E6EA0`/`0x6E6FB0` | Draw-only; no events (not in the dispatch chain) |
-| Align to existing UI | read the window's `x,y,width,height` (absolute for top-level windows) from the table in section 3, anchor to an edge; if Sacred Bild's HUD anchoring is on, use `UiAnchor::frame(window, frame)` so the mod panel moves with the window's frame | Do not hard-code the rects: the constructors move several windows |
+| Align to existing UI | read the window's `x,y,width,height` (absolute for top-level windows) from the table in section 3, anchor to an edge; if SacredBild's HUD anchoring is on, use `UiAnchor::frame(window, frame)` so the mod panel moves with the window's frame | Do not hard-code the rects: the constructors move several windows |
 | Add a *new interactive window* | not possible as a first-class window: the `windows[]` array and the draw/event sequences are fixed. Use the event hook + draw hook above and keep the mod window's state in the mod | A permanent solution would patch the dispatch sequences, which is large |
 | Text focus awareness | `manager+0x148` + flag `0x8000` (section 8) | Needed so mod hotkeys do not fire while the player types in the console |
 | Console | `UI_WND_CONSOLE` (`+0xA4`), toggled by ` or ^; characters go to it only while visible | A mod command line could reuse it by wrapping its `receiveEvent` |

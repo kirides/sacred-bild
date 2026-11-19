@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-// Party companions in single player (docs/Gear.md, "Party"): more heroes of the local player at the hero ids 3..16,
+// Party companions in single player (gear.party in docs/GearApi.md): more heroes of the local player at the hero ids 3..16,
 // the way a network game holds the players' heroes, one of which the player controls at a time. Everything runs on
 // the engine thread (the mods' tick).
 namespace Party
