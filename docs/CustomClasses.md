@@ -81,3 +81,32 @@ Gladiator art 1059 with changed numbers learned and used by a recruited Gladiato
   returns a tint (arts gold, spells pale blue). Copies have their base's icon.
 * Skills have no table in the exe: the skills window computes the name text id as `0x24B7 + skill id` and the description as
   `0x24E9 + skill id`. `gear.classes.skill(id)` / `skills()` return them in the game's language. The game has no skill icons.
+
+## Ability record fields (reverse engineered)
+
+Every byte of the ability records (T1 combat arts, 0x78 bytes; T2 spells, 0x94 bytes) has a name in `gear.data.abilities[id]` now; the old
+`unk_<offset>` names still address the same bytes. The full per-offset table with proof addresses, the per-art meaning of the fields
+(damage factor, radius, duration, push distance ...), the enums and the coverage figures are in the class editor repo:
+`docs/DataFormats.md`, section "Ability field map", and `docs/ability-re/t1.md`, `t2.md` (the editor's `Data/ability-fields.json` holds
+labels, units and formulas per art).
+
+* Both tables are produced by the game's balancing tool (FUN_005E6550). A value at level L is `base + L * per_level` for every pair;
+  the regeneration seconds are `regen_base + L * regen_per_level` divided by the hero's recovery speed. There is no mana.
+* `target_mode` (both tables): `gear.classes.target_modes` = free 0, hostile_creature 1, self_or_friend 2, ground_position 3, corpse 4,
+  self_centered 5 (the loader's ECF_ON* names; consumer FUN_0051D840). `flags` bits: `gear.classes.ability_flags`. Class mask bits:
+  `gear.classes.ability_classes`.
+* T1: `effect_base/_per_level`, `effect2_*`, `param_a_*`, `param_b_*` mean different things per art (weapon damage factor, radius, push
+  distance, duration, percent). T2: `value0..3_*` = physical / fire / magic / poison damage (min = max), `attack_mod_*` ... buff percentages,
+  `param0..2_*` + caps = duration / radius / quantity per spell.
+* Arts 1018, 1019, 1044, 1049..1053 take their numbers from a spell record (engine map 0x4D1E10, `gear.classes.linked_spell(art)`):
+  their own effect fields are ignored. Poison Mist (1052) = spell 12: physical and poison 4 + 5L, duration 24 + L seconds.
+
+### Copies that carry their spell
+
+`copy_ability(alias, base, {spell = {value3_base = 12, param0_base = 40}})` gives an art copy of such an art its own copy of the spell
+record (a spell alias 100..199 that only the art copy uses; `remove_ability` removes both). The handler of Poison Mist asks the spell
+lookup for the constant id 12; a thunk on that lookup answers with the spell alias while a copy is in flight (hero + 0x120 holds the
+art alias), so only the copy sees the edited numbers. Measured in game (Poison Mist, one tick per second): original 85..89 per tick and
+unchanged after the copy exists; copy with value0 and value3 doubled 175..185 per tick; T1 `effect_base` set to 50 changes nothing.
+Hard Hit copy (routed to the Gladiator class) with `effect_base` 1.9 / 3.8: mean damage 204.6 / 385.4 (ratio 1.88 for factor ratio 2).
+Only Poison Mist was run in game; the other spell-linked arts use the same lookup. Details: `docs/ability-re/ingame.md`.
