@@ -141,6 +141,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'drops.select'` | The loot function asks the equipment type picker for an item; a handler may change the category, level or quality, or name the item type. |
 | `'effect.add'` | The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`). |
 | `'damage'` | The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534). |
+| `'ability.hit'` | A hit of a creature that has a combat art or spell (or a copy, ids from 100) in flight: `(attacker, victim, art, damage)`; `art` is the id the hero used (a copy's own id). |
 | `'ability.route'` | A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil. |
 | `'motion.select'` | A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil. |
 | `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
@@ -292,6 +293,7 @@ Forms:
 - `fun(event: 'drops.select', fn: fun(ev: GearDropSelect)): GearHandler`
 - `fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler`
 - `fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler`
+- `fun(event: 'ability.hit', fn: fun(attacker: Creature, victim: Creature, art: integer, damage: integer)): GearHandler`
 - `fun(event: 'ability.route', fn: fun(type: integer, art: integer, vanilla: integer, action: integer, id: integer): integer?): GearHandler`
 - `fun(event: 'motion.select', fn: fun(type: integer, slot: integer, id: integer): integer?): GearHandler`
 - `fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler`
