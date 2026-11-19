@@ -41,6 +41,7 @@ namespace
     constexpr uintptr_t kPlayersLocal = 0x14;
 
     // Creature event types (the 0x44-byte orders a creature's vtable +0x18 takes).
+    constexpr uintptr_t kNameText = 0x3C;    // a hero's name: the text id 0x26FF + its id
     constexpr uint32_t kOrderMove = 4, kOrderAttack = 7, kOrderAbility = 0x105;
 
     bool safeCopy(void* dst, const void* src, size_t size)
@@ -798,6 +799,9 @@ uint32_t Party::importHero(const std::wstring& path, const World::Position& at, 
     // The file may carry another player's id: the companion is the local player's, at its own id.
     writeAt(o, kId, id);
     writeAt(o, kOwner, static_cast<uint8_t>(local));
+    // and its name is the text of its own id (+0x3C, 0x26FF + id): the file's says the id it was saved with, so the
+    // hero would show the name of the hero playing at that id (the overhead label, gear's name()).
+    writeAt(o, kNameText, 0x26FFu + id);
     const char* placeError = nullptr;
     World::teleport(id, at, placeError);
     uint8_t pos[13] = {};
@@ -1308,6 +1312,10 @@ bool Party::setName(uint32_t id, const std::string& name, const char*& error)
     {
         error = "the name must be 1 to 30 characters";
         return false;
+    }
+    if (const uintptr_t o = World::objectAddress(id))
+    {
+        writeAt(o, kNameText, 0x26FFu + id);
     }
     if (!callSetText(0x26FF + id, wide, n))
     {
