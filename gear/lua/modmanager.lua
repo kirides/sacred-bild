@@ -200,10 +200,10 @@ end
 local function draw_list(p)
     local list = admin.entries()
     local x, y, w = p.content_x, p.content_y, p.content_w
-    local head = ui.table('list_head', x, y, w, {columns = {90, '*'}, spacing = {0, 0}, row_height = 20, layer = 'top'})
-    head:row()
-    head:label(1, ('%d installed'):format(#list - 1), {color = DIM})
-    if screen.message then head:label(2, screen.message, {color = AMBER}) end
+    ui.text(('%d installed'):format(#list - 1), x, y, {height = 20, valign = 'middle', color = DIM, layer = 'top'})
+    if screen.message then
+        ui.text(fit(screen.message, w - 120), x + 90, y, {height = 20, valign = 'middle', color = AMBER, layer = 'top'})
+    end
     y = y + 24
     local per_page = rows_fitting(p, y, ROW_STEP, ROW_H)
     local pages = math.max(1, math.ceil(#list / per_page))
@@ -509,14 +509,10 @@ local function draw_keys(p, e)
             end
         end
     end
-    local foot = ui.table('keys_foot', x, footer_y(p), w, {columns = {'*', 200, 80}, spacing = {0, 0},
-        row_height = FOOTER_ITEM_H, layer = 'top'})
-    foot:row()
-    foot:label(1, 'Click a key, then press the new one. Esc cancels, Backspace unbinds.', {size = 11, color = DIM})
-    if pages > 1 then
-        local cx, cy, cw = foot:cell(2)
-        screen.tab_page = paging('kp', cx, cy, cw, screen.tab_page, pages)
-    end
+    local fy = footer_y(p)
+    ui.text('Click a key, then press the new one. Esc cancels, Backspace unbinds.', x, fy,
+        {height = FOOTER_ITEM_H, valign = 'middle', size = 11, color = DIM, layer = 'top'})
+    if pages > 1 then screen.tab_page = paging('kp', x + w - 280, fy, 200, screen.tab_page, pages) end
 end
 
 ---------------------------------------------------------------------------------------------------------------
