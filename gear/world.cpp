@@ -617,6 +617,36 @@ bool World::setHealth(uint32_t id, int32_t health, const char*& error)
     return true;
 }
 
+bool World::setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_t health, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    int32_t oldMax = 0, oldHealth = 0;
+    if (!o || !callIsCreature(o) || !readAt(o, kMaxHealth, oldMax) || !readAt(o, kHealth, oldHealth))
+    {
+        error = "no such creature, or world changes are not possible now";
+        return false;
+    }
+    if (id >= 1 && id <= kHeroIds)
+    {
+        error = "heroes keep the maximum their stats give";
+        return false;
+    }
+    maxHealth = std::max<int32_t>(maxHealth, 1);
+    if (!setCurrent)
+    {
+        health = oldMax > 0 ? static_cast<int32_t>(std::min<double>(static_cast<double>(oldHealth) / oldMax, 1.0) * maxHealth) : maxHealth;
+    }
+    health = std::clamp<int32_t>(health, 1, maxHealth);
+    if (!safeStore(reinterpret_cast<void*>(o + kMaxHealth), &maxHealth, sizeof(maxHealth)) ||
+        !safeStore(reinterpret_cast<void*>(o + kHealth), &health, sizeof(health)))
+    {
+        error = "cannot write the creature";
+        return false;
+    }
+    return true;
+}
+
 bool World::setGold(uint32_t id, uint32_t gold, const char*& error)
 {
     // Only the local hero, also in network games: the engine's setter (ENG 0x580110, what merchants and quests use)

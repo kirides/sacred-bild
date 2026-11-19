@@ -1901,6 +1901,24 @@ namespace
         return 1;
     }
 
+    // native.set_max_health(id, max, hp?) -> true | nil, message: a creature's maximum health, and its current health (default: the
+    // same share of the new maximum as before).
+    int nativeSetMaxHealth(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const lua_Number v = luaL_checknumber(L, 2);
+        const bool haveHp = lua_isnumber(L, 3) != 0;
+        const lua_Number hp = haveHp ? lua_tonumber(L, 3) : 0;
+        const char* error = "no such creature";
+        if (!id || !(v >= 1 && v < 1e9) || !(hp > -1e9 && hp < 1e9) ||
+            !World::setMaxHealth(id, static_cast<int32_t>(v), haveHp, static_cast<int32_t>(hp), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     int nativeSetGold(lua_State* L)
     {
         const uint32_t id = checkId(L, 1);
@@ -3834,6 +3852,7 @@ namespace
             {"teleport", nativeTeleport},
             {"remove", nativeRemove},
             {"set_health", nativeSetHealth},
+            {"set_max_health", nativeSetMaxHealth},
             {"set_gold", nativeSetGold},
             {"party_available", nativePartyAvailable},
             {"party_heroes", nativePartyHeroes},
@@ -4184,7 +4203,7 @@ LuaHost::Answer LuaHost::creatureAbility(int type, int vanilla, int index, int a
     return answer;
 }
 
-LuaHost::Answer LuaHost::damage(int damage, int victimType, int attackerType, int index, int& out)
+LuaHost::Answer LuaHost::damage(int damage, int victimType, int attackerType, int index, int victimId, int attackerId, int& out)
 {
     if (t_inLua)
     {
@@ -4207,9 +4226,11 @@ LuaHost::Answer LuaHost::damage(int damage, int victimType, int attackerType, in
     lua_pushnumber(L, victimType);
     lua_pushnumber(L, attackerType);
     lua_pushnumber(L, index);
+    lua_pushnumber(L, victimId);
+    lua_pushnumber(L, attackerId);
     setBudget(kHookBudget);
     t_inLua = true;
-    const int status = lua_pcall(L, 4, 1, 0);
+    const int status = lua_pcall(L, 6, 1, 0);
     t_inLua = false;
     g_deadline = 0;
     Answer answer = Answer::None;

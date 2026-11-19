@@ -403,6 +403,31 @@ namespace
         }
     }
 
+    // The object id of a creature pointer (+0x0C), 0 for none.
+    int idOfCreature(uintptr_t creature)
+    {
+        __try
+        {
+            return creature ? *reinterpret_cast<const int*>(creature + 0x0C) : 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    int idOfVictim(uintptr_t victim)
+    {
+        __try
+        {
+            return victim ? idOfCreature(*reinterpret_cast<const uintptr_t*>(victim + 4)) : 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
     extern "C" int __cdecl damageHandler(int site, int damage, uintptr_t victim, uintptr_t attacker)
     {
         g_damageCalls.fetch_add(1, std::memory_order_relaxed);
@@ -417,7 +442,7 @@ namespace
             return damage > kMaxDamage ? kMaxDamage : damage;
         }
         int result = 0;
-        switch (LuaHost::damage(damage, typeOfVictim(victim), typeOfCreature(attacker), site, result))
+        switch (LuaHost::damage(damage, typeOfVictim(victim), typeOfCreature(attacker), site, idOfVictim(victim), idOfCreature(attacker), result))
         {
         case LuaHost::Answer::Value:
             g_damageAnswered.fetch_add(1, std::memory_order_relaxed);
