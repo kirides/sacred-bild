@@ -574,7 +574,7 @@ The internal name of type `id` (nil if it has none).
 
 #### `gear.data.object_types:display_name(id) -> string?, string?`
 
-The localized name of item type `id` as the game's tooltip shows it (the first line, colour codes removed), nil if the type is not an item or has no name. Made from a scratch item (nothing is registered or sent); the names are cached.
+The localized name of type `id`: for an item as the game's tooltip shows it (the first line, colour codes removed; made from a scratch item, nothing is registered or sent), for a creature (kind 3) the game's text for its type (nil for the few creature types the game gives no name text, and for types that are neither; fall back to `name`). The names are cached.
 
 - `id`: `integer`
 - returns `name` `string?`

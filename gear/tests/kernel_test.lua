@@ -69,6 +69,7 @@ local native = {
     end,
     table_read = function(name, index, offset, kind)
         if name == 'object_types' and offset == 0x2E then return index == 2 and 3 or 8 end
+        if name == 'object_types' and offset == 0x20 then return index end
         if name == 'ability_t1' or name == 'ability_t2' then
             if offset == 0 then return ({ability_t1 = {1000, 1001}, ability_t2 = {1, 2}})[name][index + 1] end
             local v = ability_store[name .. ':' .. index .. ':' .. offset]
@@ -100,7 +101,7 @@ local native = {
     site_hooks = function() return 7, 5, 1 end,
     site_hook_sites = function() return {{hook = 'level.factor', index = 0, address = 5, calls = 2}} end,
     overlay_served = function(path) return path == 'bin/balance.bin' and 3 or 0 end,
-    text_get = function(id) if id == 8193 then return 'Ability name' end end,
+    text_get = function(id) if id == 8193 then return 'Ability name' end if id == 2 then return 'Goblin-Krieger' end end,
     setting = function(key) if key == 'SR_HD_WIDTH' then return '2560' end end,
     table_string = function(name, index, offset)
         if name == 'object_types' and offset == 0x37 then
@@ -282,6 +283,7 @@ files.a = {
         end)
         record.goblin = gear.data.object_types:find('goblin')
         record.search = #gear.data.object_types:search('o')
+        record.creature_name = gear.data.object_types:display_name(2)
         gear.on('draw', function(state)
             record.draw_mode = state and state.mode
             gear.ui.rect(10, 20, 100, 50, gear.ui.rgba(0, 0, 0, 128))
@@ -498,6 +500,7 @@ ok(rec.auto, 'automation for a mod that asks for it')
 ok(rec.auto_instance == 'test', 'gear.auto.instance')
 ok(rec.goblin == 2, 'type by name')
 ok(rec.search == 2, 'type search')
+ok(rec.creature_name == 'Goblin-Krieger', 'display_name of a creature type is the game text of its resource id: ' .. tostring(rec.creature_name))
 
 
 -- The ability tables, gear.text and gear.settings (mod ab). Its globals are reached through a handler's environment.
