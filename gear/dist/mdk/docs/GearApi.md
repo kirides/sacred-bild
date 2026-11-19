@@ -4389,7 +4389,7 @@ Includes everything of `GearUiTableCellOpts`.
 |---|---|---|
 | `step` | `number` |  (optional) |
 | `format` | `string\|false` |  (optional) |
-| `value_width` | `number` | The room kept for the number at the cell's right end (default 44). (optional) |
+| `value_width` | `number` | The room kept for the number at the cell's right end (default 44); not with `width`: the slider is then that wide and the number lies beside it. (optional) |
 
 ### GearUiTableImageOpts
 

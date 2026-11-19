@@ -4169,12 +4169,12 @@ local function make_ui(mod)
         end
 
         -- t:slider(col, min, max, value, opts) -> changed, value. The number (unless opts.format == false) takes
-        -- opts.value_width (default 44) at the cell's right end.
+        -- opts.value_width (default 44) at the cell's right end; with opts.width the slider is that wide and the number lies beside it.
         function Table:slider(col, min, max, value, opts)
             local o = self:wopts(col, opts)
             self:measure(col, o, nil, 16)
             local x, y, w = self:place(col, o, nil, 16)
-            if o.format ~= false then w = math.max(10, w - (o.value_width or 44)) end
+            if o.format ~= false and not o.width then w = math.max(10, w - (o.value_width or 44)) end
             return ui.slider(o.id, x, y, w, min, max, value, o)
         end
 
