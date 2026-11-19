@@ -1051,6 +1051,148 @@ bool Party::order(uint32_t id, const Order& o, const char*& error)
     return true;
 }
 
+namespace
+{
+    constexpr uintptr_t kContainerSize = 0x1180, kWeaponSlots = 0xC18, kWeaponActive = 0xD58, kContainerLocked = 0x1162;
+
+    uintptr_t heroContainer(uint32_t id)
+    {
+        uintptr_t inv = 0;
+        if (!Addr::g_pInventory || id >= 32 || !safeCopy(&inv, Addr::g_pInventory.get(), sizeof(inv)) || !inv)
+        {
+            return 0;
+        }
+        return inv + id * kContainerSize;
+    }
+
+    bool callWeaponSwitch(uintptr_t c, uintptr_t container, uint32_t slot, uint32_t main, uint32_t off)
+    {
+        __try
+        {
+            void* cr = reinterpret_cast<void*>(c);
+            void* co = reinterpret_cast<void*>(container);
+            const int16_t kind = Addr::cCreature_weaponKind(cr, 0);
+            uint8_t locked = 0;
+            safeCopy(&locked, reinterpret_cast<const void*>(container + kContainerLocked), 1);
+            if (!(locked & 1))
+            {
+                Addr::cCreature_unequip(cr, 0xC, 1);
+                Addr::cCreature_unequip(cr, 0xD, 1);
+            }
+            Addr::cContainer_selectWeaponSlot(co, slot, 0, 0, 1);
+            safeCopy(&locked, reinterpret_cast<const void*>(container + kContainerLocked), 1);
+            if (!(locked & 1))
+            {
+                if (main)
+                {
+                    Addr::cCreature_equip(cr, 0xC, main, 1);
+                }
+                if (off)
+                {
+                    uint32_t twoWeapons = 0, keep = 0;
+                    safeCopy(&twoWeapons, reinterpret_cast<const void*>(c + 0x1D8), 4);
+                    safeCopy(&keep, reinterpret_cast<const void*>(c + 0x1D4), 4);
+                    if (twoWeapons)
+                    {
+                        Addr::cCreature_equip(cr, 0xC, off, 1);
+                        if (!keep)
+                        {
+                            Addr::cContainer_takeWeapon(co, slot, 1, 0, 1);
+                            uintptr_t m = 0;
+                            if (Addr::g_pObjectManager && safeCopy(&m, Addr::g_pObjectManager.get(), sizeof(m)) && m)
+                            {
+                                Addr::cObjectManager_pop(reinterpret_cast<void*>(m), off, reinterpret_cast<void*>(c + 0x18));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Addr::cCreature_equip(cr, 0xD, off, 1);
+                    }
+                }
+            }
+            if (Addr::cCreature_weaponKind(cr, 0) != kind)
+            {
+                Addr::cCreature_refreshMotions(cr, 1, 0);
+            }
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+}
+
+bool Party::weaponSlots(uint32_t id, WeaponSlots& out)
+{
+    const uintptr_t container = heroObject(id) ? heroContainer(id) : 0;
+    if (!container)
+    {
+        return false;
+    }
+    uint16_t active = 0;
+    if (!readAt(container, kWeaponActive, active))
+    {
+        return false;
+    }
+    out.active = active;
+    for (uint32_t s = 0; s < 5; ++s)
+    {
+        readAt(container, kWeaponSlots + s * 0x18, out.main[s]);
+        readAt(container, kWeaponSlots + s * 0x18 + 0xC, out.off[s]);
+    }
+    return true;
+}
+
+bool Party::useWeaponSlot(uint32_t id, uint32_t slot, const char*& error)
+{
+    const char* why = nullptr;
+    if (!available(why))
+    {
+        error = why;
+        return false;
+    }
+    const uintptr_t c = heroObject(id);
+    const uintptr_t container = c ? heroContainer(id) : 0;
+    WeaponSlots slots;
+    if (!c || !container || !sameOwnerAsLocal(c) || !weaponSlots(id, slots))
+    {
+        error = "not a party hero";
+        return false;
+    }
+    if (slot >= 5 || (!slots.main[slot] && !slots.off[slot]))
+    {
+        error = "that weapon slot is empty";
+        return false;
+    }
+    if (slots.active == slot)
+    {
+        return true;
+    }
+    if (!Addr::cCreature_unequip || !Addr::cCreature_equip || !Addr::cContainer_selectWeaponSlot ||
+        !Addr::cContainer_takeWeapon || !Addr::cCreature_weaponKind || !Addr::cCreature_refreshMotions ||
+        !Addr::g_creatureEventVtable)
+    {
+        error = "the game's weapon slot functions were not found";
+        return false;
+    }
+    // the order the keys send first (the hero's weapon change)
+    uint32_t ev[0x11] = {};
+    ev[0] = static_cast<uint32_t>(Addr::g_creatureEventVtable.address);
+    ev[1] = 0x114;
+    ev[4] = 1;
+    ev[5] = slot;
+    ev[6] = slots.off[slot];
+    ev[7] = slots.main[slot];
+    if (!deliver(c, ev) || !callWeaponSwitch(c, container, slot, slots.main[slot], slots.off[slot]))
+    {
+        error = "the game faulted on the weapon switch";
+        return false;
+    }
+    return true;
+}
+
 bool Party::abilities(uint32_t id, std::vector<Ability>& out)
 {
     out.clear();

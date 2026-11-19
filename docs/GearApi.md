@@ -1413,6 +1413,20 @@ What a hero wears: its equipment slots that hold an item (the game's slot number
 
 - returns `{slot: integer, item: GearItem}[]?`
 
+#### `creature:weapon_slots() -> {active: integer, slots: {main: GearItem?, off: GearItem?}[]}?`
+
+A hero's weapon slots (the taskbar's keys 1-5): which one is active and the weapons in each (1-based; `main`, `off` the main and off-hand items, nil when empty). Nil for other creatures.
+
+- returns `{active: integer, slots: {main: GearItem?, off: GearItem?}[]}?`
+
+#### `creature:use_weapon_slot(n) -> boolean?, string?`
+
+Takes up the weapons of weapon slot `n` (1-based), as the keys 1-5 do for the hero you play: the old ones go back to their slot. For party heroes (single player).
+
+- `n`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:carried() -> {slot: integer, item: GearItem}[]?`
 
 What any creature carries in its equipment slots (0 to 18): monsters, mercenaries and heroes alike. A monster holds the gear that the Disarming skill takes from it there. Nil if the creature is gone.

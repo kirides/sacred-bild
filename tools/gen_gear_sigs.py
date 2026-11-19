@@ -224,6 +224,20 @@ GEAR = [
     # 0x44-byte events of this class through its vtable +0x18. The anti-cheat shadows (0x590730 checks them against
     # hero()) are two pages of XOR-keyed copies of experience, gold, level and the stats block.
     ('cStats_addExperience', 0x0057E160, 'func'),
+    # The weapon slots (keys 1-5, the taskbar's 0x6E1690): a hero's container (the inventory manager's, as its backpack)
+    # keeps them at +0xC18 + slot * 0x18 (+0 main hand, +0xC off hand: item ids), the active one at +0xD58. Switching
+    # sends the hero an order 0x114, takes the old weapons off (unequip, thiscall (creature, equipment slot 12 / 13, 1),
+    # ret 8), makes the slot active (thiscall (container, slot, 0, 0, 1), ret 0x10) and puts the new ones on (equip,
+    # thiscall (creature, equipment slot, item, 1), ret 0xC); a two-weapon hero (+0x1D8) takes the off-hand weapon in
+    # slot 12 too and, unless +0x1D4, out of the container (thiscall (container, slot, 1, 0, 1), ret 0x10) into the
+    # world at its feet. A changed weapon kind (0x546F80, thiscall (creature, 0) -> short) refreshes the motions
+    # (0x54E6D0, thiscall (creature, 1, 0), ret 8). Container +0x1162 bit 0: locked (nothing is equipped then).
+    ('cCreature_unequip', 0x00556A30, 'func'),
+    ('cCreature_equip', 0x00555E00, 'func'),
+    ('cContainer_selectWeaponSlot', 0x005D9860, 'func'),
+    ('cContainer_takeWeapon', 0x005D8730, 'func'),
+    ('cCreature_weaponKind', 0x00546F80, 'func'),
+    ('cCreature_refreshMotions', 0x0054E6D0, 'func'),
     # A stats block works out the combat values anew (thiscall (stats, 0, 1), ret 8): zeroes the resistances, damage
     # bonuses and factors (floats at +0x66 .. +0xF2) and adds up level, items and buffs. Gear buffs add theirs after it.
     ('cStats_recalc', 0x005796A0, 'func'),

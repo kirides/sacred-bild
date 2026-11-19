@@ -2347,6 +2347,41 @@ namespace
         return 1;
     }
 
+    // native.party_weapon_slots(id) -> active (0-based), {{main, off}...} | nil
+    int nativePartyWeaponSlots(lua_State* L)
+    {
+        Party::WeaponSlots w;
+        if (!Party::weaponSlots(checkId(L, 1), w))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, w.active);
+        lua_createtable(L, 5, 0);
+        for (int i = 0; i < 5; ++i)
+        {
+            lua_createtable(L, 2, 0);
+            lua_pushnumber(L, w.main[i]);
+            lua_rawseti(L, -2, 1);
+            lua_pushnumber(L, w.off[i]);
+            lua_rawseti(L, -2, 2);
+            lua_rawseti(L, -2, i + 1);
+        }
+        return 2;
+    }
+
+    // native.party_use_weapon_slot(id, slot 0-based) -> true | nil, message
+    int nativePartyUseWeaponSlot(lua_State* L)
+    {
+        const char* error = "not a party hero";
+        if (!Party::useWeaponSlot(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     int nativePartyShare(lua_State* L)
     {
         Party::setExperienceShare(luaL_checknumber(L, 1), luaL_optnumber(L, 2, 0));
@@ -4387,6 +4422,8 @@ namespace
             {"party_import", nativePartyImport},
             {"party_export", nativePartyExport},
             {"party_share", nativePartyShare},
+            {"party_weapon_slots", nativePartyWeaponSlots},
+            {"party_use_weapon_slot", nativePartyUseWeaponSlot},
             {"buff_apply", nativeBuffApply},
             {"buff_remove", nativeBuffRemove},
             {"buff_list", nativeBuffList},
