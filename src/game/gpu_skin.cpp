@@ -127,7 +127,9 @@ namespace
         uint32_t frame = 0;                     // presented frames
         std::unordered_map<const void*, uint32_t> lastDrawn;
         // D3DStats, this frame and summed up between reports.
-        std::unordered_set<const void*> posed, drawn;
+        // posed: skeleton -> its bone count when posed (a skeleton can be freed before the frame ends: never read it later)
+        std::unordered_map<const void*, uint32_t> posed;
+        std::unordered_set<const void*> drawn;
         uint64_t posedBones = 0, skippedBones = 0;
         uint32_t skipped = 0, onDemand = 0;
         int64_t poseTicks = 0;
@@ -172,9 +174,13 @@ namespace
                     ++s.skipped;
                     s.skippedBones += field<uint32_t>(skeleton, Skeleton::boneCount);
                 }
-                else if (s.posed.insert(skeleton).second)
+                else
                 {
-                    s.posedBones += field<uint32_t>(skeleton, Skeleton::boneCount);
+                    const uint32_t bones = field<uint32_t>(skeleton, Skeleton::boneCount);
+                    if (s.posed.emplace(skeleton, bones).second)
+                    {
+                        s.posedBones += bones;
+                    }
                 }
             }
         }
@@ -616,12 +622,12 @@ void GpuSkin::onFrame()
     s.skippedBonesTotal += s.skippedBones;
     s.onDemandTotal += s.onDemand;
     s.poseTicksTotal += s.poseTicks;
-    for (const void* skeleton : s.posed)
+    for (const auto& [skeleton, bones] : s.posed)
     {
         if (!s.drawn.contains(skeleton))
         {
             ++s.undrawnTotal;
-            s.undrawnBonesTotal += field<uint32_t>(static_cast<const uint8_t*>(skeleton), Skeleton::boneCount);
+            s.undrawnBonesTotal += bones;
         }
     }
     s.posed.clear();
