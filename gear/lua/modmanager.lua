@@ -261,11 +261,25 @@ local function process_typing(max_length)
     return changed
 end
 
+-- The game's own names in a label: `{ability:N}` becomes the name of combat art / spell N in the game's language.
+local function game_names(text)
+    if type(text) ~= 'string' or not text:find('{ability:', 1, true) then return text end
+    return (text:gsub('{ability:(%d+)}', function(n)
+        local rec = gear.data and gear.data.abilities and gear.data.abilities[tonumber(n)]
+        local name = rec and rec.name_text and gear.text and gear.text.get(rec.name_text)
+        return name or ('#' .. n)
+    end))
+end
+
 local function setting_row(m, d, x, y, w)
     local id = 's:' .. m .. ':' .. d.id
     local value = admin.get(m, d.id)
-    local label = d.label .. (d.restart and '  (after restart)' or '')
-    ui.label(id .. '#l', label, x + 6, y, {tooltip = d.tooltip, height = 24, valign = 'middle', layer = 'top'})
+    local label = game_names(d.label) .. (d.restart and '  (after restart)' or '')
+    -- a label longer than its column is cut (the whole of it in the tooltip), so it never runs into the control
+    local shown = fit(label, 278)
+    local tip = game_names(d.tooltip)
+    if shown ~= label then tip = label .. (tip and ('\n' .. tip) or '') end
+    ui.label(id .. '#l', shown, x + 6, y, {tooltip = tip, height = 24, valign = 'middle', layer = 'top'})
     local cx = x + 290
     local changed, nv = false, value
     if d.type == 'bool' then
@@ -348,6 +362,8 @@ local function setting_pages(defs)
                 add({header = d.section})
             end
         end
+        -- a setting's note: a line of explanation above it (for a section, on its first setting)
+        if d.note then add({note_row = game_names(d.note)}) end
         add(d)
     end
     return pages
@@ -370,6 +386,9 @@ local function draw_settings(p, e)
             ui.text(item.header, x + 2, ry + 2, {size = 13, bold = true, color = C.accent, height = 24, valign = 'middle', layer = 'top'})
             ui.rect(x + 2 + text_w(item.header, {size = 13, bold = true}) + 8, ry + 13, w - text_w(item.header, {size = 13, bold = true}) - 14, 1,
                 C.edge_dim, LAYER)
+        elseif item.note_row then
+            ui.text(fit(item.note_row, w - 12, {size = 12}), x + 6, ry + 2, {size = 12, color = C.dim or 0xFFA0A0A0, height = 24,
+                valign = 'middle', layer = 'top'})
         else
             setting_row(e.id, item, x, ry, w)
         end

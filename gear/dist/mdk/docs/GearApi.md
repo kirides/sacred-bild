@@ -2744,7 +2744,7 @@ An entry of `settings` in `mod.lua`. The screen builds its page from these; `gea
 |---|---|---|
 | `id` | `string` | Letters, digits, `_`, `-` and `.`; unique in the mod. |
 | `type` | `GearSettingType` |  |
-| `label` | `string` | Shown in the screen (default: the id). (optional) |
+| `label` | `string` | Shown in the screen (default: the id). `{ability:N}` shows the game's name of combat art or spell N in its language; a label longer than its column is cut (whole in the tooltip). (optional) |
 | `default` | `any` | The default value, of the setting's type (default: false, `min`, the first choice, `''`, opaque white). (optional) |
 | `min` | `number` | For `number` (default 0). (optional) |
 | `max` | `number` | For `number` (default 100). (optional) |
@@ -2753,6 +2753,7 @@ An entry of `settings` in `mod.lua`. The screen builds its page from these; `gea
 | `max_length` | `integer` | For `text`. (optional) |
 | `section` | `string` | A heading: settings in a row with the same section are shown under it. (optional) |
 | `tooltip` | `string` | Shown when the cursor rests on the label. (optional) |
+| `note` | `string` | A line of explanation shown above this setting (on a section's first setting: what the section is about). `{ability:N}` as in `label`. (optional) |
 | `restart` | `boolean` | The mod only reads it at start: the screen says "after restart" (the mod still gets `settings.changed`). (optional) |
 
 ### GearKeyDef
