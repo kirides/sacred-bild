@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "name": "Sacred-Bild",
+  "author": "kirides",
+  "description": "Sacred-Bild and Sacred Gear, the plugins for Sacred Gold. The Gear mods have an index of their own (sacred-gear-mods).",
+  "homepage": "https://github.com/kirides/sacred-bild",
+  "mods": [
+    {
+      "id": "sacred-bild",
+      "kind": "plugin",
+      "path": "",
+      "platforms": [
+        "win"
+      ],
+      "name": "Sacred-Bild",
+      "version": "0.1.0",
+      "author": "kirides",
+      "description": "Sacred Gold on a modern renderer (ddraw.dll): Direct3D 9 output, window scaling, controller support, UDP multiplayer and more.",
+      "tags": [
+        "graphics",
+        "controller",
+        "multiplayer"
+      ],
+      "install": {
+        "files": [
+          "ddraw.dll"
+        ]
+      },
+      "download": {
+        "github": "kirides/sacred-bild",
+        "asset": "SacredBild-v*.zip",
+        "prerelease": true
+      }
+    },
+    {
+      "id": "sacred-gear",
+      "kind": "plugin",
+      "path": "",
+      "platforms": [
+        "win"
+      ],
+      "name": "Sacred Gear",
+      "version": "0.1.0",
+      "author": "kirides",
+      "description": "The Lua mod kit for Sacred Gold (SacredGear.dll). Runs next to Sacred-Bild or on its own; the Gear mods need it.",
+      "tags": [
+        "tools"
+      ],
+      "install": {
+        "files": [
+          "SacredGear.dll"
+        ]
+      },
+      "download": {
+        "github": "kirides/sacred-bild",
+        "asset": "SacredGear-v*.zip",
+        "prerelease": true
+      }
+    }
+  ],
+  "indexes": [
+    {
+      "url": "https://raw.githubusercontent.com/kirides/sacred-gear-mods/main/mod-index.json",
+      "name": "Sacred Gear mods"
+    }
+  ]
+}
