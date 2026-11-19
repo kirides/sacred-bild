@@ -36,6 +36,9 @@ namespace
     decltype(Addr::abilityLookup2)::Ptr g_origLookup2 = nullptr;
     decltype(Addr::abilityUsable1)::Ptr g_origUsable1 = nullptr;
     decltype(Addr::abilityUsable2)::Ptr g_origUsable2 = nullptr;
+    decltype(Addr::abilityLinkedSpell)::Ptr g_origLinked = nullptr;
+    // art alias -> spell alias: the spell record the copy takes its numbers from (see Classes::aliasLink)
+    std::map<uint32_t, uint32_t> g_links;
     decltype(Addr::textResources_get)::Ptr g_origTextGet = nullptr;
 
     // Gear's own texts: three pointers (begin, end, capacity) like the engine's string entries, at stable addresses.
@@ -116,13 +119,77 @@ namespace
         return g_origLookup1(id);
     }
 
-    uint8_t* __cdecl hookLookup2(int16_t id)
+    uint16_t artInFlight(const void* hero)
+    {
+        __try
+        {
+            return *reinterpret_cast<const uint16_t*>(reinterpret_cast<uintptr_t>(hero) + 0x120);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // The spell lookup by id (ENG 004D2310). The handlers of the spell-linked arts (the Dark Elf's Poison Mist ...) do not ask the
+    // art's record which spell it takes: they push the spell's id (12 for Poison Mist) as a constant and call this function from the
+    // handler code (ESI = the hero). So when such a call comes from the hero handlers' code range and the hero has an art alias in
+    // flight (+0x120) that is linked to a spell alias, and the id is the spell its base art takes, the answer is the spell alias.
+    uint8_t* linkedAnswer(const void* hero, int16_t id, uintptr_t ret)
+    {
+        if (ret < 0x4FF0B0 || ret >= 0x520000 || !hero)
+        {
+            return nullptr;
+        }
+        const uint16_t art = artInFlight(hero);
+        std::lock_guard lock(g_aliasLock);
+        const auto link = g_links.find(art);
+        if (link == g_links.end())
+        {
+            return nullptr;
+        }
+        const auto a = g_aliases.find(art);
+        const auto s = g_aliases.find(link->second);
+        if (a == g_aliases.end() || s == g_aliases.end() || g_origLookup1 == nullptr || g_origLinked == nullptr)
+        {
+            return nullptr;
+        }
+        uint8_t* baseRecord = g_origLookup1(static_cast<int16_t>(a->second.base));
+        if (!baseRecord || (g_origLinked(baseRecord, nullptr) & 0xFFFF) != static_cast<uint16_t>(id))
+        {
+            return nullptr;
+        }
+        return recordAt(s->second.which, s->second.index);
+    }
+
+    uint8_t* __cdecl lookup2Impl(const void* hero, int16_t id, uintptr_t ret)
     {
         if (uint8_t* r = aliasRecord(id, 2))
         {
             return r;
         }
+        if (g_haveAliases.load(std::memory_order_acquire) && !g_links.empty())
+        {
+            if (uint8_t* r = linkedAnswer(hero, id, ret))
+            {
+                return r;
+            }
+        }
         return g_origLookup2(id);
+    }
+
+    // cdecl (id): forwards (ESI, id, the return address) to lookup2Impl.
+    __declspec(naked) uint8_t* __cdecl hookLookup2(int16_t id)
+    {
+        __asm
+        {
+            push dword ptr [esp]
+            push dword ptr [esp + 8]
+            push esi
+            call lookup2Impl
+            add esp, 12
+            ret
+        }
     }
 
     // The alias a pool record answers to; 0 for the game's own records.
@@ -165,6 +232,26 @@ namespace
     uint32_t __fastcall hookUsable2(uint8_t* record, void* edx, uint32_t heroType, char flag)
     {
         return usable(g_origUsable2(record, edx, heroType, flag), record, heroType, flag);
+    }
+
+    uint32_t __fastcall hookLinkedSpell(uint8_t* record, void* edx)
+    {
+        const uint32_t vanilla = g_origLinked(record, edx);
+        if (vanilla == 0 || !g_haveAliases.load(std::memory_order_acquire))
+        {
+            return vanilla;
+        }
+        const uint32_t alias = aliasOfRecord(record);
+        if (alias)
+        {
+            std::lock_guard lock(g_aliasLock);
+            const auto it = g_links.find(alias);
+            if (it != g_links.end())
+            {
+                return it->second;
+            }
+        }
+        return vanilla;
     }
 
     const uint8_t* findBase(uint32_t base, int& which)
@@ -214,6 +301,10 @@ bool Classes::installAliases()
     {
         ok = Patch::hook(g_origLookup1, Addr::abilityLookup1, hookLookup1, "abilityLookup1") && ok;
         ok = Patch::hook(g_origLookup2, Addr::abilityLookup2, hookLookup2, "abilityLookup2") && ok;
+    }
+    if (Addr::abilityLinkedSpell)
+    {
+        ok = Patch::hook(g_origLinked, Addr::abilityLinkedSpell, hookLinkedSpell, "abilityLinkedSpell") && ok;
     }
     if (Addr::textResources_get)
     {
@@ -291,12 +382,79 @@ bool Classes::aliasCreate(uint32_t alias, uint32_t base, const char*& error)
 bool Classes::aliasRemove(uint32_t alias)
 {
     std::lock_guard lock(g_aliasLock);
+    g_links.erase(alias);
     return g_aliases.erase(alias) != 0;
+}
+
+bool Classes::aliasLink(uint32_t artAlias, uint32_t spellAlias, const char*& error)
+{
+    std::lock_guard lock(g_aliasLock);
+    const auto a = g_aliases.find(artAlias);
+    if (a == g_aliases.end() || a->second.which != 1)
+    {
+        error = "the art alias does not exist";
+        return false;
+    }
+    if (spellAlias == 0)
+    {
+        g_links.erase(artAlias);
+        return true;
+    }
+    const auto s = g_aliases.find(spellAlias);
+    if (s == g_aliases.end() || s->second.which != 2)
+    {
+        error = "the spell alias does not exist";
+        return false;
+    }
+    g_links[artAlias] = spellAlias;
+    return true;
+}
+
+namespace
+{
+    // The spell alias an art alias is linked to (0: none); `base` becomes the base art id of an alias.
+    uint32_t resolveLink(uint32_t& base)
+    {
+        std::lock_guard lock(g_aliasLock);
+        const auto link = g_links.find(base);
+        if (link != g_links.end())
+        {
+            return link->second;
+        }
+        const auto alias = g_aliases.find(base);
+        if (alias != g_aliases.end())
+        {
+            base = alias->second.base;
+        }
+        return 0;
+    }
+}
+
+uint32_t Classes::linkedSpell(uint32_t base)
+{
+    if (const uint32_t linked = resolveLink(base))
+    {
+        return linked;
+    }
+    if (!Addr::abilityLinkedSpell || !g_origLookup1)
+    {
+        return 0;
+    }
+    __try
+    {
+        uint8_t* record = g_origLookup1(static_cast<int16_t>(base));
+        return record ? (g_origLinked ? g_origLinked(record, nullptr) : 0) & 0xFFFF : 0;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return 0;
+    }
 }
 
 void Classes::aliasClear()
 {
     std::lock_guard lock(g_aliasLock);
+    g_links.clear();
     g_aliases.clear();
 }
 

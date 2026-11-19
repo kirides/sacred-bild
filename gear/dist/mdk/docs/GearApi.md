@@ -689,7 +689,7 @@ Undoes this mod's writes to the ability tables.
 
 Written `ability` in the signatures.
 
-One ability record. Reading a field of a table the ability is not in (or an unknown name) gives nil; writing one is an error, as is writing a value that does not fit the field or the `id`. Both have `id`, `name_text`, `description_text`, `target_mode` and the `unk_` fields; T1 also `effect_base`, `effect_per_level`, `effect2_base` and `effect2_per_level`; T2 also `value0_base` .. `value3_per_level`.
+One ability record. Reading a field of a table the ability is not in (or an unknown name) gives nil; writing one is an error, as is writing a value that does not fit the field or the `id`. Every byte of a record has a name (reverse engineered, docs/CustomClasses.md "Ability record fields"; the editor's data/ability-fields.json has labels, units and formulas per art); the older `unk_<offset>` names still work. A value at level L is `base + L * per_level` for every `*_base` / `*_per_level` pair. Both tables have `id`, `name_text`, `description_text`, `target_mode`, `regen_*`, `class_mask` and `flags`. T1: `effect_base`, `effect_per_level`, `effect2_*`, `param_a_*`, `param_b_*` (what they mean depends on the art), `approach_distance`. T2: the damage pairs `value0..3_*` (= `damage_physical/fire/magic/poison_*`), `attack_mod_*`, `defense_mod_*`, `res_*_*`, `speed_mod_*`, `param0..2_*` and caps.
 
 | Field | Type | |
 |---|---|---|
@@ -700,7 +700,7 @@ One ability record. Reading a field of a table the ability is not in (or an unkn
 | `base` | `integer` | The id of the ability whose code runs (a copy's base; the game's own abilities: their own id). |
 | `name_text` | `integer` | The text id of the name (`gear.text.get`). |
 | `description_text` | `integer` | The text id of the description. |
-| `target_mode` | `integer` | How the ability is aimed (the engine passes it on to the targeting code). |
+| `target_mode` | `integer` | How the ability is aimed: see `gear.classes.target_modes` (0 free, 1 hostile creature, 2 self or friend, 3 ground position, 4 corpse, 5 self centred). |
 | `regen_base` | `number` | The regeneration time in seconds is `regen_base + level * regen_per_level` (T1: f32 at +0x40, T2: whole seconds at +0x3E). |
 | `regen_per_level` | `number` |  |
 | `effect_base` | `number` | T1: the first effect is `effect_base + level * effect_per_level` (level 1..100). |
@@ -715,6 +715,99 @@ One ability record. Reading a field of a table the ability is not in (or an unkn
 | `value2_per_level` | `integer` | T2. |
 | `value3_base` | `integer` | T2. |
 | `value3_per_level` | `integer` | T2. |
+| `icon_frame_a` | `integer` | T1: GUI icon index A (atlas index). |
+| `icon_frame_b` | `integer` | T1: GUI icon index B (atlas index). |
+| `icon_frame_main` | `integer` | T1: GUI icon index (main) (atlas index). |
+| `design_value_j` | `integer` | T1: Spreadsheet column J (unused). |
+| `approach_distance` | `integer` | T1: Approach distance (world units (50 = 1 m)). |
+| `effect_base` | `number` | T1: Effect 1 (base) (depends on the art). |
+| `effect_per_level` | `number` | T1: Effect 1 (per level) (depends on the art). |
+| `effect2_base` | `number` | T1: Effect 2 (base) (depends on the art). |
+| `effect2_per_level` | `number` | T1: Effect 2 (per level) (depends on the art). |
+| `param_a_base` | `integer` | T1: Parameter A (base) (depends on the art). |
+| `param_a_per_level` | `integer` | T1: Parameter A (per level) (depends on the art). |
+| `param_b_base` | `integer` | T1: Parameter B (base) (depends on the art). |
+| `param_b_per_level` | `integer` | T1: Parameter B (per level) (depends on the art). |
+| `class_mask` | `integer` | T1/T2: Class mask. |
+| `flags` | `integer` | T1/T2: Flags. |
+| `icon_frame_normal` | `integer` | T2: Icon frame index (normal) (sprite index). |
+| `icon_frame_hover` | `integer` | T2: Icon frame index (hover) (sprite index). |
+| `icon_frame_pressed` | `integer` | T2: Icon frame index (pressed) (sprite index). |
+| `launch_type` | `integer` | T2: Targeting (launch type). |
+| `cooldown_base` | `integer` | T2: Regeneration time (base) (seconds). |
+| `cooldown_per_level` | `integer` | T2: Regeneration time (per level) (seconds). |
+| `damage_physical_base` | `integer` | T2: Physical damage (base) (damage points). |
+| `value0_base` | `integer` | T2: Physical damage (base) (damage points). |
+| `damage_physical_per_level` | `integer` | T2: Physical damage (per level) (damage points). |
+| `value0_per_level` | `integer` | T2: Physical damage (per level) (damage points). |
+| `value1_base` | `integer` | T2: Fire damage (base) (damage points). |
+| `damage_fire_base` | `integer` | T2: Fire damage (base) (damage points). |
+| `damage_fire_per_level` | `integer` | T2: Fire damage (per level) (damage points). |
+| `value1_per_level` | `integer` | T2: Fire damage (per level) (damage points). |
+| `value2_base` | `integer` | T2: Magic damage (base) (damage points). |
+| `damage_magic_base` | `integer` | T2: Magic damage (base) (damage points). |
+| `damage_magic_per_level` | `integer` | T2: Magic damage (per level) (damage points). |
+| `value2_per_level` | `integer` | T2: Magic damage (per level) (damage points). |
+| `value3_base` | `integer` | T2: Poison damage (base) (damage points). |
+| `damage_poison_base` | `integer` | T2: Poison damage (base) (damage points). |
+| `value3_per_level` | `integer` | T2: Poison damage (per level) (damage points). |
+| `damage_poison_per_level` | `integer` | T2: Poison damage (per level) (damage points). |
+| `attack_mod_base` | `integer` | T2: Attack modifier (base) (percent (buffs) / reduction value (Dread)). |
+| `attack_bonus_base` | `integer` | T2: Attack modifier (base) (percent (buffs) / reduction value (Dread)). |
+| `attack_bonus_per_level` | `integer` | T2: Attack modifier (per level) (percent (buffs) / reduction value (Dread)). |
+| `attack_mod_per_level` | `integer` | T2: Attack modifier (per level) (percent (buffs) / reduction value (Dread)). |
+| `defense_bonus_base` | `integer` | T2: Defense modifier (base) (percent (buffs) / value). |
+| `defense_mod_base` | `integer` | T2: Defense modifier (base) (percent (buffs) / value). |
+| `defense_mod_per_level` | `integer` | T2: Defense modifier (per level) (percent (buffs) / value). |
+| `defense_bonus_per_level` | `integer` | T2: Defense modifier (per level) (percent (buffs) / value). |
+| `res_physical_base` | `integer` | T2: Physical resistance (base) (resistance points). |
+| `resist_physical_base` | `integer` | T2: Physical resistance (base) (resistance points). |
+| `resist_physical_per_level` | `integer` | T2: Physical resistance (per level) (resistance points). |
+| `res_physical_per_level` | `integer` | T2: Physical resistance (per level) (resistance points). |
+| `resist_fire_base` | `integer` | T2: Fire resistance (base) (resistance points). |
+| `res_fire_base` | `integer` | T2: Fire resistance (base) (resistance points). |
+| `res_fire_per_level` | `integer` | T2: Fire resistance (per level) (resistance points). |
+| `resist_fire_per_level` | `integer` | T2: Fire resistance (per level) (resistance points). |
+| `res_magic_base` | `integer` | T2: Magic resistance (base) (resistance points). |
+| `resist_magic_base` | `integer` | T2: Magic resistance (base) (resistance points). |
+| `resist_magic_per_level` | `integer` | T2: Magic resistance (per level) (resistance points). |
+| `res_magic_per_level` | `integer` | T2: Magic resistance (per level) (resistance points). |
+| `res_poison_base` | `integer` | T2: Poison resistance (base) (resistance points). |
+| `resist_poison_base` | `integer` | T2: Poison resistance (base) (resistance points). |
+| `res_poison_per_level` | `integer` | T2: Poison resistance (per level) (resistance points). |
+| `resist_poison_per_level` | `integer` | T2: Poison resistance (per level) (resistance points). |
+| `speed_mod_base` | `integer` | T2: Speed modifier (base) (percent). |
+| `speed_bonus_base` | `integer` | T2: Speed modifier (base) (percent). |
+| `speed_bonus_per_level` | `integer` | T2: Speed modifier (per level) (percent). |
+| `speed_mod_per_level` | `integer` | T2: Speed modifier (per level) (percent). |
+| `mental_regen_bonus_base` | `integer` | T2: Mental regeneration modifier (base) (percent). |
+| `mental_regen_mod_base` | `integer` | T2: Mental regeneration modifier (base) (percent). |
+| `mental_regen_mod_per_level` | `integer` | T2: Mental regeneration modifier (per level) (percent). |
+| `mental_regen_bonus_per_level` | `integer` | T2: Mental regeneration modifier (per level) (percent). |
+| `physical_regen_bonus_base` | `integer` | T2: Physical regeneration modifier (base) (percent). |
+| `physical_regen_mod_base` | `integer` | T2: Physical regeneration modifier (base) (percent). |
+| `physical_regen_bonus_per_level` | `integer` | T2: Physical regeneration modifier (per level) (percent). |
+| `physical_regen_mod_per_level` | `integer` | T2: Physical regeneration modifier (per level) (percent). |
+| `param0_base` | `integer` | T2: Parameter 0 (base) (spell dependent (see spell notes)). |
+| `value_a_base` | `integer` | T2: Parameter 0 (base) (spell dependent (see spell notes)). |
+| `value_a_per_level` | `integer` | T2: Parameter 0 (per level) (spell dependent (see spell notes)). |
+| `param0_per_level` | `integer` | T2: Parameter 0 (per level) (spell dependent (see spell notes)). |
+| `value_b_base` | `integer` | T2: Parameter 1 (base) (spell dependent (see spell notes)). |
+| `param1_base` | `integer` | T2: Parameter 1 (base) (spell dependent (see spell notes)). |
+| `value_b_per_level` | `integer` | T2: Parameter 1 (per level) (spell dependent (see spell notes)). |
+| `param1_per_level` | `integer` | T2: Parameter 1 (per level) (spell dependent (see spell notes)). |
+| `param2_base` | `integer` | T2: Parameter 2 (base) (spell dependent (see spell notes)). |
+| `value_c_base` | `integer` | T2: Parameter 2 (base) (spell dependent (see spell notes)). |
+| `value_c_per_level` | `integer` | T2: Parameter 2 (per level) (spell dependent (see spell notes)). |
+| `param2_per_level` | `integer` | T2: Parameter 2 (per level) (spell dependent (see spell notes)). |
+| `value_a_cap` | `integer` | T2: Parameter 0 cap (same as parameter 0). |
+| `param0_cap` | `integer` | T2: Parameter 0 cap (same as parameter 0). |
+| `value_b_cap` | `integer` | T2: Parameter 1 cap (same as parameter 1). |
+| `param1_cap` | `integer` | T2: Parameter 1 cap (same as parameter 1). |
+| `param2_cap` | `integer` | T2: Parameter 2 cap (same as parameter 2). |
+| `value_c_cap` | `integer` | T2: Parameter 2 cap (same as parameter 2). |
+| `element` | `integer` | T2: Element / school. |
+| `mount_flags` | `integer` | T2: Flags. |
 
 ## Game text (gear.text)
 
@@ -1915,13 +2008,20 @@ The rune items that teach abilities: `{[ability id] = {item type, ...}}`.
 
 #### `gear.classes.copy_ability(alias, base, values) -> GearAbility?, string?`
 
-Makes a copy of an ability: a new ability `alias` with its own record (a copy of `base`'s), which `values` change (the field names of `gear.data.abilities`: `effect_base`, `value0_base`, `name_text` ...). Only combat arts can be copied (bases 1000 to 1999), under an id in 2000 to 4999 (the engine refuses art ids above 5000; a copy of a spell was tried and is not run by the engine). The copy runs the base ability's code (its record keeps the base id, which the class handlers switch on); the hero's abilities, the art window, runes and savegames use the copy's id. `gear.text.add` makes texts for `name_text` and `description_text`. The copies are removed when the mod is switched off.
+Makes a copy of an ability: a new ability `alias` with its own record (a copy of `base`'s), which `values` change (the field names of `gear.data.abilities`: `effect_base`, `value0_base`, `name_text` ...). Only combat arts can be copied (bases 1000 to 1999), under an id in 2000 to 4999 (the engine refuses art ids above 5000; a copy of a spell was tried and is not run by the engine). The copy runs the base ability's code (its record keeps the base id, which the class handlers switch on); the hero's abilities, the art window, runes and savegames use the copy's id. `gear.text.add` makes texts for `name_text` and `description_text`. The copies are removed when the mod is switched off. `values.spell` (a table of T2 field names) changes the spell record of an art whose numbers live in a spell (see `linked_spell`: Poison Mist 1052 takes damage and duration from spell 12): the copy gets its own copy of that spell record, so the original art and spell keep their numbers. (The handlers push the spell id as a constant: Gear answers that lookup with the alias while the hero has the copy in flight. Tested in a game for Poison Mist; the other spell-linked arts use the same lookup but were not tested.)
 
 - `alias`: `integer`
 - `base`: `integer`
-- `values`: `table<string, number>` (optional)
+- `values`: `table<string, number|table<string, number>>` (optional)
 - returns `record` `GearAbility?`
 - returns `error` `string?`
+
+#### `gear.classes.linked_spell(art) -> integer?`
+
+The id of the spell record the game's art `art` takes its numbers from (the engine's map 0x4D1E10: 1018 -> 8, 1019 -> 51, 1044 -> 47, 1049 -> 45, 1050 -> 6, 1051 -> 48, 1052 -> 12, 1053 -> 46), nil for arts that use their own record.
+
+- `art`: `integer`
+- returns `integer?`
 
 #### `gear.classes.remove_ability(alias) -> boolean`
 
