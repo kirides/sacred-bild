@@ -949,3 +949,4 @@ looks for its gameserver's window class (`SACREDGAMESERVERCLASS`, LAN games).
   (lists of text ids, different localization staff) and some data without text (`PAK\motions.pak` 85 bytes and 396
   longer in ENG, `bin\sets.bin` 259 bytes, 4 header bytes of each `startcode.bin`); movies, music, fonts and loading
   screens are the same.
+- A hero's name is the text whose id is at creature +0x3C (0x26FF + its id). A hero file loaded into another id (LOADHERO 0x61D0F0) keeps the id it was saved with there, so it shows that hero's name (overhead label, roster) until +0x3C is set to its own.
