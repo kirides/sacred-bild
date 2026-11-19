@@ -31,6 +31,7 @@ local pickup_published
 local drops_pub = {sim = nil}
 save_block, save_calls, save_results = nil, {}, {}
 net_kills = {}
+created_list, created_active, created_suppressed = {}, false, false
 chat_queue = {}
 hero_saves = {}
 local op_ids, op_ready, op_sent, op_in = {0x1E0, 0x1E1}, false, {}, {}
@@ -97,6 +98,9 @@ local native = {
     level_factor_active = function(v) level_active = v end,
     combat_constant_active = function(v) constant_active = v end,
     creature_ability_active = function(v) ability_active = v end,
+    created_active = function(v) created_active = v end,
+    created_suppress = function(v) created_suppressed = v end,
+    take_created = function() local l = created_list; created_list = {}; return l, 0 end,
     route_active = function(v) route_active = v end,
     motion_active = function(v) motion_active = v end,
     usable_active = function(v) usable_active = v end,
@@ -1409,6 +1413,18 @@ do
         kernel.tick(0.016)
         ok(kills[3] and kills[3].by_local == true and kills[3].killer.slot == 1, 'mp: kill by the local hero')
     end
+        local made = {}
+        local was_suppressed
+        mpapi.on('creature.created', function(ev) made[#made + 1] = ev; was_suppressed = created_suppressed end)
+        ok(created_active == true, 'creature.created: the native recording is on while a mod listens')
+        objects[950] = {id = 950, type = 3, x = 7, y = 8, layer = 0, creature = true, hp = 10, max_hp = 10}
+        created_list[1] = {id = 950, type = 3, x = 7, y = 8, layer = 0}
+        kernel.tick(0.016)
+        ok(was_suppressed == true and created_suppressed == false, 'creature.created: creations made by the handlers are not recorded (no loop), recording resumes after')
+        ok(#made == 1 and made[1].id == 950 and made[1].type == 3 and made[1].x == 7 and made[1].y == 8 and made[1].creature.id == 950, 'creature.created: the event carries the creature, type and position')
+        kernel.tick(0.016)
+        ok(#made == 1, 'creature.created: each creation is delivered once')
+        objects[950] = nil
     hero_id, objects[1], objects[2], objects[900] = saved_hero, saved1, saved2, nil
 end
 
