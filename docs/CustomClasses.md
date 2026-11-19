@@ -81,3 +81,6 @@ Gladiator art 1059 with changed numbers learned and used by a recruited Gladiato
   returns a tint (arts gold, spells pale blue). Copies have their base's icon.
 * Skills have no table in the exe: the skills window computes the name text id as `0x24B7 + skill id` and the description as
   `0x24E9 + skill id`. `gear.classes.skill(id)` / `skills()` return them in the game's language. The game has no skill icons.
+
+* `ability.hit(attacker, victim, art, damage)` (an event of the damage hook): a hit of a creature that has an art or spell (or copy) in flight, read
+  from the word at creature +0x120. The `custom-classes` mod builds the buffs of art copies on it and on `gear.buffs`.

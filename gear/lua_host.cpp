@@ -814,6 +814,13 @@ namespace
         return 6;
     }
 
+    // native.art_in_flight(id) -> the ability id a creature object has in flight (0: none)
+    int nativeArtInFlight(lua_State* L)
+    {
+        lua_pushnumber(L, Classes::artInFlight(checkId(L, 1)));
+        return 1;
+    }
+
     // native.text_set(id, utf8) -> true | nil, message
     int nativeTextSet(lua_State* L)
     {
@@ -4329,6 +4336,7 @@ namespace
             {"hero_record_set", nativeHeroRecordSet},
             {"text_set", nativeTextSet},
             {"text_add", nativeTextAdd},
+            {"art_in_flight", nativeArtInFlight},
             {"world_cursor", nativeWorldCursor},
             {"texture_image", nativeTextureImage},
             {"motion_active", nativeMotionActive},
