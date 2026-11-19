@@ -1112,6 +1112,19 @@ do
         click_at(c[5] + (c[7] > 0 and c[7] / 2 or 4), c[6] + (c[8] > 0 and c[8] / 2 or 6))
         return true
     end
+    -- Clicks the text `label` (a button) on the same row as the text `name` (a mod's name): the entries of the list are
+    -- as tall as they need, so which entry lies where depends on the others.
+    local function click_in_row(name, label)
+        local n = find_texts(name)[1]
+        if not n then return false end
+        for _, c in ipairs(find_texts(label)) do
+            if math.abs(c[6] - n[6]) <= 8 then
+                click_at(c[5] + (c[7] > 0 and c[7] / 2 or 4), c[6] + (c[8] > 0 and c[8] / 2 or 6))
+                return true
+            end
+        end
+        return false
+    end
     local function dump(label)
         if not os.getenv('GEAR_TEST_DUMP') then return end
         local t = {}
@@ -1132,7 +1145,7 @@ do
     ok(has_prefix('Cannot be loaded'), 'an invalid manifest is listed with its message')
     ok(click_text('<') and has_text('Page 1 / 2'), 'previous page')
     click_text('>')
-    ok(click_text('Settings', 2), 'click Settings of "Settings mod" (second on page 2)')
+    ok(click_in_row('Settings mod', 'Settings'), 'click Settings of "Settings mod"')
     dump('settings')
     ok(has_text('Reset to defaults') and has_text('Flag') and has_text('Numbers'), 'settings page: rows and section header')
     -- the bool checkbox: its text is 'On'
@@ -1145,6 +1158,15 @@ do
     click_text('Keys', 1)
     dump('keys')
     ok(has_text('Ctrl+K') and has_text('Ctrl+K') and has_text('Open'), 'keys tab shows the binding')
+    -- the conflict shows in the tooltip of the binding once the cursor rests on it
+    do
+        local slot = find_texts('Ctrl+K')[1]
+        ui_mouse_at = {slot[5] + 4, slot[6] + 6}
+        tick()
+        clock = clock + 1
+        tick()
+        tick()
+    end
     ok(has_prefix('Conflicts with: Dependent'), 'the conflict is marked')
     ok(click_text('Ctrl+K') and has_text('Press a key...'), 'click a binding to rebind')
     keys_held[0x11] = true; keys_held[0x55] = true
@@ -1156,10 +1178,12 @@ do
     ok(click_text('Default') and s_env.gear.keys.binding('open') == 'ctrl+k', 'Default restores it')
     -- back to the list, switch the mod off
     ok(click_text('< Back') and has_text('Page 2 / 2'), 'back to the list (same page)')
-    ok(click_text('On', 2), 'switch "Settings mod" off')
+    ok(click_in_row('Settings mod', 'On'), 'switch "Settings mod" off')
     tick()
     ok(handler_global(k, 'settings.changed', 'srec') == nil and has_text('Off'), 'the mod is unloaded and its switch says Off')
     click_text('<')
+    -- the entries with an error line are taller, so the dependent may have moved to page 2
+    if not has_prefix('Off: requires s') then click_text('>') end
     ok(has_prefix('Off: requires s'), 'the dependent shows why it is off')
     key(0x1B)    -- Escape closes the screen
     ok(has_text('Mods') == false, 'Escape closes the screen')
