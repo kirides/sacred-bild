@@ -899,7 +899,8 @@ end
 -- Whether the damage hook is needed: some mod handles `damage`, or a creature has modifiers.
 function kernel.boss.sync()
     local list = handlers['damage']
-    native.damage_active(kernel.boss.count > 0 or (list ~= nil and #list > 0))
+    local hits = handlers['ability.hit']
+    native.damage_active(kernel.boss.count > 0 or (list ~= nil and #list > 0) or (hits ~= nil and #hits > 0))
 end
 
 function kernel.boss.forget(id)
@@ -5203,7 +5204,8 @@ local function parse_settings(list)
         end
         local d = {id = s.id, type = s.type, label = type(s.label) == 'string' and s.label or s.id,
                    section = type(s.section) == 'string' and s.section or nil,
-                   tooltip = type(s.tooltip) == 'string' and s.tooltip or nil, restart = s.restart == true}
+                   tooltip = type(s.tooltip) == 'string' and s.tooltip or nil, restart = s.restart == true,
+                   note = type(s.note) == 'string' and s.note or nil}
         local fallback
         if d.type == 'number' then
             d.min = type(s.min) == 'number' and s.min or 0
@@ -6342,7 +6344,7 @@ local function make_env(mod)
         if event == 'ability.route' then native.route_active(true) end
         if event == 'rune.usable' then native.usable_active(true) end
         if event == 'motion.select' then native.motion_active(true) end
-        if event == 'damage' then native.damage_active(true) end
+        if event == 'damage' or event == 'ability.hit' then native.damage_active(true) end
         if event == 'effect.add' then native.effect_active(true) end
         if event == 'bonus.constant' then native.bonus_active(true) end
         if event == 'skillslot.select' then native.skillslot_active(true) end
@@ -6363,7 +6365,7 @@ local function make_env(mod)
         if h.event == 'ability.route' and #list == 0 then native.route_active(false) end
         if h.event == 'rune.usable' and #list == 0 then native.usable_active(false) end
         if h.event == 'motion.select' and #list == 0 then native.motion_active(false) end
-        if h.event == 'damage' and #list == 0 then kernel.boss.sync() end
+        if (h.event == 'damage' or h.event == 'ability.hit') and #list == 0 then kernel.boss.sync() end
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
         if h.event == 'bonus.constant' and #list == 0 then native.bonus_active(false) end
         if h.event == 'skillslot.select' and #list == 0 then native.skillslot_active(false) end
@@ -7113,6 +7115,20 @@ function kernel.damage(damage, victim_type, attacker_type, index, victim, attack
             if h and not h.mod.disabled then
                 local ok, result = call(h.mod, 'damage', h.fn, hit)
                 if ok and type(result) == 'number' then answer = math.floor(result); break end
+            end
+        end
+    end
+    -- `ability.hit`: a hit of a creature that has a combat art or spell (id from 100: also copies) in flight
+    local hits = handlers['ability.hit']
+    if hits and #hits > 0 and attacker and attacker ~= 0 and victim and victim ~= 0 then
+        local art = native.art_in_flight(attacker)
+        if art and art >= 100 then
+            local a, v = world.object(attacker), world.object(victim)
+            if a and v then
+                for i = 1, #hits do
+                    local h = hits[i]
+                    if h and not h.mod.disabled then call(h.mod, 'ability.hit', h.fn, a, v, art, answer or damage) end
+                end
             end
         end
     end

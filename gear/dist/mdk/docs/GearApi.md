@@ -141,6 +141,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'drops.select'` | The loot function asks the equipment type picker for an item; a handler may change the category, level or quality, or name the item type. |
 | `'effect.add'` | The engine adds a value to a creature's effect entry; a handler may decide what is stored (see `GearEffectAdd`). |
 | `'damage'` | The final damage of a hit, before the engine applies it; a handler may return another damage (16 bit, 0 to 65534). |
+| `'ability.hit'` | A hit of a creature that has a combat art or spell (or a copy, ids from 100) in flight: `(attacker, victim, art, damage)`; `art` is the id the hero used (a copy's own id). |
 | `'ability.route'` | A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil. |
 | `'motion.select'` | A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil. |
 | `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
@@ -292,6 +293,7 @@ Forms:
 - `fun(event: 'drops.select', fn: fun(ev: GearDropSelect)): GearHandler`
 - `fun(event: 'effect.add', fn: fun(e: GearEffectAdd): GearEffectAnswer?): GearHandler`
 - `fun(event: 'damage', fn: fun(hit: GearHit): integer?): GearHandler`
+- `fun(event: 'ability.hit', fn: fun(attacker: Creature, victim: Creature, art: integer, damage: integer)): GearHandler`
 - `fun(event: 'ability.route', fn: fun(type: integer, art: integer, vanilla: integer, action: integer, id: integer): integer?): GearHandler`
 - `fun(event: 'motion.select', fn: fun(type: integer, slot: integer, id: integer): integer?): GearHandler`
 - `fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler`
@@ -2742,7 +2744,7 @@ An entry of `settings` in `mod.lua`. The screen builds its page from these; `gea
 |---|---|---|
 | `id` | `string` | Letters, digits, `_`, `-` and `.`; unique in the mod. |
 | `type` | `GearSettingType` |  |
-| `label` | `string` | Shown in the screen (default: the id). (optional) |
+| `label` | `string` | Shown in the screen (default: the id). `{ability:N}` shows the game's name of combat art or spell N in its language; a label longer than its column is cut (whole in the tooltip). (optional) |
 | `default` | `any` | The default value, of the setting's type (default: false, `min`, the first choice, `''`, opaque white). (optional) |
 | `min` | `number` | For `number` (default 0). (optional) |
 | `max` | `number` | For `number` (default 100). (optional) |
@@ -2751,6 +2753,7 @@ An entry of `settings` in `mod.lua`. The screen builds its page from these; `gea
 | `max_length` | `integer` | For `text`. (optional) |
 | `section` | `string` | A heading: settings in a row with the same section are shown under it. (optional) |
 | `tooltip` | `string` | Shown when the cursor rests on the label. (optional) |
+| `note` | `string` | A line of explanation shown above this setting (on a section's first setting: what the section is about). `{ability:N}` as in `label`. (optional) |
 | `restart` | `boolean` | The mod only reads it at start: the screen says "after restart" (the mod still gets `settings.changed`). (optional) |
 
 ### GearKeyDef

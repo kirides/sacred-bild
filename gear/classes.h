@@ -63,6 +63,9 @@ namespace Classes
     // Installs the ability lookups and the rune class checks (called by install).
     bool installAliases();
 
+    // The combat art or spell id in flight of a creature object (word at +0x120; 0 none).
+    uint32_t artInFlight(uint32_t id);
+
     // Whether some mod handles `rune.usable` (a hero type may learn an ability).
     void setUsableActive(bool active);
 

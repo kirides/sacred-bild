@@ -265,11 +265,26 @@ local function process_typing(max_length)
     return changed
 end
 
+-- The game's own names in a label: `{ability:N}` becomes the name of combat art / spell N in the game's language.
+local function game_names(text)
+    if type(text) ~= 'string' or not text:find('{ability:', 1, true) then return text end
+    return (text:gsub('{ability:(%d+)}', function(n)
+        local rec = gear.data and gear.data.abilities and gear.data.abilities[tonumber(n)]
+        local name = rec and rec.name_text and gear.text and gear.text.get(rec.name_text)
+        return name or ('#' .. n)
+    end))
+end
+
 local function setting_row(t, m, d)
     local id = 's:' .. m .. ':' .. d.id
     local value = admin.get(m, d.id)
-    local label = d.label .. (d.restart and '  (after restart)' or '')
-    t:label(1, label, {id = id .. '#l', tooltip = d.tooltip})
+    local label = game_names(d.label) .. (d.restart and '  (after restart)' or '')
+    -- a label longer than its column is cut (the whole of it in the tooltip), so it never runs into the control
+    local tip = game_names(d.tooltip)
+    local _, _, lw = t:cell(1)
+    if text_w(label) > lw then tip = label .. (tip and ('
+' .. tip) or '') end
+    t:label(1, label, {id = id .. '#l', tooltip = tip})
     local changed, nv = false, value
     if d.type == 'bool' then
         changed, nv = t:checkbox(2, value and 'On' or 'Off', value, {id = id})
@@ -363,6 +378,8 @@ local function setting_pages(defs)
                 add({header = d.section})
             end
         end
+        -- a setting's note: a line of explanation above it (for a section, on its first setting)
+        if d.note then add({note_row = game_names(d.note)}) end
         add(d)
     end
     return pages
@@ -384,6 +401,8 @@ local function draw_settings(p, e)
             t:label(1, item.header, {id = 'h:' .. item.header, span = 3, size = 13, bold = true, color = C.accent})
             local tw = text_w(item.header, {size = 13, bold = true})
             ui.rect(hx + tw + 8, hy + 11, hw - tw - 8, 1, C.edge_dim, LAYER)
+        elseif item.note_row then
+            t:label(1, item.note_row, {id = 'note:' .. item.note_row, span = 3, size = 12, color = C.dim or 0xFFA0A0A0})
         else
             setting_row(t, e.id, item)
         end

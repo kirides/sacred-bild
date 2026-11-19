@@ -3,6 +3,7 @@
 #include "lua_host.h"
 #include "game/gear_addr.h"
 #include "patch.h"
+#include "world.h"
 
 #include <windows.h>
 #include <atomic>
@@ -483,4 +484,11 @@ bool Classes::cursor(uint32_t exclude, Cursor& out)
         LOG("Classes: cursor: the game faulted on the pick or the view");
         return false;
     }
+}
+
+uint32_t Classes::artInFlight(uint32_t id)
+{
+    const uintptr_t o = World::objectAddress(id);
+    uint16_t art = 0;
+    return o && readAt(o, 0x120, art) ? art : 0;
 }
