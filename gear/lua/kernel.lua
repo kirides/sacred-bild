@@ -1593,6 +1593,21 @@ do
         return native.party_set_name(self.id, name)
     end
     -- drink_potion(kind): a party hero drinks a potion of its own backpack ('health' default, or the game's kind number)
+    -- The hero's weapon slots (keys 1-5): {active = n, slots = {{main = item?, off = item?}...}} (1-based, items as
+    -- gear.world.item tables), nil for other creatures.
+    function creature_mt:weapon_slots()
+        local active, list = native.party_weapon_slots(self.id)
+        if not active then return nil end
+        local slots = {}
+        for i, s in ipairs(list) do
+            slots[i] = {main = s[1] ~= 0 and world.item(s[1]) or nil, off = s[2] ~= 0 and world.item(s[2]) or nil}
+        end
+        return {active = active + 1, slots = slots}
+    end
+    -- Takes up the weapons of slot n (1-based), as the keys 1-5 do for the hero you play.
+    function creature_mt:use_weapon_slot(n)
+        return native.party_use_weapon_slot(self.id, n - 1)
+    end
     function creature_mt:drink_potion(kind)
         local k = kind == nil and 1 or kind == 'health' and 1 or kind
         assert(type(k) == 'number', "kind must be 'health' or a number")

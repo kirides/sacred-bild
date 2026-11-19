@@ -15,6 +15,17 @@ namespace Party
     constexpr uint32_t kFirstCompanionId = 3;
     constexpr uint32_t kLastHeroId = 16;
 
+    // A hero's weapon slots (keys 1-5): the main and off-hand item ids of each (0: empty) and the active one (0-based).
+    struct WeaponSlots
+    {
+        uint32_t active = 0;
+        uint32_t main[5] = {};
+        uint32_t off[5] = {};
+    };
+    bool weaponSlots(uint32_t id, WeaponSlots& out);
+    // Makes weapon slot `slot` (0-based) the active one, as the keys 1-5 do for the controlled hero.
+    bool useWeaponSlot(uint32_t id, uint32_t slot, const char*& error);
+
     // Hooks the engine's experience gain (for the party's shared experience).
     void install();
     // Once per frame: keeps the engine's mouse target in step after a savegame was loaded.

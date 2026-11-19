@@ -334,6 +334,15 @@ namespace Gear::Addr
     // stdcall (type), ret 4. ENG 0089095C: the vtable of the 0x44-byte creature events (orders) a creature's vtable
     // +0x18 takes. ENG 0182EE5C / 0182EE60: the two anti-cheat shadow pages of the local hero (see party.cpp).
     inline Sacred::Thiscall<void(void* stats, uint32_t amount)> cStats_addExperience{};
+    // ENG 00556A30 / 00555E00 / 005D9860 / 005D8730 / 00546F80 / 0054E6D0: what the taskbar's weapon slot keys do
+    // (0x6E1690; gear/party.cpp, Party::useWeaponSlot): unequip, equip, the container's active weapon slot, taking the
+    // off-hand weapon out of it, the creature's weapon kind and refreshing its motions.
+    inline Sacred::Thiscall<int32_t(void* creature, uint32_t slot, uint32_t flag)> cCreature_unequip{};
+    inline Sacred::Thiscall<uint32_t(void* creature, uint32_t slot, uint32_t item, uint32_t flag)> cCreature_equip{};
+    inline Sacred::Thiscall<void(void* container, uint32_t slot, uint32_t a, uint32_t b, uint32_t flag)> cContainer_selectWeaponSlot{};
+    inline Sacred::Thiscall<void(void* container, uint32_t slot, uint32_t hand, uint32_t a, uint32_t b)> cContainer_takeWeapon{};
+    inline Sacred::Thiscall<int16_t(void* creature, uint32_t a)> cCreature_weaponKind{};
+    inline Sacred::Thiscall<void(void* creature, uint32_t a, uint32_t b)> cCreature_refreshMotions{};
     // ENG 005796A0: the stats block works out its combat values anew, thiscall (stats, 0, 1), ret 8 (gear/buffs.cpp).
     inline Sacred::Thiscall<void(void* stats, uint32_t a, uint32_t b)> cStats_recalc{};
     inline Sacred::Thiscall<void(void* stats, uint32_t a, int32_t b)> cStats_initSpells{};
