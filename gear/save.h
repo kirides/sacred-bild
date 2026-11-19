@@ -3,13 +3,17 @@
 #include <string>
 
 // Saving the game as mods see it: the savegame window's own save request, sent to the engine with a slot number
-// (Save\GAMEnn.PAK; 0 is the quicksave, the game's list sorts by file name), the state it needs, and the result of
+// (Save\GAMEnn.PAK, or GAMEnnnnn up to kMaxSlot; 0 is the quicksave, the game's list sorts by file name), the state it needs, and the result of
 // the write. The engine writes the file on its render thread a moment after the request; this module watches the
 // engine's flags for that and compares the file before and after. Single player only. Engine thread only (the Lua
 // host's thread).
 namespace Save
 {
-    constexpr uint32_t kMaxSlot = 0x1FD;     // the engine stores the slot in 9 bits (0x1FE and up are internal)
+    // The savegame number is a 16-bit value in the engine (0xFFFF asks for the first free one) and only ever becomes the
+    // file name Save\GAME%02d.PAK; the game's list and its scan of the folder take any number of digits. The game's own
+    // "first free number" stopped at 509 (0x619B80, replaced by a hook of Savegames::install); numbers up to a signed short keep
+    // the comparisons of the list sorting safe.
+    constexpr uint32_t kMaxSlot = 0x7FFE;
 
     // Once per in-game frame, before the mods run: remembers the engine (the hook's `this`) and finishes a save the
     // engine completed.

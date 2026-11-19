@@ -1965,7 +1965,7 @@ What `save` can be told.
 
 #### `gear.game.save(slot, name, opts) -> boolean?, string?`
 
-Asks the engine to save into slot `slot` (0 to 509). The engine refuses while a trading, chest or similar window is open. Returns true when the request is accepted; the outcome is the event `game.saved` or `game.save_failed`.
+Asks the engine to save into slot `slot` (0 to 32766: `Save\GAME05.PAK`, `Save\GAME500.PAK`, ... `Save\GAME32766.PAK`; the game itself stopped at 509). The engine refuses while a trading, chest or similar window is open. Returns true when the request is accepted; the outcome is the event `game.saved` or `game.save_failed`.
 
 - `slot`: `integer`
 - `name`: `string` (optional) - The savegame's display name, UTF-8, at most 60 characters; the game keeps Windows-1252 (umlauts and the like), anything else becomes `?`.
@@ -2004,10 +2004,22 @@ The file of a slot.
 
 #### `gear.game.save_info(slot) -> GearSaveInfo?`
 
-The savegame file of `slot`: nil for a slot outside 0..509, else a table whose `exists` says if the file is there.
+The savegame file of `slot`: nil for a slot outside 0..32766, else a table whose `exists` says if the file is there.
 
 - `slot`: `integer`
 - returns `GearSaveInfo?`
+
+#### `gear.game.free_slot() -> integer?`
+
+The first slot from 1 up whose savegame file does not exist: the number the game's own *new savegame* picks (its search goes beyond 509 now). nil if every number up to 32766 is taken.
+
+- returns `integer?`
+
+#### `gear.game.reserve_slots(slots)`
+
+Slots this mod writes to itself (the autosave mod's rotation): `free_slot` and the game's own *new savegame* skip them even while their files do not exist yet, so a manual save does not take one a mod is about to use. At most 64 numbers, each 1 to 32766; replaces this mod's earlier list (call it with `{}` to give them back).
+
+- `slots`: `integer[]`
 
 ### GearSavegame
 
@@ -4564,6 +4576,12 @@ Starts the engine's own level function on a worker thread (the first of the `lev
 #### `gear.auto.engine_level_factor_result() -> integer?`
 
 The integer the call started by `engine_level_factor_start` returned; nil until it is done.
+
+- returns `integer?`
+
+#### `gear.auto.engine_free_slot() -> integer?`
+
+The number the game's own "first free savegame number" (the function a new savegame without a number asks) answers now: the engine's function itself, called through Gear's replacement, so it is not limited to 509 savegames. nil if it was not found.
 
 - returns `integer?`
 

@@ -34,7 +34,7 @@ function GearGame.can_save() end
 ---@field thumbnail? boolean Let the engine capture the savegame's picture first (default false: the savegame keeps no new picture).
 ---@field window? boolean Save as the open savegame window's own Save button does, for a mod that replaces the window (`gear.ui.replace_window`): only while that window is open in game; the picture is the one the game took when it opened, and the window closes once the engine took the request.
 
---- Asks the engine to save into slot `slot` (0 to 509). The engine refuses while a trading, chest or similar window
+--- Asks the engine to save into slot `slot` (0 to 32766: `Save\GAME05.PAK`, `Save\GAME500.PAK`, ... `Save\GAME32766.PAK`; the game itself stopped at 509). The engine refuses while a trading, chest or similar window
 --- is open. Returns true when the request is accepted; the outcome is the event `game.saved` or `game.save_failed`.
 ---@param slot integer
 ---@param name? string The savegame's display name, UTF-8, at most 60 characters; the game keeps Windows-1252 (umlauts and the like), anything else becomes `?`.
@@ -66,10 +66,21 @@ function GearGame.config_all() end
 ---@field size number Bytes.
 ---@field mtime number Last write, unix seconds.
 
---- The savegame file of `slot`: nil for a slot outside 0..509, else a table whose `exists` says if the file is there.
+--- The savegame file of `slot`: nil for a slot outside 0..32766, else a table whose `exists` says if the file is there.
 ---@param slot integer
 ---@return GearSaveInfo?
 function GearGame.save_info(slot) end
+
+--- The first slot from 1 up whose savegame file does not exist: the number the game's own *new savegame* picks (its
+--- search goes beyond 509 now). nil if every number up to 32766 is taken.
+---@return integer?
+function GearGame.free_slot() end
+
+--- Slots this mod writes to itself (the autosave mod's rotation): `free_slot` and the game's own *new savegame* skip them
+--- even while their files do not exist yet, so a manual save does not take one a mod is about to use. At most 64
+--- numbers, each 1 to 32766; replaces this mod's earlier list (call it with `{}` to give them back).
+---@param slots integer[]
+function GearGame.reserve_slots(slots) end
 
 --- A savegame as `saves` lists it: what the file says about itself.
 ---@class GearSavegame

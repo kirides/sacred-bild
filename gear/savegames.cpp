@@ -68,7 +68,7 @@ namespace
         const wchar_t* p = file + 4;
         uint32_t n = 0;
         int digits = 0;
-        while (*p >= L'0' && *p <= L'9' && digits < 4)
+        while (*p >= L'0' && *p <= L'9' && digits < 6)
         {
             n = n * 10 + (*p++ - L'0');
             ++digits;
@@ -219,6 +219,16 @@ namespace
         return true;
     }
 
+    // What list() read from the files so far, by file name (Lua thread).
+    struct InfoCache
+    {
+        uint64_t stamp = 0;
+        uint64_t size = 0;
+        bool ok = false;
+        Savegames::Info info;
+    };
+    std::map<std::wstring, InfoCache> g_infos;
+
     // The pictures made so far: slot -> {file stamp, picture} (Lua thread).
     struct Cached
     {
@@ -356,15 +366,33 @@ std::vector<Savegames::Info> Savegames::list()
         {
             continue;
         }
-        Info info;
-        info.slot = slot;
-        info.file = utf8(fd.cFileName, wcslen(fd.cFileName));
-        info.size = (static_cast<uint64_t>(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
-        info.mtime = unixOf(fd.ftLastWriteTime);
-        if (parse(dir + L"\\" + fd.cFileName, info))
+        // A savegame whose file did not change since the last listing is not read again: with hundreds of them the
+        // screen asks for the list on every refresh.
+        const uint64_t stamp = (static_cast<uint64_t>(fd.ftLastWriteTime.dwHighDateTime) << 32) | fd.ftLastWriteTime.dwLowDateTime;
+        const uint64_t size = (static_cast<uint64_t>(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
+        const std::wstring name = fd.cFileName;
+        auto it = g_infos.find(name);
+        if (it != g_infos.end() && it->second.stamp == stamp && it->second.size == size)
         {
-            out.push_back(std::move(info));
+            if (it->second.ok)
+            {
+                out.push_back(it->second.info);
+            }
+            continue;
         }
+        InfoCache c;
+        c.stamp = stamp;
+        c.size = size;
+        c.info.slot = slot;
+        c.info.file = utf8(fd.cFileName, wcslen(fd.cFileName));
+        c.info.size = size;
+        c.info.mtime = unixOf(fd.ftLastWriteTime);
+        c.ok = parse(dir + L"\\" + fd.cFileName, c.info);
+        if (c.ok)
+        {
+            out.push_back(c.info);
+        }
+        g_infos[name] = std::move(c);
     } while (FindNextFileW(find, &fd));
     FindClose(find);
     // As the game's list: by file name.
@@ -405,7 +433,7 @@ bool Savegames::remove(uint32_t slot, const char*& error)
 {
     if (slot > Save::kMaxSlot)
     {
-        error = "the slot is 0..509";
+        error = "the slot is 0..32766";
         return false;
     }
     if (Save::pending())
@@ -429,7 +457,7 @@ bool Savegames::load(uint32_t slot, const char*& error)
 {
     if (slot > Save::kMaxSlot)
     {
-        error = "the slot is 0..509";
+        error = "the slot is 0..32766";
         return false;
     }
     Info info;
@@ -617,8 +645,64 @@ void Savegames::noteLoad(uint32_t slot)
     }
 }
 
+namespace
+{
+    std::mutex g_reservedLock;
+    std::vector<uint32_t> g_reserved;       // sorted
+}
+
+void Savegames::setReserved(std::vector<uint32_t> slots)
+{
+    std::sort(slots.begin(), slots.end());
+    slots.erase(std::unique(slots.begin(), slots.end()), slots.end());
+    std::lock_guard lock(g_reservedLock);
+    g_reserved = std::move(slots);
+}
+
+uint32_t Savegames::firstFreeSlot()
+{
+    std::vector<uint32_t> reserved;
+    {
+        std::lock_guard lock(g_reservedLock);
+        reserved = g_reserved;
+    }
+    for (uint32_t slot = 1; slot <= Save::kMaxSlot; ++slot)
+    {
+        if (std::binary_search(reserved.begin(), reserved.end(), slot))
+        {
+            continue;
+        }
+        if (GetFileAttributesW(pathOf(slot).c_str()) == INVALID_FILE_ATTRIBUTES)
+        {
+            return slot;
+        }
+    }
+    return 0;
+}
+
+namespace
+{
+    // The game's own picker (0x619B80) looks at 1..509 and answers 0x1FF when they are all taken; this one goes on to
+    // the end of what the file names can hold. The engine (render thread) calls it when a save asks for slot 0xFFFF.
+    decltype(Gear::Addr::cSave_firstFreeSlot)::Ptr g_origFirstFree = nullptr;
+
+    uint16_t __cdecl hookFirstFreeSlot()
+    {
+        const uint32_t slot = Savegames::firstFreeSlot();
+        return static_cast<uint16_t>(slot ? slot : Save::kMaxSlot);
+    }
+}
+
 bool Savegames::install()
 {
+    if (Gear::Addr::cSave_firstFreeSlot)
+    {
+        Patch::hook(g_origFirstFree, Gear::Addr::cSave_firstFreeSlot, hookFirstFreeSlot, "cSave_firstFreeSlot");
+    }
+    else
+    {
+        LOG("Savegames: the first-free-number function was not found: the game's own saves stop at number 509");
+    }
     if (!Gear::Addr::armaPlayExecute)
     {
         LOG("Savegames: the load command was not found: no savegame.load / savegame.new");

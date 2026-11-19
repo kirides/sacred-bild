@@ -785,6 +785,19 @@ namespace
         return 3;
     }
 
+    // native.engine_free_slot() -> the number the game's own "first free savegame number" (ENG 00619B80, replaced by
+    // Savegames::install) answers, nil if it was not found (automation: the detour is called as the engine calls it).
+    int nativeEngineFreeSlot(lua_State* L)
+    {
+        if (!Gear::Addr::cSave_firstFreeSlot)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, Gear::Addr::cSave_firstFreeSlot());
+        return 1;
+    }
+
     // native.engine_level_factor_start(level) -> started: tests of the level.factor hook (automation): a worker thread calls the
     // engine's own level function (ENG 0051CC30, whose first block is a site hook) a moment later, when Lua is not running, so the
     // answer path of the hook can be exercised; native.engine_level_factor_result() -> value | nil.
@@ -896,7 +909,7 @@ namespace
         if (slot < 0 || slot > Save::kMaxSlot || slot != static_cast<uint32_t>(slot))
         {
             lua_pushnil(L);
-            lua_pushstring(L, "the slot is a whole number 0..509");
+            lua_pushstring(L, "the slot is a whole number 0..32766");
             return 2;
         }
         const char* error = "";
@@ -972,6 +985,39 @@ namespace
         return 1;
     }
 
+    // native.save_free_slot() -> the first slot from 1 whose file does not exist | nil if there is none
+    int nativeSaveFreeSlot(lua_State* L)
+    {
+        const uint32_t slot = Savegames::firstFreeSlot();
+        if (!slot)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, slot);
+        return 1;
+    }
+
+    // native.save_reserve({slot, ...}): the slots free_slot and the game's own picker skip
+    int nativeSaveReserve(lua_State* L)
+    {
+        luaL_checktype(L, 1, LUA_TTABLE);
+        std::vector<uint32_t> slots;
+        const int n = static_cast<int>(lua_objlen(L, 1));
+        for (int i = 1; i <= n && i <= 256; ++i)
+        {
+            lua_rawgeti(L, 1, i);
+            const lua_Number v = lua_tonumber(L, -1);
+            lua_pop(L, 1);
+            if (v >= 1 && v <= Save::kMaxSlot && v == static_cast<uint32_t>(v))
+            {
+                slots.push_back(static_cast<uint32_t>(v));
+            }
+        }
+        Savegames::setReserved(std::move(slots));
+        return 0;
+    }
+
     // native.save_picture(slot) -> picture id | nil
     int nativeSavePicture(lua_State* L)
     {
@@ -990,7 +1036,7 @@ namespace
     int nativeSaveDelete(lua_State* L)
     {
         uint32_t slot = 0;
-        const char* error = "the slot is a whole number 0..509";
+        const char* error = "the slot is a whole number 0..32766";
         return pushResult(L, checkSlot(L, 1, slot) && Savegames::remove(slot, error), error);
     }
 
@@ -998,7 +1044,7 @@ namespace
     int nativeSaveLoad(lua_State* L)
     {
         uint32_t slot = 0;
-        const char* error = "the slot is a whole number 0..509";
+        const char* error = "the slot is a whole number 0..32766";
         return pushResult(L, checkSlot(L, 1, slot) && Savegames::load(slot, error), error);
     }
 
@@ -4033,12 +4079,15 @@ namespace
             {"site_selftest_result", nativeSiteSelfTestResult},
             {"engine_level_factor_start", nativeEngineLevelFactorStart},
             {"engine_level_factor_result", nativeEngineLevelFactorResult},
+            {"engine_free_slot", nativeEngineFreeSlot},
             {"hero", nativeHero},
             {"world_changes", nativeWorldChanges},
             {"save_blocked", nativeSaveBlocked},
             {"save_request", nativeSaveRequest},
             {"save_pending", nativeSavePending},
             {"save_info", nativeSaveInfo},
+            {"save_free_slot", nativeSaveFreeSlot},
+            {"save_reserve", nativeSaveReserve},
             {"save_poll", nativeSavePoll},
             {"saves", nativeSaves},
             {"save_picture", nativeSavePicture},

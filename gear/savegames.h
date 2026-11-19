@@ -49,8 +49,17 @@ namespace Savegames
     // message, as the window's Load does (0071CC90 command 6). False and `error` if not possible now.
     bool load(uint32_t slot, const char*& error);
 
+    // The first number from 1 up whose file does not exist: the rule of the game's own "first free number" (0x619B80,
+    // which a hook of `install` replaces: it gave up at 509). 0 if the folder holds every number up to Save::kMaxSlot.
+    uint32_t firstFreeSlot();
+
+    // Slots that firstFreeSlot (and so the game's own picker) leaves alone although their file does not exist yet: the
+    // numbers a mod writes to itself (the autosave mod's rotation), so that a manual save never takes one first.
+    void setReserved(std::vector<uint32_t> slots);
+
     // Inside the Patch transaction: detours the game's own load / new game command (cCommand_armaPlay::execute), so
-    // mods learn which savegame is loaded or that a new game starts (gear.savegame). False if it was not found.
+    // mods learn which savegame is loaded or that a new game starts (gear.savegame), and replaces the game's "first
+    // free savegame number" by one that looks up to Save::kMaxSlot. False if the load command was not found.
     bool install();
 
     // What the game was told to do, in order (the oldest first).
