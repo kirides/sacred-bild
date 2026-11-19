@@ -98,6 +98,8 @@ namespace World
     };
     bool installCreateHook();
     void setCreatedActive(bool on);
+    // While on, creations are not recorded (the handlers of the event run: a creature they make must not raise the event again).
+    void setCreatedSuppress(bool on);
     // The creations since the last call (at most 2048 are kept; `dropped` is the running count of the ones that did not fit).
     std::vector<Created> takeCreated(uint64_t* dropped = nullptr);
 

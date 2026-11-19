@@ -7326,12 +7326,16 @@ function kernel.poll_created()
     local list = handlers['creature.created']
     if not list or #list == 0 then return end
     local made = native.take_created()
+    -- what the handlers create (gear.world.spawn, or any engine path they trigger) is not reported again: no event loop
+    native.created_suppress(true)
     for i = 1, #made do
         local c = made[i]
-        kernel.dispatch('creature.created', {
+        local ok, err = pcall(kernel.dispatch, 'creature.created', {
             creature = wrap(c.id), id = c.id, type = c.type, x = c.x, y = c.y, layer = c.layer,
         })
+        if not ok then native.log('creature.created: ' .. tostring(err)) end
     end
+    native.created_suppress(false)
 end
 
 function kernel.poll_kills()

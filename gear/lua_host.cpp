@@ -1717,6 +1717,13 @@ namespace
         return 0;
     }
 
+    // native.created_suppress(bool): creations are not recorded while the `creature.created` handlers run (no event loops)
+    int nativeCreatedSuppress(lua_State* L)
+    {
+        World::setCreatedSuppress(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
     // native.take_created() -> {{id, type, x, y, layer}, ...}, dropped: the objects the engine itself created since the last call
     // that are still live creatures (not heroes), and how many creations did not fit into the list so far.
     int nativeTakeCreated(lua_State* L)
@@ -4456,6 +4463,7 @@ namespace
             {"net_kill", nativeNetKill},
             {"created_active", nativeCreatedActive},
             {"take_created", nativeTakeCreated},
+            {"created_suppress", nativeCreatedSuppress},
             {"mp_send_frame", nativeMpSendFrame},
             {"mp_take_frame", nativeMpTakeFrame},
             {"net_ops", nativeNetOps},

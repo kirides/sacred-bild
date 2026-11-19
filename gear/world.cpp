@@ -109,6 +109,7 @@ namespace
     CreateFn g_origCreate = nullptr;
     std::atomic<bool> g_createdActive{false};
     thread_local bool t_ownCreate = false;
+    std::atomic<bool> g_createdSuppress{false};   // while `creature.created` handlers run: what they make (by any path) is not reported back
     std::mutex g_createdLock;
     std::vector<World::Created> g_created;
     uint64_t g_createdDropped = 0;
@@ -117,7 +118,7 @@ namespace
     uint32_t __fastcall hookCreate(void* self, void* edx, uint32_t type, WorldPos* pos, int want, int broadcast, int extra)
     {
         const uint32_t id = g_origCreate(self, edx, type, pos, want, broadcast, extra);
-        if (id > kHeroIds && !want && !t_ownCreate && g_createdActive.load(std::memory_order_relaxed))
+        if (id > kHeroIds && !want && !t_ownCreate && !g_createdSuppress.load(std::memory_order_relaxed) && g_createdActive.load(std::memory_order_relaxed))
         {
             World::Created c{id, type, 0, 0, 0};
             WorldPos p{};
@@ -848,6 +849,11 @@ bool World::installCreateHook()
         return false;
     }
     return Patch::hook(g_origCreate, Addr::cObjectManager_create, hookCreate, "cObjectManager_create");
+}
+
+void World::setCreatedSuppress(bool on)
+{
+    g_createdSuppress.store(on, std::memory_order_relaxed);
 }
 
 void World::setCreatedActive(bool on)
