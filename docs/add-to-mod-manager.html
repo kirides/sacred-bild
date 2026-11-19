@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add to Gear Mod Manager</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fff; --fg: #1f2328; --muted: #59636e; --accent: #2e7d32; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --accent: #4caf50; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 36rem; margin: 0 auto; padding: 2rem 16px; }
+  .button { display: inline-block; padding: .6rem 1.1rem; border-radius: 6px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; }
+  code { word-break: break-all; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Add to Gear Mod Manager</h1>
+  <p id="msg">Opening the Gear Mod Manager&hellip;</p>
+  <p><a id="open" class="button" href="#" hidden>Open the Gear Mod Manager</a></p>
+  <p class="muted">The manager always asks before it adds the source. Nothing happens if it is not installed or links are switched off in its settings.</p>
+  <p>Not installed yet? Get it from the <a href="https://github.com/kirides/sacred-mod-manager/releases">Gear Mod Manager releases</a>. Then add this address as a source by hand (Sources, Add):</p>
+  <p><code id="addr"></code></p>
+</main>
+<script>
+  // ?index=<https address of a mod-index.json>; only GitHub addresses of an index are accepted, and the link only opens a question in the manager.
+  var raw = new URLSearchParams(location.search).get('index') || '';
+  var ok = false;
+  try {
+    var u = new URL(raw);
+    ok = u.protocol === 'https:' && (u.hostname === 'raw.githubusercontent.com' || u.hostname === 'github.com');
+  } catch (e) {}
+  var msg = document.getElementById('msg');
+  if (!ok) {
+    msg.textContent = 'This page needs ?index=<https address of a mod-index.json on GitHub>.';
+  } else {
+    var link = 'gear-mod-manager://add-index?url=' + encodeURIComponent(raw);
+    var a = document.getElementById('open');
+    a.href = link; a.hidden = false;
+    document.getElementById('addr').textContent = raw;
+    msg.textContent = 'If the Gear Mod Manager does not open by itself, press the button.';
+    location.href = link;
+  }
+</script>
+</body>
+</html>
