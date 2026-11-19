@@ -104,6 +104,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cItem_pickType", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 18 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_pickType}, // 005C7FA0, 005C7F10
     {"g_rarityTable", "8B 35 ?? ?? ?? ?? 8B C8 83 C4 14 33 C0 D8 4C 24 18", 2, Sig::Take::Abs32, &Gear::Addr::g_rarityTable}, // 00AD4438, 00AD23B8
     {"cStats_addExperience", "55 8B EC 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 38 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_addExperience}, // 0057E160, 0057E020
+    {"cStats_recalc", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 28 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_recalc}, // 005796A0, 00579560
     {"textResources_set", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 53 55 56 57 8B 44 24 24 33 DB", 0, Sig::Take::Match, &Gear::Addr::textResources_set}, // 00672A60, 00672D40
     {"cStats_initSpells", "83 EC 10 53 55 8B 6C 24 1C 56 57 33 FF", 0, Sig::Take::Match, &Gear::Addr::cStats_initSpells}, // 0055FC00, 0055FAC0
     {"cStats_setCombo", "51 53 8B D9 8B 0D ?? ?? ?? ?? 56 8B 43 08 50 E8 ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::cStats_setCombo}, // 005813D0, 00581290

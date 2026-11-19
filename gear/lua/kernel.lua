@@ -1339,6 +1339,150 @@ end
 
 -- Party (gear.party): companion heroes in single player, see docs/GearApi.md, "Party". Kept in kernel.party: the main
 -- chunk is at Lua's 200-locals limit.
+-- Buffs (gear.buffs): changes to a creature's combat values for a while, with the game's own look on the hero. Kept
+-- in kernel.buffs: the main chunk is at Lua's 200-locals limit. Definitions are shared by every mod (an id is
+-- 'mod_id:name' unless it names another mod's); apply them to any creature at a strength.
+kernel.buffs = {}
+do
+    local B = kernel.buffs
+    -- The stats block's float fields cStats::recalc works out (see gear/buffs.h), by name: sums (0 before) and
+    -- factors (1 before). Seen with the game's own buffs: Steinhaut (resist_physical, armor_factor), Flammenhaut
+    -- (resist_fire), Schildwall (every resistance), Zwergenpanzer (resist_fire, resist_poison), Hoellenkraft
+    -- (damage_min_fire, damage_max_fire, attack_factor), Wieselflink (speed_factor), Aue des Geistes (regen factors).
+    B.STATS = {
+        resist_physical = 0x66, resist_fire = 0x6A, resist_magic = 0x6E, resist_poison = 0x72,
+        damage_min_physical = 0x76, damage_min_fire = 0x7A, damage_min_magic = 0x7E, damage_min_poison = 0x82,
+        damage_max_physical = 0x86, damage_max_fire = 0x8A, damage_max_magic = 0x8E, damage_max_poison = 0x92,
+    }
+    B.FACTORS = {
+        attack_factor = 0x9A, speed_factor = 0xE6, armor_factor = 0xEA, regen_factor = 0xEE, art_regen_factor = 0xF2,
+    }
+    -- The spell overlays the game draws a hero with (creature +0x60).
+    B.OVERLAYS = {light = 6, stone = 7, flame = 10}
+    B.defs = {}
+    B.order = {}
+    B.meta = {}
+
+    local function offset_of(name, factor)
+        if type(name) == 'number' then return name end
+        return (factor and B.FACTORS or B.STATS)[name]
+    end
+
+    function B.define(m, def)
+        assert(type(def) == 'table' and type(def.id) == 'string' and def.id ~= '', 'a buff needs an id')
+        local id = def.id:find(':') and def.id or (m.id .. ':' .. def.id)
+        for name, v in pairs(def.stats or {}) do
+            assert(offset_of(name, false), 'unknown stat ' .. tostring(name))
+            assert(type(v) == 'number', 'stat values are numbers')
+        end
+        for name, v in pairs(def.factors or {}) do
+            assert(offset_of(name, true), 'unknown factor ' .. tostring(name))
+            assert(type(v) == 'number', 'factors are numbers')
+        end
+        local overlay = def.overlay
+        if type(overlay) == 'string' then overlay = assert(B.OVERLAYS[overlay], 'unknown overlay ' .. overlay) end
+        local d = {id = id, name = def.name or def.id, description = def.description, icon = def.icon,
+            stats = def.stats or {}, factors = def.factors or {}, overlay = overlay or 0, seconds = def.seconds or 0,
+            debuff = def.debuff and true or false, mod = m.id}
+        if not B.defs[id] then B.order[#B.order + 1] = id end
+        B.defs[id] = d
+        return d
+    end
+
+    function B.definitions()
+        local out = {}
+        for _, id in ipairs(B.order) do out[#out + 1] = B.defs[id] end
+        return out
+    end
+
+    -- The mods {offset, factor, value} of a definition at `strength` (1: as defined; a factor f becomes
+    -- 1 + (f - 1) * strength).
+    local function mods_of(d, strength)
+        local list = {}
+        for name, v in pairs(d.stats) do list[#list + 1] = {offset_of(name, false), false, v * strength} end
+        for name, v in pairs(d.factors) do list[#list + 1] = {offset_of(name, true), true, 1 + (v - 1) * strength} end
+        return list
+    end
+
+    function B.apply(m, target, buff, opts)
+        opts = opts or {}
+        local id = type(target) == 'table' and target.id or target
+        local d = type(buff) == 'table' and buff or B.defs[buff] or B.defs[m.id .. ':' .. tostring(buff)]
+        if not d then return nil, 'no such buff' end
+        if not d.mod then d = B.define(m, d) end
+        local strength = opts.strength or 1
+        local key = opts.key or d.id
+        local seconds = opts.seconds or d.seconds or 0
+        local source = opts.source and (type(opts.source) == 'table' and opts.source.id or opts.source) or 0
+        local ok, err = native.buff_apply(id, key, mods_of(d, strength), seconds, opts.overlay or d.overlay or 0, source,
+            opts.ability or 0)
+        if not ok then return nil, err end
+        B.meta[id .. '|' .. key] = {def = d.id, strength = strength}
+        kernel.dispatch('buff.applied', world.object(id), key, d.id, strength)
+        return true
+    end
+
+    function B.remove(target, key)
+        local id = type(target) == 'table' and target.id or target
+        return native.buff_remove(id, key)
+    end
+
+    function B.list(target)
+        local id = type(target) == 'table' and target.id or target
+        local list = native.buff_list(id) or {}
+        for _, b in ipairs(list) do
+            local meta = B.meta[id .. '|' .. b.key]
+            b.id = meta and meta.def or b.key
+            b.strength = meta and meta.strength or 1
+            b.source = b.source ~= 0 and world.object(b.source) or nil
+            b.ability = b.ability ~= 0 and b.ability or nil
+        end
+        return list
+    end
+
+    -- The creature's combat value fields now, by offset ({[0x66] = 12.5, ...}).
+    function B.fields(target)
+        return native.buff_fields(type(target) == 'table' and target.id or target)
+    end
+
+    -- What changed between two `fields` snapshots, as a definition's stats and factors (by offset): copies a buff the
+    -- game gave (cast it, compare before and after) so it can go onto someone else.
+    function B.change(before, after)
+        local stats, factors, is_factor = {}, {}, {}
+        for _, o in pairs(B.FACTORS) do
+            is_factor[o] = true
+            local a, b = before[o], after[o]
+            if a and b and a ~= 0 and math.abs(b - a) > 1e-4 then factors[o] = b / a end
+        end
+        for o, b in pairs(after) do
+            local a = before[o]
+            if a and not is_factor[o] and math.abs(b - a) > 1e-4 then stats[o] = b - a end
+        end
+        return stats, factors
+    end
+
+    function B.overlay(target)
+        return native.buff_overlay(type(target) == 'table' and target.id or target)
+    end
+    function B.set_overlay(target, which, seconds)
+        if type(which) == 'string' then which = B.OVERLAYS[which] end
+        return native.buff_set_overlay(type(target) == 'table' and target.id or target, which or 0, seconds or 30)
+    end
+
+    function B.poll()
+        if not native.buff_ended then return end
+        for _, e in ipairs(native.buff_ended()) do
+            local key = e[1] .. '|' .. e[2]
+            local meta = B.meta[key]
+            B.meta[key] = nil
+            kernel.dispatch('buff.ended', world.object(e[1]), e[2], meta and meta.def or e[2])
+        end
+    end
+
+    function creature_mt:buffs() return B.list(self) end
+    function creature_mt:remove_buff(key) return B.remove(self, key) end
+end
+
 kernel.party = {}
 do
     local P = kernel.party
@@ -4052,7 +4196,7 @@ end
 -- Custom events (gear.emit). Built-in events cannot be emitted by mods.
 ---------------------------------------------------------------------------------------------------------------
 local BUILTIN = {load = true, frame = true, idle = true, draw = true, unload = true, damage = true, ['effect.add'] = true}
-local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.', 'chat.', 'party.'}
+local RESERVED_PREFIX = {'session.', 'gear.', 'pipe.', 'game.', 'realm.', 'settings.', 'level.', 'combat.', 'creature.', 'bonus.', 'skillslot.', 'chat.', 'party.', 'buff.'}
 -- EV: emit depth and the hook registry (gear.events: declared custom events, listed for other mods and the docs).
 local EV = {depth = 0, declared = {}}
 
@@ -5619,6 +5763,11 @@ local function make_env(mod)
     end
     gear.party = {}
     for k, v in pairs(kernel.party) do gear.party[k] = v end
+    gear.buffs = {STATS = kernel.buffs.STATS, FACTORS = kernel.buffs.FACTORS, OVERLAYS = kernel.buffs.OVERLAYS,
+        define = function(def) return kernel.buffs.define(mod, def) end, definitions = kernel.buffs.definitions,
+        apply = function(target, buff, opts) return kernel.buffs.apply(mod, target, buff, opts) end,
+        remove = kernel.buffs.remove, list = kernel.buffs.list, fields = kernel.buffs.fields,
+        change = kernel.buffs.change, overlay = kernel.buffs.overlay, set_overlay = kernel.buffs.set_overlay}
     -- Hero files (the network game's Save\HeroNN.pax and the mod's own heroes\*.pax): list, bring one into the party,
     -- write the controlled hero to one.
     gear.party.hero_files = function()
@@ -6661,6 +6810,7 @@ function kernel.savegame.poll()
         kernel.savegame.kind = kind
         kernel.savegame.scope = kind ~= 'new' and scope or nil
         kernel.savegame.each(kernel.savegame.enter)
+        if native.buff_clear then native.buff_clear() end
         kernel.dispatch('savegame.changed', kind, kernel.savegame.scope, number)
     end
 end
@@ -6789,6 +6939,7 @@ function kernel.tick(dt)
     uis.chat_poll()
     kernel.poll_kills()
     kernel.boss.poll()
+    kernel.buffs.poll()
     kernel.poll_mp(dt)
     poll_pipes()
     run_timers()

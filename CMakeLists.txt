@@ -174,6 +174,7 @@ if(SACREDGEAR)
     gear/classes.cpp
     gear/classes_alias.cpp
     gear/party.cpp
+    gear/buffs.cpp
     gear/tables.cpp
     gear/overlay.cpp
     gear/sitehook.cpp

@@ -224,6 +224,9 @@ GEAR = [
     # 0x44-byte events of this class through its vtable +0x18. The anti-cheat shadows (0x590730 checks them against
     # hero()) are two pages of XOR-keyed copies of experience, gold, level and the stats block.
     ('cStats_addExperience', 0x0057E160, 'func'),
+    # A stats block works out the combat values anew (thiscall (stats, 0, 1), ret 8): zeroes the resistances, damage
+    # bonuses and factors (floats at +0x66 .. +0xF2) and adds up level, items and buffs. Gear buffs add theirs after it.
+    ('cStats_recalc', 0x005796A0, 'func'),
     # A text resource's new text (stdcall (id, wchar begin, end, capacity end), ret 0x10; takes the buffer, which it frees
     # with the engine's allocator): the network lobby names the heroes so (0x7EDC50, ids 0x2700 + slot - 1).
     ('textResources_set', 0x00672A60, 'func'),

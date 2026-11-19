@@ -77,6 +77,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [Named pipes (gear.pipe)](#named-pipes-gearpipe)
 - [World (gear.world)](#world-gearworld)
 - [Party (gear.party)](#party-gearparty)
+- [Buffs (gear.buffs)](#buffs-gearbuffs)
 - [Classes (gear.classes)](#classes-gearclasses)
 - [Models (gear.models)](#models-gearmodels)
 - [Drops (gear.drops)](#drops-geardrops)
@@ -128,6 +129,8 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'net_caps'` | The custom net messages became available, or the list of players who can use them changed (gear.net): `(caps)`, see `GearNetCaps`. |
 | `'chat.line'` | The game added a chat or message line: `(line)`, see `GearChatLine` (gear.chat). |
 | `'party.control'` | `gear.party.control` gave the player another hero: `(from, to)` (creatures). |
+| `'buff.applied'` | A mod gave a creature a Gear buff: `(creature, key, id, strength)`. |
+| `'buff.ended'` | A Gear buff ended (its time ran out, it was removed, a savegame was loaded): `(creature, key, id)`. |
 | `'realm.changed'` | `gear.realm.use` switched the online play server: `(realm)`. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'skillslot.key'` | A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it. |
@@ -233,6 +236,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `clipboard` | `GearClipboard` | The Windows clipboard: copy text out of the game. |
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
 | `party` | `GearParty` | Companion heroes in single player: recruit, switch control, orders. |
+| `buffs` | `GearBuffs` | Buffs, debuffs and auras on any creature: combat values for a while, with the game's spell overlays. |
 | `classes` | `GearClasses` | Custom hero classes: the tier of each art for each body, ability copies, hero skills. |
 | `models` | `GearModels` | The models' motion slots (which clips a body has, giving it another's). |
 | `lookup` | `GearLookup` | Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window. |
@@ -276,6 +280,8 @@ Forms:
 - `fun(event: 'net_caps', fn: fun(caps: GearNetCaps)): GearHandler`
 - `fun(event: 'chat.line', fn: fun(line: GearChatLine)): GearHandler`
 - `fun(event: 'party.control', fn: fun(from: Creature, to: Creature)): GearHandler`
+- `fun(event: 'buff.applied', fn: fun(creature: Creature?, key: string, id: string, strength: number)): GearHandler`
+- `fun(event: 'buff.ended', fn: fun(creature: Creature?, key: string, id: string)): GearHandler`
 - `fun(event: 'realm.changed', fn: fun(realm: GearRealm)): GearHandler`
 - `fun(event: 'combat.constant', fn: fun(name: string, vanilla: number, index: integer): number?): GearHandler`
 - `fun(event: 'skillslot.key', fn: fun(character: integer): (integer|false|{[1]: integer, [2]: 'full'|'select'})?): GearHandler`
@@ -1683,6 +1689,151 @@ What `creature:combos()` lists.
 | `'attacking'` |  |
 | `'ability'` | Using a combat art or spell. |
 | `'busy'` | Something else (a state the API does not name). |
+
+## Buffs (gear.buffs)
+
+A buff changes a creature's combat values for a while: its resistances, damage bonuses and factors (armour, attack, speed, regeneration). The game works these values out anew whenever something changes (level, items, its own buffs); Gear adds what the creature's Gear buffs give each time, so they hold through equipment changes and go back when the buff ends or is removed. A buff can also show one of the game's spell overlays on the creature (the stone of Steinhaut, the flames of Flammenhaut, the light of Lichtschild) while it runs. A debuff is a buff with negative values. Definitions are plain data shared by every mod (`definitions` lists them, for editors); a mod applies one to any creature at a strength (0.5: half the values, factors halfway to 1). Buffs are not saved: loading a savegame or starting a new game ends them all (`buff.ended`).
+
+To pass on a buff the game gave (a companion's Steinhaut onto the hero you play): take `fields` of the caster before and after its cast, `change` turns the difference into stats and factors, `apply` them elsewhere.
+
+### GearBuffs
+
+Reached as `gear.buffs`.
+
+| Field | Type | |
+|---|---|---|
+| `STATS` | `table<string, integer>` | The values a buff adds to, by name: `resist_physical`, `resist_fire`, `resist_magic`, `resist_poison`, `damage_min_physical` / `_fire` / `_magic` / `_poison`, `damage_max_physical` / `_fire` / `_magic` / `_poison` (their stats block offsets). |
+| `FACTORS` | `table<string, integer>` | The values a buff multiplies, by name: `attack_factor`, `speed_factor`, `armor_factor`, `regen_factor`, `art_regen_factor`. |
+| `OVERLAYS` | `table<string, integer>` | The game's spell overlays: `light` (6, Lichtschild), `stone` (7, Steinhaut), `flame` (10, Flammenhaut). |
+
+### GearBuffDef
+
+A buff's definition.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | `'name'` (this mod's: becomes `'mod_id:name'`) or `'other_mod:name'`. |
+| `name` | `string` | Shown to the player. (optional) |
+| `description` | `string` |  (optional) |
+| `icon` | `string` | The game's texture name of its icon (for lists and editors). (optional) |
+| `stats` | `table<string\|integer, number>` | What it adds: `{resist_fire = 50}` (names of `STATS`, or stats block offsets). (optional) |
+| `factors` | `table<string\|integer, number>` | What it multiplies: `{armor_factor = 1.5}` (names of `FACTORS`, or offsets). (optional) |
+| `overlay` | `string\|integer` | The spell overlay shown while it runs: a name of `OVERLAYS` or its number. (optional) |
+| `seconds` | `number` | How long it lasts (0 or nil: until removed). (optional) |
+| `debuff` | `boolean` | Marks a harmful one (for lists; the values decide what it does). (optional) |
+
+### GearBuffOpts
+
+What `apply` can be told.
+
+| Field | Type | |
+|---|---|---|
+| `strength` | `number` | 1 (default): as defined; 0.5: half the values and factors halfway to 1. (optional) |
+| `seconds` | `number` | Instead of the definition's. (optional) |
+| `key` | `string` | One buff per key and creature (default: the definition's id): the same key again replaces it. (optional) |
+| `source` | `Creature\|integer` | Who gave it. (optional) |
+| `ability` | `integer` | With which combat art or spell. (optional) |
+| `overlay` | `integer` | Instead of the definition's. (optional) |
+
+### GearBuff
+
+A running buff (`list`).
+
+| Field | Type | |
+|---|---|---|
+| `key` | `string` |  |
+| `id` | `string` | Its definition's id. |
+| `strength` | `number` |  |
+| `seconds` | `number` | How long it was given for (0: until removed). |
+| `left` | `number` | Seconds left (0 when it has no end). |
+| `overlay` | `integer` |  |
+| `source` | `Creature` |  (optional) |
+| `ability` | `integer` |  (optional) |
+| `mods` | `{[1]: integer, [2]: boolean, [3]: number}[]` | What it does: stats block offset, factor (else added), value. |
+
+#### `gear.buffs.define(def) -> GearBuffDef`
+
+Defines (or replaces) a buff. Returns the definition with its full id.
+
+- `def`: `GearBuffDef`
+- returns `GearBuffDef`
+
+#### `gear.buffs.definitions() -> GearBuffDef[]`
+
+Every defined buff, in the order they were defined.
+
+- returns `GearBuffDef[]`
+
+#### `gear.buffs.apply(target, buff, opts) -> boolean?, string?`
+
+Gives `target` a buff: a definition's id (`'stone'`, `'other_mod:stone'`) or a definition table (defined on the spot).
+
+- `target`: `Creature|integer`
+- `buff`: `string|GearBuffDef`
+- `opts`: `GearBuffOpts` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.buffs.remove(target, key) -> boolean`
+
+Ends a buff before its time.
+
+- `target`: `Creature|integer`
+- `key`: `string`
+- returns `found` `boolean`
+
+#### `gear.buffs.list(target) -> GearBuff[]`
+
+The creature's running Gear buffs.
+
+- `target`: `Creature|integer`
+- returns `GearBuff[]`
+
+#### `gear.buffs.fields(target) -> table<integer, number>?`
+
+The creature's combat values now, by stats block offset (`{[0x66] = 12.5, ...}`; the offsets of `STATS` and `FACTORS` and more). nil when it is no creature.
+
+- `target`: `Creature|integer`
+- returns `table<integer, number>?`
+
+#### `gear.buffs.change(before, after) -> table<integer, number>, table<integer, number>`
+
+What changed between two `fields` snapshots, as `stats` and `factors` of a definition (by offset).
+
+- `before`: `table<integer, number>`
+- `after`: `table<integer, number>`
+- returns `stats` `table<integer, number>`
+- returns `factors` `table<integer, number>`
+
+#### `gear.buffs.overlay(target) -> integer?, number?`
+
+The spell overlay the creature shows and its seconds left (the game's own buffs set it too).
+
+- `target`: `Creature|integer`
+- returns `overlay` `integer?`
+- returns `seconds` `number?`
+
+#### `gear.buffs.set_overlay(target, which, seconds) -> boolean`
+
+Shows a spell overlay on the creature for `seconds` (default 30; 0 or `which` 0: none). The game counts it down.
+
+- `target`: `Creature|integer`
+- `which`: `string|integer`
+- `seconds`: `number` (optional)
+- returns `ok` `boolean`
+
+#### `creature:buffs() -> GearBuff[]`
+
+The creature's running Gear buffs (`gear.buffs.list`).
+
+- returns `GearBuff[]`
+
+#### `creature:remove_buff(key) -> boolean`
+
+Ends one of its Gear buffs (`gear.buffs.remove`).
+
+- `key`: `string`
+- returns `found` `boolean`
 
 ## Classes (gear.classes)
 

@@ -1,0 +1,63 @@
+-- Self test of gear.buffs (Sacred.exe -gear-auto -gear-load=N -gear-mods=bufftest): a buff's values and overlay, its
+-- end, half strength, removal, and a battle mage's Steinhaut passed on to the hero at half strength.
+if not gear.auto then return end
+local A, party, B = gear.auto, gear.party, gear.buffs
+local res = {passed = 0, failed = 0}
+local function check(n, ok, d) if ok then res.passed = res.passed + 1 else res.failed = res.failed + 1 end print((ok and 'PASS ' or 'FAIL ') .. n .. (d ~= nil and (': ' .. tostring(d)) or '')) end
+local ended = {}
+gear.on('buff.ended', function(c, key, id) ended[#ended + 1] = key end)
+local RP, AF = B.STATS.resist_physical, B.FACTORS.armor_factor
+gear.task(function()
+  A.wait_for_menu(120)
+  A.wait_for_game(180)
+  gear.wait(2)
+  local h = party.leader()
+  local f0 = B.fields(h)
+  check('fields', f0 and f0[RP] ~= nil, f0 and f0[RP])
+  B.define({id = 'stone', name = 'Stone skin', stats = {resist_physical = 200}, factors = {armor_factor = 1.5}, overlay = 'stone', seconds = 8})
+  check('defined', #B.definitions() >= 1)
+  check('apply', B.apply(h, 'stone'))
+  local f1 = B.fields(h)
+  check('resistance +200', math.abs(f1[RP] - f0[RP] - 200) < 0.01, f0[RP] .. ' -> ' .. f1[RP])
+  check('armour factor x1.5', math.abs(f1[AF] - f0[AF] * 1.5) < 0.01, f0[AF] .. ' -> ' .. f1[AF])
+  local ov, left = B.overlay(h)
+  check('stone overlay', ov == 7, tostring(ov) .. ' ' .. tostring(left))
+  check('listed', #h:buffs() == 1 and h:buffs()[1].id == 'bufftest:stone', #h:buffs())
+  gear.wait(1)
+  A.screenshot('buff-stone')
+  gear.wait(3)
+  local f2 = B.fields(h)
+  check('still there after 4 s', math.abs(f2[RP] - f0[RP] - 200) < 0.01, f2[RP])
+  gear.wait(5)
+  local f3 = B.fields(h)
+  check('gone after 8 s', math.abs(f3[RP] - f0[RP]) < 0.01, f3[RP])
+  check('overlay gone', (B.overlay(h)) == 0, B.overlay(h))
+  check('buff.ended event', ended[1] == 'bufftest:stone', ended[1])
+  -- half strength
+  B.apply(h, 'stone', {strength = 0.5, seconds = 3, key = 'half'})
+  local f4 = B.fields(h)
+  check('half strength', math.abs(f4[RP] - f0[RP] - 100) < 0.01 and math.abs(f4[AF] - f0[AF] * 1.25) < 0.01, f4[RP] .. ' ' .. f4[AF])
+  check('remove', B.remove(h, 'half'))
+  check('removed', math.abs(B.fields(h)[RP] - f0[RP]) < 0.01)
+  -- copy a native buff: a battle mage casts Steinhaut, the hero gets half of it
+  local m = party.recruit('battlemage', {experience = 500000})
+  gear.wait(2)
+  m:learn(2, 10)
+  gear.wait(5)   -- a spell just learned regenerates first
+  local before = B.fields(m)
+  m:order_ability(2, m)
+  gear.wait(2)
+  local after = B.fields(m)
+  local stats, factors = B.change(before, after)
+  local n = 0 for _ in pairs(stats) do n = n + 1 end for _ in pairs(factors) do n = n + 1 end
+  -- (a hero just recruited may still be busy and not cast: then this part only prints)
+  print('Steinhaut changed the mage in ' .. n .. ' values')
+  check('copied onto the hero at half', B.apply(h, {id = 'steinhaut', stats = stats, factors = factors, overlay = 'stone', seconds = 10}, {strength = 0.5}))
+  local f5 = B.fields(h)
+  print('copied', f0[RP], '->', f5[RP], f0[AF], '->', f5[AF])
+  gear.wait(1)
+  A.screenshot('buff-copied')
+  A.write('buff.json', gear.json.encode(res))
+  print(('%d passed, %d failed'):format(res.passed, res.failed))
+  A.quit(res.failed == 0 and 0 or 1)
+end)
