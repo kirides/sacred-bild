@@ -5131,6 +5131,20 @@ local function make_mods_api(mod)
         local e = catalog[id]
         return e and not e.invalid and mod_info(e) or nil
     end
+    -- read(id, relative) -> text | nil, message: a file of an installed mod's folder (read only; this mod's own too).
+    function api.read(id, relative)
+        assert(type(id) == 'string' and type(relative) == 'string', 'expected a mod id and a path')
+        local e = catalog[id]
+        if not e or e.invalid then return nil, 'no such mod' end
+        return native.read_file(e.dir, relative)
+    end
+    -- files(id, folder) -> {file name, ...}: the files directly in a folder of an installed mod ('' : the mod's folder), sorted.
+    function api.files(id, folder)
+        assert(type(id) == 'string', 'expected a mod id')
+        local e = catalog[id]
+        if not e or e.invalid then return nil, 'no such mod' end
+        return native.list_mod_dir(e.dir, folder or '')
+    end
     return api
 end
 

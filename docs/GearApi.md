@@ -2648,6 +2648,24 @@ Adds a page of this mod's own to its screen in the mod manager (a "More" tab aft
 
 - `fn`: `fun(x: number, y: number, w: number, h: number): number` (optional)
 
+#### `gear.mods.read(id, relative) -> string?, string?`
+
+A file of an installed mod's folder, read only (`relative` is a path inside it, e.g. `arts/venom.json`).
+
+- `id`: `string`
+- `relative`: `string`
+- returns `text` `string?`
+- returns `error` `string?`
+
+#### `gear.mods.files(id, folder) -> string[]?, string?`
+
+The names of the files directly in a folder of an installed mod (`''`: the mod's own folder), sorted.
+
+- `id`: `string`
+- `folder`: `string` (optional)
+- returns `names` `string[]?`
+- returns `error` `string?`
+
 #### `gear.mods.list() -> GearModListing[]`
 
 Every installed mod, sorted by name.
