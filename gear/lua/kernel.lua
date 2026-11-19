@@ -2239,6 +2239,7 @@ end
 ---------------------------------------------------------------------------------------------------------------
 local UI_LAYERS = {world = 0, hud = 1, top = 2}
 local UI_FITS = {stretch = 0, contain = 1, fit = 1, cover = 2, fill = 2}
+UI_FITS[1] = {h = 4, v = 8, hv = 12, vh = 12}          -- [1]: added to the fit for native.ui_image (a flip)
 local UI_ALIGN = {left = 0, center = 1, right = 4}   -- the fonts' flags
 local UI_VALIGN = {top = 0, middle = 1, bottom = 2, baseline = 3}
 local UI_MAX_PER_MOD = 2000     -- draw commands per mod and tick
@@ -2744,7 +2745,7 @@ local function make_ui(mod)
             ui_color(opts.background, 0), opts.padding or 0, opts.face, opts.size or UI_TEXT_SIZE, ui_font_style(opts),
             valign)
     end
-    -- ui.image(id, x, y, w, h, {fit = 'stretch' | 'contain' | 'cover', color, layer, window}); w, h default to the
+    -- ui.image(id, x, y, w, h, {fit = 'stretch' | 'contain' | 'cover', flip = 'h' | 'v' | 'hv', color, layer, window}); w, h default to the
     -- image's own size.
     function ui.image(id, x, y, w, h, opts)
         opts = opts or {}
@@ -2752,6 +2753,11 @@ local function make_ui(mod)
         if not layer then return false end
         local fit = UI_FITS[opts.fit or 'stretch']
         if not fit then error('fit is "stretch", "contain" or "cover"', 2) end
+        if opts.flip then
+            local flip = UI_FITS[1][opts.flip]
+            if not flip then error('flip is "h", "v" or "hv"', 2) end
+            fit = fit + flip
+        end
         ui_count(mod)
         return native.ui_image(layer, slot, id, x, y, w or 0, h or 0, ui_color(opts.color, 0xFFFFFFFF), fit)
     end
@@ -2821,6 +2827,59 @@ local function make_ui(mod)
         return out
     end
     function ui.fonts() return native.ui_font_count() end
+
+    ---------------------------------------------------------------------------------------------------------
+    -- gear.ui.native: pieces of the game's own look, built from its UI images (ui.images). Each piece is drawn with
+    -- ui.image / ui.rect, so layers, windows, the 2000 commands per tick and the 1024x768 layout apply as there.
+    -- A style is a table of image ids and sizes; `frame` draws one. Add styles (ring, bar ...) next to `tooltip`.
+    ---------------------------------------------------------------------------------------------------------
+    local native_ui = {}
+    ui.native = native_ui
+    -- tooltip: the frame of the game's item tooltip (TL = 54, TR = 55, the bottom corners are those flipped upside down;
+    -- bar 52 at the sides, 14 / 21 on top and bottom; the fill is the game's 0x9F000000).
+    local NATIVE_FRAMES = {
+        tooltip = {
+            fill = 0x9F000000,
+            tl = {id = 54, w = 37, h = 19}, tr = {id = 55, w = 37, h = 17},
+            left = {id = 52, w = 6}, right = {id = 52, w = 7},
+            top = {id = 14, h = 6}, bottom = {id = 14, h = 6, flip = 'v'},
+            overhang = {left = 11, top = 5, right = 11, bottom = 5},     -- the corner ornaments reach beyond the bars
+            inset = {left = 6, top = 6, right = 6, bottom = 6},
+        },
+    }
+    -- ui.native.insets(style) -> {left, top, right, bottom}: how far the frame's border reaches into the box (the text goes
+    -- inside it) and `overhang`, how far the corner ornaments reach out of it.
+    function native_ui.insets(style)
+        local st = NATIVE_FRAMES[style or 'tooltip']
+        if not st then error('unknown frame style', 2) end
+        return copy(st.inset), copy(st.overhang)
+    end
+    -- ui.native.frame(x, y, w, h, {style = 'tooltip', layer, window, fill = color | false, color = tint}) -> drawn
+    function native_ui.frame(x, y, w, h, opts)
+        opts = opts or {}
+        local st = NATIVE_FRAMES[opts.style or 'tooltip']
+        if not st then error('unknown frame style (known: tooltip)', 2) end
+        local o = {layer = opts.layer, window = opts.window, color = opts.color}
+        local function img(p, ix, iy, iw, ih)
+            if iw > 0 and ih > 0 then
+                ui.image(p.id, ix, iy, iw, ih, {layer = o.layer, window = o.window, color = o.color, flip = p.flip})
+            end
+        end
+        if opts.fill ~= false then
+            ui.rect(x, y, w, h, opts.fill or st.fill, {layer = o.layer, window = o.window})
+        end
+        local oh = st.overhang
+        local lw, rw, th, bh = st.left.w, st.right.w, st.top.h, st.bottom.h
+        img(st.top, x + lw, y, w - lw - rw, th)
+        img(st.bottom, x + lw, y + h - bh, w - lw - rw, bh)
+        img(st.left, x, y + th, lw, h - th - bh)
+        img(st.right, x + w - rw, y + th, rw, h - th - bh)
+        img({id = st.tl.id}, x - oh.left, y - oh.top, st.tl.w, st.tl.h)
+        img({id = st.tr.id}, x + w + oh.right - st.tr.w, y - oh.top, st.tr.w, st.tr.h)
+        img({id = st.tl.id, flip = 'v'}, x - oh.left, y + h + oh.bottom - st.tl.h, st.tl.w, st.tl.h)
+        img({id = st.tr.id, flip = 'v'}, x + w + oh.right - st.tr.w, y + h + oh.bottom - st.tr.h, st.tr.w, st.tr.h)
+        return true
+    end
 
     ---------------------------------------------------------------------------------------------------------
     -- Widgets (immediate mode): call them every frame with the current values; they draw themselves, take the

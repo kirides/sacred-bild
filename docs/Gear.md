@@ -131,6 +131,11 @@ Rules that hold across the API:
   on the `world`, `hud` or `top` layer, optionally inside a game window (`opts.window`) so it moves with it. With
   SacredBild the layout is scaled to the screen and the game's windows can be moved; without it the layout is the
   screen. See [Drawing](GearApi.md#drawing-gearui).
+- **The game's own look:** `gear.ui.native.frame(x, y, w, h, opts)` draws the border and fill of the game's item tooltip
+  (dark metal bars, ornaments in the corners; built from the game's UI images, native size at the corners, stretched
+  bars), so a panel of a mod can look like the game's tooltip while its text stays the mod's own. `gear.ui.native.insets()`
+  tells how much room the border takes. Further pieces (rings, bars) are added as styles to the same table. See
+  [The game's own look](GearApi.md#the-games-own-look-gearuinative).
 - **Mouse and keys:** a click over a mod's widget or panel is taken from the game, and the game's windows do not see
   the cursor there. Mods must not take the game's own keys (see [Mod manager](#mod-manager)); `gear.input` remaps the
   game's keys instead.

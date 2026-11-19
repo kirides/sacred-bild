@@ -780,6 +780,14 @@ namespace
         {
             return;
         }
+        if (c.flip & 1)
+        {
+            std::swap(u0, u1);
+        }
+        if (c.flip & 2)
+        {
+            std::swap(v0, v1);
+        }
         state.enter();
         state.texture(surface);
         const Text::Placement p = placement();

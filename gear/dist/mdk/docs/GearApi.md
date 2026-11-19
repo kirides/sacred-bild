@@ -95,6 +95,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [Hooks between mods (gear.events)](#hooks-between-mods-gearevents)
 - [Drawing (gear.ui)](#drawing-gearui)
 - [State queries](#state-queries)
+- [The game's own look (gear.ui.native)](#the-games-own-look-gearuinative)
 - [Widgets and input](#widgets-and-input)
 - [Layout: persistent panels, movable game windows](#layout-persistent-panels-movable-game-windows)
 - [Automation (gear.auto)](#automation-gearauto)
@@ -3262,6 +3263,7 @@ Includes everything of `GearDrawOpts`.
 | Field | Type | |
 |---|---|---|
 | `fit` | `GearImageFit` | `'stretch'` (default: fills the box), `'contain'` (the whole image, aspect kept, centered), `'cover'` (fills the box, aspect kept, the overhang cut off). (optional) |
+| `flip` | `'h'\|'v'\|'hv'` | Mirrored left-right (`'h'`), upside down (`'v'`) or both. (optional) |
 | `color` | `GearColor` | Tint: white as is; the alpha makes it translucent. (optional) |
 
 ### GearImageInfo
@@ -3287,6 +3289,7 @@ Positions and sizes are the UI's 1024x768 layout, the space the game lays its wi
 | `WIDTH` | `integer` | 1024 |
 | `HEIGHT` | `integer` | 768 |
 | `COLORS` | `GearColors` | The widgets' colours. |
+| `native` | `GearUiNative` | Pieces of the game's own look built from its UI images (`gear.ui.native.frame`). |
 
 ### GearColors
 
@@ -3547,6 +3550,43 @@ Whether the key is held.
 
 - `name`: `GearKey`
 - returns `boolean`
+
+## The game's own look (gear.ui.native)
+
+### GearUiNative
+
+Reached as `gear.ui.native`.
+
+Pieces of the game's own look, drawn with its UI images (`gear.ui.images`) through `gear.ui.image` and `gear.ui.rect`: layers, windows, the draw command budget and the 1024x768 layout work as for those. Nothing here needs a game font; the text is the mod's. A style is a table of image ids and sizes inside Sacred Gear, so a further piece (a ring, a bar) is one more style.
+
+### GearNativeFrameOpts
+
+Includes everything of `GearDrawOpts`.
+
+| Field | Type | |
+|---|---|---|
+| `style` | `'tooltip'` | The frame style: `'tooltip'` (default) is the border of the game's item tooltip, dark metal bars with ornaments in the four corners (image 54 top-left, 55 top-right, flipped upside down at the bottom; 52 for the bars). (optional) |
+| `fill` | `GearColor\|false` | The fill inside the bars (default the game's translucent black `0x9F000000`); `false` draws none. (optional) |
+| `color` | `GearColor` | Tint of the border images (white as is). (optional) |
+
+#### `gear.ui.native.frame(x, y, w, h, opts) -> boolean`
+
+A frame in the game's own style: the fill, the four bars and the four corner ornaments. `x`, `y`, `w`, `h` are the bars' outer rectangle (the fill's too); the corner ornaments reach a few units beyond it (see `insets`), like the game's tooltip, whose own frame is this one. Put the contents inside `x + inset.left` ... and leave `overhang` of room if the ornaments must not cover anything.
+
+- `x`: `number`
+- `y`: `number`
+- `w`: `number`
+- `h`: `number`
+- `opts`: `GearNativeFrameOpts` (optional)
+- returns `drawn` `boolean`
+
+#### `gear.ui.native.insets(style) -> {left: number, top: number, right: number, bottom: number}, {left: number, top: number, right: number, bottom: number}`
+
+How far the border of a frame style reaches into its box (the text goes inside that) and how far its corner ornaments reach out of the box, both as `{left, top, right, bottom}` in layout units.
+
+- `style`: `'tooltip'` (optional) - Default `'tooltip'`.
+- returns `inset` `{left: number, top: number, right: number, bottom: number}`
+- returns `overhang` `{left: number, top: number, right: number, bottom: number}`
 
 ## Widgets and input
 

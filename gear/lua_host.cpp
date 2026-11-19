@@ -2111,17 +2111,20 @@ namespace
         return 1;
     }
 
-    // native.ui_image(layer, slot, id, x, y, w, h, color, fit) -> bool; fit 0 stretch, 1 contain, 2 cover
+    // native.ui_image(layer, slot, id, x, y, w, h, color, fit) -> bool; fit 0 stretch, 1 contain, 2 cover, plus 4 for a
+    // left-right mirrored and 8 for an upside-down image
     int nativeUiImage(lua_State* L)
     {
         Ui::Command c;
         c.kind = Ui::Kind::Image;
         const uint32_t id = checkId(L, 3);
-        const lua_Number fit = luaL_checknumber(L, 9);
-        bool ok = uiCommon(L, c, 1) && uiBox(L, c, 4) && id && fit >= 0 && fit <= 2;
+        const lua_Number mode = luaL_checknumber(L, 9);
+        const int fit = static_cast<int>(mode) & 3;
+        bool ok = uiCommon(L, c, 1) && uiBox(L, c, 4) && id && mode >= 0 && mode < 16 && fit <= 2;
         c.image = id;
         c.color = toColor(luaL_checknumber(L, 8));
-        c.fit = static_cast<Ui::Fit>(static_cast<int>(fit));
+        c.fit = static_cast<Ui::Fit>(fit);
+        c.flip = static_cast<uint8_t>((static_cast<int>(mode) >> 2) & 3);
         lua_pushboolean(L, ok && Ui::add(std::move(c)));
         return 1;
     }

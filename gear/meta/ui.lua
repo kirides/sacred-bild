@@ -42,6 +42,7 @@
 
 ---@class GearImageOpts : GearDrawOpts
 ---@field fit? GearImageFit `'stretch'` (default: fills the box), `'contain'` (the whole image, aspect kept, centered), `'cover'` (fills the box, aspect kept, the overhang cut off).
+---@field flip? 'h'|'v'|'hv' Mirrored left-right (`'h'`), upside down (`'v'`) or both.
 ---@field color? GearColor Tint: white as is; the alpha makes it translucent.
 
 ---@class GearImageInfo
@@ -62,6 +63,7 @@
 ---@field WIDTH integer 1024
 ---@field HEIGHT integer 768
 ---@field COLORS GearColors The widgets' colours.
+---@field native GearUiNative Pieces of the game's own look built from its UI images (`gear.ui.native.frame`).
 local GearUi = {}
 
 ---@class GearColors
@@ -285,3 +287,36 @@ function GearUi.typed() end
 ---@param name GearKey
 ---@return boolean
 function GearUi.key_down(name) end
+
+-- ## The game's own look (gear.ui.native)
+
+-- path gear.ui.native
+--- Pieces of the game's own look, drawn with its UI images (`gear.ui.images`) through `gear.ui.image` and `gear.ui.rect`: layers,
+--- windows, the draw command budget and the 1024x768 layout work as for those. Nothing here needs a game font; the text is the
+--- mod's. A style is a table of image ids and sizes inside Sacred Gear, so a further piece (a ring, a bar) is one more style.
+---@class GearUiNative
+local GearUiNative = {}
+
+---@class GearNativeFrameOpts : GearDrawOpts
+---@field style? 'tooltip' The frame style: `'tooltip'` (default) is the border of the game's item tooltip, dark metal bars with ornaments in the four corners (image 54 top-left, 55 top-right, flipped upside down at the bottom; 52 for the bars).
+---@field fill? GearColor|false The fill inside the bars (default the game's translucent black `0x9F000000`); `false` draws none.
+---@field color? GearColor Tint of the border images (white as is).
+
+--- A frame in the game's own style: the fill, the four bars and the four corner ornaments. `x`, `y`, `w`, `h` are the bars'
+--- outer rectangle (the fill's too); the corner ornaments reach a few units beyond it (see `insets`), like the game's
+--- tooltip, whose own frame is this one. Put the contents inside `x + inset.left` ... and leave `overhang` of room if the
+--- ornaments must not cover anything.
+---@param x number
+---@param y number
+---@param w number
+---@param h number
+---@param opts? GearNativeFrameOpts
+---@return boolean drawn
+function GearUiNative.frame(x, y, w, h, opts) end
+
+--- How far the border of a frame style reaches into its box (the text goes inside that) and how far its corner ornaments
+--- reach out of the box, both as `{left, top, right, bottom}` in layout units.
+---@param style? 'tooltip' Default `'tooltip'`.
+---@return {left: number, top: number, right: number, bottom: number} inset
+---@return {left: number, top: number, right: number, bottom: number} overhang
+function GearUiNative.insets(style) end

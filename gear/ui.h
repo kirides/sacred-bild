@@ -33,6 +33,7 @@ namespace Ui
         Layer layer = Layer::Hud;
         int8_t window = -1;         // draw in this in-game window's UI frame (slot 0..22), -1: the canvas
         Fit fit = Fit::Stretch;
+        uint8_t flip = 0;           // images: 1 mirrored left-right, 2 upside down
         float x = 0, y = 0, w = 0, h = 0;
         uint32_t color = 0xFFFFFFFF;    // ARGB; for images a tint (white: as is)
         // Text
