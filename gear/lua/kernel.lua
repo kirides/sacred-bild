@@ -3469,7 +3469,7 @@ local function make_ui(mod)
         end
         ui_count(mod)
         native.ui_region(layer, x, y, w, h, handle)
-        ui_regions[#ui_regions + 1] = {handle = handle, layer = layer, x = x, y = y, w = w, h = h}
+        ui_regions[#ui_regions + 1] = {handle = handle, layer = layer, x = x, y = y, w = w, h = h, id = tostring(id), mod = mod.id}
         if opts.nav ~= false and opts.enabled ~= false then
             ui_nav[#ui_nav + 1] = {mod = mod, x = x, y = y, w = w, h = h, layer = layer, kind = opts._nav_kind,
                 ax = opts._nav_x, ay = opts._nav_y, drop = opts._nav_drop}
@@ -4820,6 +4820,14 @@ local function make_auto()
             ui_map = {ax = ax, bx = a.mouse_x - ax * px1, ay = ay, by = a.mouse_y - ay * py1}
         end
         return math.floor((x - ui_map.bx) / ui_map.ax + 0.5), math.floor((y - ui_map.by) / ui_map.ay + 0.5)
+    end
+    -- auto.widget(id, mod_id?) -> x, y, w, h: where a widget (the region of ui.button and the rest, by the id it was
+    -- given) was drawn in the last tick, in UI layout coordinates (clipped to a scroll area); nil when it was not drawn.
+    function auto.widget(id, mod_id)
+        id, mod_id = tostring(id), mod_id or mod.id
+        for _, r in ipairs(ui_prev_regions) do
+            if r.id == id and r.mod == mod_id then return r.x, r.y, r.w, r.h end
+        end
     end
     -- In a task: click the UI layout point (x, y), or the center of a node from ui().
     function auto.ui_click(x, y, button)
