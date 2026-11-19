@@ -6,7 +6,7 @@
 local ui = gear.ui
 local C = ui.COLORS
 
-local ROW_H, ROW_STEP = 58, 62   -- a mod's row in the list and the distance between rows
+local ROW_H, ROW_STEP = 66, 70   -- a mod's row in the list and the distance between rows
 local SETTING_ROWS = 9      -- rows of settings per page (section headers count)
 local KEY_ROWS = 12         -- rows (key binds and headings) per page
 local W, H_MAX = 640, 482   -- the panel: its height is the most it takes, less on a small screen
@@ -37,7 +37,8 @@ local function text_w(text, opts)
     local key = text .. '\0' .. tostring(opts and opts.size) .. tostring(opts and opts.bold)
     local w = measured[key]
     if not w then
-        w = ui.text_size(text, opts) or (#text * 6)
+        w = ui.text_size(text, opts)
+        if not w then return #text * 6 end      -- fonts not ready yet: a guess, not kept
         measured[key] = w
     end
     return w
@@ -147,10 +148,9 @@ local function draw_row(e, x, y, w)
     ui.frame(x, y, w, ROW_H, bad and 0xFF804040 or C.edge_dim, 1, LAYER)
     local sid = e.id
     local dim = e.state == 'off' or e.state == 'blocked'
-    local name_opts = {size = 14, bold = true}
     -- switch | name, version and author | Settings | Keys; the description and the status under the name.
     local t = ui.table('row:' .. sid, x + 8, y + 8, w - 18, {
-        columns = {44, math.min(text_w(e.name, name_opts), 280), '*', 80, 80},
+        columns = {44, {width = 'auto', max = 280}, '*', 80, 80},
         spacing = {6, 2}, row_heights = {22, 16, 14}, layer = 'top',
     })
     t:row()

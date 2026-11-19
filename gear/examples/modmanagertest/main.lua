@@ -41,7 +41,7 @@ local function click(x, y, wait)
     gear.wait(wait or 0.4)
 end
 
--- The list's metrics (modmanager.lua): rows of 58 every 62 from the panel's top + 52, down to 6 above the footer
+-- The list's metrics (modmanager.lua): rows of 66 every 70 from the panel's top + 52, down to 6 above the footer
 -- band, which is the panel's last 42; the footer's controls are 22 tall at the panel's bottom - 33.
 local function footer_rect()
     local p = panel()
@@ -49,11 +49,11 @@ local function footer_rect()
 end
 local function per_page()
     local p = panel()
-    return math.max(1, math.floor((p.y + p.h - 42 - 6 - (p.y + 52) - 58) / 62) + 1)
+    return math.max(1, math.floor((p.y + p.h - 42 - 6 - (p.y + 52) - 66) / 70) + 1)
 end
 local function row_rect(slot)
     local p = panel()
-    return {y = p.y + 52 + (slot - 1) * 62, h = 58}
+    return {y = p.y + 52 + (slot - 1) * 70, h = 66}
 end
 
 -- The row of a mod in the list: page and place on it (sorted by name, the manager itself last).
@@ -74,7 +74,7 @@ local function list_page(page)
     for _ = 1, 6 do click(mid - 75, fy + 11, 0.15) end            -- back to page 1
     for _ = 2, page do click(mid + 75, fy + 11, 0.25) end
 end
-local function row_y(slot) return geo().y + 24 + (slot - 1) * 62 end
+local function row_y(slot) return geo().y + 24 + (slot - 1) * 70 end
 
 local function open_list()
     local g = geo()
@@ -114,7 +114,7 @@ gear.task(function()
             local r = row_rect(slot)
             if r.y + r.h > fr.y or r.y < p.y then clash = slot end
         end
-        check('no row of the list intersects the footer', clash == nil and pp >= 1, ('rows %d, footer at %d, last row ends %d'):format(pp, fr.y, row_rect(pp).y + 58))
+        check('no row of the list intersects the footer', clash == nil and pp >= 1, ('rows %d, footer at %d, last row ends %d'):format(pp, fr.y, row_rect(pp).y + 66))
         check('the footer controls are inside the panel', fr.controls_y >= fr.y and fr.controls_y + fr.controls_h <= p.y + p.h, fr.controls_y)
         check('the panel fits the screen', p.y >= 0 and p.y + p.h <= select(4, ui.screen()), ('%d..%d'):format(p.y, p.y + p.h))
     end
