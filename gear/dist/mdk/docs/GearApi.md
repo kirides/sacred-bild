@@ -1005,6 +1005,24 @@ Creatures within `radius` world units of (x, y), nearest first.
 - `opts`: `GearNearOpts` (optional)
 - returns `Creature[]`
 
+### GearCursor
+
+What the mouse cursor is over in the world (not over a window): the object it picks as the game's own cursor does (the hero itself is skipped when `exclude` is given), and the world point and layer under it, in the units of `creature:position()`.
+
+| Field | Type | |
+|---|---|---|
+| `object` | `Creature` | The creature (or other object) under the cursor. (optional) |
+| `x` | `integer` |  |
+| `y` | `integer` |  |
+| `layer` | `integer` |  |
+| `pixel_x` | `integer` | The cursor in the game window's pixels. |
+| `pixel_y` | `integer` |  |
+
+#### `gear.world.cursor(exclude) -> GearCursor?`
+
+- `exclude`: `Creature|integer` (optional) - An object the pick skips (the hero).
+- returns `GearCursor?`
+
 #### `gear.world.items_near(x, y, radius, opts) -> GearItem[]`
 
 Items lying in the world within `radius` of (x, y), nearest first.

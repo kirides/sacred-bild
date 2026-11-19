@@ -5557,6 +5557,13 @@ local function make_env(mod)
         pickup_dirty = true
     end
     w.pickup_refused = function() return native.pickup_refused() end
+    -- w.cursor(exclude): what is under the mouse cursor in the world: {creature = object, x, y, layer, pixel_x, pixel_y}.
+    w.cursor = function(exclude)
+        local id, x, y, layer, px, py = native.world_cursor(type(exclude) == 'table' and exclude.id or exclude or 0)
+        if not id then return nil end
+        local obj = id ~= 0 and world.object(id) or nil
+        return {object = obj, x = x, y = y, layer = layer, pixel_x = px, pixel_y = py}
+    end
     gear.world = w
     -- gear.models: the models' motion slot tables (Models.tmp). `body` is a hero type (1..9) or its name ('seraphim').
     gear.classes = {}

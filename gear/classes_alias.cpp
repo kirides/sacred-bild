@@ -426,3 +426,51 @@ bool Classes::setText(uint32_t id, const char* utf8, const char*& error)
     }
     return engineSetText(id, utf8, error);
 }
+
+bool Classes::cursor(uint32_t exclude, Cursor& out)
+{
+    if (!Addr::g_uiEventTarget || !Addr::cWorldView_pick || !Addr::g_pApp)
+    {
+        return false;
+    }
+    uintptr_t engine = 0, view = 0;
+    uint32_t index = 0;
+    uint8_t* app = *Addr::g_pApp.get();
+    HWND window = nullptr;
+    if (!readAt(Addr::g_uiEventTarget.address, 0, engine) || !engine || !readAt(engine, 0x48, index) || index >= 8 ||
+        !readAt(engine, 8 + index * 4, view) || !view || !app || !readAt(reinterpret_cast<uintptr_t>(app), 0xB0, window) || !window)
+    {
+        return false;
+    }
+    POINT p{};
+    if (!GetCursorPos(&p) || !ScreenToClient(window, &p))
+    {
+        return false;
+    }
+    out.pixelX = p.x;
+    out.pixelY = p.y;
+    __try
+    {
+        out.object = Addr::cWorldView_pick(reinterpret_cast<void*>(view), p.x, p.y, exclude, nullptr);
+        struct Point
+        {
+            uint8_t head[4];
+            int32_t x, y;
+            uint8_t layer;
+            uint8_t pad[3];
+        } point = {};
+        using ScreenToWorld = void(__fastcall*)(void* self, void* edx, int x, int y, Point* out);
+        uintptr_t vtable = 0, fn = 0;
+        std::memcpy(&vtable, reinterpret_cast<void*>(view), 4);
+        std::memcpy(&fn, reinterpret_cast<void*>(vtable + 0x18), 4);
+        reinterpret_cast<ScreenToWorld>(fn)(reinterpret_cast<void*>(view), nullptr, p.x, p.y, &point);
+        out.x = point.x;
+        out.y = point.y;
+        out.layer = point.layer;
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}

@@ -249,6 +249,10 @@ GEAR = [
     ('cCreature_playMotion', 0x00593320, 'func'),
     ('cStats_learnAbility', 0x00580750, 'func'),
     ('g_pModelManager', 0x00AA4538, 'data'),
+    # The world under the mouse (gear/classes.cpp: gear.world.cursor): the world view's pick (thiscall (view, x, y, exclude id, rect*) ->
+    # object id under physical pixel (x, y), ret 0x10); the view comes from the engine (g_uiEventTarget: +8 the views, +0x48 the index)
+    # and its vtable +0x18 turns pixels into a world point.
+    ('cWorldView_pick', 0x00626C50, 'func'),
     # Ability lookups by id (cdecl (short id) -> record*, T1 0x78-byte records / T2 0x94-byte records; the record's first word is
     # the id the class handlers switch on) and the class checks a rune read makes (thiscall (record, hero type, flag) -> bool,
     # ret 8).
