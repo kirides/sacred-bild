@@ -21,6 +21,7 @@
         "controller",
         "multiplayer"
       ],
+      "thumbnail": "https://raw.githubusercontent.com/kirides/sacred-bild/main/docs/images/mod-index-sacred-bild.png",
       "install": {
         "files": [
           "ddraw.dll"
@@ -46,6 +47,7 @@
       "tags": [
         "tools"
       ],
+      "thumbnail": "https://raw.githubusercontent.com/kirides/sacred-bild/main/docs/images/mod-index-sacred-gear.png",
       "install": {
         "files": [
           "SacredGear.dll"

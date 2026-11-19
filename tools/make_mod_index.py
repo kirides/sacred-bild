@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bump_versions as bv
 
 REPOSITORY = 'kirides/sacred-bild'
+IMAGES = 'https://raw.githubusercontent.com/%s/main/docs/images/' % REPOSITORY  # thumbnails: docs/images/mod-index-<id>.png (1420x800)
 # What the release workflow publishes per push: SacredBild-v<version>.zip (ddraw.dll, SacredBild.ini, version file) and
 # SacredGear-v<version>.zip (SacredGear.dll, version file), laid out like the game folder. Nightlies are pre-releases.
 ITEMS = {
@@ -24,6 +25,7 @@ ITEMS = {
         'author': 'kirides',
         'description': 'Sacred Gold on a modern renderer (ddraw.dll): Direct3D 9 output, window scaling, controller support, UDP multiplayer and more.',
         'tags': ['graphics', 'controller', 'multiplayer'],
+        'thumbnail': IMAGES + 'mod-index-sacred-bild.png',
         'install': {'files': ['ddraw.dll']},
         'download': {'github': REPOSITORY, 'asset': 'SacredBild-v*.zip', 'prerelease': True},
     },
@@ -35,11 +37,12 @@ ITEMS = {
         'author': 'kirides',
         'description': 'The Lua mod kit for Sacred Gold (SacredGear.dll). Runs next to Sacred-Bild or on its own; the Gear mods need it.',
         'tags': ['tools'],
+        'thumbnail': IMAGES + 'mod-index-sacred-gear.png',
         'install': {'files': ['SacredGear.dll']},
         'download': {'github': REPOSITORY, 'asset': 'SacredGear-v*.zip', 'prerelease': True},
     },
 }
-ORDER = ['id', 'kind', 'path', 'platforms', 'name', 'version', 'author', 'description', 'tags', 'install', 'download']
+ORDER = ['id', 'kind', 'path', 'platforms', 'name', 'version', 'author', 'description', 'tags', 'thumbnail', 'install', 'download']
 
 
 def build(repo):
