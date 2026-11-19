@@ -14,7 +14,7 @@ local GearClasses = {}
 
 --- One entry of `catalog()`.
 ---@class GearCatalogEntry
----@field id integer The ability id (combat arts from 1000, spells below; copies: 2000 to 4999 and 100 to 199).
+---@field id integer The ability id (combat arts from 1000, spells below; copies: 2000 to 4999).
 ---@field kind 'combat_art'|'spell'
 ---@field name string? The game's name text.
 ---@field name_text integer
@@ -45,8 +45,8 @@ function GearClasses.tier(art, body) end
 function GearClasses.runes() end
 
 --- Makes a copy of an ability: a new ability `alias` with its own record (a copy of `base`'s), which `values` change (the
---- field names of `gear.data.abilities`: `effect_base`, `value0_base`, `name_text` ...). A copy of an art has an id in 2000 to
---- 4999, a copy of a spell one in 100 to 199 (the engine refuses art ids above 5000). The copy runs the base ability's code
+--- field names of `gear.data.abilities`: `effect_base`, `value0_base`, `name_text` ...). Only combat arts can be copied (bases 1000 to 1999), under an id in
+--- 2000 to 4999 (the engine refuses art ids above 5000; a copy of a spell was tried and is not run by the engine). The copy runs the base ability's code
 --- (its record keeps the base id, which the class handlers switch on); the hero's abilities, the art window, runes and
 --- savegames use the copy's id. `gear.text.add` makes texts for `name_text` and `description_text`. The copies are removed
 --- when the mod is switched off.

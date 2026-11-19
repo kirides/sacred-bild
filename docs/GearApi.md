@@ -679,6 +679,8 @@ One ability record. Reading a field of a table the ability is not in (or an unkn
 | `name_text` | `integer` | The text id of the name (`gear.text.get`). |
 | `description_text` | `integer` | The text id of the description. |
 | `target_mode` | `integer` | How the ability is aimed (the engine passes it on to the targeting code). |
+| `regen_base` | `number` | The regeneration time in seconds is `regen_base + level * regen_per_level` (T1: f32 at +0x40, T2: whole seconds at +0x3E). |
+| `regen_per_level` | `number` |  |
 | `effect_base` | `number` | T1: the first effect is `effect_base + level * effect_per_level` (level 1..100). |
 | `effect_per_level` | `number` | T1. |
 | `effect2_base` | `number` | T1: the second effect. |
@@ -1660,7 +1662,7 @@ One entry of `catalog()`.
 
 | Field | Type | |
 |---|---|---|
-| `id` | `integer` | The ability id (combat arts from 1000, spells below; copies: 2000 to 4999 and 100 to 199). |
+| `id` | `integer` | The ability id (combat arts from 1000, spells below; copies: 2000 to 4999). |
 | `kind` | `'combat_art'\|'spell'` |  |
 | `name` | `string` | The game's name text. (optional) |
 | `name_text` | `integer` |  |
@@ -1700,7 +1702,7 @@ The rune items that teach abilities: `{[ability id] = {item type, ...}}`.
 
 #### `gear.classes.copy_ability(alias, base, values) -> GearAbility?, string?`
 
-Makes a copy of an ability: a new ability `alias` with its own record (a copy of `base`'s), which `values` change (the field names of `gear.data.abilities`: `effect_base`, `value0_base`, `name_text` ...). A copy of an art has an id in 2000 to 4999, a copy of a spell one in 100 to 199 (the engine refuses art ids above 5000). The copy runs the base ability's code (its record keeps the base id, which the class handlers switch on); the hero's abilities, the art window, runes and savegames use the copy's id. `gear.text.add` makes texts for `name_text` and `description_text`. The copies are removed when the mod is switched off.
+Makes a copy of an ability: a new ability `alias` with its own record (a copy of `base`'s), which `values` change (the field names of `gear.data.abilities`: `effect_base`, `value0_base`, `name_text` ...). Only combat arts can be copied (bases 1000 to 1999), under an id in 2000 to 4999 (the engine refuses art ids above 5000; a copy of a spell was tried and is not run by the engine). The copy runs the base ability's code (its record keeps the base id, which the class handlers switch on); the hero's abilities, the art window, runes and savegames use the copy's id. `gear.text.add` makes texts for `name_text` and `description_text`. The copies are removed when the mod is switched off.
 
 - `alias`: `integer`
 - `base`: `integer`
