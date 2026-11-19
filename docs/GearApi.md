@@ -580,6 +580,13 @@ The localized name of type `id`: for an item as the game's tooltip shows it (the
 - returns `name` `string?`
 - returns `error` `string?`
 
+#### `gear.data.object_types:label(id) -> string`
+
+What to show the player for type `id`: `display_name`, else `name`, else `'type <id>'`. Never nil.
+
+- `id`: `integer`
+- returns `string`
+
 #### `gear.data.object_types:kind(id) -> integer?`
 
 The kind (the type record's byte +0x2E) of type `id`.
@@ -1170,6 +1177,12 @@ The object type id.
 - returns `integer?`
 
 #### `creature:type_name() -> string?`
+
+- returns `string?`
+
+#### `creature:display_name() -> string?`
+
+The creature's name for the player: the localized name of its type (`gear.data.object_types:display_name`), the internal type name when the game has no text for it. Use it for anything the player reads; `type_name` stays the identifier to match on.
 
 - returns `string?`
 
@@ -2048,7 +2061,8 @@ What the `kill` event gets.
 |---|---|---|
 | `victim` | `Creature` | The creature that died (it is retired a moment later; read what you need at once). |
 | `type` | `integer` | Its creature type (nil if the object is already gone). (optional) |
-| `type_name` | `string` | The name of that type. (optional) |
+| `type_name` | `string` | The internal name of that type (the model name; match on it, do not show it). (optional) |
+| `display_name` | `string` | The name to show the player: the localized name of that type, the internal one if there is none. (optional) |
 | `killer` | `GearPlayer` | The player who killed it; nil if a creature or something else did. (optional) |
 | `award` | `integer` | Experience the killer got. |
 | `by_local` | `boolean` | The local hero killed it. |
@@ -2786,6 +2800,7 @@ A thing of the built-in kind `'creature'`: a word of monster type names.
 | `name` | `string` | The word with a capital. |
 | `count` | `integer` | How many monster types carry it. |
 | `types` | `integer[]` | Their type ids. |
+| `names` | `string[]` | The localized names of those types (the player's language, no duplicates), which the search matches as well. |
 
 ### GearLookupAbility
 

@@ -217,6 +217,11 @@ function Creature:type() end
 ---@return string?
 function Creature:type_name() end
 
+--- The creature's name for the player: the localized name of its type (`gear.data.object_types:display_name`), the internal type
+--- name when the game has no text for it. Use it for anything the player reads; `type_name` stays the identifier to match on.
+---@return string?
+function Creature:display_name() end
+
 --- World position and layer.
 ---@return integer? x
 ---@return integer? y

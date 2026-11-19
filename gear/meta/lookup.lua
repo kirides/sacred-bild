@@ -22,6 +22,7 @@
 ---@field name string The word with a capital.
 ---@field count integer How many monster types carry it.
 ---@field types integer[] Their type ids.
+---@field names string[] The localized names of those types (the player's language, no duplicates), which the search matches as well.
 
 --- A thing of the built-in kind `'ability'`.
 ---@class GearLookupAbility
