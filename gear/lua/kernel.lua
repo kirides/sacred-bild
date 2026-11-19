@@ -3748,7 +3748,7 @@ local function make_ui(mod)
     -- click anywhere else closes it.
     function ui.dropdown(id, x, y, w, options, index, opts)
         opts = opts or {}
-        local h = 18
+        local h = math.max(14, opts.height or 18)
         local handle = ui_handle(mod, id)
         local open = ui_dropdown == handle
         local r = region(id, x, y, w, h, opts)
@@ -3756,7 +3756,8 @@ local function make_ui(mod)
         ui.text(tostring(options[index] or ''), x + 6, y, {height = h, valign = 'middle', color = label_color(opts),
             layer = opts.layer})
         -- the arrow
-        for i = 0, 3 do ui.rect(x + w - 14 + i, y + 7 + i, 8 - 2 * i, 1, C.accent, opts) end
+        local ay = y + math.floor((h - 4) / 2)
+        for i = 0, 3 do ui.rect(x + w - 14 + i, ay + i, 8 - 2 * i, 1, C.accent, opts) end
         if r.clicked then
             open = not open
             ui_dropdown = open and handle or nil

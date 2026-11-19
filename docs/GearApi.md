@@ -4227,6 +4227,7 @@ Includes everything of `GearWidgetOpts`.
 | Field | Type | |
 |---|---|---|
 | `max_rows` | `integer` | The open list shows at most this many entries and scrolls (default 12). (optional) |
+| `height` | `number` | The closed box's height (default 18): 22 matches a 22 high button in the same row. (optional) |
 
 ### GearScrollOpts
 
