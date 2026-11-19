@@ -172,6 +172,9 @@ GEAR = [
     # the slot and sets bit 0x40 of the engine's flags (+0x54), which the render thread loop turns into the write of
     # Save\GAMEnn.PAK. The engine is called through its vtable: SacredBild hooks the function's first bytes.
     ('cSaveEvent_vtable', 0x00890B38, 'data'),
+    # The first free savegame number (cdecl () -> uint16, 0x619B80): 1.. while Save\GAME%02d.PAK exists, up to 0x1FD; a
+    # save asked for with slot 0xFFFF takes it (event 0xF sub 2). Gear replaces it (the limit of 509 numbers).
+    ('cSave_firstFreeSlot', 0x00619B80, 'func'),
     # Replaced menus (gear/replace.cpp, gear/savegames.cpp): the savegame window's commands (cUI_Savegame, 0x71CC90,
     # thiscall (window, command), ret 4; what its buttons and message box answers run): 8 deletes the selected
     # savegame and refreshes the list, 10 refreshes the list, 0xC is its Back (closes it; in the menus the start

@@ -234,7 +234,7 @@ local native = {
         return true
     end,
     save_pending = function() return false end,
-    save_info = function(slot) if slot <= 509 then return {exists = slot == 97, size = 5, mtime = 100} end end,
+    save_info = function(slot) if slot <= 32766 then return {exists = slot == 97, size = 5, mtime = 100} end end,
     save_poll = function() return table.remove(save_results, 1) end,
     game_config = function() return {AUTOSAVE = '1', GFXLOADING = 'LOADING0.BMP'} end,
     net_kill = function() return table.remove(net_kills, 1) end,
@@ -822,7 +822,7 @@ do
     ok(game.save(98, 'Autosave', {thumbnail = true}) == true and save_calls[1][1] == 98 and save_calls[1][2] == 'Autosave'
         and save_calls[1][3] == true, 'save passes slot, name and thumbnail')
     ok(game.save(5) == true and save_calls[2][2] == '' and save_calls[2][3] == false, 'save defaults')
-    ok(game.save_info(97).exists and game.save_info(5000) == nil, 'save_info')
+    ok(game.save_info(97).exists and game.save_info(40000) == nil, 'save_info')
     save_results[1] = {slot = 98, ok = true, message = '', info = {exists = true, size = 77, mtime = 1}}
     save_results[2] = {slot = 99, ok = false, message = 'disk full', info = {exists = false, size = 0, mtime = 0}}
     kernel.tick(0.016)

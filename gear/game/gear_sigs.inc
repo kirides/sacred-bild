@@ -83,6 +83,7 @@ static const Sig::Entry kGearSigs[] = {
     {"modelRenderer_free", "51 8B 44 24 08 56 85 C0 8B F1 74 7A", 0, Sig::Take::Match, &Gear::Addr::modelRenderer_free}, // 00403E10, 00403E10
     {"cWeapon3D_netIO", "51 53 55 56 8B 74 24 14 57 8B F9 8B 06 8B CE FF 50 14 8B 6C 24 20 8B 5C 24 1C 55 53 56 8B CF 89 44 24 1C C7 44 24 24 0D F0 AD BA", 0, Sig::Take::Match, &Gear::Addr::cWeapon3D_netIO}, // 005CF2D0, 005CF240
     {"cSaveEvent_vtable", "8B F1 8B 46 20 C7 06 ?? ?? ?? ?? 85 C0 74 09 50", 7, Sig::Take::Abs32, &Gear::Addr::cSaveEvent_vtable}, // 00890B38, 0088EB38
+    {"cSave_firstFreeSlot", "81 EC 00 01 00 00 56 BE 01 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cSave_firstFreeSlot}, // 00619B80, 00619C20
     {"cUI_Savegame_command", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC 4C 03 00 00", 0, Sig::Take::Match, &Gear::Addr::cUI_Savegame_command}, // 0071CC90, 0071C520
     {"abilityTable1First", "B8 ?? ?? ?? ?? 66 39 10 74 0E 83 C0 78 41 3D ?? ?? ?? ?? 72 F0", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1First}, // 0094FE28, 0094DE28
     {"abilityTable1End", "3D ?? ?? ?? ?? 72 F0 33 C0 C3 8D 04 49 8D 04 80", 1, Sig::Take::Abs32, &Gear::Addr::abilityTable1End}, // 00952A38, 00950A38

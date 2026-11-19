@@ -210,6 +210,10 @@ namespace Gear::Addr
     // the slot (uint16 at engine+0x68) and sets bit 0x40 of the dword at engine+0x54 (already set: returns at once,
     // busy); the render thread loop (0060E350) then writes "SAVE\GAME%02d.PAK" (00619BF0) and clears bits 0xC0.
     inline Sacred::Global<uint8_t> cSaveEvent_vtable{};
+    // ENG 00619B80: the first free savegame number (cdecl () -> uint16): the first of 1..0x1FD with no
+    // "SAVE\GAME%02d.PAK", 0x1FF if none. The engine takes it for a save asked for with slot 0xFFFF (event 0xF
+    // sub 2: the savegame window's new savegame, the game's own Auto-Save). Replaced to look up to Save::kMaxSlot.
+    inline Sacred::Cdecl<uint16_t()> cSave_firstFreeSlot{};
     // Replaced menus (gear/replace.cpp, gear/savegames.cpp). ENG 0071CC90: the savegame window's commands
     // (cUI_Savegame, in game the manager's window 11, in the menus menus[3]; thiscall (window, command), ret 4): 8
     // deletes the selected savegame's file and refreshes the list (10), 0xC is its Back button (hides the window; in

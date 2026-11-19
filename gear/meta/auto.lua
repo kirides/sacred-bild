@@ -134,6 +134,11 @@ function GearAuto.engine_level_factor_start(level) end
 ---@return integer?
 function GearAuto.engine_level_factor_result() end
 
+--- The number the game's own "first free savegame number" (the function a new savegame without a number asks) answers now:
+--- the engine's function itself, called through Gear's replacement, so it is not limited to 509 savegames. nil if it was not found.
+---@return integer?
+function GearAuto.engine_free_slot() end
+
 --- Tests the stubs of the constant site hooks on two functions built in memory (`fmul dword [c]` and `fld dword [c]`, with the
 --- sites `selftest.fmul` and `selftest.fld` of the event `combat.constant`); a worker thread calls them when Lua is idle.
 ---@return boolean started false if a test is running.

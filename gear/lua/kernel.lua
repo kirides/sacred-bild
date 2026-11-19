@@ -25,7 +25,7 @@
 --   version                           Sacred Gear's version string
 
 local native = ...
-local kernel = {}
+local kernel = {slot_reservations = {}}   -- slot_reservations: mod -> its gear.game.reserve_slots list
 
 local MAX_ERRORS = 10   -- a mod whose handlers raised this many errors is switched off for the session
 
@@ -4165,7 +4165,7 @@ local automation_on = native.auto_state ~= nil
 local VK = {
     lbutton = 0x01, rbutton = 0x02, mbutton = 0x04, xbutton1 = 0x05, xbutton2 = 0x06, back = 0x08, backspace = 0x08, tab = 0x09, enter = 0x0D, shift = 0x10,
     control = 0x11, alt = 0x12, pause = 0x13, escape = 0x1B, space = 0x20, left = 0x25, up = 0x26, right = 0x27,
-    down = 0x28, delete = 0x2E, f1 = 0x70, f2 = 0x71, f3 = 0x72, f4 = 0x73, f5 = 0x74, f6 = 0x75, f7 = 0x76,
+    down = 0x28, delete = 0x2E, insert = 0x2D, home = 0x24, ['end'] = 0x23, pageup = 0x21, pagedown = 0x22, f1 = 0x70, f2 = 0x71, f3 = 0x72, f4 = 0x73, f5 = 0x74, f6 = 0x75, f7 = 0x76,
     f8 = 0x77, f9 = 0x78, f10 = 0x79, f11 = 0x7A, f12 = 0x7B,
 }
 for i = 13, 24 do VK['f' .. i] = 0x6F + i end
@@ -4275,6 +4275,9 @@ local function make_auto()
         return native.engine_level_factor_start(level)
     end
     function auto.engine_level_factor_result() return native.engine_level_factor_result() end
+    -- The number the game's own "first free savegame number" gives now (nil if it was not found): the engine's function itself,
+    -- called through Gear's replacement.
+    function auto.engine_free_slot() return native.engine_free_slot() end
     -- Tests the stubs of the constant site hooks on two functions built in memory; a worker thread calls them when Lua is idle, so
     -- the handlers of `combat.constant` may answer for `selftest.fmul` / `selftest.fld`.
     function auto.site_hook_selftest_start() return native.site_selftest_start() end
@@ -5656,6 +5659,24 @@ local function make_env(mod)
         save_info = function(slot)
             assert(type(slot) == 'number', 'slot must be a number')
             return native.save_info(slot)
+        end,
+        -- free_slot() -> the first slot from 1 whose file does not exist (the game's own rule for a new savegame), nil if all
+        -- numbers up to 32766 are taken.
+        free_slot = function() return native.save_free_slot() end,
+        -- reserve_slots(slots) -> nothing: the slots (numbers, at most 64) this mod writes to itself. free_slot and the game's
+        -- own "new savegame" leave them alone even while their files do not exist yet. Replaces this mod's earlier list.
+        reserve_slots = function(slots)
+            assert(type(slots) == 'table', 'slots must be a table of numbers')
+            local list = {}
+            for _, n in ipairs(slots) do
+                if type(n) == 'number' and #list < 64 then list[#list + 1] = n end
+            end
+            kernel.slot_reservations[mod] = list
+            local all = {}
+            for _, l in pairs(kernel.slot_reservations) do
+                for _, n in ipairs(l) do all[#all + 1] = n end
+            end
+            native.save_reserve(all)
         end,
     }
     -- gear.savegame: data that belongs to the savegame being played (see the section above).
