@@ -2801,13 +2801,43 @@ local function make_ui(mod)
         return native.item_tooltip_text(item)
     end
     -- ui.hovered_item() -> item, x, y, w, h | nil: the item whose tooltip the game shows right now (cursor or pad cursor resting on
-    -- an item in the backpack, chest, shop, equipment ...) as a gear.world.item table, and the tooltip's rectangle in layout units.
+    -- an item in the backpack, chest, shop, equipment ...) as a gear.world.item table, and the tooltip's VISIBLE outer rectangle (the
+    -- frame's bars, not the corner ornaments) in layout units. The popup's own numbers are the game canvas's (its origin is the
+    -- screen's left edge, the layout's is the 1024x768 box's: they differ by screen_left in a wider window; a window's popups are
+    -- in the window's frame, which SacredBild reports: all converted here) and its size is
+    -- that of the text area, 3 short of the bars on the left and top, 6 and 4 on the right and bottom.
     function ui.hovered_item()
-        local id, x, y, w, h = native.item_hover()
+        local id, x, y, w, h, _, canvas = native.item_hover()
         if not id then return nil end
         local item = world.item(id)
         if not item then return nil end
-        return item, x, y, w, h
+        if canvas then
+            local sl, st = ui.screen()
+            x, y = x + sl, y + st
+        end
+        return item, x - 3, y - 3, w + 9, h + 7
+    end
+    -- ui.tooltip_anchor(w, h, {gap, margin, side}) -> x, y, side | nil: where a panel of the bars' outer size w x h (see
+    -- ui.native.frame) goes to sit flush against the right side of the game's item tooltip, the corner ornaments of both touching
+    -- (`gap` more space, default 0); on the left side when it does not fit on the right (`side` 'right' or 'left' forces one);
+    -- kept `margin` (default 2) inside the screen and its ornaments' overhang.
+    function ui.tooltip_anchor(w, h, opts)
+        assert(type(w) == 'number' and type(h) == 'number', 'w and h must be numbers')
+        opts = opts or {}
+        local _, rx, ry, rw, rh = ui.hovered_item()
+        if not rx then return nil end
+        local inset, over = ui.native.insets()
+        local gap = over.right + over.left + (opts.gap or 0)
+        local margin = opts.margin or 2
+        local sl, st, sr, sb = ui.screen()
+        local side = opts.side
+        if side ~= 'left' and side ~= 'right' then
+            side = (rx + rw + gap + w + over.right > sr - margin) and 'left' or 'right'
+        end
+        local x = side == 'right' and rx + rw + gap or rx - gap - w
+        x = math.max(sl + margin + over.left, math.min(x, sr - margin - over.right - w))
+        local y = math.max(st + margin + over.top, math.min(ry, sb - margin - over.bottom - h))
+        return x, y, side
     end
     function ui.image_info(id)
         local info = type(id) == 'number' and native.ui_image_info(id)

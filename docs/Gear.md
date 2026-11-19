@@ -134,7 +134,9 @@ Rules that hold across the API:
 - **The game's own look:** `gear.ui.native.frame(x, y, w, h, opts)` draws the border and fill of the game's item tooltip
   (dark metal bars, ornaments in the corners; built from the game's UI images, native size at the corners, stretched
   bars), so a panel of a mod can look like the game's tooltip while its text stays the mod's own. `gear.ui.native.insets()`
-  tells how much room the border takes. Further pieces (rings, bars) are added as styles to the same table. See
+  tells how much room the border takes. `gear.ui.tooltip_anchor(w, h)` gives the position that attaches such a panel flush
+  to the right of the game's item tooltip (on its left near the screen's edge; `gear.ui.hovered_item()` reports the
+  tooltip's visible rectangle in the layout `gear.ui` draws in). Further pieces (rings, bars) are added as styles to the same table. See
   [The game's own look](GearApi.md#the-games-own-look-gearuinative).
 - **Mouse and keys:** a click over a mod's widget or panel is taken from the game, and the game's windows do not see
   the cursor there. Mods must not take the game's own keys (see [Mod manager](#mod-manager)); `gear.input` remaps the

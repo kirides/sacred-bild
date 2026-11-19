@@ -165,14 +165,33 @@ function GearUi.item_tooltip_text(item) end
 
 --- The item whose tooltip the game shows right now: the cursor (the mouse's or the controller's pad cursor) rests on an item
 --- in the backpack, the chest, a shop, the equipment window ... Read as of the last frame; nil when no item tooltip is up.
---- Also returns the popup's rectangle (top-left corner and size, the size as of its last layout) in layout units, so a mod
---- can put something beside the tooltip.
+--- Also returns the tooltip's visible outer rectangle (top-left corner and size of the frame's bars; the corner ornaments reach
+--- a few units beyond it) in the same layout units `gear.ui.*` draws in, so a mod can put something beside it (see
+--- `tooltip_anchor`). The game's own popup numbers are in another space (the canvas, whose origin is the screen's left edge
+--- instead of the layout's) and a little smaller than the frame; Sacred Gear converts them.
 ---@return GearItem? item
 ---@return number? x
 ---@return number? y
 ---@return number? w
 ---@return number? h
 function GearUi.hovered_item() end
+
+---@class GearTooltipAnchorOpts
+---@field gap? number More space between the two frames than the touching ornaments (default 0).
+---@field margin? number Distance kept from the screen's edges (default 2).
+---@field side? 'right'|'left' Force a side; by default the right one, the left one when the panel does not fit on the right.
+
+--- Where a panel goes to sit flush against the game's item tooltip: the top-left corner `x`, `y` of a panel whose frame's bars
+--- are `w` x `h` (what `gear.ui.native.frame` takes), beside the tooltip `hovered_item` reports, with the corner ornaments of
+--- both frames touching. On the right of the tooltip, on its left when it does not fit, never outside the screen, its top
+--- level with the tooltip's (moved up or down to fit). nil when no item tooltip is up. Also returns the side used.
+---@param w number
+---@param h number
+---@param opts? GearTooltipAnchorOpts
+---@return number? x
+---@return number? y
+---@return ('right'|'left')? side
+function GearUi.tooltip_anchor(w, h, opts) end
 
 --- The UI images whose sheet name contains `filter` (any case), all of them without a filter.
 ---@param filter? string

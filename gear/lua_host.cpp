@@ -3210,7 +3210,7 @@ namespace
         return 1;
     }
 
-    // native.item_hover() -> item id, x, y, width, height, popup flags | nil: the item whose tooltip the game shows now
+    // native.item_hover() -> item id, x, y, width, height, popup flags, canvas | nil: the item whose tooltip the game shows now
     int nativeItemHover(lua_State* L)
     {
         ItemTip::Hover h;
@@ -3220,12 +3220,13 @@ namespace
             return 1;
         }
         lua_pushnumber(L, h.id);
-        lua_pushnumber(L, h.x);
-        lua_pushnumber(L, h.y);
+        lua_pushnumber(L, h.x + h.frameX);
+        lua_pushnumber(L, h.y + h.frameY);
         lua_pushnumber(L, h.width);
         lua_pushnumber(L, h.height);
         lua_pushnumber(L, h.flags);
-        return 6;
+        lua_pushboolean(L, !h.framed);      // x, y are canvas coordinates (add the screen's left / top edge for the layout)
+        return 7;
     }
 
     // native.item_equip_slot(creature id, item type) -> slot (0..18) | nil

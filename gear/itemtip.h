@@ -25,6 +25,8 @@ namespace ItemTip
     {
         uint32_t id = 0;
         int x = 0, y = 0, width = 0, height = 0;
+        float frameX = 0, frameY = 0;   // SacredBild's frame of the popup (the window that set its text): layout x = x + frameX
+        bool framed = false;            // else x, y are canvas coordinates: layout x = x + the screen's left edge (ui.screen)
         uint32_t flags = 0;         // the popup's own flags (+0x154), diagnostics
     };
     bool hovered(Hover& out);

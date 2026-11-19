@@ -13,6 +13,17 @@ namespace
 {
     using namespace Gear;
 
+    // SacredBild's frame of a popup (0, 0 without SacredBild or for a popup in the canvas).
+    bool popupFrame(const void* popup, float& x, float& y)
+    {
+        using Fn = int(__cdecl*)(const void*, float*, float*);
+        static const Fn fn = [] {
+            const HMODULE bild = GetModuleHandleW(L"ddraw.dll");
+            return bild ? reinterpret_cast<Fn>(GetProcAddress(bild, "SacredBild_UiGetPopupFrame")) : nullptr;
+        }();
+        return fn && fn(popup, &x, &y) == 2;
+    }
+
     uint32_t g_scratchShown = 0, g_fallbackUsed = 0;
 
     // The item whose tooltip the engine showed last: every item tooltip ties the popup to the item with setOwner (the hover code of the
@@ -319,6 +330,8 @@ bool ItemTip::hovered(Hover& out)
         out.width = *reinterpret_cast<const int16_t*>(popup + kPopupW);
         out.height = *reinterpret_cast<const int16_t*>(popup + kPopupH);
         out.flags = *reinterpret_cast<const uint32_t*>(popup + 0x154);
+        out.frameX = out.frameY = 0;
+        out.framed = popupFrame(popup, out.frameX, out.frameY);
         return true;
     }
     __except (EXCEPTION_EXECUTE_HANDLER)

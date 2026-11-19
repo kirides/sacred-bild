@@ -594,6 +594,34 @@ extern "C" int __cdecl SacredBild_UiSetWindowFrame(int slot, float x, float y, i
     return 1;
 }
 
+// The frame a popup (tooltip) is drawn in: the frame of the window whose code set its text (0, 0 for one set in the canvas).
+// A popup's own x / y are in its frame's layout, so the layout position is x + frame x. Returns 0 while the UI canvas is off, 1
+// for a popup in the canvas (frame 0, 0: its x / y are canvas coordinates, whose origin is the screen's left edge), 2 for one in a frame.
+extern "C" int __cdecl SacredBild_UiGetPopupFrame(const void* popup, float* x, float* y)
+{
+    if (!g_handlersSet || !popup || !x || !y)
+    {
+        return 0;
+    }
+    float fx = 0.0f, fy = 0.0f;
+    int found = 1;
+    AcquireSRWLockShared(&g_popupLock);
+    for (size_t i = 0; i < g_popupCount; ++i)
+    {
+        if (g_popups[i].popup == popup)
+        {
+            fx = g_popups[i].frame.x;
+            fy = g_popups[i].frame.y;
+            found = 2;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&g_popupLock);
+    *x = fx;
+    *y = fy;
+    return found;
+}
+
 extern "C" int __cdecl SacredBild_UiGetWindowFrame(int slot, float* x, float* y)
 {
     if (!g_handlersSet || slot < 0 || slot >= static_cast<int>(W::count) || !x || !y)
