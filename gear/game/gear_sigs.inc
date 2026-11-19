@@ -44,6 +44,8 @@ static const Sig::Entry kGearSigs[] = {
     {"heroLoad", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 2C 53 33 DB", 0, Sig::Take::Match, &Gear::Addr::heroLoad}, // 0061D0F0, 0061D190
     {"g_heroFileFlag", "8B CF 66 89 B7 52 01 00 00 C6 05 ?? ?? ?? ?? 01", 11, Sig::Take::Abs32, &Gear::Addr::g_heroFileFlag}, // 0182EE50, 0182CDD0
     {"cUI_InventoryTab_vtable", "C7 44 24 14 00 00 00 00 C7 06 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 78 14", 10, Sig::Take::Abs32, &Gear::Addr::cUI_InventoryTab_vtable}, // 008965C4, 008945C4
+    {"cUI_Taskbar2_vtable", "C7 06 ?? ?? ?? ?? 33 D2 89 01 8D BE C8 0A 00 00", 2, Sig::Take::Abs32, &Gear::Addr::cUI_Taskbar2_vtable}, // 00896AC0, 00894AC0
+    {"cUI_Taskbar2_setHero", "53 56 57 8B 7C 24 10 6A 00 68 ?? ?? ?? ?? 8B F1", 0, Sig::Take::Match, &Gear::Addr::cUI_Taskbar2_setHero}, // 006E0070, 006DFE20
     {"g_pTextManager", "A1 ?? ?? ?? ?? 64 89 25 00 00 00 00 83 EC 0C 53", 1, Sig::Take::Abs32, &Gear::Addr::g_pTextManager}, // 017E7F68, 017E5EE8
     {"cTextManager_get", "8B 44 24 04 56 83 F8 FF 8B F1 74 4A", 0, Sig::Take::Match, &Gear::Addr::cTextManager_get}, // 00672C90, 00672F70
     {"modelRenderer_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3F 68 FC 00 00 00", 0, Sig::Take::Match, &Gear::Addr::modelRenderer_instance}, // 00401660, 00401660

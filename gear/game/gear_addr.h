@@ -105,6 +105,10 @@ namespace Gear::Addr
     // ENG 008965C4: the vtable of cUI_InventoryTab, the backpack page of the inventory window; +0x154 (u32) and +0x158
     // (u16) hold the hero id whose container it shows, set once when the UI is built (0x6BFFE0).
     inline uintptr_t cUI_InventoryTab_vtable{};
+    // ENG 00896AC0 / 006E0070: the taskbar (UI manager +0x80) and its setHero, thiscall (taskbar, hero id, 0), ret 8:
+    // the hero whose weapon and combat art slots, belt and slot count it shows (+0x154 / +0x158 the id).
+    inline uintptr_t cUI_Taskbar2_vtable{};
+    inline Sacred::Thiscall<void(void* taskbar, uint32_t id, uint32_t a2)> cUI_Taskbar2_setHero{};
     // ENG 0182EE50: a byte of the running game that the hero loader overwrites from the file's header.
     inline Sacred::Global<uint8_t> g_heroFileFlag{};
     // Hero names. ENG 017E7F68: the text manager; ENG 00672C90: its lookup, thiscall (manager, id) -> STLport wstring*

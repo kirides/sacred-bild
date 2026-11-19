@@ -107,6 +107,11 @@ GEAR = [
     # The backpack tab of the inventory window (cUI_InventoryTab, made by 0x6BFFE0): it keeps the hero id whose
     # container it shows (+0x154, +0x158) from when the UI was built; a control switch points it at the new hero.
     ('cUI_InventoryTab_vtable', 0x008965C4, 'data'),
+    # The taskbar (cUI_Taskbar2, the UI manager's first in-game window) shows one hero's weapon slots, combat art slots,
+    # belt and level-dependent slot count; setHero (thiscall (taskbar, hero id, 0), ret 8) is what its constructor
+    # (0x6DF590) calls with the local id. A control switch calls it with the new hero.
+    ('cUI_Taskbar2_vtable', 0x00896AC0, 'data'),
+    ('cUI_Taskbar2_setHero', 0x006E0070, 'func'),
     # Hero names (gear/netmsg.cpp): a hero keeps its name as a text resource whose id is at creature +0x3C (0x26FF + the
     # hero's id); the text manager (singleton at 017E7F68, getter 0x6725E0) returns it: thiscall (manager, id) -> wstring*.
     ('g_pTextManager', 0x017E7F68, 'data'),
