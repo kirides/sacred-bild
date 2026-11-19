@@ -179,6 +179,8 @@ namespace
     }
 
     // cdecl (id): forwards (ESI, id, the return address) to lookup2Impl.
+    // the naked stub reads `id` from the stack in assembly
+#pragma warning(suppress : 4100)
     __declspec(naked) uint8_t* __cdecl hookLookup2(int16_t id)
     {
         __asm
