@@ -78,6 +78,11 @@ gear.task(function()
     check('object types', count > 0, count .. ' named types')
     -- Creature types have a localized name (the game's text for the record's resource id), not the model name.
     local types = gear.data.object_types
+    -- label never gives the model name for a named creature, and the creature lookup finds it by its localized name.
+    local gob = types:find('gob_warrior.grn')
+    check('label of a creature type', gob and types:label(gob) == types:display_name(gob), gob and types:label(gob))
+    local found = gear.lookup.search('creature', types:display_name(gob) or '?', 5)
+    check('lookup finds a creature by its localized name', #found > 0, found[1] and found[1].word)
     for _, model in ipairs({'gob_warrior.grn', 'ORC_WARRIOR.GRN'}) do
         local id = types:find(model)
         local shown = id and types:display_name(id)
@@ -92,6 +97,8 @@ gear.task(function()
         if c then
             gear.wait(1)
             check('spawned creature lives', c:exists() and c:is_creature(), c:type_name())
+            local shown = c:display_name()
+            check('spawned creature display_name', type(shown) == 'string' and shown ~= '' and not shown:lower():find('%.grn$'), shown)
         end
     end
 

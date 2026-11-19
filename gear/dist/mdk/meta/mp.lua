@@ -93,7 +93,8 @@ function GearMp.force_network(on) end
 ---@class GearKill
 ---@field victim Creature The creature that died (it is retired a moment later; read what you need at once).
 ---@field type integer? Its creature type (nil if the object is already gone).
----@field type_name string? The name of that type.
+---@field type_name string? The internal name of that type (the model name; match on it, do not show it).
+---@field display_name string? The name to show the player: the localized name of that type, the internal one if there is none.
 ---@field killer GearPlayer? The player who killed it; nil if a creature or something else did.
 ---@field award integer Experience the killer got.
 ---@field by_local boolean The local hero killed it.

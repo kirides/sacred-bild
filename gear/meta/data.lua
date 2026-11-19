@@ -82,6 +82,11 @@ function GearObjectTypes:name(id) end
 ---@return string? error
 function GearObjectTypes:display_name(id) end
 
+--- What to show the player for type `id`: `display_name`, else `name`, else `'type <id>'`. Never nil.
+---@param id integer
+---@return string
+function GearObjectTypes:label(id) end
+
 --- The kind (the type record's byte +0x2E) of type `id`.
 ---@param id integer
 ---@return integer?

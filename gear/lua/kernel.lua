@@ -134,6 +134,12 @@ function data.object_types:name(id)
     return n
 end
 
+-- What to show the player for type `id`: the localized name, else the internal one, else 'type <id>'. Never nil.
+function data.object_types:label(id)
+    assert(type(id) == 'number', 'id must be a number')
+    return self:display_name(id) or self:name(id) or ('type ' .. tostring(id))
+end
+
 function data.object_types:kind(id)
     local r = self:get(id)
     return r and r:u8(OBJECT_TYPE_KIND)
@@ -820,6 +826,7 @@ function creature_mt:info() return info(self) end
 function creature_mt:is_creature() local o = info(self); return o ~= nil and o.creature end
 function creature_mt:type() local o = info(self); return o and o.type end
 function creature_mt:type_name() local o = info(self); return o and data.object_types:name(o.type) end
+function creature_mt:display_name() local o = info(self); return o and data.object_types:label(o.type) end
 function creature_mt:position() local o = info(self); if o then return o.x, o.y, o.layer end end
 function creature_mt:sector() local o = info(self); return o and o.sector end
 function creature_mt:hp() local o = info(self); return o and o.hp end
@@ -6562,6 +6569,7 @@ function kernel.poll_kills()
             victim = wrap(k.victim),
             type = o and o.type,
             type_name = o and data.object_types:name(o.type) or nil,
+            display_name = o and data.object_types:label(o.type) or nil,
             award = k.award,
             by_local = k.killer ~= 0 and k.killer == native.hero(),
         }

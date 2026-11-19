@@ -212,12 +212,17 @@ L.register('creature', {
                             seen[w] = true
                             local e = by[w]
                             if not e then
-                                e = {word = w, name = w:gsub('^%l', string.upper), count = 0, types = {}}
+                                e = {word = w, name = w:gsub('^%l', string.upper), count = 0, types = {}, names = {}}
                                 by[w] = e
                                 list[#list + 1] = e
                             end
                             e.count = e.count + 1
                             e.types[#e.types + 1] = id
+                            local shown = types:display_name(id)
+                            if shown then
+                                e.shown_set = e.shown_set or {}
+                                if not e.shown_set[shown] then e.shown_set[shown] = true; e.names[#e.names + 1] = shown end
+                            end
                         end
                     end
                 end
@@ -226,7 +231,7 @@ L.register('creature', {
         table.sort(list, function(a, b) return a.word < b.word end)
         return list
     end,
-    text = function(t) return t.word end,
+    text = function(t) return t.word .. ' ' .. table.concat(t.names, ' ') end,
     detail = function(t) return t.count .. (t.count == 1 and ' type' or ' types') end,
 })
 
