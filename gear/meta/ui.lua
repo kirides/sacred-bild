@@ -44,6 +44,7 @@
 ---@field fit? GearImageFit `'stretch'` (default: fills the box), `'contain'` (the whole image, aspect kept, centered), `'cover'` (fills the box, aspect kept, the overhang cut off).
 ---@field flip? 'h'|'v'|'hv' Mirrored left-right (`'h'`), upside down (`'v'`) or both.
 ---@field color? GearColor Tint: white as is; the alpha makes it translucent.
+---@field crop? number[] `{left, top, right, bottom}` as fractions of the image (default `{0, 0, 1, 1}`): only that part is drawn, where it would be in the box. `{0, 0.6, 1, 1}` draws the lower 40 % (a gauge).
 
 ---@class GearImageInfo
 ---@field id integer The game's image index (stable for a build).

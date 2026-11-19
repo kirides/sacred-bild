@@ -334,6 +334,8 @@ namespace Gear::Addr
     // stdcall (type), ret 4. ENG 0089095C: the vtable of the 0x44-byte creature events (orders) a creature's vtable
     // +0x18 takes. ENG 0182EE5C / 0182EE60: the two anti-cheat shadow pages of the local hero (see party.cpp).
     inline Sacred::Thiscall<void(void* stats, uint32_t amount)> cStats_addExperience{};
+    // ENG 0057F8D0: the level an amount of experience gives, thiscall (stats, experience) -> level, ret 4.
+    inline Sacred::Thiscall<uint32_t(void* stats, uint32_t experience)> cStats_levelOnExp{};
     // ENG 00556A30 / 00555E00 / 005D9860 / 005D8730 / 00546F80 / 0054E6D0: what the taskbar's weapon slot keys do
     // (0x6E1690; gear/party.cpp, Party::useWeaponSlot): unequip, equip, the container's active weapon slot, taking the
     // off-hand weapon out of it, the creature's weapon kind and refreshing its motions.

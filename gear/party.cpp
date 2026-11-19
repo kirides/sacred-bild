@@ -1193,6 +1193,80 @@ bool Party::useWeaponSlot(uint32_t id, uint32_t slot, const char*& error)
     return true;
 }
 
+namespace
+{
+    bool callLevelOnExp(uintptr_t stats, uint32_t experience, uint32_t& level)
+    {
+        __try
+        {
+            level = Addr::cStats_levelOnExp(reinterpret_cast<void*>(stats), experience) & 0xFFFF;
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    // The least experience that gives at least `level`.
+    bool experienceFor(uintptr_t stats, uint32_t level, uint32_t& out)
+    {
+        // an upper bound by doubling (the game's function complains about the largest values)
+        uint32_t lo = 0, hi = 1000, got = 0;
+        for (;;)
+        {
+            if (!callLevelOnExp(stats, hi, got))
+            {
+                return false;
+            }
+            if (got >= level)
+            {
+                break;
+            }
+            if (hi >= 0x40000000u)
+            {
+                return false;
+            }
+            lo = hi;
+            hi *= 2;
+        }
+        while (lo < hi)
+        {
+            const uint32_t mid = lo + (hi - lo) / 2;
+            if (!callLevelOnExp(stats, mid, got))
+            {
+                return false;
+            }
+            if (got >= level)
+            {
+                hi = mid;
+            }
+            else
+            {
+                lo = mid + 1;
+            }
+        }
+        out = lo;
+        return true;
+    }
+}
+
+bool Party::experienceRange(uint32_t id, uint32_t& now, uint32_t& from, uint32_t& to)
+{
+    const uintptr_t c = heroObject(id);
+    uint16_t level = 0;
+    if (!c || !Addr::cStats_levelOnExp || !readAt(c, kExperience, now) || !readAt(c, kLevel, level) || level == 0)
+    {
+        return false;
+    }
+    from = 0;
+    if (level > 1 && !experienceFor(c + kStats, level, from))
+    {
+        return false;
+    }
+    return experienceFor(c + kStats, level + 1u, to);
+}
+
 bool Party::abilities(uint32_t id, std::vector<Ability>& out)
 {
     out.clear();

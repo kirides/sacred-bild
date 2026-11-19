@@ -104,6 +104,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cItem_pickType", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 18 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_pickType}, // 005C7FA0, 005C7F10
     {"g_rarityTable", "8B 35 ?? ?? ?? ?? 8B C8 83 C4 14 33 C0 D8 4C 24 18", 2, Sig::Take::Abs32, &Gear::Addr::g_rarityTable}, // 00AD4438, 00AD23B8
     {"cStats_addExperience", "55 8B EC 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 38 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_addExperience}, // 0057E160, 0057E020
+    {"cStats_levelOnExp", "83 EC 50 53 55 56 57 66 8B 79 56 33 F6", 0, Sig::Take::Match, &Gear::Addr::cStats_levelOnExp}, // 0057F8D0, 0057F790
     {"cCreature_unequip", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 8B 44 24 10 64 89 25 00 00 00 00 83 EC 78 66 3D 13 00", 0, Sig::Take::Match, &Gear::Addr::cCreature_unequip}, // 00556A30, 00556870
     {"cCreature_equip", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 84 00 00 00 53 55 8B AC 24 9C 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cCreature_equip}, // 00555E00, 00555C40
     {"cContainer_selectWeaponSlot", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 94 00 00 00 8B 84 24 A8 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cContainer_selectWeaponSlot}, // 005D9860, 005D9820
