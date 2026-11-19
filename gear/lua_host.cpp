@@ -795,6 +795,24 @@ namespace
         return 1;
     }
 
+    // native.world_cursor(exclude id) -> object id (0: none), world x, y, layer, pixel x, y | nil
+    int nativeWorldCursor(lua_State* L)
+    {
+        Classes::Cursor c;
+        if (!Classes::cursor(static_cast<uint32_t>(luaL_optnumber(L, 1, 0)), c))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, c.object);
+        lua_pushnumber(L, c.x);
+        lua_pushnumber(L, c.y);
+        lua_pushnumber(L, c.layer);
+        lua_pushnumber(L, c.pixelX);
+        lua_pushnumber(L, c.pixelY);
+        return 6;
+    }
+
     // native.text_set(id, utf8) -> true | nil, message
     int nativeTextSet(lua_State* L)
     {
@@ -4123,6 +4141,7 @@ namespace
             {"hero_record_set", nativeHeroRecordSet},
             {"text_set", nativeTextSet},
             {"text_add", nativeTextAdd},
+            {"world_cursor", nativeWorldCursor},
             {"texture_image", nativeTextureImage},
             {"motion_active", nativeMotionActive},
             {"creature_learn", nativeCreatureLearn},

@@ -118,6 +118,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cCreature_playMotion", "55 8B EC 83 E4 F8 83 EC 44 D9 45 14", 0, Sig::Take::Match, &Gear::Addr::cCreature_playMotion}, // 00593320, 00593290
     {"cStats_learnAbility", "83 EC 38 53 8B D9 89 5C 24 08 55 8B 93 06 01 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_learnAbility}, // 00580750, 00580610
     {"g_pModelManager", "A1 ?? ?? ?? ?? 85 C0 75 44 68 38 A3 01 00 E8 ?? ?? ?? ?? 83 C4 04", 1, Sig::Take::Abs32, &Gear::Addr::g_pModelManager}, // 00AA4538, 00AA24B8
+    {"cWorldView_pick", "89 4C 24 14 E8 ?? ?? ?? ?? 8B 8B 28 6B 09 00 8B 93 24 6B 09 00", 8, Sig::Take::Match, &Gear::Addr::cWorldView_pick}, // 00626C80, 00626D60
     {"abilityLookup1", "66 8B 54 24 04 B9 01 00 00 00 B8 ?? ?? ?? ?? 66 39 10 74 0E", 0, Sig::Take::Match, &Gear::Addr::abilityLookup1}, // 004D1AF0, 004D1930
     {"abilityLookup2", "66 8B 54 24 04 B9 01 00 00 00 B8 ?? ?? ?? ?? 66 39 10 74 10", 0, Sig::Take::Match, &Gear::Addr::abilityLookup2}, // 004D2310, 004D2150
     {"abilityUsable1", "8A 44 24 08 84 C0 0F 84 ?? ?? ?? ?? 8B 44 24 04 83 F8 01 75 09", 0, Sig::Take::Match, &Gear::Addr::abilityUsable1}, // 004D1B20, 004D1960

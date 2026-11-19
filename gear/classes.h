@@ -50,6 +50,16 @@ namespace Classes
     // The alias id of pool record `index` (0 if none) and its base id.
     uint32_t aliasId(int which, size_t index, uint32_t& base);
 
+    // The world under the mouse cursor: the object id the cursor picks (0 none; not `exclude`), the world point (the units of creature
+    // positions) and the layer. False when there is no game view.
+    struct Cursor
+    {
+        uint32_t object = 0;
+        int x = 0, y = 0, layer = 0;
+        int pixelX = 0, pixelY = 0;
+    };
+    bool cursor(uint32_t exclude, Cursor& out);
+
     // Installs the ability lookups and the rune class checks (called by install).
     bool installAliases();
 

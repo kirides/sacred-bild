@@ -47,6 +47,20 @@ function GearWorld.can_change() end
 ---@return Creature[]
 function GearWorld.creatures_near(x, y, radius, opts) end
 
+--- What the mouse cursor is over in the world (not over a window): the object it picks as the game's own cursor does (the hero
+--- itself is skipped when `exclude` is given), and the world point and layer under it, in the units of `creature:position()`.
+---@class GearCursor
+---@field object Creature? The creature (or other object) under the cursor.
+---@field x integer
+---@field y integer
+---@field layer integer
+---@field pixel_x integer The cursor in the game window's pixels.
+---@field pixel_y integer
+
+---@param exclude? Creature|integer An object the pick skips (the hero).
+---@return GearCursor?
+function GearWorld.cursor(exclude) end
+
 --- Items lying in the world within `radius` of (x, y), nearest first.
 ---@param x number
 ---@param y number
