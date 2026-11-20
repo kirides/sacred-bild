@@ -3623,7 +3623,7 @@ local function make_ui(mod)
     end
 
     -- doc:on(selector, event, fn) -> ok: fn(event, doc) runs when `event` ('click', 'change', 'submit', 'keydown' ...) reaches an
-    -- element matching `selector` ('#id', '.class', 'button' ...; '' is the document) as it is now. event = {type, target (id of the
+    -- element matching `selector` ('#id', '.class', 'button' ...; '' is the document), also one added later. event = {type, target (id of the
     -- element hit), current (id of the element listening), params = {name = text}}; a change of a form control carries params.value.
     function Doc:on(selector, event, fn)
         assert(type(fn) == 'function', 'on(selector, event, fn)')
@@ -3709,7 +3709,7 @@ local function make_ui(mod)
     function Element:style(property, value) return self.doc:style(self.sel, property, value) end
     function Element:value(text) return self.doc:value(self.sel, text) end
     function Element:rect() return native.rml_rect(self.doc.id, self.sel) end
-    -- element:on(event, fn): fn(event, element) when the event happens on the element (as it is now: elements added later get none).
+    -- element:on(event, fn): fn(event, element) when the event happens on the element (also for elements added later).
     function Element:on(event, fn)
         assert(type(fn) == 'function', 'on(event, fn)')
         return self.doc:on(self.sel, event, function(e) return fn(e, self) end)

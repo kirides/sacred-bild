@@ -489,7 +489,7 @@ function GearRmlElement:value(text) end
 ---@return {x: number, y: number, w: number, h: number}?
 function GearRmlElement:rect() end
 
---- Calls `fn(event, element)` when the event happens on the element (elements added later do not get it).
+--- Calls `fn(event, element)` when the event happens on the element or inside it, also for elements added later (the listener sits on the document and matches when the event arrives).
 ---@param event string
 ---@param fn fun(event: GearRmlEvent, element: GearRmlElement)
 ---@return boolean ok
@@ -535,12 +535,12 @@ function GearUiRml.load_string(markup, opts) end
 ---@return boolean ok
 function GearUiRml.load_font(path, fallback) end
 
---- Calls `fn(event, doc)` when `event` reaches an element that matches `selector` (as the document is now: elements added later are not
---- covered).
+--- Calls `fn(event, doc)` when `event` happens on an element that matches `selector`, or inside one (the innermost match is reported).
+--- Elements added later are covered too: the listener sits on the document and matches when the event arrives.
 ---@param selector string `'#id'`, `'.class'`, a tag, `'button.primary'` ... ; `''` is the document.
 ---@param event string `'click'`, `'change'`, `'submit'`, `'keydown'`, `'mouseover'`, `'focus'` ...
 ---@param fn fun(event: GearRmlEvent, doc: GearRmlDoc)
----@return boolean found Whether any element matched.
+---@return boolean ok
 function GearRmlDoc:on(selector, event, fn) end
 
 --- Runs the document for this frame and draws it: call it every frame from a `draw` handler. It takes the mouse over the

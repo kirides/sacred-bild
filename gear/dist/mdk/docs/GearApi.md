@@ -4556,7 +4556,7 @@ The element's box in layout units.
 
 #### `GearRmlElement:on(event, fn) -> boolean`
 
-Calls `fn(event, element)` when the event happens on the element (elements added later do not get it).
+Calls `fn(event, element)` when the event happens on the element or inside it, also for elements added later (the listener sits on the document and matches when the event arrives).
 
 - `event`: `string`
 - `fn`: `fun(event: GearRmlEvent, element: GearRmlElement)`
@@ -4619,12 +4619,12 @@ Adds a font file of the mod (TTF or OTF) for `font-family` in the documents.
 
 #### `GearRmlDoc:on(selector, event, fn) -> boolean`
 
-Calls `fn(event, doc)` when `event` reaches an element that matches `selector` (as the document is now: elements added later are not covered).
+Calls `fn(event, doc)` when `event` happens on an element that matches `selector`, or inside one (the innermost match is reported). Elements added later are covered too: the listener sits on the document and matches when the event arrives.
 
 - `selector`: `string` - `'#id'`, `'.class'`, a tag, `'button.primary'` ... ; `''` is the document.
 - `event`: `string` - `'click'`, `'change'`, `'submit'`, `'keydown'`, `'mouseover'`, `'focus'` ...
 - `fn`: `fun(event: GearRmlEvent, doc: GearRmlDoc)`
-- returns `found` `boolean` - Whether any element matched.
+- returns `ok` `boolean`
 
 #### `GearRmlDoc:draw(opts) -> integer`
 

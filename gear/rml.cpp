@@ -705,12 +705,15 @@ namespace
     class Listener final : public Rml::EventListener
     {
     public:
-        Listener(Doc* doc, int id) : m_doc(doc), m_id(id) {}
+        // `selector` empty: the listener sits on the element it was added to. Otherwise it sits on the document, in the capture
+        // phase, and fires for events whose target is, or lies within, an element matching the selector: elements added later count.
+        Listener(Doc* doc, int id, std::string selector = {}) : m_doc(doc), m_id(id), m_selector(std::move(selector)) {}
         void ProcessEvent(Rml::Event& event) override;
 
     private:
         Doc* m_doc;
         int m_id;
+        std::string m_selector;
     };
 
     struct Doc
@@ -746,11 +749,28 @@ namespace
         QueuedEvent q;
         q.listener = m_id;
         q.type = event.GetType();
+        Rml::Element* matched = nullptr;
+        if (!m_selector.empty())
+        {
+            // The innermost element from the target up that matches the selector.
+            for (Rml::Element* e = event.GetTargetElement(); e && e != m_doc->document; e = e->GetParentNode())
+            {
+                if (e->Matches(m_selector))
+                {
+                    matched = e;
+                    break;
+                }
+            }
+            if (!matched)
+            {
+                return;
+            }
+        }
         if (Rml::Element* t = event.GetTargetElement())
         {
             q.target = t->GetId();
         }
-        if (Rml::Element* c = event.GetCurrentElement())
+        if (Rml::Element* c = matched ? matched : event.GetCurrentElement())
         {
             q.current = c->GetId();
         }
@@ -1654,33 +1674,31 @@ namespace
         return 1;
     }
 
-    // native.rml_listen(id, selector, event) -> listener id, elements | nil: events of that type on the matching
-    // elements come back from rml_update with the listener id.
+    // native.rml_listen(id, selector, event) -> listener id, matching elements now | nil: events of that type on the matching
+    // elements (also ones added later) come back from rml_update with the listener id.
     int rmlListen(lua_State* L)
     {
         Doc& d = docArg(L);
         const std::string selector = str(L, 2);
         const std::string event = str(L, 3);
-        Rml::ElementList list;
-        if (selector.empty())
-        {
-            list.push_back(d.document);
-        }
-        else
-        {
-            d.document->QuerySelectorAll(list, selector);
-        }
-        if (list.empty() || d.listeners.size() >= 1024)
+        if (d.listeners.size() >= 1024)
         {
             lua_pushnil(L);
             return 1;
         }
         const int id = static_cast<int>(d.listeners.size()) + 1;
-        d.listeners.push_back(std::make_unique<Listener>(&d, id));
-        for (Rml::Element* e : list)
+        if (selector.empty())
         {
-            e->AddEventListener(event, d.listeners.back().get());
+            d.listeners.push_back(std::make_unique<Listener>(&d, id));
+            d.document->AddEventListener(event, d.listeners.back().get());
+            lua_pushnumber(L, id);
+            lua_pushnumber(L, 1);
+            return 2;
         }
+        Rml::ElementList list;
+        d.document->QuerySelectorAll(list, selector);
+        d.listeners.push_back(std::make_unique<Listener>(&d, id, selector));
+        d.document->AddEventListener(event, d.listeners.back().get(), true);
         lua_pushnumber(L, id);
         lua_pushnumber(L, static_cast<lua_Number>(list.size()));
         return 2;
