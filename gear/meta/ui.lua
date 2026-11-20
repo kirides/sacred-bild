@@ -271,6 +271,28 @@ function GearUi.window(name) end
 ---@return GearWindow[]
 function GearUi.windows() end
 
+--- An entry of the game menu.
+---@class GearMenuEntry
+---@field text string The game's own text for it (its language).
+---@field x number Its rectangle in the 1024x768 layout.
+---@field y number
+---@field w number
+---@field h number
+
+--- The entries of the game menu (`'UI_WND_ESCMENU'`) in the game's order (options, save, export, quit, continue), with the game's own
+--- text and rectangles: what a native menu lists before the items of `gear.menu`. Empty while the menu is closed.
+---@param name 'UI_WND_ESCMENU'
+---@return GearMenuEntry[]
+function GearUi.menu_entries(name) end
+
+--- Presses entry `index` (1-based) of the game menu as the game's own click would, also while a mod replaces the menu: the game
+--- does what the entry does (it opens its options or asks before it quits). Sent to the menu itself as a mouse press and release at the
+--- entry's centre.
+---@param name 'UI_WND_ESCMENU'
+---@param index integer
+---@return boolean sent
+function GearUi.menu_click(name, index) end
+
 ---@return GearUiState
 function GearUi.state() end
 

@@ -136,6 +136,7 @@
 ---@field keys GearKeys This mod's declared key binds.
 ---@field input GearInput The game's own keys, remapped.
 ---@field mods GearMods The installed mods; a page of this mod's own in the mod manager.
+---@field menu GearMenu Menus mods add items to (the game menu) and the mod that draws them.
 ---@field ui GearUi Drawing on top of the game, widgets, panels and the layout.
 ---@field auto? GearAuto Automation (only with `-gear-auto` and `automation = true` in `mod.lua`).
 gear = {}

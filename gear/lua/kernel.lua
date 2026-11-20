@@ -4578,6 +4578,11 @@ local function make_ui(mod)
     function ui.window_open(name) return native.ui_window_open(tostring(name):upper()) end
     -- ui.close_window(name) -> bool: closes the game's window as its own Back (or Esc) does.
     function ui.close_window(name) return native.ui_close_window(tostring(name):upper()) end
+    -- ui.menu_entries(name) -> {{text, x, y, w, h}, ...}: the entries of the game menu ('UI_WND_ESCMENU') in their order, with the game's own
+    -- text (in its language) and rectangles; empty while the menu is closed. ui.menu_click(name, index) presses entry `index` (1-based)
+    -- as the game's own click would, also while a mod replaces the menu (ui.replace_window).
+    function ui.menu_entries(name) return native.ui_menu_entries and native.ui_menu_entries(tostring(name):upper()) or {} end
+    function ui.menu_click(name, index) return native.ui_menu_click and native.ui_menu_click(tostring(name):upper(), index) or false end
     -- ui.back_pressed() -> bool: the controller's B was pressed (consumed: true once per press). Mods with a
     -- nav_modal screen or a panel with `back = false` close or step back with it.
     function ui.back_pressed()
@@ -5914,6 +5919,87 @@ function uis.input_poll()
     end
 end
 
+-- gear.menu: menus the mods can add items to, and the mod that draws them (a "native menu", for instance one built on gear.ui.rml). Items are
+-- kept here whether or not a native menu exists, so a mod registers its entry once; it draws its own button only while
+-- gear.menu.available(menu) is false.
+uis.menu = {hosts = {}, items = {}}
+function uis.make_menu(mod)
+    local api = {}
+    local state = uis.menu
+    local function alive(m) return m ~= nil and not m.disabled and not m.unloaded end
+    -- menu.host(menu, on) -> true | false, message: this mod draws `menu` ('esc'): the game menu).
+    function api.host(menu, on)
+        assert(type(menu) == 'string', 'menu must be a string')
+        local owner = state.hosts[menu]
+        if on == false then
+            if owner == mod then state.hosts[menu] = nil end
+            return true
+        end
+        if alive(owner) and owner ~= mod then return false, menu .. ' is drawn by ' .. tostring(owner.id) end
+        state.hosts[menu] = mod
+        return true
+    end
+    -- menu.available(menu) -> whether a mod draws the menu now (default 'esc').
+    function api.available(menu) return alive(state.hosts[menu or 'esc']) end
+    -- menu.add_item(menu, {id, label, on_click, order, tooltip, enabled}): the same id of this mod replaces its item.
+    function api.add_item(menu, spec)
+        assert(type(menu) == 'string', 'menu must be a string')
+        assert(type(spec) == 'table' and type(spec.id) == 'string' and spec.id ~= '', 'spec.id must be a string')
+        assert(type(spec.on_click) == 'function', 'spec.on_click must be a function')
+        assert(type(spec.label) == 'string' or type(spec.label) == 'function', 'spec.label must be a string or a function')
+        local list = state.items[menu] or {}
+        state.items[menu] = list
+        local item = {mod = mod, id = spec.id, label = spec.label, on_click = spec.on_click, order = tonumber(spec.order) or 100,
+            tooltip = spec.tooltip, enabled = spec.enabled}
+        for i, it in ipairs(list) do
+            if it.mod == mod and it.id == spec.id then list[i] = item; return true end
+        end
+        list[#list + 1] = item
+        return true
+    end
+    function api.remove_item(menu, id)
+        local list = state.items[menu] or {}
+        for i = #list, 1, -1 do
+            if list[i].mod == mod and list[i].id == id then table.remove(list, i); return true end
+        end
+        return false
+    end
+    -- menu.items(menu) -> {{id, mod, label, tooltip, enabled, order, click}, ...} by order, of the mods that are on; `click()` runs the item's function.
+    function api.items(menu)
+        local out = {}
+        for _, it in ipairs(state.items[menu] or {}) do
+            local m = it.mod
+            if alive(m) then
+                local label = it.label
+                if type(label) == 'function' then
+                    local ok, text = pcall(label)
+                    label = ok and tostring(text) or '?'
+                end
+                local enabled = it.enabled
+                if type(enabled) == 'function' then enabled = select(2, pcall(enabled)) end
+                out[#out + 1] = {id = it.id, mod = m.id, label = label, tooltip = it.tooltip, enabled = enabled ~= false, order = it.order,
+                    click = function() call(m, 'menu item ' .. it.id, it.on_click) end}
+            end
+        end
+        table.sort(out, function(a, b)
+            if a.order ~= b.order then return a.order < b.order end
+            return a.label < b.label
+        end)
+        return out
+    end
+    return api
+end
+function uis.drop_menu(m)
+    for menu, owner in pairs(uis.menu.hosts) do
+        if owner == m then uis.menu.hosts[menu] = nil end
+    end
+    for _, list in pairs(uis.menu.items) do
+        for i = #list, 1, -1 do
+            if list[i].mod == m then table.remove(list, i) end
+        end
+    end
+end
+
 local function make_mods_api(mod)
     local api = {}
     -- A page of this mod's own in its settings screen (after the generated settings): fn(x, y, w, h) draws in that
@@ -6575,6 +6661,7 @@ local function make_env(mod)
     gear.keys = make_keys_api(mod)
     gear.input = uis.make_input(mod)
     gear.mods = make_mods_api(mod)
+    gear.menu = uis.make_menu(mod)
     if mod.builtin then env.admin = admin end
     gear.ui = make_ui(mod)
     -- gear.on(event, fn) -> handle; gear.off(handle). Events: "load" (all mods loaded), "frame" (dt in seconds,
@@ -6910,6 +6997,7 @@ local function unload_mod(e)
     D.dirty = true
     ui_keys[m] = nil
     key_capture[m] = nil
+    uis.drop_menu(m)
     if uis.rml_docs then
         for id, entry in pairs(uis.rml_docs) do
             if entry.mod == m then uis.rml_docs[id] = nil; native.rml_close(id) end

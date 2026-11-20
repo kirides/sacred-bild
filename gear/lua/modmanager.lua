@@ -736,10 +736,14 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Each frame
 ---------------------------------------------------------------------------------------------------------------
+-- The item of the game menu in a native menu (gear.menu); the button below stands in for it otherwise.
+gear.menu.add_item('esc', {id = 'mods', label = 'Mods', order = 900, tooltip = 'Mod manager', on_click = function() open_screen() end})
+
 local function escape_menu_button(state)
     if state.mode == 'menus' then
         if ui.button('menu_button', 16, 724, 90, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then open_screen() end
-    elseif state.escape_menu and not state.message_box then
+    elseif state.escape_menu and not state.message_box and not gear.menu.available('esc') then
+        -- With a native menu (a mod that draws the game menu itself) the "Mods" item below is part of it; else this button.
         local l, t, r, b = ui.screen()
         local x = (l + r) / 2 - 60      -- below the escape menu's window (centered in the layout)
         if ui.button('esc_button', x, 508, 120, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then open_screen() end

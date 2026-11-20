@@ -1209,6 +1209,39 @@ namespace
         return 1;
     }
 
+    // native.ui_menu_entries(name) -> {{text, x, y, w, h}, ...}: the entries of the game menu (UI_WND_ESCMENU), in layout units
+    int nativeUiMenuEntries(lua_State* L)
+    {
+        const std::vector<Replace::Entry> list = Replace::entries(upperName(L, 1));
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        for (size_t i = 0; i < list.size(); ++i)
+        {
+            const Replace::Entry& e = list[i];
+            lua_createtable(L, 0, 5);
+            const std::string text = narrow(e.text);
+            lua_pushlstring(L, text.data(), text.size());
+            lua_setfield(L, -2, "text");
+            lua_pushnumber(L, e.x);
+            lua_setfield(L, -2, "x");
+            lua_pushnumber(L, e.y);
+            lua_setfield(L, -2, "y");
+            lua_pushnumber(L, e.w);
+            lua_setfield(L, -2, "w");
+            lua_pushnumber(L, e.h);
+            lua_setfield(L, -2, "h");
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.ui_menu_click(name, index) -> bool: presses the index-th (1-based) entry as the game's own click would
+    int nativeUiMenuClick(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 2);
+        lua_pushboolean(L, index >= 1 && index < 64 && Replace::clickEntry(upperName(L, 1), static_cast<size_t>(index) - 1));
+        return 1;
+    }
+
     int nativeSavePending(lua_State* L)
     {
         lua_pushboolean(L, Save::pending());
@@ -4460,6 +4493,8 @@ namespace
             {"ui_replace_beat", nativeUiReplaceBeat},
             {"ui_window_open", nativeUiWindowOpen},
             {"ui_close_window", nativeUiCloseWindow},
+            {"ui_menu_entries", nativeUiMenuEntries},
+            {"ui_menu_click", nativeUiMenuClick},
             {"game_config", nativeGameConfig},
             {"net_kill", nativeNetKill},
             {"created_active", nativeCreatedActive},

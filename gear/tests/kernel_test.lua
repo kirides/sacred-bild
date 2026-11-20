@@ -2042,6 +2042,44 @@ do
     ok(log_rml[#log_rml] == 'close 7' and doc:draw() == 0, 'doc:close closes the host document, drawing a closed one does nothing')
 end
 
+
+-- gear.menu: items of the game menu and the mod that draws it.
+do
+    local gear_a
+    do
+        local i = 1
+        while true do
+            local name, value = debug.getupvalue(kernel.dispatch, i)
+            if not name then break end
+            if name == 'handlers' then
+                for _, h in ipairs(value['frame']) do
+                    local env = getfenv(h.fn)
+                    if env.record and env.gear then gear_a = env.gear end
+                end
+            end
+            i = i + 1
+        end
+    end
+    local menu = gear_a.menu
+    ok(type(menu) == 'table' and menu.available and menu.host and menu.add_item and menu.items, 'menu: the API is there')
+    ok(menu.available('esc') == false, 'menu: no native menu by default')
+    local clicked = 0
+    ok(menu.add_item('esc', {id = 'a', label = 'Zeta', order = 50, on_click = function() clicked = clicked + 1 end}), 'menu.add_item')
+    menu.add_item('esc', {id = 'b', label = function() return 'Alpha' end, order = 50, on_click = function() end, enabled = false})
+    menu.add_item('esc', {id = 'c', label = 'First', order = 1, on_click = function() end})
+    local list = menu.items('esc')
+    ok(#list == 3 and list[1].id == 'c' and list[2].label == 'Alpha' and list[3].label == 'Zeta', 'menu.items: by order, then label; labels may be functions')
+    ok(list[2].enabled == false and list[1].enabled == true, 'menu.items: enabled')
+    list[3].click()
+    ok(clicked == 1, 'menu.items: click runs the item')
+    menu.add_item('esc', {id = 'a', label = 'Zeta 2', on_click = function() end})
+    ok(#menu.items('esc') == 3 and menu.items('esc')[3].label == 'Zeta 2', 'menu.add_item: the same id replaces')
+    ok(not pcall(menu.add_item, 'esc', {id = 'x'}) and not pcall(menu.add_item, 'esc', {label = 'x', on_click = function() end}), 'menu.add_item: bad specs are refused')
+    ok(menu.host('esc') == true and menu.available('esc') == true, 'menu.host makes the menu available')
+    ok(menu.host('esc', false) == true and menu.available('esc') == false, 'menu.host(…, false) lets go')
+    ok(menu.remove_item('esc', 'a') and menu.remove_item('esc', 'b') and menu.remove_item('esc', 'c') and #menu.items('esc') == 0, 'menu.remove_item')
+end
+
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

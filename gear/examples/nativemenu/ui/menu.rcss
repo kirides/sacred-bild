@@ -1,0 +1,55 @@
+/* The look of the native game menu. Sizes are dp: one layout unit (1024x768) each, so the screen scales with the UI. */
+body {
+    width: 100%;
+    height: 100%;
+    font-family: "Segoe UI";
+    font-size: 15dp;
+    color: #e8dcc0;
+}
+
+.backdrop {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 120);
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    min-width: 260dp;
+    padding: 18dp 22dp;
+    background-color: rgba(10, 8, 6, 225);
+    border: 2dp #6e5e3a;
+}
+
+.entry {
+    display: block;
+    margin: 3dp 0;
+    padding: 7dp 14dp;
+    text-align: center;
+    font-size: 19dp;
+    color: #d8c9a0;
+    background-color: rgba(0, 0, 0, 0);
+    border: 1dp rgba(0, 0, 0, 0);
+}
+
+.entry:hover {
+    color: #ffe9a8;
+    background-color: rgba(200, 170, 90, 40);
+    border-color: #c8aa5a;
+}
+
+.entry:active { background-color: rgba(200, 170, 90, 80); }
+.entry[disabled] { color: #6c6454; }
+
+/* The mods' items after the game's own entries, a little quieter. */
+.entry.mod { font-size: 16dp; }
+
+.rule {
+    height: 1dp;
+    margin: 8dp 14dp;
+    background-color: #6e5e3a;
+}

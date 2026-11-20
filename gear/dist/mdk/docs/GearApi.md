@@ -88,6 +88,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [Custom net messages (gear.net)](#custom-net-messages-gearnet)
 - [Chat lines (gear.chat)](#chat-lines-gearchat)
 - [Settings, key binds and the mod manager](#settings-key-binds-and-the-mod-manager)
+- [Menus (gear.menu)](#menus-gearmenu)
 - [Remapping the game's keys (gear.input)](#remapping-the-games-keys-gearinput)
 - [Inventories (gear.inv)](#inventories-gearinv)
 - [Lookups (gear.lookup)](#lookups-gearlookup)
@@ -267,6 +268,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `keys` | `GearKeys` | This mod's declared key binds. |
 | `input` | `GearInput` | The game's own keys, remapped. |
 | `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
+| `menu` | `GearMenu` | Menus mods add items to (the game menu) and the mod that draws them. |
 | `ui` | `GearUi` | Drawing on top of the game, widgets, panels and the layout. |
 | `auto` | `GearAuto` | Automation (only with `-gear-auto` and `automation = true` in `mod.lua`). (optional) |
 
@@ -3062,6 +3064,80 @@ One installed mod, or nil.
 - `id`: `string`
 - returns `GearModListing?`
 
+## Menus (gear.menu)
+
+### GearMenuItemSpec
+
+What a mod registers with `add_item`.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | Unique within the mod; registering the same id again replaces the item. |
+| `label` | `string\|fun(): string` | The text (a function is asked each time the menu is drawn). |
+| `on_click` | `fun()` | Runs when the player picks the item. |
+| `order` | `number` | Where it goes: smaller first (default 100; the Mods item is 900). (optional) |
+| `tooltip` | `string` |  (optional) |
+| `enabled` | `boolean\|fun(): boolean` | Default `true`. (optional) |
+
+### GearMenuItem
+
+An item as the mod that draws the menu gets it.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` |  |
+| `mod` | `string` | The id of the mod that registered it. |
+| `label` | `string` |  |
+| `tooltip` | `string` |  (optional) |
+| `enabled` | `boolean` |  |
+| `order` | `number` |  |
+| `click` | `fun()` | Runs the item's `on_click` (errors are the registering mod's, not the caller's). |
+
+### GearMenu
+
+Reached as `gear.menu`.
+
+Menus a mod can add items to, and the mod that draws them. `'esc'` is the game menu (Escape in game). Items are kept whether or not any mod draws the menu, so a mod registers its item once and draws a button of its own only while `available('esc')` is false: with a native menu (a mod that replaces the game's menu with its own screen, `host`) the item is part of it; without one the game's menu is untouched. See `gear.ui.replace_window`, `gear.ui.menu_entries` and `gear.ui.rml`.
+
+#### `gear.menu.available(menu) -> boolean`
+
+Whether a mod draws `menu` now (the native menu mod is on and called `host`).
+
+- `menu`: `string` (optional) - Default `'esc'`.
+- returns `boolean`
+
+#### `gear.menu.host(menu, on) -> boolean, string?`
+
+This mod draws `menu` (`on` false: no longer). Only one mod can; it also replaces the game's window with `gear.ui.replace_window`.
+
+- `menu`: `string`
+- `on`: `boolean` (optional) - Default `true`.
+- returns `ok` `boolean`
+- returns `message` `string?`
+
+#### `gear.menu.add_item(menu, spec) -> boolean`
+
+Adds an item to `menu`.
+
+- `menu`: `string`
+- `spec`: `GearMenuItemSpec`
+- returns `ok` `boolean`
+
+#### `gear.menu.remove_item(menu, id) -> boolean`
+
+Removes this mod's item.
+
+- `menu`: `string`
+- `id`: `string`
+- returns `found` `boolean`
+
+#### `gear.menu.items(menu) -> GearMenuItem[]`
+
+The items of the mods that are on, by `order`: what the mod that draws the menu lists after the game's own entries.
+
+- `menu`: `string`
+- returns `GearMenuItem[]`
+
 ## Remapping the game's keys (gear.input)
 
 The game's keys are fixed: I opens the inventory, 6 selects combat art 1, Space drinks the healing potion. A mod that lets the player choose other keys (or mouse buttons) for those actions gives Sacred Gear rules: "this input is that game key". Sacred Gear applies them to the messages the game reads, before any of its handlers, so the game reacts to the new key as if the player had pressed its own, and never sees the original. A rule without target makes an input do nothing (the original key of an action that was moved elsewhere). Rules apply only while the game has the keyboard: in game, with no message box, escape menu, savegame, options or character screen, and no chat line open; elsewhere every key is the game's own. Inputs are keys (the names of `gear.ui.key_pressed`, with `f13` to `f24` for the extra keys of mice and keyboards) and the mouse buttons `mouse3` (middle), `mouse4` and `mouse5` (the side buttons), alone or with `ctrl+`, `shift+` and `alt+`; the modifiers named must be the only ones held. A modifier alone is a binding too (`alt`), for the keys the game polls. Mouse buttons 1 and 2 and Esc cannot be rebound. The declared keys of `mod.lua` take the same names, so the mod manager's rebinding screen (F11, with the controller's key picker) offers them.
@@ -4207,6 +4283,33 @@ The game's in-game window by control name (any case), or nil.
 The game's in-game windows.
 
 - returns `GearWindow[]`
+
+### GearMenuEntry
+
+An entry of the game menu.
+
+| Field | Type | |
+|---|---|---|
+| `text` | `string` | The game's own text for it (its language). |
+| `x` | `number` | Its rectangle in the 1024x768 layout. |
+| `y` | `number` |  |
+| `w` | `number` |  |
+| `h` | `number` |  |
+
+#### `gear.ui.menu_entries(name) -> GearMenuEntry[]`
+
+The entries of the game menu (`'UI_WND_ESCMENU'`) in the game's order (options, save, export, quit, continue), with the game's own text and rectangles: what a native menu lists before the items of `gear.menu`. Empty while the menu is closed.
+
+- `name`: `'UI_WND_ESCMENU'`
+- returns `GearMenuEntry[]`
+
+#### `gear.ui.menu_click(name, index) -> boolean`
+
+Presses entry `index` (1-based) of the game menu as the game's own click would, also while a mod replaces the menu: the game does what the entry does (it opens its options or asks before it quits). Sent to the menu itself as a mouse press and release at the entry's centre.
+
+- `name`: `'UI_WND_ESCMENU'`
+- `index`: `integer`
+- returns `sent` `boolean`
 
 #### `gear.ui.state() -> GearUiState`
 

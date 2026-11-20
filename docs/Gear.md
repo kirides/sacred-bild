@@ -408,6 +408,7 @@ of the game folder.
 | `hello` | The smallest mod: events and the creature types. |
 | `uidemo` | `gear.ui`: a hero panel, a widget gallery (F4) with every widget, images in the three fit modes, the fonts, tooltips, notes on the world and top layers and in the inventory's frame; with `-gear-auto` a self test that clicks every widget. |
 | `rmldemo` | `gear.ui.rml`: a window written as an RmlUi document (HTML and CSS): buttons and a text field that call Lua, a bar that follows the hero's health, the game's tooltip corner ornaments as images (F6 shows and hides it). A prototype: not yet run in game. |
+| `nativemenu` | The game menu (Esc) as an RmlUi screen: `gear.ui.replace_window`, the game's own entries through `gear.ui.menu_entries` / `menu_click`, and the items other mods add with `gear.menu.add_item` (the Mods manager's "Mods" is one); off by default, with it off nothing changes. A prototype: not yet run in game. |
 | `hooks` | Reacts to the hooks other mods publish and publishes one of its own. |
 | `saveinfo` | Loads a savegame and writes where the hero stands and what is around. |
 | `selftest` | Loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `selftest.json` and `types.txt`, quits with 0 or 1. |
