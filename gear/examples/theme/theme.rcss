@@ -130,7 +130,7 @@ button.game-button {
     decorator: image(gear:image/281 repeat-x) content-box, image(gear:image/280 scale-none left center) border-box, image(gear:image/282 scale-none right center) border-box;
     color: #e4e4e4;
     font-size: 17px;
-    line-height: 37px;
+    line-height: 28px;
     text-align: center;
     cursor: pointer;
     transform: none;
