@@ -142,17 +142,33 @@ namespace
     using LimiterFn = void(__cdecl*)(double unused, uint32_t fps);
     LimiterFn g_origLimiter = nullptr;
 
-    void __cdecl hookLimiter(double, uint32_t fps)
+    // Set by the limiter hook, cleared by each flip: tells hookFlip whether the frame was paced already.
+    thread_local bool t_limiterCalled = false;
+
+    // The limit for this frame: [Display] FpsLimitInactive in the background (the lower of it and the menu limit in
+    // the menus), [Display] FpsLimitMenu in the menus, FpsLimit in game, `passed` (the menus' own) otherwise.
+    int frameLimit(int passed, bool inGameRender)
     {
-        int limit = static_cast<uint16_t>(fps);     // the game reads the low word only
-        if (Config::display.fpsLimitInactive > 0 && !Focus::foreground())
+        const bool menu = g_engine == nullptr;
+        int limit = inGameRender ? Config::display.fpsLimit : passed;
+        if (menu && Config::display.fpsLimitMenu > 0)
+        {
+            limit = Config::display.fpsLimitMenu;
+        }
+        if (Config::display.fpsLimitInactive > 0 && !Focus::foreground() &&
+            (limit <= 0 || Config::display.fpsLimitInactive < limit))
         {
             limit = Config::display.fpsLimitInactive;
         }
-        else if (reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::renderLimiterReturn)
-        {
-            limit = Config::display.fpsLimit;
-        }
+        return limit;
+    }
+
+    void __cdecl hookLimiter(double, uint32_t fps)
+    {
+        t_limiterCalled = true;
+        const bool inGameRender = g_engine != nullptr &&
+            reinterpret_cast<uintptr_t>(_ReturnAddress()) == Addr::renderLimiterReturn;
+        const int limit = frameLimit(static_cast<uint16_t>(fps), inGameRender);   // the game reads the low word only
         if (limit > 0)
         {
             paceFrame(limit);
@@ -188,6 +204,16 @@ namespace
                 Profiler::retarget(thread);
             }
         }
+        // The menus' own frames that bypassed the game's limiter (a loop that waits some other way) are paced here,
+        // so the menu and background limits hold there too.
+        if (g_engine == nullptr && !t_limiterCalled)
+        {
+            if (const int limit = frameLimit(0, false); limit > 0)
+            {
+                paceFrame(limit);
+            }
+        }
+        t_limiterCalled = false;
         D3DStats::mark(D3DStats::TimerCount);
         Resolution::beforeFlip(self);
         int hr;

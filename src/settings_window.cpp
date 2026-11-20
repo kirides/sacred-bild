@@ -261,6 +261,9 @@ namespace
 
         ui.page(L"Advanced");
         ui.group(L"Frame timing");
+        ui.combo(L"In menu:", {L"Display", L"FpsLimitMenu"}, {0, 15, 20, 30, 60},
+              std::max(Config::display.fpsLimitMenu, 0), fps)
+            .tip(L"Frame limit in the main menu (no game running). The menu needs no more than 30 frames per second.");
         ui.combo(L"In the background:", {L"Display", L"FpsLimitInactive"}, {0, 10, 15, 20, 30, 60},
               std::max(Config::display.fpsLimitInactive, 0), fps)
             .tip(L"Frame limit while the game is in the background (another window has the focus), in game and in the menus.");

@@ -18,6 +18,7 @@ tabs, Start is Play. Text fields need the keyboard.
 | Display | (automation) | | With `-gear-auto` the `Width`, `Height` and `Borderless` above are ignored: a framed 1600x900 window in the work area's bottom-right corner, `-gear-window=WxH[+X+Y]` changes it (see [Gear](Gear.md#automation)); `-gear-ui-scale=N` overrides `[UI] Scale` the same way. |
 | Display | ClipCursor | 1 | Confine the mouse to the game window while it is in the foreground; hold Alt to move it out. |
 | Display | FpsLimit | 60 | The game's own in-game frame limit; 0 = off. |
+| Display | FpsLimitMenu | 30 | Frame limit in the main menu (no game running); 0 = off. |
 | Display | FpsLimitInactive | 20 | Frame limit while the game is in the background, in game and in the menus; 0 = off. |
 | Display | VSync | 1 | Direct3D 9 backend: present on the display's refresh (flip model); 0 = right away, not limited by the refresh rate (blit model). |
 | Display | MaxFrameLatency | 1 | Direct3D 9 backend: frames the CPU may queue ahead of the GPU. |
