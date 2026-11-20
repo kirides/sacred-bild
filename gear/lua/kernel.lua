@@ -4053,6 +4053,8 @@ local function make_ui(mod)
                     layer = opts.layer or 'hud'}
                 if ui_edit then ui.frame(r.x, r.y, r.w, r.h, C.accent, 1, {layer = opts.layer}) end
             end
+            -- The game's own frame behind a window with class "window" or data-frame (the ornaments overhang the box, so it cannot be a CSS decorator).
+            if r.frame and r.frame ~= '' and ui.native then ui.native.frame(r.x, r.y, r.w, r.h, {style = r.frame, layer = opts.layer}) end
             -- In the layout editor the windows take no mouse: the editor drags them.
             local wkey = keys[-i]
             if not wkey then wkey = 'rml:' .. id .. ':w' .. i; keys[-i] = wkey end

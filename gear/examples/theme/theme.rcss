@@ -6,11 +6,8 @@ body { font-size: 15dp; color: #f0f0f0; }
 
 /* A window: .window is the frame (the game's tooltip border and fill); .titlebar its brown header with the title and a close mark; .body the content. */
 .window {
-    /* The game's own border (the frame of the item tooltip, as in Item compare): corner ornaments 54 / 55 (the bottom ones flipped),
-       bars 14 (top, bottom flipped) and 52 (sides), the fill its black at 62 %. The ornaments sit inside the box: keep the padding. */
-    decorator: tiled-box(gear:image/54, gear:image/14, gear:image/55,
-                         gear:image/52, fill.png, gear:image/52,
-                         gear:image/54 flip-vertical, gear:image/14 flip-vertical, gear:image/55 flip-vertical);
+    /* The game's own frame (tooltip: bars, fill, overhanging corner ornaments) is drawn by Gear behind every top-level element with
+       class "window" or data-frame="tooltip" (gear.ui.native.frame); a CSS decorator cannot overhang. The bars sit 6px inside the box: keep the padding. */
     padding: 6px;
 }
 .window > .titlebar {
@@ -113,3 +110,4 @@ span.padkey.up { decorator: image(gear:pad/up contain); }
 span.padkey.down { decorator: image(gear:pad/down contain); }
 span.padkey.left { decorator: image(gear:pad/left contain); }
 span.padkey.right { decorator: image(gear:pad/right contain); }
+

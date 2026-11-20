@@ -1417,6 +1417,9 @@ namespace
             lua_setfield(L, -2, "panel");
             push(L, e->GetAttribute<Rml::String>("data-title", ""));
             lua_setfield(L, -2, "title");
+            // The game's own frame (gear.ui.native.frame) behind the window: data-frame="tooltip", or any element with class "window".
+            push(L, e->GetAttribute<Rml::String>("data-frame", e->IsClassSet("window") ? "tooltip" : ""));
+            lua_setfield(L, -2, "frame");
         }
         lua_pop(L, 1);
     }
