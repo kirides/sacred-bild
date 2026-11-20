@@ -93,3 +93,21 @@ input.field:focus, select.field:focus { border-color: #ffd780; }
    (gear sets body.pad), sized with the text. */
 .padkey { display: none; width: 1.3em; height: 1.3em; margin-right: 0.5em; vertical-align: middle; }
 body.pad .padkey { display: inline-block; }
+
+/* The same prompts without an <img>: <span class="padkey a"></span> (a span is sized like the img, the glyph is its decorator). */
+span.padkey.a { decorator: image(gear:pad/a contain); }
+span.padkey.b { decorator: image(gear:pad/b contain); }
+span.padkey.x { decorator: image(gear:pad/x contain); }
+span.padkey.y { decorator: image(gear:pad/y contain); }
+span.padkey.lb { decorator: image(gear:pad/lb contain); }
+span.padkey.rb { decorator: image(gear:pad/rb contain); }
+span.padkey.lt { decorator: image(gear:pad/lt contain); }
+span.padkey.rt { decorator: image(gear:pad/rt contain); }
+span.padkey.back { decorator: image(gear:pad/back contain); }
+span.padkey.start { decorator: image(gear:pad/start contain); }
+span.padkey.l3 { decorator: image(gear:pad/l3 contain); }
+span.padkey.r3 { decorator: image(gear:pad/r3 contain); }
+span.padkey.up { decorator: image(gear:pad/up contain); }
+span.padkey.down { decorator: image(gear:pad/down contain); }
+span.padkey.left { decorator: image(gear:pad/left contain); }
+span.padkey.right { decorator: image(gear:pad/right contain); }
