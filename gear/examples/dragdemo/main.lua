@@ -18,17 +18,17 @@ end)
 
 gear.on('draw', function(state)
     if not state or state.mode ~= 'game' then return end
-    local p = ui.panel('main', 'Drag and drop demo', 60, 200, 260, 190)
+    local p = ui.panel('main', 'Drag and drop demo', 60, 200, 270, 150)
     if not p.open then return end
     for i, name in ipairs(NAMES) do
-        local x, y, w, h = p.x + 8, p.y + 8 + (i - 1) * 24, 110, 20
+        local x, y, w, h = p.content_x + 8, p.content_y + 8 + (i - 1) * 24, 110, 20
         local r = ui.region('n' .. i, x, y, w, h)
         local dragging = ui.drag_source('n' .. i, r, {type = 'creature', data = name, label = name})
         ui.rect(x, y, w, h, dragging and 0x60303040 or (r.hover and 0xC0383850 or 0xC0202030))
         ui.text(name, x + 6, y + 3)
     end
     for i = 1, 3 do
-        local x, y, w, h = p.x + 140, p.y + 8 + (i - 1) * 44, 100, 38
+        local x, y, w, h = p.content_x + 140, p.content_y + 8 + (i - 1) * 44, 100, 38
         local r = ui.region('slot' .. i, x, y, w, h)
         local t = ui.drop_target('slot' .. i, {
             accept = function(drag)
