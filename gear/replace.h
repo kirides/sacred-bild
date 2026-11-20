@@ -40,6 +40,7 @@ namespace Replace
     struct Entry
     {
         std::wstring text;
+        int textId = 0;     // the game's text id of the label (the controls keep it at +0x84: 1050 Options ...)
         float x = 0, y = 0, w = 0, h = 0;
     };
     std::vector<Entry> entries(const std::string& name);

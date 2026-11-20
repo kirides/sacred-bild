@@ -490,6 +490,7 @@ std::vector<Replace::Entry> Replace::entries(const std::string& name)
         {
             continue;
         }
+        e.textId = readOr<int32_t>(control + 0x84, 0);
         const uintptr_t text = readOr<uintptr_t>(control + 0x88, 0), textEnd = readOr<uintptr_t>(control + 0x8C, 0);
         if (text && textEnd > text && (textEnd - text) / 2 <= 128)
         {

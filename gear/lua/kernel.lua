@@ -5025,7 +5025,14 @@ local function make_ui(mod)
     -- ui.menu_entries(name) -> {{text, x, y, w, h}, ...}: the entries of the game menu ('UI_WND_ESCMENU') in their order, with the game's own
     -- text (in its language) and rectangles; empty while the menu is closed. ui.menu_click(name, index) presses entry `index` (1-based)
     -- as the game's own click would, also while a mod replaces the menu (ui.replace_window).
-    function ui.menu_entries(name) return native.ui_menu_entries and native.ui_menu_entries(tostring(name):upper()) or {} end
+    function ui.menu_entries(name)
+        local list = native.ui_menu_entries and native.ui_menu_entries(tostring(name):upper()) or {}
+        -- The labels are the game's texts by id (the control keeps the id, not the text).
+        for _, e in ipairs(list) do
+            if (e.text == nil or e.text == '') and e.text_id and e.text_id > 0 then e.text = native.text_get(e.text_id) or '' end
+        end
+        return list
+    end
     function ui.menu_click(name, index) return native.ui_menu_click and native.ui_menu_click(tostring(name):upper(), index) or false end
     -- ui.back_pressed() -> bool: the controller's B was pressed (consumed: true once per press). Mods with a
     -- nav_modal screen or a panel with `back = false` close or step back with it.

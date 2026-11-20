@@ -1217,10 +1217,12 @@ namespace
         for (size_t i = 0; i < list.size(); ++i)
         {
             const Replace::Entry& e = list[i];
-            lua_createtable(L, 0, 5);
+            lua_createtable(L, 0, 6);
             const std::string text = narrow(e.text);
             lua_pushlstring(L, text.data(), text.size());
             lua_setfield(L, -2, "text");
+            lua_pushnumber(L, e.textId);
+            lua_setfield(L, -2, "text_id");
             lua_pushnumber(L, e.x);
             lua_setfield(L, -2, "x");
             lua_pushnumber(L, e.y);
