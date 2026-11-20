@@ -139,6 +139,12 @@ Rules that hold across the API:
   to the right of the game's item tooltip (on its left near the screen's edge; `gear.ui.hovered_item()` reports the
   tooltip's visible rectangle in the layout `gear.ui` draws in). Further pieces (rings, bars) are added as styles to the same table. See
   [The game's own look](GearApi.md#the-games-own-look-gearuinative).
+- **HTML/CSS documents (prototype):** `gear.ui.rml` loads a `.rml` document and its `.rcss` styles from the mod's folder
+  ([RmlUi](https://mikke89.github.io/RmlUiDoc/): `div`, `button`, `input`, flexbox, `:hover`, animations) and draws it every frame
+  with `doc:draw()`; `doc:on('#ok', 'click', fn)` calls Lua, `doc:text`, `doc:class`, `doc:style` and `doc:value` change the
+  document. Every button, link and input is a pad stop, a focused text field takes the keyboard, the default font is Segoe UI, and the
+  game's own UI images are available as `gear:image/<id>`, CSS `transform` works. No JavaScript, no filters or drop shadows yet. See
+  [HTML/CSS documents](GearApi.md#htmlcss-documents-gearuirml) and `gear/examples/rmldemo`.
 - **Item data:** `gear.inv.values(item)` decodes an item's resolved value record (level, requirements, damage, attack, defense,
   protection, the eight bonus slots with code, attribute and stored value, and the records its sockets merged in), and
   `gear.inv.bonus_text(item, entry, slot)` gives the game's own tooltip line for one bonus slot (the engine's routine, so the
@@ -403,6 +409,9 @@ of the game folder.
 |---|---|
 | `hello` | The smallest mod: events and the creature types. |
 | `uidemo` | `gear.ui`: a hero panel, a widget gallery (F4) with every widget, images in the three fit modes, the fonts, tooltips, notes on the world and top layers and in the inventory's frame; with `-gear-auto` a self test that clicks every widget. |
+| `rmldemo` | `gear.ui.rml`: a window written as an RmlUi document (HTML and CSS): buttons and a text field that call Lua, a bar that follows the hero's health, the game's tooltip corner ornaments as images (F6 shows and hides it). A prototype: not yet run in game. |
+| `theme` | The shared RmlUi look: `mod.lua` has `theme = 'theme.rcss'`, and Gear puts that stylesheet in front of the styles of every RmlUi document of every mod (classes `window`, `row`, `primary` / `danger` buttons, `field`, `list`, `bar`, `padkey` ...), so mods only override what is special. Mods opt out with `{theme = false}`. A prototype: not yet run in game. |
+| `nativemenu` | The game menu (Esc) as an RmlUi screen: `gear.ui.replace_window`, the game's own entries through `gear.ui.menu_entries` / `menu_click`, and the items other mods add with `gear.menu.add_item` (the Mods manager's "Mods" is one); off by default, with it off nothing changes. A prototype: not yet run in game. |
 | `hooks` | Reacts to the hooks other mods publish and publishes one of its own. |
 | `saveinfo` | Loads a savegame and writes where the hero stands and what is around. |
 | `selftest` | Loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `selftest.json` and `types.txt`, quits with 0 or 1. |

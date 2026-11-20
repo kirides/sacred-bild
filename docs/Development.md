@@ -127,7 +127,7 @@ its owner PID is gone (`run` records its own PID; with `acquire` pass `-OwnerPid
 Requires Visual Studio 2026 (MSVC, Win32 toolset), CMake 3.25+ and vcpkg with `VCPKG_ROOT` set
 (vcpkg provides [Detours](https://github.com/microsoft/Detours), [gtl](https://github.com/greg7mdp/gtl),
 [Dear ImGui](https://github.com/ocornut/imgui), [SDL3](https://www.libsdl.org) and
-[KCP](https://github.com/skywind3000/kcp)). The matchmaker needs Go 1.27 (`cd matchmaker && go build`).
+[KCP](https://github.com/skywind3000/kcp), and for Sacred Gear [RmlUi](https://github.com/mikke89/RmlUi) with FreeType and [stb](https://github.com/nothings/stb)). The matchmaker needs Go 1.27 (`cd matchmaker && go build`).
 
 ```sh
 cmake --preset msvc-x86
@@ -160,6 +160,7 @@ from the `sacred_core` library. Building: part of the normal build (`out/build/m
 | `gear/ui.*`, `itemicon.*`, `replace.*` | Mod drawing (draw commands, the hooks in the UI pass, Direct3D 7 quads with the game's states saved and restored, fonts and UI images, window and UI state queries); item icons; replaced windows |
 | `gear/pickup.*`, `drops.*` | Pickup rules; drop hooks ([Gear drops](GearDrops.md)) |
 | `gear/overlay.*` | The file overlay and delta patches |
+| `gear/rml.*` | RmlUi for `gear.ui.rml`: its system, file and render interfaces (meshes recorded as draw commands, `Kind::Mesh` in `ui.cpp`), a context per document, element access and the event queue for Lua. Documents read only the mod's own folder |
 | `gear/netmsg.*`, `gear/realm.*` | Custom net messages; the lobby host and port of the network menu |
 | `gear/chat.*`, `input.*`, `padnav.*`, `itemtip.*`, `text.*`, `gamecfg.*`, `sitehook.*` | Chat lines; remapping the game's keys; the controller on mod UI; item tooltips; game text; `Settings.cfg`; engine hook sites (`gear.hooks`) |
 | `gear/save.*`, `savegames.*` | Saving and loading; the savegame list and per-savegame mod data |

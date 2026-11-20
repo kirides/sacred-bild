@@ -16,6 +16,7 @@
 #include "pickup.h"
 #include "realm.h"
 #include "replace.h"
+#include "rml.h"
 #include "overlay.h"
 #include "buffs.h"
 #include "party.h"
@@ -1205,6 +1206,41 @@ namespace
     int nativeUiCloseWindow(lua_State* L)
     {
         lua_pushboolean(L, Replace::close(upperName(L, 1)));
+        return 1;
+    }
+
+    // native.ui_menu_entries(name) -> {{text, x, y, w, h}, ...}: the entries of the game menu (UI_WND_ESCMENU), in layout units
+    int nativeUiMenuEntries(lua_State* L)
+    {
+        const std::vector<Replace::Entry> list = Replace::entries(upperName(L, 1));
+        lua_createtable(L, static_cast<int>(list.size()), 0);
+        for (size_t i = 0; i < list.size(); ++i)
+        {
+            const Replace::Entry& e = list[i];
+            lua_createtable(L, 0, 6);
+            const std::string text = narrow(e.text);
+            lua_pushlstring(L, text.data(), text.size());
+            lua_setfield(L, -2, "text");
+            lua_pushnumber(L, e.textId);
+            lua_setfield(L, -2, "text_id");
+            lua_pushnumber(L, e.x);
+            lua_setfield(L, -2, "x");
+            lua_pushnumber(L, e.y);
+            lua_setfield(L, -2, "y");
+            lua_pushnumber(L, e.w);
+            lua_setfield(L, -2, "w");
+            lua_pushnumber(L, e.h);
+            lua_setfield(L, -2, "h");
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
+        }
+        return 1;
+    }
+
+    // native.ui_menu_click(name, index) -> bool: presses the index-th (1-based) entry as the game's own click would
+    int nativeUiMenuClick(lua_State* L)
+    {
+        const lua_Number index = luaL_checknumber(L, 2);
+        lua_pushboolean(L, index >= 1 && index < 64 && Replace::clickEntry(upperName(L, 1), static_cast<size_t>(index) - 1));
         return 1;
     }
 
@@ -3106,6 +3142,17 @@ namespace
         return 3;
     }
 
+    // native.ui_pad_info() -> controller, style: whether the controller was used last, and the pad's style (0 Xbox, 1 PlayStation,
+    // 2 Switch).
+    int nativeUiPadInfo(lua_State* L)
+    {
+        int style = 0;
+        const bool controller = PadNav::padInfo(style);
+        lua_pushboolean(L, controller);
+        lua_pushnumber(L, style);
+        return 2;
+    }
+
     // native.auto_pad(nudge, back, menu): automation posts pad events; native.auto_nav() -> stops, flags as SacredBild
     // holds them (stops -1: stale, -2: no SacredBild).
     int nativeAutoPad(lua_State* L)
@@ -4482,6 +4529,8 @@ namespace
             {"ui_replace_beat", nativeUiReplaceBeat},
             {"ui_window_open", nativeUiWindowOpen},
             {"ui_close_window", nativeUiCloseWindow},
+            {"ui_menu_entries", nativeUiMenuEntries},
+            {"ui_menu_click", nativeUiMenuClick},
             {"game_config", nativeGameConfig},
             {"net_kill", nativeNetKill},
             {"created_active", nativeCreatedActive},
@@ -4579,6 +4628,7 @@ namespace
             {"builtin", nativeBuiltin},
             {"ui_events", nativeUiEvents},
             {"ui_nav", nativeUiNav},
+            {"ui_pad_info", nativeUiPadInfo},
             {"ui_pad", nativeUiPad},
             {"ui_clip", nativeUiClip},
             {"ui_wheel", nativeUiWheel},
@@ -4665,6 +4715,7 @@ namespace
                 lua_setfield(L, -2, r->name);
             }
         }
+        RmlHost::registerNatives(L);
         lua_pushstring(L, Gear::kVersion);
         lua_setfield(L, -2, "version");
         if (lua_pcall(L, 1, 1, 0) != 0 || !lua_istable(L, -1))
@@ -4691,6 +4742,7 @@ void LuaHost::configure(HMODULE module, const std::wstring& gameDir)
     g_module = module;
     g_modsDir = gameDir + L"\\mods";
     g_gameDir = gameDir;
+    RmlHost::configure(g_modsDir);
 }
 
 static ULONGLONG g_lastIdle = 0, g_lastMenuTick = 0;

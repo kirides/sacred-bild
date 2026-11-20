@@ -1,0 +1,76 @@
+body {
+    font-family: "Segoe UI";
+    font-size: 14px;
+    color: #f0f0f0;
+}
+
+#window {
+    position: absolute;
+    left: 300px;
+    top: 160px;
+    width: 400px;
+    padding: 14px 16px 12px 16px;
+    background-color: rgba(0, 0, 0, 160);       /* the game's tooltip fill, 0x9F */
+    border: 1px #6e5e3a;
+}
+
+/* The game's corner ornaments reach a few units beyond the box. */
+.corner { position: absolute; }
+.tl { left: -11px; top: -5px; }
+.tr { right: -11px; top: -5px; }
+.bl { left: -11px; bottom: -5px; }
+.br { right: -11px; bottom: -5px; }
+
+h1 {
+    font-size: 17px;
+    font-weight: bold;
+    color: #ffd780;
+    margin-bottom: 6px;
+}
+
+p { margin: 4px 0; color: #d8d8d8; }
+.hero { color: #ffffff; margin-top: 10px; }
+.greeting { color: #ffd780; height: 18px; }
+
+.bar {
+    height: 10px;
+    margin: 4px 0 10px 0;
+    background-color: #20202c;
+    border: 1px #6e5e3a;
+}
+.fill {
+    height: 10px;
+    width: 0%;
+    background-color: #a82828;
+}
+.fill.boost { background-color: #e8b030; }
+
+.row { display: flex; flex-direction: row; margin: 6px 0; }
+.row.right { justify-content: flex-end; }
+
+button {
+    margin-right: 8px;
+    padding: 4px 12px;
+    color: #f0f0f0;
+    background-color: #141420;
+    border: 1px #c8aa5a;
+    cursor: pointer;
+}
+button:hover { background-color: #282838; transform: scale(1.06); }
+button { transition: transform 0.12s cubic-out; }
+button:active { background-color: #3c3c50; }
+button.secondary { border-color: #6e5e3a; }
+
+input.field {
+    width: 180px;
+    margin-right: 8px;
+    padding: 4px 8px;
+    color: #f0f0f0;
+    background-color: #0c0c14;
+    border: 1px #6e5e3a;
+}
+input.field:focus { border-color: #c8aa5a; }
+
+/* Controller prompts: shown only while the controller was used last (doc:draw sets body.pad), sized with the text. */
+.padkey { display: none; width: 1.3em; height: 1.3em; margin-right: 0.5em; vertical-align: middle; }
+body.pad .padkey { display: inline-block; }

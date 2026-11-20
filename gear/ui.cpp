@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstring>
 #include <map>
+#include <memory>
 #include <mutex>
 
 // See ui.h. The game's UI pass, cUI_Manager_render (ENG 00758ED0, docs/UI_SYSTEM.md section 7), draws everything as
@@ -432,6 +433,8 @@ namespace
     {
         int width = 0, height = 0;
         std::vector<uint16_t> pixels;       // ARGB 4444, until the texture is made
+        std::vector<uint32_t> pixels32;     // or ARGB 8888 (pictureCreate32)
+        bool premultiplied = false;         // pixels32: the colors are scaled by alpha
         IDirectDrawSurface7* surface = nullptr;
         int texWidth = 0, texHeight = 0;
         bool failed = false;
@@ -471,6 +474,10 @@ namespace
         HRESULT hr = E_FAIL;
         for (const bool w : {false, true})
         {
+            if (!w && !pic.pixels32.empty())
+            {
+                continue;       // 32-bit pixels need the 32-bit format
+            }
             DDSURFACEDESC2 desc = {};
             desc.dwSize = sizeof(desc);
             desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
@@ -511,6 +518,15 @@ namespace
         {
             auto* row = static_cast<uint8_t*>(desc.lpSurface) + size_t(y) * desc.lPitch;
             // Beyond the picture: its last row and column repeated, so filtering at its edge takes nothing else.
+            if (!pic.pixels32.empty())
+            {
+                const uint32_t* src32 = pic.pixels32.data() + size_t(std::min(y, pic.height - 1)) * pic.width;
+                for (int x = 0; x < tw; ++x)
+                {
+                    reinterpret_cast<uint32_t*>(row)[x] = src32[std::min(x, pic.width - 1)];
+                }
+                continue;
+            }
             const uint16_t* src = pic.pixels.data() + size_t(std::min(y, pic.height - 1)) * pic.width;
             for (int x = 0; x < tw; ++x)
             {
@@ -531,11 +547,14 @@ namespace
         pic.texHeight = th;
         pic.pixels.clear();
         pic.pixels.shrink_to_fit();
+        pic.pixels32.clear();
+        pic.pixels32.shrink_to_fit();
         return true;
     }
 
     // The picture's record (as an image's) and texture; render thread.
-    bool pictureTexture(IDirect3DDevice7* device, uint32_t id, ImageRecord& r, IDirectDrawSurface7*& surface)
+    bool pictureTexture(IDirect3DDevice7* device, uint32_t id, ImageRecord& r, IDirectDrawSurface7*& surface,
+                        bool* premultiplied = nullptr)
     {
         std::scoped_lock lock(g_pictureLock);
         auto it = g_pictures.find(id);
@@ -557,8 +576,23 @@ namespace
         r.u1 = static_cast<float>(pic.width) / pic.texWidth;
         r.v1 = static_cast<float>(pic.height) / pic.texHeight;
         surface = pic.surface;
+        if (premultiplied)
+        {
+            *premultiplied = pic.premultiplied;
+        }
         return true;
     }
+
+    // ---- Meshes (Ui::meshCreate): geometry of the RmlUi host, kept for the frames that draw it ----
+
+    struct MeshData
+    {
+        std::vector<Ui::MeshVertex> vertices;
+        std::vector<int> indices;
+    };
+    std::mutex g_meshLock;
+    std::map<uint32_t, std::shared_ptr<const MeshData>> g_meshes;
+    uint32_t g_nextMesh = 1;
 
     void releaseDeadPictures()
     {
@@ -878,6 +912,204 @@ namespace
              u1, v1);
     }
 
+
+    // Clips the convex polygon `poly` (n vertices) to the rectangle (x, y, w, h), texture coordinates and color
+    // interpolated; returns the new count (at most n + 4).
+    struct MeshPoint
+    {
+        float x, y, u, v;
+        float a, r, g, b;
+    };
+
+    size_t clipPolygon(const MeshPoint* in, size_t n, const float* rect, MeshPoint* out)
+    {
+        MeshPoint bufA[8], bufB[8];
+        std::copy(in, in + n, bufA);
+        MeshPoint* src = bufA;
+        MeshPoint* dst = bufB;
+        const float l = rect[0], t = rect[1], r = rect[0] + rect[2], b = rect[1] + rect[3];
+        for (int edge = 0; edge < 4 && n > 0; ++edge)
+        {
+            const auto inside = [&](const MeshPoint& p) {
+                switch (edge)
+                {
+                case 0: return p.x >= l;
+                case 1: return p.x <= r;
+                case 2: return p.y >= t;
+                default: return p.y <= b;
+                }
+            };
+            const auto cut = [&](const MeshPoint& p, const MeshPoint& q) {
+                float k;
+                switch (edge)
+                {
+                case 0: k = (l - p.x) / (q.x - p.x); break;
+                case 1: k = (r - p.x) / (q.x - p.x); break;
+                case 2: k = (t - p.y) / (q.y - p.y); break;
+                default: k = (b - p.y) / (q.y - p.y); break;
+                }
+                MeshPoint o;
+                o.x = p.x + (q.x - p.x) * k;
+                o.y = p.y + (q.y - p.y) * k;
+                o.u = p.u + (q.u - p.u) * k;
+                o.v = p.v + (q.v - p.v) * k;
+                o.a = p.a + (q.a - p.a) * k;
+                o.r = p.r + (q.r - p.r) * k;
+                o.g = p.g + (q.g - p.g) * k;
+                o.b = p.b + (q.b - p.b) * k;
+                return o;
+            };
+            size_t m = 0;
+            for (size_t i = 0; i < n; ++i)
+            {
+                const MeshPoint& cur = src[i];
+                const MeshPoint& prev = src[(i + n - 1) % n];
+                const bool ci = inside(cur), pi = inside(prev);
+                if (ci)
+                {
+                    if (!pi)
+                    {
+                        dst[m++] = cut(prev, cur);
+                    }
+                    dst[m++] = cur;
+                }
+                else if (pi)
+                {
+                    dst[m++] = cut(prev, cur);
+                }
+            }
+            std::swap(src, dst);
+            n = m;
+        }
+        std::copy(src, src + n, out);
+        return n;
+    }
+
+    uint32_t packColor(float a, float r, float g, float b)
+    {
+        const auto c = [](float v) { return static_cast<uint32_t>(std::clamp(v, 0.0f, 255.0f) + 0.5f); };
+        return c(a) << 24 | c(r) << 16 | c(g) << 8 | c(b);
+    }
+
+    void drawMesh(IDirect3DDevice7* device, StateGuard& state, const Command& c)
+    {
+        std::shared_ptr<const MeshData> mesh;
+        {
+            std::scoped_lock lock(g_meshLock);
+            const auto it = g_meshes.find(c.region);
+            if (it == g_meshes.end())
+            {
+                return;
+            }
+            mesh = it->second;
+        }
+        ImageRecord r{};
+        IDirectDrawSurface7* surface = nullptr;
+        bool premultiplied = true;      // the vertex colors: scaled by alpha (a game image's pixels are not)
+        if (c.image >= Ui::kPictureBase)
+        {
+            if (!pictureTexture(device, c.image, r, surface, &premultiplied))
+            {
+                return;
+            }
+        }
+        else if (c.image)
+        {
+            if (!imageRecord(c.image, r) || !(surface = imageSurface(r.texture)))
+            {
+                return;
+            }
+            premultiplied = false;
+        }
+        const float inv = c.w > 0 ? 1.0f / c.w : 1.0f;
+        const float tu0 = r.u0, tv0 = r.v0, tdu = r.u1 - r.u0, tdv = r.v1 - r.v0;
+        const bool flipU = (c.flip & 1) != 0, flipV = (c.flip & 2) != 0;
+        const std::vector<Ui::MeshVertex>& vs = mesh->vertices;
+
+        const auto point = [&](int index) {
+            const Ui::MeshVertex& v = vs[static_cast<size_t>(index)];
+            MeshPoint p;
+            float px = v.x + c.x, py = v.y + c.y;
+            if (c.matrix)
+            {
+                const auto& m = *c.matrix;
+                const float tx = m[0] * px + m[4] * py + m[12];
+                const float ty = m[1] * px + m[5] * py + m[13];
+                const float tw = m[3] * px + m[7] * py + m[15];
+                const float k = tw != 0.0f ? 1.0f / tw : 1.0f;
+                px = tx * k;
+                py = ty * k;
+            }
+            p.x = px * inv;
+            p.y = py * inv;
+            const float uu = flipU ? 1.0f - v.u : v.u, vv = flipV ? 1.0f - v.v : v.v;
+            p.u = surface ? tu0 + uu * tdu : 0.0f;
+            p.v = surface ? tv0 + vv * tdv : 0.0f;
+            p.a = static_cast<float>(v.color >> 24);
+            p.r = static_cast<float>((v.color >> 16) & 0xFF);
+            p.g = static_cast<float>((v.color >> 8) & 0xFF);
+            p.b = static_cast<float>(v.color & 0xFF);
+            return p;
+        };
+        const auto toVertex = [&](const MeshPoint& p) {
+            float rr = p.r, gg = p.g, bb = p.b;
+            if (!premultiplied && p.a > 0.0f)
+            {
+                // Straight-alpha blending: the color without the alpha scaled in.
+                const float k = 255.0f / p.a;
+                rr = std::min(255.0f, rr * k);
+                gg = std::min(255.0f, gg * k);
+                bb = std::min(255.0f, bb * k);
+            }
+            return TLVertex{p.x, p.y, 0.0f, 1.0f, packColor(p.a, rr, gg, bb), 0, p.u, p.v};
+        };
+
+        thread_local std::vector<TLVertex> out;
+        out.clear();
+        const size_t triangles = mesh->indices.size() / 3;
+        for (size_t t = 0; t < triangles; ++t)
+        {
+            const int i0 = mesh->indices[t * 3], i1 = mesh->indices[t * 3 + 1], i2 = mesh->indices[t * 3 + 2];
+            const int count = static_cast<int>(vs.size());
+            if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= count || i1 >= count || i2 >= count)
+            {
+                continue;
+            }
+            const MeshPoint tri[3] = {point(i0), point(i1), point(i2)};
+            if (c.clipped)
+            {
+                MeshPoint poly[8];
+                const size_t n = clipPolygon(tri, 3, c.clip, poly);
+                for (size_t k = 1; k + 1 < n; ++k)
+                {
+                    out.push_back(toVertex(poly[0]));
+                    out.push_back(toVertex(poly[k]));
+                    out.push_back(toVertex(poly[k + 1]));
+                }
+            }
+            else
+            {
+                out.push_back(toVertex(tri[0]));
+                out.push_back(toVertex(tri[1]));
+                out.push_back(toVertex(tri[2]));
+            }
+        }
+        if (out.empty())
+        {
+            return;
+        }
+        state.enter();
+        state.texture(surface);
+        device->SetRenderState(D3DRENDERSTATE_SRCBLEND, premultiplied ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
+        constexpr size_t kChunk = 60000;        // vertices per call (a multiple of 3, below the device's limit)
+        for (size_t first = 0; first < out.size(); first += kChunk)
+        {
+            const size_t n = std::min(kChunk, out.size() - first);
+            device->DrawPrimitive(D3DPT_TRIANGLELIST, kFvf, out.data() + first, static_cast<DWORD>(n), 0);
+        }
+        device->SetRenderState(D3DRENDERSTATE_SRCBLEND, D3DBLEND_SRCALPHA);
+    }
+
     void drawText(IDirect3DDevice7* device, StateGuard& state, const Command& c)
     {
         void* font = fontById(c.font);
@@ -969,6 +1201,7 @@ namespace
             {
             case Kind::Rect: drawRect(device, state, c); break;
             case Kind::Image: drawImage(device, state, c); break;
+            case Kind::Mesh: drawMesh(device, state, c); break;
             case Kind::Text: c.vector ? drawVectorText(device, state, c) : drawText(device, state, c); break;
             case Kind::Region: break;
             case Kind::ItemIcon:
@@ -1334,6 +1567,17 @@ bool Ui::add(Command&& command)
             command.w = x1 - x0;
             command.h = y1 - y0;
         }
+        else if (command.kind == Kind::Mesh && command.clipped)
+        {
+            // A mesh with a clip of its own (the RmlUi host's scissor): the intersection with the scroll area's.
+            const float x0 = std::max(command.clip[0], g_clipRect[0]), y0 = std::max(command.clip[1], g_clipRect[1]);
+            const float x1 = std::min(command.clip[0] + command.clip[2], g_clipRect[0] + g_clipRect[2]);
+            const float y1 = std::min(command.clip[1] + command.clip[3], g_clipRect[1] + g_clipRect[3]);
+            command.clip[0] = x0;
+            command.clip[1] = y0;
+            command.clip[2] = std::max(0.0f, x1 - x0);
+            command.clip[3] = std::max(0.0f, y1 - y0);
+        }
         else
         {
             command.clipped = true;
@@ -1657,4 +1901,46 @@ void Ui::pictureRelease(uint32_t id)
         g_deadSurfaces.push_back(it->second.surface);
     }
     g_pictures.erase(it);
+}
+
+uint32_t Ui::pictureCreate32(int width, int height, std::vector<uint32_t> pixels, bool premultiplied)
+{
+    if (width <= 0 || height <= 0 || width > 4096 || height > 4096 || pixels.size() < size_t(width) * height)
+    {
+        return 0;
+    }
+    std::scoped_lock lock(g_pictureLock);
+    const uint32_t id = g_nextPicture++;
+    Picture& pic = g_pictures[id];
+    pic.width = width;
+    pic.height = height;
+    pic.pixels32 = std::move(pixels);
+    pic.premultiplied = premultiplied;
+    return id;
+}
+
+uint32_t Ui::meshCreate(std::vector<MeshVertex> vertices, std::vector<int> indices)
+{
+    if (vertices.empty() || indices.size() < 3 || vertices.size() > 1000000 || indices.size() > 3000000)
+    {
+        return 0;
+    }
+    auto mesh = std::make_shared<MeshData>();
+    mesh->vertices = std::move(vertices);
+    mesh->indices = std::move(indices);
+    std::scoped_lock lock(g_meshLock);
+    const uint32_t id = g_nextMesh++;
+    g_meshes.emplace(id, std::move(mesh));
+    return id;
+}
+
+void Ui::meshRelease(uint32_t id)
+{
+    std::scoped_lock lock(g_meshLock);
+    g_meshes.erase(id);
+}
+
+float Ui::canvasScale()
+{
+    return placement().scale;
 }

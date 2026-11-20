@@ -482,6 +482,83 @@ function GearUi.back_pressed() end
 ---@param fn fun()
 function GearUi.menu_item(id, label, fn) end
 
+-- ## Drag and drop between mods
+
+--: One drag at a time, across mods. A source is a widget or region the mod already draws; a target is a region of any mod
+--: (or the world). While the player drags, every target says whether it takes the drag (`accept`), and a hint follows the
+--: cursor: the dragged thing's icon or label, a green `+` over a target that takes it, a red `×` over anything that does not
+--: (with the target's reason beside it), nothing over the source itself. A release over a valid target calls its `on_drop`;
+--: anywhere else, or Esc, or the pad's B, ends the drag without a drop. The press that started the drag is taken from the
+--: game (no world click), and the release is no click on the source. Controller: a click on a source (`carry`) picks the
+--: thing up, the D-pad then reaches only the targets that take it, a click on one puts it down, B cancels. (Dropping into
+--: the world is mouse only.)
+
+--- What is being dragged.
+---@class GearDrag
+---@field type string The kind of thing (`'combat_art'`, `'creature_type'` ...): targets accept by type.
+---@field data any What the source carries (any Lua value).
+---@field label? string
+---@field icon? integer
+---@field source string Id of the mod that started the drag.
+---@field carry boolean Picked up with the controller (click to put down) rather than dragged with the mouse.
+
+---@class GearDragSourceOpts
+---@field type string Required.
+---@field data? any
+---@field label? string Drawn at the cursor (in a small box) when there is no icon.
+---@field icon? integer A UI image id drawn at the cursor.
+---@field icon_size? number Default 32.
+---@field threshold? number Cursor travel in layout units before a press becomes a drag. Default 6.
+---@field carry? boolean `false`: no controller pick-up on a click. Default true.
+---@field enabled? boolean
+---@field on_end? fun(drag: GearDrag, dropped: boolean) The drag ended (dropped on a target or not).
+
+--- Makes the region or widget `id` (drawn this tick, `result` is what `region` or the widget returned) a drag source. Call it
+--- after the widget every tick. Returns true while this source is the one being dragged (dim it).
+---@param id string|integer
+---@param result table
+---@param opts GearDragSourceOpts
+---@return boolean dragging
+function GearUi.drag_source(id, result, opts) end
+
+---@class GearDropTargetOpts
+---@field accept? string|string[]|fun(drag: GearDrag): boolean|string|nil, string? A type, a list of types, `'*'` (anything), or a function: `ok, text` (text: the hint when ok, the reason when not; a lone string means "no" and is the reason). Default: anything.
+---@field hint? string Shown beside the cursor while it takes the drag.
+---@field on_drop fun(drag: GearDrag, info: {x: number, y: number}) Called on a release over the target when it accepts.
+
+---@class GearDropState
+---@field dragging boolean Whether something is being dragged now (false: nothing else is set).
+---@field over boolean The cursor is over this target.
+---@field valid boolean The target takes the drag (also while the cursor is elsewhere: highlight the free slots).
+---@field reason? string
+
+--- Makes the region `id` (drawn this tick) a drop target. Call it every tick after the region; while nothing is dragged it costs
+--- nothing and returns a shared read-only table. A click that puts a carried thing down also reaches the region as `clicked`:
+--- check `drag_active()` before acting on it.
+---@param id string|integer
+---@param opts GearDropTargetOpts
+---@return GearDropState
+function GearUi.drop_target(id, opts) end
+
+---@class GearWorldDropOpts
+---@field accept? string|string[]|fun(drag: GearDrag): boolean|string|nil, string?
+---@field hint? string
+---@field on_drop fun(drag: GearDrag, spot: {x: number, y: number, layer: integer, object_id: integer?}) `spot` is the world point under the cursor (as `gear.world.cursor`); `gear.world.cursor()` also gives the object there.
+
+--- The world takes drops of what `accept` allows while the cursor is on it (not on a game window or a mod's UI): a dev
+--- mod spawns the dragged creature there. Registered once (not every tick); the same id replaces it, `nil` removes it.
+--- Nothing else on the screen reacts to the drag, so the world only shows a green `+` (or a red `×` when nothing takes it).
+---@param id string|integer
+---@param opts GearWorldDropOpts|nil
+function GearUi.world_drop(id, opts) end
+
+--- The drag that is on, or nil.
+---@return GearDrag?
+function GearUi.drag_active() end
+
+--- Ends the drag this mod's source started, without a drop.
+function GearUi.drag_cancel() end
+
 --- Opens or closes a panel. Whether a panel is open is kept in the layout (`mods\gear_layout.json`) and comes back at the
 --- next start: what a mod sets with `show_panel` in its `main.lua` is only the default for a first start, after that the
 --- player's last state wins. `persist_panel(id, false)` opts a panel out.

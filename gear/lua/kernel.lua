@@ -2861,8 +2861,8 @@ local function ui_target(opts)
     return layer, slot
 end
 
-local function ui_count(mod)
-    local n = (ui_counts[mod] or 0) + 1
+local function ui_count(mod, count)
+    local n = (ui_counts[mod] or 0) + (count or 1)
     if n > UI_MAX_PER_MOD then error('too many draw commands this frame (' .. UI_MAX_PER_MOD .. ')', 3) end
     ui_counts[mod] = n
 end
@@ -2873,9 +2873,9 @@ end
 local ui_handles = {}       -- key (mod id .. '\0' .. widget id) -> handle
 local ui_handle_key = {}    -- handle -> key
 local ui_next_handle = 1
-local ui_regions = {}       -- this tick's regions, in order: {handle, layer, x, y, w, h}
-local ui_prev_regions = {}
-local ui_input = {}         -- handle -> {pressed, released, clicked} of this tick
+local ui_regions = {n = 0}  -- this tick's regions, in order: {handle, layer, x, y, w, h, id, mod}; entries are reused (n = how many are live)
+local ui_prev_regions = {n = 0}
+local ui_input = {}         -- handle -> {pressed, released, clicked} of this tick (tables pooled)
 local ui_active = nil       -- the handle whose press has no release yet
 local ui_hot = nil          -- the topmost region under the cursor
 local ui_mouse = {x = 0, y = 0}
@@ -2889,7 +2889,7 @@ local ui_panel_list = {}    -- the panels of all mods drawn this tick, in order:
 local ui_panel_prev = {}    -- the last tick's
 -- The controller (SacredBild's D-pad): the widgets' rectangles are reported as stops each tick; the pad's events
 -- (slider nudges, B, the mod menu button) come back.
-local ui_nav = {}           -- this tick's stops: {mod, x, y, w, h, layer, kind, ax, ay, drop}
+local ui_nav = {n = 0}      -- this tick's stops: {mod, x, y, w, h, layer, kind, ax, ay, drop}; entries are reused (n = how many are live)
 local ui_nav_modal = nil    -- the mod whose screen takes the pad alone (ui.nav_modal)
 local ui_window_open = false    -- a closable panel is up this tick
 local ui_pad = {nudge = 0, back = 0, menu = 0}
@@ -2903,8 +2903,14 @@ uis.deferred = {}      -- functions run after every mod's draw handlers, in orde
 uis.wheel = 0          -- wheel notches over mod UI this tick (+ away from the player, as WM_MOUSEWHEEL)
 uis.wheel_taken = false
 uis.pad_scroll = 0     -- D-pad lines in a scroll area this tick (+ down)
-uis.scroll_now = {}    -- this tick's scroll areas {key, x, y, w, h, layer}
-uis.scroll_prev = {}
+uis.scroll_now = {n = 0}    -- this tick's scroll areas {key, x, y, w, h, layer}; entries are reused (n = how many are live)
+uis.scroll_prev = {n = 0}
+uis.input_list = {n = 0}   -- the handles in ui_input
+uis.input_pool = {}
+uis.NO_INPUT = {}          -- read-only stand-in for a region without events
+function uis.clear_list(t)
+    for i = #t, 1, -1 do t[i] = nil end
+end
 uis.scroll_hot = nil   -- the key of the topmost scroll area under the cursor (last tick's)
 uis.scroll_focus = nil -- the key of the scroll area clicked last (its keys work while the cursor is elsewhere)
 uis.SCROLLBAR = 12     -- the scrollbar's width
@@ -2912,6 +2918,101 @@ uis.SCROLLBAR = 12     -- the scrollbar's width
 -- to Gear every tick before the handlers run; a mod that is off or unloaded does not count (the game's window shows).
 uis.replace = {}
 uis.typed = ''         -- the characters typed since the last tick (while a mod captures the keys)
+-- Drag and drop between mods (ui.drag_source, ui.drop_target, ui.world_drop). One drag at a time: uis.drag = {type,
+-- data, label, icon, mod, source, id, handle, carry, released, ...}. Drop targets register while a drag is on (each
+-- tick, from the mods' draw handlers); the end of the tick decides what is under the cursor, shows the hint and drops.
+uis.drag = nil
+uis.drop_targets = {n = 0}      -- this tick's targets {handle, mod, opts, id}; entries are reused
+uis.world_drops = {}            -- persistent world drop areas {mod, id, opts}, in registration order
+uis.DRAG_THRESHOLD = 6          -- cursor travel (layout units) before a press on a source becomes a drag
+uis.NOT_DRAGGING = setmetatable({dragging = false, over = false, valid = false}, {__newindex = function() error('read-only', 2) end})
+
+-- Whether a target's `accept` (a type, a list of types, '*', or a function(drag) -> ok, text) takes the drag, and the
+-- text for it (the hint when it does, the reason when it does not).
+function uis.drag_accepts(spec, drag)
+    local t = type(spec)
+    if t == 'nil' then return true end
+    if t == 'string' then return spec == '*' or spec == drag.type end
+    if t == 'table' then
+        for _, v in ipairs(spec) do
+            if v == '*' or v == drag.type then return true end
+        end
+        return false
+    end
+    if t == 'function' then
+        local ok, a, b = pcall(spec, drag)
+        if not ok then
+            if uis.drag_err ~= a then uis.drag_err = a; log('UI: a drop accept function failed: %s', tostring(a)) end
+            return false
+        end
+        if type(a) == 'string' then return false, a end
+        if a then return true, type(b) == 'string' and b or nil end
+        return false, type(b) == 'string' and b or nil
+    end
+    return false
+end
+
+-- The topmost region of the last frame at (x, y), as ui_hot is decided for the cursor.
+function uis.topmost_at(x, y)
+    local best, found = -1, nil
+    for i = 1, ui_prev_regions.n do
+        local r = ui_prev_regions[i]
+        local rank = r.layer * 100000 + i
+        if rank > best and x >= r.x and y >= r.y and x < r.x + r.w and y < r.y + r.h then
+            found, best = r.handle, rank
+        end
+    end
+    return found
+end
+
+-- What the drag is over: -> target (an entry of uis.drop_targets or a world drop, nil: nothing that takes drops), valid
+-- (true | false | nil: neutral, over its own source), text, spot (the world point of a world drop).
+function uis.drag_resolve(drag, handle)
+    if handle == drag.handle then return nil, nil end
+    if handle then
+        for i = 1, uis.drop_targets.n do
+            local t = uis.drop_targets[i]
+            if t.handle == handle then
+                local ok, text = uis.drag_accepts(t.opts.accept, drag)
+                if ok and not text then text = t.opts.hint end
+                return t, ok and true or false, text
+            end
+        end
+        return nil, false
+    end
+    -- over no mod region: the world, if the cursor is on it (not on a game window)
+    if not native.world_cursor then return nil, false end
+    local id, wx, wy, layer = native.world_cursor(0)
+    if not id then return nil, false end
+    local reason
+    for _, w in ipairs(uis.world_drops) do
+        if not (w.mod.disabled or w.mod.unloaded) then
+            local ok, text = uis.drag_accepts(w.opts.accept, drag)
+            if ok then
+                return w, true, text or w.opts.hint, {x = wx, y = wy, layer = layer, object_id = id ~= 0 and id or nil}
+            end
+            reason = reason or text
+        end
+    end
+    return nil, false, reason
+end
+
+function uis.drag_start(mod, id, handle, opts, carry)
+    uis.drag = {
+        type = opts.type, data = opts.data, label = opts.label, icon = opts.icon, icon_size = opts.icon_size,
+        mod = mod, source = mod.id, id = id, handle = handle, carry = carry, on_end = opts.on_end,
+        esc = native.key_down(0x1B) == true, x0 = ui_mouse.x, y0 = ui_mouse.y,
+    }
+    -- The keyboard stays from the game while a drag is on: Esc cancels it, and must not also open the game menu.
+    key_capture[uis] = true
+end
+
+function uis.drag_end(dropped)
+    local d = uis.drag
+    uis.drag = nil
+    key_capture[uis] = nil
+    if d and d.on_end then call(d.mod, 'drag end', d.on_end, d, dropped and true or false) end
+end
 function uis.publish_replace()
     local names = {}
     for name, m in pairs(uis.replace) do
@@ -2947,49 +3048,66 @@ function uis.scroll_from_thumb(pos, content, view, track, size)
 end
 kernel.scroll_math = {clamp = uis.scroll_clamp, thumb = uis.scroll_thumb, from_thumb = uis.scroll_from_thumb}
 
+uis.handles_by_mod = {}   -- mod id -> widget id (as given: a string or a number) -> handle; looked up every frame, so no string is built
 local function ui_handle(mod, id)
-    local key = mod.id .. '\0' .. tostring(id)
-    local h = ui_handles[key]
+    local per_mod = uis.handles_by_mod[mod.id]
+    if not per_mod then
+        per_mod = {}
+        uis.handles_by_mod[mod.id] = per_mod
+    end
+    local h = per_mod[id]
     if not h then
-        h = ui_next_handle
-        ui_next_handle = ui_next_handle + 1
-        ui_handles[key] = h
-        ui_handle_key[h] = key
+        local key = mod.id .. '\0' .. tostring(id)
+        h = ui_handles[key]
+        if not h then
+            h = ui_next_handle
+            ui_next_handle = ui_next_handle + 1
+            ui_handles[key] = h
+            ui_handle_key[h] = key
+        end
+        per_mod[id] = h
     end
     return h
 end
 
 local function ui_begin_tick()
-    ui_counts = {}
+    for k in pairs(ui_counts) do ui_counts[k] = nil end
     ui_slots = nil
-    ui_prev_regions, ui_regions = ui_regions, {}
-    ui_panel_prev, ui_panel_list = ui_panel_list, {}
+    ui_prev_regions, ui_regions = ui_regions, ui_prev_regions      -- two pooled arrays: entries are overwritten, `n` counts the live ones
+    ui_regions.n = 0
+    ui_panel_prev, ui_panel_list = ui_panel_list, ui_panel_prev
+    for i = #ui_panel_list, 1, -1 do ui_panel_list[i] = nil end     -- two lists swapped each tick, the old one emptied
     ui_tooltip = nil
-    ui_nav, ui_window_open = {}, false
+    ui_nav.n, ui_window_open = 0, false
     do
         local nudge, back, menu = native.ui_pad()
-        ui_pad = {nudge = nudge or 0, back = back or 0, menu = menu or 0}
+        ui_pad.nudge, ui_pad.back, ui_pad.menu = nudge or 0, back or 0, menu or 0
         -- B closes an open dropdown first.
         if ui_pad.back > 0 and ui_dropdown then
             ui_dropdown = nil
             ui_pad.back = ui_pad.back - 1
         end
     end
-    uis.clip_stack, uis.deferred = {}, {}
+    uis.clear_list(uis.clip_stack)
+    uis.clear_list(uis.deferred)
+    uis.drop_targets.n = 0
     uis.set_clip(nil)
     do
         local wheel, pad = 0, 0
         if native.ui_wheel then wheel, pad = native.ui_wheel() end
         uis.wheel, uis.pad_scroll, uis.wheel_taken = (wheel or 0) / 120, pad or 0, false
     end
-    uis.scroll_prev, uis.scroll_now = uis.scroll_now, {}
+    uis.scroll_prev, uis.scroll_now = uis.scroll_now, uis.scroll_prev      -- two pooled lists (entries overwritten, `n` = live ones)
+    uis.scroll_now.n = 0
+    uis.modal, uis.modal_next = uis.modal_next, nil      -- the document that was modal in the last frame (draw order between mods is not fixed)
     ui_tick_state = native.ui_state()
     ui_mouse.x, ui_mouse.y = ui_tick_state.mouse_x or 0, ui_tick_state.mouse_y or 0
     -- The topmost scroll area under the cursor takes the wheel (layers in draw order, then the order drawn).
     uis.scroll_hot = nil
     do
         local best = -1
-        for i, a in ipairs(uis.scroll_prev) do
+        for i = 1, uis.scroll_prev.n do
+            local a = uis.scroll_prev[i]
             local rank = a.layer * 100000 + i
             if rank > best and ui_mouse.x >= a.x and ui_mouse.y >= a.y and ui_mouse.x < a.x + a.w and ui_mouse.y < a.y + a.h then
                 uis.scroll_hot, best = a.key, rank
@@ -2999,7 +3117,8 @@ local function ui_begin_tick()
     -- The topmost region of the last frame under the cursor (layers in draw order, then the order registered).
     ui_hot = nil
     local best = -1
-    for i, r in ipairs(ui_prev_regions) do
+    for i = 1, ui_prev_regions.n do
+        local r = ui_prev_regions[i]
         local rank = r.layer * 100000 + i
         if rank > best and ui_mouse.x >= r.x and ui_mouse.y >= r.y and ui_mouse.x < r.x + r.w and ui_mouse.y < r.y + r.h then
             ui_hot, best = r.handle, rank
@@ -3010,10 +3129,25 @@ local function ui_begin_tick()
         if h ~= ui_hot then ui_hover_since[h] = nil end
     end
     if ui_hot and not ui_hover_since[ui_hot] then ui_hover_since[ui_hot] = now end
-    ui_input = {}
+    for i = uis.input_list.n, 1, -1 do        -- last tick's per-region states go back to the pool
+        local h = uis.input_list[i]
+        local st = ui_input[h]
+        st.pressed, st.released, st.clicked = nil, nil, nil
+        ui_input[h] = nil
+        uis.input_pool[#uis.input_pool + 1] = st
+        uis.input_list[i] = nil
+    end
+    uis.input_list.n = 0
     for _, e in ipairs(native.ui_events()) do
-        local s = ui_input[e.region] or {}
-        ui_input[e.region] = s
+        local s = ui_input[e.region]
+        if not s then
+            local np = #uis.input_pool
+            if np > 0 then s = uis.input_pool[np]; uis.input_pool[np] = nil else s = {} end
+            ui_input[e.region] = s
+            local n = uis.input_list.n + 1
+            uis.input_list.n = n
+            uis.input_list[n] = e.region
+        end
         -- The button's own position: the cursor read at the tick may still be the one before it moved there.
         ui_mouse.x, ui_mouse.y = e.x, e.y
         if e.down then
@@ -3023,10 +3157,14 @@ local function ui_begin_tick()
             end
         else
             s.released = true
+            local dr = uis.drag
+            local dragged = dr and not dr.carry and dr.handle == e.region     -- a drag's release is no click on its source
+            if dragged then dr.released, dr.rx, dr.ry = true, e.x, e.y end
             if ui_active == e.region then
                 ui_active = nil
                 -- A click: released over the region it was pressed on.
-                for _, r in ipairs(ui_prev_regions) do
+                for ri = 1, dragged and 0 or ui_prev_regions.n do
+                    local r = ui_prev_regions[ri]
                     if r.handle == e.region and e.x >= r.x and e.y >= r.y and e.x < r.x + r.w and e.y < r.y + r.h then
                         s.clicked = true
                     end
@@ -3098,31 +3236,39 @@ end
 -- message box is up.
 local function ui_push_nav()
     local s = ui_tick_state or {}
-    local list, flags = {}, 0
-    local drop = {}
-    for _, n in ipairs(ui_nav) do
-        if n.drop then drop[#drop + 1] = n end
+    local out = uis.nav_out
+    if not out then out = {}; uis.nav_out = out end
+    local count = ui_nav.n
+    -- Which stops: an open dropdown's list, or the modal screen's, or all (the top layer's only while the game's menu is up).
+    local mode, flags = 'all', 0
+    for i = 1, count do
+        if ui_nav[i].drop then mode, flags = 'drop', 1; break end
     end
-    if #drop > 0 then
-        list, flags = drop, 1
-    elseif ui_nav_modal then
-        for _, n in ipairs(ui_nav) do
-            if n.mod == ui_nav_modal then list[#list + 1] = n end
+    if mode == 'all' then
+        if uis.modal then mode, flags = 'modal_doc', 1
+        elseif ui_nav_modal then mode, flags = 'modal_mod', 1
+        else
+            if s.escape_menu or s.message_box then mode = 'top' end
+            if ui_window_open then flags = 2 end
         end
-        flags = 1
-    else
-        local top_only = s.escape_menu or s.message_box
-        for _, n in ipairs(ui_nav) do
-            if not top_only or n.layer == 2 then list[#list + 1] = n end
+    end
+    local n = 0
+    for i = 1, count do
+        local e = ui_nav[i]
+        local take
+        if mode == 'drop' then take = e.drop
+        elseif mode == 'modal_mod' then take = e.mod == ui_nav_modal
+        elseif mode == 'top' then take = e.layer == 2
+        else take = true end
+        if take and n < 400 then
+            n = n + 1
+            local row = out[n]
+            if not row then row = {}; out[n] = row end
+            row.x, row.y = e.ax or (e.x + e.w / 2), e.ay or (e.y + e.h / 2)
+            row.left, row.top, row.width, row.height, row.kind = e.x, e.y, e.w, e.h, e.kind or 0
         end
-        if ui_window_open then flags = 2 end
     end
-    local out = {}
-    for i, n in ipairs(list) do
-        if i > 400 then break end
-        out[i] = {x = n.ax or (n.x + n.w / 2), y = n.ay or (n.y + n.h / 2), left = n.x, top = n.y, width = n.w,
-            height = n.h, kind = n.kind or 0}
-    end
+    for i = n + 1, #out do out[i] = nil end        -- the host counts the rows by the table's length
     native.ui_nav(out, flags)
 end
 
@@ -3153,18 +3299,124 @@ function uis.tooltip_wrap(text, width)
     return lines, widest
 end
 
+-- The drag's hint at the cursor: the dragged thing (its icon or label), a badge (+ it takes the drop here, x it does not;
+-- none while over its own source) and the target's text (the hint, or why it does not take it).
+function uis.drag_draw(drag, valid, text)
+    local s = ui_tick_state or {}
+    local bl, bt = s.screen_left or 0, s.screen_top or 0
+    local br, bb = s.screen_right or 1024, s.screen_bottom or 768
+    local gw, gh
+    local lw, lh = 0, 0
+    if drag.icon then
+        gw = drag.icon_size or 32
+        gh = gw
+    elseif drag.label then
+        lw, lh = ui_measure(tostring(drag.label), {})
+        gw, gh = math.ceil(lw or 0) + 12, math.max(lh or 20, 14) + 4
+    else
+        gw, gh = 0, 0
+    end
+    local tw, th = 0, 0
+    if text and text ~= '' then
+        tw, th = ui_measure(tostring(text), {})
+        tw, th = math.ceil(tw or 0) + 12, math.max(th or 20, 14) + 4
+    end
+    local badge = valid ~= nil and 16 or 0
+    local total = gw + (badge > 0 and badge - 6 or 0) + (tw > 0 and tw + 4 or 0)
+    local x, y = ui_mouse.x + 16, ui_mouse.y + 18
+    if x + total > br - 4 then x = math.max(bl, ui_mouse.x - 6 - total) end
+    if y + math.max(gh, th, badge) > bb - 4 then y = math.max(bt, bb - 4 - math.max(gh, th, badge)) end
+    if drag.icon then
+        native.ui_image(2, -1, drag.icon, x, y, gw, gh, 0xC8FFFFFF, 1)
+    elseif drag.label then
+        native.ui_rect(2, -1, x, y, gw, gh, 0xD0101018)
+        native.ui_rect(2, -1, x, y, gw, 1, 0xFFC8AA5A)
+        native.ui_rect(2, -1, x, y + gh - 1, gw, 1, 0xFFC8AA5A)
+        native.ui_rect(2, -1, x, y, 1, gh, 0xFFC8AA5A)
+        native.ui_rect(2, -1, x + gw - 1, y, 1, gh, 0xFFC8AA5A)
+        native.ui_text(2, -1, tostring(drag.label):gsub('\\', '/'), x + 6, y + 2, 0, gh - 4, 0xFFF0F0F0, -1, 0, 0, 0, nil,
+            UI_TEXT_SIZE, 0, 1)
+    end
+    local bx = x + math.max(0, gw - 6)
+    if badge > 0 then
+        local color = valid and 0xFF2E9E4F or 0xFFC83232
+        native.ui_rect(2, -1, bx, y, badge, badge, 0xFFFFFFFF)
+        native.ui_rect(2, -1, bx + 1, y + 1, badge - 2, badge - 2, color)
+        native.ui_text(2, -1, valid and '+' or '\195\151', bx, y, badge, badge, 0xFFFFFFFF, -1, 1, 0, 0, nil, 14, 0, 1)
+    end
+    if tw > 0 then
+        local tx = bx + badge + 4
+        local ty = y
+        native.ui_rect(2, -1, tx, ty, tw, th, 0xE0101018)
+        native.ui_rect(2, -1, tx, ty, tw, 1, 0xFFC8AA5A)
+        native.ui_rect(2, -1, tx, ty + th - 1, tw, 1, 0xFFC8AA5A)
+        native.ui_rect(2, -1, tx, ty, 1, th, 0xFFC8AA5A)
+        native.ui_rect(2, -1, tx + tw - 1, ty, 1, th, 0xFFC8AA5A)
+        native.ui_text(2, -1, tostring(text):gsub('\\', '/'), tx + 6, ty + 2, 0, th - 4, 0xFFF0F0F0, -1, 0, 0, 0, nil, UI_TEXT_SIZE, 0, 1)
+    end
+end
+
+-- End of every tick while a drag is on: cancel (Esc, the pad's B, the source's mod gone, a lost release), find the
+-- target under the cursor, drop on a release (or on a click, when the drag is carried with the pad), else show the hint.
+function uis.drag_finish()
+    local d = uis.drag
+    if not d then return end
+    ui_tooltip = nil
+    local cancel = d.mod.disabled or d.mod.unloaded
+    if native.key_down(0x1B) then
+        if not d.esc then cancel = true end
+        d.esc = true
+    else
+        d.esc = false
+    end
+    if ui_pad.back > 0 then
+        ui_pad.back = ui_pad.back - 1
+        cancel = true
+    end
+    if not cancel and not d.carry and not d.released and ui_active ~= d.handle then cancel = true end
+    if cancel then
+        uis.drag_end(false)
+        return
+    end
+    local handle = ui_hot
+    if d.released then handle = uis.topmost_at(d.rx, d.ry) end
+    local target, valid, text, spot = uis.drag_resolve(d, handle)
+    local dropped = false
+    if d.carry then
+        local st = target and not target.world and ui_input[target.handle]
+        dropped = valid and st and st.clicked or false
+    else
+        dropped = d.released and valid and target or false
+    end
+    if dropped then
+        local info = spot or {x = d.released and d.rx or ui_mouse.x, y = d.released and d.ry or ui_mouse.y}
+        uis.drag_end(true)
+        call(target.mod, 'drop', target.opts.on_drop, d, info)
+        return
+    end
+    if d.released then
+        uis.drag_end(false)
+        return
+    end
+    uis.drag_draw(d, valid, text)
+end
+
 local function ui_end_tick()
     -- What must lie over everything: open dropdown lists, drawn after all draw handlers, outside any clip.
-    uis.clip_stack = {}
+    uis.clear_list(uis.clip_stack)
     uis.set_clip(nil)
+    -- Run by index: a deferred function may defer another; the list is emptied once all have run.
     local deferred = uis.deferred
-    uis.deferred = {}
-    for _, fn in ipairs(deferred) do
-        local ok, err = pcall(fn)
+    local i = 1
+    while deferred[i] do
+        local ok, err = pcall(deferred[i])
         if not ok then log('UI: a deferred draw failed: %s', tostring(err)) end
-        uis.clip_stack = {}
+        uis.clear_list(uis.clip_stack)
         uis.set_clip(nil)
+        i = i + 1
     end
+    uis.clear_list(deferred)
+    uis.drag_finish()
     ui_push_nav()
     local t = ui_tooltip
     if not t then return end
@@ -3523,6 +3775,10 @@ local function make_ui(mod)
         opts = opts or {}
         local layer = UI_LAYERS[opts.layer or 'hud']
         if not layer then error('layer is "world", "hud" or "top"', 2) end
+        if uis.modal and uis.modal ~= opts._rml_doc then
+            -- A modal RmlUi document is open: everything else takes no mouse and is no pad stop.
+            return {hover = false, pressed = false, released = false, clicked = false, held = false, hidden = true}
+        end
         local handle = ui_handle(mod, id)
         local c = uis.clip_stack[#uis.clip_stack]
         if c then
@@ -3536,12 +3792,20 @@ local function make_ui(mod)
         end
         ui_count(mod)
         native.ui_region(layer, x, y, w, h, handle)
-        ui_regions[#ui_regions + 1] = {handle = handle, layer = layer, x = x, y = y, w = w, h = h, id = tostring(id), mod = mod.id}
+        local rn = ui_regions.n + 1
+        ui_regions.n = rn
+        local re = ui_regions[rn]
+        if not re then re = {}; ui_regions[rn] = re end
+        re.handle, re.layer, re.x, re.y, re.w, re.h, re.id, re.mod = handle, layer, x, y, w, h, id, mod.id
         if opts.nav ~= false and opts.enabled ~= false then
-            ui_nav[#ui_nav + 1] = {mod = mod, x = x, y = y, w = w, h = h, layer = layer, kind = opts._nav_kind,
-                ax = opts._nav_x, ay = opts._nav_y, drop = opts._nav_drop}
+            local nn = ui_nav.n + 1
+            ui_nav.n = nn
+            local ne = ui_nav[nn]
+            if not ne then ne = {}; ui_nav[nn] = ne end
+            ne.mod, ne.x, ne.y, ne.w, ne.h, ne.layer = mod, x, y, w, h, layer
+            ne.kind, ne.ax, ne.ay, ne.drop = opts._nav_kind, opts._nav_x, opts._nav_y, opts._nav_drop
         end
-        local s = ui_input[handle] or {}
+        local s = ui_input[handle] or uis.NO_INPUT
         local enabled = opts.enabled ~= false
         local r = {
             hover = ui_hot == handle,
@@ -3556,6 +3820,330 @@ local function make_ui(mod)
         return r
     end
     local region = ui.region
+
+    ---------------------------------------------------------------------------------------------------------
+    -- gear.ui.rml: documents in RmlUi's HTML/CSS dialect (.rml, .rcss), drawn through the overlay and reporting back to Lua.
+    -- A document is loaded once, then drawn every frame from the mod's draw handler (`doc:draw()`), which also feeds
+    -- it the mouse, the pad (every button, link and input is a pad stop) and the keyboard (text fields), and hands
+    -- the events of the listeners registered with `doc:on` to their Lua functions. Files come from the mod's own folder.
+    ---------------------------------------------------------------------------------------------------------
+    local rml = {}
+    ui.rml = rml
+    local Doc = {}
+    Doc.__index = Doc
+    uis.rml_docs = uis.rml_docs or {}
+    local RML_KEYS = {'backspace', 'delete', 'enter', 'tab', 'escape', 'left', 'right', 'up', 'down', 'home', 'end', 'pageup', 'pagedown'}
+
+    -- The names of the callbacks of data-event-* attributes (opts.calls: name -> function).
+    function uis.rml_call_names(opts)
+        local names = {}
+        for name in pairs(opts.calls or {}) do names[#names + 1] = name end
+        table.sort(names)
+        return names
+    end
+    -- The theme mod's folder and stylesheet (a running mod whose mod.lua has `theme = 'file.rcss'`), for the natives; nothing with opts.theme = false.
+    function uis.rml_theme(opts)
+        if opts.theme == false or not uis.theme_provider then return end
+        return uis.theme_provider()
+    end
+    -- doc.model: the data model's values, read and written like a table; writing a value (at any depth) has the bindings of the
+    -- document refresh. The top-level keys are the ones the model was loaded with.
+    function uis.rml_proxy(doc, raw, top)
+        return setmetatable({}, {
+            __index = function(_, k)
+                local v = raw[k]
+                if type(v) == 'table' then return uis.rml_proxy(doc, v, top or k) end
+                return v
+            end,
+            __newindex = function(_, k, v)
+                raw[k] = v
+                local key = top or k
+                if not doc.closed then native.rml_model_set(doc.id, key, doc.data[key]) end
+            end,
+        })
+    end
+    local function rml_open(id, opts)
+        local doc = setmetatable({id = id, handlers = {}, opts = opts, calls = opts.calls or {}}, Doc)
+        if opts.model then
+            doc.data = opts.model
+            doc.model = uis.rml_proxy(doc, doc.data)
+        end
+        uis.rml_docs[id] = {mod = mod, doc = doc}
+        return doc
+    end
+
+    -- rml.load(path, {dp}) -> document | nil, message: path is a .rml file in the mod's folder. With dp = true the document is
+    -- laid out in screen pixels with 1dp = one layout unit (text is rasterized for the screen: crisp); otherwise 1px = one layout unit.
+    function rml.load(path, opts)
+        assert(type(path) == 'string', 'path must be a string')
+        if not native.rml_load then error('RmlUi is not available in this build', 2) end
+        opts = opts or {}
+        local id, err = native.rml_load(mod.dir, path, opts.dp and true or false, opts.model, uis.rml_call_names(opts), uis.rml_theme(opts))
+        if not id then return nil, err end
+        return rml_open(id, opts)
+    end
+
+    -- rml.load_string(markup, {dp}) -> document | nil, message: the same from a string of RML (relative links resolve in the mod's folder).
+    function rml.load_string(markup, opts)
+        assert(type(markup) == 'string', 'markup must be a string')
+        if not native.rml_load_string then error('RmlUi is not available in this build', 2) end
+        opts = opts or {}
+        local id, err = native.rml_load_string(mod.dir, markup, opts.dp and true or false, opts.model, uis.rml_call_names(opts), uis.rml_theme(opts))
+        if not id then return nil, err end
+        return rml_open(id, opts)
+    end
+
+    -- rml.load_font(path, fallback) -> ok: a TTF / OTF file of the mod, for font-family in its documents (the default face is Segoe UI).
+    function rml.load_font(path, fallback)
+        assert(type(path) == 'string', 'path must be a string')
+        return native.rml_font and native.rml_font(mod.dir, path, fallback and true or false) or false
+    end
+
+    local function rml_escape(text)
+        return (tostring(text):gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;'))
+    end
+
+    -- doc:on(selector, event, fn) -> ok: fn(event, doc) runs when `event` ('click', 'change', 'submit', 'keydown' ...) reaches an
+    -- element matching `selector` ('#id', '.class', 'button' ...; '' is the document), also one added later. event = {type, target (id of the
+    -- element hit), current (id of the element listening), params = {name = text}}; a change of a form control carries params.value.
+    function Doc:on(selector, event, fn)
+        assert(type(fn) == 'function', 'on(selector, event, fn)')
+        local listener = native.rml_listen(self.id, tostring(selector), tostring(event))
+        if not listener then return false end
+        self.handlers[listener] = fn
+        return true
+    end
+
+    -- Reading and changing the document: `selector` finds the first matching element (nil answers: no such element).
+    function Doc:html(selector, markup) return native.rml_html(self.id, selector, markup) end
+    function Doc:text(selector, text)
+        if text ~= nil then return native.rml_html(self.id, selector, rml_escape(text)) end
+        return native.rml_html(self.id, selector)
+    end
+    -- doc:attr(selector, name [, value]): value true sets a flag attribute (disabled, checked), false removes the attribute.
+    function Doc:attr(selector, name, value)
+        if type(value) == 'number' then value = tostring(value) end
+        return native.rml_attr(self.id, selector, name, value)
+    end
+    function Doc:class(selector, name, on) return native.rml_class(self.id, selector, name, on and true or false) end
+    -- doc:style(selector, property, value): an inline style; nil or false takes it off again.
+    function Doc:style(selector, property, value)
+        if type(value) == 'number' then value = tostring(value) end
+        return native.rml_style(self.id, selector, property, value or false)
+    end
+    -- doc:value(selector [, text]): the value of a form control (an input, a select, a textarea).
+    function Doc:value(selector, text)
+        if type(text) == 'number' then text = tostring(text) end
+        return native.rml_value(self.id, selector, text)
+    end
+    -- Elements: doc:query(selector) -> element | nil, doc:query_all(selector) -> {element}. An element is a handle (it is addressed by a
+    -- number the host gives it): removing it from the document makes its methods answer nothing, nothing crashes.
+    local Element = {}
+    Element.__index = Element
+    function uis.rml_element(doc, handle)
+        return setmetatable({doc = doc, handle = handle, sel = '[data-gh="' .. handle .. '"]'}, Element)
+    end
+    function Doc:query(selector)
+        local h = native.rml_query(self.id, tostring(selector))
+        return h and uis.rml_element(self, h) or nil
+    end
+    function Doc:query_all(selector)
+        local out = {}
+        for i, h in ipairs(native.rml_query(self.id, tostring(selector), true)) do out[i] = uis.rml_element(self, h) end
+        return out
+    end
+    function Element:exists() return native.rml_tag(self.doc.id, self.sel) ~= nil end
+    function Element:tag() return native.rml_tag(self.doc.id, self.sel) end
+    function Element:query(selector)
+        local h = native.rml_query(self.doc.id, self.sel .. ' ' .. tostring(selector))
+        return h and uis.rml_element(self.doc, h) or nil
+    end
+    function Element:query_all(selector)
+        local out = {}
+        for i, h in ipairs(native.rml_query(self.doc.id, self.sel .. ' ' .. tostring(selector), true)) do out[i] = uis.rml_element(self.doc, h) end
+        return out
+    end
+    function Element:parent()
+        local h = native.rml_relatives(self.doc.id, self.sel, 'parent')
+        return h and uis.rml_element(self.doc, h) or nil
+    end
+    function Element:children()
+        local out = {}
+        for i, h in ipairs(native.rml_relatives(self.doc.id, self.sel, 'children')) do out[i] = uis.rml_element(self.doc, h) end
+        return out
+    end
+    -- element:append(tag [, {attribute = text}]) -> the new element (the last child), nil if there is no such parent.
+    function Element:append(tag, attrs)
+        local a
+        if attrs then
+            a = {}
+            for k, v in pairs(attrs) do a[tostring(k)] = tostring(v) end
+        end
+        local h = native.rml_append(self.doc.id, self.sel, tostring(tag), a)
+        return h and h ~= 0 and uis.rml_element(self.doc, h) or nil
+    end
+    function Element:remove() return native.rml_remove(self.doc.id, self.sel) end
+    function Element:html(markup) return self.doc:html(self.sel, markup) end
+    function Element:text(text) return self.doc:text(self.sel, text) end
+    function Element:attr(name, value) return self.doc:attr(self.sel, name, value) end
+    function Element:class(name, on) return self.doc:class(self.sel, name, on) end
+    function Element:style(property, value) return self.doc:style(self.sel, property, value) end
+    function Element:value(text) return self.doc:value(self.sel, text) end
+    function Element:rect() return native.rml_rect(self.doc.id, self.sel) end
+    -- element:on(event, fn): fn(event, element) when the event happens on the element (also for elements added later).
+    function Element:on(event, fn)
+        assert(type(fn) == 'function', 'on(event, fn)')
+        return self.doc:on(self.sel, event, function(e) return fn(e, self) end)
+    end
+
+    -- doc:get(key) -> the plain value of a top-level key of the data model (a table for lists and records).
+    function Doc:get(key) return self.data and self.data[key] end
+    function Doc:show() native.rml_show(self.id, true) end
+    function Doc:hide() native.rml_show(self.id, false) end
+
+    function Doc:close()
+        if self.closed then return end
+        self.closed = true
+        uis.rml_docs[self.id] = nil
+        native.rml_close(self.id)
+        if self.capturing then ui.capture_keys(false) end
+    end
+
+    -- doc:draw({layer}) -> commands drawn: call it every frame from a draw handler. It lets the document take the mouse where it has
+    -- elements, makes every button, link and input a pad stop, reads the keys for a focused text field, runs the document's
+    -- animations, calls the handlers of events that happened and draws it.
+    function Doc:draw(opts)
+        if self.closed then return 0 end
+        opts = opts or {}
+        local layer = UI_LAYERS[opts.layer or 'hud']
+        if not layer then error('layer is "world", "hud" or "top"', 2) end
+        local id = self.id
+        local mx, my = ui.mouse()
+        if not self.primed then
+            -- Lay the document out once, so its windows have their places before the first frame is drawn.
+            self.primed = true
+            native.rml_update(id, mx, my, false)
+        end
+        do
+            -- The classes of <body> that tell the stylesheet whether and which button prompts to show: "pad" while the
+            -- controller was used last, "pad-ps" or "pad-switch" for the style of the pad.
+            local on, style = false, 0
+            if native.ui_pad_info then on, style = native.ui_pad_info() end
+            local key = (on and 'pad' or '') .. ':' .. tostring(style)
+            if self.pad_key ~= key then
+                self.pad_key = key
+                native.rml_class(id, 'body', 'pad', on)
+                native.rml_class(id, 'body', 'pad-ps', style == 1)
+                native.rml_class(id, 'body', 'pad-switch', style == 2)
+            end
+        end
+        local hover = false
+        -- Per frame nothing is allocated here: the option tables and the region keys are kept in the document, the rows come back into
+        -- the same tables.
+        local ropts = self.ropts
+        if not ropts or ropts.layer ~= opts.layer then
+            ropts = {layer = opts.layer, nav = false, _rml_doc = id}
+            self.ropts = ropts
+            self.nopts = {layer = opts.layer, _rml_doc = id}
+            self.keys = {}
+        end
+        local keys = self.keys
+        if opts.modal and not ui_edit then
+            -- A modal dialog: it blocks the mouse and the pad for the game and for every other overlay until it is closed.
+            uis.modal_next = id
+            local sl, st, sr, sb = screen_rect()
+            region('rml:' .. id .. ':modal', sl, st, sr - sl, sb - st, ropts)
+            hover = true
+        end
+        local panels = self.panels or {}
+        self.panels = panels
+        local rects = native.rml_rects(id, self.rect_rows)
+        self.rect_rows = rects
+        for i, r in ipairs(rects) do
+            if r.panel and r.panel ~= '' then
+                -- A window the player may move (data-panel="name"): a panel of the layout like the ones of gear.ui.panel, so the layout
+                -- editor lists it and keeps its place (mods\gear_layout.json, key "<mod id>:<name>").
+                local key = mod.id .. ':' .. r.panel
+                local p = panels[r.panel]
+                if not p then p = {x = r.x, y = r.y}; panels[r.panel] = p end      -- where the document puts it
+                local x, y = p.x, p.y
+                local saved = layout_get()[key]
+                if saved and saved.x then x, y = from_virtual(saved.x, saved.y) end
+                local sl, st, sr, sb = screen_rect()
+                x, y = math.max(sl, math.min(x, sr - r.w)), math.max(st, math.min(y, sb - r.h))
+                if math.abs(x - r.x) > 0.25 or math.abs(y - r.y) > 0.25 then
+                    if native.rml_move(id, '[data-panel="' .. r.panel .. '"]', x, y) then r.x, r.y = x, y end
+                end
+                ui_panel_list[#ui_panel_list + 1] = {key = key, mod = mod.id, id = r.panel, title = r.title ~= '' and r.title or r.panel,
+                    x = r.x, y = r.y, w = r.w, h = r.h, closable = false, back = false, resizable = false, min_width = 0, min_height = 0,
+                    layer = opts.layer or 'hud'}
+                if ui_edit then ui.frame(r.x, r.y, r.w, r.h, C.accent, 1, {layer = opts.layer}) end
+            end
+            -- The game's own frame behind a window with class "window" or data-frame (the ornaments overhang the box, so it cannot be a CSS decorator).
+            if r.frame and r.frame ~= '' and ui.native then ui.native.frame(r.x, r.y, r.w, r.h, {style = r.frame, layer = opts.layer}) end
+            -- In the layout editor the windows take no mouse: the editor drags them.
+            local wkey = keys[-i]
+            if not wkey then wkey = 'rml:' .. id .. ':w' .. i; keys[-i] = wkey end
+            if not ui_edit and region(wkey, r.x, r.y, r.w, r.h, ropts).hover then hover = true end
+        end
+        if not ui_edit then
+            local stops = native.rml_nav(id, self.nav_rows)
+            self.nav_rows = stops
+            for i, r in ipairs(stops) do
+                local nkey = keys[i]
+                if not nkey then nkey = 'rml:' .. id .. ':n' .. i; keys[i] = nkey end
+                local res = region(nkey, r.x, r.y, r.w, r.h, self.nopts)
+                if res.hover then hover = true end
+                if res.clicked then native.rml_click(id, i) end
+            end
+        end
+        if native.rml_wants_text(id) then
+            ui.capture_keys(true)
+            self.capturing = true
+            local typed = ui.typed()
+            if typed ~= '' then native.rml_text(id, typed) end
+            for _, name in ipairs(RML_KEYS) do
+                if ui.key_pressed(name) then
+                    native.rml_key(id, UI_VK[name], true)
+                    native.rml_key(id, UI_VK[name], false)
+                end
+            end
+        elseif self.capturing then
+            ui.capture_keys(false)
+            self.capturing = false
+        end
+        if hover and uis.wheel ~= 0 and not uis.wheel_taken then
+            uis.wheel_taken = true
+            native.rml_wheel(id, uis.wheel)
+        end
+        for _, e in ipairs(native.rml_update(id, mx, my, hover)) do
+            local fn = e.call and self.calls[e.call] or self.handlers[e.listener]
+            if e.call and fn then
+                local ok, err = xpcall(fn, traceback, e.args, self, e)
+                if not ok then log('[%s] rml callback %s failed: %s', mod.id, e.call, tostring(err)) end
+                fn = nil
+            end
+            if fn then
+                local ok, err = xpcall(fn, traceback, e, self)
+                if not ok then log('[%s] rml handler for %s failed: %s', mod.id, e.type, tostring(err)) end
+            end
+            if self.closed then return 0 end
+        end
+        if self.data then
+            -- A value the document changed itself (data-value): into the table, and the mod's on_change.
+            local changed = native.rml_model_changed(id)
+            if changed then
+                for k, v in pairs(changed) do self.data[k] = v end
+                if self.opts.on_change then
+                    local ok, err = xpcall(self.opts.on_change, traceback, self, self.data)
+                    if not ok then log('[%s] rml on_change failed: %s', mod.id, tostring(err)) end
+                end
+            end
+        end
+        local n = native.rml_draw(id, layer, -1)
+        if n > 0 then ui_count(mod, n) end
+        return n
+    end
 
     -- The cursor in layout coordinates, and whether the left button is held over a mod's widget.
     function ui.mouse() return ui_mouse.x, ui_mouse.y end
@@ -3705,7 +4293,13 @@ local function make_ui(mod)
         end
         local max
         st.offset, max = uis.scroll_clamp(st.offset + delta, st.content, h)
-        uis.scroll_now[#uis.scroll_now + 1] = {key = key, x = x, y = y, w = w, h = h, layer = layer}
+        do
+            local sn = uis.scroll_now.n + 1
+            uis.scroll_now.n = sn
+            local a = uis.scroll_now[sn]
+            if not a then a = {}; uis.scroll_now[sn] = a end
+            a.key, a.x, a.y, a.w, a.h, a.layer = key, x, y, w, h, layer
+        end
         local view = {x = x, y = y, w = w - bar, h = h}
         local outer = uis.clip_stack[#uis.clip_stack]
         local c = view
@@ -4459,6 +5053,18 @@ local function make_ui(mod)
     function ui.window_open(name) return native.ui_window_open(tostring(name):upper()) end
     -- ui.close_window(name) -> bool: closes the game's window as its own Back (or Esc) does.
     function ui.close_window(name) return native.ui_close_window(tostring(name):upper()) end
+    -- ui.menu_entries(name) -> {{text, x, y, w, h}, ...}: the entries of the game menu ('UI_WND_ESCMENU') in their order, with the game's own
+    -- text (in its language) and rectangles; empty while the menu is closed. ui.menu_click(name, index) presses entry `index` (1-based)
+    -- as the game's own click would, also while a mod replaces the menu (ui.replace_window).
+    function ui.menu_entries(name)
+        local list = native.ui_menu_entries and native.ui_menu_entries(tostring(name):upper()) or {}
+        -- The labels are the game's texts by id (the control keeps the id, not the text).
+        for _, e in ipairs(list) do
+            if (e.text == nil or e.text == '') and e.text_id and e.text_id > 0 then e.text = native.text_get(e.text_id) or '' end
+        end
+        return list
+    end
+    function ui.menu_click(name, index) return native.ui_menu_click and native.ui_menu_click(tostring(name):upper(), index) or false end
     -- ui.back_pressed() -> bool: the controller's B was pressed (consumed: true once per press). Mods with a
     -- nav_modal screen or a panel with `back = false` close or step back with it.
     function ui.back_pressed()
@@ -4478,6 +5084,74 @@ local function make_ui(mod)
             if it.id == id then it.label, it.fn = tostring(label), fn return end
         end
         items[#items + 1] = {id = id, label = tostring(label), fn = fn}
+    end
+    -- Drag and drop between mods. A source is a widget or region the mod already draws; targets are other widgets or regions, of
+    -- any mod, and the world. See gear/meta/ui.lua.
+    -- ui.drag_source(id, result, {type, data, label, icon, icon_size, threshold, carry, on_end}): call after the region `id` (its result
+    -- `result`): a press that moves `threshold` units (default 6) starts a drag of `type` carrying `data`. With the controller, a click
+    -- picks the thing up (carry) and a click on a target puts it down (B cancels). -> true while this source is being dragged.
+    function ui.drag_source(id, r, opts)
+        assert(type(opts) == 'table' and type(opts.type) == 'string', 'drag_source(id, region, {type = "...", data = ...})')
+        local handle = ui_handle(mod, id)
+        local d = uis.drag
+        if d then return d.handle == handle and d.mod == mod end
+        if r.hidden or opts.enabled == false then return false end
+        if r.pressed then uis.press_h, uis.press_x, uis.press_y = handle, ui_mouse.x, ui_mouse.y end
+        if r.held and uis.press_h == handle then
+            local dx, dy = ui_mouse.x - uis.press_x, ui_mouse.y - uis.press_y
+            local th = opts.threshold or uis.DRAG_THRESHOLD
+            if dx * dx + dy * dy >= th * th then
+                uis.press_h = nil
+                uis.drag_start(mod, id, handle, opts, false)
+                return true
+            end
+        elseif r.clicked and opts.carry ~= false and native.ui_pad_info and native.ui_pad_info() then
+            uis.drag_start(mod, id, handle, opts, true)
+            return true
+        end
+        return false
+    end
+    -- ui.drop_target(id, {accept, hint, on_drop}) -> {dragging, over, valid, reason}: call after the region `id` every tick. While
+    -- nothing is dragged it costs nothing and returns a constant table. `accept` is a type, a list of types, '*', or function(drag) -> ok, text.
+    function ui.drop_target(id, opts)
+        local d = uis.drag
+        if not d then return uis.NOT_DRAGGING end
+        assert(type(opts) == 'table' and type(opts.on_drop) == 'function', 'drop_target(id, {accept = ..., on_drop = function(drag, info) end})')
+        local handle = ui_handle(mod, id)
+        local found
+        for i = ui_regions.n, 1, -1 do
+            if ui_regions[i].handle == handle then found = ui_regions[i]; break end
+        end
+        if not found then return {dragging = true, over = false, valid = false} end
+        local n = uis.drop_targets.n + 1
+        uis.drop_targets.n = n
+        local t = uis.drop_targets[n]
+        if not t then t = {}; uis.drop_targets[n] = t end
+        t.handle, t.mod, t.opts, t.id = handle, mod, opts, id
+        local ok, text = uis.drag_accepts(opts.accept, d)
+        if ok and d.handle ~= handle and d.carry then
+            for i = ui_nav.n, 1, -1 do       -- with the pad's pick-up, the valid targets are the only stops
+                local e = ui_nav[i]
+                if e.mod == mod and e.x == found.x and e.y == found.y and e.w == found.w and e.h == found.h then e.drop = true; break end
+            end
+        end
+        return {dragging = true, over = ui_hot == handle and d.handle ~= handle, valid = ok and d.handle ~= handle or false, reason = text or (ok and opts.hint or nil)}
+    end
+    -- ui.world_drop(id, {accept, hint, on_drop}): the world takes drops of what `accept` allows (as for drop_target) while the cursor
+    -- is on it; on_drop(drag, spot) gets spot = {x, y, layer, object_id}, the world point under the cursor. A second call with the same id replaces it, `ui.world_drop(id, nil)` removes it.
+    function ui.world_drop(id, opts)
+        local list = uis.world_drops
+        for i = #list, 1, -1 do
+            if list[i].mod == mod and list[i].id == id then table.remove(list, i) end
+        end
+        if opts == nil or opts == false then return end
+        assert(type(opts) == 'table' and type(opts.on_drop) == 'function', 'world_drop(id, {accept = ..., on_drop = function(drag, spot) end})')
+        list[#list + 1] = {mod = mod, id = id, opts = opts}
+    end
+    -- ui.drag_active() -> the drag now on ({type, data, label, source, ...}) or nil; ui.drag_cancel() ends one this mod's source started.
+    function ui.drag_active() return uis.drag end
+    function ui.drag_cancel()
+        if uis.drag and uis.drag.mod == mod then uis.drag_end(false) end
     end
     function ui.edit_mode() return ui_edit end
     function ui.set_edit_mode(on) ui_edit = on and true or false end
@@ -4892,8 +5566,9 @@ local function make_auto()
     -- given) was drawn in the last tick, in UI layout coordinates (clipped to a scroll area); nil when it was not drawn.
     function auto.widget(id, mod_id)
         id, mod_id = tostring(id), mod_id or mod.id
-        for _, r in ipairs(ui_prev_regions) do
-            if r.id == id and r.mod == mod_id then return r.x, r.y, r.w, r.h end
+        for ri = 1, ui_prev_regions.n do
+            local r = ui_prev_regions[ri]
+            if tostring(r.id) == id and r.mod == mod_id then return r.x, r.y, r.w, r.h end
         end
     end
     -- In a task: click the UI layout point (x, y), or the center of a node from ui().
@@ -4999,6 +5674,12 @@ end
 ---------------------------------------------------------------------------------------------------------------
 local catalog = {}          -- mod id -> entry {id, dir, m, builtin, invalid, loaded, want, reason, fail, excluded}
 local catalog_list = {}     -- the entries by id
+-- The theme mod: the first running mod (in the catalog's order) whose mod.lua names a `theme` stylesheet. Returns its folder and the file.
+function uis.theme_provider()
+    for _, e in ipairs(catalog_list) do
+        if e.loaded and e.m and e.m.theme then return e.dir, e.m.theme end
+    end
+end
 local mod_state = nil       -- gear_mods.json decoded: {mods = {id = {enabled, settings, keys, migrated}}, order = {id, ...}}
 local state_dirty = false
 local key_handlers = {}     -- array of {mod, id, def, fn, entry, was}
@@ -5807,6 +6488,87 @@ function uis.input_poll()
     end
 end
 
+-- gear.menu: menus the mods can add items to, and the mod that draws them (a "native menu", for instance one built on gear.ui.rml). Items are
+-- kept here whether or not a native menu exists, so a mod registers its entry once; it draws its own button only while
+-- gear.menu.available(menu) is false.
+uis.menu = {hosts = {}, items = {}}
+function uis.make_menu(mod)
+    local api = {}
+    local state = uis.menu
+    local function alive(m) return m ~= nil and not m.disabled and not m.unloaded end
+    -- menu.host(menu, on) -> true | false, message: this mod draws `menu` ('esc'): the game menu).
+    function api.host(menu, on)
+        assert(type(menu) == 'string', 'menu must be a string')
+        local owner = state.hosts[menu]
+        if on == false then
+            if owner == mod then state.hosts[menu] = nil end
+            return true
+        end
+        if alive(owner) and owner ~= mod then return false, menu .. ' is drawn by ' .. tostring(owner.id) end
+        state.hosts[menu] = mod
+        return true
+    end
+    -- menu.available(menu) -> whether a mod draws the menu now (default 'esc').
+    function api.available(menu) return alive(state.hosts[menu or 'esc']) end
+    -- menu.add_item(menu, {id, label, on_click, order, tooltip, enabled}): the same id of this mod replaces its item.
+    function api.add_item(menu, spec)
+        assert(type(menu) == 'string', 'menu must be a string')
+        assert(type(spec) == 'table' and type(spec.id) == 'string' and spec.id ~= '', 'spec.id must be a string')
+        assert(type(spec.on_click) == 'function', 'spec.on_click must be a function')
+        assert(type(spec.label) == 'string' or type(spec.label) == 'function', 'spec.label must be a string or a function')
+        local list = state.items[menu] or {}
+        state.items[menu] = list
+        local item = {mod = mod, id = spec.id, label = spec.label, on_click = spec.on_click, order = tonumber(spec.order) or 100,
+            tooltip = spec.tooltip, enabled = spec.enabled}
+        for i, it in ipairs(list) do
+            if it.mod == mod and it.id == spec.id then list[i] = item; return true end
+        end
+        list[#list + 1] = item
+        return true
+    end
+    function api.remove_item(menu, id)
+        local list = state.items[menu] or {}
+        for i = #list, 1, -1 do
+            if list[i].mod == mod and list[i].id == id then table.remove(list, i); return true end
+        end
+        return false
+    end
+    -- menu.items(menu) -> {{id, mod, label, tooltip, enabled, order, click}, ...} by order, of the mods that are on; `click()` runs the item's function.
+    function api.items(menu)
+        local out = {}
+        for _, it in ipairs(state.items[menu] or {}) do
+            local m = it.mod
+            if alive(m) then
+                local label = it.label
+                if type(label) == 'function' then
+                    local ok, text = pcall(label)
+                    label = ok and tostring(text) or '?'
+                end
+                local enabled = it.enabled
+                if type(enabled) == 'function' then enabled = select(2, pcall(enabled)) end
+                out[#out + 1] = {id = it.id, mod = m.id, label = label, tooltip = it.tooltip, enabled = enabled ~= false, order = it.order,
+                    click = function() call(m, 'menu item ' .. it.id, it.on_click) end}
+            end
+        end
+        table.sort(out, function(a, b)
+            if a.order ~= b.order then return a.order < b.order end
+            return a.label < b.label
+        end)
+        return out
+    end
+    return api
+end
+function uis.drop_menu(m)
+    for menu, owner in pairs(uis.menu.hosts) do
+        if owner == m then uis.menu.hosts[menu] = nil end
+    end
+    for _, list in pairs(uis.menu.items) do
+        for i = #list, 1, -1 do
+            if list[i].mod == m then table.remove(list, i) end
+        end
+    end
+end
+
 local function make_mods_api(mod)
     local api = {}
     -- A page of this mod's own in its settings screen (after the generated settings): fn(x, y, w, h) draws in that
@@ -6468,6 +7230,7 @@ local function make_env(mod)
     gear.keys = make_keys_api(mod)
     gear.input = uis.make_input(mod)
     gear.mods = make_mods_api(mod)
+    gear.menu = uis.make_menu(mod)
     if mod.builtin then env.admin = admin end
     gear.ui = make_ui(mod)
     -- gear.on(event, fn) -> handle; gear.off(handle). Events: "load" (all mods loaded), "frame" (dt in seconds,
@@ -6568,6 +7331,9 @@ local function check_manifest(m, dir)
     if m.config ~= nil and type(m.config) ~= 'table' then return nil, 'mod.lua: config must be a table' end
     if m.description ~= nil and type(m.description) ~= 'string' then return nil, 'mod.lua: description must be a string' end
     if m.author ~= nil and type(m.author) ~= 'string' then return nil, 'mod.lua: author must be a string' end
+    if m.theme ~= nil and (type(m.theme) ~= 'string' or m.theme:find('%.%.') or m.theme:find('^[/\\]') or m.theme:find(':')) then
+        return nil, 'mod.lua: theme must be the path of an .rcss file inside the mod'
+    end
     local allowed = {}
     for _, name in ipairs(m.pipes or {}) do
         if type(name) ~= 'string' or not name:match('^[%w_%-%.]+$') then
@@ -6598,6 +7364,7 @@ local function check_manifest(m, dir)
         settings_by_id = settings_by_id,
         keys = keys,
         keys_by_id = keys_by_id,
+        theme = m.theme,
         dir = dir,
     }
 end
@@ -6809,6 +7576,12 @@ local function unload_mod(e)
     D.dirty = true
     ui_keys[m] = nil
     key_capture[m] = nil
+    uis.drop_menu(m)
+    if uis.rml_docs then
+        for id, entry in pairs(uis.rml_docs) do
+            if entry.mod == m then uis.rml_docs[id] = nil; native.rml_close(id) end
+        end
+    end
     if uis.input.rules[m] then uis.input.rules[m] = nil; uis.input.dirty = true end
     for i = #uis.input.handlers, 1, -1 do
         if uis.input.handlers[i].mod == m then table.remove(uis.input.handlers, i) end

@@ -381,3 +381,146 @@ bool Replace::close(const std::string& name)
     }
     return false;
 }
+
+namespace
+{
+    // The entries of the game menu (ENG 006BBA80): a vector of cUI_StaticText64 at +0x158 / +0x15C, their text at +0x88 /
+    // +0x8C (wide chars), each a control (x, y at +0x24, +0x28 relative to the parent at +0x50; width, height int16 at
+    // +0x2C, +0x2E).
+    constexpr uintptr_t kEntriesBegin = 0x158, kEntriesEnd = 0x15C;
+    constexpr size_t kMaxEntries = 16;
+
+    bool entryRect(uintptr_t control, float& x, float& y, float& w, float& h)
+    {
+        float ax = 0, ay = 0;
+        uintptr_t c = control;
+        for (int depth = 0; c && depth < 4; ++depth)
+        {
+            ax += static_cast<float>(readOr<int32_t>(c + 0x24, 0));
+            ay += static_cast<float>(readOr<int32_t>(c + 0x28, 0));
+            c = readOr<uintptr_t>(c + 0x50, 0);
+        }
+        x = ax;
+        y = ay;
+        w = static_cast<float>(readOr<int16_t>(control + 0x2C, 0));
+        h = static_cast<float>(readOr<int16_t>(control + 0x2E, 0));
+        return w > 0 && h > 0;
+    }
+
+    // The window's own receiveEvent (the one before Gear's thunk, if it is patched), so a press reaches it replaced or not.
+    ReceiveFn receiveOf(uintptr_t object)
+    {
+        const uintptr_t vt = readOr<uintptr_t>(object, 0);
+        if (!vt)
+        {
+            return nullptr;
+        }
+        if (const Patched* p = patchedFor(vt))
+        {
+            return p->receive;
+        }
+        return reinterpret_cast<ReceiveFn>(readOr<uintptr_t>(vt + 4 * 4, 0));
+    }
+
+    // Copies game memory (no objects in this function: __try needs none to unwind).
+    bool copyBytes(void* destination, uintptr_t source, size_t bytes)
+    {
+        __try
+        {
+            std::memcpy(destination, reinterpret_cast<const void*>(source), bytes);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    // A mouse event as the game builds them (vtable, button, x, y; the rest zero): what ui.cpp reads in its hook.
+    struct MouseEvent
+    {
+        uintptr_t vtable;
+        int32_t button;
+        int32_t x, y;
+        uint8_t rest[0x80];
+    };
+
+    bool sendMouse(uintptr_t object, ReceiveFn receive, uintptr_t vtable, int x, int y)
+    {
+        MouseEvent e{};
+        e.vtable = vtable;
+        e.button = 0;
+        e.x = x;
+        e.y = y;
+        __try
+        {
+            receive(reinterpret_cast<void*>(object), nullptr, &e);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+}
+
+std::vector<Replace::Entry> Replace::entries(const std::string& name)
+{
+    std::vector<Entry> out;
+    Target t;
+    if (name != "UI_WND_ESCMENU" || !target(name, t))
+    {
+        return out;
+    }
+    const uintptr_t window = objectOf(t);
+    if (!window || !visible(window))
+    {
+        return out;
+    }
+    const uintptr_t begin = readOr<uintptr_t>(window + kEntriesBegin, 0), end = readOr<uintptr_t>(window + kEntriesEnd, 0);
+    if (!begin || end <= begin || (end - begin) / 4 > kMaxEntries)
+    {
+        return out;
+    }
+    for (uintptr_t at = begin; at < end; at += 4)
+    {
+        const uintptr_t control = readOr<uintptr_t>(at, 0);
+        Entry e;
+        if (!control || !entryRect(control, e.x, e.y, e.w, e.h))
+        {
+            continue;
+        }
+        e.textId = readOr<int32_t>(control + 0x84, 0);
+        const uintptr_t text = readOr<uintptr_t>(control + 0x88, 0), textEnd = readOr<uintptr_t>(control + 0x8C, 0);
+        if (text && textEnd > text && (textEnd - text) / 2 <= 128)
+        {
+            e.text.resize((textEnd - text) / 2);
+            if (!copyBytes(e.text.data(), text, e.text.size() * 2))
+            {
+                e.text.clear();
+            }
+        }
+        out.push_back(std::move(e));
+    }
+    return out;
+}
+
+bool Replace::clickEntry(const std::string& name, size_t index)
+{
+    const std::vector<Entry> list = entries(name);
+    Target t;
+    if (index >= list.size() || !target(name, t))
+    {
+        return false;
+    }
+    const uintptr_t window = objectOf(t);
+    const ReceiveFn receive = window ? receiveOf(window) : nullptr;
+    const uintptr_t down = Gear::Addr::cEventMouseDown_vtable, up = Gear::Addr::cEventMouseUp_vtable;
+    if (!receive || !down || !up)
+    {
+        return false;
+    }
+    const Entry& e = list[index];
+    const int x = static_cast<int>(e.x + e.w * 0.5f), y = static_cast<int>(e.y + e.h * 0.5f);
+    return sendMouse(window, receive, down, x, y) && sendMouse(window, receive, up, x, y);
+}

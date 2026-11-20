@@ -1,5 +1,8 @@
 #include "game/gear_nav.h"
 #include "game/ui_canvas.h"
+#include "input/gamepad.h"
+#include "input/input_mode.h"
+#include "overlay/prompts.h"
 
 #include <windows.h>
 #include <algorithm>
@@ -136,6 +139,11 @@ extern "C" void __cdecl SacredBild_UiPostPad(int nudge, int back, int menu)
     g_nudge += nudge;
     g_back += back;
     g_menu += menu;
+    // As a real pad press does: the prompts (body.pad) and the pad focus follow the pad from now on.
+    if (nudge != 0 || back != 0 || menu != 0)
+    {
+        InputMode::controllerUsed();
+    }
 }
 
 extern "C" int __cdecl SacredBild_UiNavState(int* flags)
@@ -164,4 +172,22 @@ extern "C" int __cdecl SacredBild_UiTakePad(int* nudge, int* back, int* menu)
     *back = g_back.exchange(0);
     *menu = g_menu.exchange(0);
     return 1;
+}
+
+// Sacred Gear's controller prompts: the style of the pad in use (0 Xbox, 1 PlayStation, 2 Switch) and whether the
+// controller was used last (1) rather than the keyboard and mouse.
+extern "C" int __cdecl SacredBild_PadInfo(int* style)
+{
+    *style = static_cast<int>(Gamepad::state().style);
+    return InputMode::controller() ? 1 : 0;
+}
+
+// The 64x64 icon of a button (a Gamepad::Button bit) of a style as 4096 premultiplied ARGB pixels; 1 if there is one.
+extern "C" int __cdecl SacredBild_PadGlyph(int style, unsigned button, unsigned* pixels)
+{
+    if (style < 0 || style > 2)
+    {
+        return 0;
+    }
+    return Prompts::glyph(static_cast<Gamepad::Style>(style), button, pixels) ? 1 : 0;
 }

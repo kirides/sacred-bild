@@ -35,4 +35,8 @@ namespace Prompts
     // The overlay: draws the latest prompts (unless they are stale) into the current render target.
     void draw(d9::IDirect3DDevice9Ex* device, float width, float height);
     bool pending();
+
+    // The 64x64 icon of one button (a Gamepad::Button bit) in the labels of `style`, as 4096 premultiplied ARGB pixels
+    // (any thread; decodes the atlas on first use). False if there is no such icon.
+    bool glyph(Gamepad::Style style, uint32_t button, uint32_t* pixels);
 }

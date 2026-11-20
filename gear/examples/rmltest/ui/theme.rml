@@ -1,0 +1,29 @@
+<rml>
+<head><title>Theme test</title></head>
+<body data-model="model">
+<div id="win" class="window" data-panel="win" data-title="Theme test" style="position: absolute; left: 80px; top: 80px; width: 430px;">
+    <div class="titlebar">Theme test window</div>
+    <div class="body">
+        <p class="heading">Heading in gold</p>
+        <p><span class="label">Label: </span><span class="value">value {{ n }}</span> <span class="muted">muted</span> <span class="good">good</span> <span class="bad">bad</span></p>
+        <div class="bar"><div id="hp" class="fill" style="width: 70%"></div></div>
+        <div class="bar mana"><div class="fill" style="width: 40%"></div></div>
+        <div class="bar xp"><div class="fill" style="width: 15%"></div></div>
+        <div class="row">
+            <button id="plain" data-event-click="inc">Plain {{ n }}</button>
+            <button id="prim" class="primary"><img class="padkey" src="gear:pad/a"/>Primary</button>
+            <button id="dang" class="danger">Danger</button>
+            <button id="dis" disabled>Disabled</button>
+        </div>
+        <div class="row">
+            <input id="name" class="field" type="text" value="Text field" style="width: 200px"/>
+            <span id="lnk" class="link" data-nav>Menu entry link</span>
+        </div>
+        <div class="list">
+            <div class="item selected"><span class="name">Selected item</span><br/><span class="sub">sub text</span></div>
+            <button class="item" id="it2"><span class="name">Item as button</span><br/><span class="sub">a pad stop</span></button>
+        </div>
+    </div>
+</div>
+</body>
+</rml>

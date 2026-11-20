@@ -1,7 +1,9 @@
 #pragma once
 #include "text.h"
 
+#include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,7 +26,10 @@ namespace Ui
     // Region: draws nothing; a rectangle that takes the mouse (see input below).
     // ItemIcon: an item's model drawn by the game's model renderer (gear/itemicon.*); `image` is the item type, `region` the
     // item object's id (0: make a temporary item of the type).
-    enum class Kind : uint8_t { Rect, Text, Image, Region, ItemIcon };
+    // Mesh: a triangle mesh (meshCreate) drawn translated by (x, y), both in the mesh's own units; `w` is how many of them
+    // make a layout unit (the RmlUi host's pixels per layout unit); `region` the mesh id; `image` its texture (0 none, a
+    // game image id as for Image, or a picture id from pictureCreate32); `flip` as for images; the clip cuts the triangles.
+    enum class Kind : uint8_t { Rect, Text, Image, Region, ItemIcon, Mesh };
     enum class Fit : uint8_t { Stretch, Contain, Cover };
 
     struct Command
@@ -50,6 +55,9 @@ namespace Ui
         uint32_t image = 0;
         // Region
         uint32_t region = 0;        // the kernel's handle, reported with the events
+        // Mesh: a 4x4 transform (column-major, m[column * 4 + row]) applied to (x + translation, y + translation, 0, 1) in the mesh's
+        // units, then divided by w; null: none (CSS transforms of the RmlUi host).
+        std::shared_ptr<const std::array<float, 16>> matrix;
         // Clip (setClip while it was recorded; canvas commands only): drawn only inside x, y, w, h.
         bool clipped = false;
         float clip[4] = {};
@@ -110,7 +118,25 @@ namespace Ui
     // the texture is made when it is first drawn. pictureRelease drops it (its texture goes with the next frame).
     constexpr uint32_t kPictureBase = 0x40000000;
     uint32_t pictureCreate(int width, int height, std::vector<uint16_t> pixels);
+    // The same in 32 bits (ARGB, rows top to bottom, 0xAARRGGBB); `premultiplied`: the color channels are already scaled by
+    // alpha (the mesh blends them as they are).
+    uint32_t pictureCreate32(int width, int height, std::vector<uint32_t> pixels, bool premultiplied);
     void pictureRelease(uint32_t id);
+
+    // Meshes (Kind::Mesh): vertices with positions in the mesh's units, a color (0xAARRGGBB, alpha premultiplied) and texture
+    // coordinates (0..1 over the whole texture or game image); indices into them, three per triangle. Any thread; a
+    // mesh stays until meshRelease (drawing a released one draws nothing). 0 if the data is invalid.
+    struct MeshVertex
+    {
+        float x, y;
+        uint32_t color;
+        float u, v;
+    };
+    uint32_t meshCreate(std::vector<MeshVertex> vertices, std::vector<int> indices);
+    void meshRelease(uint32_t id);
+
+    // Screen pixels per layout unit of the canvas the Lua thread draws in (1 without SacredBild).
+    float canvasScale();
 
     // The UI fonts.
     uint32_t fontCount();

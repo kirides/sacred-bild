@@ -88,6 +88,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [Custom net messages (gear.net)](#custom-net-messages-gearnet)
 - [Chat lines (gear.chat)](#chat-lines-gearchat)
 - [Settings, key binds and the mod manager](#settings-key-binds-and-the-mod-manager)
+- [Menus (gear.menu)](#menus-gearmenu)
 - [Remapping the game's keys (gear.input)](#remapping-the-games-keys-gearinput)
 - [Inventories (gear.inv)](#inventories-gearinv)
 - [Lookups (gear.lookup)](#lookups-gearlookup)
@@ -99,7 +100,9 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [Drawing (gear.ui)](#drawing-gearui)
 - [State queries](#state-queries)
 - [The game's own look (gear.ui.native)](#the-games-own-look-gearuinative)
+- [HTML/CSS documents (gear.ui.rml)](#htmlcss-documents-gearuirml)
 - [Widgets and input](#widgets-and-input)
+- [Drag and drop between mods](#drag-and-drop-between-mods)
 - [Layout: persistent panels, movable game windows](#layout-persistent-panels-movable-game-windows)
 - [Automation (gear.auto)](#automation-gearauto)
 
@@ -266,6 +269,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `keys` | `GearKeys` | This mod's declared key binds. |
 | `input` | `GearInput` | The game's own keys, remapped. |
 | `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
+| `menu` | `GearMenu` | Menus mods add items to (the game menu) and the mod that draws them. |
 | `ui` | `GearUi` | Drawing on top of the game, widgets, panels and the layout. |
 | `auto` | `GearAuto` | Automation (only with `-gear-auto` and `automation = true` in `mod.lua`). (optional) |
 
@@ -431,6 +435,7 @@ The table `mod.lua` returns. It runs without any globals, so it can only hold va
 | `keys` | `GearKeyDef[]` | Declared key binds: the player rebinds them in the mod manager; use them with `gear.keys`. (optional) |
 | `config` | `table<string, any>` | Default settings: `gear.config` starts as a copy and `config.lua` overrides them. (optional) |
 | `pipes` | `string[]` | Names of the named pipes the mod may open (`gear.pipe.open`). (optional) |
+| `theme` | `string` | The `.rcss` file (path inside the mod) that Gear puts in front of every RmlUi document of every mod while this mod runs (the shared theme). (optional) |
 | `automation` | `boolean` | `true`: the mod gets `gear.auto` when the game runs with `-gear-auto`. (optional) |
 
 ## The standard library a mod gets
@@ -3086,6 +3091,80 @@ One installed mod, or nil.
 - `id`: `string`
 - returns `GearModListing?`
 
+## Menus (gear.menu)
+
+### GearMenuItemSpec
+
+What a mod registers with `add_item`.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | Unique within the mod; registering the same id again replaces the item. |
+| `label` | `string\|fun(): string` | The text (a function is asked each time the menu is drawn). |
+| `on_click` | `fun()` | Runs when the player picks the item. |
+| `order` | `number` | Where it goes: smaller first (default 100; the Mods item is 900). (optional) |
+| `tooltip` | `string` |  (optional) |
+| `enabled` | `boolean\|fun(): boolean` | Default `true`. (optional) |
+
+### GearMenuItem
+
+An item as the mod that draws the menu gets it.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` |  |
+| `mod` | `string` | The id of the mod that registered it. |
+| `label` | `string` |  |
+| `tooltip` | `string` |  (optional) |
+| `enabled` | `boolean` |  |
+| `order` | `number` |  |
+| `click` | `fun()` | Runs the item's `on_click` (errors are the registering mod's, not the caller's). |
+
+### GearMenu
+
+Reached as `gear.menu`.
+
+Menus a mod can add items to, and the mod that draws them. `'esc'` is the game menu (Escape in game). Items are kept whether or not any mod draws the menu, so a mod registers its item once and draws a button of its own only while `available('esc')` is false: with a native menu (a mod that replaces the game's menu with its own screen, `host`) the item is part of it; without one the game's menu is untouched. See `gear.ui.replace_window`, `gear.ui.menu_entries` and `gear.ui.rml`.
+
+#### `gear.menu.available(menu) -> boolean`
+
+Whether a mod draws `menu` now (the native menu mod is on and called `host`).
+
+- `menu`: `string` (optional) - Default `'esc'`.
+- returns `boolean`
+
+#### `gear.menu.host(menu, on) -> boolean, string?`
+
+This mod draws `menu` (`on` false: no longer). Only one mod can; it also replaces the game's window with `gear.ui.replace_window`.
+
+- `menu`: `string`
+- `on`: `boolean` (optional) - Default `true`.
+- returns `ok` `boolean`
+- returns `message` `string?`
+
+#### `gear.menu.add_item(menu, spec) -> boolean`
+
+Adds an item to `menu`.
+
+- `menu`: `string`
+- `spec`: `GearMenuItemSpec`
+- returns `ok` `boolean`
+
+#### `gear.menu.remove_item(menu, id) -> boolean`
+
+Removes this mod's item.
+
+- `menu`: `string`
+- `id`: `string`
+- returns `found` `boolean`
+
+#### `gear.menu.items(menu) -> GearMenuItem[]`
+
+The items of the mods that are on, by `order`: what the mod that draws the menu lists after the game's own entries.
+
+- `menu`: `string`
+- returns `GearMenuItem[]`
+
 ## Remapping the game's keys (gear.input)
 
 The game's keys are fixed: I opens the inventory, 6 selects combat art 1, Space drinks the healing potion. A mod that lets the player choose other keys (or mouse buttons) for those actions gives Sacred Gear rules: "this input is that game key". Sacred Gear applies them to the messages the game reads, before any of its handlers, so the game reacts to the new key as if the player had pressed its own, and never sees the original. A rule without target makes an input do nothing (the original key of an action that was moved elsewhere). Rules apply only while the game has the keyboard: in game, with no message box, escape menu, savegame, options or character screen, and no chat line open; elsewhere every key is the game's own. Inputs are keys (the names of `gear.ui.key_pressed`, with `f13` to `f24` for the extra keys of mice and keyboards) and the mouse buttons `mouse3` (middle), `mouse4` and `mouse5` (the side buttons), alone or with `ctrl+`, `shift+` and `alt+`; the modifiers named must be the only ones held. A modifier alone is a binding too (`alt`), for the keys the game polls. Mouse buttons 1 and 2 and Esc cannot be rebound. The declared keys of `mod.lua` take the same names, so the mod manager's rebinding screen (F11, with the controller's key picker) offers them.
@@ -4000,6 +4079,7 @@ Positions and sizes are the UI's 1024x768 layout, the space the game lays its wi
 | `HEIGHT` | `integer` | 768 |
 | `COLORS` | `GearColors` | The widgets' colours. |
 | `native` | `GearUiNative` | Pieces of the game's own look built from its UI images (`gear.ui.native.frame`). |
+| `rml` | `GearUiRml` | HTML/CSS-style documents (RmlUi): `gear.ui.rml.load`. |
 
 ### GearColors
 
@@ -4231,6 +4311,33 @@ The game's in-game windows.
 
 - returns `GearWindow[]`
 
+### GearMenuEntry
+
+An entry of the game menu.
+
+| Field | Type | |
+|---|---|---|
+| `text` | `string` | The game's own text for it (its language). |
+| `x` | `number` | Its rectangle in the 1024x768 layout. |
+| `y` | `number` |  |
+| `w` | `number` |  |
+| `h` | `number` |  |
+
+#### `gear.ui.menu_entries(name) -> GearMenuEntry[]`
+
+The entries of the game menu (`'UI_WND_ESCMENU'`) in the game's order (options, save, export, quit, continue), with the game's own text and rectangles: what a native menu lists before the items of `gear.menu`. Empty while the menu is closed.
+
+- `name`: `'UI_WND_ESCMENU'`
+- returns `GearMenuEntry[]`
+
+#### `gear.ui.menu_click(name, index) -> boolean`
+
+Presses entry `index` (1-based) of the game menu as the game's own click would, also while a mod replaces the menu: the game does what the entry does (it opens its options or asks before it quits). Sent to the menu itself as a mouse press and release at the entry's centre.
+
+- `name`: `'UI_WND_ESCMENU'`
+- `index`: `integer`
+- returns `sent` `boolean`
+
 #### `gear.ui.state() -> GearUiState`
 
 - returns `GearUiState`
@@ -4323,6 +4430,297 @@ How far the border of a frame style reaches into its box (the text goes inside t
 - `style`: `'tooltip'` (optional) - Default `'tooltip'`.
 - returns `inset` `{left: number, top: number, right: number, bottom: number}`
 - returns `overhang` `{left: number, top: number, right: number, bottom: number}`
+
+## HTML/CSS documents (gear.ui.rml)
+
+### GearUiRml
+
+Reached as `gear.ui.rml`.
+
+UI written as documents (RmlUi's HTML and CSS dialect: `.rml` and `.rcss` files with `div`, `button`, `input`, flexbox, `:hover` and animations) in the mod's own folder. A document is loaded once and drawn every frame from a `draw` handler with `doc:draw()`; its buttons, links and inputs take the mouse and the controller (every one is a pad stop), a focused text field takes the keyboard, and events (`click`, `change` ...) call Lua functions registered with `doc:on`. The default font is Segoe UI, as for `gear.ui` text; `rml.load_font` adds the mod's own. Images: a file of the mod's folder (PNG, TGA, JPG), or the game's own UI images as `gear:image/<id>` (`gear.ui.images`) and `gear:texture/<NAME.TGA>` (Texture.pak), with `?flip=h`, `?flip=v` or `?flip=hv` mirroring them: `<img src="gear:image/54">`, `decorator: image(gear:image/54)`. Button prompts of the controller (needs Sacred Bild; the glyphs of the pad in use) as `gear:pad/<button>` (`a b x y lb rb lt rt back start l3 r3 up down left right`, also `confirm` = a, `cancel` = b, `menu` = start): `<img src="gear:pad/a"/>` in front of the label, sized in `em` so it follows the text. `doc:draw` sets the classes `pad` (the controller was used last), `pad-ps` and `pad-switch` (the pad's style) on `<body>`, so a stylesheet shows the prompts only while they matter (the theme mod below ships that rule): `.padkey { display: none; } body.pad .padkey { display: inline-block; }`. The icon is chosen when the image loads, so it follows the pad's style from the next load on. Theme: a running mod whose `mod.lua` has `theme = 'file.rcss'` provides the shared stylesheet (classes for windows, buttons, fields, lists, bars, pad prompts); Gear puts it in front of every document's own styles, so documents only override; `{theme = false}` in the load options opts out. Data binding: load with `{model = {...}, calls = {...}}` and write `<body data-model="model">` with `{{ expression }}`, `data-value`, `data-if`, `data-for`, `data-class-x`, `data-attr-x` and `data-event-click="name(args)"`; change values with `doc.model.key = value` (nested writes work too) and the document refreshes only what depends on them.
+
+A prototype: no JavaScript (the logic is Lua), no filters, shaders, blur or drop shadows yet (CSS `transform` works: 2D rotate, scale, skew, translate and perspective, applied to the vertices; the mouse and the pad still hit the untransformed boxes), and a mesh counts as a draw command (at most 1500 per document and draw). The document's windows (its top-level elements) take the mouse where they are; the rest of the canvas stays the game's. Documents are laid out in the 1024x768 layout; `dp = true` lays them out in screen pixels instead (1dp is one layout unit), so text is crisp at any resolution (write sizes in `dp` then).
+
+### GearRmlLoadOpts
+
+The options of `load` and `load_string`.
+
+| Field | Type | |
+|---|---|---|
+| `theme` | `boolean` | `false`: do not add the theme mod's stylesheet to this document. Default: added. (optional) |
+| `model` | `table` | Data binding: the values of the document's data model, named `model` (`<body data-model="model">`, then `{{ hp }}`, `data-value="name"`, `data-if="hp < 10"`, `data-for="item : items"`, `data-class-low="hp < 10"` ...). Top-level keys fix what can be bound; their values may be numbers, strings, booleans, lists and records (nested up to 8 deep). Change them through `doc.model`. (optional) |
+| `calls` | `table<string, fun(args: string[], doc: GearRmlDoc, event: GearRmlEvent)>` | Functions for `data-event-click="name(arg, ...)"` attributes; `args` are the call's arguments as text. (optional) |
+| `on_change` | `fun(doc: GearRmlDoc, model: table)` | Called after the document changed a value itself (an input with `data-value`); the table is up to date. (optional) |
+| `dp` | `boolean` | Lay the document out in screen pixels with `1dp` = one layout unit (crisp text; write sizes in `dp`). Default `false`: `1px` = one layout unit, text is scaled with the UI. (optional) |
+
+### GearRmlDrawOpts
+
+The options of `GearRmlDoc.draw`. A top-level element with `position: absolute` and `data-panel="name"` (and optionally `data-title="Title"`) is a window the player can move in the layout editor, like a `gear.ui.panel`; its place is kept under the layout key `<mod id>:name`.
+
+| Field | Type | |
+|---|---|---|
+| `layer` | `'world'\|'hud'\|'top'` | Default `'hud'`. (optional) |
+| `modal` | `boolean` | Draw the document as a modal dialog: while it is drawn with `modal = true`, the game and every other overlay (of any mod) take no mouse and no pad focus. Use `layer = 'top'`. (optional) |
+
+### GearRmlEvent
+
+An event delivered to a `GearRmlDoc.on handler.
+
+| Field | Type | |
+|---|---|---|
+| `type` | `string` | The event's name (`'click'`, `'change'` ...). |
+| `target` | `string` | The `id` of the element the event happened on (`''` if it has none). |
+| `current` | `string` | The `id` of the element the handler listens on. |
+| `params` | `table<string, string>` | The event's parameters as text; a form control's `change` has `value`, mouse events `mouse_x` and `mouse_y`. |
+
+### GearRmlElement
+
+An element of a document: a handle, found with `GearRmlDoc.query`. If it is removed (or the markup around it replaced), its methods answer nothing instead of failing.
+
+#### `GearRmlElement:exists() -> boolean`
+
+Whether the element is still in the document.
+
+- returns `boolean`
+
+#### `GearRmlElement:tag() -> string?`
+
+The element's tag name (`'div'`), nil if it is gone.
+
+- returns `string?`
+
+#### `GearRmlElement:query(selector) -> GearRmlElement?`
+
+The first descendant matching a CSS selector.
+
+- `selector`: `string`
+- returns `GearRmlElement?`
+
+#### `GearRmlElement:query_all(selector) -> GearRmlElement[]`
+
+All descendants matching a CSS selector (at most 500).
+
+- `selector`: `string`
+- returns `GearRmlElement[]`
+
+#### `GearRmlElement:parent() -> GearRmlElement?`
+
+The parent element (nil for a top-level element).
+
+- returns `GearRmlElement?`
+
+#### `GearRmlElement:children() -> GearRmlElement[]`
+
+The child elements (at most 500).
+
+- returns `GearRmlElement[]`
+
+#### `GearRmlElement:append(tag, attrs) -> GearRmlElement?`
+
+Adds a new empty element as the last child; fill it with `html` / `text`, or `append` to it.
+
+- `tag`: `string`
+- `attrs`: `table<string, any>` (optional) - Attributes, e.g. `{class = 'item', id = 'row1'}`.
+- returns `child` `GearRmlElement?`
+
+#### `GearRmlElement:remove() -> boolean`
+
+Takes the element out of the document. Returns whether it was there.
+
+- returns `boolean`
+
+#### `GearRmlElement:html(markup) -> string?`
+
+The element's inner markup; with an argument it is replaced.
+
+- `markup`: `string` (optional)
+- returns `string?`
+
+#### `GearRmlElement:text(text) -> string?`
+
+The element's content; with an argument it is replaced by that text (markup characters are escaped).
+
+- `text`: `string` (optional)
+- returns `string?`
+
+#### `GearRmlElement:attr(name, value) -> string?`
+
+An attribute's text; with a value it is set (`true` sets a flag such as `disabled`, `false` removes the attribute).
+
+- `name`: `string`
+- `value`: `string|number|boolean` (optional)
+- returns `string?`
+
+#### `GearRmlElement:class(name, on) -> boolean`
+
+Switches a class on or off.
+
+- `name`: `string`
+- `on`: `boolean`
+- returns `found` `boolean`
+
+#### `GearRmlElement:style(property, value) -> boolean`
+
+Sets an inline style; nil or false takes it off again.
+
+- `property`: `string`
+- `value`: `string|number|false` (optional)
+- returns `found` `boolean`
+
+#### `GearRmlElement:value(text) -> string?`
+
+The value of a form control; with an argument it is set.
+
+- `text`: `string|number` (optional)
+- returns `string?`
+
+#### `GearRmlElement:rect() -> {x: number, y: number, w: number, h: number}?`
+
+The element's box in layout units.
+
+- returns `{x: number, y: number, w: number, h: number}?`
+
+#### `GearRmlElement:on(event, fn) -> boolean`
+
+Calls `fn(event, element)` when the event happens on the element or inside it, also for elements added later (the listener sits on the document and matches when the event arrives).
+
+- `event`: `string`
+- `fn`: `fun(event: GearRmlEvent, element: GearRmlElement)`
+- returns `ok` `boolean`
+
+### GearRmlDoc
+
+A loaded document.
+
+| Field | Type | |
+|---|---|---|
+| `model` | `table` | The data model's values (when loaded with `model`): read and write them like a table, at any depth; a write refreshes the bindings of the document. (optional) |
+
+#### `GearRmlDoc:query(selector) -> GearRmlElement?`
+
+The first element matching a CSS selector.
+
+- `selector`: `string`
+- returns `GearRmlElement?`
+
+#### `GearRmlDoc:query_all(selector) -> GearRmlElement[]`
+
+All elements matching a CSS selector (at most 500).
+
+- `selector`: `string`
+- returns `GearRmlElement[]`
+
+#### `GearRmlDoc:get(key) -> any`
+
+The plain value of a top-level key of the data model (a table for lists and records).
+
+- `key`: `string`
+- returns `any`
+
+#### `gear.ui.rml.load(path, opts) -> GearRmlDoc?, string?`
+
+Loads a document of the mod's folder.
+
+- `path`: `string` - A `.rml` file in the mod's folder; its stylesheets and images are read from there too.
+- `opts`: `GearRmlLoadOpts` (optional)
+- returns `doc` `GearRmlDoc?`
+- returns `message` `string?` - Why not.
+
+#### `gear.ui.rml.load_string(markup, opts) -> GearRmlDoc?, string?`
+
+Loads a document from a string of RML (relative links resolve in the mod's folder).
+
+- `markup`: `string`
+- `opts`: `GearRmlLoadOpts` (optional)
+- returns `doc` `GearRmlDoc?`
+- returns `message` `string?`
+
+#### `gear.ui.rml.load_font(path, fallback) -> boolean`
+
+Adds a font file of the mod (TTF or OTF) for `font-family` in the documents.
+
+- `path`: `string`
+- `fallback`: `boolean` (optional) - Use it for characters the other fonts lack.
+- returns `ok` `boolean`
+
+#### `GearRmlDoc:on(selector, event, fn) -> boolean`
+
+Calls `fn(event, doc)` when `event` happens on an element that matches `selector`, or inside one (the innermost match is reported). Elements added later are covered too: the listener sits on the document and matches when the event arrives.
+
+- `selector`: `string` - `'#id'`, `'.class'`, a tag, `'button.primary'` ... ; `''` is the document.
+- `event`: `string` - `'click'`, `'change'`, `'submit'`, `'keydown'`, `'mouseover'`, `'focus'` ...
+- `fn`: `fun(event: GearRmlEvent, doc: GearRmlDoc)`
+- returns `ok` `boolean`
+
+#### `GearRmlDoc:draw(opts) -> integer`
+
+Runs the document for this frame and draws it: call it every frame from a `draw` handler. It takes the mouse over the document's windows, registers its buttons, links and inputs as pad stops, feeds a focused text field the keys, runs animations, calls the handlers of what happened and records the draw commands.
+
+- `opts`: `GearRmlDrawOpts` (optional)
+- returns `commands` `integer` - How many draw commands it recorded.
+
+#### `GearRmlDoc:html(selector, markup) -> string?`
+
+The inner markup of the first element matching `selector` (set it with `markup`); `nil` if there is none.
+
+- `selector`: `string`
+- `markup`: `string` (optional)
+- returns `string?`
+
+#### `GearRmlDoc:text(selector, text) -> string?`
+
+The inner markup of the first element matching `selector`; with `text` its content becomes that text (escaped).
+
+- `selector`: `string`
+- `text`: `string|number` (optional)
+- returns `string?`
+
+#### `GearRmlDoc:attr(selector, name, value) -> string?`
+
+An attribute of the first matching element. `value` sets it (`true` for a flag such as `disabled` or `checked`); `false` removes it.
+
+- `selector`: `string`
+- `name`: `string`
+- `value`: `string|number|boolean` (optional)
+- returns `current` `string?`
+
+#### `GearRmlDoc:class(selector, name, on) -> boolean`
+
+Adds or removes a class of the first matching element.
+
+- `selector`: `string`
+- `name`: `string`
+- `on`: `boolean`
+- returns `found` `boolean`
+
+#### `GearRmlDoc:style(selector, property, value) -> boolean`
+
+Sets an inline style property of the first matching element (`doc:style('#bar', 'width', '40%')`); `nil` or `false` takes it off.
+
+- `selector`: `string`
+- `property`: `string`
+- `value`: `string|number|false` (optional)
+- returns `found` `boolean`
+
+#### `GearRmlDoc:value(selector, text) -> string?`
+
+The value of a form control (an `input`, `select` or `textarea`); with `text` it is set.
+
+- `selector`: `string`
+- `text`: `string|number` (optional)
+- returns `string?`
+
+#### `GearRmlDoc:show()`
+
+Shows the document again after `hide` (a loaded document is shown).
+
+#### `GearRmlDoc:hide()`
+
+Hides the document: it is not drawn and takes no mouse.
+
+#### `GearRmlDoc:close()`
+
+Closes the document. The mod's documents are closed when it unloads.
 
 ## Widgets and input
 
@@ -4911,6 +5309,96 @@ An entry of the controller's mod menu (Sacred Gear's mod menu button, LT + LB by
 - `id`: `string`
 - `label`: `string`
 - `fn`: `fun()`
+
+## Drag and drop between mods
+
+One drag at a time, across mods. A source is a widget or region the mod already draws; a target is a region of any mod (or the world). While the player drags, every target says whether it takes the drag (`accept`), and a hint follows the cursor: the dragged thing's icon or label, a green `+` over a target that takes it, a red `×` over anything that does not (with the target's reason beside it), nothing over the source itself. A release over a valid target calls its `on_drop`; anywhere else, or Esc, or the pad's B, ends the drag without a drop. The press that started the drag is taken from the game (no world click), and the release is no click on the source. Controller: a click on a source (`carry`) picks the thing up, the D-pad then reaches only the targets that take it, a click on one puts it down, B cancels. (Dropping into the world is mouse only.)
+
+### GearDrag
+
+What is being dragged.
+
+| Field | Type | |
+|---|---|---|
+| `type` | `string` | The kind of thing (`'combat_art'`, `'creature_type'` ...): targets accept by type. |
+| `data` | `any` | What the source carries (any Lua value). |
+| `label` | `string` |  (optional) |
+| `icon` | `integer` |  (optional) |
+| `source` | `string` | Id of the mod that started the drag. |
+| `carry` | `boolean` | Picked up with the controller (click to put down) rather than dragged with the mouse. |
+
+### GearDragSourceOpts
+
+| Field | Type | |
+|---|---|---|
+| `type` | `string` | Required. |
+| `data` | `any` |  (optional) |
+| `label` | `string` | Drawn at the cursor (in a small box) when there is no icon. (optional) |
+| `icon` | `integer` | A UI image id drawn at the cursor. (optional) |
+| `icon_size` | `number` | Default 32. (optional) |
+| `threshold` | `number` | Cursor travel in layout units before a press becomes a drag. Default 6. (optional) |
+| `carry` | `boolean` | `false`: no controller pick-up on a click. Default true. (optional) |
+| `enabled` | `boolean` |  (optional) |
+| `on_end` | `fun(drag: GearDrag, dropped: boolean)` | The drag ended (dropped on a target or not). (optional) |
+
+#### `gear.ui.drag_source(id, result, opts) -> boolean`
+
+Makes the region or widget `id` (drawn this tick, `result` is what `region` or the widget returned) a drag source. Call it after the widget every tick. Returns true while this source is the one being dragged (dim it).
+
+- `id`: `string|integer`
+- `result`: `table`
+- `opts`: `GearDragSourceOpts`
+- returns `dragging` `boolean`
+
+### GearDropTargetOpts
+
+| Field | Type | |
+|---|---|---|
+| `accept` | `string\|string[]\|fun(drag: GearDrag): boolean\|string\|nil, string` | A type, a list of types, `'*'` (anything), or a function: `ok, text` (text: the hint when ok, the reason when not; a lone string means "no" and is the reason). Default: anything. (optional) |
+| `hint` | `string` | Shown beside the cursor while it takes the drag. (optional) |
+| `on_drop` | `fun(drag: GearDrag, info: {x: number, y: number})` | Called on a release over the target when it accepts. |
+
+### GearDropState
+
+| Field | Type | |
+|---|---|---|
+| `dragging` | `boolean` | Whether something is being dragged now (false: nothing else is set). |
+| `over` | `boolean` | The cursor is over this target. |
+| `valid` | `boolean` | The target takes the drag (also while the cursor is elsewhere: highlight the free slots). |
+| `reason` | `string` |  (optional) |
+
+#### `gear.ui.drop_target(id, opts) -> GearDropState`
+
+Makes the region `id` (drawn this tick) a drop target. Call it every tick after the region; while nothing is dragged it costs nothing and returns a shared read-only table. A click that puts a carried thing down also reaches the region as `clicked`: check `drag_active()` before acting on it.
+
+- `id`: `string|integer`
+- `opts`: `GearDropTargetOpts`
+- returns `GearDropState`
+
+### GearWorldDropOpts
+
+| Field | Type | |
+|---|---|---|
+| `accept` | `string\|string[]\|fun(drag: GearDrag): boolean\|string\|nil, string` |  (optional) |
+| `hint` | `string` |  (optional) |
+| `on_drop` | `fun(drag: GearDrag, spot: {x: number, y: number, layer: integer, object_id: integer?})` | `spot` is the world point under the cursor (as `gear.world.cursor`); `gear.world.cursor()` also gives the object there. |
+
+#### `gear.ui.world_drop(id, opts)`
+
+The world takes drops of what `accept` allows while the cursor is on it (not on a game window or a mod's UI): a dev mod spawns the dragged creature there. Registered once (not every tick); the same id replaces it, `nil` removes it. Nothing else on the screen reacts to the drag, so the world only shows a green `+` (or a red `×` when nothing takes it).
+
+- `id`: `string|integer`
+- `opts`: `GearWorldDropOpts|nil`
+
+#### `gear.ui.drag_active() -> GearDrag?`
+
+The drag that is on, or nil.
+
+- returns `GearDrag?`
+
+#### `gear.ui.drag_cancel()`
+
+Ends the drag this mod's source started, without a drop.
 
 #### `gear.ui.show_panel(id, open)`
 

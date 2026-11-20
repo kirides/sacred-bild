@@ -34,4 +34,19 @@ namespace Replace
 
     // The window object for `name` while it exists, 0 if not.
     uintptr_t object(const std::string& name);
+
+    // The entries of the game menu (UI_WND_ESCMENU; the only window with entries so far) in their order: the game's own
+    // text (its language) and the rectangle in the 1024x768 layout. Empty if the menu is not open.
+    struct Entry
+    {
+        std::wstring text;
+        int textId = 0;     // the game's text id of the label (the controls keep it at +0x84: 1050 Options ...)
+        float x = 0, y = 0, w = 0, h = 0;
+    };
+    std::vector<Entry> entries(const std::string& name);
+
+    // Presses entry `index` (0-based, as `entries` lists them) as the game's own mouse click would: a mouse down and up
+    // at its centre sent to the window itself (also while a mod replaces it), so the game does what its menu does. False if
+    // the window is not open or has no such entry.
+    bool clickEntry(const std::string& name, size_t index);
 }

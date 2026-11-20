@@ -37,6 +37,7 @@ hero_saves = {}
 local op_ids, op_ready, op_sent, op_in = {0x1E0, 0x1E1}, false, {}, {}
 mp_info_mock, hero_names, net_sent, net_frames, net_send_ok = {network = false}, {[1] = 'Aria'}, {}, {}, true
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
+world_at = nil
 state_file, state_bak, state_writes = nil, nil, 0
 realm_file, realm_bak, realm_writes, realm_client, realm_selected = nil, nil, 0, nil, nil
 layout_file, moved_windows = '{"game:UI_WND_INVENTORY":{"x":2048,"y":1024}}', {}
@@ -207,6 +208,7 @@ local native = {
     ui_nav = function(stops, flags) nav_published = {stops = stops, flags = flags}; return true end,
     ui_pad = function() local p = pad_queue; pad_queue = {0, 0, 0}; return p[1], p[2], p[3] end,
     key_down = function(vk) return keys_held[vk] == true end,
+    world_cursor = function() if world_at then return 77, world_at[1], world_at[2], 0 end end,
     state_read = function(which) if which == 'realms' then return realm_file end return state_file end,
     state_write = function(text, backup, which)
         if which == 'realms' then
@@ -460,6 +462,17 @@ files.w = {
             widgets.clip = gear.clipboard
             widgets.get_sector = function() local hero = gear.world.hero(); return hero and hero:sector() end
             widgets.bare = ui.panel('b', 'Bare', 100, 100, 200, 30, {bare = true, resizable = true, min_width = 20, min_height = 10})
+            -- drag and drop: a source, a target that takes it, one that refuses, and the world
+            local sr = ui.region('src', 600, 650, 40, 40)
+            widgets.dragging = ui.drag_source('src', sr, {type = 'art', data = {id = 7}, label = 'Art 7'})
+            ui.region('slot', 700, 650, 40, 40)
+            widgets.slot = ui.drop_target('slot', {accept = 'art', hint = 'Place here', on_drop = function(drag, info) widgets.dropped = {drag.data.id, info.x} end})
+            ui.region('bad', 800, 650, 40, 40)
+            widgets.bad = ui.drop_target('bad', {accept = function(d) return false, 'No room' end, on_drop = function() widgets.dropped = 'wrong' end})
+            if not widgets.wd then
+                widgets.wd = true
+                ui.world_drop('spawn', {accept = 'art', on_drop = function(drag, spot) widgets.world = {spot.x, spot.y, spot.object_id} end})
+            end
         end)
     ]],
 }
@@ -785,6 +798,70 @@ ok(widgets.panel.x == 400 and widgets.panel.w == 200, 'reset_panel: its own plac
 keys_held[0x25] = true
 ok(widgets.ui.key_down('left') and not widgets.ui.key_down('right'), 'key_down')
 keys_held[0x25] = nil
+-- Drag and drop: a press that moves starts a drag; targets say whether they take it; a release drops on a valid one.
+do
+    local U = widgets.ui
+    local function start_drag()
+        ui_mouse_at = {610, 660}
+        kernel.tick(0.016)
+        local sh = region_at(610, 660)
+        ui_events_queue = {{down = true, button = 0, x = 610, y = 660, region = sh}}
+        kernel.tick(0.016)
+        return sh
+    end
+    local function release(sh, x, y)
+        ui_events_queue = {{down = false, button = 0, x = x, y = y, region = sh}}
+        kernel.tick(0.016)
+    end
+    ok(widgets.slot.dragging == false and getmetatable(widgets.slot) ~= nil, 'drop_target is a constant while nothing is dragged')
+    local sh = start_drag()
+    ok(not U.drag_active() and not widgets.dragging, 'a press alone starts no drag')
+    ui_mouse_at = {710, 660}
+    kernel.tick(0.016)
+    local d = U.drag_active()
+    ok(d and d.type == 'art' and d.data.id == 7 and widgets.dragging, 'moving the pressed source starts the drag')
+    ok(widgets.slot.dragging and widgets.slot.over and widgets.slot.valid and not widgets.bad.valid, 'targets report whether they take the drag')
+    ui_mouse_at = {810, 660}
+    kernel.tick(0.016)
+    ok(widgets.bad.over and widgets.bad.valid == false and widgets.bad.reason == 'No room', 'a refusing target says why')
+    release(sh, 810, 660)
+    ok(not U.drag_active() and widgets.dropped == nil, 'a release over a refusing target drops nothing and ends the drag')
+    -- on a taking target
+    sh = start_drag()
+    ui_mouse_at = {710, 660}
+    kernel.tick(0.016)
+    release(sh, 710, 660)
+    ok(widgets.dropped and widgets.dropped[1] == 7 and widgets.dropped[2] == 710 and not U.drag_active(), 'a release over a taking target drops there')
+    widgets.dropped = nil
+    -- the world
+    sh = start_drag()
+    world_at = {1000, 2000}
+    ui_mouse_at = {900, 100}
+    kernel.tick(0.016)
+    release(sh, 900, 100)
+    ok(widgets.world and widgets.world[1] == 1000 and widgets.world[2] == 2000 and widgets.world[3] == 77, 'a release over the world drops there')
+    widgets.world = nil
+    -- over a game window (no world point under the cursor): nothing
+    sh = start_drag()
+    world_at = nil
+    ui_mouse_at = {900, 100}
+    kernel.tick(0.016)
+    release(sh, 900, 100)
+    ok(widgets.world == nil and widgets.dropped == nil, 'no world point: no drop')
+    -- Esc cancels
+    sh = start_drag()
+    ui_mouse_at = {710, 660}
+    kernel.tick(0.016)
+    ok(U.drag_active(), 'a drag is on again')
+    keys_held[0x1B] = true
+    kernel.tick(0.016)
+    keys_held[0x1B] = nil
+    ok(not U.drag_active(), 'Esc cancels the drag')
+    release(sh, 710, 660)
+    ok(widgets.dropped == nil, 'a cancelled drag drops nothing')
+    ui_mouse_at = {0, 0}
+    kernel.tick(0.016)
+end
 -- tooltip placement: clear of the cursor sprite, flipped at the screen's edges
 do
     local tr = widgets.ui.tooltip_rect
@@ -2016,6 +2093,136 @@ do
     end
     files.libs = nil
     native.builtin = saved_builtin
+end
+
+
+-- gear.ui.rml (RmlUi documents): the API on mocked natives.
+do
+    local gear_a
+    do
+        local i = 1
+        while true do
+            local name, value = debug.getupvalue(kernel.dispatch, i)
+            if not name then break end
+            if name == 'handlers' then
+                for _, h in ipairs(value['frame']) do
+                    local env = getfenv(h.fn)
+                    if env.record and env.gear then gear_a = env.gear end
+                end
+            end
+            i = i + 1
+        end
+    end
+    local log_rml = {}
+    local clicked_ev, listened = nil, {}
+    native.rml_model_set = function(id, key, value) log_rml[#log_rml + 1] = 'model ' .. key .. ' ' .. (type(value) == 'table' and 'table' or tostring(value)); return true end
+    native.rml_model_changed = function() return nil end
+    native.rml_query = function(id, sel, all) log_rml[#log_rml + 1] = 'query ' .. sel; if all then return {3, 4} end return 3 end
+    native.rml_append = function(id, sel, tag, attrs) log_rml[#log_rml + 1] = 'append ' .. sel .. ' ' .. tag .. ' ' .. tostring(attrs and attrs.class); return 9 end
+    native.rml_tag = function() return 'div' end
+    native.rml_remove = function(id, sel) log_rml[#log_rml + 1] = 'remove ' .. sel; return true end
+    native.rml_load = function(dir, path, dp) log_rml[#log_rml + 1] = 'load ' .. dir .. ' ' .. path .. ' ' .. tostring(dp); return 7 end
+    native.rml_load_string = function() return nil, 'bad markup' end
+    native.rml_rects = function() return {{x = 10, y = 10, w = 100, h = 50, panel = 'main', title = 'Main'}} end
+    native.rml_move = function() return true end
+    native.rml_nav = function() return {{x = 20, y = 20, w = 40, h = 16}, {x = 20, y = 40, w = 40, h = 16}} end
+    native.rml_wants_text = function() return false end
+    native.rml_listen = function(id, sel, ev) listened[#listened + 1] = sel .. '/' .. ev; return #listened, 1 end
+    native.rml_update = function(id, mx, my, hover)
+        log_rml[#log_rml + 1] = 'update ' .. tostring(hover)
+        return {{listener = 1, type = 'click', target = 'ok', current = 'ok', params = {}}, {listener = 99, type = 'x', target = '', current = '', params = {}}}
+    end
+    native.rml_draw = function(id, layer, slot) log_rml[#log_rml + 1] = 'draw ' .. layer .. ' ' .. slot; return 3 end
+    native.rml_html = function(id, sel, v) log_rml[#log_rml + 1] = 'html ' .. sel .. ' ' .. tostring(v); return 'x' end
+    native.rml_close = function(id) log_rml[#log_rml + 1] = 'close ' .. id end
+    local rml = gear_a.ui.rml
+    ok(type(rml) == 'table' and rml.load and rml.load_string and rml.load_font, 'rml: the API is there')
+    local doc = rml.load('ui/main.rml', {dp = true})
+    ok(doc and log_rml[1]:match('^load %S+ ui/main%.rml true$'), 'rml.load asks the host with the mod folder and the dp flag')
+    ok(select(2, rml.load_string('<x')) == 'bad markup', 'rml.load_string passes the message of a failure on')
+    local mdoc = rml.load('ui/m.rml', {model = {hp = 5, items = {{name = 'a'}}}, calls = {pick = function() end}})
+    mdoc.model.hp = 9
+    ok(mdoc:get('hp') == 9 and log_rml[#log_rml] == 'model hp 9', 'doc.model writes through to the host')
+    mdoc.model.items[1].name = 'b'
+    ok(mdoc:get('items')[1].name == 'b' and log_rml[#log_rml] == 'model items table', 'a nested write sends the top-level key again')
+    local el = mdoc:query('#list')
+    ok(el and el.sel == '[data-gh="3"]', 'doc:query gives an element addressed by its handle')
+    ok(#mdoc:query_all('.x') == 2, 'doc:query_all gives the elements')
+    local child = el:append('div', {class = 'item'})
+    ok(child and log_rml[#log_rml] == 'append [data-gh="3"] div item', 'element:append creates a child of the element')
+    ok(child:remove() and log_rml[#log_rml] == 'remove [data-gh="9"]', 'element:remove takes it out')
+    el:query('.name')
+    ok(log_rml[#log_rml] == 'query [data-gh="3"] .name', 'element:query searches below the element')
+    mdoc:close()
+    log_rml = {}
+    ok(doc:on('#ok', 'click', function(e) clicked_ev = e end) and listened[1] == '#ok/click', 'doc:on registers a listener')
+    doc:text('#t', 'a<b&c')
+    ok(log_rml[#log_rml] == 'html #t a&lt;b&amp;c', 'doc:text escapes the markup')
+    local drawn
+    gear_a.on('draw', function() drawn = doc:draw({layer = 'top'}) end)
+    log_rml = {}
+    ui_published = {}
+    kernel.tick(0.016)
+    kernel.tick(0.016)
+    ok(drawn == 3, 'doc:draw returns the commands drawn')
+    ok(clicked_ev and clicked_ev.type == 'click' and clicked_ev.target == 'ok', 'doc:draw hands the events to the handlers (and ignores unknown listeners)')
+    local regions = 0
+    for _, c in ipairs(ui_published) do if c[1] == 'region' and c[2] == 2 then regions = regions + 1 end end
+    ok(regions == 3, 'doc:draw registers a region per window and per pad stop (' .. regions .. ')')
+    ok(log_rml[#log_rml] == 'draw 2 -1', 'doc:draw draws on the chosen layer')
+    -- A modal document: other overlays' regions go inert from the next frame on.
+    local other_hover
+    gear_a.on('draw', function() local r = gear_a.ui.region('other', 0, 0, 50, 50); other_hover = r.hidden end)
+    gear_a.on('draw', function() doc:draw({layer = 'top', modal = true}) end)
+    kernel.tick(0.016)
+    kernel.tick(0.016)
+    ok(other_hover == true, 'a modal document makes the regions of other overlays inert')
+    local nav_flags
+    local old_nav = native.ui_nav
+    native.ui_nav = function(stops, flags) nav_flags = flags end
+    kernel.tick(0.016)
+    native.ui_nav = old_nav
+    ok(nav_flags == 1, 'a modal document makes its pad stops the only ones')
+    doc:close()
+    ok(log_rml[#log_rml] == 'close 7' and doc:draw() == 0, 'doc:close closes the host document, drawing a closed one does nothing')
+end
+
+
+-- gear.menu: items of the game menu and the mod that draws it.
+do
+    local gear_a
+    do
+        local i = 1
+        while true do
+            local name, value = debug.getupvalue(kernel.dispatch, i)
+            if not name then break end
+            if name == 'handlers' then
+                for _, h in ipairs(value['frame']) do
+                    local env = getfenv(h.fn)
+                    if env.record and env.gear then gear_a = env.gear end
+                end
+            end
+            i = i + 1
+        end
+    end
+    local menu = gear_a.menu
+    ok(type(menu) == 'table' and menu.available and menu.host and menu.add_item and menu.items, 'menu: the API is there')
+    ok(menu.available('esc') == false, 'menu: no native menu by default')
+    local clicked = 0
+    ok(menu.add_item('esc', {id = 'a', label = 'Zeta', order = 50, on_click = function() clicked = clicked + 1 end}), 'menu.add_item')
+    menu.add_item('esc', {id = 'b', label = function() return 'Alpha' end, order = 50, on_click = function() end, enabled = false})
+    menu.add_item('esc', {id = 'c', label = 'First', order = 1, on_click = function() end})
+    local list = menu.items('esc')
+    ok(#list == 3 and list[1].id == 'c' and list[2].label == 'Alpha' and list[3].label == 'Zeta', 'menu.items: by order, then label; labels may be functions')
+    ok(list[2].enabled == false and list[1].enabled == true, 'menu.items: enabled')
+    list[3].click()
+    ok(clicked == 1, 'menu.items: click runs the item')
+    menu.add_item('esc', {id = 'a', label = 'Zeta 2', on_click = function() end})
+    ok(#menu.items('esc') == 3 and menu.items('esc')[3].label == 'Zeta 2', 'menu.add_item: the same id replaces')
+    ok(not pcall(menu.add_item, 'esc', {id = 'x'}) and not pcall(menu.add_item, 'esc', {label = 'x', on_click = function() end}), 'menu.add_item: bad specs are refused')
+    ok(menu.host('esc') == true and menu.available('esc') == true, 'menu.host makes the menu available')
+    ok(menu.host('esc', false) == true and menu.available('esc') == false, 'menu.host(…, false) lets go')
+    ok(menu.remove_item('esc', 'a') and menu.remove_item('esc', 'b') and menu.remove_item('esc', 'c') and #menu.items('esc') == 0, 'menu.remove_item')
 end
 
 print(('%d passed, %d failed'):format(passes, failures))
