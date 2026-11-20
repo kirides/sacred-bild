@@ -1,21 +1,25 @@
 /* Gear theme: the classes RmlUi documents can rely on while this mod runs. Documents only override what is special.
-   The look of the legacy mod windows (Better SaveLoad, Damage meter ...): near-black fills with a hint of blue, a thin gold edge,
+   The look of the legacy mod windows (Better SaveLoad, Damage meter ...): near-black fills with a hint of blue, the game's tooltip frame as the window border,
    a brown title bar, yellow-gold headings, grey secondary text, brown-gold selection. */
 
 body { font-size: 15dp; color: #f0f0f0; }
 
-/* A window: .window is the frame (fill, gold edge); .titlebar its brown header with the title and a close mark; .body the content. */
+/* A window: .window is the frame (the game's tooltip border and fill); .titlebar its brown header with the title and a close mark; .body the content. */
 .window {
-    background-color: #0e0e16;
-    border: 1px #8c7440;
+    /* The game's own border (the frame of the item tooltip, as in Item compare): corner ornaments 54 / 55 (the bottom ones flipped),
+       bars 14 (top, bottom flipped) and 52 (sides), the fill its black at 62 %. The ornaments sit inside the box: keep the padding. */
+    decorator: tiled-box(gear:image/54, gear:image/14, gear:image/55,
+                         gear:image/52, fill.png, gear:image/52,
+                         gear:image/54 flip-vertical, gear:image/14 flip-vertical, gear:image/55 flip-vertical);
+    padding: 6px;
 }
 .window > .titlebar {
     padding: 4px 10px;
     background-color: #302418;
     color: #f0c860;
 }
-.window > .body { padding: 12px 14px; }
-.window.plain { padding: 12px 14px; background-color: rgba(10, 10, 18, 215); }
+.window > .body { padding: 10px 14px 12px 14px; }
+.window.plain { padding: 14px 16px; }
 
 /* Text: .heading is a section title in the gold of the legacy headings; .label / .value are a grey name and its white value. */
 .heading { color: #f0c860; margin: 8px 0 4px 0; }
