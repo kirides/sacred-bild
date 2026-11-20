@@ -74,7 +74,7 @@ input.field:focus, select.field:focus { border-color: #ffd780; }
 .bar.mana .fill { background-color: #2f6fd0; }
 .bar.xp .fill { background-color: #7fd37f; }
 
-/* Controller prompts: <img class="padkey" src="gear:pad/a"/> inside a button; shown only while the controller was used last
+/* Controller prompts: <img class="padkey" src="gear:pad/a"/> in front of the text inside a button; shown only while the controller was used last
    (gear sets body.pad), sized with the text. */
-.padkey { display: none; width: 1.3em; height: 1.3em; margin-left: 0.5em; vertical-align: middle; }
+.padkey { display: none; width: 1.3em; height: 1.3em; margin-right: 0.5em; vertical-align: middle; }
 body.pad .padkey { display: inline-block; }

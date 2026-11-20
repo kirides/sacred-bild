@@ -72,5 +72,5 @@ input.field {
 input.field:focus { border-color: #c8aa5a; }
 
 /* Controller prompts: shown only while the controller was used last (doc:draw sets body.pad), sized with the text. */
-.padkey { display: none; width: 1.3em; height: 1.3em; margin-left: 0.5em; vertical-align: middle; }
+.padkey { display: none; width: 1.3em; height: 1.3em; margin-right: 0.5em; vertical-align: middle; }
 body.pad .padkey { display: inline-block; }
