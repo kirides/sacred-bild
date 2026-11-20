@@ -4999,7 +4999,7 @@ end
 ---------------------------------------------------------------------------------------------------------------
 local catalog = {}          -- mod id -> entry {id, dir, m, builtin, invalid, loaded, want, reason, fail, excluded}
 local catalog_list = {}     -- the entries by id
-local mod_state = nil       -- gear_mods.json decoded: {mods = {id = {enabled, settings, keys, migrated}}}
+local mod_state = nil       -- gear_mods.json decoded: {mods = {id = {enabled, settings, keys, migrated}}, order = {id, ...}}
 local state_dirty = false
 local key_handlers = {}     -- array of {mod, id, def, fn, entry, was}
 local keys_blocked = false  -- the mod manager's screen is open: other mods' hotkeys do not fire
@@ -5010,13 +5010,23 @@ local function is_table(v) return type(v) == 'table' and v ~= json.null end
 
 local function state_load()
     if mod_state then return mod_state end
-    mod_state = {mods = {}}
+    mod_state = {mods = {}, order = {}}
     local text = native.state_read()
     if text then
         local v, err = json.decode(text)
         if is_table(v) and (v.mods == nil or is_table(v.mods)) then
             for id, e in pairs(v.mods or {}) do
                 if is_table(e) then mod_state.mods[id] = e end
+            end
+            -- The player's load order (the mod manager app writes it): an array of mod ids, first loads first.
+            if is_table(v.order) then
+                local seen = {}
+                for _, id in ipairs(v.order) do
+                    if type(id) == 'string' and not seen[id] then
+                        seen[id] = true
+                        mod_state.order[#mod_state.order + 1] = id
+                    end
+                end
             end
         else
             log('gear_mods.json cannot be read (%s): it is kept as gear_mods.json.bak, the defaults apply',
@@ -5058,7 +5068,9 @@ local function state_flush()
         end
         if next(c) ~= nil then out[id] = c end
     end
-    if not native.state_write(json.encode({version = 1, mods = out})) then
+    local file = {version = 1, mods = out}
+    if #state_load().order > 0 then file.order = state_load().order end
+    if not native.state_write(json.encode(file)) then
         log('gear_mods.json: the file cannot be written')
     end
 end
@@ -6601,10 +6613,16 @@ local function read_manifest(dir)
     return check_manifest(m, dir)
 end
 
--- Mods in load order: by priority (lower first), then id; a mod after the mods it requires. Mods whose
--- requirements are missing are left out.
+-- Mods in load order: the mods in the player's order (gear_mods.json "order") first, in that order; the others by
+-- priority (lower first), then id. A mod always comes after the mods it requires. Mods whose requirements are
+-- missing are left out.
 local function order(found, have)
+    local rank = {}
+    for i, id in ipairs(state_load().order) do rank[id] = i end
     table.sort(found, function(a, b)
+        local ra, rb = rank[a.id], rank[b.id]
+        if ra and rb then return ra < rb end
+        if ra or rb then return ra ~= nil end
         if a.priority ~= b.priority then return a.priority < b.priority end
         return a.id < b.id
     end)

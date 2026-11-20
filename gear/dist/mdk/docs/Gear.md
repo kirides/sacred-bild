@@ -78,7 +78,7 @@ end)
 | `id` | Required: letters, digits, `_` and `-`; unique among the installed mods |
 | `name`, `version` | Shown in the Mods screen and the log; `version` is part of the mod set |
 | `description`, `author` | Shown in the Mods screen |
-| `priority` | Lower loads first (default 0); ties load by id |
+| `priority` | Lower loads first (default 0); ties load by id. The player's load order (below) comes before it |
 | `requires` | Ids that must load first; the mod is skipped if one is missing (and off while one of them is off) |
 | `enabled` | `false`: off until the player switches it on in the Mods screen (a default, not a lock) |
 | `settings`, `keys` | Declared settings and key binds: the [Mod manager](#mod-manager) builds their pages |
@@ -242,6 +242,8 @@ from its declared settings, plus a page of its own if it registers one) and a **
 F11 close it; while it is open the game gets no keys, so typing into a text setting does not fire hotkeys. Every choice
 is saved at once in `mods\gear_mods.json` (On/Off, settings and key binds of all mods; written atomically; a file that
 cannot be read is kept as `gear_mods.json.bak` and the defaults apply).
+
+**Load order.** `gear_mods.json` may hold a top-level `"order": ["id", ...]` (the external Mod Manager writes it). Mods in the list load first, in list order; mods not in it follow by `priority`, then id. A mod still loads after the mods it `requires`. Ids of mods that are not installed are ignored, a malformed list is ignored, and Gear keeps the list when it saves. The order is read at start; switching a mod on later does not re-sort the running mods.
 
 - A mod switched off is unloaded at once: it gets `unload`, then its handlers, timers, tasks, pipes, key binds, pickup
   rules and widgets are dropped (what it did to the world stays until the game restarts). Switching it on loads it
