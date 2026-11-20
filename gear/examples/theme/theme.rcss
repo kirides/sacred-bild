@@ -1,61 +1,74 @@
 /* Gear theme: the classes RmlUi documents can rely on while this mod runs. Documents only override what is special.
-   Palette (from the legacy gear.ui look and the Sacred Gear artwork): deep navy fills (#0e1626 .. #141c2e), gold edges
-   (#c8962a, light #f0d58a, dark #6e5e3a), cyan for interactive highlights and code (#7fd0ff). */
+   The look of the legacy mod windows (Better SaveLoad, Damage meter ...): near-black fills with a hint of blue, a thin gold edge,
+   a brown title bar, yellow-gold headings, grey secondary text, brown-gold selection. */
 
-body { font-size: 15dp; color: #e8ecf4; }
+body { font-size: 15dp; color: #f0f0f0; }
 
-/* A window: the content box; add .title for its heading. */
+/* A window: .window is the frame (fill, gold edge); .titlebar its brown header with the title and a close mark; .body the content. */
 .window {
-    padding: 14px 16px 12px 16px;
-    decorator: vertical-gradient(#e0141c2e #e00c1220);
-    border: 1px #c8962a;
+    background-color: #0e0e16;
+    border: 1px #8c7440;
 }
-.window .title { color: #f0d58a; font-weight: bold; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
-.muted { color: #8c8c8c; }
-.accent { color: #f0d58a; }
-.link, .code { color: #7fd0ff; }
-.danger { color: #e05a4a; }
+.window > .titlebar {
+    padding: 4px 10px;
+    background-color: #302418;
+    color: #f0c860;
+}
+.window > .body { padding: 12px 14px; }
+.window.plain { padding: 12px 14px; background-color: rgba(10, 10, 18, 215); }
 
-/* Rows: .row lays its children out side by side; .right pushes them to the right edge. */
+/* Text: .heading is a section title in the gold of the legacy headings; .label / .value are a grey name and its white value. */
+.heading { color: #f0c860; margin: 8px 0 4px 0; }
+.label { color: #9a9a9a; }
+.value { color: #f0f0f0; }
+.muted { color: #8c8c8c; }
+.accent { color: #ffd780; }
+.good { color: #7fd37f; }
+.bad { color: #e06060; }
+
+/* Rows: .row lays its children out side by side; .right pushes them to the right edge; .space puts the first at the left, the last at the right. */
 .row { display: flex; flex-direction: row; margin: 6px 0; }
 .row.right { justify-content: flex-end; }
 .row.space { justify-content: space-between; }
 
-/* Buttons (pad stops, like every button): .primary is the answer to "go ahead", .danger a destructive one. */
+/* Buttons (pad stops, like every button): dark fill, dim gold edge; hover brightens the edge; .primary has the bright gold edge. */
 button {
     margin-right: 8px;
-    padding: 4px 12px;
-    color: #e8ecf4;
-    decorator: vertical-gradient(#1a2338 #111828);
-    border: 1px #6e5e3a;
+    padding: 4px 14px;
+    color: #f0f0f0;
+    background-color: #14141f;
+    border: 1px #8c7440;
     cursor: pointer;
     transition: transform 0.12s cubic-out;
 }
-button:hover, button:focus { decorator: vertical-gradient(#26324e #172036); border-color: #f0d58a; transform: scale(1.04); }
-button:active { decorator: vertical-gradient(#111828 #1a2338); }
-button.primary { border-color: #c8962a; color: #f0d58a; }
-button.primary:hover, button.primary:focus { border-color: #7fd0ff; }
+button:hover, button:focus { background-color: #24243a; border-color: #ffd780; transform: scale(1.03); }
+button:active { background-color: #34344e; }
+button.primary { border-color: #c8aa5a; color: #ffd780; }
 button.danger { border-color: #a84030; }
 button:disabled { color: #8c8c8c; border-color: #3c3c3c; transform: none; }
 
-/* Text fields. */
-input.field {
+/* Text fields and selects. */
+input.field, select.field {
     padding: 4px 8px;
-    color: #e8ecf4;
-    background-color: #0a101c;
+    color: #f0f0f0;
+    background-color: #0c0c14;
     border: 1px #6e5e3a;
 }
-input.field:focus { border-color: #7fd0ff; }
+input.field:focus, select.field:focus { border-color: #ffd780; }
 
-/* Lists: .list holds .item rows; the pad moves over buttons, so make an item a button for selectable rows. */
+/* Lists: .list holds .item rows (a thumbnail, a gold .name, grey .sub); .selected is the brown-gold chosen row. Make an item a button to make it a pad stop. */
 .list { margin: 4px 0; }
-.list .item { padding: 3px 8px; border-bottom: 1px #1f2a42; }
+.list .item { padding: 6px 10px; margin-bottom: 4px; background-color: #12121c; border: 1px #4a4030; }
+.list .item:hover { border-color: #c8aa5a; }
+.list .item.selected { background-color: #4a3f2a; border-color: #ffd780; }
+.item .name { color: #ffd780; font-weight: bold; }
+.item .sub { color: #9a9a9a; }
 
 /* Bars (health, progress): <div class="bar"><div class="fill" style="width: 40%"/></div>. */
-.bar { height: 10px; margin: 4px 0; background-color: #0a101c; border: 1px #6e5e3a; }
+.bar { height: 10px; margin: 4px 0; background-color: #0c0c14; border: 1px #6e5e3a; }
 .bar .fill { height: 10px; background-color: #a82828; }
 .bar.mana .fill { background-color: #2f6fd0; }
-.bar.xp .fill { background-color: #c8962a; }
+.bar.xp .fill { background-color: #7fd37f; }
 
 /* Controller prompts: <img class="padkey" src="gear:pad/a"/> inside a button; shown only while the controller was used last
    (gear sets body.pad), sized with the text. */
