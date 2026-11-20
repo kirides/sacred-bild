@@ -2977,11 +2977,14 @@ function uis.drag_start(mod, id, handle, opts, carry)
         mod = mod, source = mod.id, id = id, handle = handle, carry = carry, on_end = opts.on_end,
         esc = native.key_down(0x1B) == true, x0 = ui_mouse.x, y0 = ui_mouse.y,
     }
+    -- The keyboard stays from the game while a drag is on: Esc cancels it, and must not also open the game menu.
+    key_capture[uis] = true
 end
 
 function uis.drag_end(dropped)
     local d = uis.drag
     uis.drag = nil
+    key_capture[uis] = nil
     if d and d.on_end then call(d.mod, 'drag end', d.on_end, d, dropped and true or false) end
 end
 function uis.publish_replace()

@@ -1,7 +1,10 @@
 -- gear.ui.drag_source / drop_target / world_drop: a list of creature names, three slots and the world.
 local ui = gear.ui
 
-local NAMES = {'Wolf', 'Skeleton', 'Orc', 'Troll'}
+-- label and the game's object type name (what gear.world.spawn takes)
+local CREATURES = {
+    {'Wolf', 'WOLF.GRN'}, {'Skeleton', 'SKELETON_WARRIOR_HEADLESS.GRN'}, {'Orc', 'ORC_WARRIOR.GRN'}, {'Troll', 'TROLL.GRN'},
+}
 local slots = {nil, nil, nil}
 local LOCKED = 3
 
@@ -11,7 +14,7 @@ gear.on('load', function()
         hint = 'Spawn here',
         on_drop = function(drag, spot)
             local c, err = gear.world.spawn(drag.data, spot.x, spot.y)
-            print(c and ('spawned ' .. drag.data) or ('spawn failed: ' .. tostring(err)))
+            print(c and ('spawned ' .. drag.label) or ('spawn failed: ' .. tostring(err)))
         end,
     })
 end)
@@ -20,10 +23,11 @@ gear.on('draw', function(state)
     if not state or state.mode ~= 'game' then return end
     local p = ui.panel('main', 'Drag and drop demo', 60, 200, 270, 150)
     if not p.open then return end
-    for i, name in ipairs(NAMES) do
+    for i, entry in ipairs(CREATURES) do
+        local name = entry[1]
         local x, y, w, h = p.content_x + 8, p.content_y + 8 + (i - 1) * 24, 110, 20
         local r = ui.region('n' .. i, x, y, w, h)
-        local dragging = ui.drag_source('n' .. i, r, {type = 'creature', data = name, label = name})
+        local dragging = ui.drag_source('n' .. i, r, {type = 'creature', data = entry[2], label = name})
         ui.rect(x, y, w, h, dragging and 0x60303040 or (r.hover and 0xC0383850 or 0xC0202030))
         ui.text(name, x + 6, y + 3)
     end
@@ -34,9 +38,9 @@ gear.on('draw', function(state)
             accept = function(drag)
                 if i == LOCKED then return false, 'This slot is locked' end
                 if drag.type ~= 'creature' then return false, 'Only creatures' end
-                return true, 'Put ' .. drag.data .. ' here'
+                return true, 'Put ' .. drag.label .. ' here'
             end,
-            on_drop = function(drag) slots[i] = drag.data end,
+            on_drop = function(drag) slots[i] = drag.label end,
         })
         local fill = 0xC0181820
         if t.dragging and t.valid then fill = t.over and 0xC0285a30 or 0xC0203a28 end
