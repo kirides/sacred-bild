@@ -19,7 +19,7 @@ gear.task(function()
     gear.wait(2.5)
     A.move(1500, 800); gear.wait(0.5)
     A.screenshot('frames-1-base')
-    for _, id in ipairs({'#gb-wide', '#gb-narrow', '#gb-mid', '#gb-dis', '#gb-pad'}) do
+    for _, id in ipairs({'#gb-wide', '#gb-narrow', '#gb-mid', '#gb-dis', '#gb-pad', '#gb-plain'}) do
         local r = doc:query(id):rect()
         print('rect', id, r.x, r.y, r.w, r.h)
     end

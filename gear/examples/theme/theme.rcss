@@ -118,7 +118,7 @@ span.padkey.right { decorator: image(gear:pad/right contain); }
 
 /* The game's own button (class game-button on a <button>): the orb caps (images 280 / 282) keep their size, only the middle (281) is tiled, so a button
    of any width works; the label is centred in the middle part and the pad prompt (.padkey) sits in front of it. Normal grey-white label, hover
-   yellow with a glow (and with the pad focus), pressed the other plate (283 to 285), disabled dim. */
+   yellow (and with the pad focus; the glow is for the frameless .link only), pressed the other plate (283 to 285), disabled dim. */
 button.game-button {
     display: inline-block;
     height: 37px;
@@ -129,8 +129,8 @@ button.game-button {
     background-color: transparent;
     decorator: image(gear:image/281 repeat-x) content-box, image(gear:image/280 scale-none left center) border-box, image(gear:image/282 scale-none right center) border-box;
     color: #e4e4e4;
-    font-size: 17px;
-    line-height: 28px;
+    font-size: 14px;
+    line-height: 30px;
     text-align: center;
     cursor: pointer;
     transform: none;
@@ -140,7 +140,6 @@ button.game-button:hover, button.game-button:focus {
     background-color: transparent;
     border: 0;
     transform: none;
-    font-effect: glow(2px 5px 0px 0px #ffc030c0);
 }
 button.game-button:active { decorator: image(gear:image/284 repeat-x) content-box, image(gear:image/283 scale-none left center) border-box, image(gear:image/285 scale-none right center) border-box; color: #fff2a0; }
 button.game-button:disabled, button.game-button[disabled], button.game-button[disabled]:hover, button.game-button[disabled]:focus { color: #8a8a8a; opacity: 0.55; font-effect: none; }
