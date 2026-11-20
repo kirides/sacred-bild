@@ -398,8 +398,9 @@ local GearUiRml = {}
 --- A top-level element with `position: absolute` and `data-panel="name"` (and optionally `data-title="Title"`) is a window the player can move in the layout editor, like a `gear.ui.panel`; its place is kept under the layout key `<mod id>:name`.
 ---@class GearRmlDrawOpts
 ---@field layer? 'world'|'hud'|'top' Default `'hud'`.
+---@field modal? boolean Draw the document as a modal dialog: while it is drawn with `modal = true`, the game and every other overlay (of any mod) take no mouse and no pad focus. Use `layer = 'top'`.
 
---- An event delivered to a `GearRmlDoc.on` handler.
+--- An event delivered to a `GearRmlDoc.on handler.
 ---@class GearRmlEvent
 ---@field type string The event's name (`'click'`, `'change'` ...).
 ---@field target string The `id` of the element the event happened on (`''` if it has none).

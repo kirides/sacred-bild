@@ -2039,6 +2039,13 @@ do
     for _, c in ipairs(ui_published) do if c[1] == 'region' and c[2] == 2 then regions = regions + 1 end end
     ok(regions == 3, 'doc:draw registers a region per window and per pad stop (' .. regions .. ')')
     ok(log_rml[#log_rml] == 'draw 2 -1', 'doc:draw draws on the chosen layer')
+    -- A modal document: other overlays' regions go inert from the next frame on.
+    local other_hover
+    gear_a.on('draw', function() local r = gear_a.ui.region('other', 0, 0, 50, 50); other_hover = r.hidden end)
+    gear_a.on('draw', function() doc:draw({layer = 'top', modal = true}) end)
+    kernel.tick(0.016)
+    kernel.tick(0.016)
+    ok(other_hover == true, 'a modal document makes the regions of other overlays inert')
     doc:close()
     ok(log_rml[#log_rml] == 'close 7' and doc:draw() == 0, 'doc:close closes the host document, drawing a closed one does nothing')
 end

@@ -4429,10 +4429,11 @@ The options of `GearRmlDoc.draw`. A top-level element with `position: absolute` 
 | Field | Type | |
 |---|---|---|
 | `layer` | `'world'\|'hud'\|'top'` | Default `'hud'`. (optional) |
+| `modal` | `boolean` | Draw the document as a modal dialog: while it is drawn with `modal = true`, the game and every other overlay (of any mod) take no mouse and no pad focus. Use `layer = 'top'`. (optional) |
 
 ### GearRmlEvent
 
-An event delivered to a `GearRmlDoc.on` handler.
+An event delivered to a `GearRmlDoc.on handler.
 
 | Field | Type | |
 |---|---|---|

@@ -2957,6 +2957,7 @@ local function ui_begin_tick()
         uis.wheel, uis.pad_scroll, uis.wheel_taken = (wheel or 0) / 120, pad or 0, false
     end
     uis.scroll_prev, uis.scroll_now = uis.scroll_now, {}
+    uis.modal, uis.modal_next = uis.modal_next, nil      -- the document that was modal in the last frame (draw order between mods is not fixed)
     ui_tick_state = native.ui_state()
     ui_mouse.x, ui_mouse.y = ui_tick_state.mouse_x or 0, ui_tick_state.mouse_y or 0
     -- The topmost scroll area under the cursor takes the wheel (layers in draw order, then the order drawn).
@@ -3497,6 +3498,10 @@ local function make_ui(mod)
         opts = opts or {}
         local layer = UI_LAYERS[opts.layer or 'hud']
         if not layer then error('layer is "world", "hud" or "top"', 2) end
+        if uis.modal and uis.modal ~= opts._rml_doc then
+            -- A modal RmlUi document is open: everything else takes no mouse and is no pad stop.
+            return {hover = false, pressed = false, released = false, clicked = false, held = false, hidden = true}
+        end
         local handle = ui_handle(mod, id)
         local c = uis.clip_stack[#uis.clip_stack]
         if c then
@@ -3641,6 +3646,14 @@ local function make_ui(mod)
             native.rml_update(id, mx, my, false)
         end
         local hover = false
+        local ropts = {layer = opts.layer, nav = false, _rml_doc = id}
+        if opts.modal and not ui_edit then
+            -- A modal dialog: it blocks the mouse and the pad for the game and for every other overlay until it is closed.
+            uis.modal_next = id
+            local sl, st, sr, sb = screen_rect()
+            region('rml:' .. id .. ':modal', sl, st, sr - sl, sb - st, ropts)
+            hover = true
+        end
         local panels = self.panels or {}
         self.panels = panels
         for i, r in ipairs(native.rml_rects(id)) do
@@ -3664,11 +3677,11 @@ local function make_ui(mod)
                 if ui_edit then ui.frame(r.x, r.y, r.w, r.h, C.accent, 1, {layer = opts.layer}) end
             end
             -- In the layout editor the windows take no mouse: the editor drags them.
-            if not ui_edit and region('rml:' .. id .. ':w' .. i, r.x, r.y, r.w, r.h, {layer = opts.layer, nav = false}).hover then hover = true end
+            if not ui_edit and region('rml:' .. id .. ':w' .. i, r.x, r.y, r.w, r.h, ropts).hover then hover = true end
         end
         if not ui_edit then
             for i, r in ipairs(native.rml_nav(id)) do
-                local res = region('rml:' .. id .. ':n' .. i, r.x, r.y, r.w, r.h, {layer = opts.layer})
+                local res = region('rml:' .. id .. ':n' .. i, r.x, r.y, r.w, r.h, {layer = opts.layer, _rml_doc = id})
                 if res.hover then hover = true end
                 if res.clicked then native.rml_click(id, i) end
             end
