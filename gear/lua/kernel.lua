@@ -2849,7 +2849,7 @@ local ui_handle_key = {}    -- handle -> key
 local ui_next_handle = 1
 local ui_regions = {n = 0}  -- this tick's regions, in order: {handle, layer, x, y, w, h, id, mod}; entries are reused (n = how many are live)
 local ui_prev_regions = {n = 0}
-local ui_input = {}         -- handle -> {pressed, released, clicked} of this tick
+local ui_input = {}         -- handle -> {pressed, released, clicked} of this tick (tables pooled)
 local ui_active = nil       -- the handle whose press has no release yet
 local ui_hot = nil          -- the topmost region under the cursor
 local ui_mouse = {x = 0, y = 0}
@@ -2877,8 +2877,14 @@ uis.deferred = {}      -- functions run after every mod's draw handlers, in orde
 uis.wheel = 0          -- wheel notches over mod UI this tick (+ away from the player, as WM_MOUSEWHEEL)
 uis.wheel_taken = false
 uis.pad_scroll = 0     -- D-pad lines in a scroll area this tick (+ down)
-uis.scroll_now = {}    -- this tick's scroll areas {key, x, y, w, h, layer}
-uis.scroll_prev = {}
+uis.scroll_now = {n = 0}    -- this tick's scroll areas {key, x, y, w, h, layer}; entries are reused (n = how many are live)
+uis.scroll_prev = {n = 0}
+uis.input_list = {n = 0}   -- the handles in ui_input
+uis.input_pool = {}
+uis.NO_INPUT = {}          -- read-only stand-in for a region without events
+function uis.clear_list(t)
+    for i = #t, 1, -1 do t[i] = nil end
+end
 uis.scroll_hot = nil   -- the key of the topmost scroll area under the cursor (last tick's)
 uis.scroll_focus = nil -- the key of the scroll area clicked last (its keys work while the cursor is elsewhere)
 uis.SCROLLBAR = 12     -- the scrollbar's width
@@ -2944,30 +2950,33 @@ local function ui_handle(mod, id)
 end
 
 local function ui_begin_tick()
-    ui_counts = {}
+    for k in pairs(ui_counts) do ui_counts[k] = nil end
     ui_slots = nil
     ui_prev_regions, ui_regions = ui_regions, ui_prev_regions      -- two pooled arrays: entries are overwritten, `n` counts the live ones
     ui_regions.n = 0
-    ui_panel_prev, ui_panel_list = ui_panel_list, {}
+    ui_panel_prev, ui_panel_list = ui_panel_list, ui_panel_prev
+    for i = #ui_panel_list, 1, -1 do ui_panel_list[i] = nil end     -- two lists swapped each tick, the old one emptied
     ui_tooltip = nil
     ui_nav.n, ui_window_open = 0, false
     do
         local nudge, back, menu = native.ui_pad()
-        ui_pad = {nudge = nudge or 0, back = back or 0, menu = menu or 0}
+        ui_pad.nudge, ui_pad.back, ui_pad.menu = nudge or 0, back or 0, menu or 0
         -- B closes an open dropdown first.
         if ui_pad.back > 0 and ui_dropdown then
             ui_dropdown = nil
             ui_pad.back = ui_pad.back - 1
         end
     end
-    uis.clip_stack, uis.deferred = {}, {}
+    uis.clear_list(uis.clip_stack)
+    uis.clear_list(uis.deferred)
     uis.set_clip(nil)
     do
         local wheel, pad = 0, 0
         if native.ui_wheel then wheel, pad = native.ui_wheel() end
         uis.wheel, uis.pad_scroll, uis.wheel_taken = (wheel or 0) / 120, pad or 0, false
     end
-    uis.scroll_prev, uis.scroll_now = uis.scroll_now, {}
+    uis.scroll_prev, uis.scroll_now = uis.scroll_now, uis.scroll_prev      -- two pooled lists (entries overwritten, `n` = live ones)
+    uis.scroll_now.n = 0
     uis.modal, uis.modal_next = uis.modal_next, nil      -- the document that was modal in the last frame (draw order between mods is not fixed)
     ui_tick_state = native.ui_state()
     ui_mouse.x, ui_mouse.y = ui_tick_state.mouse_x or 0, ui_tick_state.mouse_y or 0
@@ -2975,7 +2984,8 @@ local function ui_begin_tick()
     uis.scroll_hot = nil
     do
         local best = -1
-        for i, a in ipairs(uis.scroll_prev) do
+        for i = 1, uis.scroll_prev.n do
+            local a = uis.scroll_prev[i]
             local rank = a.layer * 100000 + i
             if rank > best and ui_mouse.x >= a.x and ui_mouse.y >= a.y and ui_mouse.x < a.x + a.w and ui_mouse.y < a.y + a.h then
                 uis.scroll_hot, best = a.key, rank
@@ -2997,10 +3007,25 @@ local function ui_begin_tick()
         if h ~= ui_hot then ui_hover_since[h] = nil end
     end
     if ui_hot and not ui_hover_since[ui_hot] then ui_hover_since[ui_hot] = now end
-    ui_input = {}
+    for i = uis.input_list.n, 1, -1 do        -- last tick's per-region states go back to the pool
+        local h = uis.input_list[i]
+        local st = ui_input[h]
+        st.pressed, st.released, st.clicked = nil, nil, nil
+        ui_input[h] = nil
+        uis.input_pool[#uis.input_pool + 1] = st
+        uis.input_list[i] = nil
+    end
+    uis.input_list.n = 0
     for _, e in ipairs(native.ui_events()) do
-        local s = ui_input[e.region] or {}
-        ui_input[e.region] = s
+        local s = ui_input[e.region]
+        if not s then
+            local np = #uis.input_pool
+            if np > 0 then s = uis.input_pool[np]; uis.input_pool[np] = nil else s = {} end
+            ui_input[e.region] = s
+            local n = uis.input_list.n + 1
+            uis.input_list.n = n
+            uis.input_list[n] = e.region
+        end
         -- The button's own position: the cursor read at the tick may still be the one before it moved there.
         ui_mouse.x, ui_mouse.y = e.x, e.y
         if e.down then
@@ -3151,16 +3176,19 @@ end
 
 local function ui_end_tick()
     -- What must lie over everything: open dropdown lists, drawn after all draw handlers, outside any clip.
-    uis.clip_stack = {}
+    uis.clear_list(uis.clip_stack)
     uis.set_clip(nil)
+    -- Run by index: a deferred function may defer another; the list is emptied once all have run.
     local deferred = uis.deferred
-    uis.deferred = {}
-    for _, fn in ipairs(deferred) do
-        local ok, err = pcall(fn)
+    local i = 1
+    while deferred[i] do
+        local ok, err = pcall(deferred[i])
         if not ok then log('UI: a deferred draw failed: %s', tostring(err)) end
-        uis.clip_stack = {}
+        uis.clear_list(uis.clip_stack)
         uis.set_clip(nil)
+        i = i + 1
     end
+    uis.clear_list(deferred)
     ui_push_nav()
     local t = ui_tooltip
     if not t then return end
@@ -3549,7 +3577,7 @@ local function make_ui(mod)
             ne.mod, ne.x, ne.y, ne.w, ne.h, ne.layer = mod, x, y, w, h, layer
             ne.kind, ne.ax, ne.ay, ne.drop = opts._nav_kind, opts._nav_x, opts._nav_y, opts._nav_drop
         end
-        local s = ui_input[handle] or {}
+        local s = ui_input[handle] or uis.NO_INPUT
         local enabled = opts.enabled ~= false
         local r = {
             hover = ui_hot == handle,
@@ -4035,7 +4063,13 @@ local function make_ui(mod)
         end
         local max
         st.offset, max = uis.scroll_clamp(st.offset + delta, st.content, h)
-        uis.scroll_now[#uis.scroll_now + 1] = {key = key, x = x, y = y, w = w, h = h, layer = layer}
+        do
+            local sn = uis.scroll_now.n + 1
+            uis.scroll_now.n = sn
+            local a = uis.scroll_now[sn]
+            if not a then a = {}; uis.scroll_now[sn] = a end
+            a.key, a.x, a.y, a.w, a.h, a.layer = key, x, y, w, h, layer
+        end
         local view = {x = x, y = y, w = w - bar, h = h}
         local outer = uis.clip_stack[#uis.clip_stack]
         local c = view
