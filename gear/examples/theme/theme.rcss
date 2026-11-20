@@ -152,7 +152,7 @@ button.game-button:disabled, button.game-button[disabled], button.game-button[di
 
 /* Check boxes and radio buttons of the game (class game-check on <input type="checkbox"> or "radio"): the orb of the options screens,
    plain (image 272) and with the golden check (323), kept at its own size in a box a little larger. Hover and pad focus add a whitish bloom
-   (bloom.png, drawn over the orb: it brightens the sphere and spills 1 to 2 px past the outline, as the game does); no pressed state. Disabled: dim, no bloom. .check-row: the label text on the left, the orb on the right. */
+   (bloom-plain.png / bloom-check.png, listed first, so drawn over the orb (RmlUi draws the first decorator on top): the per-pixel overlay measured from the game's own hover, which brightens the sphere with its gloss and spills 1 to 2 px past the ring); no pressed state. Disabled: dim, no bloom. .check-row: the label text on the left, the orb on the right. */
 input.game-check {
     display: inline-block;
     width: 52px;
@@ -165,10 +165,10 @@ input.game-check {
     cursor: pointer;
 }
 input.game-check:checked { decorator: image(gear:image/323 scale-none center center); }
-input.game-check:hover, input.game-check:focus { decorator: image(gear:image/272 scale-none center center), image(bloom.png scale-none center center); }
-input.game-check:checked:hover, input.game-check:checked:focus { decorator: image(gear:image/323 scale-none center center), image(bloom.png scale-none center center); }
-input.game-check:active { decorator: image(gear:image/272 scale-none center center), image(bloom.png scale-none center center); }
-input.game-check:checked:active { decorator: image(gear:image/323 scale-none center center), image(bloom.png scale-none center center); }
+input.game-check:hover, input.game-check:focus { decorator: image(bloom-plain.png), image(gear:image/272 scale-none center center); }
+input.game-check:checked:hover, input.game-check:checked:focus { decorator: image(bloom-check.png), image(gear:image/323 scale-none center center); }
+input.game-check:active { decorator: image(bloom-plain.png), image(gear:image/272 scale-none center center); }
+input.game-check:checked:active { decorator: image(bloom-check.png), image(gear:image/323 scale-none center center); }
 input.game-check[disabled], input.game-check[disabled]:hover, input.game-check[disabled]:focus { opacity: 0.5; decorator: image(gear:image/272 scale-none center center); }
 input.game-check[disabled]:checked, input.game-check[disabled]:checked:hover { decorator: image(gear:image/323 scale-none center center); }
 .check-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 40px; }
