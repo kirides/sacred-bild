@@ -278,6 +278,7 @@ function gear.save(name, text) end
 ---@field keys? GearKeyDef[] Declared key binds: the player rebinds them in the mod manager; use them with `gear.keys`.
 ---@field config? table<string, any> Default settings: `gear.config` starts as a copy and `config.lua` overrides them.
 ---@field pipes? string[] Names of the named pipes the mod may open (`gear.pipe.open`).
+---@field theme? string The `.rcss` file (path inside the mod) that Gear puts in front of every RmlUi document of every mod while this mod runs (the shared theme).
 ---@field automation? boolean `true`: the mod gets `gear.auto` when the game runs with `-gear-auto`.
 
 -- ## The standard library a mod gets

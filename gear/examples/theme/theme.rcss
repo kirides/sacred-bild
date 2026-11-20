@@ -1,0 +1,58 @@
+/* Gear theme: the classes RmlUi documents can rely on while this mod runs. Documents only override what is special.
+   Colours follow the game's own tooltip frame: dark fill, gold edge. */
+
+body { font-size: 15dp; color: #f0f0f0; }
+
+/* A window: the content box; add .title for its heading. */
+.window {
+    padding: 14px 16px 12px 16px;
+    background-color: rgba(0, 0, 0, 160);
+    border: 1px #6e5e3a;
+}
+.window .title { color: #ffd780; font-weight: bold; margin-bottom: 8px; }
+.muted { color: #8c8c8c; }
+.accent { color: #ffd780; }
+.danger { color: #e05a4a; }
+
+/* Rows: .row lays its children out side by side; .right pushes them to the right edge. */
+.row { display: flex; flex-direction: row; margin: 6px 0; }
+.row.right { justify-content: flex-end; }
+.row.space { justify-content: space-between; }
+
+/* Buttons (pad stops, like every button): .primary is the answer to "go ahead", .danger a destructive one. */
+button {
+    margin-right: 8px;
+    padding: 4px 12px;
+    color: #f0f0f0;
+    background-color: #141420;
+    border: 1px #6e5e3a;
+    cursor: pointer;
+    transition: transform 0.12s cubic-out;
+}
+button:hover, button:focus { background-color: #282838; border-color: #c8aa5a; transform: scale(1.04); }
+button:active { background-color: #3c3c50; }
+button.primary { border-color: #c8aa5a; }
+button.danger { border-color: #a84030; }
+button:disabled { color: #8c8c8c; border-color: #3c3c3c; transform: none; }
+
+/* Text fields. */
+input.field {
+    padding: 4px 8px;
+    color: #f0f0f0;
+    background-color: #0c0c14;
+    border: 1px #6e5e3a;
+}
+input.field:focus { border-color: #c8aa5a; }
+
+/* Lists: .list holds .item rows; the pad moves over buttons, so make an item a button for selectable rows. */
+.list { margin: 4px 0; }
+.list .item { padding: 3px 8px; border-bottom: 1px #2a2a36; }
+
+/* Bars (health, progress): <div class="bar"><div class="fill" style="width: 40%"/></div>. */
+.bar { height: 10px; margin: 4px 0; background-color: #20202c; border: 1px #6e5e3a; }
+.bar .fill { height: 10px; background-color: #a82828; }
+
+/* Controller prompts: <img class="padkey" src="gear:pad/a"/> inside a button; shown only while the controller was used last
+   (gear sets body.pad), sized with the text. */
+.padkey { display: none; width: 1.3em; height: 1.3em; margin-left: 0.5em; vertical-align: middle; }
+body.pad .padkey { display: inline-block; }

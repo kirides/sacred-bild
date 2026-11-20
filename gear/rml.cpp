@@ -57,6 +57,7 @@ namespace
 
     std::wstring g_modsDir;
     fs::path g_root;            // the folder the current call may read from (empty: none)
+    fs::path g_themeRoot;       // the theme mod's folder, readable too while a document that uses the theme is handled
     bool g_allowFonts = false;  // the Windows font folder is readable too
 
     fs::path fromUtf8(const std::string& s)
@@ -105,6 +106,10 @@ namespace
     bool readable(const fs::path& path)
     {
         if (!g_root.empty() && inside(g_root, path))
+        {
+            return true;
+        }
+        if (!g_themeRoot.empty() && inside(g_themeRoot, path))
         {
             return true;
         }
@@ -713,6 +718,7 @@ namespace
         int id = 0;
         std::string mod;
         fs::path root;
+        fs::path themeRoot;                     // the theme mod's folder, if the document uses the theme
         Rml::Context* context = nullptr;
         Rml::ElementDocument* document = nullptr;
         std::string contextName;
@@ -762,14 +768,26 @@ namespace
     class RootScope
     {
     public:
-        explicit RootScope(const Doc& doc) : m_previous(std::move(g_root)) { g_root = doc.root; }
-        explicit RootScope(fs::path root) : m_previous(std::move(g_root)) { g_root = std::move(root); }
-        ~RootScope() { g_root = std::move(m_previous); }
+        explicit RootScope(const Doc& doc) : m_previous(std::move(g_root)), m_previousTheme(std::move(g_themeRoot))
+        {
+            g_root = doc.root;
+            g_themeRoot = doc.themeRoot;
+        }
+        explicit RootScope(fs::path root, fs::path themeRoot = {}) : m_previous(std::move(g_root)), m_previousTheme(std::move(g_themeRoot))
+        {
+            g_root = std::move(root);
+            g_themeRoot = std::move(themeRoot);
+        }
+        ~RootScope()
+        {
+            g_root = std::move(m_previous);
+            g_themeRoot = std::move(m_previousTheme);
+        }
         RootScope(const RootScope&) = delete;
         RootScope& operator=(const RootScope&) = delete;
 
     private:
-        fs::path m_previous;
+        fs::path m_previous, m_previousTheme;
     };
 
     void loadFont(const fs::path& path, bool fallback)
@@ -942,6 +960,33 @@ namespace
         return 2;
     }
 
+    // Puts <link> to the theme's stylesheet at the start of the document's head (a head is added if there is none).
+    void injectTheme(std::string& markup, const fs::path& themeFile)
+    {
+        std::string href = toUtf8(themeFile);
+        std::replace(href.begin(), href.end(), '\\', '/');
+        const std::string link = "<link type=\"text/rcss\" href=\"" + href + "\"/>";
+        std::string lower = markup;
+        for (char& c : lower)
+        {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        size_t at = lower.find("<head>");
+        if (at != std::string::npos)
+        {
+            markup.insert(at + 6, link);
+            return;
+        }
+        at = lower.find("<head ");
+        if (at != std::string::npos && (at = lower.find('>', at)) != std::string::npos)
+        {
+            markup.insert(at + 1, link);
+            return;
+        }
+        at = lower.find("<body");
+        markup.insert(at == std::string::npos ? 0 : at, "<head>" + link + "</head>");
+    }
+
     // Creates the context and document; `source` is the file (or, with `fromString`, the markup).
     int create(lua_State* L, bool fromString)
     {
@@ -1031,10 +1076,35 @@ namespace
                 d->hasModel = true;
             }
         }
+        // The theme mod's stylesheet (arguments 6 and 7: its folder and the .rcss in it) goes in front of the document's own.
+        fs::path themeFile;
+        if (lua_isstring(L, 6) && lua_isstring(L, 7) && str(L, 6) != dir)
+        {
+            const fs::path themeRoot = modRoot(str(L, 6));
+            const fs::path candidate = themeRoot / fromUtf8(str(L, 7));
+            if (!themeRoot.empty() && inside(themeRoot, candidate))
+            {
+                d->themeRoot = themeRoot;
+                themeFile = candidate;
+            }
+        }
         {
             RootScope scope(*d);
-            d->document = fromString ? d->context->LoadDocumentFromMemory(source, toUtf8(file))
-                                     : d->context->LoadDocument(toUtf8(file));
+            std::string markup = source;
+            bool inMemory = fromString;
+            if (!themeFile.empty())
+            {
+                if (!fromString)
+                {
+                    inMemory = readAll(file, markup);
+                }
+                if (inMemory)
+                {
+                    injectTheme(markup, themeFile);
+                }
+            }
+            d->document = inMemory ? d->context->LoadDocumentFromMemory(markup, toUtf8(file))
+                                   : d->context->LoadDocument(toUtf8(file));
         }
         if (!d->document)
         {

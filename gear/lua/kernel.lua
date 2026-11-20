@@ -3560,6 +3560,11 @@ local function make_ui(mod)
         table.sort(names)
         return names
     end
+    -- The theme mod's folder and stylesheet (a running mod whose mod.lua has `theme = 'file.rcss'`), for the natives; nothing with opts.theme = false.
+    function uis.rml_theme(opts)
+        if opts.theme == false or not uis.theme_provider then return end
+        return uis.theme_provider()
+    end
     -- doc.model: the data model's values, read and written like a table; writing a value (at any depth) has the bindings of the
     -- document refresh. The top-level keys are the ones the model was loaded with.
     function uis.rml_proxy(doc, raw, top)
@@ -3592,7 +3597,7 @@ local function make_ui(mod)
         assert(type(path) == 'string', 'path must be a string')
         if not native.rml_load then error('RmlUi is not available in this build', 2) end
         opts = opts or {}
-        local id, err = native.rml_load(mod.dir, path, opts.dp and true or false, opts.model, uis.rml_call_names(opts))
+        local id, err = native.rml_load(mod.dir, path, opts.dp and true or false, opts.model, uis.rml_call_names(opts), uis.rml_theme(opts))
         if not id then return nil, err end
         return rml_open(id, opts)
     end
@@ -3602,7 +3607,7 @@ local function make_ui(mod)
         assert(type(markup) == 'string', 'markup must be a string')
         if not native.rml_load_string then error('RmlUi is not available in this build', 2) end
         opts = opts or {}
-        local id, err = native.rml_load_string(mod.dir, markup, opts.dp and true or false, opts.model, uis.rml_call_names(opts))
+        local id, err = native.rml_load_string(mod.dir, markup, opts.dp and true or false, opts.model, uis.rml_call_names(opts), uis.rml_theme(opts))
         if not id then return nil, err end
         return rml_open(id, opts)
     end
@@ -5227,6 +5232,12 @@ end
 ---------------------------------------------------------------------------------------------------------------
 local catalog = {}          -- mod id -> entry {id, dir, m, builtin, invalid, loaded, want, reason, fail, excluded}
 local catalog_list = {}     -- the entries by id
+-- The theme mod: the first running mod (in the catalog's order) whose mod.lua names a `theme` stylesheet. Returns its folder and the file.
+function uis.theme_provider()
+    for _, e in ipairs(catalog_list) do
+        if e.loaded and e.m and e.m.theme then return e.dir, e.m.theme end
+    end
+end
 local mod_state = nil       -- gear_mods.json decoded: {mods = {id = {enabled, settings, keys, migrated}}}
 local state_dirty = false
 local key_handlers = {}     -- array of {mod, id, def, fn, entry, was}
@@ -6866,6 +6877,9 @@ local function check_manifest(m, dir)
     if m.config ~= nil and type(m.config) ~= 'table' then return nil, 'mod.lua: config must be a table' end
     if m.description ~= nil and type(m.description) ~= 'string' then return nil, 'mod.lua: description must be a string' end
     if m.author ~= nil and type(m.author) ~= 'string' then return nil, 'mod.lua: author must be a string' end
+    if m.theme ~= nil and (type(m.theme) ~= 'string' or m.theme:find('%.%.') or m.theme:find('^[/\\]') or m.theme:find(':')) then
+        return nil, 'mod.lua: theme must be the path of an .rcss file inside the mod'
+    end
     local allowed = {}
     for _, name in ipairs(m.pipes or {}) do
         if type(name) ~= 'string' or not name:match('^[%w_%-%.]+$') then
@@ -6896,6 +6910,7 @@ local function check_manifest(m, dir)
         settings_by_id = settings_by_id,
         keys = keys,
         keys_by_id = keys_by_id,
+        theme = m.theme,
         dir = dir,
     }
 end
