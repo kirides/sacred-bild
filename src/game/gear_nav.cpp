@@ -139,6 +139,11 @@ extern "C" void __cdecl SacredBild_UiPostPad(int nudge, int back, int menu)
     g_nudge += nudge;
     g_back += back;
     g_menu += menu;
+    // As a real pad press does: the prompts (body.pad) and the pad focus follow the pad from now on.
+    if (nudge != 0 || back != 0 || menu != 0)
+    {
+        InputMode::controllerUsed();
+    }
 }
 
 extern "C" int __cdecl SacredBild_UiNavState(int* flags)

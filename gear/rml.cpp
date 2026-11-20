@@ -176,7 +176,9 @@ namespace
     public:
         Rml::FileHandle Open(const Rml::String& path) override
         {
-            const fs::path p = fromUtf8(path);
+            // The documents' own URLs are "file:///B:/..." (see create); plain paths and "B:/..." arrive as they are.
+            const std::string plain = path.compare(0, 8, "file:///") == 0 ? path.substr(8) : path;
+            const fs::path p = fromUtf8(plain);
             if (!readable(p))
             {
                 LOG("RmlUi: a document may not read {}", path);
@@ -910,7 +912,8 @@ namespace
 
     Rml::Element* find(Doc& d, const std::string& selector)
     {
-        if (selector.empty())
+        // The document element is the <body>: a descendant query never finds it.
+        if (selector.empty() || selector == "body")
         {
             return d.document;
         }
@@ -1022,12 +1025,32 @@ namespace
         return 2;
     }
 
-    // Puts <link> to the theme's stylesheet at the start of the document's head (a head is added if there is none).
+    // RmlUi has no built-in user agent stylesheet: without one a div, p or h1 is inline and the lines run together.
+    // Put in front of every document (and so of the theme and the document's own styles).
+    const char* const kUserAgentStyle =
+        "<style>"
+        "div, p, h1, h2, h3, h4, h5, h6, ul, ol, li, dl, dt, dd, form, header, footer, section, article, nav, aside, pre, hr "
+        "{ display: block; }"
+        "h1, h2, h3, h4, h5, h6, strong, b { font-weight: bold; }"
+        "body { font-family: \"Segoe UI\"; }"
+                "em, i { font-style: italic; }"
+        "</style>";
+
+    // Puts the user agent style and <link> to the theme's stylesheet (if any) at the start of the document's head (a
+    // head is added if there is none).
     void injectTheme(std::string& markup, const fs::path& themeFile)
     {
-        std::string href = toUtf8(themeFile);
-        std::replace(href.begin(), href.end(), '\\', '/');
-        const std::string link = "<link type=\"text/rcss\" href=\"" + href + "\"/>";
+        std::string link = kUserAgentStyle;
+        if (!themeFile.empty())
+        {
+            std::string href = toUtf8(themeFile);
+            std::replace(href.begin(), href.end(), '\\', '/');
+            if (href.size() > 1 && href[1] == ':')
+            {
+                href.insert(0, "file:///");     // see create: a bare drive path is no URL
+            }
+            link += "<link type=\"text/rcss\" href=\"" + href + "\"/>";
+        }
         std::string lower = markup;
         for (char& c : lower)
         {
@@ -1154,19 +1177,22 @@ namespace
             RootScope scope(*d);
             std::string markup = source;
             bool inMemory = fromString;
-            if (!themeFile.empty())
+            if (!fromString)
             {
-                if (!fromString)
-                {
-                    inMemory = readAll(file, markup);
-                }
-                if (inMemory)
-                {
-                    injectTheme(markup, themeFile);
-                }
+                inMemory = readAll(file, markup);
             }
-            d->document = inMemory ? d->context->LoadDocumentFromMemory(markup, toUtf8(file))
-                                   : d->context->LoadDocument(toUtf8(file));
+            if (inMemory)
+            {
+                injectTheme(markup, themeFile);
+            }
+            // A path with a drive letter ("B:/...") is no URL to RmlUi (it takes "B" for a protocol and logs an error per
+            // link); "file:///B:/..." is one, and its relative links resolve against it into plain paths again.
+            std::string url = toUtf8(file);
+            if (url.size() > 1 && url[1] == ':')
+            {
+                url.insert(0, "file:///");
+            }
+            d->document = inMemory ? d->context->LoadDocumentFromMemory(markup, url) : d->context->LoadDocument(url);
         }
         if (!d->document)
         {
