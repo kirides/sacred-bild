@@ -65,6 +65,7 @@
 ---@field HEIGHT integer 768
 ---@field COLORS GearColors The widgets' colours.
 ---@field native GearUiNative Pieces of the game's own look built from its UI images (`gear.ui.native.frame`).
+---@field rml GearUiRml HTML/CSS-style documents (RmlUi): `gear.ui.rml.load`.
 local GearUi = {}
 
 ---@class GearColors
@@ -347,3 +348,123 @@ function GearUiNative.frame(x, y, w, h, opts) end
 ---@return {left: number, top: number, right: number, bottom: number} inset
 ---@return {left: number, top: number, right: number, bottom: number} overhang
 function GearUiNative.insets(style) end
+
+-- ## HTML/CSS documents (gear.ui.rml)
+
+-- path gear.ui.rml
+--- UI written as documents (RmlUi's HTML and CSS dialect: `.rml` and `.rcss` files with `div`, `button`, `input`, flexbox,
+--- `:hover` and animations) in the mod's own folder. A document is loaded once and drawn every frame from a `draw` handler with
+--- `doc:draw()`; its buttons, links and inputs take the mouse and the controller (every one is a pad stop), a focused
+--- text field takes the keyboard, and events (`click`, `change` ...) call Lua functions registered with `doc:on`. The default
+--- font is Segoe UI, as for `gear.ui` text; `rml.load_font` adds the mod's own. Images: a file of the mod's folder (PNG, TGA, JPG), or
+--- the game's own UI images as `gear:image/<id>` (`gear.ui.images`) and `gear:texture/<NAME.TGA>` (Texture.pak), with `?flip=h`, `?flip=v`
+--- or `?flip=hv` mirroring them: `<img src="gear:image/54">`, `decorator: image(gear:image/54)`.
+---
+--- A prototype: no JavaScript (the logic is Lua), no CSS `transform`, filters or shaders, and a mesh counts as a draw command (at
+--- most 1500 per document and draw). The document's windows (its top-level elements) take the mouse where they are; the rest of the
+--- canvas stays the game's. Documents are laid out in the 1024x768 layout; `dp = true` lays them out in screen pixels instead (1dp is one
+--- layout unit), so text is crisp at any resolution (write sizes in `dp` then).
+---@class GearUiRml
+local GearUiRml = {}
+
+--- The options of `load` and `load_string`.
+---@class GearRmlLoadOpts
+---@field dp? boolean Lay the document out in screen pixels with `1dp` = one layout unit (crisp text; write sizes in `dp`). Default `false`: `1px` = one layout unit, text is scaled with the UI.
+
+--- The options of `GearRmlDoc.draw`.
+---@class GearRmlDrawOpts
+---@field layer? 'world'|'hud'|'top' Default `'hud'`.
+
+--- An event delivered to a `GearRmlDoc.on` handler.
+---@class GearRmlEvent
+---@field type string The event's name (`'click'`, `'change'` ...).
+---@field target string The `id` of the element the event happened on (`''` if it has none).
+---@field current string The `id` of the element the handler listens on.
+---@field params table<string, string> The event's parameters as text; a form control's `change` has `value`, mouse events `mouse_x` and `mouse_y`.
+
+--- A loaded document.
+---@class GearRmlDoc
+local GearRmlDoc = {}
+
+--- Loads a document of the mod's folder.
+---@param path string A `.rml` file in the mod's folder; its stylesheets and images are read from there too.
+---@param opts? GearRmlLoadOpts
+---@return GearRmlDoc? doc
+---@return string? message Why not.
+function GearUiRml.load(path, opts) end
+
+--- Loads a document from a string of RML (relative links resolve in the mod's folder).
+---@param markup string
+---@param opts? GearRmlLoadOpts
+---@return GearRmlDoc? doc
+---@return string? message
+function GearUiRml.load_string(markup, opts) end
+
+--- Adds a font file of the mod (TTF or OTF) for `font-family` in the documents.
+---@param path string
+---@param fallback? boolean Use it for characters the other fonts lack.
+---@return boolean ok
+function GearUiRml.load_font(path, fallback) end
+
+--- Calls `fn(event, doc)` when `event` reaches an element that matches `selector` (as the document is now: elements added later are not
+--- covered).
+---@param selector string `'#id'`, `'.class'`, a tag, `'button.primary'` ... ; `''` is the document.
+---@param event string `'click'`, `'change'`, `'submit'`, `'keydown'`, `'mouseover'`, `'focus'` ...
+---@param fn fun(event: GearRmlEvent, doc: GearRmlDoc)
+---@return boolean found Whether any element matched.
+function GearRmlDoc:on(selector, event, fn) end
+
+--- Runs the document for this frame and draws it: call it every frame from a `draw` handler. It takes the mouse over the
+--- document's windows, registers its buttons, links and inputs as pad stops, feeds a focused text field the keys, runs animations,
+--- calls the handlers of what happened and records the draw commands.
+---@param opts? GearRmlDrawOpts
+---@return integer commands How many draw commands it recorded.
+function GearRmlDoc:draw(opts) end
+
+--- The inner markup of the first element matching `selector` (set it with `markup`); `nil` if there is none.
+---@param selector string
+---@param markup? string
+---@return string?
+function GearRmlDoc:html(selector, markup) end
+
+--- The inner markup of the first element matching `selector`; with `text` its content becomes that text (escaped).
+---@param selector string
+---@param text? string|number
+---@return string?
+function GearRmlDoc:text(selector, text) end
+
+--- An attribute of the first matching element. `value` sets it (`true` for a flag such as `disabled` or `checked`); `false` removes it.
+---@param selector string
+---@param name string
+---@param value? string|number|boolean
+---@return string? current
+function GearRmlDoc:attr(selector, name, value) end
+
+--- Adds or removes a class of the first matching element.
+---@param selector string
+---@param name string
+---@param on boolean
+---@return boolean found
+function GearRmlDoc:class(selector, name, on) end
+
+--- Sets an inline style property of the first matching element (`doc:style('#bar', 'width', '40%')`); `nil` or `false` takes it off.
+---@param selector string
+---@param property string
+---@param value? string|number|false
+---@return boolean found
+function GearRmlDoc:style(selector, property, value) end
+
+--- The value of a form control (an `input`, `select` or `textarea`); with `text` it is set.
+---@param selector string
+---@param text? string|number
+---@return string?
+function GearRmlDoc:value(selector, text) end
+
+--- Shows the document again after `hide` (a loaded document is shown).
+function GearRmlDoc:show() end
+
+--- Hides the document: it is not drawn and takes no mouse.
+function GearRmlDoc:hide() end
+
+--- Closes the document. The mod's documents are closed when it unloads.
+function GearRmlDoc:close() end

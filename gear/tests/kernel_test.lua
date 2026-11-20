@@ -1985,6 +1985,63 @@ do
     native.builtin = saved_builtin
 end
 
+
+-- gear.ui.rml (RmlUi documents): the API on mocked natives.
+do
+    local gear_a
+    do
+        local i = 1
+        while true do
+            local name, value = debug.getupvalue(kernel.dispatch, i)
+            if not name then break end
+            if name == 'handlers' then
+                for _, h in ipairs(value['frame']) do
+                    local env = getfenv(h.fn)
+                    if env.record and env.gear then gear_a = env.gear end
+                end
+            end
+            i = i + 1
+        end
+    end
+    local log_rml = {}
+    local clicked_ev, listened = nil, {}
+    native.rml_load = function(dir, path, dp) log_rml[#log_rml + 1] = 'load ' .. dir .. ' ' .. path .. ' ' .. tostring(dp); return 7 end
+    native.rml_load_string = function() return nil, 'bad markup' end
+    native.rml_rects = function() return {{x = 10, y = 10, w = 100, h = 50}} end
+    native.rml_nav = function() return {{x = 20, y = 20, w = 40, h = 16}, {x = 20, y = 40, w = 40, h = 16}} end
+    native.rml_wants_text = function() return false end
+    native.rml_listen = function(id, sel, ev) listened[#listened + 1] = sel .. '/' .. ev; return #listened, 1 end
+    native.rml_update = function(id, mx, my, hover)
+        log_rml[#log_rml + 1] = 'update ' .. tostring(hover)
+        return {{listener = 1, type = 'click', target = 'ok', current = 'ok', params = {}}, {listener = 99, type = 'x', target = '', current = '', params = {}}}
+    end
+    native.rml_draw = function(id, layer, slot) log_rml[#log_rml + 1] = 'draw ' .. layer .. ' ' .. slot; return 3 end
+    native.rml_html = function(id, sel, v) log_rml[#log_rml + 1] = 'html ' .. sel .. ' ' .. tostring(v); return 'x' end
+    native.rml_close = function(id) log_rml[#log_rml + 1] = 'close ' .. id end
+    local rml = gear_a.ui.rml
+    ok(type(rml) == 'table' and rml.load and rml.load_string and rml.load_font, 'rml: the API is there')
+    local doc = rml.load('ui/main.rml', {dp = true})
+    ok(doc and log_rml[1]:match('^load %S+ ui/main%.rml true$'), 'rml.load asks the host with the mod folder and the dp flag')
+    ok(select(2, rml.load_string('<x')) == 'bad markup', 'rml.load_string passes the message of a failure on')
+    ok(doc:on('#ok', 'click', function(e) clicked_ev = e end) and listened[1] == '#ok/click', 'doc:on registers a listener')
+    doc:text('#t', 'a<b&c')
+    ok(log_rml[#log_rml] == 'html #t a&lt;b&amp;c', 'doc:text escapes the markup')
+    local drawn
+    gear_a.on('draw', function() drawn = doc:draw({layer = 'top'}) end)
+    log_rml = {}
+    ui_published = {}
+    kernel.tick(0.016)
+    kernel.tick(0.016)
+    ok(drawn == 3, 'doc:draw returns the commands drawn')
+    ok(clicked_ev and clicked_ev.type == 'click' and clicked_ev.target == 'ok', 'doc:draw hands the events to the handlers (and ignores unknown listeners)')
+    local regions = 0
+    for _, c in ipairs(ui_published) do if c[1] == 'region' and c[2] == 2 then regions = regions + 1 end end
+    ok(regions == 3, 'doc:draw registers a region per window and per pad stop (' .. regions .. ')')
+    ok(log_rml[#log_rml] == 'draw 2 -1', 'doc:draw draws on the chosen layer')
+    doc:close()
+    ok(log_rml[#log_rml] == 'close 7' and doc:draw() == 0, 'doc:close closes the host document, drawing a closed one does nothing')
+end
+
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

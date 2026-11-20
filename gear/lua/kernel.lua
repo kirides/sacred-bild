@@ -2835,8 +2835,8 @@ local function ui_target(opts)
     return layer, slot
 end
 
-local function ui_count(mod)
-    local n = (ui_counts[mod] or 0) + 1
+local function ui_count(mod, count)
+    local n = (ui_counts[mod] or 0) + (count or 1)
     if n > UI_MAX_PER_MOD then error('too many draw commands this frame (' .. UI_MAX_PER_MOD .. ')', 3) end
     ui_counts[mod] = n
 end
@@ -3530,6 +3530,151 @@ local function make_ui(mod)
         return r
     end
     local region = ui.region
+
+    ---------------------------------------------------------------------------------------------------------
+    -- gear.ui.rml: documents in RmlUi's HTML/CSS dialect (.rml, .rcss), drawn through the overlay and reporting back to Lua.
+    -- A document is loaded once, then drawn every frame from the mod's draw handler (`doc:draw()`), which also feeds
+    -- it the mouse, the pad (every button, link and input is a pad stop) and the keyboard (text fields), and hands
+    -- the events of the listeners registered with `doc:on` to their Lua functions. Files come from the mod's own folder.
+    ---------------------------------------------------------------------------------------------------------
+    local rml = {}
+    ui.rml = rml
+    local Doc = {}
+    Doc.__index = Doc
+    uis.rml_docs = uis.rml_docs or {}
+    local RML_KEYS = {'backspace', 'delete', 'enter', 'tab', 'escape', 'left', 'right', 'up', 'down', 'home', 'end', 'pageup', 'pagedown'}
+
+    local function rml_open(id, opts)
+        local doc = setmetatable({id = id, handlers = {}, opts = opts}, Doc)
+        uis.rml_docs[id] = {mod = mod, doc = doc}
+        return doc
+    end
+
+    -- rml.load(path, {dp}) -> document | nil, message: path is a .rml file in the mod's folder. With dp = true the document is
+    -- laid out in screen pixels with 1dp = one layout unit (text is rasterized for the screen: crisp); otherwise 1px = one layout unit.
+    function rml.load(path, opts)
+        assert(type(path) == 'string', 'path must be a string')
+        if not native.rml_load then error('RmlUi is not available in this build', 2) end
+        opts = opts or {}
+        local id, err = native.rml_load(mod.dir, path, opts.dp and true or false)
+        if not id then return nil, err end
+        return rml_open(id, opts)
+    end
+
+    -- rml.load_string(markup, {dp}) -> document | nil, message: the same from a string of RML (relative links resolve in the mod's folder).
+    function rml.load_string(markup, opts)
+        assert(type(markup) == 'string', 'markup must be a string')
+        if not native.rml_load_string then error('RmlUi is not available in this build', 2) end
+        opts = opts or {}
+        local id, err = native.rml_load_string(mod.dir, markup, opts.dp and true or false)
+        if not id then return nil, err end
+        return rml_open(id, opts)
+    end
+
+    -- rml.load_font(path, fallback) -> ok: a TTF / OTF file of the mod, for font-family in its documents (the default face is Segoe UI).
+    function rml.load_font(path, fallback)
+        assert(type(path) == 'string', 'path must be a string')
+        return native.rml_font and native.rml_font(mod.dir, path, fallback and true or false) or false
+    end
+
+    local function rml_escape(text)
+        return (tostring(text):gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;'))
+    end
+
+    -- doc:on(selector, event, fn) -> ok: fn(event, doc) runs when `event` ('click', 'change', 'submit', 'keydown' ...) reaches an
+    -- element matching `selector` ('#id', '.class', 'button' ...; '' is the document) as it is now. event = {type, target (id of the
+    -- element hit), current (id of the element listening), params = {name = text}}; a change of a form control carries params.value.
+    function Doc:on(selector, event, fn)
+        assert(type(fn) == 'function', 'on(selector, event, fn)')
+        local listener = native.rml_listen(self.id, tostring(selector), tostring(event))
+        if not listener then return false end
+        self.handlers[listener] = fn
+        return true
+    end
+
+    -- Reading and changing the document: `selector` finds the first matching element (nil answers: no such element).
+    function Doc:html(selector, markup) return native.rml_html(self.id, selector, markup) end
+    function Doc:text(selector, text)
+        if text ~= nil then return native.rml_html(self.id, selector, rml_escape(text)) end
+        return native.rml_html(self.id, selector)
+    end
+    -- doc:attr(selector, name [, value]): value true sets a flag attribute (disabled, checked), false removes the attribute.
+    function Doc:attr(selector, name, value)
+        if type(value) == 'number' then value = tostring(value) end
+        return native.rml_attr(self.id, selector, name, value)
+    end
+    function Doc:class(selector, name, on) return native.rml_class(self.id, selector, name, on and true or false) end
+    -- doc:style(selector, property, value): an inline style; nil or false takes it off again.
+    function Doc:style(selector, property, value)
+        if type(value) == 'number' then value = tostring(value) end
+        return native.rml_style(self.id, selector, property, value or false)
+    end
+    -- doc:value(selector [, text]): the value of a form control (an input, a select, a textarea).
+    function Doc:value(selector, text)
+        if type(text) == 'number' then text = tostring(text) end
+        return native.rml_value(self.id, selector, text)
+    end
+    function Doc:show() native.rml_show(self.id, true) end
+    function Doc:hide() native.rml_show(self.id, false) end
+
+    function Doc:close()
+        if self.closed then return end
+        self.closed = true
+        uis.rml_docs[self.id] = nil
+        native.rml_close(self.id)
+        if self.capturing then ui.capture_keys(false) end
+    end
+
+    -- doc:draw({layer}) -> commands drawn: call it every frame from a draw handler. It lets the document take the mouse where it has
+    -- elements, makes every button, link and input a pad stop, reads the keys for a focused text field, runs the document's
+    -- animations, calls the handlers of events that happened and draws it.
+    function Doc:draw(opts)
+        if self.closed then return 0 end
+        opts = opts or {}
+        local layer = UI_LAYERS[opts.layer or 'hud']
+        if not layer then error('layer is "world", "hud" or "top"', 2) end
+        local id = self.id
+        local hover = false
+        for i, r in ipairs(native.rml_rects(id)) do
+            if region('rml:' .. id .. ':w' .. i, r.x, r.y, r.w, r.h, {layer = opts.layer, nav = false}).hover then hover = true end
+        end
+        for i, r in ipairs(native.rml_nav(id)) do
+            local res = region('rml:' .. id .. ':n' .. i, r.x, r.y, r.w, r.h, {layer = opts.layer})
+            if res.hover then hover = true end
+            if res.clicked then native.rml_click(id, i) end
+        end
+        if native.rml_wants_text(id) then
+            ui.capture_keys(true)
+            self.capturing = true
+            local typed = ui.typed()
+            if typed ~= '' then native.rml_text(id, typed) end
+            for _, name in ipairs(RML_KEYS) do
+                if ui.key_pressed(name) then
+                    native.rml_key(id, UI_VK[name], true)
+                    native.rml_key(id, UI_VK[name], false)
+                end
+            end
+        elseif self.capturing then
+            ui.capture_keys(false)
+            self.capturing = false
+        end
+        if hover and uis.wheel ~= 0 and not uis.wheel_taken then
+            uis.wheel_taken = true
+            native.rml_wheel(id, uis.wheel)
+        end
+        local mx, my = ui.mouse()
+        for _, e in ipairs(native.rml_update(id, mx, my, hover)) do
+            local fn = self.handlers[e.listener]
+            if fn then
+                local ok, err = xpcall(fn, traceback, e, self)
+                if not ok then log('[%s] rml handler for %s failed: %s', mod.id, e.type, tostring(err)) end
+            end
+            if self.closed then return 0 end
+        end
+        local n = native.rml_draw(id, layer, -1)
+        if n > 0 then ui_count(mod, n) end
+        return n
+    end
 
     -- The cursor in layout coordinates, and whether the left button is held over a mod's widget.
     function ui.mouse() return ui_mouse.x, ui_mouse.y end
@@ -6765,6 +6910,11 @@ local function unload_mod(e)
     D.dirty = true
     ui_keys[m] = nil
     key_capture[m] = nil
+    if uis.rml_docs then
+        for id, entry in pairs(uis.rml_docs) do
+            if entry.mod == m then uis.rml_docs[id] = nil; native.rml_close(id) end
+        end
+    end
     if uis.input.rules[m] then uis.input.rules[m] = nil; uis.input.dirty = true end
     for i = #uis.input.handlers, 1, -1 do
         if uis.input.handlers[i].mod == m then table.remove(uis.input.handlers, i) end

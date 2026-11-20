@@ -13,6 +13,8 @@
     },
     "kcp",
     "luajit",
-    "sdl3"
+    "rmlui",
+    "sdl3",
+    "stb"
   ]
 }

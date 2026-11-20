@@ -16,6 +16,9 @@ string(REPLACE "/INCREMENTAL" "/INCREMENTAL:NO /OPT:REF /OPT:ICF" CMAKE_SHARED_L
 find_package(imgui CONFIG REQUIRED)
 find_package(kcp CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
+# RmlUi (Sacred Gear's HTML/CSS-style mod UI, gear/rml.cpp) and stb_image (the images its documents name).
+find_package(RmlUi CONFIG REQUIRED)
+find_path(STB_INCLUDE_DIRS "stb_image.h" REQUIRED)
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h" REQUIRED)
 find_library(DETOURS_LIBRARY_RELEASE detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH REQUIRED)
 find_library(DETOURS_LIBRARY_DEBUG detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/lib" NO_DEFAULT_PATH REQUIRED)
@@ -198,11 +201,13 @@ if(SACREDGEAR)
     gear/input.cpp
     gear/itemicon.cpp
     gear/realm.cpp
+    gear/rml.cpp
     gear/gear.rc
   )
-  target_include_directories(SacredGear PRIVATE gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS})
+  target_include_directories(SacredGear PRIVATE gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS} ${STB_INCLUDE_DIRS})
   set_source_files_properties(gear/gear.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kernel.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/lookup.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/fmt.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/toast.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/store.lua")
-  target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} shell32)
+  target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi shell32)
+  target_compile_definitions(SacredGear PRIVATE RMLUI_STATIC_LIB)
   target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})
   # SAFESEH off as for ddraw (Detours trampolines); /MAP for profiles.
   target_link_options(SacredGear PRIVATE /SAFESEH:NO /MAP)

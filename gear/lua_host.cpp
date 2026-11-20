@@ -16,6 +16,7 @@
 #include "pickup.h"
 #include "realm.h"
 #include "replace.h"
+#include "rml.h"
 #include "overlay.h"
 #include "buffs.h"
 #include "party.h"
@@ -4640,6 +4641,7 @@ namespace
                 lua_setfield(L, -2, r->name);
             }
         }
+        RmlHost::registerNatives(L);
         lua_pushstring(L, Gear::kVersion);
         lua_setfield(L, -2, "version");
         if (lua_pcall(L, 1, 1, 0) != 0 || !lua_istable(L, -1))
@@ -4666,6 +4668,7 @@ void LuaHost::configure(HMODULE module, const std::wstring& gameDir)
     g_module = module;
     g_modsDir = gameDir + L"\\mods";
     g_gameDir = gameDir;
+    RmlHost::configure(g_modsDir);
 }
 
 static ULONGLONG g_lastIdle = 0, g_lastMenuTick = 0;
