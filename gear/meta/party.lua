@@ -85,12 +85,28 @@ function GearParty.dismiss(companion) end
 
 --- Gives the player control of a party hero: the camera, the HUD, the windows (inventory, skills, combat arts), the
 --- mouse, the keys and the controller then serve it, and the hero ids of the game follow (`gear.world.hero()`). The
---- gold goes with control (the party's purse), and the mercenaries follow the controlled hero. Every mod gets
+--- gold goes with control (the party's purse, unless `shared_purse(false)`), and the mercenaries follow the controlled hero. Every mod gets
 --- `party.control` `(from, to)` afterwards.
 ---@param hero Creature|integer
 ---@return boolean? ok
 ---@return string? error
 function GearParty.control(hero) end
+
+--- Whether `control` moves the gold to the hero you play (the party's purse, the default). `false`: every hero keeps their own
+--- gold (it is in their savegame record as for any hero). Called without an argument it only returns the setting. Not saved: a mod
+--- sets it again on every start.
+---@param on? boolean
+---@return boolean shared
+function GearParty.shared_purse(on) end
+
+--- Moves gold from one party hero to another (single player): at most what `from` holds and what `to` can take (the game's limit
+--- is 2,147,483,646). The hero you play goes through the game's own gold function.
+---@param from Creature|integer
+---@param to Creature|integer
+---@param amount number
+---@return boolean? ok
+---@return string? error
+function GearParty.give_gold(from, to, amount) end
 
 --- Experience a party hero gains from the game (kills, quests) also goes to the other living party heroes within
 --- `radius` world units (0 or nil: anywhere), times `share` (1: the same amount, 0: off, the default).

@@ -1762,9 +1762,26 @@ Removes a companion from the world for good, with what it wears. Refused for the
 
 #### `gear.party.control(hero) -> boolean?, string?`
 
-Gives the player control of a party hero: the camera, the HUD, the windows (inventory, skills, combat arts), the mouse, the keys and the controller then serve it, and the hero ids of the game follow (`gear.world.hero()`). The gold goes with control (the party's purse), and the mercenaries follow the controlled hero. Every mod gets `party.control` `(from, to)` afterwards.
+Gives the player control of a party hero: the camera, the HUD, the windows (inventory, skills, combat arts), the mouse, the keys and the controller then serve it, and the hero ids of the game follow (`gear.world.hero()`). The gold goes with control (the party's purse, unless `shared_purse(false)`), and the mercenaries follow the controlled hero. Every mod gets `party.control` `(from, to)` afterwards.
 
 - `hero`: `Creature|integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.party.shared_purse(on) -> boolean`
+
+Whether `control` moves the gold to the hero you play (the party's purse, the default). `false`: every hero keeps their own gold (it is in their savegame record as for any hero). Called without an argument it only returns the setting. Not saved: a mod sets it again on every start.
+
+- `on`: `boolean` (optional)
+- returns `shared` `boolean`
+
+#### `gear.party.give_gold(from, to, amount) -> boolean?, string?`
+
+Moves gold from one party hero to another (single player): at most what `from` holds and what `to` can take (the game's limit is 2,147,483,646). The hero you play goes through the game's own gold function.
+
+- `from`: `Creature|integer`
+- `to`: `Creature|integer`
+- `amount`: `number`
 - returns `ok` `boolean?`
 - returns `error` `string?`
 

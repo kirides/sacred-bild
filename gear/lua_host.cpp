@@ -2466,6 +2466,29 @@ namespace
         return 3;
     }
 
+    // native.party_shared_purse(on?) -> boolean (sets when given); native.party_give_gold(from, to, amount) -> true | nil, message
+    int nativePartySharedPurse(lua_State* L)
+    {
+        if (lua_isboolean(L, 1))
+        {
+            Party::setSharedPurse(lua_toboolean(L, 1) != 0);
+        }
+        lua_pushboolean(L, Party::sharedPurse() ? 1 : 0);
+        return 1;
+    }
+
+    int nativePartyGiveGold(lua_State* L)
+    {
+        const lua_Number n = luaL_checknumber(L, 3);
+        const char* error = nullptr;
+        if (!(n >= 0 && n < 4294967296.0) || !Party::giveGold(checkId(L, 1), checkId(L, 2), static_cast<uint32_t>(n), error))
+        {
+            return pushFailure(L, error ? error : "invalid amount");
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     int nativePartyShare(lua_State* L)
     {
         Party::setExperienceShare(luaL_checknumber(L, 1), luaL_optnumber(L, 2, 0));
@@ -4516,6 +4539,8 @@ namespace
             {"party_import", nativePartyImport},
             {"party_export", nativePartyExport},
             {"party_share", nativePartyShare},
+            {"party_shared_purse", nativePartySharedPurse},
+            {"party_give_gold", nativePartyGiveGold},
             {"party_exp_range", nativePartyExpRange},
             {"party_weapon_slots", nativePartyWeaponSlots},
             {"party_use_weapon_slot", nativePartyUseWeaponSlot},

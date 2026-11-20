@@ -1738,6 +1738,19 @@ do
         if ok and from ~= id then kernel.dispatch('party.control', wrap(from), wrap(id)) end
         return ok, err
     end
+    -- shared_purse(on?) -> boolean: whether `control` moves the gold to the hero you play (default true); a boolean sets it.
+    function P.shared_purse(on)
+        assert(on == nil or type(on) == 'boolean', 'on must be a boolean')
+        return native.party_shared_purse(on)
+    end
+    -- give_gold(from, to, amount) -> true | nil, message: moves gold between two party heroes (single player).
+    function P.give_gold(from, to, amount)
+        local a = type(from) == 'table' and from.id or from
+        local b = type(to) == 'table' and to.id or to
+        assert(type(a) == 'number' and type(b) == 'number', 'expected creatures or their ids')
+        assert(type(amount) == 'number', 'amount must be a number')
+        return native.party_give_gold(a, b, math.max(0, math.floor(amount)))
+    end
     -- share_experience(share, radius): experience a party hero gains from the game also goes to the others within
     -- `radius` world units (0 or nil: anywhere), times `share` (0 turns it off, 1 the full amount).
     function P.share_experience(share, radius)

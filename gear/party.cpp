@@ -359,6 +359,7 @@ namespace
 
     decltype(Addr::cStats_addExperience)::Ptr g_origAddExperience = nullptr;
     double g_share = 0;
+    bool g_sharedPurse = true;   // gear.party.shared_purse
     double g_shareRadius = 0;
     bool g_sharing = false;
 
@@ -910,9 +911,9 @@ bool Party::control(uint32_t id, const char*& error)
     }
     const uintptr_t p = players();
     const uintptr_t e = engine();
-    // The gold is the party's: it goes with control.
+    // The gold is the party's: it goes with control (unless the heroes keep their own).
     uint32_t goldFrom = 0, goldTo = 0;
-    if (readAt(from, kGold, goldFrom) && readAt(to, kGold, goldTo))
+    if (g_sharedPurse && readAt(from, kGold, goldFrom) && readAt(to, kGold, goldTo))
     {
         const uint32_t sum = static_cast<uint32_t>(std::min<uint64_t>(static_cast<uint64_t>(goldFrom) + goldTo, 0x7FFFFFFE));
         writeAt(to, kGold, sum);
@@ -944,6 +945,68 @@ bool Party::control(uint32_t id, const char*& error)
         LOG("Party: the anti-cheat shadow could not be refreshed");
     }
     LOG("Party: control {} -> {} ({} objects change owner)", old, id, moved);
+    return true;
+}
+
+void Party::setSharedPurse(bool shared)
+{
+    g_sharedPurse = shared;
+}
+
+bool Party::sharedPurse()
+{
+    return g_sharedPurse;
+}
+
+bool Party::giveGold(uint32_t fromId, uint32_t toId, uint32_t amount, const char*& error)
+{
+    const char* why = nullptr;
+    if (!available(why))
+    {
+        error = why;
+        return false;
+    }
+    const uintptr_t from = heroObject(fromId);
+    const uintptr_t to = heroObject(toId);
+    if (!from || !to || fromId == toId || !sameOwnerAsLocal(from) || !sameOwnerAsLocal(to))
+    {
+        error = "not two different party heroes";
+        return false;
+    }
+    uint32_t goldFrom = 0, goldTo = 0;
+    if (!readAt(from, kGold, goldFrom) || !readAt(to, kGold, goldTo))
+    {
+        error = "cannot read the heroes' gold";
+        return false;
+    }
+    constexpr uint32_t kMaxGold = 0x7FFFFFFE;   // the engine's own limit
+    amount = std::min({amount, goldFrom, goldTo >= kMaxGold ? 0u : kMaxGold - goldTo});
+    if (amount == 0)
+    {
+        return true;
+    }
+    // The controlled hero's gold goes through the engine's setter, the others' is written as `control` does.
+    auto put = [&](uint32_t id, uintptr_t o, uint32_t gold) {
+        if (id == World::localId())
+        {
+            return World::setGold(id, gold, error);
+        }
+        if (!writeAt(o, kGold, gold))
+        {
+            error = "cannot write the hero";
+            return false;
+        }
+        return true;
+    };
+    if (!put(fromId, from, goldFrom - amount))
+    {
+        return false;
+    }
+    if (!put(toId, to, goldTo + amount))
+    {
+        put(fromId, from, goldFrom);   // give it back
+        return false;
+    }
     return true;
 }
 

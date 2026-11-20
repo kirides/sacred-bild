@@ -75,6 +75,15 @@ namespace Party
     // to it. False and `error` if it cannot.
     bool control(uint32_t id, const char*& error);
 
+    // The party's purse: on (the default), `control` moves the gold of the hero it leaves to the hero it gives control to, as the
+    // game's single purse. Off: every hero keeps their own gold (it is in their savegame record as usual).
+    void setSharedPurse(bool shared);
+    bool sharedPurse();
+
+    // Moves `amount` gold (at most what `from` holds and what `to` can take) from one party hero to another, single player. The
+    // controlled hero's gold goes through the engine's own setter (its anti-cheat copy stays in step).
+    bool giveGold(uint32_t from, uint32_t to, uint32_t amount, const char*& error);
+
     enum class OrderKind
     {
         Move,
