@@ -4,7 +4,7 @@
     <link type="text/rcss" href="demo.rcss"/>
 </head>
 <body>
-    <div id="window">
+    <div id="window" data-panel="demo" data-title="RmlUi demo">
         <!-- The corner ornaments of the game's own tooltip frame (gear.ui.native.frame): UI images 54 and 55. -->
         <img class="corner tl" src="gear:image/54"/>
         <img class="corner tr" src="gear:image/55"/>

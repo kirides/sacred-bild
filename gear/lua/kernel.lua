@@ -3634,14 +3634,44 @@ local function make_ui(mod)
         local layer = UI_LAYERS[opts.layer or 'hud']
         if not layer then error('layer is "world", "hud" or "top"', 2) end
         local id = self.id
-        local hover = false
-        for i, r in ipairs(native.rml_rects(id)) do
-            if region('rml:' .. id .. ':w' .. i, r.x, r.y, r.w, r.h, {layer = opts.layer, nav = false}).hover then hover = true end
+        local mx, my = ui.mouse()
+        if not self.primed then
+            -- Lay the document out once, so its windows have their places before the first frame is drawn.
+            self.primed = true
+            native.rml_update(id, mx, my, false)
         end
-        for i, r in ipairs(native.rml_nav(id)) do
-            local res = region('rml:' .. id .. ':n' .. i, r.x, r.y, r.w, r.h, {layer = opts.layer})
-            if res.hover then hover = true end
-            if res.clicked then native.rml_click(id, i) end
+        local hover = false
+        local panels = self.panels or {}
+        self.panels = panels
+        for i, r in ipairs(native.rml_rects(id)) do
+            if r.panel and r.panel ~= '' then
+                -- A window the player may move (data-panel="name"): a panel of the layout like the ones of gear.ui.panel, so the layout
+                -- editor lists it and keeps its place (mods\gear_layout.json, key "<mod id>:<name>").
+                local key = mod.id .. ':' .. r.panel
+                local p = panels[r.panel]
+                if not p then p = {x = r.x, y = r.y}; panels[r.panel] = p end      -- where the document puts it
+                local x, y = p.x, p.y
+                local saved = layout_get()[key]
+                if saved and saved.x then x, y = from_virtual(saved.x, saved.y) end
+                local sl, st, sr, sb = screen_rect()
+                x, y = math.max(sl, math.min(x, sr - r.w)), math.max(st, math.min(y, sb - r.h))
+                if math.abs(x - r.x) > 0.25 or math.abs(y - r.y) > 0.25 then
+                    if native.rml_move(id, '[data-panel="' .. r.panel .. '"]', x, y) then r.x, r.y = x, y end
+                end
+                ui_panel_list[#ui_panel_list + 1] = {key = key, mod = mod.id, id = r.panel, title = r.title ~= '' and r.title or r.panel,
+                    x = r.x, y = r.y, w = r.w, h = r.h, closable = false, back = false, resizable = false, min_width = 0, min_height = 0,
+                    layer = opts.layer or 'hud'}
+                if ui_edit then ui.frame(r.x, r.y, r.w, r.h, C.accent, 1, {layer = opts.layer}) end
+            end
+            -- In the layout editor the windows take no mouse: the editor drags them.
+            if not ui_edit and region('rml:' .. id .. ':w' .. i, r.x, r.y, r.w, r.h, {layer = opts.layer, nav = false}).hover then hover = true end
+        end
+        if not ui_edit then
+            for i, r in ipairs(native.rml_nav(id)) do
+                local res = region('rml:' .. id .. ':n' .. i, r.x, r.y, r.w, r.h, {layer = opts.layer})
+                if res.hover then hover = true end
+                if res.clicked then native.rml_click(id, i) end
+            end
         end
         if native.rml_wants_text(id) then
             ui.capture_keys(true)
@@ -3662,7 +3692,6 @@ local function make_ui(mod)
             uis.wheel_taken = true
             native.rml_wheel(id, uis.wheel)
         end
-        local mx, my = ui.mouse()
         for _, e in ipairs(native.rml_update(id, mx, my, hover)) do
             local fn = self.handlers[e.listener]
             if fn then

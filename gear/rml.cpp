@@ -877,7 +877,7 @@ namespace
         return 1;
     }
 
-    void pushRect(lua_State* L, Rml::Element* e, float unit, int index)
+    void pushRect(lua_State* L, Rml::Element* e, float unit, int index, bool panel = false)
     {
         const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
         const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
@@ -890,11 +890,20 @@ namespace
         lua_setfield(L, -2, "w");
         lua_pushnumber(L, s.y / unit);
         lua_setfield(L, -2, "h");
+        if (panel)
+        {
+            // data-panel names a window the player may move (the layout editor); data-title is what the editor shows.
+            push(L, e->GetAttribute<Rml::String>("data-panel", ""));
+            lua_setfield(L, -2, "panel");
+            push(L, e->GetAttribute<Rml::String>("data-title", ""));
+            lua_setfield(L, -2, "title");
+        }
         lua_rawseti(L, -2, index);
     }
 
-    // native.rml_rects(id) -> {{x, y, w, h}, ...}: the boxes of the document's top-level elements (the windows), in
-    // layout units; what takes the mouse.
+    // native.rml_rects(id) -> {{x, y, w, h, panel, title}, ...}: the boxes of the document's top-level elements (the windows), in
+    // layout units; what takes the mouse. `panel` is the element's data-panel attribute ('' if none): a window the layout
+    // editor may move (see rml_move).
     int rmlRects(lua_State* L)
     {
         Doc& d = docArg(L);
@@ -910,9 +919,25 @@ namespace
             const Rml::Vector2f s = c->GetBox().GetSize(Rml::BoxArea::Border);
             if (c->IsVisible() && s.x > 0 && s.y > 0)
             {
-                pushRect(L, c, d.unit, index++);
+                pushRect(L, c, d.unit, index++, true);
             }
         }
+        return 1;
+    }
+
+    // native.rml_move(id, selector, x, y) -> found: puts the (absolutely positioned) element at x, y of the layout by its left and
+    // top styles.
+    int rmlMove(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        Rml::Element* e = find(d, str(L, 2));
+        if (e)
+        {
+            const double x = luaL_checknumber(L, 3), y = luaL_checknumber(L, 4);
+            e->SetProperty("left", std::to_string(static_cast<int>(std::lround(x * d.unit))) + "px");
+            e->SetProperty("top", std::to_string(static_cast<int>(std::lround(y * d.unit))) + "px");
+        }
+        lua_pushboolean(L, e != nullptr);
         return 1;
     }
 
@@ -1211,6 +1236,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_update", guarded<rmlUpdate>},
         {"rml_draw", guarded<rmlDraw>},
         {"rml_rects", guarded<rmlRects>},
+        {"rml_move", guarded<rmlMove>},
         {"rml_nav", guarded<rmlNav>},
         {"rml_click", guarded<rmlClick>},
         {"rml_html", guarded<rmlHtml>},

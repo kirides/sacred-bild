@@ -395,6 +395,7 @@ local GearUiRml = {}
 ---@field dp? boolean Lay the document out in screen pixels with `1dp` = one layout unit (crisp text; write sizes in `dp`). Default `false`: `1px` = one layout unit, text is scaled with the UI.
 
 --- The options of `GearRmlDoc.draw`.
+--- A top-level element with `position: absolute` and `data-panel="name"` (and optionally `data-title="Title"`) is a window the player can move in the layout editor, like a `gear.ui.panel`; its place is kept under the layout key `<mod id>:name`.
 ---@class GearRmlDrawOpts
 ---@field layer? 'world'|'hud'|'top' Default `'hud'`.
 

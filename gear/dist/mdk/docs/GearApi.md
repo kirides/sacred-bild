@@ -4424,7 +4424,7 @@ The options of `load` and `load_string`.
 
 ### GearRmlDrawOpts
 
-The options of `GearRmlDoc.draw`.
+The options of `GearRmlDoc.draw`. A top-level element with `position: absolute` and `data-panel="name"` (and optionally `data-title="Title"`) is a window the player can move in the layout editor, like a `gear.ui.panel`; its place is kept under the layout key `<mod id>:name`.
 
 | Field | Type | |
 |---|---|---|

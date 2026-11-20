@@ -2007,7 +2007,8 @@ do
     local clicked_ev, listened = nil, {}
     native.rml_load = function(dir, path, dp) log_rml[#log_rml + 1] = 'load ' .. dir .. ' ' .. path .. ' ' .. tostring(dp); return 7 end
     native.rml_load_string = function() return nil, 'bad markup' end
-    native.rml_rects = function() return {{x = 10, y = 10, w = 100, h = 50}} end
+    native.rml_rects = function() return {{x = 10, y = 10, w = 100, h = 50, panel = 'main', title = 'Main'}} end
+    native.rml_move = function() return true end
     native.rml_nav = function() return {{x = 20, y = 20, w = 40, h = 16}, {x = 20, y = 40, w = 40, h = 16}} end
     native.rml_wants_text = function() return false end
     native.rml_listen = function(id, sel, ev) listened[#listened + 1] = sel .. '/' .. ev; return #listened, 1 end
