@@ -857,6 +857,118 @@ namespace
         }
     }
 
+    // The families the host registers for the theme: "Segoe UI" (the modern default; Arial under that name if Segoe is missing),
+    // "Sacred Game" (the game's own ANTQS__.TTF from the font folder next to Sacred.exe; the default face if it is missing) and
+    // "Sacred Start" (CAROLING.TTF, the start screen's; else the game font). A stylesheet can always say font-family: Sacred Game.
+    struct FontReport
+    {
+        std::string family;
+        bool real = false;          // the intended file was found and loaded (not the fallback)
+        std::string file;           // the file the family's regular face comes from
+    };
+    FontReport g_fontDefault{"Segoe UI"}, g_fontGame{"Sacred Game"}, g_fontStart{"Sacred Start"};
+    std::vector<std::unique_ptr<std::string>> g_fontData;       // RmlUi needs the data until Shutdown
+
+    std::string slurpFont(const fs::path& path)
+    {
+        std::error_code ec;
+        if (!fs::is_regular_file(path, ec))
+        {
+            return {};
+        }
+        std::ifstream in(path, std::ios::binary);
+        if (!in)
+        {
+            return {};
+        }
+        std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        return bytes.size() > 64 && bytes.size() < 32u * 1024 * 1024 ? bytes : std::string();
+    }
+
+    bool addFace(const std::string& family, const std::string& bytes, Rml::Style::FontStyle style, Rml::Style::FontWeight weight)
+    {
+        if (bytes.empty())
+        {
+            return false;
+        }
+        g_fontData.push_back(std::make_unique<std::string>(bytes));
+        const std::string& kept = *g_fontData.back();
+        return Rml::LoadFontFace(Rml::Span<const Rml::byte>(reinterpret_cast<const Rml::byte*>(kept.data()), kept.size()), family, style, weight, false);
+    }
+
+    fs::path gameFontDir()
+    {
+        wchar_t exe[MAX_PATH] = {};
+        const DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
+        if (n == 0 || n >= MAX_PATH)
+        {
+            return {};
+        }
+        return fs::path(exe).parent_path() / L"font";
+    }
+
+    void registerThemeFonts(const fs::path& system)
+    {
+        using Rml::Style::FontStyle;
+        using Rml::Style::FontWeight;
+        // Default: Segoe UI as installed; Arial registered under the same name if it is not.
+        const std::string segoe = slurpFont(system / "segoeui.ttf");
+        std::string regular, bold, italic;
+        if (!segoe.empty())
+        {
+            regular = segoe;
+            g_fontDefault.real = true;
+            g_fontDefault.file = toUtf8(system / "segoeui.ttf");
+        }
+        else
+        {
+            regular = slurpFont(system / "arial.ttf");
+            bold = slurpFont(system / "arialbd.ttf");
+            italic = slurpFont(system / "ariali.ttf");
+            g_fontDefault.real = false;
+            g_fontDefault.file = toUtf8(system / "arial.ttf");
+            if (addFace("Segoe UI", regular, FontStyle::Normal, FontWeight::Normal))
+            {
+                addFace("Segoe UI", bold, FontStyle::Normal, FontWeight::Bold);
+                addFace("Segoe UI", italic, FontStyle::Italic, FontWeight::Normal);
+            }
+            else
+            {
+                LOG("RmlUi: neither Segoe UI nor Arial found in {}", toUtf8(system));
+            }
+        }
+        const std::string defaultBold = !bold.empty() ? bold : slurpFont(system / "segoeuib.ttf");
+        // Game font and start screen font from the folder next to Sacred.exe.
+        const fs::path dir = gameFontDir();
+        const std::string game = dir.empty() ? std::string() : slurpFont(dir / "ANTQS__.TTF");
+        const std::string start = dir.empty() ? std::string() : slurpFont(dir / "CAROLING.TTF");
+        if (!game.empty() && addFace("Sacred Game", game, FontStyle::Normal, FontWeight::Normal))
+        {
+            g_fontGame.real = true;
+            g_fontGame.file = toUtf8(dir / "ANTQS__.TTF");
+        }
+        else
+        {
+            g_fontGame.real = false;
+            g_fontGame.file = g_fontDefault.file;
+            addFace("Sacred Game", regular, FontStyle::Normal, FontWeight::Normal);
+            addFace("Sacred Game", defaultBold, FontStyle::Normal, FontWeight::Bold);
+        }
+        if (!start.empty() && addFace("Sacred Start", start, FontStyle::Normal, FontWeight::Normal))
+        {
+            g_fontStart.real = true;
+            g_fontStart.file = toUtf8(dir / "CAROLING.TTF");
+        }
+        else
+        {
+            g_fontStart.real = false;
+            g_fontStart.file = g_fontGame.file;
+            addFace("Sacred Start", g_fontGame.real ? game : regular, FontStyle::Normal, FontWeight::Normal);
+        }
+        LOG("RmlUi fonts: default '{}' ({}), game '{}' ({}), start '{}' ({})", g_fontDefault.family, g_fontDefault.real ? "Segoe UI" : "Arial",
+            g_fontGame.family, g_fontGame.real ? g_fontGame.file : "fallback", g_fontStart.family, g_fontStart.real ? g_fontStart.file : "fallback");
+    }
+
     // RmlUi starts with the first document; false (with the reason logged) if it cannot.
     bool ensureStarted()
     {
@@ -890,6 +1002,7 @@ namespace
         loadFont(fonts / "segoeuiz.ttf", false);
         loadFont(fonts / "seguisym.ttf", true);
         g_allowFonts = false;
+        registerThemeFonts(fonts);
         LOG("RmlUi {} started", Rml::GetVersion());
         return true;
     }
@@ -1899,6 +2012,32 @@ namespace
         return 0;
     }
 
+    // native.rml_fonts() -> {default = {family, real, file}, game = {...}, start = {...}}: the families registered for the theme and whether
+    // each comes from its real file or is the fallback.
+    int rmlFonts(lua_State* L)
+    {
+        if (!ensureStarted())
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 3);
+        const auto put = [&](const char* key, const FontReport& f) {
+            lua_createtable(L, 0, 3);
+            push(L, f.family);
+            lua_setfield(L, -2, "family");
+            lua_pushboolean(L, f.real ? 1 : 0);
+            lua_setfield(L, -2, "real");
+            push(L, f.file);
+            lua_setfield(L, -2, "file");
+            lua_setfield(L, -2, key);
+        };
+        put("default", g_fontDefault);
+        put("game", g_fontGame);
+        put("start", g_fontStart);
+        return 1;
+    }
+
     // native.rml_font(dir, path) -> ok: a font file of the mod (TTF / OTF) for the documents' font-family
     int rmlFont(lua_State* L)
     {
@@ -1958,6 +2097,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_key", guarded<rmlKey>},
         {"rml_wheel", guarded<rmlWheel>},
         {"rml_font", guarded<rmlFont>},
+        {"rml_fonts", guarded<rmlFonts>},
         {nullptr, nullptr},
     };
     for (const luaL_Reg* r = kNatives; r->name; ++r)

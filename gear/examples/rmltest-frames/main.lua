@@ -1,7 +1,7 @@
 -- Sacred.exe -gear-auto -gear-load=1 -gear-mods=theme,rmltest-frames: screenshots of the thick frame and the game buttons in their states
 if not gear.auto then return end
 local A, ui = gear.auto, gear.ui
-local doc, checks
+local doc, checks, fonts
 gear.on('draw', function(state)
     if not state or state.mode ~= 'game' then return end
     if not doc then
@@ -9,6 +9,8 @@ gear.on('draw', function(state)
         if not doc then print('load failed ' .. tostring(err)) end
     end
     if not checks then checks = ui.rml.load('ui/checks.rml', {model = {flag = false}}) end
+    if not fonts then fonts = ui.rml.load('ui/fonts.rml') end
+    if fonts then fonts:draw({layer = 'top'}) end
     if doc then doc:draw({layer = 'top'}) end
     if checks then checks:draw({layer = 'top'}) end
 end)
@@ -21,6 +23,9 @@ gear.task(function()
     gear.wait(2.5)
     A.move(1500, 800); gear.wait(0.5)
     A.screenshot('frames-1-base')
+    local ff = ui.rml.fonts()
+    for _, k in ipairs({'default', 'game', 'start'}) do print('font', k, ff[k].family, ff[k].real, ff[k].file) end
+    print('game_font', ui.rml.game_font())
     for _, id in ipairs({'#gb-wide', '#gb-narrow', '#gb-mid', '#gb-dis', '#gb-pad', '#gb-plain'}) do
         local r = doc:query(id):rect()
         print('rect', id, r.x, r.y, r.w, r.h)

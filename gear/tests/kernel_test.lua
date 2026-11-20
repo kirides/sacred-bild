@@ -2137,6 +2137,19 @@ do
     native.rml_close = function(id) log_rml[#log_rml + 1] = 'close ' .. id end
     local rml = gear_a.ui.rml
     ok(type(rml) == 'table' and rml.load and rml.load_string and rml.load_font, 'rml: the API is there')
+    -- The font families: the host reports them, the Lua side passes them on; without the host function it is the modern face.
+    ok(type(rml.fonts) == 'function' and type(rml.game_font) == 'function', 'rml: fonts and game_font exist')
+    local saved_fonts = native.rml_fonts
+    native.rml_fonts = nil
+    local family, real = rml.game_font()
+    ok(rml.fonts() == nil and family == 'Segoe UI' and real == false, 'rml.game_font falls back to the default face without the host')
+    native.rml_fonts = function()
+        return {default = {family = 'Segoe UI', real = true, file = 'a.ttf'}, game = {family = 'Sacred Game', real = false, file = 'a.ttf'},
+                start = {family = 'Sacred Start', real = false, file = 'a.ttf'}}
+    end
+    family, real = rml.game_font()
+    ok(family == 'Sacred Game' and real == false and rml.fonts().start.family == 'Sacred Start', 'rml.game_font and rml.fonts report what the host registered')
+    native.rml_fonts = saved_fonts
     local doc = rml.load('ui/main.rml', {dp = true})
     ok(doc and log_rml[1]:match('^load %S+ ui/main%.rml true$'), 'rml.load asks the host with the mod folder and the dp flag')
     ok(select(2, rml.load_string('<x')) == 'bad markup', 'rml.load_string passes the message of a failure on')

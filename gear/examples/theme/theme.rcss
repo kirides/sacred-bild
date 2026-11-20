@@ -4,6 +4,10 @@
 
 body { font-size: 15dp; color: #f0f0f0; }
 
+/* Fonts (families Gear registers: see gear.ui.rml.fonts; each falls back to the modern face when its file is missing). Body text stays modern; the native-looking pieces
+   (game-button, titlebar, heading, check-row text, list item names) use the game's own font, and any element can pick one with a class: .font-game (ANTQS__.TTF),
+   .font-default (Segoe UI) and .font-start (CAROLING.TTF, the start screen's, hard to read). The classes (written with a repeated class so they win over the rules of the pieces). */
+
 /* A window: .window is the frame (the game's tooltip border and fill); .titlebar its brown header with the title and a close mark; .body the content. */
 .window {
     /* The game's own frame (tooltip: bars, fill, overhanging corner ornaments) is drawn by Gear behind every top-level element with
@@ -11,6 +15,7 @@ body { font-size: 15dp; color: #f0f0f0; }
     padding: 6px;
 }
 .window > .titlebar {
+    font-family: "Sacred Game";
     padding: 4px 10px;
     background-color: #302418;
     color: #f0c860;
@@ -19,7 +24,7 @@ body { font-size: 15dp; color: #f0f0f0; }
 .window.plain { padding: 14px 16px; }
 
 /* Text: .heading is a section title in the gold of the legacy headings; .label / .value are a grey name and its white value. */
-.heading { color: #f0c860; margin: 8px 0 4px 0; }
+.heading { font-family: "Sacred Game"; color: #f0c860; margin: 8px 0 4px 0; }
 .label { color: #9a9a9a; }
 .value { color: #f0f0f0; }
 .muted { color: #8c8c8c; }
@@ -64,7 +69,7 @@ input.field:focus, select.field:focus { border-color: #ffd780; }
 /* An item that is a button (a pad stop) is a row like the others, not a shrunk inline box. */
 .list button.item { display: block; margin-right: 0; text-align: left; }
 .list .item.selected { background-color: #4a3f2a; border-color: #ffd780; }
-.item .name { color: #ffd780; font-weight: bold; }
+.item .name { font-family: "Sacred Game"; color: #ffd780; font-weight: bold; }
 .item .sub { color: #9a9a9a; }
 
 /* Bars (health, progress): <div class="bar"><div class="fill" style="width: 40%"/></div>. */
@@ -129,8 +134,9 @@ button.game-button {
     background-color: transparent;
     decorator: image(gear:image/281 repeat-x) content-box, image(gear:image/280 scale-none left center) border-box, image(gear:image/282 scale-none right center) border-box;
     color: #e4e4e4;
-    font-size: 14px;
-    line-height: 30px;
+    font-family: "Sacred Game";
+    font-size: 18px;
+    line-height: 31px;
     text-align: center;
     cursor: pointer;
     transform: none;
@@ -166,4 +172,9 @@ input.game-check:checked:active { decorator: image(glow.png scale-none center ce
 input.game-check[disabled], input.game-check[disabled]:hover, input.game-check[disabled]:focus { opacity: 0.5; decorator: image(gear:image/272 scale-none center center); }
 input.game-check[disabled]:checked, input.game-check[disabled]:checked:hover { decorator: image(gear:image/323 scale-none center center); }
 .check-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 40px; }
-.check-row .text { color: #e4e4e4; font-size: 14px; }
+.check-row .text { font-family: "Sacred Game"; color: #e4e4e4; font-size: 18px; }
+
+/* Pick a font for any text: the game's own, the modern default, the start screen's. */
+.font-game.font-game.font-game, .font-game { font-family: "Sacred Game"; }
+.font-start.font-start.font-start, .font-start { font-family: "Sacred Start"; }
+.font-default.font-default.font-default, .font-default { font-family: "Segoe UI"; }

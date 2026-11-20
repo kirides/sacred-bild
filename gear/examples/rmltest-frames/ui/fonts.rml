@@ -1,0 +1,13 @@
+<rml>
+<head><title>Fonts</title></head>
+<body>
+<div id="fw" class="window" data-panel="fw" data-title="Fonts" style="position: absolute; left: 60px; top: 400px; width: 450px;">
+    <p class="heading">Heading (game font by theme)</p>
+    <p>Body text stays modern: The quick brown fox jumps over the lazy dog 0123456789</p>
+    <p class="font-game">.font-game: The quick brown fox jumps over the lazy dog 0123456789</p>
+    <p class="font-default">.font-default: The quick brown fox jumps over the lazy dog 0123456789</p>
+    <p class="font-start" style="font-size: 22px">.font-start: The quick brown fox Ä Ö Ü</p>
+    <div class="row"><button id="fb" class="game-button">Zurück</button><button class="game-button font-default">Zurück (default font)</button></div>
+</div>
+</body>
+</rml>

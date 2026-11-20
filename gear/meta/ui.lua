@@ -536,6 +536,23 @@ function GearUiRml.load_string(markup, opts) end
 ---@return boolean ok
 function GearUiRml.load_font(path, fallback) end
 
+---@class GearRmlFont
+---@field family string The name for `font-family`.
+---@field real boolean True when the family comes from its real file, false when it is the fallback (the family name still works).
+---@field file string The file the regular face comes from.
+
+--- The font families Sacred Gear registers for documents: `default` is `Segoe UI` (Arial under that name if Segoe is missing), `game` is
+--- `Sacred Game` (the game's own `ANTQS__.TTF` from the `font` folder next to Sacred.exe; the default face when that file is missing) and
+--- `start` is `Sacred Start` (`CAROLING.TTF`, the start screen's; else the game font). A stylesheet can always say `font-family: Sacred Game`;
+--- the theme's classes `font-game`, `font-default` and `font-start` use them. Nil before RmlUi could start.
+---@return {default: GearRmlFont, game: GearRmlFont, start: GearRmlFont}?
+function GearUiRml.fonts() end
+
+--- The family name of the game's own font and whether it is the real file (false: the fallback is registered under that name).
+---@return string family
+---@return boolean real
+function GearUiRml.game_font() end
+
 --- Calls `fn(event, doc)` when `event` happens on an element that matches `selector`, or inside one (the innermost match is reported).
 --- Elements added later are covered too: the listener sits on the document and matches when the event arrives.
 ---@param selector string `'#id'`, `'.class'`, a tag, `'button.primary'` ... ; `''` is the document.

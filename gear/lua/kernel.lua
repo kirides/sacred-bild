@@ -3946,6 +3946,16 @@ local function make_ui(mod)
         return native.rml_font and native.rml_font(mod.dir, path, fallback and true or false) or false
     end
 
+    -- rml.fonts() -> {default, game, start}, each {family, real, file}: the font families the theme uses (font-family: Sacred Game ...) and whether
+    -- each is its real file (the game's ANTQS__.TTF and CAROLING.TTF from the font folder next to Sacred.exe, Segoe UI) or the fallback.
+    function rml.fonts() return native.rml_fonts and native.rml_fonts() or nil end
+    -- rml.game_font() -> family, real: the game's own font family for font-family, and whether it is the real file.
+    function rml.game_font()
+        local f = rml.fonts()
+        if not f then return 'Segoe UI', false end
+        return f.game.family, f.game.real
+    end
+
     local function rml_escape(text)
         return (tostring(text):gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;'))
     end
