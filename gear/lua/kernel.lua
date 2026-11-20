@@ -2847,8 +2847,8 @@ end
 local ui_handles = {}       -- key (mod id .. '\0' .. widget id) -> handle
 local ui_handle_key = {}    -- handle -> key
 local ui_next_handle = 1
-local ui_regions = {}       -- this tick's regions, in order: {handle, layer, x, y, w, h}
-local ui_prev_regions = {}
+local ui_regions = {n = 0}  -- this tick's regions, in order: {handle, layer, x, y, w, h, id, mod}; entries are reused (n = how many are live)
+local ui_prev_regions = {n = 0}
 local ui_input = {}         -- handle -> {pressed, released, clicked} of this tick
 local ui_active = nil       -- the handle whose press has no release yet
 local ui_hot = nil          -- the topmost region under the cursor
@@ -2863,7 +2863,7 @@ local ui_panel_list = {}    -- the panels of all mods drawn this tick, in order:
 local ui_panel_prev = {}    -- the last tick's
 -- The controller (SacredBild's D-pad): the widgets' rectangles are reported as stops each tick; the pad's events
 -- (slider nudges, B, the mod menu button) come back.
-local ui_nav = {}           -- this tick's stops: {mod, x, y, w, h, layer, kind, ax, ay, drop}
+local ui_nav = {n = 0}      -- this tick's stops: {mod, x, y, w, h, layer, kind, ax, ay, drop}; entries are reused (n = how many are live)
 local ui_nav_modal = nil    -- the mod whose screen takes the pad alone (ui.nav_modal)
 local ui_window_open = false    -- a closable panel is up this tick
 local ui_pad = {nudge = 0, back = 0, menu = 0}
@@ -2921,14 +2921,24 @@ function uis.scroll_from_thumb(pos, content, view, track, size)
 end
 kernel.scroll_math = {clamp = uis.scroll_clamp, thumb = uis.scroll_thumb, from_thumb = uis.scroll_from_thumb}
 
+uis.handles_by_mod = {}   -- mod id -> widget id (as given: a string or a number) -> handle; looked up every frame, so no string is built
 local function ui_handle(mod, id)
-    local key = mod.id .. '\0' .. tostring(id)
-    local h = ui_handles[key]
+    local per_mod = uis.handles_by_mod[mod.id]
+    if not per_mod then
+        per_mod = {}
+        uis.handles_by_mod[mod.id] = per_mod
+    end
+    local h = per_mod[id]
     if not h then
-        h = ui_next_handle
-        ui_next_handle = ui_next_handle + 1
-        ui_handles[key] = h
-        ui_handle_key[h] = key
+        local key = mod.id .. '\0' .. tostring(id)
+        h = ui_handles[key]
+        if not h then
+            h = ui_next_handle
+            ui_next_handle = ui_next_handle + 1
+            ui_handles[key] = h
+            ui_handle_key[h] = key
+        end
+        per_mod[id] = h
     end
     return h
 end
@@ -2936,10 +2946,11 @@ end
 local function ui_begin_tick()
     ui_counts = {}
     ui_slots = nil
-    ui_prev_regions, ui_regions = ui_regions, {}
+    ui_prev_regions, ui_regions = ui_regions, ui_prev_regions      -- two pooled arrays: entries are overwritten, `n` counts the live ones
+    ui_regions.n = 0
     ui_panel_prev, ui_panel_list = ui_panel_list, {}
     ui_tooltip = nil
-    ui_nav, ui_window_open = {}, false
+    ui_nav.n, ui_window_open = 0, false
     do
         local nudge, back, menu = native.ui_pad()
         ui_pad = {nudge = nudge or 0, back = back or 0, menu = menu or 0}
@@ -2974,7 +2985,8 @@ local function ui_begin_tick()
     -- The topmost region of the last frame under the cursor (layers in draw order, then the order registered).
     ui_hot = nil
     local best = -1
-    for i, r in ipairs(ui_prev_regions) do
+    for i = 1, ui_prev_regions.n do
+        local r = ui_prev_regions[i]
         local rank = r.layer * 100000 + i
         if rank > best and ui_mouse.x >= r.x and ui_mouse.y >= r.y and ui_mouse.x < r.x + r.w and ui_mouse.y < r.y + r.h then
             ui_hot, best = r.handle, rank
@@ -3001,7 +3013,8 @@ local function ui_begin_tick()
             if ui_active == e.region then
                 ui_active = nil
                 -- A click: released over the region it was pressed on.
-                for _, r in ipairs(ui_prev_regions) do
+                for ri = 1, ui_prev_regions.n do
+                    local r = ui_prev_regions[ri]
                     if r.handle == e.region and e.x >= r.x and e.y >= r.y and e.x < r.x + r.w and e.y < r.y + r.h then
                         s.clicked = true
                     end
@@ -3073,35 +3086,39 @@ end
 -- message box is up.
 local function ui_push_nav()
     local s = ui_tick_state or {}
-    local list, flags = {}, 0
-    local drop = {}
-    for _, n in ipairs(ui_nav) do
-        if n.drop then drop[#drop + 1] = n end
+    local out = uis.nav_out
+    if not out then out = {}; uis.nav_out = out end
+    local count = ui_nav.n
+    -- Which stops: an open dropdown's list, or the modal screen's, or all (the top layer's only while the game's menu is up).
+    local mode, flags = 'all', 0
+    for i = 1, count do
+        if ui_nav[i].drop then mode, flags = 'drop', 1; break end
     end
-    if #drop > 0 then
-        list, flags = drop, 1
-    elseif uis.modal then
-        -- A modal RmlUi document: the pad stays on its stops (only they were registered), the game takes no pad input.
-        for _, n in ipairs(ui_nav) do list[#list + 1] = n end
-        flags = 1
-    elseif ui_nav_modal then
-        for _, n in ipairs(ui_nav) do
-            if n.mod == ui_nav_modal then list[#list + 1] = n end
+    if mode == 'all' then
+        if uis.modal then mode, flags = 'modal_doc', 1
+        elseif ui_nav_modal then mode, flags = 'modal_mod', 1
+        else
+            if s.escape_menu or s.message_box then mode = 'top' end
+            if ui_window_open then flags = 2 end
         end
-        flags = 1
-    else
-        local top_only = s.escape_menu or s.message_box
-        for _, n in ipairs(ui_nav) do
-            if not top_only or n.layer == 2 then list[#list + 1] = n end
+    end
+    local n = 0
+    for i = 1, count do
+        local e = ui_nav[i]
+        local take
+        if mode == 'drop' then take = e.drop
+        elseif mode == 'modal_mod' then take = e.mod == ui_nav_modal
+        elseif mode == 'top' then take = e.layer == 2
+        else take = true end
+        if take and n < 400 then
+            n = n + 1
+            local row = out[n]
+            if not row then row = {}; out[n] = row end
+            row.x, row.y = e.ax or (e.x + e.w / 2), e.ay or (e.y + e.h / 2)
+            row.left, row.top, row.width, row.height, row.kind = e.x, e.y, e.w, e.h, e.kind or 0
         end
-        if ui_window_open then flags = 2 end
     end
-    local out = {}
-    for i, n in ipairs(list) do
-        if i > 400 then break end
-        out[i] = {x = n.ax or (n.x + n.w / 2), y = n.ay or (n.y + n.h / 2), left = n.x, top = n.y, width = n.w,
-            height = n.h, kind = n.kind or 0}
-    end
+    for i = n + 1, #out do out[i] = nil end        -- the host counts the rows by the table's length
     native.ui_nav(out, flags)
 end
 
@@ -3519,10 +3536,18 @@ local function make_ui(mod)
         end
         ui_count(mod)
         native.ui_region(layer, x, y, w, h, handle)
-        ui_regions[#ui_regions + 1] = {handle = handle, layer = layer, x = x, y = y, w = w, h = h, id = tostring(id), mod = mod.id}
+        local rn = ui_regions.n + 1
+        ui_regions.n = rn
+        local re = ui_regions[rn]
+        if not re then re = {}; ui_regions[rn] = re end
+        re.handle, re.layer, re.x, re.y, re.w, re.h, re.id, re.mod = handle, layer, x, y, w, h, id, mod.id
         if opts.nav ~= false and opts.enabled ~= false then
-            ui_nav[#ui_nav + 1] = {mod = mod, x = x, y = y, w = w, h = h, layer = layer, kind = opts._nav_kind,
-                ax = opts._nav_x, ay = opts._nav_y, drop = opts._nav_drop}
+            local nn = ui_nav.n + 1
+            ui_nav.n = nn
+            local ne = ui_nav[nn]
+            if not ne then ne = {}; ui_nav[nn] = ne end
+            ne.mod, ne.x, ne.y, ne.w, ne.h, ne.layer = mod, x, y, w, h, layer
+            ne.kind, ne.ax, ne.ay, ne.drop = opts._nav_kind, opts._nav_x, opts._nav_y, opts._nav_drop
         end
         local s = ui_input[handle] or {}
         local enabled = opts.enabled ~= false
@@ -5202,8 +5227,9 @@ local function make_auto()
     -- given) was drawn in the last tick, in UI layout coordinates (clipped to a scroll area); nil when it was not drawn.
     function auto.widget(id, mod_id)
         id, mod_id = tostring(id), mod_id or mod.id
-        for _, r in ipairs(ui_prev_regions) do
-            if r.id == id and r.mod == mod_id then return r.x, r.y, r.w, r.h end
+        for ri = 1, ui_prev_regions.n do
+            local r = ui_prev_regions[ri]
+            if tostring(r.id) == id and r.mod == mod_id then return r.x, r.y, r.w, r.h end
         end
     end
     -- In a task: click the UI layout point (x, y), or the center of a node from ui().
