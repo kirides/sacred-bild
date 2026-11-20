@@ -939,6 +939,39 @@ do
     state_file = good
 end
 
+-- load order: the player's list ("order" in gear_mods.json) first, the others by priority then id; a requirement still
+-- loads before the mod that needs it; the list survives a save
+do
+    local good = state_file
+    local function order_of(file)
+        state_file = file
+        local first = #logs + 1
+        files.lo_a = {['mod.lua'] = "return {id = 'lo_a', priority = -5}", ['main.lua'] = ''}
+        files.lo_b = {['mod.lua'] = "return {id = 'lo_b', priority = 5}", ['main.lua'] = ''}
+        files.lo_c = {['mod.lua'] = "return {id = 'lo_c', requires = {'lo_a'}}", ['main.lua'] = ''}
+        files.lo_d = {['mod.lua'] = "return {id = 'lo_d'}", ['main.lua'] = ''}
+        local k = new_kernel()
+        k.load()
+        local out = {}
+        for i = first, #logs do
+            local id = logs[i]:match('^mod (lo_%a) %S+ loaded')
+            if id then out[#out + 1] = id end
+        end
+        return table.concat(out, ','), k
+    end
+    ok(order_of(nil) == 'lo_a,lo_c,lo_d,lo_b', 'without a saved order: priority, then id')
+    ok(order_of('{"mods":{},"order":["lo_d","lo_b","gone","lo_d"]}') == 'lo_d,lo_b,lo_a,lo_c', 'listed mods first, in the list; the rest by priority')
+    ok(order_of('{"mods":{},"order":["lo_c","lo_b","lo_a","lo_d"]}') == 'lo_a,lo_c,lo_b,lo_d', 'a requirement loads before the mod that needs it')
+    ok(order_of('{"mods":{},"order":"nonsense"}') == 'lo_a,lo_c,lo_d,lo_b', 'a malformed order is ignored')
+    local _, k = order_of('{"version":1,"mods":{},"order":["lo_d","lo_b"]}')
+    local handle = handler_global(k, 'frame', 'adm')
+    ok(handle and handle.set_enabled('lo_b', false) == true, 'toggle for a save')
+    k.flush()
+    ok(state_file:find('"order":["lo_d","lo_b"]', 1, true), 'the order is written back unchanged')
+    files.lo_a, files.lo_b, files.lo_c, files.lo_d = nil, nil, nil, nil
+    state_file = good
+end
+
 -- key binds
 local function press(vks, down)
     for _, vk in ipairs(vks) do keys_held[vk] = down or nil end
