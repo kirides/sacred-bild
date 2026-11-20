@@ -57,9 +57,11 @@ gear.task(function()
     A.click(px('#c4')); gear.wait(0.5)
     print('after ', st('#r1'), st('#r2'), st('#r3'), st('#c1'), st('#c2'), st('#c3'), st('#c4'))
     A.screenshot('checks-2-clicked')
-    A.move(px('#c2')); gear.wait(0.7)
+    -- the cursor sprite hangs down to the right of its tip: hover with the tip at the lower right of the orb so it does not cover it
+    local function pxo(sel) local x, y = px(sel); return x + 13, y + 13 end
+    A.move(pxo('#c2')); gear.wait(0.7)
     A.screenshot('checks-3-hover-checked')
-    A.move(px('#r2')); gear.wait(0.7)
+    A.move(pxo('#r2')); gear.wait(0.7)
     A.screenshot('checks-4-hover-plain')
     A.down(); gear.wait(0.4)
     A.screenshot('checks-5-pressed')
