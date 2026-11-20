@@ -1,14 +1,16 @@
 -- Sacred.exe -gear-auto -gear-load=1 -gear-mods=theme,rmltest-frames: screenshots of the thick frame and the game buttons in their states
 if not gear.auto then return end
 local A, ui = gear.auto, gear.ui
-local doc
+local doc, checks
 gear.on('draw', function(state)
     if not state or state.mode ~= 'game' then return end
     if not doc then
         local err; doc, err = ui.rml.load('ui/frames.rml')
         if not doc then print('load failed ' .. tostring(err)) end
     end
+    if not checks then checks = ui.rml.load('ui/checks.rml', {model = {flag = false}}) end
     if doc then doc:draw({layer = 'top'}) end
+    if checks then checks:draw({layer = 'top'}) end
 end)
 local function at(sel)
     local r = doc:query(sel):rect()
@@ -32,5 +34,30 @@ gear.task(function()
     A.screenshot('frames-4-hover-disabled')
     A.pad(1, 0, 0); gear.wait(0.8)
     A.screenshot('frames-5-pad')
+    -- check boxes and radio buttons
+    for _, id in ipairs({'#r1', '#c1', '#c4'}) do local r = checks:query(id):rect(); print('crect', id, r.x, r.y, r.w, r.h) end
+    local function px(sel) local r = checks:query(sel):rect(); return A.ui_to_pixels(r.x + r.w / 2, r.y + r.h / 2) end
+    local function st(sel) local e = checks:query(sel); return tostring(e:attr('checked')) end
+    A.move(1500, 850); gear.wait(0.5)
+    A.screenshot('checks-1-base')
+    print('before', st('#r1'), st('#r2'), st('#r3'), st('#c1'), st('#c2'), st('#c3'))
+    A.click(px('#c1')); gear.wait(0.5)
+    print('c1 only', st('#c1'))
+    A.click(px('#r2')); gear.wait(0.5)
+    print('r2 clicked', st('#r1'), st('#r2'), st('#r3'))
+    A.click(px('#r1')); gear.wait(0.5)
+    print('r1 clicked', st('#r1'), st('#r2'), st('#r3'))
+    A.click(px('#c1')); gear.wait(0.5)
+    A.click(px('#c3')); gear.wait(0.5)
+    A.click(px('#c4')); gear.wait(0.5)
+    print('after ', st('#r1'), st('#r2'), st('#r3'), st('#c1'), st('#c2'), st('#c3'), st('#c4'))
+    A.screenshot('checks-2-clicked')
+    A.move(px('#c2')); gear.wait(0.7)
+    A.screenshot('checks-3-hover-checked')
+    A.move(px('#r2')); gear.wait(0.7)
+    A.screenshot('checks-4-hover-plain')
+    A.down(); gear.wait(0.4)
+    A.screenshot('checks-5-pressed')
+    A.up(); gear.wait(0.3)
     A.quit(0)
 end)

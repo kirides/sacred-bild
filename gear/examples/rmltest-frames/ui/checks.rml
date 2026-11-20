@@ -1,0 +1,15 @@
+<rml>
+<head><title>Checks</title></head>
+<body data-model="model">
+<div id="cw" class="thick-frame" data-panel="cw" data-title="Checks" style="position: absolute; left: 560px; top: 60px; width: 330px; height: 352px;">
+    <p class="heading" style="text-align: center">Check boxes and radio buttons</p>
+    <div class="check-row"><span class="text">Gering</span><input id="r1" type="radio" name="detail" value="1" class="game-check"/></div>
+    <div class="check-row"><span class="text">Mittel</span><input id="r2" type="radio" name="detail" value="2" class="game-check"/></div>
+    <div class="check-row"><span class="text">Hoch</span><input id="r3" type="radio" name="detail" value="3" class="game-check" checked/></div>
+    <div class="check-row"><span class="text">Unchecked</span><input id="c1" type="checkbox" class="game-check"/></div>
+    <div class="check-row"><span class="text">Checked</span><input id="c2" type="checkbox" class="game-check" checked/></div>
+    <div class="check-row"><span class="text">Bound: {{ flag }}</span><input id="c3" type="checkbox" class="game-check" data-checked="flag"/></div>
+    <div class="check-row"><span class="text">Disabled</span><input id="c4" type="checkbox" class="game-check" disabled checked/></div>
+</div>
+</body>
+</rml>

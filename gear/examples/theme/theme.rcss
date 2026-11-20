@@ -143,3 +143,27 @@ button.game-button:hover, button.game-button:focus {
 }
 button.game-button:active { decorator: image(gear:image/284 repeat-x) content-box, image(gear:image/283 scale-none left center) border-box, image(gear:image/285 scale-none right center) border-box; color: #fff2a0; }
 button.game-button:disabled, button.game-button[disabled], button.game-button[disabled]:hover, button.game-button[disabled]:focus { color: #8a8a8a; opacity: 0.55; font-effect: none; }
+
+/* Check boxes and radio buttons of the game (class game-check on <input type="checkbox"> or "radio"): the orb of the options screens,
+   plain (image 272) and with the golden check (323), kept at its own size in a box a little larger. Hover and pad focus add a whitish bloom
+   (glow.png) around the orb; no pressed state. Disabled: dim, no bloom. .check-row: the label text on the left, the orb on the right. */
+input.game-check {
+    display: inline-block;
+    width: 52px;
+    height: 52px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background-color: transparent;
+    decorator: image(gear:image/272 scale-none center center);
+    cursor: pointer;
+}
+input.game-check:checked { decorator: image(gear:image/323 scale-none center center); }
+input.game-check:hover, input.game-check:focus { decorator: image(glow.png scale-none center center), image(gear:image/272 scale-none center center); }
+input.game-check:checked:hover, input.game-check:checked:focus { decorator: image(glow.png scale-none center center), image(gear:image/323 scale-none center center); }
+input.game-check:active { decorator: image(glow.png scale-none center center), image(gear:image/272 scale-none center center); }
+input.game-check:checked:active { decorator: image(glow.png scale-none center center), image(gear:image/323 scale-none center center); }
+input.game-check[disabled], input.game-check[disabled]:hover, input.game-check[disabled]:focus { opacity: 0.5; decorator: image(gear:image/272 scale-none center center); }
+input.game-check[disabled]:checked, input.game-check[disabled]:checked:hover { decorator: image(gear:image/323 scale-none center center); }
+.check-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 40px; }
+.check-row .text { color: #e4e4e4; font-size: 14px; }
