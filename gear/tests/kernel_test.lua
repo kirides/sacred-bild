@@ -2007,6 +2007,10 @@ do
     local clicked_ev, listened = nil, {}
     native.rml_model_set = function(id, key, value) log_rml[#log_rml + 1] = 'model ' .. key .. ' ' .. (type(value) == 'table' and 'table' or tostring(value)); return true end
     native.rml_model_changed = function() return nil end
+    native.rml_query = function(id, sel, all) log_rml[#log_rml + 1] = 'query ' .. sel; if all then return {3, 4} end return 3 end
+    native.rml_append = function(id, sel, tag, attrs) log_rml[#log_rml + 1] = 'append ' .. sel .. ' ' .. tag .. ' ' .. tostring(attrs and attrs.class); return 9 end
+    native.rml_tag = function() return 'div' end
+    native.rml_remove = function(id, sel) log_rml[#log_rml + 1] = 'remove ' .. sel; return true end
     native.rml_load = function(dir, path, dp) log_rml[#log_rml + 1] = 'load ' .. dir .. ' ' .. path .. ' ' .. tostring(dp); return 7 end
     native.rml_load_string = function() return nil, 'bad markup' end
     native.rml_rects = function() return {{x = 10, y = 10, w = 100, h = 50, panel = 'main', title = 'Main'}} end
@@ -2031,6 +2035,14 @@ do
     ok(mdoc:get('hp') == 9 and log_rml[#log_rml] == 'model hp 9', 'doc.model writes through to the host')
     mdoc.model.items[1].name = 'b'
     ok(mdoc:get('items')[1].name == 'b' and log_rml[#log_rml] == 'model items table', 'a nested write sends the top-level key again')
+    local el = mdoc:query('#list')
+    ok(el and el.sel == '[data-gh="3"]', 'doc:query gives an element addressed by its handle')
+    ok(#mdoc:query_all('.x') == 2, 'doc:query_all gives the elements')
+    local child = el:append('div', {class = 'item'})
+    ok(child and log_rml[#log_rml] == 'append [data-gh="3"] div item', 'element:append creates a child of the element')
+    ok(child:remove() and log_rml[#log_rml] == 'remove [data-gh="9"]', 'element:remove takes it out')
+    el:query('.name')
+    ok(log_rml[#log_rml] == 'query [data-gh="3"] .name', 'element:query searches below the element')
     mdoc:close()
     log_rml = {}
     ok(doc:on('#ok', 'click', function(e) clicked_ev = e end) and listened[1] == '#ok/click', 'doc:on registers a listener')

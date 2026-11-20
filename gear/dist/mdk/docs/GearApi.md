@@ -4447,6 +4447,121 @@ An event delivered to a `GearRmlDoc.on handler.
 | `current` | `string` | The `id` of the element the handler listens on. |
 | `params` | `table<string, string>` | The event's parameters as text; a form control's `change` has `value`, mouse events `mouse_x` and `mouse_y`. |
 
+### GearRmlElement
+
+An element of a document: a handle, found with `GearRmlDoc.query`. If it is removed (or the markup around it replaced), its methods answer nothing instead of failing.
+
+#### `GearRmlElement:exists() -> boolean`
+
+Whether the element is still in the document.
+
+- returns `boolean`
+
+#### `GearRmlElement:tag() -> string?`
+
+The element's tag name (`'div'`), nil if it is gone.
+
+- returns `string?`
+
+#### `GearRmlElement:query(selector) -> GearRmlElement?`
+
+The first descendant matching a CSS selector.
+
+- `selector`: `string`
+- returns `GearRmlElement?`
+
+#### `GearRmlElement:query_all(selector) -> GearRmlElement[]`
+
+All descendants matching a CSS selector (at most 500).
+
+- `selector`: `string`
+- returns `GearRmlElement[]`
+
+#### `GearRmlElement:parent() -> GearRmlElement?`
+
+The parent element (nil for a top-level element).
+
+- returns `GearRmlElement?`
+
+#### `GearRmlElement:children() -> GearRmlElement[]`
+
+The child elements (at most 500).
+
+- returns `GearRmlElement[]`
+
+#### `GearRmlElement:append(tag, attrs) -> GearRmlElement?`
+
+Adds a new empty element as the last child; fill it with `html` / `text`, or `append` to it.
+
+- `tag`: `string`
+- `attrs`: `table<string, any>` (optional) - Attributes, e.g. `{class = 'item', id = 'row1'}`.
+- returns `child` `GearRmlElement?`
+
+#### `GearRmlElement:remove() -> boolean`
+
+Takes the element out of the document. Returns whether it was there.
+
+- returns `boolean`
+
+#### `GearRmlElement:html(markup) -> string?`
+
+The element's inner markup; with an argument it is replaced.
+
+- `markup`: `string` (optional)
+- returns `string?`
+
+#### `GearRmlElement:text(text) -> string?`
+
+The element's content; with an argument it is replaced by that text (markup characters are escaped).
+
+- `text`: `string` (optional)
+- returns `string?`
+
+#### `GearRmlElement:attr(name, value) -> string?`
+
+An attribute's text; with a value it is set (`true` sets a flag such as `disabled`, `false` removes the attribute).
+
+- `name`: `string`
+- `value`: `string|number|boolean` (optional)
+- returns `string?`
+
+#### `GearRmlElement:class(name, on) -> boolean`
+
+Switches a class on or off.
+
+- `name`: `string`
+- `on`: `boolean`
+- returns `found` `boolean`
+
+#### `GearRmlElement:style(property, value) -> boolean`
+
+Sets an inline style; nil or false takes it off again.
+
+- `property`: `string`
+- `value`: `string|number|false` (optional)
+- returns `found` `boolean`
+
+#### `GearRmlElement:value(text) -> string?`
+
+The value of a form control; with an argument it is set.
+
+- `text`: `string|number` (optional)
+- returns `string?`
+
+#### `GearRmlElement:rect() -> {x: number, y: number, w: number, h: number}?`
+
+The element's box in layout units.
+
+- returns `{x: number, y: number, w: number, h: number}?`
+
+#### `GearRmlElement:on(event, fn) -> boolean`
+
+Calls `fn(event, element)` when the event happens on the element (elements added later do not get it).
+
+- `event`: `string`
+- `fn`: `fun(event: GearRmlEvent, element: GearRmlElement)`
+- returns `ok` `boolean`
+
 ### GearRmlDoc
 
 A loaded document.
@@ -4454,6 +4569,20 @@ A loaded document.
 | Field | Type | |
 |---|---|---|
 | `model` | `table` | The data model's values (when loaded with `model`): read and write them like a table, at any depth; a write refreshes the bindings of the document. (optional) |
+
+#### `GearRmlDoc:query(selector) -> GearRmlElement?`
+
+The first element matching a CSS selector.
+
+- `selector`: `string`
+- returns `GearRmlElement?`
+
+#### `GearRmlDoc:query_all(selector) -> GearRmlElement[]`
+
+All elements matching a CSS selector (at most 500).
+
+- `selector`: `string`
+- returns `GearRmlElement[]`
 
 #### `GearRmlDoc:get(key) -> any`
 

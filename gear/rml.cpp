@@ -731,6 +731,7 @@ namespace
         Rml::DataModelHandle modelHandle;
         bool hasModel = false;
         unsigned modelSeen = 0;
+        int nextHandle = 0;                     // element handles (data-gh), see rml_query
     };
 
     std::map<int, std::unique_ptr<Doc>> g_docs;
@@ -866,6 +867,19 @@ namespace
             return d.document;
         }
         return d.document->QuerySelector(selector);
+    }
+
+    // The handle of an element: the number in its data-gh attribute, given on first use. Lua addresses the element with the selector
+    // [data-gh="N"], so a handle to an element that was removed simply matches nothing.
+    int handleOf(Doc& d, Rml::Element* e)
+    {
+        int h = e->GetAttribute<int>("data-gh", 0);
+        if (h == 0)
+        {
+            h = ++d.nextHandle;
+            e->SetAttribute("data-gh", h);
+        }
+        return h;
     }
 
     constexpr const char* kNavSelector = "button, a, input, select, textarea, [data-nav]";
@@ -1489,6 +1503,157 @@ namespace
         return 1;
     }
 
+    // native.rml_query(id, selector [, all]) -> handle | nil, or with `all` a list of handles (at most 500)
+    int rmlQuery(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        const std::string selector = str(L, 2);
+        if (lua_toboolean(L, 3))
+        {
+            Rml::ElementList list;
+            d.document->QuerySelectorAll(list, selector);
+            lua_createtable(L, static_cast<int>(list.size()), 0);
+            int i = 0;
+            for (Rml::Element* e : list)
+            {
+                if (++i > 500)
+                {
+                    break;
+                }
+                lua_pushnumber(L, handleOf(d, e));
+                lua_rawseti(L, -2, i);
+            }
+            return 1;
+        }
+        Rml::Element* e = find(d, selector);
+        if (e)
+        {
+            lua_pushnumber(L, handleOf(d, e));
+        }
+        else
+        {
+            lua_pushnil(L);
+        }
+        return 1;
+    }
+
+    // native.rml_append(id, parent selector, tag [, {attribute = text}]) -> handle | nil: a new empty element as the last child
+    int rmlAppend(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        Rml::Element* parent = find(d, str(L, 2));
+        if (!parent || !d.document || parent->GetNumChildren(true) >= 2000)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        RootScope scope(d);
+        Rml::ElementPtr child = d.document->CreateElement(str(L, 3));
+        if (!child)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        if (lua_istable(L, 4))
+        {
+            lua_pushnil(L);
+            while (lua_next(L, 4))
+            {
+                if (lua_type(L, -2) == LUA_TSTRING && lua_type(L, -1) != LUA_TTABLE)
+                {
+                    child->SetAttribute(lua_tostring(L, -2), lua_isstring(L, -1) ? std::string(lua_tostring(L, -1)) : std::string());
+                }
+                lua_pop(L, 1);
+            }
+        }
+        Rml::Element* raw = parent->AppendChild(std::move(child));
+        lua_pushnumber(L, raw ? handleOf(d, raw) : 0);
+        return 1;
+    }
+
+    // native.rml_remove(id, selector) -> whether an element was removed (never the document itself)
+    int rmlRemove(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        Rml::Element* e = find(d, str(L, 2));
+        Rml::Element* parent = e ? e->GetParentNode() : nullptr;
+        if (parent && e != d.document)
+        {
+            parent->RemoveChild(e);
+            lua_pushboolean(L, 1);
+        }
+        else
+        {
+            lua_pushboolean(L, 0);
+        }
+        return 1;
+    }
+
+    // native.rml_relatives(id, selector, "parent" | "children") -> handle | nil, or a list of handles
+    int rmlRelatives(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        Rml::Element* e = find(d, str(L, 2));
+        const std::string what = str(L, 3);
+        if (what == "parent")
+        {
+            Rml::Element* p = e ? e->GetParentNode() : nullptr;
+            if (p && p != d.document)
+            {
+                lua_pushnumber(L, handleOf(d, p));
+            }
+            else
+            {
+                lua_pushnil(L);
+            }
+            return 1;
+        }
+        lua_createtable(L, 0, 0);
+        if (e)
+        {
+            const int n = std::min(e->GetNumChildren(), 500);
+            for (int i = 0; i < n; ++i)
+            {
+                lua_pushnumber(L, handleOf(d, e->GetChild(i)));
+                lua_rawseti(L, -2, i + 1);
+            }
+        }
+        return 1;
+    }
+
+    // native.rml_rect(id, selector) -> {x, y, w, h} in layout units | nil
+    int rmlRect(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        Rml::Element* e = find(d, str(L, 2));
+        if (!e)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 1, 0);
+        pushRect(L, e, d.unit, 1);
+        lua_rawgeti(L, -1, 1);
+        lua_remove(L, -2);
+        return 1;
+    }
+
+    // native.rml_tag(id, selector) -> tag name | nil
+    int rmlTag(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        Rml::Element* e = find(d, str(L, 2));
+        if (e)
+        {
+            push(L, e->GetTagName());
+        }
+        else
+        {
+            lua_pushnil(L);
+        }
+        return 1;
+    }
+
     // native.rml_listen(id, selector, event) -> listener id, elements | nil: events of that type on the matching
     // elements come back from rml_update with the listener id.
     int rmlListen(lua_State* L)
@@ -1644,6 +1809,12 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_draw", guarded<rmlDraw>},
         {"rml_rects", guarded<rmlRects>},
         {"rml_move", guarded<rmlMove>},
+        {"rml_query", guarded<rmlQuery>},
+        {"rml_append", guarded<rmlAppend>},
+        {"rml_remove", guarded<rmlRemove>},
+        {"rml_relatives", guarded<rmlRelatives>},
+        {"rml_rect", guarded<rmlRect>},
+        {"rml_tag", guarded<rmlTag>},
         {"rml_model_set", guarded<rmlModelSet>},
         {"rml_model_changed", guarded<rmlModelChanged>},
         {"rml_nav", guarded<rmlNav>},

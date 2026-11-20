@@ -411,10 +411,104 @@ local GearUiRml = {}
 ---@field current string The `id` of the element the handler listens on.
 ---@field params table<string, string> The event's parameters as text; a form control's `change` has `value`, mouse events `mouse_x` and `mouse_y`.
 
+--- An element of a document: a handle, found with `GearRmlDoc.query`. If it is removed (or the markup around it replaced), its methods
+--- answer nothing instead of failing.
+---@class GearRmlElement
+local GearRmlElement = {}
+
+--- Whether the element is still in the document.
+---@return boolean
+function GearRmlElement:exists() end
+
+--- The element's tag name (`'div'`), nil if it is gone.
+---@return string?
+function GearRmlElement:tag() end
+
+--- The first descendant matching a CSS selector.
+---@param selector string
+---@return GearRmlElement?
+function GearRmlElement:query(selector) end
+
+--- All descendants matching a CSS selector (at most 500).
+---@param selector string
+---@return GearRmlElement[]
+function GearRmlElement:query_all(selector) end
+
+--- The parent element (nil for a top-level element).
+---@return GearRmlElement?
+function GearRmlElement:parent() end
+
+--- The child elements (at most 500).
+---@return GearRmlElement[]
+function GearRmlElement:children() end
+
+--- Adds a new empty element as the last child; fill it with `html` / `text`, or `append` to it.
+---@param tag string
+---@param attrs? table<string, any> Attributes, e.g. `{class = 'item', id = 'row1'}`.
+---@return GearRmlElement? child
+function GearRmlElement:append(tag, attrs) end
+
+--- Takes the element out of the document. Returns whether it was there.
+---@return boolean
+function GearRmlElement:remove() end
+
+--- The element's inner markup; with an argument it is replaced.
+---@param markup? string
+---@return string?
+function GearRmlElement:html(markup) end
+
+--- The element's content; with an argument it is replaced by that text (markup characters are escaped).
+---@param text? string
+---@return string?
+function GearRmlElement:text(text) end
+
+--- An attribute's text; with a value it is set (`true` sets a flag such as `disabled`, `false` removes the attribute).
+---@param name string
+---@param value? string|number|boolean
+---@return string?
+function GearRmlElement:attr(name, value) end
+
+--- Switches a class on or off.
+---@param name string
+---@param on boolean
+---@return boolean found
+function GearRmlElement:class(name, on) end
+
+--- Sets an inline style; nil or false takes it off again.
+---@param property string
+---@param value? string|number|false
+---@return boolean found
+function GearRmlElement:style(property, value) end
+
+--- The value of a form control; with an argument it is set.
+---@param text? string|number
+---@return string?
+function GearRmlElement:value(text) end
+
+--- The element's box in layout units.
+---@return {x: number, y: number, w: number, h: number}?
+function GearRmlElement:rect() end
+
+--- Calls `fn(event, element)` when the event happens on the element (elements added later do not get it).
+---@param event string
+---@param fn fun(event: GearRmlEvent, element: GearRmlElement)
+---@return boolean ok
+function GearRmlElement:on(event, fn) end
+
 --- A loaded document.
 ---@class GearRmlDoc
 ---@field model table? The data model's values (when loaded with `model`): read and write them like a table, at any depth; a write refreshes the bindings of the document.
 local GearRmlDoc = {}
+
+--- The first element matching a CSS selector.
+---@param selector string
+---@return GearRmlElement?
+function GearRmlDoc:query(selector) end
+
+--- All elements matching a CSS selector (at most 500).
+---@param selector string
+---@return GearRmlElement[]
+function GearRmlDoc:query_all(selector) end
 
 --- The plain value of a top-level key of the data model (a table for lists and records).
 ---@param key string

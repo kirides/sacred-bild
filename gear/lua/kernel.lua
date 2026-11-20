@@ -3655,6 +3655,66 @@ local function make_ui(mod)
         if type(text) == 'number' then text = tostring(text) end
         return native.rml_value(self.id, selector, text)
     end
+    -- Elements: doc:query(selector) -> element | nil, doc:query_all(selector) -> {element}. An element is a handle (it is addressed by a
+    -- number the host gives it): removing it from the document makes its methods answer nothing, nothing crashes.
+    local Element = {}
+    Element.__index = Element
+    function uis.rml_element(doc, handle)
+        return setmetatable({doc = doc, handle = handle, sel = '[data-gh="' .. handle .. '"]'}, Element)
+    end
+    function Doc:query(selector)
+        local h = native.rml_query(self.id, tostring(selector))
+        return h and uis.rml_element(self, h) or nil
+    end
+    function Doc:query_all(selector)
+        local out = {}
+        for i, h in ipairs(native.rml_query(self.id, tostring(selector), true)) do out[i] = uis.rml_element(self, h) end
+        return out
+    end
+    function Element:exists() return native.rml_tag(self.doc.id, self.sel) ~= nil end
+    function Element:tag() return native.rml_tag(self.doc.id, self.sel) end
+    function Element:query(selector)
+        local h = native.rml_query(self.doc.id, self.sel .. ' ' .. tostring(selector))
+        return h and uis.rml_element(self.doc, h) or nil
+    end
+    function Element:query_all(selector)
+        local out = {}
+        for i, h in ipairs(native.rml_query(self.doc.id, self.sel .. ' ' .. tostring(selector), true)) do out[i] = uis.rml_element(self.doc, h) end
+        return out
+    end
+    function Element:parent()
+        local h = native.rml_relatives(self.doc.id, self.sel, 'parent')
+        return h and uis.rml_element(self.doc, h) or nil
+    end
+    function Element:children()
+        local out = {}
+        for i, h in ipairs(native.rml_relatives(self.doc.id, self.sel, 'children')) do out[i] = uis.rml_element(self.doc, h) end
+        return out
+    end
+    -- element:append(tag [, {attribute = text}]) -> the new element (the last child), nil if there is no such parent.
+    function Element:append(tag, attrs)
+        local a
+        if attrs then
+            a = {}
+            for k, v in pairs(attrs) do a[tostring(k)] = tostring(v) end
+        end
+        local h = native.rml_append(self.doc.id, self.sel, tostring(tag), a)
+        return h and h ~= 0 and uis.rml_element(self.doc, h) or nil
+    end
+    function Element:remove() return native.rml_remove(self.doc.id, self.sel) end
+    function Element:html(markup) return self.doc:html(self.sel, markup) end
+    function Element:text(text) return self.doc:text(self.sel, text) end
+    function Element:attr(name, value) return self.doc:attr(self.sel, name, value) end
+    function Element:class(name, on) return self.doc:class(self.sel, name, on) end
+    function Element:style(property, value) return self.doc:style(self.sel, property, value) end
+    function Element:value(text) return self.doc:value(self.sel, text) end
+    function Element:rect() return native.rml_rect(self.doc.id, self.sel) end
+    -- element:on(event, fn): fn(event, element) when the event happens on the element (as it is now: elements added later get none).
+    function Element:on(event, fn)
+        assert(type(fn) == 'function', 'on(event, fn)')
+        return self.doc:on(self.sel, event, function(e) return fn(e, self) end)
+    end
+
     -- doc:get(key) -> the plain value of a top-level key of the data model (a table for lists and records).
     function Doc:get(key) return self.data and self.data[key] end
     function Doc:show() native.rml_show(self.id, true) end
