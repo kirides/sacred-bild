@@ -74,6 +74,20 @@ input.field:focus, select.field:focus { border-color: #ffd780; }
 .bar.mana .fill { background-color: #2f6fd0; }
 .bar.xp .fill { background-color: #7fd37f; }
 
+/* Clickable text (like a hyperlink that opens a dialogue or popup; the entries of Sacred's own menus): cream text that lights up with a
+   soft glow behind it while hovered or focused with the pad. Use on <a> (a pad stop) or any element with data-nav. The glow is a baked
+   soft ellipse (glow.png) tinted with image-color: RmlUi's blur needs off-screen render targets, which Gear does not have yet. */
+.link {
+    display: inline-block;
+    padding: 4px 22px;
+    color: #e8d8a8;
+    cursor: pointer;
+    text-align: center;
+}
+.link:hover, .link:focus { color: #fff6d0; decorator: image(glow.png fill); image-color: #ffc860; }
+.link:active { color: #ffffff; image-color: #ffe0a0; }
+.link.big { font-size: 1.25em; }
+
 /* Controller prompts: <img class="padkey" src="gear:pad/a"/> in front of the text inside a button; shown only while the controller was used last
    (gear sets body.pad), sized with the text. */
 .padkey { display: none; width: 1.3em; height: 1.3em; margin-right: 0.5em; vertical-align: middle; }
