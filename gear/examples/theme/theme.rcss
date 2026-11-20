@@ -85,7 +85,7 @@ input.field:focus, select.field:focus { border-color: #ffd780; }
     text-align: center;
 }
 .link:hover, .link:focus { color: #fff6d0; decorator: image(glow.png fill); image-color: #ffc860; }
-.link:active { color: #ffffff; image-color: #ffe0a0; }
+.link:active { color: #ffffff; image-color: #fff2c8; }      /* the click: the same glow, brighter */
 .link.big { font-size: 1.25em; }
 
 /* Controller prompts: <img class="padkey" src="gear:pad/a"/> in front of the text inside a button; shown only while the controller was used last
