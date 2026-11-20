@@ -65,6 +65,12 @@ namespace
         return fs::path(std::u8string(s.begin(), s.end()));
     }
 
+    // The documents' own URLs are "file:///B:/..." (see create) and the links in them resolve against that: back to a path.
+    std::string plainPath(const std::string& s)
+    {
+        return s.compare(0, 8, "file:///") == 0 ? s.substr(8) : s;
+    }
+
     std::string toUtf8(const fs::path& p)
     {
         const std::u8string u = p.generic_u8string();
@@ -176,9 +182,7 @@ namespace
     public:
         Rml::FileHandle Open(const Rml::String& path) override
         {
-            // The documents' own URLs are "file:///B:/..." (see create); plain paths and "B:/..." arrive as they are.
-            const std::string plain = path.compare(0, 8, "file:///") == 0 ? path.substr(8) : path;
-            const fs::path p = fromUtf8(plain);
+            const fs::path p = fromUtf8(plainPath(path));
             if (!readable(p))
             {
                 LOG("RmlUi: a document may not read {}", path);
@@ -384,7 +388,7 @@ namespace
                 return add(info);
             }
             std::string bytes;
-            if (!readAll(fromUtf8(source), bytes))
+            if (!readAll(fromUtf8(plainPath(source)), bytes))
             {
                 LOG("RmlUi: cannot read the image {}", source);
                 return 0;

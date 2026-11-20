@@ -64,6 +64,8 @@ input.field:focus, select.field:focus { border-color: #ffd780; }
 .list { margin: 4px 0; }
 .list .item { padding: 6px 10px; margin-bottom: 4px; background-color: #12121c; border: 1px #4a4030; }
 .list .item:hover { border-color: #c8aa5a; }
+/* An item that is a button (a pad stop) is a row like the others, not a shrunk inline box. */
+.list button.item { display: block; margin-right: 0; text-align: left; }
 .list .item.selected { background-color: #4a3f2a; border-color: #ffd780; }
 .item .name { color: #ffd780; font-weight: bold; }
 .item .sub { color: #9a9a9a; }
