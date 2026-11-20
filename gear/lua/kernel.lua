@@ -3757,7 +3757,16 @@ local function make_ui(mod)
             end
         end
         local hover = false
-        local ropts = {layer = opts.layer, nav = false, _rml_doc = id}
+        -- Per frame nothing is allocated here: the option tables and the region keys are kept in the document, the rows come back into
+        -- the same tables.
+        local ropts = self.ropts
+        if not ropts or ropts.layer ~= opts.layer then
+            ropts = {layer = opts.layer, nav = false, _rml_doc = id}
+            self.ropts = ropts
+            self.nopts = {layer = opts.layer, _rml_doc = id}
+            self.keys = {}
+        end
+        local keys = self.keys
         if opts.modal and not ui_edit then
             -- A modal dialog: it blocks the mouse and the pad for the game and for every other overlay until it is closed.
             uis.modal_next = id
@@ -3767,7 +3776,9 @@ local function make_ui(mod)
         end
         local panels = self.panels or {}
         self.panels = panels
-        for i, r in ipairs(native.rml_rects(id)) do
+        local rects = native.rml_rects(id, self.rect_rows)
+        self.rect_rows = rects
+        for i, r in ipairs(rects) do
             if r.panel and r.panel ~= '' then
                 -- A window the player may move (data-panel="name"): a panel of the layout like the ones of gear.ui.panel, so the layout
                 -- editor lists it and keeps its place (mods\gear_layout.json, key "<mod id>:<name>").
@@ -3788,11 +3799,17 @@ local function make_ui(mod)
                 if ui_edit then ui.frame(r.x, r.y, r.w, r.h, C.accent, 1, {layer = opts.layer}) end
             end
             -- In the layout editor the windows take no mouse: the editor drags them.
-            if not ui_edit and region('rml:' .. id .. ':w' .. i, r.x, r.y, r.w, r.h, ropts).hover then hover = true end
+            local wkey = keys[-i]
+            if not wkey then wkey = 'rml:' .. id .. ':w' .. i; keys[-i] = wkey end
+            if not ui_edit and region(wkey, r.x, r.y, r.w, r.h, ropts).hover then hover = true end
         end
         if not ui_edit then
-            for i, r in ipairs(native.rml_nav(id)) do
-                local res = region('rml:' .. id .. ':n' .. i, r.x, r.y, r.w, r.h, {layer = opts.layer, _rml_doc = id})
+            local stops = native.rml_nav(id, self.nav_rows)
+            self.nav_rows = stops
+            for i, r in ipairs(stops) do
+                local nkey = keys[i]
+                if not nkey then nkey = 'rml:' .. id .. ':n' .. i; keys[i] = nkey end
+                local res = region(nkey, r.x, r.y, r.w, r.h, self.nopts)
                 if res.hover then hover = true end
                 if res.clicked then native.rml_click(id, i) end
             end

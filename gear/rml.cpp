@@ -1283,6 +1283,18 @@ namespace
             d.hovering = false;
         }
         d.context->Update();
+        if (d.events.empty())
+        {
+            // The common case: nothing happened. One shared empty table, nothing allocated (callers only read it).
+            static int emptyRef = LUA_NOREF;
+            if (emptyRef == LUA_NOREF)
+            {
+                lua_newtable(L);
+                emptyRef = luaL_ref(L, LUA_REGISTRYINDEX);
+            }
+            lua_rawgeti(L, LUA_REGISTRYINDEX, emptyRef);
+            return 1;
+        }
         lua_createtable(L, static_cast<int>(d.events.size()), 0);
         int index = 1;
         for (const QueuedEvent& e : d.events)
@@ -1346,11 +1358,20 @@ namespace
         return 1;
     }
 
+    // Fills row `index` of the table on top of the stack with the element's box (the row table is reused when there is one, so a
+    // caller that hands the same table in every frame allocates nothing).
     void pushRect(lua_State* L, Rml::Element* e, float unit, int index, bool panel = false)
     {
         const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
         const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
-        lua_createtable(L, 0, 4);
+        lua_rawgeti(L, -1, index);
+        if (!lua_istable(L, -1))
+        {
+            lua_pop(L, 1);
+            lua_createtable(L, 0, 6);
+            lua_pushvalue(L, -1);
+            lua_rawseti(L, -3, index);
+        }
         lua_pushnumber(L, o.x / unit);
         lua_setfield(L, -2, "x");
         lua_pushnumber(L, o.y / unit);
@@ -1367,7 +1388,31 @@ namespace
             push(L, e->GetAttribute<Rml::String>("data-title", ""));
             lua_setfield(L, -2, "title");
         }
-        lua_rawseti(L, -2, index);
+        lua_pop(L, 1);
+    }
+
+    // The table on top of the stack after `count` rows: the rows beyond it are dropped.
+    void trimRows(lua_State* L, int count)
+    {
+        const int have = static_cast<int>(lua_objlen(L, -1));
+        for (int i = count + 1; i <= have; ++i)
+        {
+            lua_pushnil(L);
+            lua_rawseti(L, -2, i);
+        }
+    }
+
+    // A table to fill: argument `arg` if it is one (reused), else a new one. Leaves it on top of the stack.
+    void rowsTable(lua_State* L, int arg)
+    {
+        if (lua_istable(L, arg))
+        {
+            lua_pushvalue(L, arg);
+        }
+        else
+        {
+            lua_newtable(L);
+        }
     }
 
     // native.rml_rects(id) -> {{x, y, w, h, panel, title}, ...}: the boxes of the document's top-level elements (the windows), in
@@ -1376,21 +1421,21 @@ namespace
     int rmlRects(lua_State* L)
     {
         Doc& d = docArg(L);
-        lua_newtable(L);
-        if (!d.document->IsVisible())
-        {
-            return 1;
-        }
+        rowsTable(L, 2);
         int index = 1;
-        for (int i = 0; i < d.document->GetNumChildren(); ++i)
+        if (d.document->IsVisible())
         {
-            Rml::Element* c = d.document->GetChild(i);
-            const Rml::Vector2f s = c->GetBox().GetSize(Rml::BoxArea::Border);
-            if (c->IsVisible() && s.x > 0 && s.y > 0)
+            for (int i = 0; i < d.document->GetNumChildren(); ++i)
             {
-                pushRect(L, c, d.unit, index++, true);
+                Rml::Element* c = d.document->GetChild(i);
+                const Rml::Vector2f s = c->GetBox().GetSize(Rml::BoxArea::Border);
+                if (c->IsVisible() && s.x > 0 && s.y > 0)
+                {
+                    pushRect(L, c, d.unit, index++, true);
+                }
             }
         }
+        trimRows(L, index - 1);
         return 1;
     }
 
@@ -1415,12 +1460,13 @@ namespace
     int rmlNav(lua_State* L)
     {
         Doc& d = docArg(L);
-        lua_newtable(L);
+        rowsTable(L, 2);
         int index = 1;
         for (Rml::Element* e : navElements(d))
         {
             pushRect(L, e, d.unit, index++);
         }
+        trimRows(L, index - 1);
         return 1;
     }
 
