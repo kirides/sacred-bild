@@ -1,7 +1,7 @@
 <rml>
 <head><title>Frames</title></head>
 <body>
-<div id="tf" class="thick-frame" data-panel="tf" data-title="Thick frame" data-dividers="150" style="position: absolute; left: 60px; top: 60px; width: 450px; height: 220px;">
+<div id="tf" class="thick-frame" data-panel="tf" data-title="Thick frame" data-dividers="150" style="position: absolute; left: 60px; top: 60px; width: 450px; height: 262px;">
     <p class="heading" style="text-align: center">Thick frame, game buttons</p>
     <div class="row" style="justify-content: center; margin-top: 24px;">
         <button id="gb-wide" class="game-button" style="width: 300px">Neuer Charakter (wide)</button>
@@ -11,6 +11,9 @@
         <button id="gb-mid" class="game-button">Logout</button>
         <button id="gb-dis" class="game-button" disabled>Disabled</button>
         <button id="gb-pad" class="game-button"><img class="padkey" src="gear:pad/a"/>Weiter</button>
+    </div>
+    <div style="position: absolute; left: 30px; top: 244px;">
+        <button id="gb-plain" class="game-button">Weiter</button>
     </div>
 </div>
 </body>
