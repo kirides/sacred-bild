@@ -12,6 +12,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -216,6 +217,7 @@ namespace
         bool scissor = false;
         float clip[4] = {};         // layout units
         int count = 0;
+        std::shared_ptr<const std::array<float, 16>> matrix;    // the element's transform (SetTransform), null: none
     };
     Target g_target;
 
@@ -296,6 +298,7 @@ namespace
             c.x = translation.x;
             c.y = translation.y;
             c.w = g_target.unit;
+            c.matrix = g_target.matrix;
             if (texture)
             {
                 const auto it = m_textures.find(texture);
@@ -401,6 +404,25 @@ namespace
                 Ui::pictureRelease(it->second.id);
             }
             m_textures.erase(it);
+        }
+
+        // CSS transforms: the matrix goes along with every mesh until it is reset (null).
+        void SetTransform(const Rml::Matrix4f* transform) override
+        {
+            if (!transform)
+            {
+                g_target.matrix.reset();
+                return;
+            }
+            auto m = std::make_shared<std::array<float, 16>>();
+            for (int column = 0; column < 4; ++column)
+            {
+                for (int row = 0; row < 4; ++row)
+                {
+                    (*m)[static_cast<size_t>(column * 4 + row)] = (*transform)[column][row];
+                }
+            }
+            g_target.matrix = std::move(m);
         }
 
         void EnableScissorRegion(bool enable) override { g_target.scissor = enable; }

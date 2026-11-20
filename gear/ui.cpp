@@ -1029,8 +1029,19 @@ namespace
         const auto point = [&](int index) {
             const Ui::MeshVertex& v = vs[static_cast<size_t>(index)];
             MeshPoint p;
-            p.x = (v.x + c.x) * inv;
-            p.y = (v.y + c.y) * inv;
+            float px = v.x + c.x, py = v.y + c.y;
+            if (c.matrix)
+            {
+                const auto& m = *c.matrix;
+                const float tx = m[0] * px + m[4] * py + m[12];
+                const float ty = m[1] * px + m[5] * py + m[13];
+                const float tw = m[3] * px + m[7] * py + m[15];
+                const float k = tw != 0.0f ? 1.0f / tw : 1.0f;
+                px = tx * k;
+                py = ty * k;
+            }
+            p.x = px * inv;
+            p.y = py * inv;
             const float uu = flipU ? 1.0f - v.u : v.u, vv = flipV ? 1.0f - v.v : v.v;
             p.u = surface ? tu0 + uu * tdu : 0.0f;
             p.v = surface ? tv0 + vv * tdv : 0.0f;

@@ -56,7 +56,8 @@ button {
     border: 1px #c8aa5a;
     cursor: pointer;
 }
-button:hover { background-color: #282838; }
+button:hover { background-color: #282838; transform: scale(1.06); }
+button { transition: transform 0.12s cubic-out; }
 button:active { background-color: #3c3c50; }
 button.secondary { border-color: #6e5e3a; }
 

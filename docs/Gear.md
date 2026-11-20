@@ -143,7 +143,7 @@ Rules that hold across the API:
   ([RmlUi](https://mikke89.github.io/RmlUiDoc/): `div`, `button`, `input`, flexbox, `:hover`, animations) and draws it every frame
   with `doc:draw()`; `doc:on('#ok', 'click', fn)` calls Lua, `doc:text`, `doc:class`, `doc:style` and `doc:value` change the
   document. Every button, link and input is a pad stop, a focused text field takes the keyboard, the default font is Segoe UI, and the
-  game's own UI images are available as `gear:image/<id>`. No JavaScript, no CSS transforms. See
+  game's own UI images are available as `gear:image/<id>`, CSS `transform` works. No JavaScript, no filters or drop shadows yet. See
   [HTML/CSS documents](GearApi.md#htmlcss-documents-gearuirml) and `gear/examples/rmldemo`.
 - **Item data:** `gear.inv.values(item)` decodes an item's resolved value record (level, requirements, damage, attack, defense,
   protection, the eight bonus slots with code, attribute and stored value, and the records its sockets merged in), and

@@ -1,7 +1,9 @@
 #pragma once
 #include "text.h"
 
+#include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -53,6 +55,9 @@ namespace Ui
         uint32_t image = 0;
         // Region
         uint32_t region = 0;        // the kernel's handle, reported with the events
+        // Mesh: a 4x4 transform (column-major, m[column * 4 + row]) applied to (x + translation, y + translation, 0, 1) in the mesh's
+        // units, then divided by w; null: none (CSS transforms of the RmlUi host).
+        std::shared_ptr<const std::array<float, 16>> matrix;
         // Clip (setClip while it was recorded; canvas commands only): drawn only inside x, y, w, h.
         bool clipped = false;
         float clip[4] = {};

@@ -360,7 +360,8 @@ function GearUiNative.insets(style) end
 --- the game's own UI images as `gear:image/<id>` (`gear.ui.images`) and `gear:texture/<NAME.TGA>` (Texture.pak), with `?flip=h`, `?flip=v`
 --- or `?flip=hv` mirroring them: `<img src="gear:image/54">`, `decorator: image(gear:image/54)`.
 ---
---- A prototype: no JavaScript (the logic is Lua), no CSS `transform`, filters or shaders, and a mesh counts as a draw command (at
+--- A prototype: no JavaScript (the logic is Lua), no filters, shaders, blur or drop shadows yet (CSS `transform` works: 2D rotate, scale, skew,
+--- translate and perspective, applied to the vertices; the mouse and the pad still hit the untransformed boxes), and a mesh counts as a draw command (at
 --- most 1500 per document and draw). The document's windows (its top-level elements) take the mouse where they are; the rest of the
 --- canvas stays the game's. Documents are laid out in the 1024x768 layout; `dp = true` lays them out in screen pixels instead (1dp is one
 --- layout unit), so text is crisp at any resolution (write sizes in `dp` then).
