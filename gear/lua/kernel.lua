@@ -1680,6 +1680,19 @@ do
         return o and native.party_portrait(o.type)
     end
 
+    -- class_portrait(class) -> image | nil, message: the portrait of a hero class (a name or class_id) for gear.ui.image.
+    function P.class_portrait(class)
+        local id = class
+        if type(class) == 'string' then
+            id = nil
+            for _, c in ipairs(CLASSES) do
+                if c.name == class then id = c.id end
+            end
+        end
+        if type(id) ~= 'number' or not CLASS_INFO.by_id[id] then return nil, 'no such hero class' end
+        return native.party_portrait(id)
+    end
+
     P.FIRST_ID, P.LAST_ID = 3, 16
     function P.available() return native.party_available() end
     function P.heroes()

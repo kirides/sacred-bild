@@ -92,6 +92,13 @@ function GearParty.dismiss(companion) end
 ---@return string? error
 function GearParty.control(hero) end
 
+--- The portrait of a hero class (what `Creature:portrait` returns for a hero of that class), an id for `gear.ui.image`. For a hero
+--- file's class in a list. nil if the game has none.
+---@param class GearClassName|integer
+---@return integer? image
+---@return string? error
+function GearParty.class_portrait(class) end
+
 --- Whether `control` moves the gold to the hero you play (the party's purse, the default). `false`: every hero keeps their own
 --- gold (it is in their savegame record as for any hero). Called without an argument it only returns the setting. Not saved: a mod
 --- sets it again on every start.

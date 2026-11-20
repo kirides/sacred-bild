@@ -1768,6 +1768,14 @@ Gives the player control of a party hero: the camera, the HUD, the windows (inve
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `gear.party.class_portrait(class) -> integer?, string?`
+
+The portrait of a hero class (what `Creature:portrait` returns for a hero of that class), an id for `gear.ui.image`. For a hero file's class in a list. nil if the game has none.
+
+- `class`: `GearClassName|integer`
+- returns `image` `integer?`
+- returns `error` `string?`
+
 #### `gear.party.shared_purse(on) -> boolean`
 
 Whether `control` moves the gold to the hero you play (the party's purse, the default). `false`: every hero keeps their own gold (it is in their savegame record as for any hero). Called without an argument it only returns the setting. Not saved: a mod sets it again on every start.
