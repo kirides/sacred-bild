@@ -348,7 +348,8 @@ function GearUi.key_down(name) end
 local GearUiNative = {}
 
 ---@class GearNativeFrameOpts : GearDrawOpts
----@field style? 'tooltip' The frame style: `'tooltip'` (default) is the border of the game's item tooltip, dark metal bars with ornaments in the four corners (image 54 top-left, 55 top-right, flipped upside down at the bottom; 52 for the bars).
+---@field style? 'tooltip'|'thick' The frame style: `'tooltip'` (default) is the border of the game's item tooltip, dark metal bars with ornaments in the four corners (image 54 top-left, 55 top-right, flipped upside down at the bottom; 52 for the bars). `'thick'` is the heavy ornate frame of the character selection: pattern strips repeated along the four sides (images 294, 310, 312; the last segment cropped), ornaments on the corners (276 to 279) and on the middle of the top and bottom edge (302 to 305).
+---@field dividers? number[] `'thick'` only: offsets from the top of the box where divider bars (image 311) run between the sides.
 ---@field fill? GearColor|false The fill inside the bars (default the game's translucent black `0x9F000000`); `false` draws none.
 ---@field color? GearColor Tint of the border images (white as is).
 
@@ -366,7 +367,7 @@ function GearUiNative.frame(x, y, w, h, opts) end
 
 --- How far the border of a frame style reaches into its box (the text goes inside that) and how far its corner ornaments
 --- reach out of the box, both as `{left, top, right, bottom}` in layout units.
----@param style? 'tooltip' Default `'tooltip'`.
+---@param style? 'tooltip'|'thick' Default `'tooltip'`.
 ---@return {left: number, top: number, right: number, bottom: number} inset
 ---@return {left: number, top: number, right: number, bottom: number} overhang
 function GearUiNative.insets(style) end

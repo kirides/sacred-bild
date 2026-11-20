@@ -921,9 +921,61 @@ namespace
         float a, r, g, b;
     };
 
+    // The part of a polygon inside the texture cell [cu, cu + 1] x [cv, cv + 1] (Sutherland-Hodgman in u and v): a mesh whose
+    // texture coordinates run past 1 (a repeated tile) is drawn cell by cell, because the UI images live in an atlas and
+    // cannot wrap.
+    size_t clipUvCell(const MeshPoint* in, size_t n, float cu, float cv, MeshPoint* out)
+    {
+        MeshPoint bufA[16], bufB[16];
+        std::copy(in, in + n, bufA);
+        MeshPoint* src = bufA;
+        MeshPoint* dst = bufB;
+        for (int edge = 0; edge < 4 && n > 0; ++edge)
+        {
+            const auto value = [&](const MeshPoint& p) {
+                switch (edge)
+                {
+                case 0: return p.u - cu;
+                case 1: return cu + 1.0f - p.u;
+                case 2: return p.v - cv;
+                default: return cv + 1.0f - p.v;
+                }
+            };
+            size_t m = 0;
+            for (size_t i = 0; i < n; ++i)
+            {
+                const MeshPoint& p = src[i];
+                const MeshPoint& q = src[(i + 1) % n];
+                const float vp = value(p), vq = value(q);
+                if (vp >= 0)
+                {
+                    dst[m++] = p;
+                }
+                if ((vp >= 0) != (vq >= 0))
+                {
+                    const float k = vp / (vp - vq);
+                    MeshPoint o;
+                    o.x = p.x + (q.x - p.x) * k;
+                    o.y = p.y + (q.y - p.y) * k;
+                    o.u = p.u + (q.u - p.u) * k;
+                    o.v = p.v + (q.v - p.v) * k;
+                    o.a = p.a + (q.a - p.a) * k;
+                    o.r = p.r + (q.r - p.r) * k;
+                    o.g = p.g + (q.g - p.g) * k;
+                    o.b = p.b + (q.b - p.b) * k;
+                    dst[m++] = o;
+                }
+            }
+            std::swap(src, dst);
+            n = m;
+        }
+        std::copy(src, src + n, out);
+        return n;
+    }
+
     size_t clipPolygon(const MeshPoint* in, size_t n, const float* rect, MeshPoint* out)
     {
-        MeshPoint bufA[8], bufB[8];
+        MeshPoint bufA[16], bufB[16];
         std::copy(in, in + n, bufA);
         MeshPoint* src = bufA;
         MeshPoint* dst = bufB;
@@ -1043,15 +1095,15 @@ namespace
             p.x = px * inv;
             p.y = py * inv;
             const float uu = flipU ? 1.0f - v.u : v.u, vv = flipV ? 1.0f - v.v : v.v;
-            p.u = surface ? tu0 + uu * tdu : 0.0f;
-            p.v = surface ? tv0 + vv * tdv : 0.0f;
+            p.u = uu;       // mapped into the atlas rectangle when the vertex is emitted (a repeated tile runs past 1)
+            p.v = vv;
             p.a = static_cast<float>(v.color >> 24);
             p.r = static_cast<float>((v.color >> 16) & 0xFF);
             p.g = static_cast<float>((v.color >> 8) & 0xFF);
             p.b = static_cast<float>(v.color & 0xFF);
             return p;
         };
-        const auto toVertex = [&](const MeshPoint& p) {
+        const auto toVertex = [&](const MeshPoint& p, float cellU = 0.0f, float cellV = 0.0f) {
             float rr = p.r, gg = p.g, bb = p.b;
             if (!premultiplied && p.a > 0.0f)
             {
@@ -1061,7 +1113,8 @@ namespace
                 gg = std::min(255.0f, gg * k);
                 bb = std::min(255.0f, bb * k);
             }
-            return TLVertex{p.x, p.y, 0.0f, 1.0f, packColor(p.a, rr, gg, bb), 0, p.u, p.v};
+            return TLVertex{p.x, p.y, 0.0f, 1.0f, packColor(p.a, rr, gg, bb), 0,
+                            surface ? tu0 + (p.u - cellU) * tdu : 0.0f, surface ? tv0 + (p.v - cellV) * tdv : 0.0f};
         };
 
         thread_local std::vector<TLVertex> out;
@@ -1076,6 +1129,46 @@ namespace
                 continue;
             }
             const MeshPoint tri[3] = {point(i0), point(i1), point(i2)};
+            const float umin = std::min({tri[0].u, tri[1].u, tri[2].u}), umax = std::max({tri[0].u, tri[1].u, tri[2].u});
+            const float vmin = std::min({tri[0].v, tri[1].v, tri[2].v}), vmax = std::max({tri[0].v, tri[1].v, tri[2].v});
+            if (surface && !(c.image >= Ui::kPictureBase) && (umin < -0.001f || umax > 1.001f || vmin < -0.001f || vmax > 1.001f))
+            {
+                // A repeated tile: one piece per texture cell, each mapped into the image's rectangle.
+                const int u0 = static_cast<int>(std::floor(umin + 0.0005f)), u1 = static_cast<int>(std::ceil(umax - 0.0005f));
+                const int v0 = static_cast<int>(std::floor(vmin + 0.0005f)), v1 = static_cast<int>(std::ceil(vmax - 0.0005f));
+                if ((u1 - u0) * (v1 - v0) > 256)
+                {
+                    continue;
+                }
+                for (int iv = v0; iv < std::max(v1, v0 + 1); ++iv)
+                {
+                    for (int iu = u0; iu < std::max(u1, u0 + 1); ++iu)
+                    {
+                        MeshPoint cell[16];
+                        const size_t cn = clipUvCell(tri, 3, static_cast<float>(iu), static_cast<float>(iv), cell);
+                        if (cn < 3)
+                        {
+                            continue;
+                        }
+                        MeshPoint poly[16];
+                        size_t n = cn;
+                        std::copy(cell, cell + cn, poly);
+                        if (c.clipped)
+                        {
+                            MeshPoint cut[16];
+                            n = clipPolygon(poly, cn, c.clip, cut);
+                            std::copy(cut, cut + n, poly);
+                        }
+                        for (size_t k = 1; k + 1 < n; ++k)
+                        {
+                            out.push_back(toVertex(poly[0], static_cast<float>(iu), static_cast<float>(iv)));
+                            out.push_back(toVertex(poly[k], static_cast<float>(iu), static_cast<float>(iv)));
+                            out.push_back(toVertex(poly[k + 1], static_cast<float>(iu), static_cast<float>(iv)));
+                        }
+                    }
+                }
+                continue;
+            }
             if (c.clipped)
             {
                 MeshPoint poly[8];

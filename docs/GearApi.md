@@ -4408,7 +4408,8 @@ Includes everything of `GearDrawOpts`.
 
 | Field | Type | |
 |---|---|---|
-| `style` | `'tooltip'` | The frame style: `'tooltip'` (default) is the border of the game's item tooltip, dark metal bars with ornaments in the four corners (image 54 top-left, 55 top-right, flipped upside down at the bottom; 52 for the bars). (optional) |
+| `style` | `'tooltip'\|'thick'` | The frame style: `'tooltip'` (default) is the border of the game's item tooltip, dark metal bars with ornaments in the four corners (image 54 top-left, 55 top-right, flipped upside down at the bottom; 52 for the bars). `'thick'` is the heavy ornate frame of the character selection: pattern strips repeated along the four sides (images 294, 310, 312; the last segment cropped), ornaments on the corners (276 to 279) and on the middle of the top and bottom edge (302 to 305). (optional) |
+| `dividers` | `number[]` | `'thick'` only: offsets from the top of the box where divider bars (image 311) run between the sides. (optional) |
 | `fill` | `GearColor\|false` | The fill inside the bars (default the game's translucent black `0x9F000000`); `false` draws none. (optional) |
 | `color` | `GearColor` | Tint of the border images (white as is). (optional) |
 
@@ -4427,7 +4428,7 @@ A frame in the game's own style: the fill, the four bars and the four corner orn
 
 How far the border of a frame style reaches into its box (the text goes inside that) and how far its corner ornaments reach out of the box, both as `{left, top, right, bottom}` in layout units.
 
-- `style`: `'tooltip'` (optional) - Default `'tooltip'`.
+- `style`: `'tooltip'|'thick'` (optional) - Default `'tooltip'`.
 - returns `inset` `{left: number, top: number, right: number, bottom: number}`
 - returns `overhang` `{left: number, top: number, right: number, bottom: number}`
 
