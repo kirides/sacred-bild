@@ -1,0 +1,1 @@
+return { id = 'rmltest-frames', name = 'Frames in-game test', version = '0.1.0', author = 'Sacred Gear', description = 'Automation: the thick frame and the game-button class of the theme.', automation = true }

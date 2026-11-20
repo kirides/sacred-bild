@@ -1,0 +1,1 @@
+return { id = 'rmltest-images', name = 'UI image dump', version = '0.1.0', author = 'Sacred Gear', description = 'Automation: writes the UI image list; screenshots the character selection.', automation = true }

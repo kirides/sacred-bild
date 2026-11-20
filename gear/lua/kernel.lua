@@ -3722,6 +3722,15 @@ local function make_ui(mod)
             overhang = {left = 11, top = 5, right = 11, bottom = 5},     -- the corner ornaments reach beyond the bars
             inset = {left = 6, top = 6, right = 6, bottom = 6},
         },
+        -- thick: the frame of the character selection and the other big menu screens (pieces of the menus' UI images):
+        -- pattern strips 294 (top, 32x17; the bottom is it flipped), 310 / 312 (left / right, 41x32 and 24x32), the divider 311 (32x44),
+        -- the centre ornaments 302 + 303 (top) and 304 + 305 (bottom), the corner ornaments 276 / 278 / 277 / 279 drawn last.
+        thick = {
+            fill = 0x9F000000,
+            kind = 'thick',
+            inset = {left = 14, top = 17, right = 14, bottom = 17},
+            overhang = {left = 10, top = 14, right = 10, bottom = 14},
+        },
     }
     -- ui.native.insets(style) -> {left, top, right, bottom}: how far the frame's border reaches into the box (the text goes
     -- inside it) and `overhang`, how far the corner ornaments reach out of it.
@@ -3734,7 +3743,7 @@ local function make_ui(mod)
     function native_ui.frame(x, y, w, h, opts)
         opts = opts or {}
         local st = NATIVE_FRAMES[opts.style or 'tooltip']
-        if not st then error('unknown frame style (known: tooltip)', 2) end
+        if not st then error('unknown frame style (known: tooltip, thick)', 2) end
         local o = {layer = opts.layer, window = opts.window, color = opts.color}
         local function img(p, ix, iy, iw, ih)
             if iw > 0 and ih > 0 then
@@ -3744,6 +3753,7 @@ local function make_ui(mod)
         if opts.fill ~= false then
             ui.rect(x, y, w, h, opts.fill or st.fill, {layer = o.layer, window = o.window})
         end
+        if st.kind == 'thick' then return native_ui.thick_frame(x, y, w, h, opts, st) end
         local oh = st.overhang
         local lw, rw, th, bh = st.left.w, st.right.w, st.top.h, st.bottom.h
         img(st.top, x + lw, y, w - lw - rw, th)
@@ -3754,6 +3764,43 @@ local function make_ui(mod)
         img({id = st.tr.id}, x + w + oh.right - st.tr.w, y - oh.top, st.tr.w, st.tr.h)
         img({id = st.tl.id, flip = 'v'}, x - oh.left, y + h + oh.bottom - st.tl.h, st.tl.w, st.tl.h)
         img({id = st.tr.id, flip = 'v'}, x + w + oh.right - st.tr.w, y + h + oh.bottom - st.tr.h, st.tr.w, st.tr.h)
+        return true
+    end
+
+    -- The thick frame: segments of a pattern strip repeated along the sides (the last one cropped, so the pattern keeps its
+    -- proportions), dividers at opts.dividers (offsets from the top of the box), the ornaments drawn last over the strips.
+    function native_ui.thick_frame(x, y, w, h, opts, st)
+        local o = {layer = opts.layer, window = opts.window, color = opts.color}
+        local function img(id, ix, iy, iw, ih, flip, crop)
+            ui.image(id, ix, iy, iw, ih, {layer = o.layer, window = o.window, color = o.color, flip = flip, crop = crop})
+        end
+        local function tile_h(id, tw, th, tx, ty, len, flip)
+            local at = 0
+            while at < len - 0.01 do
+                local seg = math.min(tw, len - at)
+                img(id, tx + at, ty, seg, th, flip, seg < tw and {0, 0, seg / tw, 1} or nil)
+                at = at + tw
+            end
+        end
+        local function tile_v(id, tw, th, tx, ty, len)
+            local at = 0
+            while at < len - 0.01 do
+                local seg = math.min(th, len - at)
+                img(id, tx, ty + at, tw, seg, nil, seg < th and {0, 0, 1, seg / th} or nil)
+                at = at + th
+            end
+        end
+        if opts.fill ~= false then ui.rect(x, y, w, h, opts.fill or st.fill, {layer = o.layer, window = o.window}) end
+        tile_h(294, 32, 17, x, y, w)
+        tile_h(294, 32, 17, x, y + h - 17, w, 'v')
+        tile_v(310, 41, 32, x - 9, y + 17, h - 34)
+        tile_v(312, 24, 32, x + w - 16, y + 17, h - 34)
+        for _, d in ipairs(opts.dividers or {}) do tile_h(311, 32, 44, x + 8, y + d - 14, w - 24) end
+        local cx = x + w / 2
+        img(302, cx - 32, y - 14, 32, 44); img(303, cx, y - 14, 32, 44)
+        img(304, cx - 32, y + h - 28, 32, 42); img(305, cx, y + h - 28, 32, 42)
+        img(276, x - 10, y - 10, 42, 42); img(278, x + w - 30, y - 10, 40, 42)
+        img(277, x - 10, y + h - 30, 42, 40); img(279, x + w - 30, y + h - 30, 40, 40)
         return true
     end
 
@@ -4080,7 +4127,14 @@ local function make_ui(mod)
                 if ui_edit then ui.frame(r.x, r.y, r.w, r.h, C.accent, 1, {layer = opts.layer}) end
             end
             -- The game's own frame behind a window with class "window" or data-frame (the ornaments overhang the box, so it cannot be a CSS decorator).
-            if r.frame and r.frame ~= '' and ui.native then ui.native.frame(r.x, r.y, r.w, r.h, {style = r.frame, layer = opts.layer}) end
+            if r.frame and r.frame ~= '' and ui.native then
+                local divs
+                if r.dividers and r.dividers ~= '' then
+                    divs = {}
+                    for n in r.dividers:gmatch('[%d%.]+') do divs[#divs + 1] = tonumber(n) end
+                end
+                ui.native.frame(r.x, r.y, r.w, r.h, {style = r.frame, layer = opts.layer, dividers = divs})
+            end
             -- In the layout editor the windows take no mouse: the editor drags them.
             local wkey = keys[-i]
             if not wkey then wkey = 'rml:' .. id .. ':w' .. i; keys[-i] = wkey end
