@@ -702,6 +702,34 @@ namespace
         }
     }
 
+    // Whether `e` matches a selector: simple ones ("#id", ".class", "tag", [data-gh="N"]) by plain comparison, others through RmlUi
+    // (which parses the selector on every call).
+    bool matchesSelector(Rml::Element* e, const std::string& selector)
+    {
+        const auto plain = [](const std::string& name) {
+            return !name.empty() && name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") == std::string::npos;
+        };
+        if (selector.size() > 1 && selector[0] == '#' && plain(selector.substr(1)))
+        {
+            return e->GetId() == selector.substr(1);
+        }
+        if (selector.size() > 1 && selector[0] == '.' && plain(selector.substr(1)))
+        {
+            return e->IsClassSet(selector.substr(1));
+        }
+        if (plain(selector))
+        {
+            return e->GetTagName() == selector;
+        }
+        if (selector.rfind("[data-gh=\"", 0) == 0 && selector.size() > 12 && selector.compare(selector.size() - 2, 2, "\"]") == 0)
+        {
+            const std::string number = selector.substr(10, selector.size() - 12);
+            return !number.empty() && number.find_first_not_of("0123456789") == std::string::npos &&
+                   e->GetAttribute<int>("data-gh", 0) == std::atoi(number.c_str());
+        }
+        return e->Matches(selector);
+    }
+
     class Listener final : public Rml::EventListener
     {
     public:
@@ -755,7 +783,7 @@ namespace
             // The innermost element from the target up that matches the selector.
             for (Rml::Element* e = event.GetTargetElement(); e && e != m_doc->document; e = e->GetParentNode())
             {
-                if (e->Matches(m_selector))
+                if (matchesSelector(e, m_selector))
                 {
                     matched = e;
                     break;
