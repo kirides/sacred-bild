@@ -81,6 +81,44 @@ namespace
         }
     }
 
+    // The atlas decoded on the CPU, for glyph() (premultiplied ARGB); empty until first asked for.
+    std::mutex g_cpuLock;
+    std::vector<uint32_t> g_cpuAtlas;
+    bool g_cpuTried = false;
+
+    bool loadCpuAtlas()
+    {
+        if (g_cpuTried)
+        {
+            return !g_cpuAtlas.empty();
+        }
+        g_cpuTried = true;
+        HMODULE module = nullptr;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&loadCpuAtlas), &module);
+        HRSRC resource = FindResourceW(module, MAKEINTRESOURCEW(kAtlasResource), MAKEINTRESOURCEW(10));
+        HGLOBAL loaded = resource ? LoadResource(module, resource) : nullptr;
+        const void* png = loaded ? LockResource(loaded) : nullptr;
+        if (!png)
+        {
+            return false;
+        }
+        SDL_Surface* decoded = SDL_LoadPNG_IO(SDL_IOFromConstMem(png, SizeofResource(module, resource)), true);
+        SDL_Surface* argb = decoded ? SDL_ConvertSurface(decoded, SDL_PIXELFORMAT_ARGB8888) : nullptr;
+        SDL_DestroySurface(decoded);
+        if (argb && argb->w == kAtlasWidth && argb->h == kAtlasHeight)
+        {
+            g_cpuAtlas.resize(size_t(kAtlasWidth) * kAtlasHeight);
+            for (int y = 0; y < argb->h; ++y)
+            {
+                memcpy(&g_cpuAtlas[size_t(y) * kAtlasWidth], static_cast<const uint8_t*>(argb->pixels) + y * argb->pitch,
+                    size_t(kAtlasWidth) * 4);
+            }
+        }
+        SDL_DestroySurface(argb);
+        return !g_cpuAtlas.empty();
+    }
+
     // The atlas PNG from the DLL's resources, as a texture of the device.
     bool createTexture(d9::IDirect3DDevice9Ex* device)
     {
@@ -288,4 +326,30 @@ void Prompts::draw(d9::IDirect3DDevice9Ex* device, float width, float height)
         sizeof(Vertex));
     saved->Apply();
     saved->Release();
+}
+
+bool Prompts::glyph(Gamepad::Style style, uint32_t button, uint32_t* pixels)
+{
+    if (!button || (button & (button - 1)) || !pixels)
+    {
+        return false;
+    }
+    unsigned long bit = 0;
+    _BitScanForward(&bit, button);
+    if (bit >= kPerStyle)
+    {
+        return false;
+    }
+    std::scoped_lock lock(g_cpuLock);
+    if (!loadCpuAtlas())
+    {
+        return false;
+    }
+    const int cell = static_cast<int>(style) * kPerStyle + static_cast<int>(bit);
+    const int x0 = (cell % kColumns) * kCell, y0 = (cell / kColumns) * kCell;
+    for (int y = 0; y < kCell; ++y)
+    {
+        memcpy(pixels + y * kCell, &g_cpuAtlas[size_t(y0 + y) * kAtlasWidth + x0], size_t(kCell) * 4);
+    }
+    return true;
 }

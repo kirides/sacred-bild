@@ -37,3 +37,5 @@ EXPORTS
     SacredBild_UiTakeScroll
     SacredBild_UiPostPad
     SacredBild_UiNavState
+    SacredBild_PadInfo
+    SacredBild_PadGlyph

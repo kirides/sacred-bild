@@ -3117,6 +3117,17 @@ namespace
         return 3;
     }
 
+    // native.ui_pad_info() -> controller, style: whether the controller was used last, and the pad's style (0 Xbox, 1 PlayStation,
+    // 2 Switch).
+    int nativeUiPadInfo(lua_State* L)
+    {
+        int style = 0;
+        const bool controller = PadNav::padInfo(style);
+        lua_pushboolean(L, controller);
+        lua_pushnumber(L, style);
+        return 2;
+    }
+
     // native.auto_pad(nudge, back, menu): automation posts pad events; native.auto_nav() -> stops, flags as SacredBild
     // holds them (stops -1: stale, -2: no SacredBild).
     int nativeAutoPad(lua_State* L)
@@ -4590,6 +4601,7 @@ namespace
             {"builtin", nativeBuiltin},
             {"ui_events", nativeUiEvents},
             {"ui_nav", nativeUiNav},
+            {"ui_pad_info", nativeUiPadInfo},
             {"ui_pad", nativeUiPad},
             {"ui_clip", nativeUiClip},
             {"ui_wheel", nativeUiWheel},

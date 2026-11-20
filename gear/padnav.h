@@ -25,4 +25,9 @@ namespace PadNav
     // Automation: pad events as the controller would post them; SacredBild's stop count (-1 stale, -2 no SacredBild).
     void post(int nudge, int back, int menu);
     int navState(int& flags);
+    // Whether the controller was used last (not the keyboard and mouse) and the pad's style (0 Xbox, 1 PlayStation,
+    // 2 Switch); false, Xbox without SacredBild.
+    bool padInfo(int& style);
+    // The 64x64 icon of a button (Gamepad::Button's bit: A = 1, B = 2 ...) as premultiplied ARGB pixels, in the pad's style.
+    bool glyph(unsigned button, std::vector<unsigned>& pixels);
 }

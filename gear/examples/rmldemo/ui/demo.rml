@@ -23,7 +23,7 @@
         </div>
         <div class="row">
             <input id="name" class="field" type="text" value="Seraphim"/>
-            <button id="greet">Greet</button>
+            <button id="greet">Greet<img class="padkey" src="gear:pad/a"/></button>
         </div>
         <p id="greeting" class="greeting"></p>
         <div class="row right">

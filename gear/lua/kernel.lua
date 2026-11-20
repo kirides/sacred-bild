@@ -3649,6 +3649,19 @@ local function make_ui(mod)
             self.primed = true
             native.rml_update(id, mx, my, false)
         end
+        do
+            -- The classes of <body> that tell the stylesheet whether and which button prompts to show: "pad" while the
+            -- controller was used last, "pad-ps" or "pad-switch" for the style of the pad.
+            local on, style = false, 0
+            if native.ui_pad_info then on, style = native.ui_pad_info() end
+            local key = (on and 'pad' or '') .. ':' .. tostring(style)
+            if self.pad_key ~= key then
+                self.pad_key = key
+                native.rml_class(id, 'body', 'pad', on)
+                native.rml_class(id, 'body', 'pad-ps', style == 1)
+                native.rml_class(id, 'body', 'pad-switch', style == 2)
+            end
+        end
         local hover = false
         local ropts = {layer = opts.layer, nav = false, _rml_doc = id}
         if opts.modal and not ui_edit then

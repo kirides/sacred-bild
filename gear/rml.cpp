@@ -1,5 +1,6 @@
 #include "rml.h"
 #include "log.h"
+#include "padnav.h"
 #include "ui.h"
 
 #include <RmlUi/Core.h>
@@ -14,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -264,6 +266,36 @@ namespace
             info.id = Ui::textureImage(s.substr(8));
             return info.id != 0;
         }
+        if (s.rfind("pad/", 0) == 0)
+        {
+            // A button prompt of the pad in use ("a", "b", "x", "y", "lb", "rb", "lt", "rt", "back", "start", "l3", "r3", "up",
+            // "down", "left", "right"; "confirm" is a, "cancel" b, "menu" start), drawn by SacredBild.
+            std::string name = s.substr(4);
+            for (char& c : name)
+            {
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            }
+            static const char* const names[] = {"a", "b", "x", "y", "lb", "rb", "lt", "rt", "back", "start", "l3", "r3", "up", "down", "left", "right"};
+            if (name == "confirm") name = "a";
+            else if (name == "cancel") name = "b";
+            else if (name == "menu") name = "start";
+            unsigned button = 0;
+            for (unsigned i = 0; i < 16; ++i)
+            {
+                if (name == names[i])
+                {
+                    button = 1u << i;
+                }
+            }
+            std::vector<unsigned> pixels;
+            if (!button || !PadNav::glyph(button, pixels))
+            {
+                return false;
+            }
+            info.id = Ui::pictureCreate32(64, 64, std::vector<uint32_t>(pixels.begin(), pixels.end()), true);
+            info.picture = true;
+            return info.id != 0;
+        }
         return false;
     }
 
@@ -328,7 +360,12 @@ namespace
             if (source.rfind("gear:", 0) == 0)
             {
                 Ui::ImageInfo image;
-                if (!parseGearTexture(source, info) || !Ui::imageInfo(info.id, image) || image.width <= 0 || image.height <= 0)
+                if (parseGearTexture(source, info) && info.picture)
+                {
+                    dimensions = {64, 64};      // a pad button prompt
+                    return add(info);
+                }
+                if (!info.picture && (info.id == 0 || !Ui::imageInfo(info.id, image) || image.width <= 0 || image.height <= 0))
                 {
                     LOG("RmlUi: no game image for {}", source);
                     return 0;
