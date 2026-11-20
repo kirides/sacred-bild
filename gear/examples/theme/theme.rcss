@@ -76,7 +76,7 @@ input.field:focus, select.field:focus { border-color: #ffd780; }
 
 /* Clickable text (like a hyperlink that opens a dialogue or popup; the entries of Sacred's own menus): cream text that blooms while
    hovered or focused with the pad, as the game's menu entries do. Use on <a> (a pad stop) or any element with data-nav. The bloom is
-   RmlUi's glow font effect: the glyphs are blurred into a halo (outline 1px, blur 5px) in the text's own shape, baked into the glyph
+   RmlUi's glow font effect: the glyphs are blurred into a halo (outline 2px, blur 6px) in the text's own shape, baked into the glyph
    textures, so it needs no off-screen render targets. */
 .link {
     display: inline-block;
@@ -85,8 +85,8 @@ input.field:focus, select.field:focus { border-color: #ffd780; }
     cursor: pointer;
     text-align: center;
 }
-.link:hover, .link:focus { color: #fff6d0; font-effect: glow(1px 5px 0px 0px #ffb840c0); }
-.link:active { color: #ffffff; font-effect: glow(2px 7px 0px 0px #ffe9a8ff); }     /* the click: the same bloom, brighter and wider */
+.link:hover, .link:focus { color: #fff6d0; font-effect: glow(2px 6px 0px 0px #ffb840e6); }
+.link:active { color: #ffffff; font-effect: glow(3px 8px 0px 0px #ffe9a8ff); }     /* the click: the same bloom, brighter and wider */
 .link.big { font-size: 1.25em; }
 
 /* Controller prompts: <img class="padkey" src="gear:pad/a"/> in front of the text inside a button; shown only while the controller was used last
