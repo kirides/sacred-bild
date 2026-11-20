@@ -12,21 +12,20 @@ local doc, visible = nil, true
 local clicks, boosted = 0, false
 
 local function load()
-    local d, err = ui.rml.load('ui/demo.rml')
+    -- Data binding: the counter lives in the model; the document shows it with {{ clicks }} and calls back through data-event-click.
+    local d, err = ui.rml.load('ui/demo.rml', {
+        model = {clicks = 0},
+        calls = {
+            count = function() clicks = clicks + 1; doc.model.clicks = clicks end,
+            reset = function() clicks = 0; doc.model.clicks = 0 end,
+        },
+    })
     if not d then
         print('rmldemo: ' .. tostring(err))
         return
     end
     doc = d
 
-    d:on('#count', 'click', function()
-        clicks = clicks + 1
-        d:text('#count', ('Clicked %d times'):format(clicks))
-    end)
-    d:on('#reset', 'click', function()
-        clicks = 0
-        d:text('#count', 'Clicked 0 times')
-    end)
     d:on('#boost', 'click', function()
         boosted = not boosted
         d:class('#hp', 'boost', boosted)

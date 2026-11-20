@@ -380,7 +380,7 @@ function GearUiNative.insets(style) end
 --- text field takes the keyboard, and events (`click`, `change` ...) call Lua functions registered with `doc:on`. The default
 --- font is Segoe UI, as for `gear.ui` text; `rml.load_font` adds the mod's own. Images: a file of the mod's folder (PNG, TGA, JPG), or
 --- the game's own UI images as `gear:image/<id>` (`gear.ui.images`) and `gear:texture/<NAME.TGA>` (Texture.pak), with `?flip=h`, `?flip=v`
---- or `?flip=hv` mirroring them: `<img src="gear:image/54">`, `decorator: image(gear:image/54)`. Button prompts of the controller (needs Sacred Bild; the glyphs of the pad in use) as `gear:pad/<button>` (`a b x y lb rb lt rt back start l3 r3 up down left right`, also `confirm` = a, `cancel` = b, `menu` = start): `<img src="gear:pad/a"/>`, sized in `em` so it follows the text. `doc:draw` sets the classes `pad` (the controller was used last), `pad-ps` and `pad-switch` (the pad's style) on `<body>`, so a stylesheet shows the prompts only while they matter: `.padkey { display: none; } body.pad .padkey { display: inline-block; }`. The icon is chosen when the image loads, so it follows the pad's style from the next load on.
+--- or `?flip=hv` mirroring them: `<img src="gear:image/54">`, `decorator: image(gear:image/54)`. Button prompts of the controller (needs Sacred Bild; the glyphs of the pad in use) as `gear:pad/<button>` (`a b x y lb rb lt rt back start l3 r3 up down left right`, also `confirm` = a, `cancel` = b, `menu` = start): `<img src="gear:pad/a"/>`, sized in `em` so it follows the text. `doc:draw` sets the classes `pad` (the controller was used last), `pad-ps` and `pad-switch` (the pad's style) on `<body>`, so a stylesheet shows the prompts only while they matter: `.padkey { display: none; } body.pad .padkey { display: inline-block; }`. The icon is chosen when the image loads, so it follows the pad's style from the next load on. Data binding: load with `{model = {...}, calls = {...}}` and write `<body data-model="model">` with `{{ expression }}`, `data-value`, `data-if`, `data-for`, `data-class-x`, `data-attr-x` and `data-event-click="name(args)"`; change values with `doc.model.key = value` (nested writes work too) and the document refreshes only what depends on them.
 ---
 --- A prototype: no JavaScript (the logic is Lua), no filters, shaders, blur or drop shadows yet (CSS `transform` works: 2D rotate, scale, skew,
 --- translate and perspective, applied to the vertices; the mouse and the pad still hit the untransformed boxes), and a mesh counts as a draw command (at
@@ -392,6 +392,9 @@ local GearUiRml = {}
 
 --- The options of `load` and `load_string`.
 ---@class GearRmlLoadOpts
+---@field model? table Data binding: the values of the document's data model, named `model` (`<body data-model="model">`, then `{{ hp }}`, `data-value="name"`, `data-if="hp < 10"`, `data-for="item : items"`, `data-class-low="hp < 10"` ...). Top-level keys fix what can be bound; their values may be numbers, strings, booleans, lists and records (nested up to 8 deep). Change them through `doc.model`.
+---@field calls? table<string, fun(args: string[], doc: GearRmlDoc, event: GearRmlEvent)> Functions for `data-event-click="name(arg, ...)"` attributes; `args` are the call's arguments as text.
+---@field on_change? fun(doc: GearRmlDoc, model: table) Called after the document changed a value itself (an input with `data-value`); the table is up to date.
 ---@field dp? boolean Lay the document out in screen pixels with `1dp` = one layout unit (crisp text; write sizes in `dp`). Default `false`: `1px` = one layout unit, text is scaled with the UI.
 
 --- The options of `GearRmlDoc.draw`.
@@ -409,7 +412,13 @@ local GearUiRml = {}
 
 --- A loaded document.
 ---@class GearRmlDoc
+---@field model table? The data model's values (when loaded with `model`): read and write them like a table, at any depth; a write refreshes the bindings of the document.
 local GearRmlDoc = {}
+
+--- The plain value of a top-level key of the data model (a table for lists and records).
+---@param key string
+---@return any
+function GearRmlDoc:get(key) end
 
 --- Loads a document of the mod's folder.
 ---@param path string A `.rml` file in the mod's folder; its stylesheets and images are read from there too.

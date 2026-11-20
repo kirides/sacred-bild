@@ -2005,6 +2005,8 @@ do
     end
     local log_rml = {}
     local clicked_ev, listened = nil, {}
+    native.rml_model_set = function(id, key, value) log_rml[#log_rml + 1] = 'model ' .. key .. ' ' .. (type(value) == 'table' and 'table' or tostring(value)); return true end
+    native.rml_model_changed = function() return nil end
     native.rml_load = function(dir, path, dp) log_rml[#log_rml + 1] = 'load ' .. dir .. ' ' .. path .. ' ' .. tostring(dp); return 7 end
     native.rml_load_string = function() return nil, 'bad markup' end
     native.rml_rects = function() return {{x = 10, y = 10, w = 100, h = 50, panel = 'main', title = 'Main'}} end
@@ -2024,6 +2026,13 @@ do
     local doc = rml.load('ui/main.rml', {dp = true})
     ok(doc and log_rml[1]:match('^load %S+ ui/main%.rml true$'), 'rml.load asks the host with the mod folder and the dp flag')
     ok(select(2, rml.load_string('<x')) == 'bad markup', 'rml.load_string passes the message of a failure on')
+    local mdoc = rml.load('ui/m.rml', {model = {hp = 5, items = {{name = 'a'}}}, calls = {pick = function() end}})
+    mdoc.model.hp = 9
+    ok(mdoc:get('hp') == 9 and log_rml[#log_rml] == 'model hp 9', 'doc.model writes through to the host')
+    mdoc.model.items[1].name = 'b'
+    ok(mdoc:get('items')[1].name == 'b' and log_rml[#log_rml] == 'model items table', 'a nested write sends the top-level key again')
+    mdoc:close()
+    log_rml = {}
     ok(doc:on('#ok', 'click', function(e) clicked_ev = e end) and listened[1] == '#ok/click', 'doc:on registers a listener')
     doc:text('#t', 'a<b&c')
     ok(log_rml[#log_rml] == 'html #t a&lt;b&amp;c', 'doc:text escapes the markup')

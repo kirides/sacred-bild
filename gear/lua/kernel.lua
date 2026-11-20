@@ -3553,8 +3553,35 @@ local function make_ui(mod)
     uis.rml_docs = uis.rml_docs or {}
     local RML_KEYS = {'backspace', 'delete', 'enter', 'tab', 'escape', 'left', 'right', 'up', 'down', 'home', 'end', 'pageup', 'pagedown'}
 
+    -- The names of the callbacks of data-event-* attributes (opts.calls: name -> function).
+    function uis.rml_call_names(opts)
+        local names = {}
+        for name in pairs(opts.calls or {}) do names[#names + 1] = name end
+        table.sort(names)
+        return names
+    end
+    -- doc.model: the data model's values, read and written like a table; writing a value (at any depth) has the bindings of the
+    -- document refresh. The top-level keys are the ones the model was loaded with.
+    function uis.rml_proxy(doc, raw, top)
+        return setmetatable({}, {
+            __index = function(_, k)
+                local v = raw[k]
+                if type(v) == 'table' then return uis.rml_proxy(doc, v, top or k) end
+                return v
+            end,
+            __newindex = function(_, k, v)
+                raw[k] = v
+                local key = top or k
+                if not doc.closed then native.rml_model_set(doc.id, key, doc.data[key]) end
+            end,
+        })
+    end
     local function rml_open(id, opts)
-        local doc = setmetatable({id = id, handlers = {}, opts = opts}, Doc)
+        local doc = setmetatable({id = id, handlers = {}, opts = opts, calls = opts.calls or {}}, Doc)
+        if opts.model then
+            doc.data = opts.model
+            doc.model = uis.rml_proxy(doc, doc.data)
+        end
         uis.rml_docs[id] = {mod = mod, doc = doc}
         return doc
     end
@@ -3565,7 +3592,7 @@ local function make_ui(mod)
         assert(type(path) == 'string', 'path must be a string')
         if not native.rml_load then error('RmlUi is not available in this build', 2) end
         opts = opts or {}
-        local id, err = native.rml_load(mod.dir, path, opts.dp and true or false)
+        local id, err = native.rml_load(mod.dir, path, opts.dp and true or false, opts.model, uis.rml_call_names(opts))
         if not id then return nil, err end
         return rml_open(id, opts)
     end
@@ -3575,7 +3602,7 @@ local function make_ui(mod)
         assert(type(markup) == 'string', 'markup must be a string')
         if not native.rml_load_string then error('RmlUi is not available in this build', 2) end
         opts = opts or {}
-        local id, err = native.rml_load_string(mod.dir, markup, opts.dp and true or false)
+        local id, err = native.rml_load_string(mod.dir, markup, opts.dp and true or false, opts.model, uis.rml_call_names(opts))
         if not id then return nil, err end
         return rml_open(id, opts)
     end
@@ -3623,6 +3650,8 @@ local function make_ui(mod)
         if type(text) == 'number' then text = tostring(text) end
         return native.rml_value(self.id, selector, text)
     end
+    -- doc:get(key) -> the plain value of a top-level key of the data model (a table for lists and records).
+    function Doc:get(key) return self.data and self.data[key] end
     function Doc:show() native.rml_show(self.id, true) end
     function Doc:hide() native.rml_show(self.id, false) end
 
@@ -3723,12 +3752,28 @@ local function make_ui(mod)
             native.rml_wheel(id, uis.wheel)
         end
         for _, e in ipairs(native.rml_update(id, mx, my, hover)) do
-            local fn = self.handlers[e.listener]
+            local fn = e.call and self.calls[e.call] or self.handlers[e.listener]
+            if e.call and fn then
+                local ok, err = xpcall(fn, traceback, e.args, self, e)
+                if not ok then log('[%s] rml callback %s failed: %s', mod.id, e.call, tostring(err)) end
+                fn = nil
+            end
             if fn then
                 local ok, err = xpcall(fn, traceback, e, self)
                 if not ok then log('[%s] rml handler for %s failed: %s', mod.id, e.type, tostring(err)) end
             end
             if self.closed then return 0 end
+        end
+        if self.data then
+            -- A value the document changed itself (data-value): into the table, and the mod's on_change.
+            local changed = native.rml_model_changed(id)
+            if changed then
+                for k, v in pairs(changed) do self.data[k] = v end
+                if self.opts.on_change then
+                    local ok, err = xpcall(self.opts.on_change, traceback, self, self.data)
+                    if not ok then log('[%s] rml on_change failed: %s', mod.id, tostring(err)) end
+                end
+            end
         end
         local n = native.rml_draw(id, layer, -1)
         if n > 0 then ui_count(mod, n) end

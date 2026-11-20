@@ -3,7 +3,7 @@
     <title>RmlUi demo</title>
     <link type="text/rcss" href="demo.rcss"/>
 </head>
-<body>
+<body data-model="model">
     <div id="window" data-panel="demo" data-title="RmlUi demo">
         <!-- The corner ornaments of the game's own tooltip frame (gear.ui.native.frame): UI images 54 and 55. -->
         <img class="corner tl" src="gear:image/54"/>
@@ -17,8 +17,8 @@
         <div class="bar"><div id="hp" class="fill"></div></div>
 
         <div class="row">
-            <button id="count">Clicked 0 times</button>
-            <button id="reset" class="secondary">Reset</button>
+            <button id="count" data-event-click="count">Clicked {{ clicks }} times</button>
+            <button id="reset" class="secondary" data-event-click="reset">Reset</button>
             <button id="boost" class="secondary">Highlight: off</button>
         </div>
         <div class="row">

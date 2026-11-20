@@ -4,6 +4,8 @@
 #include "ui.h"
 
 #include <RmlUi/Core.h>
+#include <RmlUi/Core/DataTypes.h>
+#include <RmlUi/Core/DataVariable.h>
 #include <RmlUi/Core/Elements/ElementFormControl.h>
 
 #include <lua.hpp>
@@ -14,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cctype>
 #include <cmath>
@@ -501,7 +504,198 @@ namespace
         int listener = 0;
         std::string type, target, current;
         std::vector<std::pair<std::string, std::string>> params;
+        std::string call;                       // a data-event-* callback: its name (listener is 0)
+        std::vector<std::string> args;          // ... and its arguments
     };
+
+    // The data model: a tree of values (what the mod's Lua table holds) that RmlUi's data bindings read and write.
+    struct Node
+    {
+        enum class Type { Nil, Bool, Num, Str, Arr, Obj } type = Type::Nil;
+        bool b = false;
+        double n = 0;
+        std::string s;
+        std::vector<Node> arr;
+        std::vector<std::pair<std::string, Node>> obj;
+    };
+
+    std::atomic<unsigned> g_modelEdits{0};      // counts the values the document itself changed (data-value)
+
+    class NodeDef final : public Rml::VariableDefinition
+    {
+    public:
+        explicit NodeDef(Rml::DataVariableType type) : Rml::VariableDefinition(type) {}
+
+        bool Get(void* ptr, Rml::Variant& variant) override
+        {
+            const Node& n = *static_cast<Node*>(ptr);
+            switch (n.type)
+            {
+            case Node::Type::Bool: variant = n.b; return true;
+            case Node::Type::Num: variant = n.n; return true;
+            case Node::Type::Str: variant = n.s; return true;
+            case Node::Type::Nil: variant = Rml::String(); return true;
+            default: return false;
+            }
+        }
+
+        bool Set(void* ptr, const Rml::Variant& variant) override
+        {
+            Node& n = *static_cast<Node*>(ptr);
+            bool ok = false;
+            if (n.type == Node::Type::Bool)
+            {
+                ok = variant.GetInto(n.b);
+            }
+            else if (n.type == Node::Type::Num)
+            {
+                ok = variant.GetInto(n.n);
+            }
+            else if (n.type == Node::Type::Str || n.type == Node::Type::Nil)
+            {
+                ok = variant.GetInto(n.s);
+                if (ok)
+                {
+                    n.type = Node::Type::Str;
+                }
+            }
+            if (ok)
+            {
+                ++g_modelEdits;
+            }
+            return ok;
+        }
+
+        int Size(void* ptr) override
+        {
+            const Node& n = *static_cast<Node*>(ptr);
+            return n.type == Node::Type::Arr ? static_cast<int>(n.arr.size()) : static_cast<int>(n.obj.size());
+        }
+
+        Rml::DataVariable Child(void* ptr, const Rml::DataAddressEntry& address) override;
+    };
+
+    NodeDef g_scalarDef(Rml::DataVariableType::Scalar), g_arrayDef(Rml::DataVariableType::Array), g_structDef(Rml::DataVariableType::Struct);
+
+    Rml::DataVariable variableOf(Node& n)
+    {
+        return Rml::DataVariable(n.type == Node::Type::Arr ? static_cast<Rml::VariableDefinition*>(&g_arrayDef)
+                                 : n.type == Node::Type::Obj ? static_cast<Rml::VariableDefinition*>(&g_structDef)
+                                                             : static_cast<Rml::VariableDefinition*>(&g_scalarDef),
+                                 &n);
+    }
+
+    Rml::DataVariable NodeDef::Child(void* ptr, const Rml::DataAddressEntry& address)
+    {
+        Node& n = *static_cast<Node*>(ptr);
+        if (n.type == Node::Type::Arr)
+        {
+            if (address.index >= 0 && address.index < static_cast<int>(n.arr.size()))
+            {
+                return variableOf(n.arr[static_cast<size_t>(address.index)]);
+            }
+            if (address.name == "size")
+            {
+                return Rml::MakeLiteralIntVariable(static_cast<int>(n.arr.size()));
+            }
+        }
+        else if (n.type == Node::Type::Obj)
+        {
+            for (auto& [key, value] : n.obj)
+            {
+                if (key == address.name)
+                {
+                    return variableOf(value);
+                }
+            }
+        }
+        return Rml::DataVariable();
+    }
+
+    // Lua value at `index` -> Node (depth-limited; functions and userdata become nil; a table with only 1..n keys is an array).
+    void toNode(lua_State* L, int index, Node& out, int depth)
+    {
+        if (index < 0 && index > LUA_REGISTRYINDEX)
+        {
+            index = lua_gettop(L) + index + 1;
+        }
+        out = Node();
+        switch (lua_type(L, index))
+        {
+        case LUA_TBOOLEAN: out.type = Node::Type::Bool; out.b = lua_toboolean(L, index) != 0; break;
+        case LUA_TNUMBER: out.type = Node::Type::Num; out.n = lua_tonumber(L, index); break;
+        case LUA_TSTRING: out.type = Node::Type::Str; out.s = lua_tostring(L, index); break;
+        case LUA_TTABLE:
+        {
+            if (depth > 8)
+            {
+                break;
+            }
+            const size_t count = lua_objlen(L, index);
+            size_t keys = 0;
+            lua_pushnil(L);
+            while (lua_next(L, index))
+            {
+                ++keys;
+                lua_pop(L, 1);
+            }
+            if (keys == count)
+            {
+                out.type = Node::Type::Arr;
+                out.arr.resize(count);
+                for (size_t i = 0; i < count; ++i)
+                {
+                    lua_rawgeti(L, index, static_cast<int>(i + 1));
+                    toNode(L, -1, out.arr[i], depth + 1);
+                    lua_pop(L, 1);
+                }
+            }
+            else
+            {
+                out.type = Node::Type::Obj;
+                lua_pushnil(L);
+                while (lua_next(L, index))
+                {
+                    if (lua_type(L, -2) == LUA_TSTRING)
+                    {
+                        out.obj.emplace_back(lua_tostring(L, -2), Node());
+                        toNode(L, -1, out.obj.back().second, depth + 1);
+                    }
+                    lua_pop(L, 1);
+                }
+            }
+            break;
+        }
+        default: break;
+        }
+    }
+
+    void pushNode(lua_State* L, const Node& n)
+    {
+        switch (n.type)
+        {
+        case Node::Type::Bool: lua_pushboolean(L, n.b); break;
+        case Node::Type::Num: lua_pushnumber(L, n.n); break;
+        case Node::Type::Str: lua_pushlstring(L, n.s.data(), n.s.size()); break;
+        case Node::Type::Arr:
+            lua_createtable(L, static_cast<int>(n.arr.size()), 0);
+            for (size_t i = 0; i < n.arr.size(); ++i)
+            {
+                pushNode(L, n.arr[i]);
+                lua_rawseti(L, -2, static_cast<int>(i + 1));
+            }
+            break;
+        case Node::Type::Obj:
+            lua_createtable(L, 0, static_cast<int>(n.obj.size()));
+            for (const auto& [key, value] : n.obj)
+            {
+                pushNode(L, value);
+                lua_setfield(L, -2, key.c_str());
+            }
+            break;
+        default: lua_pushnil(L); break;
+        }
+    }
 
     class Listener final : public Rml::EventListener
     {
@@ -527,6 +721,10 @@ namespace
         bool hovering = false;
         std::vector<std::unique_ptr<Listener>> listeners;
         std::vector<QueuedEvent> events;
+        Node model;                             // the data model's values (an object), if the document has one
+        Rml::DataModelHandle modelHandle;
+        bool hasModel = false;
+        unsigned modelSeen = 0;
     };
 
     std::map<int, std::unique_ptr<Doc>> g_docs;
@@ -784,6 +982,55 @@ namespace
             return pushFail(L, "cannot create the context");
         }
         fitContext(*d);
+        if (lua_istable(L, 4))
+        {
+            // The data model "model" (data-model="model" in the document): the table's top-level keys, and the names of the
+            // callbacks of data-event-* attributes (the list in argument 5).
+            toNode(L, 4, d->model, 0);
+            if (d->model.type != Node::Type::Obj)
+            {
+                d->model = Node();
+                d->model.type = Node::Type::Obj;
+            }
+            Rml::DataModelConstructor ctor = d->context->CreateDataModel("model");
+            if (ctor)
+            {
+                for (auto& [key, value] : d->model.obj)
+                {
+                    ctor.BindCustomDataVariable(key, variableOf(value));
+                }
+                Doc* doc = d.get();
+                if (lua_istable(L, 5))
+                {
+                    const int count = static_cast<int>(lua_objlen(L, 5));
+                    for (int i = 1; i <= count; ++i)
+                    {
+                        lua_rawgeti(L, 5, i);
+                        const char* name = lua_tostring(L, -1);
+                        if (name)
+                        {
+                            ctor.BindEventCallback(name, [doc, call = std::string(name)](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& arguments) {
+                                if (doc->events.size() >= 512)
+                                {
+                                    return;
+                                }
+                                QueuedEvent q;
+                                q.call = call;
+                                for (const Rml::Variant& a : arguments)
+                                {
+                                    Rml::String text;
+                                    q.args.push_back(a.GetInto(text) ? text : std::string());
+                                }
+                                doc->events.push_back(std::move(q));
+                            });
+                        }
+                        lua_pop(L, 1);
+                    }
+                }
+                d->modelHandle = ctor.GetModelHandle();
+                d->hasModel = true;
+            }
+        }
         {
             RootScope scope(*d);
             d->document = fromString ? d->context->LoadDocumentFromMemory(source, toUtf8(file))
@@ -806,6 +1053,47 @@ namespace
 
     // native.rml_load_string(dir, rml, dp) -> id | nil, message (relative links resolve against the mod's folder)
     int rmlLoadString(lua_State* L) { return create(L, true); }
+
+    // native.rml_model_set(id, key, value) -> bool: replaces the value of a top-level key of the document's data model
+    // (the keys of the table given to load) and has the bindings refresh.
+    int rmlModelSet(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        const std::string key = str(L, 2);
+        if (!d.hasModel)
+        {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+        for (auto& [name, value] : d.model.obj)
+        {
+            if (name == key)
+            {
+                toNode(L, 3, value, 0);
+                d.modelHandle.DirtyVariable(key);
+                lua_pushboolean(L, 1);
+                return 1;
+            }
+        }
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
+    // native.rml_model_changed(id) -> table | nil: the whole data model, if the document changed a value itself (data-value) since
+    // the last call.
+    int rmlModelChanged(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        const unsigned edits = g_modelEdits.load();
+        if (!d.hasModel || edits == d.modelSeen)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        d.modelSeen = edits;
+        pushNode(L, d.model);
+        return 1;
+    }
 
     // native.rml_close(id)
     int rmlClose(lua_State* L)
@@ -883,6 +1171,18 @@ namespace
                 lua_setfield(L, -2, key.c_str());
             }
             lua_setfield(L, -2, "params");
+            if (!e.call.empty())
+            {
+                push(L, e.call);
+                lua_setfield(L, -2, "call");
+                lua_createtable(L, static_cast<int>(e.args.size()), 0);
+                for (size_t i = 0; i < e.args.size(); ++i)
+                {
+                    push(L, e.args[i]);
+                    lua_rawseti(L, -2, static_cast<int>(i + 1));
+                }
+                lua_setfield(L, -2, "args");
+            }
             lua_rawseti(L, -2, index++);
         }
         d.events.clear();
@@ -1274,6 +1574,8 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_draw", guarded<rmlDraw>},
         {"rml_rects", guarded<rmlRects>},
         {"rml_move", guarded<rmlMove>},
+        {"rml_model_set", guarded<rmlModelSet>},
+        {"rml_model_changed", guarded<rmlModelChanged>},
         {"rml_nav", guarded<rmlNav>},
         {"rml_click", guarded<rmlClick>},
         {"rml_html", guarded<rmlHtml>},
