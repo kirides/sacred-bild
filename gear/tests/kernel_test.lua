@@ -2046,6 +2046,12 @@ do
     kernel.tick(0.016)
     kernel.tick(0.016)
     ok(other_hover == true, 'a modal document makes the regions of other overlays inert')
+    local nav_flags
+    local old_nav = native.ui_nav
+    native.ui_nav = function(stops, flags) nav_flags = flags end
+    kernel.tick(0.016)
+    native.ui_nav = old_nav
+    ok(nav_flags == 1, 'a modal document makes its pad stops the only ones')
     doc:close()
     ok(log_rml[#log_rml] == 'close 7' and doc:draw() == 0, 'doc:close closes the host document, drawing a closed one does nothing')
 end

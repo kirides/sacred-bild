@@ -3080,6 +3080,10 @@ local function ui_push_nav()
     end
     if #drop > 0 then
         list, flags = drop, 1
+    elseif uis.modal then
+        -- A modal RmlUi document: the pad stays on its stops (only they were registered), the game takes no pad input.
+        for _, n in ipairs(ui_nav) do list[#list + 1] = n end
+        flags = 1
     elseif ui_nav_modal then
         for _, n in ipairs(ui_nav) do
             if n.mod == ui_nav_modal then list[#list + 1] = n end
