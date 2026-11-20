@@ -37,6 +37,7 @@ hero_saves = {}
 local op_ids, op_ready, op_sent, op_in = {0x1E0, 0x1E1}, false, {}, {}
 mp_info_mock, hero_names, net_sent, net_frames, net_send_ok = {network = false}, {[1] = 'Aria'}, {}, {}, true
 ui_events_queue, keys_held, ui_mouse_at = {}, {}, {0, 0}
+world_at = nil
 state_file, state_bak, state_writes = nil, nil, 0
 realm_file, realm_bak, realm_writes, realm_client, realm_selected = nil, nil, 0, nil, nil
 layout_file, moved_windows = '{"game:UI_WND_INVENTORY":{"x":2048,"y":1024}}', {}
@@ -207,6 +208,7 @@ local native = {
     ui_nav = function(stops, flags) nav_published = {stops = stops, flags = flags}; return true end,
     ui_pad = function() local p = pad_queue; pad_queue = {0, 0, 0}; return p[1], p[2], p[3] end,
     key_down = function(vk) return keys_held[vk] == true end,
+    world_cursor = function() if world_at then return 77, world_at[1], world_at[2], 0 end end,
     state_read = function(which) if which == 'realms' then return realm_file end return state_file end,
     state_write = function(text, backup, which)
         if which == 'realms' then
@@ -460,6 +462,17 @@ files.w = {
             widgets.clip = gear.clipboard
             widgets.get_sector = function() local hero = gear.world.hero(); return hero and hero:sector() end
             widgets.bare = ui.panel('b', 'Bare', 100, 100, 200, 30, {bare = true, resizable = true, min_width = 20, min_height = 10})
+            -- drag and drop: a source, a target that takes it, one that refuses, and the world
+            local sr = ui.region('src', 600, 650, 40, 40)
+            widgets.dragging = ui.drag_source('src', sr, {type = 'art', data = {id = 7}, label = 'Art 7'})
+            ui.region('slot', 700, 650, 40, 40)
+            widgets.slot = ui.drop_target('slot', {accept = 'art', hint = 'Place here', on_drop = function(drag, info) widgets.dropped = {drag.data.id, info.x} end})
+            ui.region('bad', 800, 650, 40, 40)
+            widgets.bad = ui.drop_target('bad', {accept = function(d) return false, 'No room' end, on_drop = function() widgets.dropped = 'wrong' end})
+            if not widgets.wd then
+                widgets.wd = true
+                ui.world_drop('spawn', {accept = 'art', on_drop = function(drag, spot) widgets.world = {spot.x, spot.y, spot.object_id} end})
+            end
         end)
     ]],
 }
@@ -785,6 +798,70 @@ ok(widgets.panel.x == 400 and widgets.panel.w == 200, 'reset_panel: its own plac
 keys_held[0x25] = true
 ok(widgets.ui.key_down('left') and not widgets.ui.key_down('right'), 'key_down')
 keys_held[0x25] = nil
+-- Drag and drop: a press that moves starts a drag; targets say whether they take it; a release drops on a valid one.
+do
+    local U = widgets.ui
+    local function start_drag()
+        ui_mouse_at = {610, 660}
+        kernel.tick(0.016)
+        local sh = region_at(610, 660)
+        ui_events_queue = {{down = true, button = 0, x = 610, y = 660, region = sh}}
+        kernel.tick(0.016)
+        return sh
+    end
+    local function release(sh, x, y)
+        ui_events_queue = {{down = false, button = 0, x = x, y = y, region = sh}}
+        kernel.tick(0.016)
+    end
+    ok(widgets.slot.dragging == false and getmetatable(widgets.slot) ~= nil, 'drop_target is a constant while nothing is dragged')
+    local sh = start_drag()
+    ok(not U.drag_active() and not widgets.dragging, 'a press alone starts no drag')
+    ui_mouse_at = {710, 660}
+    kernel.tick(0.016)
+    local d = U.drag_active()
+    ok(d and d.type == 'art' and d.data.id == 7 and widgets.dragging, 'moving the pressed source starts the drag')
+    ok(widgets.slot.dragging and widgets.slot.over and widgets.slot.valid and not widgets.bad.valid, 'targets report whether they take the drag')
+    ui_mouse_at = {810, 660}
+    kernel.tick(0.016)
+    ok(widgets.bad.over and widgets.bad.valid == false and widgets.bad.reason == 'No room', 'a refusing target says why')
+    release(sh, 810, 660)
+    ok(not U.drag_active() and widgets.dropped == nil, 'a release over a refusing target drops nothing and ends the drag')
+    -- on a taking target
+    sh = start_drag()
+    ui_mouse_at = {710, 660}
+    kernel.tick(0.016)
+    release(sh, 710, 660)
+    ok(widgets.dropped and widgets.dropped[1] == 7 and widgets.dropped[2] == 710 and not U.drag_active(), 'a release over a taking target drops there')
+    widgets.dropped = nil
+    -- the world
+    sh = start_drag()
+    world_at = {1000, 2000}
+    ui_mouse_at = {900, 100}
+    kernel.tick(0.016)
+    release(sh, 900, 100)
+    ok(widgets.world and widgets.world[1] == 1000 and widgets.world[2] == 2000 and widgets.world[3] == 77, 'a release over the world drops there')
+    widgets.world = nil
+    -- over a game window (no world point under the cursor): nothing
+    sh = start_drag()
+    world_at = nil
+    ui_mouse_at = {900, 100}
+    kernel.tick(0.016)
+    release(sh, 900, 100)
+    ok(widgets.world == nil and widgets.dropped == nil, 'no world point: no drop')
+    -- Esc cancels
+    sh = start_drag()
+    ui_mouse_at = {710, 660}
+    kernel.tick(0.016)
+    ok(U.drag_active(), 'a drag is on again')
+    keys_held[0x1B] = true
+    kernel.tick(0.016)
+    keys_held[0x1B] = nil
+    ok(not U.drag_active(), 'Esc cancels the drag')
+    release(sh, 710, 660)
+    ok(widgets.dropped == nil, 'a cancelled drag drops nothing')
+    ui_mouse_at = {0, 0}
+    kernel.tick(0.016)
+end
 -- tooltip placement: clear of the cursor sprite, flipped at the screen's edges
 do
     local tr = widgets.ui.tooltip_rect

@@ -2892,6 +2892,98 @@ uis.SCROLLBAR = 12     -- the scrollbar's width
 -- to Gear every tick before the handlers run; a mod that is off or unloaded does not count (the game's window shows).
 uis.replace = {}
 uis.typed = ''         -- the characters typed since the last tick (while a mod captures the keys)
+-- Drag and drop between mods (ui.drag_source, ui.drop_target, ui.world_drop). One drag at a time: uis.drag = {type,
+-- data, label, icon, mod, source, id, handle, carry, released, ...}. Drop targets register while a drag is on (each
+-- tick, from the mods' draw handlers); the end of the tick decides what is under the cursor, shows the hint and drops.
+uis.drag = nil
+uis.drop_targets = {n = 0}      -- this tick's targets {handle, mod, opts, id}; entries are reused
+uis.world_drops = {}            -- persistent world drop areas {mod, id, opts}, in registration order
+uis.DRAG_THRESHOLD = 6          -- cursor travel (layout units) before a press on a source becomes a drag
+uis.NOT_DRAGGING = setmetatable({dragging = false, over = false, valid = false}, {__newindex = function() error('read-only', 2) end})
+
+-- Whether a target's `accept` (a type, a list of types, '*', or a function(drag) -> ok, text) takes the drag, and the
+-- text for it (the hint when it does, the reason when it does not).
+function uis.drag_accepts(spec, drag)
+    local t = type(spec)
+    if t == 'nil' then return true end
+    if t == 'string' then return spec == '*' or spec == drag.type end
+    if t == 'table' then
+        for _, v in ipairs(spec) do
+            if v == '*' or v == drag.type then return true end
+        end
+        return false
+    end
+    if t == 'function' then
+        local ok, a, b = pcall(spec, drag)
+        if not ok then
+            if uis.drag_err ~= a then uis.drag_err = a; log('UI: a drop accept function failed: %s', tostring(a)) end
+            return false
+        end
+        if type(a) == 'string' then return false, a end
+        if a then return true, type(b) == 'string' and b or nil end
+        return false, type(b) == 'string' and b or nil
+    end
+    return false
+end
+
+-- The topmost region of the last frame at (x, y), as ui_hot is decided for the cursor.
+function uis.topmost_at(x, y)
+    local best, found = -1, nil
+    for i = 1, ui_prev_regions.n do
+        local r = ui_prev_regions[i]
+        local rank = r.layer * 100000 + i
+        if rank > best and x >= r.x and y >= r.y and x < r.x + r.w and y < r.y + r.h then
+            found, best = r.handle, rank
+        end
+    end
+    return found
+end
+
+-- What the drag is over: -> target (an entry of uis.drop_targets or a world drop, nil: nothing that takes drops), valid
+-- (true | false | nil: neutral, over its own source), text, spot (the world point of a world drop).
+function uis.drag_resolve(drag, handle)
+    if handle == drag.handle then return nil, nil end
+    if handle then
+        for i = 1, uis.drop_targets.n do
+            local t = uis.drop_targets[i]
+            if t.handle == handle then
+                local ok, text = uis.drag_accepts(t.opts.accept, drag)
+                if ok and not text then text = t.opts.hint end
+                return t, ok and true or false, text
+            end
+        end
+        return nil, false
+    end
+    -- over no mod region: the world, if the cursor is on it (not on a game window)
+    if not native.world_cursor then return nil, false end
+    local id, wx, wy, layer = native.world_cursor(0)
+    if not id then return nil, false end
+    local reason
+    for _, w in ipairs(uis.world_drops) do
+        if not (w.mod.disabled or w.mod.unloaded) then
+            local ok, text = uis.drag_accepts(w.opts.accept, drag)
+            if ok then
+                return w, true, text or w.opts.hint, {x = wx, y = wy, layer = layer, object_id = id ~= 0 and id or nil}
+            end
+            reason = reason or text
+        end
+    end
+    return nil, false, reason
+end
+
+function uis.drag_start(mod, id, handle, opts, carry)
+    uis.drag = {
+        type = opts.type, data = opts.data, label = opts.label, icon = opts.icon, icon_size = opts.icon_size,
+        mod = mod, source = mod.id, id = id, handle = handle, carry = carry, on_end = opts.on_end,
+        esc = native.key_down(0x1B) == true, x0 = ui_mouse.x, y0 = ui_mouse.y,
+    }
+end
+
+function uis.drag_end(dropped)
+    local d = uis.drag
+    uis.drag = nil
+    if d and d.on_end then call(d.mod, 'drag end', d.on_end, d, dropped and true or false) end
+end
 function uis.publish_replace()
     local names = {}
     for name, m in pairs(uis.replace) do
@@ -2969,6 +3061,7 @@ local function ui_begin_tick()
     end
     uis.clear_list(uis.clip_stack)
     uis.clear_list(uis.deferred)
+    uis.drop_targets.n = 0
     uis.set_clip(nil)
     do
         local wheel, pad = 0, 0
@@ -3035,10 +3128,13 @@ local function ui_begin_tick()
             end
         else
             s.released = true
+            local dr = uis.drag
+            local dragged = dr and not dr.carry and dr.handle == e.region     -- a drag's release is no click on its source
+            if dragged then dr.released, dr.rx, dr.ry = true, e.x, e.y end
             if ui_active == e.region then
                 ui_active = nil
                 -- A click: released over the region it was pressed on.
-                for ri = 1, ui_prev_regions.n do
+                for ri = 1, dragged and 0 or ui_prev_regions.n do
                     local r = ui_prev_regions[ri]
                     if r.handle == e.region and e.x >= r.x and e.y >= r.y and e.x < r.x + r.w and e.y < r.y + r.h then
                         s.clicked = true
@@ -3174,6 +3270,108 @@ function uis.tooltip_wrap(text, width)
     return lines, widest
 end
 
+-- The drag's hint at the cursor: the dragged thing (its icon or label), a badge (+ it takes the drop here, x it does not;
+-- none while over its own source) and the target's text (the hint, or why it does not take it).
+function uis.drag_draw(drag, valid, text)
+    local s = ui_tick_state or {}
+    local bl, bt = s.screen_left or 0, s.screen_top or 0
+    local br, bb = s.screen_right or 1024, s.screen_bottom or 768
+    local gw, gh
+    local lw, lh = 0, 0
+    if drag.icon then
+        gw = drag.icon_size or 32
+        gh = gw
+    elseif drag.label then
+        lw, lh = ui_measure(tostring(drag.label), {})
+        gw, gh = math.ceil(lw or 0) + 12, math.max(lh or 20, 14) + 4
+    else
+        gw, gh = 0, 0
+    end
+    local tw, th = 0, 0
+    if text and text ~= '' then
+        tw, th = ui_measure(tostring(text), {})
+        tw, th = math.ceil(tw or 0) + 12, math.max(th or 20, 14) + 4
+    end
+    local badge = valid ~= nil and 16 or 0
+    local total = gw + (badge > 0 and badge - 6 or 0) + (tw > 0 and tw + 4 or 0)
+    local x, y = ui_mouse.x + 16, ui_mouse.y + 18
+    if x + total > br - 4 then x = math.max(bl, ui_mouse.x - 6 - total) end
+    if y + math.max(gh, th, badge) > bb - 4 then y = math.max(bt, bb - 4 - math.max(gh, th, badge)) end
+    if drag.icon then
+        native.ui_image(2, -1, drag.icon, x, y, gw, gh, 0xC8FFFFFF, 1)
+    elseif drag.label then
+        native.ui_rect(2, -1, x, y, gw, gh, 0xD0101018)
+        native.ui_rect(2, -1, x, y, gw, 1, 0xFFC8AA5A)
+        native.ui_rect(2, -1, x, y + gh - 1, gw, 1, 0xFFC8AA5A)
+        native.ui_rect(2, -1, x, y, 1, gh, 0xFFC8AA5A)
+        native.ui_rect(2, -1, x + gw - 1, y, 1, gh, 0xFFC8AA5A)
+        native.ui_text(2, -1, tostring(drag.label):gsub('\\', '/'), x + 6, y + 2, 0, gh - 4, 0xFFF0F0F0, -1, 0, 0, 0, nil,
+            UI_TEXT_SIZE, 0, 1)
+    end
+    local bx = x + math.max(0, gw - 6)
+    if badge > 0 then
+        local color = valid and 0xFF2E9E4F or 0xFFC83232
+        native.ui_rect(2, -1, bx, y, badge, badge, 0xFFFFFFFF)
+        native.ui_rect(2, -1, bx + 1, y + 1, badge - 2, badge - 2, color)
+        native.ui_text(2, -1, valid and '+' or '\195\151', bx, y, badge, badge, 0xFFFFFFFF, -1, 1, 0, 0, nil, 14, 0, 1)
+    end
+    if tw > 0 then
+        local tx = bx + badge + 4
+        local ty = y
+        native.ui_rect(2, -1, tx, ty, tw, th, 0xE0101018)
+        native.ui_rect(2, -1, tx, ty, tw, 1, 0xFFC8AA5A)
+        native.ui_rect(2, -1, tx, ty + th - 1, tw, 1, 0xFFC8AA5A)
+        native.ui_rect(2, -1, tx, ty, 1, th, 0xFFC8AA5A)
+        native.ui_rect(2, -1, tx + tw - 1, ty, 1, th, 0xFFC8AA5A)
+        native.ui_text(2, -1, tostring(text):gsub('\\', '/'), tx + 6, ty + 2, 0, th - 4, 0xFFF0F0F0, -1, 0, 0, 0, nil, UI_TEXT_SIZE, 0, 1)
+    end
+end
+
+-- End of every tick while a drag is on: cancel (Esc, the pad's B, the source's mod gone, a lost release), find the
+-- target under the cursor, drop on a release (or on a click, when the drag is carried with the pad), else show the hint.
+function uis.drag_finish()
+    local d = uis.drag
+    if not d then return end
+    ui_tooltip = nil
+    local cancel = d.mod.disabled or d.mod.unloaded
+    if native.key_down(0x1B) then
+        if not d.esc then cancel = true end
+        d.esc = true
+    else
+        d.esc = false
+    end
+    if ui_pad.back > 0 then
+        ui_pad.back = ui_pad.back - 1
+        cancel = true
+    end
+    if not cancel and not d.carry and not d.released and ui_active ~= d.handle then cancel = true end
+    if cancel then
+        uis.drag_end(false)
+        return
+    end
+    local handle = ui_hot
+    if d.released then handle = uis.topmost_at(d.rx, d.ry) end
+    local target, valid, text, spot = uis.drag_resolve(d, handle)
+    local dropped = false
+    if d.carry then
+        local st = target and not target.world and ui_input[target.handle]
+        dropped = valid and st and st.clicked or false
+    else
+        dropped = d.released and valid and target or false
+    end
+    if dropped then
+        local info = spot or {x = d.released and d.rx or ui_mouse.x, y = d.released and d.ry or ui_mouse.y}
+        uis.drag_end(true)
+        call(target.mod, 'drop', target.opts.on_drop, d, info)
+        return
+    end
+    if d.released then
+        uis.drag_end(false)
+        return
+    end
+    uis.drag_draw(d, valid, text)
+end
+
 local function ui_end_tick()
     -- What must lie over everything: open dropdown lists, drawn after all draw handlers, outside any clip.
     uis.clear_list(uis.clip_stack)
@@ -3189,6 +3387,7 @@ local function ui_end_tick()
         i = i + 1
     end
     uis.clear_list(deferred)
+    uis.drag_finish()
     ui_push_nav()
     local t = ui_tooltip
     if not t then return end
@@ -4847,6 +5046,74 @@ local function make_ui(mod)
             if it.id == id then it.label, it.fn = tostring(label), fn return end
         end
         items[#items + 1] = {id = id, label = tostring(label), fn = fn}
+    end
+    -- Drag and drop between mods. A source is a widget or region the mod already draws; targets are other widgets or regions, of
+    -- any mod, and the world. See gear/meta/ui.lua.
+    -- ui.drag_source(id, result, {type, data, label, icon, icon_size, threshold, carry, on_end}): call after the region `id` (its result
+    -- `result`): a press that moves `threshold` units (default 6) starts a drag of `type` carrying `data`. With the controller, a click
+    -- picks the thing up (carry) and a click on a target puts it down (B cancels). -> true while this source is being dragged.
+    function ui.drag_source(id, r, opts)
+        assert(type(opts) == 'table' and type(opts.type) == 'string', 'drag_source(id, region, {type = "...", data = ...})')
+        local handle = ui_handle(mod, id)
+        local d = uis.drag
+        if d then return d.handle == handle and d.mod == mod end
+        if r.hidden or opts.enabled == false then return false end
+        if r.pressed then uis.press_h, uis.press_x, uis.press_y = handle, ui_mouse.x, ui_mouse.y end
+        if r.held and uis.press_h == handle then
+            local dx, dy = ui_mouse.x - uis.press_x, ui_mouse.y - uis.press_y
+            local th = opts.threshold or uis.DRAG_THRESHOLD
+            if dx * dx + dy * dy >= th * th then
+                uis.press_h = nil
+                uis.drag_start(mod, id, handle, opts, false)
+                return true
+            end
+        elseif r.clicked and opts.carry ~= false and native.ui_pad_info and native.ui_pad_info() then
+            uis.drag_start(mod, id, handle, opts, true)
+            return true
+        end
+        return false
+    end
+    -- ui.drop_target(id, {accept, hint, on_drop}) -> {dragging, over, valid, reason}: call after the region `id` every tick. While
+    -- nothing is dragged it costs nothing and returns a constant table. `accept` is a type, a list of types, '*', or function(drag) -> ok, text.
+    function ui.drop_target(id, opts)
+        local d = uis.drag
+        if not d then return uis.NOT_DRAGGING end
+        assert(type(opts) == 'table' and type(opts.on_drop) == 'function', 'drop_target(id, {accept = ..., on_drop = function(drag, info) end})')
+        local handle = ui_handle(mod, id)
+        local found
+        for i = ui_regions.n, 1, -1 do
+            if ui_regions[i].handle == handle then found = ui_regions[i]; break end
+        end
+        if not found then return {dragging = true, over = false, valid = false} end
+        local n = uis.drop_targets.n + 1
+        uis.drop_targets.n = n
+        local t = uis.drop_targets[n]
+        if not t then t = {}; uis.drop_targets[n] = t end
+        t.handle, t.mod, t.opts, t.id = handle, mod, opts, id
+        local ok, text = uis.drag_accepts(opts.accept, d)
+        if ok and d.handle ~= handle and d.carry then
+            for i = ui_nav.n, 1, -1 do       -- with the pad's pick-up, the valid targets are the only stops
+                local e = ui_nav[i]
+                if e.mod == mod and e.x == found.x and e.y == found.y and e.w == found.w and e.h == found.h then e.drop = true; break end
+            end
+        end
+        return {dragging = true, over = ui_hot == handle and d.handle ~= handle, valid = ok and d.handle ~= handle or false, reason = text or (ok and opts.hint or nil)}
+    end
+    -- ui.world_drop(id, {accept, hint, on_drop}): the world takes drops of what `accept` allows (as for drop_target) while the cursor
+    -- is on it; on_drop(drag, spot) gets spot = {x, y, layer, object_id}, the world point under the cursor. A second call with the same id replaces it, `ui.world_drop(id, nil)` removes it.
+    function ui.world_drop(id, opts)
+        local list = uis.world_drops
+        for i = #list, 1, -1 do
+            if list[i].mod == mod and list[i].id == id then table.remove(list, i) end
+        end
+        if opts == nil or opts == false then return end
+        assert(type(opts) == 'table' and type(opts.on_drop) == 'function', 'world_drop(id, {accept = ..., on_drop = function(drag, spot) end})')
+        list[#list + 1] = {mod = mod, id = id, opts = opts}
+    end
+    -- ui.drag_active() -> the drag now on ({type, data, label, source, ...}) or nil; ui.drag_cancel() ends one this mod's source started.
+    function ui.drag_active() return uis.drag end
+    function ui.drag_cancel()
+        if uis.drag and uis.drag.mod == mod then uis.drag_end(false) end
     end
     function ui.edit_mode() return ui_edit end
     function ui.set_edit_mode(on) ui_edit = on and true or false end

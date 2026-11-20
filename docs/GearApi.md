@@ -102,6 +102,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [The game's own look (gear.ui.native)](#the-games-own-look-gearuinative)
 - [HTML/CSS documents (gear.ui.rml)](#htmlcss-documents-gearuirml)
 - [Widgets and input](#widgets-and-input)
+- [Drag and drop between mods](#drag-and-drop-between-mods)
 - [Layout: persistent panels, movable game windows](#layout-persistent-panels-movable-game-windows)
 - [Automation (gear.auto)](#automation-gearauto)
 
@@ -5283,6 +5284,96 @@ An entry of the controller's mod menu (Sacred Gear's mod menu button, LT + LB by
 - `id`: `string`
 - `label`: `string`
 - `fn`: `fun()`
+
+## Drag and drop between mods
+
+One drag at a time, across mods. A source is a widget or region the mod already draws; a target is a region of any mod (or the world). While the player drags, every target says whether it takes the drag (`accept`), and a hint follows the cursor: the dragged thing's icon or label, a green `+` over a target that takes it, a red `×` over anything that does not (with the target's reason beside it), nothing over the source itself. A release over a valid target calls its `on_drop`; anywhere else, or Esc, or the pad's B, ends the drag without a drop. The press that started the drag is taken from the game (no world click), and the release is no click on the source. Controller: a click on a source (`carry`) picks the thing up, the D-pad then reaches only the targets that take it, a click on one puts it down, B cancels. (Dropping into the world is mouse only.)
+
+### GearDrag
+
+What is being dragged.
+
+| Field | Type | |
+|---|---|---|
+| `type` | `string` | The kind of thing (`'combat_art'`, `'creature_type'` ...): targets accept by type. |
+| `data` | `any` | What the source carries (any Lua value). |
+| `label` | `string` |  (optional) |
+| `icon` | `integer` |  (optional) |
+| `source` | `string` | Id of the mod that started the drag. |
+| `carry` | `boolean` | Picked up with the controller (click to put down) rather than dragged with the mouse. |
+
+### GearDragSourceOpts
+
+| Field | Type | |
+|---|---|---|
+| `type` | `string` | Required. |
+| `data` | `any` |  (optional) |
+| `label` | `string` | Drawn at the cursor (in a small box) when there is no icon. (optional) |
+| `icon` | `integer` | A UI image id drawn at the cursor. (optional) |
+| `icon_size` | `number` | Default 32. (optional) |
+| `threshold` | `number` | Cursor travel in layout units before a press becomes a drag. Default 6. (optional) |
+| `carry` | `boolean` | `false`: no controller pick-up on a click. Default true. (optional) |
+| `enabled` | `boolean` |  (optional) |
+| `on_end` | `fun(drag: GearDrag, dropped: boolean)` | The drag ended (dropped on a target or not). (optional) |
+
+#### `gear.ui.drag_source(id, result, opts) -> boolean`
+
+Makes the region or widget `id` (drawn this tick, `result` is what `region` or the widget returned) a drag source. Call it after the widget every tick. Returns true while this source is the one being dragged (dim it).
+
+- `id`: `string|integer`
+- `result`: `table`
+- `opts`: `GearDragSourceOpts`
+- returns `dragging` `boolean`
+
+### GearDropTargetOpts
+
+| Field | Type | |
+|---|---|---|
+| `accept` | `string\|string[]\|fun(drag: GearDrag): boolean\|string\|nil, string` | A type, a list of types, `'*'` (anything), or a function: `ok, text` (text: the hint when ok, the reason when not; a lone string means "no" and is the reason). Default: anything. (optional) |
+| `hint` | `string` | Shown beside the cursor while it takes the drag. (optional) |
+| `on_drop` | `fun(drag: GearDrag, info: {x: number, y: number})` | Called on a release over the target when it accepts. |
+
+### GearDropState
+
+| Field | Type | |
+|---|---|---|
+| `dragging` | `boolean` | Whether something is being dragged now (false: nothing else is set). |
+| `over` | `boolean` | The cursor is over this target. |
+| `valid` | `boolean` | The target takes the drag (also while the cursor is elsewhere: highlight the free slots). |
+| `reason` | `string` |  (optional) |
+
+#### `gear.ui.drop_target(id, opts) -> GearDropState`
+
+Makes the region `id` (drawn this tick) a drop target. Call it every tick after the region; while nothing is dragged it costs nothing and returns a shared read-only table. A click that puts a carried thing down also reaches the region as `clicked`: check `drag_active()` before acting on it.
+
+- `id`: `string|integer`
+- `opts`: `GearDropTargetOpts`
+- returns `GearDropState`
+
+### GearWorldDropOpts
+
+| Field | Type | |
+|---|---|---|
+| `accept` | `string\|string[]\|fun(drag: GearDrag): boolean\|string\|nil, string` |  (optional) |
+| `hint` | `string` |  (optional) |
+| `on_drop` | `fun(drag: GearDrag, spot: {x: number, y: number, layer: integer, object_id: integer?})` | `spot` is the world point under the cursor (as `gear.world.cursor`); `gear.world.cursor()` also gives the object there. |
+
+#### `gear.ui.world_drop(id, opts)`
+
+The world takes drops of what `accept` allows while the cursor is on it (not on a game window or a mod's UI): a dev mod spawns the dragged creature there. Registered once (not every tick); the same id replaces it, `nil` removes it. Nothing else on the screen reacts to the drag, so the world only shows a green `+` (or a red `×` when nothing takes it).
+
+- `id`: `string|integer`
+- `opts`: `GearWorldDropOpts|nil`
+
+#### `gear.ui.drag_active() -> GearDrag?`
+
+The drag that is on, or nil.
+
+- returns `GearDrag?`
+
+#### `gear.ui.drag_cancel()`
+
+Ends the drag this mod's source started, without a drop.
 
 #### `gear.ui.show_panel(id, open)`
 
