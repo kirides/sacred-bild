@@ -1751,8 +1751,8 @@ scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 16px
 .tabbar .tab-sep { width: 1px; height: 20px; margin: 0 6px; background-color: #8c744099; }
 .padkey { display: none; width: 1.3em; height: 1.3em; margin-right: 0.5em; vertical-align: middle; }
 body.pad .padkey { display: inline-block; }
-body.pad .padkey.a { visibility: hidden; }
-body.pad button:focus > .padkey.a, body.pad button:hover > .padkey.a, body.pad a:focus > .padkey.a, body.pad a:hover > .padkey.a { visibility: visible; }
+body.pad .padkey.a { display: none; }
+body.pad button:focus > .padkey.a, body.pad button:hover > .padkey.a, body.pad a:focus > .padkey.a, body.pad a:hover > .padkey.a { display: inline-block; }
 body.pad button:focus > span.padkey.b, body.pad button:hover > span.padkey.b, body.pad button:focus > span.padkey.y, body.pad button:hover > span.padkey.y,
 body.pad button:focus > span.padkey.x, body.pad button:hover > span.padkey.x, body.pad button:focus > span.padkey.lb, body.pad button:hover > span.padkey.lb,
 body.pad button:focus > span.padkey.rb, body.pad button:hover > span.padkey.rb, body.pad button:focus > span.padkey.back, body.pad button:hover > span.padkey.back { decorator: image(gear:pad/a contain); }
