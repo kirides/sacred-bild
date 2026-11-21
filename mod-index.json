@@ -13,7 +13,7 @@
         "win"
       ],
       "name": "Sacred-Bild",
-      "version": "0.2.2",
+      "version": "0.2.1",
       "author": "kirides",
       "description": "Sacred Gold on a modern renderer (ddraw.dll): Direct3D 9 output, window scaling, controller support, UDP multiplayer and more.",
       "tags": [
@@ -41,7 +41,7 @@
         "win"
       ],
       "name": "Sacred Gear",
-      "version": "0.2.3",
+      "version": "0.2.2",
       "author": "kirides",
       "description": "The Lua mod kit for Sacred Gold (SacredGear.dll). Runs next to Sacred-Bild or on its own; the Gear mods need it.",
       "tags": [
