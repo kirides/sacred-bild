@@ -93,6 +93,13 @@ input.field:focus, select.field:focus { border-color: #ffd780; }
 .link:active { color: #ffffff; font-effect: glow(3px 8px 0px 0px #ffe9a8ff); }     /* the click: the same bloom, brighter and wider */
 .link.big { font-size: 1.25em; }
 
+/* Tab headers (not buttons, so nobody takes them for a button that does something in the content): <div class="tabbar"><a class="link tab on">One</a><span class="tab-sep"></span><a class="link tab">Two</a></div>.
+   The anchors are the .link text with its bloom on hover and pad focus, separated by thin vertical lines with a little room around them, and one horizontal line runs under the whole bar. The open tab is gold. */
+.tabbar { display: flex; flex-direction: row; align-items: center; padding: 0 0 4px 0; margin: 0 0 10px 0; border-bottom: 1px #8c7440c0; }
+.tabbar a.link.tab { padding: 3px 14px; font-family: "Sacred Game"; font-size: 17px; }
+.tabbar a.link.tab.on { color: #ffd780; }
+.tabbar .tab-sep { width: 1px; height: 20px; margin: 0 6px; background-color: #8c744099; }
+
 /* Controller prompts: <img class="padkey" src="gear:pad/a"/> in front of the text inside a button; shown only while the controller was used last
    (gear sets body.pad), sized with the text. */
 .padkey { display: none; width: 1.3em; height: 1.3em; margin-right: 0.5em; vertical-align: middle; }
