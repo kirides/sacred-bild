@@ -95,6 +95,27 @@ gear.task(function()
         check('the list ends above the footer', body and foot and body.y + body.h <= foot.y + 1, body and body.y + body.h)
         check('the window fits the screen', win and win.y >= 0 and win.y + win.h <= select(4, ui.screen()), win and win.y)
     end
+    -- The pad's D-pad in the list: a step down with the cursor on the first row scrolls the list to the next one (when there are more rows than room).
+    do
+        local o = q()
+        local first = o.index and next(o.index.mods) and o.rect('#me1')
+        local body = o.rect('.bodybox')
+        if first and body and cfg.pad_list then
+            local px, py
+            for _ = 1, 5 do
+                px, py = A.ui_to_pixels(first.x + first.w / 2, first.y + first.h / 2)
+                if px then break end
+                gear.wait(0.5)
+            end
+            A.move(px, py)
+            gear.wait(0.5)
+            local before = q().scroll_top()
+            for _ = 1, 3 do A.pad_scroll(1); gear.wait(0.4) end
+            local after = q().scroll_top()
+            check('D-pad down scrolls the Mods list to the next row', after and before and after > before, tostring(before) .. ' -> ' .. tostring(after))
+            for _ = 1, 8 do A.pad_scroll(-1); gear.wait(0.2) end
+        end
+    end
     -- Every mod has its row (the list scrolls).
     do
         local o, missing = q(), nil

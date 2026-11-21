@@ -1528,17 +1528,40 @@ namespace
         return false;
     }
 
-    // The nearest ancestor marked data-nav-scroll: the scrolling list the pad's up / down walks card by card.
+    // A box the pad's up / down walks card by card: one that scrolls (overflow-y auto or scroll, with more content than room), or any marked data-nav-scroll.
+    bool isNavScrollArea(Rml::Element* p)
+    {
+        if (p->HasAttribute("data-nav-scroll"))
+        {
+            return true;
+        }
+        const Rml::Style::Overflow oy = p->GetComputedValues().overflow_y();
+        return (oy == Rml::Style::Overflow::Auto || oy == Rml::Style::Overflow::Scroll) && p->GetScrollHeight() > p->GetClientHeight() + 0.5f;
+    }
+
+    // The nearest ancestor that is such a box.
     Rml::Element* navScrollArea(Rml::Element* e)
     {
         for (Rml::Element* p = e->GetParentNode(); p; p = p->GetParentNode())
         {
-            if (p->HasAttribute("data-nav-scroll"))
+            if (isNavScrollArea(p))
             {
                 return p;
             }
         }
         return nullptr;
+    }
+
+    void collectNavScrollAreas(Rml::Element* e, std::vector<Rml::Element*>& out)
+    {
+        if (e->IsVisible(true) && isNavScrollArea(e))
+        {
+            out.push_back(e);
+        }
+        for (int i = 0; i < e->GetNumChildren(); ++i)
+        {
+            collectNavScrollAreas(e->GetChild(i), out);
+        }
     }
 
     std::vector<Rml::Element*> navElements(Doc& d)
@@ -2276,6 +2299,9 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             lua_rawgeti(L, -1, index - 1);
             lua_pushboolean(L, isRange(e) ? 1 : 0);
             lua_setfield(L, -2, "range");
+            // data-nav-home: where the pad's cursor starts when the document opens (the topmost savegame, not the search field).
+            lua_pushboolean(L, e->HasAttribute("data-nav-home") ? 1 : 0);
+            lua_setfield(L, -2, "home");
             lua_pop(L, 1);
         }
         trimRows(L, index - 1);
@@ -2356,12 +2382,12 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         int index = 1;
         if (d.document->IsVisible())
         {
-            Rml::ElementList all;
-            d.document->QuerySelectorAll(all, "[data-nav-scroll]");
-            for (Rml::Element* e : all)
+            std::vector<Rml::Element*> areas;
+            collectNavScrollAreas(d.document, areas);
+            for (Rml::Element* e : areas)
             {
                 const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
-                if (e->IsVisible(true) && s.x > 0 && s.y > 0)
+                if (s.x > 0 && s.y > 0 && !scrolledOut(e))
                 {
                     pushRect(L, e, d.unit, index++);
                 }

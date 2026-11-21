@@ -83,6 +83,11 @@ function GearAuto.pad(nudge, back, menu) end
 ---@param pages integer
 function GearAuto.pad_page(pages) end
 
+--- The first stop Gear reported to the controller in the last tick: where the pad's cursor starts when a screen opens (`data-nav-home` puts a stop there).
+---@return number? x
+---@return number? y
+function GearAuto.nav_first() end
+
 --- The D-pad's up (-1) / down (+1) steps in a scroll area (a list marked `data-nav-scroll`, or a `ui.scroll` area), as the controller posts them: they
 --- act at the game cursor (`gear.auto.move`).
 ---@param steps integer

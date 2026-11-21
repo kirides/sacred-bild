@@ -5734,6 +5734,13 @@ The controller's LB / RB without one: posts `pages` page steps (-1 previous, +1 
 
 - `pages`: `integer`
 
+#### `gear.auto.nav_first() -> number?, number?`
+
+The first stop Gear reported to the controller in the last tick: where the pad's cursor starts when a screen opens (`data-nav-home` puts a stop there).
+
+- returns `x` `number?`
+- returns `y` `number?`
+
 #### `gear.auto.pad_scroll(steps)`
 
 The D-pad's up (-1) / down (+1) steps in a scroll area (a list marked `data-nav-scroll`, or a `ui.scroll` area), as the controller posts them: they act at the game cursor (`gear.auto.move`).

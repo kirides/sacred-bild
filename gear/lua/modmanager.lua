@@ -1128,6 +1128,12 @@ do
             end
             return e:rect()
         end
+        out.scroll_top = function()
+            for _, box in ipairs(R.doc and R.doc:query_all('.bodybox') or {}) do
+                local br = box:rect()
+                if br and br.w > 0 then return (box:scroll()) end
+            end
+        end
         out.press = function(id)
             local f = R.acts[id]
             if f then f() return true end

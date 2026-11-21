@@ -20,5 +20,6 @@ return {
     },
     config = {
         quit = true,
+        pad_list = false,       -- the D-pad in the list: needs more mods than the list has room for (-gear-mods=... with a few more)
     },
 }

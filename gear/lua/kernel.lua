@@ -3269,6 +3269,7 @@ local function ui_push_nav()
     end
     local n = 0
     local nn = 0
+    local home_row
     local nat = uis.nav_native
     if not nat then nat = {}; uis.nav_native = nat end
     for i = 1, count do
@@ -3284,6 +3285,7 @@ local function ui_push_nav()
             if not row then row = {}; out[n] = row end
             row.x, row.y = e.ax or (e.x + e.w / 2), e.ay or (e.y + e.h / 2)
             row.left, row.top, row.width, row.height, row.kind = e.x, e.y, e.w, e.h, e.kind or 0
+            if e.home and not home_row then home_row = n end
             if e.native and nn < 400 then
                 -- a control that draws its own button prompt (an RmlUi element): SacredBild keeps its own off it
                 nn = nn + 1
@@ -3294,6 +3296,7 @@ local function ui_push_nav()
         end
     end
     for i = n + 1, #out do out[i] = nil end        -- the host counts the rows by the table's length
+    if home_row and home_row > 1 then out[1], out[home_row] = out[home_row], out[1] end     -- the first stop is where the cursor starts on a screen that opens
     for i = nn + 1, #nat do nat[i] = nil end
     native.ui_nav(out, flags)
     if native.ui_nav_native then native.ui_nav_native(nat) end
@@ -3893,7 +3896,7 @@ local function make_ui(mod)
             if not ne then ne = {}; ui_nav[nn] = ne end
             ne.mod, ne.x, ne.y, ne.w, ne.h, ne.layer = mod, x, y, w, h, layer
             ne.kind, ne.ax, ne.ay, ne.drop = opts._nav_kind, opts._nav_x, opts._nav_y, opts._nav_drop
-            ne.native = opts._nav_native
+            ne.native, ne.home = opts._nav_native, opts._nav_home
         end
         local s = ui_input[handle] or uis.NO_INPUT
         local enabled = opts.enabled ~= false
@@ -4288,7 +4291,9 @@ local function make_ui(mod)
             for i, r in ipairs(stops) do
                 local nkey = keys[i]
                 if not nkey then nkey = 'rml:' .. id .. ':n' .. i; keys[i] = nkey end
-                local res = region(nkey, r.x, r.y, r.w, r.h, self.nopts)
+                local homeopts = self.homeopts
+                if not homeopts then homeopts = {layer = opts.layer, _rml_doc = id, _nav_native = true, _nav_home = true}; self.homeopts = homeopts end
+                local res = region(nkey, r.x, r.y, r.w, r.h, r.home and homeopts or self.nopts)
                 if res.hover then hover = true end
                 if r.range then
                     -- A slider takes the real mouse: a press jumps to that value and a drag goes on (RmlUi's own slider does that), the
@@ -5733,6 +5738,12 @@ local ui_map            -- {ax, bx, ay, by}: layout = a * pixel + b, from two cu
 local function make_auto()
     local auto = {VK = VK, instance = native.auto_instance()}
     function auto.state() return native.auto_state() end
+    -- auto.nav_first() -> x, y: the first stop Gear told the controller about last tick, where the pad's cursor starts when a screen opens (nil: none).
+    function auto.nav_first()
+        local out = uis.nav_out
+        local row = out and out[1]
+        if row then return row.x, row.y end
+    end
     function auto.ui() return native.auto_ui() end
     function auto.move(x, y)
         assert(type(x) == 'number' and type(y) == 'number', 'x and y must be numbers')
