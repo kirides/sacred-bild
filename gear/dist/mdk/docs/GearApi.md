@@ -5370,6 +5370,18 @@ The controller's B was pressed: true once per press (consumed). B closes an open
 
 - returns `boolean`
 
+#### `gear.ui.page_pressed() -> integer`
+
+The controller's LB (-1) or RB (+1) was pressed while a `nav_modal` screen or a window of a mod is open: 0 when neither (consumed: once per press; both in one tick cancel out). The previous / next page, tab or step of that screen. Show the prompts next to what it switches (`<span class="padkey lb"></span>` / `rb` in an RmlUi document: they appear while the controller is in use).
+
+- returns `integer`
+
+#### `gear.ui.select_pressed() -> boolean`
+
+The controller's Select / "-" button was pressed: true once per press (consumed, for whoever asks first). Ask only where it means something to the mod (the mod manager asks while the escape menu is open: it opens its screen).
+
+- returns `boolean`
+
 #### `gear.ui.menu_item(id, label, fn)`
 
 An entry of the controller's mod menu (Sacred Gear's mod menu button, LT + LB by default): for a tool a player would otherwise reach with a hotkey, Alt or a small button. The keys a mod declares in mod.lua are listed there by themselves; calling it again with the same id changes the entry.
@@ -5715,6 +5727,16 @@ The controller without one: posts pad events as SacredBild's controller does (D-
 - `nudge`: `integer` (optional)
 - `back`: `integer` (optional)
 - `menu`: `integer` (optional)
+
+#### `gear.auto.pad_page(pages)`
+
+The controller's LB / RB without one: posts `pages` page steps (-1 previous, +1 next), read by `ui.page_pressed`.
+
+- `pages`: `integer`
+
+#### `gear.auto.pad_select()`
+
+The Select / "-" button without a controller: one press, read by `ui.select_pressed`.
 
 #### `gear.auto.nav() -> integer, integer`
 

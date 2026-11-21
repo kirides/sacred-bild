@@ -3176,6 +3176,26 @@ namespace
         return 0;
     }
 
+    // native.ui_page() -> pages: LB / RB presses since the last call (+ next page, - previous).
+    int nativeUiPage(lua_State* L)
+    {
+        lua_pushnumber(L, PadNav::takePage());
+        return 1;
+    }
+
+    // native.ui_select() -> presses of the pad's Select / "-" button since the last call.
+    int nativeUiSelect(lua_State* L)
+    {
+        lua_pushnumber(L, PadNav::takeSelect());
+        return 1;
+    }
+
+    int nativeAutoPage(lua_State* L)
+    {
+        PadNav::postPage(static_cast<int>(luaL_checknumber(L, 1)));
+        return 0;
+    }
+
     int nativeAutoNav(lua_State* L)
     {
         int flags = 0;
@@ -4442,6 +4462,7 @@ namespace
             {"fmt", IDR_GEAR_FMT},
             {"toast", IDR_GEAR_TOAST},
             {"store", IDR_GEAR_STORE},
+            {"modmanager.rml", IDR_GEAR_MODMANAGER_UI},
         };
         const char* name = luaL_checkstring(L, 1);
         const char* text = nullptr;
@@ -4689,6 +4710,8 @@ namespace
             {"ui_nav", nativeUiNav},
             {"ui_pad_info", nativeUiPadInfo},
             {"ui_pad", nativeUiPad},
+            {"ui_page", nativeUiPage},
+            {"ui_select", nativeUiSelect},
             {"ui_clip", nativeUiClip},
             {"ui_wheel", nativeUiWheel},
             {"key_down", nativeKeyDown},
@@ -4752,6 +4775,7 @@ namespace
                 {"auto_wheel", nativeAutoWheel},
                 {"auto_key", nativeAutoKey},
                 {"auto_pad", nativeAutoPad},
+                {"auto_page", nativeAutoPage},
                 {"auto_nav", nativeAutoNav},
                 {"auto_char", nativeAutoChar},
                 {"auto_release", nativeAutoRelease},

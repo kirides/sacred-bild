@@ -36,6 +36,9 @@ EXPORTS
     SacredBild_UiSetWheelHandler
     SacredBild_UiTakeScroll
     SacredBild_UiPostPad
+    SacredBild_UiTakePage
+    SacredBild_UiPostPage
+    SacredBild_UiTakeSelect
     SacredBild_UiNavState
     SacredBild_PadInfo
     SacredBild_PadGlyph

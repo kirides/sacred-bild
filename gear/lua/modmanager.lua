@@ -734,6 +734,481 @@ local function draw_menu()
 end
 
 ---------------------------------------------------------------------------------------------------------------
+-- The screen as an RmlUi document (gear/lua/modmanager.rml: the game theme). The gear.ui drawing above stays as the fallback for when the
+-- document cannot load (no RmlUi, or no theme mod running: it comes with the sacred-theme mod).
+---------------------------------------------------------------------------------------------------------------
+local draw_rml_screen
+do
+    local R = {doc = nil, retry = 0, acts = {}, slacts = {}, txacts = {}, pushed = {}, last = {}, built_at = -1, dirty = true}
+
+    local function ser(v)
+        local t = type(v)
+        if t == 'table' then
+            local keys = {}
+            for k in pairs(v) do keys[#keys + 1] = k end
+            table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+            local out = {}
+            for _, k in ipairs(keys) do out[#out + 1] = tostring(k) .. '=' .. ser(v[k]) end
+            return '{' .. table.concat(out, ',') .. '}'
+        elseif t == 'string' then
+            return string.format('%q', v)
+        end
+        return tostring(v)
+    end
+
+    -- a row of the model with every field the document reads (a field that is missing in some rows makes the bindings complain)
+    local function row(kind)
+        return {kind = kind, id = '', bool_id = '', num_id = '', text_id = '', label = '', tip = '', changed = false, rst_id = '', on = false, min = 0, max = 0, step = 1, value = 0,
+            text = '', prev_id = '', next_id = '', max_length = 64, kbd_id = '', css = 'transparent', a = 0, r = 0, g = 0, b = 0,
+            a_id = '', r_id = '', g_id = '', b_id = '', slot = '', slot_id = '', pick_id = '', has2 = false, slot2 = '',
+            slot2_id = '', pick2_id = '', capturing = false, capturing2 = false, conflict = false, conflict2 = false}
+    end
+
+    local function decimals(step)
+        local s = ('%.4f'):format(step):gsub('0+$', '')
+        local frac = s:match('%.(%d*)$')
+        return frac and #frac or 0
+    end
+
+    -- the value on the slider's grid, inside its range (what the slider itself would report back)
+    local function on_grid(d, v)
+        v = math.max(d.min, math.min(d.max, v))
+        if d.step and d.step > 0 then v = d.min + math.floor((v - d.min) / d.step + 0.5) * d.step end
+        return math.max(d.min, math.min(d.max, v))
+    end
+
+    local function setting_rows(e, m)
+        local defs = admin.settings(e.id)
+        local acts, slacts, txacts = R.acts, R.slacts, R.txacts
+        local last_section, n = nil, 0
+        local function add(r) m.rows[#m.rows + 1] = r end
+        for _, d in ipairs(defs) do
+            if d.section ~= last_section then
+                last_section = d.section
+                if d.section then local r = row('head'); r.label = d.section; add(r) end
+            end
+            if d.note then local r = row('note'); r.label = game_names(d.note); add(r) end
+            n = n + 1
+            local id = 's' .. n
+            local value = admin.get(e.id, d.id)
+            local default = admin.default(e.id, d.id)
+            local r = row(d.type == 'number' and 'num' or d.type)
+            r.id = id
+            r[(d.type == 'bool' and 'bool' or d.type == 'number' and 'num' or 'text') .. '_id'] = id
+            R.index.settings[d.id] = r
+            r.label = game_names(d.label) .. (d.restart and '  (after restart)' or '')
+            r.tip = game_names(d.tooltip) or ''
+            r.changed = value ~= default
+            r.rst_id = id .. 'r'
+            local function set(nv)
+                admin.set(e.id, d.id, nv)
+                if d.restart then screen.restart = true end
+                R.dirty = true
+            end
+            acts[r.rst_id] = function() admin.set(e.id, d.id, default); R.dirty = true end
+            if d.type == 'bool' then
+                r.kind, r.on = 'bool', value and true or false
+                acts[id] = function() set(not admin.get(e.id, d.id)) end
+            elseif d.type == 'number' then
+                r.kind = 'num'
+                r.min, r.max, r.step = d.min, d.max, d.step or 1
+                r.value = on_grid(d, value)
+                r.text = ('%.' .. decimals(r.step) .. 'f'):format(value)
+                R.pushed[id] = r.value
+                slacts[id] = function(v)
+                    if math.abs(v - (R.pushed[id] or 0)) < 1e-6 then return end
+                    set(v)
+                end
+            elseif d.type == 'choice' then
+                r.kind = 'choice'
+                local index = 1
+                for i, c in ipairs(d.choices) do if c.value == value then index = i end end
+                r.text = d.choices[index].label
+                r.prev_id, r.next_id = id .. 'p', id .. 'n'
+                acts[r.prev_id] = function() set(d.choices[(index - 2) % #d.choices + 1].value) end
+                acts[r.next_id] = function() set(d.choices[index % #d.choices + 1].value) end
+            elseif d.type == 'text' then
+                r.kind, r.text, r.max_length = 'text', value, d.max_length or 64
+                r.kbd_id = id .. 'k'
+                R.pushed[id] = value
+                txacts[id] = function(text)
+                    if text == R.pushed[id] then return end
+                    set(text:sub(1, d.max_length or 64))
+                end
+                acts[r.kbd_id] = function()
+                    screen.osk = {mode = 'text', mod = e.id, def = d, label = d.label, text = value, max = d.max_length or 64}
+                    screen.capture = nil
+                    R.dirty = true
+                end
+            elseif d.type == 'color' then
+                r.kind = 'color'
+                local a, rr, g, b = bit.rshift(value, 24) % 256, bit.rshift(value, 16) % 256, bit.rshift(value, 8) % 256, value % 256
+                r.a, r.r, r.g, r.b = a, rr, g, b
+                r.css = ('#%02x%02x%02x%02x'):format(rr, g, b, a)
+                local chans = {a = a, r = rr, g = g, b = b}
+                for _, ch in ipairs({'a', 'r', 'g', 'b'}) do
+                    local cid = id .. '_' .. ch
+                    r[ch .. '_id'] = cid
+                    R.pushed[cid] = chans[ch]
+                    slacts[cid] = function(v)
+                        if math.abs(v - R.pushed[cid]) < 1e-6 then return end
+                        local cur = admin.get(e.id, d.id)
+                        local c = {a = bit.rshift(cur, 24) % 256, r = bit.rshift(cur, 16) % 256, g = bit.rshift(cur, 8) % 256, b = cur % 256}
+                        c[ch] = math.floor(v + 0.5)
+                        set(ui.rgba(c.r, c.g, c.b, c.a))
+                    end
+                end
+            end
+            add(r)
+        end
+    end
+
+    local function key_rows(e, m)
+        local acts = R.acts
+        local rows, section = {}, nil
+        for _, k in ipairs(admin.keys(e.id)) do
+            if not k.is_second then
+                if k.section and k.section ~= section then rows[#rows + 1] = {head = k.section} end
+                if k.section then section = k.section end
+                rows[#rows + 1] = {key = k}
+            end
+        end
+        for i, it in ipairs(rows) do
+            if it.head then
+                local r = row('head'); r.label = it.head
+                m.rows[#m.rows + 1] = r
+            else
+                local k = it.key
+                local second = k.second and admin.key_def(e.id, k.second) or nil
+                local r = row('key')
+                r.label = k.label
+                local c1 = admin.conflicts(e.id, k.id)
+                local c2 = second and admin.conflicts(e.id, second.id) or {}
+                local names = {}
+                for _, list in ipairs({c1, c2}) do
+                    for _, c in ipairs(list) do names[#names + 1] = c.name .. ' / ' .. c.label end
+                end
+                r.conflict, r.conflict2 = #c1 > 0, #c2 > 0
+                r.tip = (#names > 0 and ('Conflicts with: ' .. table.concat(names, ', ') .. '. ') or '') ..
+                    'Default: ' .. format_binding(admin.default_binding(e.id, k.id))
+                local function slot(def, prefix)
+                    local capturing = screen.capture and screen.capture.mod == e.id and screen.capture.key == def.id
+                    local text = capturing and 'Press a key...' or format_binding(admin.binding(e.id, def.id))
+                    local sid, pid = 'k' .. i .. prefix, 'k' .. i .. prefix .. 'p'
+                    acts[sid] = function()
+                        screen.capture = {mod = e.id, key = def.id}
+                        admin.capture_start()
+                        R.dirty = true
+                    end
+                    acts[pid] = function()
+                        screen.osk = {mode = 'key', mod = e.id, key = def.id, label = def.label, ctrl = false, shift = false, alt = false}
+                        screen.capture = nil
+                        R.dirty = true
+                    end
+                    return text, sid, pid, capturing and true or false
+                end
+                r.slot, r.slot_id, r.pick_id, r.capturing = slot(k, 'a')
+                R.index.keys[k.id] = r
+                if second then
+                    r.has2 = true
+                    r.slot2, r.slot2_id, r.pick2_id, r.capturing2 = slot(second, 'b')
+                end
+                r.changed = admin.binding(e.id, k.id) ~= admin.default_binding(e.id, k.id) or
+                    (second and admin.binding(e.id, second.id) ~= admin.default_binding(e.id, second.id)) or false
+                r.rst_id = 'k' .. i .. 'r'
+                acts[r.rst_id] = function()
+                    admin.set_binding(e.id, k.id, nil)
+                    if second then admin.set_binding(e.id, second.id, nil) end
+                    R.dirty = true
+                end
+                m.rows[#m.rows + 1] = r
+            end
+        end
+    end
+
+    local function osk_model(m)
+        local o = screen.osk
+        local acts = R.acts
+        m.osk_text_mode = o.mode == 'text'
+        m.osk_title = o.mode == 'text' and ('Typing: ' .. o.label) or ('Pick a key for: ' .. o.label)
+        m.osk_text = o.text or ''
+        m.osk_shift = o.shift and true or false
+        m.osk_ctrl, m.osk_alt = o.ctrl and true or false, o.alt and true or false
+        local function key_row(list, prefix, label)
+            local out = {}
+            for i, k in ipairs(list) do
+                local id = prefix .. i
+                out[#out + 1] = {id = id, label = label and label(k) or k}
+                acts[id] = function()
+                    if o.mode == 'text' then
+                        if #o.text < o.max then
+                            o.text = o.text .. ((o.shift and k:match('%a')) and k:upper() or k)
+                            o.shift = false
+                            admin.set(o.mod, o.def.id, o.text)
+                        end
+                    else
+                        local b = (o.ctrl and 'ctrl+' or '') .. (o.shift and 'shift+' or '') .. (o.alt and 'alt+' or '') .. k
+                        admin.set_binding(o.mod, o.key, b)
+                        screen.osk = nil
+                    end
+                    R.dirty = true
+                end
+            end
+            return out
+        end
+        local rows = {}
+        for i, list in ipairs(OSK_TEXT) do
+            rows[#rows + 1] = key_row(list, 'o' .. i .. '_', function(k) return (o.mode == 'text' and o.shift and k:match('%a')) and k:upper() or k end)
+        end
+        if o.mode ~= 'text' then
+            rows[#rows + 1] = key_row(OSK_F, 'of_', function(k) return k:upper() end)
+            rows[#rows + 1] = key_row(OSK_SPECIAL, 'os_', function(k) return OSK_SHORT[k] or (k:sub(1, 1):upper() .. k:sub(2, 3)) end)
+        end
+        m.osk_rows = rows
+        local function toggle(name) return function() o[name] = not o[name]; R.dirty = true end end
+        acts.osk_ctrl, acts.osk_alt = toggle('ctrl'), toggle('alt')
+        acts.osk_shift, acts.osk_shift2 = toggle('shift'), toggle('shift')
+        acts.osk_space = function()
+            if #o.text < o.max then o.text = o.text .. ' '; admin.set(o.mod, o.def.id, o.text) end
+            R.dirty = true
+        end
+        acts.osk_back = function() o.text = o.text:sub(1, -2); admin.set(o.mod, o.def.id, o.text); R.dirty = true end
+        acts.osk_done = function() screen.osk = nil; R.dirty = true end
+        acts.osk_none = function() admin.set_binding(o.mod, o.key, ''); screen.osk = nil; R.dirty = true end
+        acts.osk_cancel = function() screen.osk = nil; R.dirty = true end
+    end
+
+    local function build()
+        R.acts, R.slacts, R.txacts = {}, {}, {}
+        R.index = {mods = {}, settings = {}, keys = {}, tabs = {}}
+        local acts = R.acts
+        local m = {open = true, view = 'list', message = screen.message or '', restart = screen.restart and true or false,
+            count_text = '', mods = {}, mod_name = '', tabs = {}, tab = 'none', multi_tab = false, rows = {},
+            osk_title = '', osk_text = '', osk_text_mode = true, osk_rows = {}, osk_ctrl = false, osk_shift = false, osk_alt = false}
+        local list = admin.entries()
+        m.count_text = ('%d installed'):format(#list - 1)
+        if screen.view == 'list' then
+            for i, e in ipairs(list) do
+                local status, color = entry_status(e)
+                local meta = ''
+                if e.version ~= '' then meta = 'v' .. e.version end
+                if e.author ~= '' then meta = meta .. (meta ~= '' and '  by ' or 'by ') .. e.author end
+                local can_settings = e.state ~= 'invalid' and (e.has_settings or e.has_page)
+                local mr = {id = e.id, name = e.name, meta = meta, desc = e.description ~= '' and e.description or '(no description)',
+                    status = status or '', st_red = color == RED, st_amber = color == AMBER, st_grey = color == DIM,
+                    bad = e.state == 'error' or e.state == 'invalid', dim = e.state == 'off' or e.state == 'blocked',
+                    core = e.builtin and true or false, can_toggle = not e.builtin and e.state ~= 'invalid', on = e.enabled and true or false,
+                    en_id = 'me' .. i, set_id = 'ms' .. i, keys_id = 'mk' .. i,
+                    en_tip = e.enabled and 'Switch this mod off' or 'Switch this mod on',
+                    no_settings = not can_settings, no_keys = not e.has_keys}
+                m.mods[#m.mods + 1] = mr
+                R.index.mods[e.id] = {en = mr.en_id, settings = mr.set_id, keys = mr.keys_id}
+                local sid = e.id
+                acts[mr.en_id] = function()
+                    local cur = find_entry(sid)
+                    local ok, why = admin.set_enabled(sid, not (cur and cur.enabled))
+                    screen.message = (not ok) and why or nil
+                    R.dirty = true
+                end
+                if can_settings then
+                    acts[mr.set_id] = function()
+                        screen.view, screen.mod, screen.tab, screen.tab_page = 'mod', sid, (e.has_settings and 'settings' or 'page'), 1
+                        stop_input()
+                        R.dirty, R.reset_scroll = true, true
+                    end
+                end
+                if e.has_keys then
+                    acts[mr.keys_id] = function()
+                        screen.view, screen.mod, screen.tab, screen.tab_page = 'mod', sid, 'keys', 1
+                        stop_input()
+                        R.dirty, R.reset_scroll = true, true
+                    end
+                end
+            end
+        else
+            local e = find_entry(screen.mod)
+            if not e then
+                screen.view = 'list'
+                R.dirty = true
+                return build()
+            end
+            m.view, m.mod_name = 'mod', e.name
+            local tabs = {}
+            if e.has_settings then tabs[#tabs + 1] = {'settings', 'Settings'} end
+            if e.has_keys then tabs[#tabs + 1] = {'keys', 'Keys'} end
+            if e.has_page then tabs[#tabs + 1] = {'page', 'More'} end
+            local present = false
+            for _, t in ipairs(tabs) do if t[1] == screen.tab then present = true end end
+            if not present and tabs[1] then screen.tab = tabs[1][1] end
+            for _, t in ipairs(tabs) do
+                local id = 'tab_' .. t[1]
+                m.tabs[#m.tabs + 1] = {id = id, label = t[2], on = screen.tab == t[1]}
+                R.index.tabs[t[1]] = id
+                acts[id] = function()
+                    if screen.tab ~= t[1] then
+                        screen.tab, screen.tab_page = t[1], 1
+                        stop_input()
+                        R.dirty, R.reset_scroll = true, true
+                    end
+                end
+            end
+            m.tab = #tabs == 0 and 'none' or screen.tab
+            m.multi_tab = #tabs > 1
+            R.tab_order = {}
+            for i, t in ipairs(tabs) do R.tab_order[i] = t[1] end
+            if screen.tab == 'settings' then setting_rows(e, m)
+            elseif screen.tab == 'keys' then key_rows(e, m) end
+            acts.back = function() screen.view = 'list'; stop_input(); R.dirty, R.reset_scroll = true, true end
+            acts.reset_all = function() admin.reset(e.id); R.dirty = true end
+            if screen.osk then m.view = 'osk'; osk_model(m) end
+        end
+        acts.close = function() close_screen() end
+        return m
+    end
+
+    -- the document, loaded on the first need; nil (and the gear.ui screen) while it cannot
+    local function document()
+        if R.doc then return R.doc end
+        local now = gear.time()
+        if now < R.retry or not ui.rml or not admin.markup then return nil end
+        local markup = admin.markup()
+        if not markup then R.retry = now + 60 return nil end
+        R.dirty = true
+        local m = build()
+        R.doc, R.err = ui.rml.load_string(markup, {model = m})
+        if not R.doc then
+            R.retry = now + 5
+            if not R.logged then R.logged = true; gear.log('mod manager: RmlUi screen unavailable (' .. tostring(R.err) .. '): using the basic screen') end
+            return nil
+        end
+        for k, v in pairs(m) do R.last[k] = ser(v) end
+        local doc = R.doc
+        doc:on('.act', 'click', function(e)
+            local f = R.acts[tostring(e.current)]
+            if f then f() end
+        end)
+        doc:on('.sl', 'change', function(e)
+            local f = R.slacts[tostring(e.current)]
+            local v = tonumber(e.params and e.params.value)
+            if f and v then f(v) end
+        end)
+        doc:on('.tx', 'change', function(e)
+            local f = R.txacts[tostring(e.current)]
+            if f and e.params and e.params.value then f(tostring(e.params.value)) end
+        end)
+        return doc
+    end
+
+    -- For the self test (gear/examples/modmanagertest): gear.emit('mods.query', out) fills `out` with where the screen is, the ids of the elements of the
+    -- mods, settings, keys and tabs shown (R.index; an element is found by '#id'), rect(selector) -> {x, y, w, h}, reveal(selector) (scrolls it into the
+    -- visible part of the list) and press(id) (what a click on that element does).
+    gear.on('mods.query', function(out)
+        out.open, out.view, out.mod, out.tab = screen.open, screen.view, screen.mod, screen.tab
+        out.index = R.index
+        out.tab_order = R.tab_order
+        out.capturing = screen.capture ~= nil
+        out.osk = screen.osk ~= nil
+        out.rect = function(sel)
+            local e = R.doc and R.doc:query(sel)
+            return e and e:rect() or nil
+        end
+        out.reveal = function(sel)
+            local doc = R.doc
+            local e = doc and doc:query(sel)
+            local er = e and e:rect()
+            if not er then return nil end
+            for _, box in ipairs(doc:query_all('.bodybox')) do
+                local br = box:rect()
+                if br and br.w > 0 then
+                    local top, _, client = box:scroll()
+                    if er.y < br.y then box:scroll(top - (br.y - er.y) - 8)
+                    elseif er.y + er.h > br.y + client then box:scroll(top + (er.y + er.h - br.y - client) + 8) end
+                    break
+                end
+            end
+            return e:rect()
+        end
+        out.press = function(id)
+            local f = R.acts[id]
+            if f then f() return true end
+        end
+    end)
+
+    -- true when the document drew the screen (the caller then has nothing to draw)
+    function draw_rml_screen(back, escape)
+        local doc = document()
+        if not doc then return false end
+        local l, t, r, b = ui.screen()
+        local blocker = ui.region('blocker', l, t, r - l, b - t, {layer = 'top', nav = false})
+        if blocker.pressed then stop_input() end
+        if back then
+            -- The controller's B: out of the keyboard, out of a mod's screen, then out of the manager.
+            if screen.osk then screen.osk = nil
+            elseif screen.capture then stop_input()
+            elseif screen.view ~= 'list' then screen.view = 'list'; R.reset_scroll = true
+            else close_screen() return true end
+            R.dirty = true
+        elseif escape then
+            if screen.osk or screen.capture then stop_input(); R.dirty = true else close_screen(true) return true end
+        end
+        -- a key being rebound: the next key pressed is the binding
+        local cap = screen.capture
+        if cap then
+            local bnd = admin.capture()
+            if bnd then
+                if bnd == 'backspace' or bnd == 'delete' then bnd = '' end
+                admin.set_binding(cap.mod, cap.key, bnd)
+                screen.capture = nil
+                R.dirty = true
+            end
+        end
+        -- LB / RB: the previous / next tab of a mod's screen, a page up / down of the list
+        local page = ui.page_pressed()
+        if page ~= 0 and not screen.osk then
+            if screen.view == 'mod' and R.tab_order then
+                local at = 1
+                for i, name in ipairs(R.tab_order) do if name == screen.tab then at = i end end
+                local to = math.max(1, math.min(#R.tab_order, at + page))
+                if to ~= at then
+                    screen.tab, screen.tab_page = R.tab_order[to], 1
+                    stop_input()
+                    R.dirty, R.reset_scroll = true, true
+                end
+            elseif screen.view == 'list' then
+                for _, box in ipairs(doc:query_all('.bodybox')) do
+                    local top, _, client = box:scroll()
+                    if top then box:scroll(top + page * math.floor(client * 0.9)) end
+                end
+            end
+        end
+        local now = gear.time()
+        if R.dirty or now - R.built_at > 0.25 then
+            R.dirty, R.built_at = false, now
+            local m = build()
+            for k, v in pairs(m) do
+                local s = ser(v)
+                if R.last[k] ~= s then
+                    doc.model[k] = v
+                    R.last[k] = s
+                end
+            end
+        end
+        if R.reset_scroll then
+            R.reset_scroll = false
+            for _, e in ipairs(doc:query_all('.bodybox')) do e:scroll('start') end
+        end
+        ui.capture_keys(true)
+        doc:draw({layer = 'top'})
+        if screen.view == 'mod' and screen.tab == 'page' and not screen.osk then
+            local area = doc:query('#more')
+            local rect = area and area:rect()
+            if rect and rect.w > 0 then admin.draw_page(screen.mod, rect.x, rect.y, rect.w, rect.h) end
+        end
+        return true
+    end
+end
+
+---------------------------------------------------------------------------------------------------------------
 -- Each frame
 ---------------------------------------------------------------------------------------------------------------
 -- The item of the game menu in a native menu (gear.menu); the button below stands in for it otherwise.
@@ -743,7 +1218,7 @@ gear.menu.add_item('esc', {id = 'mods', label = 'Mods', order = 900, tooltip = '
 -- Without the theme mod (or RmlUi) the document cannot load and the button is the old gear.ui one, so nothing depends on it.
 local rml_buttons = {}
 -- The button is placed by its real width: its centre goes to `cx` (nil: its left edge to `left`), its top to `y`.
-local function rml_button(key, cx, left, y)
+local function rml_button(key, cx, left, y, select_key)
     local entry = rml_buttons[key]
     if entry == nil then
         entry = {retry = 0}
@@ -753,8 +1228,14 @@ local function rml_button(key, cx, left, y)
     local now = gear.time()
     if entry.failed and now < entry.retry then return nil end
     if not ui.rml then entry.failed, entry.retry = true, now + 5 return nil end
-    local doc = ui.rml.load_string('<rml><body><button id="b" class="game-button" style="position: absolute; left: -2000px; top: 0px; margin: 0; width: 104px;">'
-        .. '<img class="padkey" src="gear:pad/a"/>Mods</button></body></rml>')
+    -- The pad prompts: while the button has the pad's focus the confirm button (A); else, where Select / "-" opens the screen (the escape menu), that
+    -- button; where nothing does, none.
+    local prompts = '<img class="padkey conf" src="gear:pad/a"/>' .. (select_key and '<img class="padkey sel" src="gear:pad/back"/>' or '')
+    local doc = ui.rml.load_string('<rml><head><style>'
+        .. 'body.pad button .padkey.conf { display: none; } body.pad button:focus .padkey.conf { display: inline-block; } '
+        .. 'body.pad button:focus .padkey.sel { display: none; } '
+        .. '</style></head><body><button id="b" class="game-button" style="position: absolute; left: -2000px; top: 0px; margin: 0; width: 104px;">'
+        .. prompts .. 'Mods</button></body></rml>')
     if not doc then entry.failed, entry.retry = true, now + 5 return nil end
     doc:on('#b', 'click', function() open_screen() end)
     entry.doc = doc
@@ -774,18 +1255,20 @@ end
 
 local function escape_menu_button(state)
     if state.mode == 'menus' then
-        local doc = rml_button('menu')
+        local doc = rml_button('menu', nil, nil, nil, true)
         if doc then
             place_rml_button(doc, rml_buttons.menu, nil, 16, 718)
             doc:draw({layer = 'top'})
         elseif ui.button('menu_button', 16, 724, 90, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then
             open_screen()
         end
+        -- Select / "-" on the pad opens the screen while the main menu is shown
+        if ui.select_pressed() then open_screen() end
     elseif state.escape_menu and not state.message_box and not gear.menu.available('esc') then
         -- With a native menu (a mod that draws the game menu itself) the "Mods" item below is part of it; else this button.
         local l, t, r, b = ui.screen()
         local x = (l + r) / 2 - 60      -- below the escape menu's window (centered in the layout)
-        local doc = rml_button('esc')
+        local doc = rml_button('esc', nil, nil, nil, true)
         if doc then
             -- Centred under the game menu's window (the one Gear reports), as the old button was; the gap below the frame is the old one's.
             local win = ui.window('UI_WND_ESCMENU')
@@ -795,10 +1278,14 @@ local function escape_menu_button(state)
         elseif ui.button('esc_button', x, 508, 120, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then
             open_screen()
         end
+        -- Select / "-" on the pad opens the screen while the escape menu is up (the game menu items have no such button)
+        if ui.select_pressed() then open_screen() end
     end
 end
 
 gear.on('draw', function(state)
+    -- (a Select press only counts while the escape menu or the main menu is up: older ones are dropped)
+    if not ((state.mode == 'menus' or (state.escape_menu and not state.message_box)) and not screen.open) then while ui.select_pressed() do end end
     if screen.holding then
         if ui.key_down('escape') then
             screen.up_at = nil
@@ -829,6 +1316,7 @@ gear.on('draw', function(state)
     end
     local back = ui.back_pressed()
     local escape = ui.key_pressed('escape')
+    if draw_rml_screen(back, escape) then return end
     local l, t, r, b = ui.screen()
     local blocker = ui.region('blocker', l, t, r - l, b - t, {layer = 'top', nav = false})
     if blocker.pressed then stop_input() end
@@ -858,5 +1346,22 @@ gear.on('draw', function(state)
 end)
 
 gear.keys.on('open', toggle_screen)
+
+-- gear.emit('mods.open', {mod = 'autosave', tab = 'settings'}): opens the screen on a mod's own screen (tab 'settings', 'keys' or 'page'; the first it has when
+-- tab is left out), or on the list when no mod is named. For mods that link to their own settings, and for the screenshot tools.
+gear.on('mods.open', function(t)
+    t = type(t) == 'table' and t or {}
+    if not screen.open then open_screen() end
+    local e = t.mod and find_entry(t.mod)
+    stop_input()
+    screen.osk = nil
+    if not e or e.state == 'invalid' then
+        screen.view = 'list'
+        return
+    end
+    local tab = t.tab
+    if tab ~= 'settings' and tab ~= 'keys' and tab ~= 'page' then tab = e.has_settings and 'settings' or (e.has_keys and 'keys' or 'page') end
+    screen.view, screen.mod, screen.tab, screen.tab_page = 'mod', e.id, tab, 1
+end)
 
 gear.on('unload', function() ui.nav_modal(false); admin.modal(false) end)

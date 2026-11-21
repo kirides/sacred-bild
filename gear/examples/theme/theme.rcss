@@ -211,3 +211,13 @@ scrollbarvertical slidertrack { width: 30px; decorator: image(gear:image/288 rep
 scrollbarvertical sliderbar { width: 30px; height: 30px; decorator: image(gear:image/286 scale-none center center); background-color: transparent; }
 scrollbarvertical sliderarrowdec { width: 30px; height: 30px; decorator: image(gear:image/298 scale-none center center); }
 scrollbarvertical sliderarrowinc { width: 30px; height: 30px; decorator: image(gear:image/299 scale-none center center); }
+
+/* Arrows to step through values or pages (class arrow on an <a>, next for the right one): the game's white arrows (images 236 and 237, 32x18) in a box a little
+   larger, so hover and pad focus can put the warm bloom (arrow-glow-left.png / arrow-glow-right.png, the arrow blurred and tinted like the .link bloom) over
+   them. <a class="arrow prev"></a> <a class="arrow next"></a>; class off dims one that cannot go further. */
+a.arrow { display: inline-block; width: 52px; height: 38px; margin: 0 -4px; vertical-align: middle; cursor: pointer; decorator: image(gear:image/236 scale-none center center); }
+a.arrow.next { decorator: image(gear:image/237 scale-none center center); }
+a.arrow:hover, a.arrow:focus, a.arrow:active { decorator: image(arrow-glow-left.png scale-none center center), image(gear:image/236 scale-none center center); }
+a.arrow.next:hover, a.arrow.next:focus, a.arrow.next:active { decorator: image(arrow-glow-right.png scale-none center center), image(gear:image/237 scale-none center center); }
+a.arrow.off, a.arrow.off:hover, a.arrow.off:focus { opacity: 0.35; decorator: image(gear:image/236 scale-none center center); cursor: default; }
+a.arrow.next.off, a.arrow.next.off:hover, a.arrow.next.off:focus { decorator: image(gear:image/237 scale-none center center); }

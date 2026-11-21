@@ -79,6 +79,13 @@ function GearAuto.release() end
 ---@param menu? integer
 function GearAuto.pad(nudge, back, menu) end
 
+--- The controller's LB / RB without one: posts `pages` page steps (-1 previous, +1 next), read by `ui.page_pressed`.
+---@param pages integer
+function GearAuto.pad_page(pages) end
+
+--- The Select / "-" button without a controller: one press, read by `ui.select_pressed`.
+function GearAuto.pad_select() end
+
 --- The stops SacredBild holds for the controller: their count (-1 stale, -2 no SacredBild) and flags (1 modal, 2 a
 --- mod window is open).
 ---@return integer count

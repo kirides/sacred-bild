@@ -36,4 +36,6 @@ namespace GearNav
     void postScroll(int steps);     // D-pad up / down in a scroll area: lines, + down
     void postBack();
     void postMenu();
+    void postSelect();              // the pad's Select / "-" button
+    void postPage(int direction);   // LB (-1) / RB (+1) while a mod screen or window is open: its previous / next page
 }

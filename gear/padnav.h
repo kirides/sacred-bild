@@ -24,6 +24,9 @@ namespace PadNav
     Events take();
     // Automation: pad events as the controller would post them; SacredBild's stop count (-1 stale, -2 no SacredBild).
     void post(int nudge, int back, int menu);
+    int takeSelect();               // presses of Select / "-" since the last call
+    int takePage();                 // LB / RB since the last call: + next, - previous
+    void postPage(int pages);       // automation
     int navState(int& flags);
     // Whether the controller was used last (not the keyboard and mouse) and the pad's style (0 Xbox, 1 PlayStation,
     // 2 Switch); false, Xbox without SacredBild.

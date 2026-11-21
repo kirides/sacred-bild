@@ -1,0 +1,184 @@
+<rml>
+<head>
+    <title>Mods</title>
+    <style>
+        #win { position: absolute; left: 112px; top: 44px; width: 800px; height: 680px; }
+        .fillbg { position: absolute; left: 24px; top: 27px; right: 24px; bottom: 30px; background-color: #0a0a12e8; z-index: -1; }
+        .titlerow { height: 30px; text-align: center; }
+        .ttl { font-family: "Sacred Game"; font-size: 20px; color: #ffd780; }
+        .head { display: flex; flex-direction: row; align-items: center; height: 44px; }
+        .head .grow { flex: 1 1 auto; min-width: 0px; }
+        .head .count { color: #8c8c8c; font-size: 13dp; }
+        .head .msg { color: #ffc060; margin-left: 12px; font-size: 13dp; }
+        .modname { font-weight: bold; font-size: 17dp; color: #ffd780; margin: 0 14px; }
+        .head .tabbar { margin: 0; padding: 0 0 4px 0; flex: none; }
+        .head .tabbar .padkey { margin: 0 8px 0 0; }
+        .head .tabbar .padkey.after { margin: 0 0 0 8px; }
+        #foot .pg .padkey { margin-right: 4px; }
+        .bodybox { height: 530px; overflow-y: auto; margin-top: 4px; }
+        #foot { display: flex; flex-direction: row; align-items: center; height: 42px; margin-top: 6px; }
+        #foot .grow { flex: 1 1 auto; min-width: 0px; }
+        #foot .note { color: #8c8c8c; font-size: 12dp; }
+        #foot .restart { color: #ffc060; font-size: 12dp; margin-right: 12px; }
+        button.game-button { flex: none; white-space: nowrap; min-width: 0px; padding: 0 38px 0 37px; font-size: 16px; margin-right: 8px; }
+        button.mini { flex: none; white-space: nowrap; padding: 3px 10px; margin: 0 0 0 6px; font-size: 13dp; }
+        button.mini.on { border-color: #ffe030; color: #ffe030; }
+        button.mini.warn { border-color: #ffc060; color: #ffc060; }
+
+        /* the list of mods */
+        .mrow { position: relative; padding: 8px 236px 8px 70px; min-height: 56px; margin: 0 6px 4px 0; background-color: #12121c; border: 1px #4a4030; }
+        .mrow.bad { background-color: #2a1418; border-color: #804040; }
+        .mrow .sw { position: absolute; left: 6px; top: 0px; bottom: 0px; width: 56px; text-align: center; color: #8c8c8c; font-size: 12dp; padding-top: 18px; }
+        .mrow .sw input.game-check { margin: 0 2px; }
+        .mrow .nm { font-weight: bold; font-size: 15dp; color: #ffd780; }
+        .mrow.dim .nm { color: #8c8c8c; }
+        .mrow .meta { color: #8c8c8c; font-size: 12dp; margin-left: 10px; }
+        .mrow .desc { color: #e0e0e0; font-size: 13dp; }
+        .mrow.dim .desc { color: #8c8c8c; }
+        .mrow .st { font-size: 12dp; margin-top: 2px; }
+        .mrow .st.red { color: #ff7070; }
+        .mrow .st.amber { color: #ffc060; }
+        .mrow .st.grey { color: #8c8c8c; }
+        .mrow .btns { position: absolute; right: 8px; top: 0px; bottom: 0px; width: 220px; padding-top: 10px; text-align: right; }
+        .mrow .btns a.link { padding: 3px 12px; }
+        .mrow .btns .tab-sep { display: inline-block; width: 1px; height: 18px; margin: 0 2px; vertical-align: middle; background-color: #8c744099; }
+        a.link.off { color: #6a6a6a; font-effect: none; cursor: default; }
+
+        /* the settings and keys of one mod */
+        .srow { display: flex; flex-direction: row; align-items: center; min-height: 40px; margin: 0 6px 2px 0; padding: 0 6px; }
+        .srow .slab { width: 230px; flex: none; padding-right: 8px; }
+        .srow .slab.amber { color: #ffc060; }
+        .srow .sctl { flex: 1 1 auto; min-width: 0px; display: flex; flex-direction: row; align-items: center; }
+        .srow .rst { width: 74px; flex: none; text-align: right; }
+        .srow input.game-check { margin: -6px 0; }
+        .srow .val { width: 54px; flex: none; text-align: right; color: #ffd780; margin-left: 8px; }
+        .srow input.game-slider { width: 220px; flex: none; }
+        .srow input.game-slider.small { width: 150px; margin-right: 6px; flex: none; }
+        .cgrid { display: flex; flex-direction: row; flex-wrap: wrap; width: 320px; }
+        .srow .chv { min-width: 150px; text-align: center; color: #ffd780; margin: 0 4px; }
+        .srow input.field { width: 230px; flex: none; }
+        .swatch { width: 26px; height: 22px; flex: none; margin-right: 8px; border: 1px #8c7440; }
+        .sh { font-weight: bold; font-size: 14dp; color: #ffd780; margin: 10px 6px 2px 6px; padding-bottom: 2px; border-bottom: 1px #8c744080; }
+        .snote { color: #8c8c8c; font-size: 12dp; margin: 2px 6px 2px 6px; }
+        .empty { color: #8c8c8c; margin: 20px; }
+        #more { height: 524px; }
+        .krow button.mini.slot { min-width: 132px; text-align: center; }
+
+        /* the on-screen keyboard */
+        .osk { padding: 4px 8px; }
+        .osk .otitle { font-weight: bold; font-size: 15dp; color: #ffd780; margin-bottom: 8px; }
+        .osk .otext { height: 28px; line-height: 28px; padding: 0 8px; margin-bottom: 10px; background-color: #0c0c14; border: 1px #8c7440; }
+        .osk .orow { display: flex; flex-direction: row; justify-content: center; margin: 4px 0; }
+        .osk button.mini.key { min-width: 44px; margin: 0 3px; text-align: center; padding: 6px 0; }
+        .osk button.mini.wide { min-width: 100px; margin: 0 6px; text-align: center; padding: 6px 0; }
+        .osk .ohint { color: #8c8c8c; font-size: 12dp; text-align: center; margin-top: 10px; }
+    </style>
+</head>
+<body data-model="model">
+<div id="win" class="thick-frame bg-fill-settings" data-panel="main" data-title="Mods" data-if="open">
+    <div class="fillbg"></div>
+    <div class="titlerow"><span class="ttl">Mods</span></div>
+
+    <!-- the list -->
+    <div data-if="view == 'list'" class="head">
+        <span class="count">{{ count_text }}</span><span class="msg">{{ message }}</span><span class="grow"></span>
+    </div>
+    <div data-if="view == 'list'" class="bodybox">
+        <div data-for="m : mods" class="mrow" data-class-bad="m.bad" data-class-dim="m.dim">
+            <div class="sw"><span data-if="m.core">Core</span><input data-if="!m.core &amp;&amp; m.can_toggle" type="checkbox" class="game-check act" data-attr-id="m.en_id" data-checked="m.on" data-attr-title="m.en_tip"/></div>
+            <div class="info">
+                <div><span class="nm">{{ m.name }}</span><span class="meta">{{ m.meta }}</span></div>
+                <div class="desc">{{ m.desc }}</div>
+                <div data-if="m.status != ''" class="st" data-class-red="m.st_red" data-class-amber="m.st_amber" data-class-grey="m.st_grey">{{ m.status }}</div>
+            </div>
+            <div class="btns">
+                <a class="link act" data-attr-id="m.set_id" data-class-off="m.no_settings">Settings</a><span class="tab-sep"></span><a class="link act" data-attr-id="m.keys_id" data-class-off="m.no_keys">Keys</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- one mod -->
+    <div data-if="view == 'mod'" class="head">
+        <button class="game-button act" id="back"><span class="padkey b"></span>Back</button>
+        <span class="modname">{{ mod_name }}</span><span class="grow"></span>
+        <div class="tabbar"><span data-if="multi_tab" class="padkey lb"></span><a data-for="t : tabs" class="link tab act" data-attr-id="t.id" data-class-on="t.on">{{ t.label }}</a><span data-if="multi_tab" class="padkey rb after"></span></div>
+    </div>
+    <div data-if="view == 'mod'" class="bodybox">
+        <div data-if="tab == 'none'" class="empty">Nothing to set here.</div>
+
+        <div data-if="tab == 'settings' || tab == 'keys'">
+            <div data-for="r : rows">
+                <div data-if="r.kind == 'head'" class="sh">{{ r.label }}</div>
+                <div data-if="r.kind == 'note'" class="snote">{{ r.label }}</div>
+                <div data-if="r.kind == 'bool'" class="srow">
+                    <div class="slab" data-attr-title="r.tip">{{ r.label }}</div>
+                    <div class="sctl"><input type="checkbox" class="game-check act" data-attr-id="r.bool_id" data-checked="r.on"/></div>
+                    <div class="rst"><button data-if="r.changed" class="mini act" data-attr-id="r.rst_id">Reset</button></div>
+                </div>
+                <div data-if="r.kind == 'num'" class="srow">
+                    <div class="slab" data-attr-title="r.tip">{{ r.label }}</div>
+                    <div class="sctl"><input type="range" class="game-slider sl" data-attr-id="r.num_id" data-attr-min="r.min" data-attr-max="r.max" data-attr-step="r.step" data-value="r.value"/><span class="val">{{ r.text }}</span></div>
+                    <div class="rst"><button data-if="r.changed" class="mini act" data-attr-id="r.rst_id">Reset</button></div>
+                </div>
+                <div data-if="r.kind == 'choice'" class="srow">
+                    <div class="slab" data-attr-title="r.tip">{{ r.label }}</div>
+                    <div class="sctl"><a class="arrow prev act" data-attr-id="r.prev_id"></a><span class="chv">{{ r.text }}</span><a class="arrow next act" data-attr-id="r.next_id"></a></div>
+                    <div class="rst"><button data-if="r.changed" class="mini act" data-attr-id="r.rst_id">Reset</button></div>
+                </div>
+                <div data-if="r.kind == 'text'" class="srow">
+                    <div class="slab" data-attr-title="r.tip">{{ r.label }}</div>
+                    <div class="sctl"><input type="text" class="field tx" data-attr-id="r.text_id" data-attr-maxlength="r.max_length" data-attr-value="r.text"/><button class="mini act" data-attr-id="r.kbd_id" title="Type with an on-screen keyboard (for a controller)"><span class="padkey a"></span>Kbd</button></div>
+                    <div class="rst"><button data-if="r.changed" class="mini act" data-attr-id="r.rst_id">Reset</button></div>
+                </div>
+                <div data-if="r.kind == 'color'" class="srow">
+                    <div class="slab" data-attr-title="r.tip">{{ r.label }}</div>
+                    <div class="sctl"><div class="swatch" data-style-background-color="r.css"></div>
+                        <div class="cgrid"><input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.a_id" data-value="r.a" title="Alpha"/>
+                        <input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.r_id" data-value="r.r" title="Red"/>
+                        <input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.g_id" data-value="r.g" title="Green"/>
+                        <input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.b_id" data-value="r.b" title="Blue"/></div></div>
+                    <div class="rst"><button data-if="r.changed" class="mini act" data-attr-id="r.rst_id">Reset</button></div>
+                </div>
+                <div data-if="r.kind == 'key'" class="srow krow">
+                    <div class="slab" data-class-amber="r.conflict" data-attr-title="r.tip">{{ r.label }}</div>
+                    <div class="sctl">
+                        <button class="mini slot act" data-attr-id="r.slot_id" data-class-on="r.capturing" data-class-warn="r.conflict"><span class="padkey a"></span>{{ r.slot }}</button><button class="mini act" data-attr-id="r.pick_id" title="Choose the key from an on-screen list (for a controller)"><span class="padkey a"></span>...</button>
+                        <button data-if="r.has2" class="mini slot act" data-attr-id="r.slot2_id" data-class-on="r.capturing2" data-class-warn="r.conflict2"><span class="padkey a"></span>{{ r.slot2 }}</button><button data-if="r.has2" class="mini act" data-attr-id="r.pick2_id"><span class="padkey a"></span>...</button>
+                    </div>
+                    <div class="rst"><button data-if="r.changed" class="mini act" data-attr-id="r.rst_id">Default</button></div>
+                </div>
+            </div>
+        </div>
+
+        <div data-if="tab == 'page'" id="more"></div>
+    </div>
+
+    <!-- the on-screen keyboard -->
+    <div data-if="view == 'osk'" class="head"></div>
+    <div data-if="view == 'osk'" class="bodybox osk">
+        <div class="otitle">{{ osk_title }}</div>
+        <div data-if="osk_text_mode" class="otext">{{ osk_text }}|</div>
+        <div data-if="!osk_text_mode" class="orow">
+            <button class="mini wide act" id="osk_ctrl" data-class-on="osk_ctrl"><span class="padkey a"></span>Ctrl</button><button class="mini wide act" id="osk_shift" data-class-on="osk_shift"><span class="padkey a"></span>Shift</button><button class="mini wide act" id="osk_alt" data-class-on="osk_alt"><span class="padkey a"></span>Alt</button>
+            <button class="mini wide act" id="osk_none"><span class="padkey a"></span>Unbind</button><button class="mini wide act" id="osk_cancel"><span class="padkey b"></span>Cancel</button>
+        </div>
+        <div data-for="row : osk_rows" class="orow"><button data-for="k : row" class="mini key act" data-attr-id="k.id"><span class="padkey a"></span>{{ k.label }}</button></div>
+        <div data-if="osk_text_mode" class="orow">
+            <button class="mini wide act" id="osk_shift2" data-class-on="osk_shift"><span class="padkey a"></span>Shift</button><button class="mini wide act" id="osk_space"><span class="padkey a"></span>Space</button><button class="mini wide act" id="osk_back"><span class="padkey a"></span>Backspace</button><button class="mini wide act" id="osk_done"><span class="padkey a"></span>Done</button>
+        </div>
+        <div data-if="!osk_text_mode" class="ohint">Pick the modifiers first, then the key.</div>
+    </div>
+
+    <!-- the footer -->
+    <div id="foot">
+        <div data-if="view == 'list'" class="grow note"><span class="pg"><span class="padkey lb"></span><span class="padkey rb"></span>Page up / down</span>  Saved in mods\gear_mods.json</div>
+        <div data-if="view == 'mod' &amp;&amp; tab == 'settings'" class="grow"><button class="game-button act" id="reset_all" title="Every setting of this mod back to its default"><span class="padkey y"></span>Reset to defaults</button></div>
+        <div data-if="view == 'mod' &amp;&amp; tab == 'keys'" class="grow note">Click a key, then press the new one. Esc cancels, Backspace unbinds.</div>
+        <div data-if="view == 'mod' &amp;&amp; tab == 'page'" class="grow"></div>
+        <div data-if="view == 'osk'" class="grow"></div>
+        <span data-if="restart &amp;&amp; view == 'mod'" class="restart">Some changes apply after a restart</span>
+        <button class="game-button act" id="close"><span class="padkey b"></span>Close</button>
+    </div>
+</div>
+</body>
+</rml>

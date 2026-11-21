@@ -2905,7 +2905,7 @@ local ui_panel_prev = {}    -- the last tick's
 local ui_nav = {n = 0}      -- this tick's stops: {mod, x, y, w, h, layer, kind, ax, ay, drop}; entries are reused (n = how many are live)
 local ui_nav_modal = nil    -- the mod whose screen takes the pad alone (ui.nav_modal)
 local ui_window_open = false    -- a closable panel is up this tick
-local ui_pad = {nudge = 0, back = 0, menu = 0}
+local ui_pad = {nudge = 0, back = 0, menu = 0, page = 0, select = 0}
 local ui_menu_items = {}    -- mod -> {{id, label, fn}} (ui.menu_item)
 -- Clipping and scrolling: a scroll area clips what is drawn inside it (and the regions: a widget scrolled out of
 -- sight takes no mouse); things that must lie over everything (an open dropdown's list) are drawn after all draw
@@ -3095,6 +3095,8 @@ local function ui_begin_tick()
     do
         local nudge, back, menu = native.ui_pad()
         ui_pad.nudge, ui_pad.back, ui_pad.menu = nudge or 0, back or 0, menu or 0
+        ui_pad.page = (native.ui_page and native.ui_page() or 0)
+        ui_pad.select = (native.ui_select and native.ui_select() or 0)
         -- B closes an open dropdown first.
         if ui_pad.back > 0 and ui_dropdown then
             ui_dropdown = nil
@@ -5224,6 +5226,23 @@ local function make_ui(mod)
         end
         return false
     end
+    -- ui.page_pressed() -> -1, 0 or 1: the controller's LB (-1) or RB (+1) was pressed while a nav_modal screen or a window of a mod is open (consumed;
+    -- both in one tick cancel out). The previous / next page, tab or step of that screen. Show the prompts (<span class="padkey lb"></span> / rb) by it.
+    function ui.page_pressed()
+        local page = ui_pad.page
+        if page == 0 then return 0 end
+        ui_pad.page = 0
+        return page > 0 and 1 or -1
+    end
+    -- ui.select_pressed() -> bool: the controller's Select / "-" button was pressed (consumed: true once per press, whoever asks first; ask only in the
+    -- state where it means something to the mod, e.g. while the escape menu is open).
+    function ui.select_pressed()
+        if ui_pad.select > 0 then
+            ui_pad.select = ui_pad.select - 1
+            return true
+        end
+        return false
+    end
     -- ui.menu_item(id, label, fn): an entry of the controller's mod menu (the pad button reaches it where a mod's
     -- tool needs a hotkey, ALT or a click on a tiny button). Declared keys (mod.lua) are listed there on their own.
     function ui.menu_item(id, label, fn)
@@ -5667,6 +5686,10 @@ local function make_auto()
     -- The controller, without one: pad events as SacredBild posts them (slider steps, B, the mod menu button), and
     -- the stops SacredBild holds (count, flags; count -1 stale, -2 no SacredBild).
     function auto.pad(nudge, back, menu) native.auto_pad(nudge or 0, back or 0, menu or 0) end
+    -- auto.pad_page(pages): as LB (-1) / RB (+1) presses of the pad.
+    function auto.pad_page(pages) native.auto_page(pages or 0) end
+    -- auto.pad_select(): one press of the Select / "-" button.
+    function auto.pad_select() native.auto_page(100) end
     function auto.nav() return native.auto_nav() end
     -- In a task: press and release with a short pause, as a player would.
     function auto.click(x, y, button)
@@ -7816,6 +7839,8 @@ local function apply(initial)
 end
 
 -- The mod manager's own view of everything (gear.mods.admin does not exist: the manager gets the global `admin`).
+-- admin.markup() -> the RmlUi document of its screen (gear/lua/modmanager.rml, shipped inside the DLL), nil if it is not there.
+function admin.markup() return native.builtin and native.builtin('modmanager.rml') end
 function admin.entries()
     local out = {}
     for _, e in ipairs(catalog_list) do out[#out + 1] = mod_info(e) end

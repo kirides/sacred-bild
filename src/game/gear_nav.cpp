@@ -29,7 +29,7 @@ namespace
     int g_flags = 0;
     ULONGLONG g_updated = 0;
 
-    std::atomic<int> g_nudge{0}, g_back{0}, g_menu{0}, g_scroll{0};
+    std::atomic<int> g_nudge{0}, g_back{0}, g_menu{0}, g_scroll{0}, g_page{0}, g_select{0};
     using WheelFn = int(__cdecl*)(int delta);
     std::atomic<WheelFn> g_wheel{nullptr};
 
@@ -121,6 +121,8 @@ void GearNav::postScroll(int steps) { g_scroll += steps; }
 void GearNav::postNudge(int steps) { g_nudge += steps; }
 void GearNav::postBack() { ++g_back; }
 void GearNav::postMenu() { ++g_menu; }
+void GearNav::postPage(int direction) { g_page += direction; }
+void GearNav::postSelect() { ++g_select; }
 
 // Sacred Gear, once per tick: the interactive rectangles of its widgets in the UI's layout coordinates (the order
 // they were drawn in), and flags: 1 a modal mod screen (the stops are all there is), 2 a mod window is open.
@@ -172,6 +174,35 @@ extern "C" int __cdecl SacredBild_UiTakePad(int* nudge, int* back, int* menu)
     *back = g_back.exchange(0);
     *menu = g_menu.exchange(0);
     return 1;
+}
+
+// Sacred Gear: LB / RB while its screen or window is open, since the last call: the pages stepped (+ next, - previous; each press counts one).
+extern "C" int __cdecl SacredBild_UiTakePage()
+{
+    return g_page.exchange(0);
+}
+
+// Sacred Gear: presses of the pad's Select / "-" button since the last call (the Mods button of the escape menu answers it).
+extern "C" int __cdecl SacredBild_UiTakeSelect()
+{
+    return g_select.exchange(0);
+}
+
+// Automation: posts page steps as LB / RB would.
+extern "C" void __cdecl SacredBild_UiPostPage(int pages)
+{
+    if (pages == 100)
+    {
+        ++g_select;     // the automation's Select press
+    }
+    else
+    {
+        g_page += pages;
+    }
+    if (pages != 0)
+    {
+        InputMode::controllerUsed();
+    }
 }
 
 // Sacred Gear's controller prompts: the style of the pad in use (0 Xbox, 1 PlayStation, 2 Switch) and whether the

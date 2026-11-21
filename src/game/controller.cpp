@@ -562,7 +562,12 @@ namespace
         }
         Inject::button(VK_RBUTTON, !secondary && (buttons & Gamepad::X) != 0);
         // LB / RB: the inventory's previous / next page.
-        if (const uint32_t shoulder = Gamepad::pressed() & (Gamepad::LB | Gamepad::RB); shoulder && !UiNav::modal())
+        if (const uint32_t shoulder = Gamepad::pressed() & (Gamepad::LB | Gamepad::RB); shoulder && GearNav::windowOpen())
+        {
+            // A mod's screen or window pages with them (the mod manager's tabs and list, ...).
+            GearNav::postPage((shoulder & Gamepad::RB) ? 1 : -1);
+        }
+        else if (shoulder && !UiNav::modal())
         {
             float x, y;
             if (UiNav::inventoryTab((shoulder & Gamepad::RB) ? 1 : -1, x, y))
@@ -1287,6 +1292,10 @@ void Controller::onFrame()
     if (pressed[static_cast<int>(Action::ModMenu)])
     {
         GearNav::postMenu();
+    }
+    if (Gamepad::pressed() & Gamepad::Back)
+    {
+        GearNav::postSelect();      // Sacred Gear's Mods button of the escape menu answers it
     }
     if (cUI_Manager* manager = cUI_Manager::instance())
     {

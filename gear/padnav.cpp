@@ -10,6 +10,11 @@ namespace
     SetStopsFn g_setStops = nullptr;
     TakePadFn g_takePad = nullptr;
     using PostPadFn = void(__cdecl*)(int nudge, int back, int menu);
+    using TakePageFn = int(__cdecl*)();
+    using PostPageFn = void(__cdecl*)(int pages);
+    TakePageFn g_takePage = nullptr;
+    TakePageFn g_takeSelect = nullptr;
+    PostPageFn g_postPage = nullptr;
     using NavStateFn = int(__cdecl*)(int* flags);
     using PadInfoFn = int(__cdecl*)(int* style);
     using PadGlyphFn = int(__cdecl*)(int style, unsigned button, unsigned* pixels);
@@ -27,6 +32,9 @@ namespace
                 g_setStops = reinterpret_cast<SetStopsFn>(GetProcAddress(bild, "SacredBild_UiSetNavStops"));
                 g_takePad = reinterpret_cast<TakePadFn>(GetProcAddress(bild, "SacredBild_UiTakePad"));
                 g_postPad = reinterpret_cast<PostPadFn>(GetProcAddress(bild, "SacredBild_UiPostPad"));
+                g_takePage = reinterpret_cast<TakePageFn>(GetProcAddress(bild, "SacredBild_UiTakePage"));
+                g_postPage = reinterpret_cast<PostPageFn>(GetProcAddress(bild, "SacredBild_UiPostPage"));
+                g_takeSelect = reinterpret_cast<TakePageFn>(GetProcAddress(bild, "SacredBild_UiTakeSelect"));
                 g_navState = reinterpret_cast<NavStateFn>(GetProcAddress(bild, "SacredBild_UiNavState"));
                 g_padInfo = reinterpret_cast<PadInfoFn>(GetProcAddress(bild, "SacredBild_PadInfo"));
                 g_padGlyph = reinterpret_cast<PadGlyphFn>(GetProcAddress(bild, "SacredBild_PadGlyph"));
@@ -63,6 +71,27 @@ void PadNav::post(int nudge, int back, int menu)
     if (g_postPad)
     {
         g_postPad(nudge, back, menu);
+    }
+}
+
+int PadNav::takePage()
+{
+    find();
+    return g_takePage ? g_takePage() : 0;
+}
+
+int PadNav::takeSelect()
+{
+    find();
+    return g_takeSelect ? g_takeSelect() : 0;
+}
+
+void PadNav::postPage(int pages)
+{
+    find();
+    if (g_postPage)
+    {
+        g_postPage(pages);
     }
 }
 
