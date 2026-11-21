@@ -1018,10 +1018,23 @@ bool Party::order(uint32_t id, const Order& o, const char*& error)
         error = why;
         return false;
     }
-    const uintptr_t c = memberObject(id);
-    if (!c || !sameOwnerAsLocal(c))
+    uintptr_t c = memberObject(id);
+    if (c && !sameOwnerAsLocal(c))
     {
-        error = "not a party hero";
+        c = 0;
+    }
+    if (!c && o.kind == OrderKind::Attack && id > kLastHeroId && World::changesAllowed())
+    {
+        // Single player: a creature that is no party member (a monster) can be ordered to attack, as a script does.
+        World::Object any;
+        if (World::object(id, any) && any.creature)
+        {
+            c = World::objectAddress(id);
+        }
+    }
+    if (!c)
+    {
+        error = "not a party hero (in single player an attack order works on any creature)";
         return false;
     }
     if (!Addr::g_creatureEventVtable)

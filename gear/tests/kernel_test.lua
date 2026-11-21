@@ -32,6 +32,7 @@ local drops_pub = {sim = nil}
 save_block, save_calls, save_results = nil, {}, {}
 net_kills = {}
 created_list, created_active, created_suppressed = {}, false, false
+allegiance_copies = {}
 chat_queue = {}
 hero_saves = {}
 local op_ids, op_ready, op_sent, op_in = {0x1E0, 0x1E1}, false, {}, {}
@@ -159,6 +160,7 @@ local native = {
     end,
     teleport = function(id, x, y) objects[id].x, objects[id].y = x, y; return true end,
     set_health = function(id, hp) objects[id].hp = hp; return true end,
+    copy_allegiance = function(id, from) allegiance_copies[#allegiance_copies + 1] = {id, from}; return true end,
     set_gold = function(id, g) objects[id].gold = g; return true end,
     pipe_open = function(name) return 7 end,
     pipe_close = function() end,
@@ -1535,6 +1537,12 @@ do
         kernel.tick(0.016)
         ok(#made == 1, 'creature.created: each creation is delivered once')
         objects[950] = nil
+        objects[960] = {id = 960, type = 3, x = 1, y = 1, layer = 0, creature = true, hp = 10, max_hp = 10}
+        allegiance_copies = {}
+        local like = mpapi.world.spawn(3, 5, 5, {layer = 0, like = objects[960] and mpapi.world.object(960)})
+        ok(like ~= nil and #allegiance_copies == 1 and allegiance_copies[1][1] == like.id and allegiance_copies[1][2] == 960, 'spawn {like}: the new creature takes the allegiance of the source')
+        ok(like:copy_allegiance(960) == true and #allegiance_copies == 2 and allegiance_copies[2][1] == like.id, 'creature:copy_allegiance')
+        objects[960], objects[like.id] = nil, nil
     hero_id, objects[1], objects[2], objects[900] = saved_hero, saved1, saved2, nil
 end
 

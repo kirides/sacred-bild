@@ -903,6 +903,12 @@ function creature_mt:set_hp(hp)
     assert(type(hp) == 'number', 'hp must be a number')
     return native.set_health(self.id, math.floor(hp))
 end
+-- copy_allegiance(source): the faction and aggression of another creature (single player).
+function creature_mt:copy_allegiance(source)
+    local id = type(source) == 'table' and source.id or source
+    assert(type(id) == 'number', 'source must be a creature or its id')
+    return native.copy_allegiance(self.id, id)
+end
 function creature_mt:set_gold(gold)
     assert(type(gold) == 'number', 'gold must be a number')
     return native.set_gold(self.id, math.min(math.max(0, math.floor(gold)), 2147483646))
@@ -2783,7 +2789,7 @@ function world.around(x, y, min, max)
 end
 
 -- spawn(type, x, y, opts) -> creature | nil, message. `type` is a type id or an object type name;
--- opts.layer (default: the hero's), opts.label (a text kept for the creature, see creature:label()), opts.modifiers (see creature:set_modifiers).
+-- opts.layer (default: the hero's), opts.like (a creature whose faction and aggression the new one takes), opts.label (a text kept for the creature, see creature:label()), opts.modifiers (see creature:set_modifiers).
 local function spawn(mod, kind, x, y, opts)
     opts = opts or {}
     assert(type(x) == 'number' and type(y) == 'number', 'x and y must be numbers')
@@ -2801,6 +2807,13 @@ local function spawn(mod, kind, x, y, opts)
     end
     local oid, err = native.spawn(id, math.floor(x), math.floor(y), layer)
     if not oid then return nil, err end
+    if opts.like ~= nil then
+        local ok, why = native.copy_allegiance(oid, type(opts.like) == 'table' and opts.like.id or opts.like)
+        if not ok then
+            native.remove(oid)
+            return nil, why
+        end
+    end
     if opts.label ~= nil then
         labels[oid] = {text = tostring(opts.label), mod = mod.id}
     end
@@ -5730,6 +5743,10 @@ local function make_auto()
     function auto.write(name, text)
         assert(type(name) == 'string' and type(text) == 'string', 'name and text must be strings')
         return native.auto_write(name, text)
+    end
+    function auto.object_bytes(id, offset, size)
+        assert(type(id) == 'number' and type(offset) == 'number' and type(size) == 'number', 'id, offset and size must be numbers')
+        return native.auto_object_bytes(id, offset, size)
     end
     -- Starts the engine's own level function on a worker thread (it answers through the level.factor hook when a mod handles
     -- it); false if one is running or the function was not found. `engine_level_factor_result` gives the integer once done.
