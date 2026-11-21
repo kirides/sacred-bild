@@ -1752,9 +1752,10 @@ scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 16px
 .padkey { display: none; width: 1.3em; height: 1.3em; margin-right: 0.5em; vertical-align: middle; }
 body.pad .padkey { display: inline-block; }
 body.pad .padkey.a { visibility: hidden; }
-body.pad :focus .padkey.a, body.pad :hover .padkey.a { visibility: visible; }
-body.pad :focus span.padkey.b, body.pad :hover span.padkey.b, body.pad :focus span.padkey.y, body.pad :hover span.padkey.y, body.pad :focus span.padkey.x, body.pad :hover span.padkey.x,
-body.pad :focus span.padkey.lb, body.pad :hover span.padkey.lb, body.pad :focus span.padkey.rb, body.pad :hover span.padkey.rb, body.pad :focus span.padkey.back, body.pad :hover span.padkey.back { decorator: image(gear:pad/a contain); }
+body.pad button:focus > .padkey.a, body.pad button:hover > .padkey.a, body.pad a:focus > .padkey.a, body.pad a:hover > .padkey.a { visibility: visible; }
+body.pad button:focus > span.padkey.b, body.pad button:hover > span.padkey.b, body.pad button:focus > span.padkey.y, body.pad button:hover > span.padkey.y,
+body.pad button:focus > span.padkey.x, body.pad button:hover > span.padkey.x, body.pad button:focus > span.padkey.lb, body.pad button:hover > span.padkey.lb,
+body.pad button:focus > span.padkey.rb, body.pad button:hover > span.padkey.rb, body.pad button:focus > span.padkey.back, body.pad button:hover > span.padkey.back { decorator: image(gear:pad/a contain); }
 span.padkey.a { decorator: image(gear:pad/a contain); }
 span.padkey.b { decorator: image(gear:pad/b contain); }
 span.padkey.x { decorator: image(gear:pad/x contain); }
@@ -2389,7 +2390,17 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
                 const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
                 if (s.x > 0 && s.y > 0 && !scrolledOut(e))
                 {
-                    pushRect(L, e, d.unit, index++);
+                    pushRect(L, e, d.unit, index);
+                    // Scrolled to its top / bottom: the pad leaves the list there instead of scrolling it.
+                    const float top = e->GetScrollTop();
+                    const float most = std::max(0.0f, e->GetScrollHeight() - e->GetClientHeight());
+                    lua_rawgeti(L, -1, index);
+                    lua_pushboolean(L, top <= 0.5f ? 1 : 0);
+                    lua_setfield(L, -2, "at_top");
+                    lua_pushboolean(L, top >= most - 0.5f ? 1 : 0);
+                    lua_setfield(L, -2, "at_bottom");
+                    lua_pop(L, 1);
+                    ++index;
                 }
             }
         }

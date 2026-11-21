@@ -121,7 +121,7 @@ bool GearNav::scrollAreaAt(float x, float y, Stop& out)
 {
     for (const Stop& s : stops())
     {
-        if (s.kind == 2 && x >= s.left && x < s.right && y >= s.top && y < s.bottom)
+        if ((s.kind & 3) == 2 && x >= s.left && x < s.right && y >= s.top && y < s.bottom)
         {
             out = s;
             return true;

@@ -11,7 +11,7 @@ namespace GearNav
     {
         float x, y;     // where the cursor goes, screen pixels
         float left, top, right, bottom;
-        int kind;       // 0 button, 1 slider, 2 scroll area
+        int kind;       // 0 button, 1 slider, 2 scroll area (+ 4: it is scrolled to its top, + 8: to its bottom)
     };
 
     // The reported stops, in screen pixels; empty when Gear has not reported within the last moments.

@@ -33,7 +33,7 @@ local function q()
 end
 local function panel()
     for _, p in ipairs(ui.panels()) do
-        if p.key == 'gear-mods:main' then return p end
+        if p.key == 'gear-mods:window' then return p end
     end
 end
 -- A click on the UI layout point: the cursor moves there first and rests a moment, so the screen's document knows what it is over when the button goes down.
@@ -93,6 +93,8 @@ gear.task(function()
         check('the footer and Close are inside the window', win and foot and close and foot.y >= win.y and foot.y + foot.h <= win.y + win.h
             and close.x + close.w <= win.x + win.w, foot and foot.y)
         check('the list ends above the footer', body and foot and body.y + body.h <= foot.y + 1, body and body.y + body.h)
+        check('the window is centred in the layout', win and math.abs(win.x + win.w / 2 - 512) < 2 and math.abs(win.y + win.h / 2 - 384) < 2,
+            win and ('%.1f,%.1f'):format(win.x + win.w / 2, win.y + win.h / 2))
         check('the window fits the screen', win and win.y >= 0 and win.y + win.h <= select(4, ui.screen()), win and win.y)
     end
     -- The pad's D-pad in the list: a step down with the cursor on the first row scrolls the list to the next one (when there are more rows than room).

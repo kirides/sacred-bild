@@ -75,7 +75,7 @@
     </style>
 </head>
 <body data-model="model">
-<div id="win" class="thick-frame bg-fill-settings" data-panel="main" data-title="Mods" data-if="open">
+<div id="win" class="thick-frame bg-fill-settings" data-panel="window" data-title="Mods" data-if="open">
     <div class="fillbg"></div>
     <div class="titlerow"><span class="ttl">Mods</span></div>
 

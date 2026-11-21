@@ -83,6 +83,10 @@ function GearAuto.pad(nudge, back, menu) end
 ---@param pages integer
 function GearAuto.pad_page(pages) end
 
+--- The kinds of the stops Gear told the controller about in the last tick: 0 button, 1 slider, 2 scroll area (+ 4 scrolled to its top, + 8 to its bottom: the D-pad leaves the list there).
+---@return integer[]
+function GearAuto.nav_kinds() end
+
 --- The first stop Gear reported to the controller in the last tick: where the pad's cursor starts when a screen opens (`data-nav-home` puts a stop there).
 ---@return number? x
 ---@return number? y

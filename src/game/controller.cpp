@@ -466,12 +466,23 @@ namespace
         GearNav::Stop area;
         if (dy != 0.0f && GearNav::scrollAreaAt(g_x, g_y, area))
         {
-            if (UiNav::next(g_x, g_y, dx, dy, x, y) && x >= area.left && x < area.right && y >= area.top && y < area.bottom &&
-                !(x == area.x && y == area.y))
+            // At the end of the list (its top for up, its bottom for down) there is nothing to scroll: the pad leaves it for the control beyond.
+            const bool atEnd = (area.kind & (dy > 0.0f ? 8 : 4)) != 0;
+            if (UiNav::next(g_x, g_y, dx, dy, x, y))
             {
-                setCursor(x, y);
+                const bool inside = x >= area.left && x < area.right && y >= area.top && y < area.bottom;
+                if (inside && !(x == area.x && y == area.y))
+                {
+                    setCursor(x, y);
+                    return;
+                }
+                if (atEnd && !inside)
+                {
+                    setCursor(x, y);
+                    return;
+                }
             }
-            else
+            if (!atEnd)
             {
                 GearNav::postScroll(static_cast<int>(dy));
             }

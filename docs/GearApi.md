@@ -5734,6 +5734,12 @@ The controller's LB / RB without one: posts `pages` page steps (-1 previous, +1 
 
 - `pages`: `integer`
 
+#### `gear.auto.nav_kinds() -> integer[]`
+
+The kinds of the stops Gear told the controller about in the last tick: 0 button, 1 slider, 2 scroll area (+ 4 scrolled to its top, + 8 to its bottom: the D-pad leaves the list there).
+
+- returns `integer[]`
+
 #### `gear.auto.nav_first() -> number?, number?`
 
 The first stop Gear reported to the controller in the last tick: where the pad's cursor starts when a screen opens (`data-nav-home` puts a stop there).

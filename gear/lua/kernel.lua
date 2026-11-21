@@ -4246,12 +4246,16 @@ local function make_ui(mod)
             if not akeys then
                 akeys = {}
                 self.area_keys = akeys
-                self.area_opts = {layer = opts.layer, _rml_doc = id, _nav_kind = 2}
+                self.area_opts = {}
             end
             for i, r in ipairs(areas) do
                 local akey = akeys[i]
                 if not akey then akey = 'rml:' .. id .. ':a' .. i; akeys[i] = akey end
-                local ares = region(akey, r.x, r.y, r.w, r.h, self.area_opts)
+                -- kind 2 is a scroll area; + 4 at its top, + 8 at its bottom (the pad leaves the list there)
+                local kind = 2 + (r.at_top and 4 or 0) + (r.at_bottom and 8 or 0)
+                local aopts = self.area_opts[kind]
+                if not aopts then aopts = {layer = opts.layer, _rml_doc = id, _nav_kind = kind}; self.area_opts[kind] = aopts end
+                local ares = region(akey, r.x, r.y, r.w, r.h, aopts)
                 if ares.hover then hover = true end
             end
             -- The scroll bars of the boxes that scroll take the real mouse: a press on the knob, the groove or an arrow is RmlUi's own (a drag goes on, the groove
@@ -4490,7 +4494,8 @@ local function make_ui(mod)
         local step = opts.step or 20
         local bar = st.content > h and uis.SCROLLBAR or 0
         -- The body takes clicks on empty space (they focus the area) and is the pad's stop for it.
-        local body = region(tostring(id) .. '#body', x, y, w, h, {layer = opts.layer, nav = opts.nav, _nav_kind = 2})
+        local body_kind = 2 + (st.offset <= 0.5 and 4 or 0) + (st.offset >= st.content - h - 0.5 and 8 or 0)     -- + 4 at the top, + 8 at the bottom: the pad leaves the list there
+        local body = region(tostring(id) .. '#body', x, y, w, h, {layer = opts.layer, nav = opts.nav, _nav_kind = body_kind})
         if body.pressed then uis.scroll_focus = key end
         local delta = 0
         local hot = uis.scroll_hot == key
@@ -5738,6 +5743,12 @@ local ui_map            -- {ax, bx, ay, by}: layout = a * pixel + b, from two cu
 local function make_auto()
     local auto = {VK = VK, instance = native.auto_instance()}
     function auto.state() return native.auto_state() end
+    -- auto.nav_kinds() -> {kind, ...}: the kinds of the stops Gear told the controller about last tick (0 button, 1 slider, 2 scroll area, + 4 at its top, + 8 at its bottom).
+    function auto.nav_kinds()
+        local out, kinds = uis.nav_out or {}, {}
+        for i = 1, #out do kinds[i] = out[i].kind end
+        return kinds
+    end
     -- auto.nav_first() -> x, y: the first stop Gear told the controller about last tick, where the pad's cursor starts when a screen opens (nil: none).
     function auto.nav_first()
         local out = uis.nav_out
