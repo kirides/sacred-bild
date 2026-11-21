@@ -385,4 +385,15 @@ namespace Gear::Addr
     inline Sacred::Thiscall<uint32_t(uint8_t* record, uint32_t heroType, char flag)> abilityUsable2{};
     // ENG 004D1E10: the spell record id an art takes its numbers from (thiscall, ECX = art record; 0 for arts without a spell).
     inline Sacred::Thiscall<uint32_t(uint8_t* record)> abilityLinkedSpell{};
+    // ENG 005CAA60: cPotion3D::receiveEvent, thiscall (item, message*), ret 4: the effect of a drunk potion (message word +4 = 0x10, +8 = the
+    // drinker's id). ENG 00808E50 (cdecl, no arguments) returns the kernel that carries the engine's messages; ENG 008092F0 sends one
+    // (thiscall (kernel, message*, 0, 0), ret 0xC).
+    inline Sacred::Thiscall<void(void* item, void* message)> cPotion3D_receiveEvent{};
+    inline Sacred::Cdecl<void*()> kernel_instance{};
+    inline Sacred::Thiscall<void(void* kernel, void* message, uint32_t a, uint32_t b)> kernel_send{};
+    // ENG 0052E590: cCreature::receiveEvent (vtable slot 6, thiscall (creature, message*), ret 4); the effects of a drunk potion reach the drinker
+    // through it as messages of the class `g_creatureEventVtable` (word +4 = 6, +0x14 the effect, +0x18 its value). ENG 0182EE48: a word the
+    // game sets when it starts (1 for the plain game); the script command Teleporter and ReBorn's teleporter pick sub-command 6 when it is 1, else 5.
+    inline Sacred::Thiscall<void(void* creature, void* message)> cCreature_receiveEvent{};
+    inline Sacred::Global<uint16_t> g_portalListFlag{};
 }

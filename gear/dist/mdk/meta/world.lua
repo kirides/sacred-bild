@@ -39,6 +39,29 @@ function GearWorld.object(id) end
 ---@return boolean
 function GearWorld.can_change() end
 
+--- Opens the game's list of the portals the local hero knows (the "Transferportal" window), as a portal does: the hero can move to any of
+--- its open portals. `sub` is the script command's sub-command, 5 or 6 (both show the list); by default the game's own kind word picks it, as
+--- ReBorn's teleportation potion does (6 when the word is 1, which it is in the plain game, else 5). Nothing is charged.
+---@param sub integer? 5, 6 or nil (the game's choice).
+---@return boolean? ok
+---@return string? error
+function GearWorld.open_teleporter(sub) end
+
+--- Shows a line of the game's text `text_id` in the HUD, as the game's own refusals ("Enemy is near!") do. `color` is 0xAARRGGBB (the
+--- game's refusals use 0xFFFF0000, red; 0 or nil leaves it to the game).
+---@param text_id integer A text id of the game's texts (`gear.text.get`), below 0x80000000.
+---@param color integer?
+---@return boolean? ok
+---@return string? error
+function GearWorld.show_text(text_id, color) end
+
+--- The portals the local hero knows (one bit per portal, as the script command Teleporter sets them). With `mask` they are set (single
+--- player; the other players are not told).
+---@param mask integer?
+---@return integer? mask
+---@return string? error
+function GearWorld.portals(mask) end
+
 --- Creatures within `radius` world units of (x, y), nearest first.
 ---@param x number
 ---@param y number
@@ -183,6 +206,7 @@ function GearWorld.pickup_refused() end
 ---@field gold? integer Creatures only (heroes).
 ---@field exp? integer Creatures only.
 ---@field level? integer Creatures only.
+---@field in_combat? boolean Creatures only: the engine's own "enemies about" state (see `Creature:in_combat`).
 
 --- An item object, from `gear.world.item` or `items_near`.
 ---@class GearItem
@@ -257,6 +281,19 @@ function Creature:max_hp() end
 --- True when it has no hit points left or is gone.
 ---@return boolean
 function Creature:is_dead() end
+
+--- Whether the engine's own "enemies about" state is set for the creature (bit 0x8000 of its state word, which the engine's creature code
+--- sets while enemies are near and clears a while after): the state that stops ReBorn's teleportation potion.
+---@return boolean
+function Creature:in_combat() end
+
+--- Sends the creature the message a drunk potion sends its drinker, so a mod can give a potion its own numbers (the potion handler's effects:
+--- 6, 7 and 9 refill health or mana, 8 removes poison by `value` percent, 10 the concentration potions' combo refill).
+---@param effect integer
+---@param value integer
+---@return boolean? ok
+---@return string? error
+function Creature:apply_effect(effect, value) end
 
 ---@return integer?
 function Creature:level() end
@@ -475,7 +512,8 @@ function Creature:forget(ability) end
 function Creature:set_name(name) end
 
 --- Lets a party hero drink a potion from its own backpack, as the potion keys do for the controlled hero (the game
---- picks the potion). Fails if it carries none.
+--- picks the potion). Fails if it carries none. The `item.use` event is not asked for this drink (a mod's Lua is running), the potion has
+--- the engine's effect.
 ---@param kind? 'health'|integer `'health'` (default, what Space drinks) or the game's potion kind number.
 ---@return boolean? ok
 ---@return string? error

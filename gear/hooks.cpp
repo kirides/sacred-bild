@@ -2,6 +2,7 @@
 #include "chat.h"
 #include "classes.h"
 #include "itemtip.h"
+#include "itemuse.h"
 #include "drops.h"
 #include "lua_host.h"
 #include "netmsg.h"
@@ -52,6 +53,7 @@ bool Hooks::install()
     Classes::install();
     Savegames::install();
     ItemTip::install();
+    ItemUse::install();
     const bool committed = Patch::commit();
     // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.
     SiteHook::install();

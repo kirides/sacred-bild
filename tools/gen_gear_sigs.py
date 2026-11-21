@@ -283,6 +283,18 @@ GEAR = [
     ('abilityUsable2', 0x004D24C0, 'func'),
     # Arts whose numbers live in a spell record (thiscall (art record) -> spell id, 0 = none): 0x4D1E10 maps 0x3FA, 0x3FB, 0x414, 0x419..0x41D.
     ('abilityLinkedSpell', 0x004D1E10, 'func'),
+    # Potions (gear/itemuse.cpp): cPotion3D::receiveEvent (thiscall (item, message*), ret 4) runs the effect of a drunk potion; the
+    # event `item.use` asks the mods first. The teleporter list is opened by a message to the kernel's bus, as the script command
+    # Teleporter does (0x4AE040): the kernel (0x808E50 returns it), its send (thiscall (message, 0, 0), ret 0xC).
+    ('cPotion3D_receiveEvent', 0x005CAA60, 'func'),
+    ('kernel_instance', 0x00808E50, 'func'),
+    ('kernel_send', 0x008092F0, 'func'),
+    # cCreature::receiveEvent (vtable slot 6, thiscall (creature, message*), ret 4): every effect of a drunk potion reaches the drinker
+    # as a message of kind 6 (word +5 the effect, +6 its value); while a potion's effect is suppressed (`item.use` answered 'consume'
+    # or 'keep') the hook drops these. 0x182EE48 is the game kind flag the script command Teleporter and ReBorn's teleporter use to
+    # choose the sub-command (6 when it is 1, else 5).
+    ('cCreature_receiveEvent', 0x0052E590, 'func'),
+    ('g_portalListFlag', 0x0182EE48, 'data'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

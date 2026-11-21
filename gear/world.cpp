@@ -22,7 +22,7 @@ namespace
     // dump, 007F49A0, reads them so), +0x4D4 maximum and +0x4D8 current health (the hero portrait, 006D73D0).
     constexpr uintptr_t kId = 0x0C, kType = 0x10, kFlags = 0x14, kPos = 0x18;
     constexpr uintptr_t kFaction = 0x1F0, kBehavior = 0x1F4;   // the relation class (isEnemy, ENG 00423580) and the behavior flags
-    constexpr uintptr_t kExperience = 0x3B4, kGold = 0x3EE, kLevel = 0x3FE, kMaxHealth = 0x4D4, kHealth = 0x4D8;
+    constexpr uintptr_t kExperience = 0x3B4, kGold = 0x3EE, kLevel = 0x3FE, kMaxHealth = 0x4D4, kHealth = 0x4D8, kState = 0x200;
     constexpr uint32_t kFlagGone = 0x10;    // set on objects the manager freed or parked (create and pop skip them)
     constexpr uint32_t kTypeCount = 0x7E60; // the type records (00425EA0 accepts 0 < type < 0x7E60)
     constexpr uint32_t kHeroIds = 16;       // ids 1..16 are the players' heroes (007F49A0 walks them)
@@ -485,6 +485,8 @@ bool World::object(uint32_t id, Object& out)
             return false;
         }
         r.level = level;
+        uint32_t state = 0;
+        r.inCombat = readAt(o, kState, state) && (state & 0x8000) != 0;
     }
     out = r;
     return true;
