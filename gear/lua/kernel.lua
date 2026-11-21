@@ -3722,14 +3722,15 @@ local function make_ui(mod)
             overhang = {left = 11, top = 5, right = 11, bottom = 5},     -- the corner ornaments reach beyond the bars
             inset = {left = 6, top = 6, right = 6, bottom = 6},
         },
-        -- thick: the frame of the character selection and the other big menu screens (pieces of the menus' UI images):
-        -- pattern strips 294 (top, 32x17; the bottom is it flipped), 310 / 312 (left / right, 41x32 and 24x32), the divider 311 (32x44),
-        -- the centre ornaments 302 + 303 (top) and 304 + 305 (bottom), the corner ornaments 276 / 278 / 277 / 279 drawn last.
+        -- thick: the frame of the character selection and the other big menu screens (pieces of the menus' UI images, positions measured against the
+        -- game's own frame by template matching): the rounded corner pieces 318 / 319 (41x44, 39x44) and 320 / 321 (41x42, 39x42) at the corners of the box,
+        -- pattern strips 294 (32x17, 8.5 from the top edge; the bottom one flipped) between them, 310 / 312 (41x32, 24x32) down the sides, the crests 302 + 303
+        -- (top) and 304 + 305 (bottom) in the middle of the top and bottom edge, dividers made of 294. The fill stays inside the strips.
         thick = {
             fill = 0x9F000000,
             kind = 'thick',
-            inset = {left = 14, top = 17, right = 14, bottom = 17},
-            overhang = {left = 10, top = 14, right = 10, bottom = 14},
+            inset = {left = 22, top = 25, right = 22, bottom = 28},
+            overhang = {left = 0, top = 0, right = 0, bottom = 0},
         },
     }
     -- ui.native.insets(style) -> {left, top, right, bottom}: how far the frame's border reaches into the box (the text goes
@@ -3750,10 +3751,10 @@ local function make_ui(mod)
                 ui.image(p.id, ix, iy, iw, ih, {layer = o.layer, window = o.window, color = o.color, flip = p.flip})
             end
         end
+        if st.kind == 'thick' then return native_ui.thick_frame(x, y, w, h, opts, st) end     -- its fill is inset, see there
         if opts.fill ~= false then
             ui.rect(x, y, w, h, opts.fill or st.fill, {layer = o.layer, window = o.window})
         end
-        if st.kind == 'thick' then return native_ui.thick_frame(x, y, w, h, opts, st) end
         local oh = st.overhang
         local lw, rw, th, bh = st.left.w, st.right.w, st.top.h, st.bottom.h
         img(st.top, x + lw, y, w - lw - rw, th)
@@ -3767,8 +3768,9 @@ local function make_ui(mod)
         return true
     end
 
-    -- The thick frame: segments of a pattern strip repeated along the sides (the last one cropped, so the pattern keeps its
-    -- proportions), dividers at opts.dividers (offsets from the top of the box), the ornaments drawn last over the strips.
+    -- The thick frame: segments of a pattern strip repeated along the sides (the last one cropped, so the pattern keeps its proportions), dividers at
+    -- opts.dividers (offsets from the top of the box to the top of the divider's strip), the corner and crest pieces over the strips. The box is the
+    -- outer rectangle of the corner pieces; the fill covers only what the strips enclose, so the rounded corners show the background behind their arcs.
     function native_ui.thick_frame(x, y, w, h, opts, st)
         local o = {layer = opts.layer, window = opts.window, color = opts.color}
         local function img(id, ix, iy, iw, ih, flip, crop)
@@ -3790,17 +3792,20 @@ local function make_ui(mod)
                 at = at + th
             end
         end
-        if opts.fill ~= false then ui.rect(x, y, w, h, opts.fill or st.fill, {layer = o.layer, window = o.window}) end
-        tile_h(294, 32, 17, x, y, w)
-        tile_h(294, 32, 17, x, y + h - 17, w, 'v')
-        tile_v(310, 41, 32, x - 9, y + 17, h - 34)
-        tile_v(312, 24, 32, x + w - 16, y + 17, h - 34)
-        for _, d in ipairs(opts.dividers or {}) do tile_h(311, 32, 44, x + 8, y + d - 14, w - 24) end
+        local ins = st.inset
+        if opts.fill ~= false then
+            ui.rect(x + ins.left, y + ins.top, w - ins.left - ins.right, h - ins.top - ins.bottom, opts.fill or st.fill, {layer = o.layer, window = o.window})
+        end
+        tile_h(294, 32, 17, x + 41, y + 8.5, w - 41 - 39)
+        tile_h(294, 32, 17, x + 41, y + h - 25.5, w - 41 - 39, 'v')
+        tile_v(310, 41, 32, x, y + 44.8, h - 44.8 - 42)
+        tile_v(312, 24, 32, x + w - 24, y + 44.8, h - 44.8 - 42)
+        for _, d in ipairs(opts.dividers or {}) do tile_h(294, 32, 17, x + 21, y + d, w - 42) end
         local cx = x + w / 2
-        img(302, cx - 32, y - 14, 32, 44); img(303, cx, y - 14, 32, 44)
-        img(304, cx - 32, y + h - 28, 32, 42); img(305, cx, y + h - 28, 32, 42)
-        img(276, x - 10, y - 10, 42, 42); img(278, x + w - 30, y - 10, 40, 42)
-        img(277, x - 10, y + h - 30, 42, 40); img(279, x + w - 30, y + h - 30, 40, 40)
+        img(302, cx - 32, y + 0.8, 32, 44); img(303, cx, y + 0.8, 32, 44)
+        img(304, cx - 32, y + h - 42, 32, 42); img(305, cx, y + h - 42, 32, 42)
+        img(318, x, y, 41, 44); img(319, x + w - 39, y, 39, 44)
+        img(320, x, y + h - 42, 41, 42); img(321, x + w - 39, y + h - 42, 39, 42)
         return true
     end
 

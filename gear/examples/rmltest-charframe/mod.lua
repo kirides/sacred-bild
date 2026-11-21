@@ -1,0 +1,1 @@
+return { id = 'rmltest-charframe', name = 'Thick frame vs the character selection', version = '0.1.0', author = 'Sacred Gear', description = 'Automation: draws the thick frame over the hero selection of the menus for a pixel comparison with the game frame.', automation = true }
