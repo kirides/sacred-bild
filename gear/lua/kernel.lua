@@ -4158,7 +4158,25 @@ local function make_ui(mod)
                 if not nkey then nkey = 'rml:' .. id .. ':n' .. i; keys[i] = nkey end
                 local res = region(nkey, r.x, r.y, r.w, r.h, self.nopts)
                 if res.hover then hover = true end
-                if res.clicked then native.rml_click(id, i) end
+                if r.range then
+                    -- A slider takes the real mouse: a press jumps to that value and a drag goes on (RmlUi's own slider does that), the
+                    -- minus and plus buttons step; the pad's D-pad nudges it.
+                    if res.pressed then
+                        native.rml_mouse(id, 'down', ui_mouse.x, ui_mouse.y)
+                        self.range_down = i
+                    elseif self.range_down == i then
+                        if res.held then
+                            hover = true
+                        else
+                            native.rml_mouse(id, 'up', ui_mouse.x, ui_mouse.y)
+                            self.range_down = nil
+                        end
+                    end
+                    if res.hover and not res.held and ui_pad.nudge ~= 0 then
+                        native.rml_nudge(id, i, ui_pad.nudge)
+                        ui_pad.nudge = 0
+                    end
+                elseif res.clicked then native.rml_click(id, i) end
             end
         end
         if native.rml_wants_text(id) then

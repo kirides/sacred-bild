@@ -1050,6 +1050,11 @@ namespace
         return h;
     }
 
+    bool isRange(Rml::Element* e)
+    {
+        return e && e->GetTagName() == "input" && e->GetAttribute<Rml::String>("type", "") == "range";
+    }
+
     constexpr const char* kNavSelector = "button, a, input, select, textarea, [data-nav]";
 
     // The elements the pad and the mouse can press, in document order.
@@ -1614,9 +1619,64 @@ namespace
         for (Rml::Element* e : navElements(d))
         {
             pushRect(L, e, d.unit, index++);
+            // A range input takes the real mouse (a press jumps to the value, a drag goes on) and the pad's D-pad (rml_nudge), see Doc:draw.
+            lua_rawgeti(L, -1, index - 1);
+            lua_pushboolean(L, isRange(e) ? 1 : 0);
+            lua_setfield(L, -2, "range");
+            lua_pop(L, 1);
         }
         trimRows(L, index - 1);
         return 1;
+    }
+
+    // native.rml_mouse(id, "down" | "up"): the left button for the mouse position the last update gave (a press on a range input, which
+    // the click at the element's centre of rml_click would not serve).
+    int rmlMouse(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        const std::string kind = str(L, 2);
+        RootScope scope(d);
+        if (lua_isnumber(L, 3) && lua_isnumber(L, 4))
+        {
+            d.context->ProcessMouseMove(static_cast<int>(lua_tonumber(L, 3) * d.unit), static_cast<int>(lua_tonumber(L, 4) * d.unit), 0);
+            d.hovering = true;
+        }
+        if (kind == "down")
+        {
+            d.context->ProcessMouseButtonDown(0, 0);
+        }
+        else
+        {
+            d.context->ProcessMouseButtonUp(0, 0);
+        }
+        return 0;
+    }
+
+    // native.rml_nudge(id, index, steps): the D-pad on the index-th element of rml_nav, a range input: its value moves by `steps` jumps of
+    // about a fiftieth of its range (at least one step), as the arrow keys of the slider would.
+    int rmlNudge(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        const size_t index = static_cast<size_t>(luaL_checknumber(L, 2));
+        const int steps = static_cast<int>(luaL_checknumber(L, 3));
+        RootScope scope(d);
+        const std::vector<Rml::Element*> list = navElements(d);
+        if (index < 1 || index > list.size() || !isRange(list[index - 1]) || steps == 0)
+        {
+            return 0;
+        }
+        Rml::Element* e = list[index - 1];
+        const float lo = e->GetAttribute<float>("min", 0.0f), hi = e->GetAttribute<float>("max", 100.0f);
+        const float step = std::max(e->GetAttribute<float>("step", 1.0f), 1e-6f);
+        const int jump = std::max(1, static_cast<int>(std::lround((hi - lo) / 50.0f / step)));
+        e->Focus();
+        const Rml::Input::KeyIdentifier key = steps > 0 ? Rml::Input::KI_RIGHT : Rml::Input::KI_LEFT;
+        for (int i = 0; i < std::abs(steps) * jump; ++i)
+        {
+            d.context->ProcessKeyDown(key, 0);
+            d.context->ProcessKeyUp(key, 0);
+        }
+        return 0;
     }
 
     // native.rml_click(id, index): a left click on the index-th element of rml_nav (the mouse, or the pad's A).
@@ -2086,6 +2146,8 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_model_changed", guarded<rmlModelChanged>},
         {"rml_nav", guarded<rmlNav>},
         {"rml_click", guarded<rmlClick>},
+        {"rml_mouse", guarded<rmlMouse>},
+        {"rml_nudge", guarded<rmlNudge>},
         {"rml_html", guarded<rmlHtml>},
         {"rml_attr", guarded<rmlAttr>},
         {"rml_class", guarded<rmlClass>},

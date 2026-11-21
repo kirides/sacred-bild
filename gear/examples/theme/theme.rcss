@@ -178,3 +178,16 @@ input.game-check[disabled]:checked, input.game-check[disabled]:checked:hover { d
 .font-game.font-game.font-game, .font-game { font-family: "Sacred Game"; }
 .font-start.font-start.font-start, .font-start { font-family: "Sacred Start"; }
 .font-default.font-default.font-default, .font-default { font-family: "Segoe UI"; }
+
+/* Sliders of the options screens (class game-slider on <input type="range">): the minus button with the start of the groove (image 263) and the plus
+   button with its end (265) are the caps and keep their size, the groove (264) repeats in between, the knob is the star orb (262). RmlUi's slider already
+   does what the game does: a press in the track jumps to that value and a drag goes on, the minus and plus buttons step (and repeat while held); Gear
+   hands it the real mouse and the pad's D-pad. No glow on the track or the knob. Any width from about 90px works. */
+input.game-slider { display: inline-block; width: 300px; height: 37px; margin: 0; padding: 0; border: 0; background-color: transparent; cursor: pointer; }
+input.game-slider slidertrack { height: 37px; decorator: image(gear:image/264 repeat-x); }
+input.game-slider sliderbar { width: 30px; height: 37px; decorator: image(gear:image/262 scale-none center center); }
+input.game-slider sliderarrowdec { width: 37px; height: 37px; decorator: image(gear:image/263 scale-none left center); }
+input.game-slider sliderarrowinc { width: 40px; height: 37px; decorator: image(gear:image/265 scale-none right center); }
+input.game-slider[disabled] { opacity: 0.5; }
+.slider-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 44px; }
+.slider-row .text { font-family: "Sacred Game"; color: #e4e4e4; font-size: 18px; }

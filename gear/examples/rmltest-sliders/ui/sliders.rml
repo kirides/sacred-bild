@@ -1,0 +1,13 @@
+<rml>
+<head><title>Sliders</title></head>
+<body data-model="model">
+<div id="sw" class="thick-frame" data-panel="sw" data-title="Sliders" data-dividers="168" style="position: absolute; left: 60px; top: 60px; width: 700px; height: 330px;">
+    <div class="slider-row"><span class="text">Effekte</span><input id="s1" type="range" class="game-slider" min="0" max="100" step="1" data-value="effects"/></div>
+    <div class="slider-row"><span class="text">Sprache</span><input id="s2" type="range" class="game-slider" min="0" max="100" step="1" data-value="voice"/></div>
+    <div class="slider-row"><span class="text">Musik</span><input id="s3" type="range" class="game-slider" min="0" max="100" step="1" data-value="music"/></div>
+    <div style="height: 44px"></div>
+    <div class="slider-row"><span class="text">Kurz (90)</span><input id="s4" type="range" class="game-slider" min="0" max="100" step="5" style="width: 90px"/></div>
+    <div class="slider-row"><span class="text">Lang (560)</span><input id="s5" type="range" class="game-slider" min="0" max="100" step="1" style="width: 560px"/></div>
+</div>
+</body>
+</rml>

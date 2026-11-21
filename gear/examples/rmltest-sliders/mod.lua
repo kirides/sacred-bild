@@ -1,0 +1,1 @@
+return { id = 'rmltest-sliders', name = 'Theme gallery: sliders', version = '0.1.0', author = 'Sacred Gear', description = 'One page: the game-slider (three option rows, short and long). Needs the theme mod. With -gear-auto a self test.', automation = true }

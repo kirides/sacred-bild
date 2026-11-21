@@ -1,0 +1,1 @@
+return { id = 'rmltest-fonts', name = 'Theme gallery: fonts', version = '0.1.0', author = 'Sacred Gear', description = 'One page: the game font, the modern font and the start screen font. Needs the theme mod.', automation = true }

@@ -1,0 +1,1 @@
+return { id = 'rmltest-checks', name = 'Theme gallery: check boxes', version = '0.1.0', author = 'Sacred Gear', description = 'One page: the game-check orbs (radio group, check boxes, bound, disabled). Needs the theme mod. With -gear-auto a self test.', automation = true }
