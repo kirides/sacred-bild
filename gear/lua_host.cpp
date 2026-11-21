@@ -26,6 +26,7 @@
 #include "save.h"
 #include "savegames.h"
 #include "sitehook.h"
+#include "master.h"
 #include "tables.h"
 #include "game/gear_addr.h"
 #include "ui.h"
@@ -597,6 +598,13 @@ namespace
         return 1;
     }
 
+    // native.master_active(event, bool): whether some mod handles `master.price`, `master.layout` or `master.exchange`
+    int nativeMasterActive(lua_State* L)
+    {
+        Master::setActive(luaL_checkstring(L, 1), lua_toboolean(L, 2) != 0);
+        return 0;
+    }
+
     // native.branch_active(bool): whether some mod handles `combat.branch`
     int nativeBranchActive(lua_State* L)
     {
@@ -757,6 +765,11 @@ namespace
         }
         if (!(effect >= 0 && effect < 256) || !(value >= -2147483648.0 && value < 2147483648.0) ||
             !ItemUse::applyEffect(creature, static_cast<uint32_t>(effect), static_cast<uint32_t>(static_cast<int32_t>(value)), error))
+    // native.creature_raise(id, ability, levels) -> true | nil, message
+    int nativeCreatureRaise(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Classes::raise(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), static_cast<uint32_t>(luaL_optnumber(L, 3, 1)), error))
         {
             return pushFailure(L, error);
         }
@@ -4696,6 +4709,8 @@ namespace
             {"skillslot_active", nativeSkillSlotActive},
             {"skillkey_active", nativeSkillKeyActive},
             {"branch_active", nativeBranchActive},
+            {"master_active", nativeMasterActive},
+            {"creature_raise", nativeCreatureRaise},
             {"cursor_click", nativeCursorClick},
             {"site_hook_sites", nativeSiteHookSites},
             {"site_selftest_start", nativeSiteSelfTestStart},
@@ -5747,6 +5762,54 @@ LuaHost::Answer LuaHost::branch(const char* name, int index, bool vanilla, int e
     else if (lua_isboolean(L, -1))
     {
         take = lua_toboolean(L, -1) != 0;
+        answer = Answer::Value;
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::masterEvent(const char* event, int rune, int ability, int count, double& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "master_event");
+    lua_remove(L, -2);
+    lua_pushstring(L, event);
+    lua_pushnumber(L, rune);
+    lua_pushnumber(L, ability);
+    lua_pushnumber(L, count);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 4, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.master_event failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isboolean(L, -1))
+    {
+        out = lua_toboolean(L, -1) ? 1 : 0;
+        answer = Answer::Value;
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        out = lua_tonumber(L, -1);
         answer = Answer::Value;
     }
     lua_pop(L, 1);

@@ -177,6 +177,7 @@ if(SACREDGEAR)
     gear/classes.cpp
     gear/classes_alias.cpp
     gear/itemuse.cpp
+    gear/master.cpp
     gear/party.cpp
     gear/buffs.cpp
     gear/tables.cpp

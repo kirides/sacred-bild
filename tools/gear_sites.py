@@ -146,8 +146,15 @@ BRANCH_SITES = [
     ('ai.timer', 0, 'abilityAiFn', 0x004D4E50, 0x004D7068),         # cmp eax, 0xB7 (the creature type); jne
     ('ability.dispatch', 0, 'siteFn51D840', 0x0051D840, 0x0051DA04), # cmp eax, 0x28 (the ability id); jge
     ('color.clamp', 0, 'siteFnColor', 0x004DCB80, 0x004DEF0B),       # cmp word [esp+0x30], 0xFF; jbe
+    # The rune exchange tab of the combo master window (cUI_MasterLotto, UI_TABPAGE_LOTTO): the engine shows the rune selector (the arrows
+    # that choose which rune the exchange makes) only with four runes in the slots (`cmp dx, 4; jne` in the selector update 006D3FD0: taken
+    # hides it), and enables the exchange button only with two or more (`cmp dx, 2; jb` in the tab's render 006D49A0: taken disables it).
+    ('master.select', 0, 'masterSelectFn', 0x006D3FD0, 0x006D3FF4),  # cmp dx, 4; jne
+    ('master.ready', 0, 'masterRenderFn', 0x006D49A0, 0x006D4C97),   # cmp dx, 2; jb
+    # The same render function skips the gold label and the price when the price is 0 (`test ecx, ecx; mov [esp+28], ecx; je`: taken hides them).
+    ('master.gold', 0, 'masterRenderFn', 0x006D49A0, 0x006D4B7A),    # test ecx, ecx; je
 ]
-BRANCH_EXTRA = {0x004D7068: 8, 0x0051DA04: 3, 0x004DEF0B: 4}
+BRANCH_EXTRA = {0x004D7068: 8, 0x0051DA04: 3, 0x004DEF0B: 4, 0x006D3FF4: 6, 0x006D4C97: 6}
 
 
 # Skill slot key routing (ENG 006E1BC0): the `jb 006E2819` after `cmp ax, 0x30` of the character key handler. Gear lets the mods route a character

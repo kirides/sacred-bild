@@ -47,6 +47,10 @@ namespace LuaHost
     // event `item.use`: a potion is drunk by `creature` (item object `item`, item type `type`); `out` 0 = the engine's effect, 1 = the potion is
     // used up and has no effect, 2 = no effect and the potion stays.
     Answer itemUse(uint32_t item, uint32_t type, uint32_t creature, int& out);
+    // events of the combo master's rune exchange tab (gear/master.cpp): `master.price` (the gold the exchange costs: `rune` the item type of the
+    // chosen rune, `ability` the art or spell it teaches, `count` the runes in the slots), `master.layout` (true: the tab takes no runes, its slots are hidden)
+    // and `master.exchange` (true: the mod did the exchange, the engine's rune exchange is skipped). `out`: the number the handler returned (a boolean as 0/1).
+    Answer masterEvent(const char* event, int rune, int ability, int count, double& out);
 
     // event `motion.select`: the motion slot to play for a hero of `type` that is about to play `slot`.
     Answer motionSelect(int type, int slot, uint32_t id, int& out);

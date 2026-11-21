@@ -396,4 +396,25 @@ namespace Gear::Addr
     // game sets when it starts (1 for the plain game); the script command Teleporter and ReBorn's teleporter pick sub-command 6 when it is 1, else 5.
     inline Sacred::Thiscall<void(void* creature, void* message)> cCreature_receiveEvent{};
     inline Sacred::Global<uint16_t> g_portalListFlag{};
+    // The combo master's rune exchange tab (gear/master.cpp). ENG 006D49A0: the tab's render (thiscall (tab, device), ret 4 -- the vtable's slot 5);
+    // 006D3FD0 holds the selector update and 006D49A0 the exchange button's check (site hooks, tools/gear_sites.py). 006D5B80: lays out the tab's controls
+    // (fastcall (tab)); 006D4520: the exchange (fastcall (tab)): takes the runes out of the slots and puts the chosen rune into the result box.
+    // 00AD4B2C: dword[5], the gold the exchange costs by the number of runes in the slots (the engine reads it in ten places).
+    inline uintptr_t masterSelectFn{};
+    inline uintptr_t masterRenderFn{};
+    inline uintptr_t masterLayoutFn{};
+    inline uintptr_t masterExchangeFn{};
+    inline Sacred::Global<uint32_t> masterPriceTable{};
+    // ENG 00581D40: the index of an ability id in a hero's abilities (thiscall (stats, id), ret 4; the list's size if the hero has none).
+    // ENG 00581F80: raises an ability's level (thiscall (stats, index, amount, byLevel, flag), ret 0x10): `byLevel` adds to the level byte (+6) and
+    // marks the entry changed, else to the item bonus (+7). ENG 0043AF10: the ability a rune item type teaches (thiscall on the type manager (type)).
+    inline Sacred::Thiscall<uint32_t(void* stats, int id)> cStats_abilityIndex{};
+    inline Sacred::Thiscall<uint32_t(void* stats, uint32_t index, uint32_t amount, int byLevel, int flag)> cStats_raiseAbility{};
+    inline Sacred::Thiscall<uint32_t(void* typeManager, int type)> typeAbilityOfRune{};
+    // ENG 004D2020 / 004D27B0: the text of an art / a spell record at a level (thiscall (record, STLport wstring* out, level, format), ret 0xC); format 1 is
+    // "<name> - <Level> <n>" (the text 0x42E is the word Level). ENG 00732350: a control's rect in screen pixels (thiscall (control, int[3] out), ret 4:
+    // x, y, then the width word and the height word), the sum of its own and its parents' positions.
+    inline Sacred::Thiscall<void(uint8_t* record, void* out, uint32_t level, uint32_t format)> abilityDescribe1{};
+    inline Sacred::Thiscall<void(uint8_t* record, void* out, uint32_t level, uint32_t format)> abilityDescribe2{};
+    inline Sacred::Thiscall<void(void* control, int32_t* out)> cUI_Control_getRect{};
 }

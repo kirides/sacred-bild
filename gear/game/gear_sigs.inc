@@ -137,6 +137,15 @@ static const Sig::Entry kGearSigs[] = {
     {"kernel_send", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 83 EC 28 53 8B 5C 24 44", 0, Sig::Take::Match, &Gear::Addr::kernel_send}, // 008092F0, 00808930
     {"cCreature_receiveEvent", "6A FF 64 A1 00 00 00 00 68 ?? ?? ?? ?? 50 B8 70 19 00 00", 0, Sig::Take::Match, &Gear::Addr::cCreature_receiveEvent}, // 0052E590, 0052E400
     {"g_portalListFlag", "66 A1 ?? ?? ?? ?? 89 B7 A0 03 00 00 66 3D 01 00", 2, Sig::Take::Abs32, &Gear::Addr::g_portalListFlag}, // 0182EE48, 0182CDC8
+    {"masterLayoutFn", "83 EC 0C 53 55 56 8B F1 57 33 ED 8D BE AC 01 00 00", 0, Sig::Take::Match, &Gear::Addr::masterLayoutFn}, // 006D5B80, 006D5900
+    {"masterExchangeFn", "53 56 57 8B F9 33 D2 B9 04 00 00 00", 0, Sig::Take::Match, &Gear::Addr::masterExchangeFn}, // 006D4520, 006D42A0
+    {"masterPriceTable", "8B 04 95 ?? ?? ?? ?? C3 90 90 90 90 90 90 90 56", 3, Sig::Take::Abs32, &Gear::Addr::masterPriceTable}, // 00AD4B2C, 00AD2AAC
+    {"cStats_abilityIndex", "8B 91 06 01 00 00 53 56 8B B1 02 01 00 00 2B D6 B8 E9 A2 8B 2E F7 EA C1 FA 02 8B C2 33 DB", 0, Sig::Take::Match, &Gear::Addr::cStats_abilityIndex}, // 00581D40, 00581C00
+    {"cStats_raiseAbility", "53 55 56 8B F1 8B 4C 24 10 57 8B 96 06 01 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_raiseAbility}, // 00581F80, 00581E40
+    {"typeAbilityOfRune", "8B 44 24 04 85 C0 7E 12 3D 60 7E 00 00 7D 0B C1 E0 07 66 8B 44 08 6A", 0, Sig::Take::Match, &Gear::Addr::typeAbilityOfRune}, // 0043AF10, 0043ADE0
+    {"abilityDescribe1", "56 57 8B F9 E8 ?? ?? ?? ?? 66 8B 3F 8B F0 B9 01 00 00 00", 0, Sig::Take::Match, &Gear::Addr::abilityDescribe1}, // 004D2020, 004D1E60
+    {"abilityDescribe2", "81 EC 04 08 00 00 53 56 57 8B F1 E8 ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::abilityDescribe2}, // 004D27B0, 004D25F0
+    {"cUI_Control_getRect", "83 EC 30 66 8B 41 2C 66 8B 51 2E 53", 0, Sig::Take::Match, &Gear::Addr::cUI_Control_getRect}, // 00732350, 00731C70
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
     {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270
@@ -151,6 +160,8 @@ static const Sig::Entry kGearSigs[] = {
     {"skillSlotFn", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC C8 00 00 00 53 8B 9C 24 DC 00 00 00", 0, Sig::Take::Match, &Gear::Addr::skillSlotFn}, // 006E1BC0, 006E1970
     {"siteFn51D840", "8A 44 24 08 83 EC 44 53 55 8B 6C 24 50", 0, Sig::Take::Match, &Gear::Addr::siteFn51D840}, // 0051D840, 0051D680
     {"siteFnColor", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 48 07 00 00", 0, Sig::Take::Match, &Gear::Addr::siteFnColor}, // 004DCB80, 004DC9C0
+    {"masterSelectFn", "56 8B F1 57 33 FF 33 D2 8D 86 50 02 00 00", 0, Sig::Take::Match, &Gear::Addr::masterSelectFn}, // 006D3FD0, 006D3D50
+    {"masterRenderFn", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 50 53 8B D9", 0, Sig::Take::Match, &Gear::Addr::masterRenderFn}, // 006D49A0, 006D4720
     {"lootRollFn", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC D8 07 00 00", 0, Sig::Take::Match, &Gear::Addr::lootRollFn}, // 00559BF0, 00559A30
     {"rarityFn485C10", "6A FF 64 A1 00 00 00 00 68 ?? ?? ?? ?? 50 B8 14 23 00 00", 0, Sig::Take::Match, &Gear::Addr::rarityFn485C10}, // 00485C10, 00485F00
     {"rarityFn4AC940", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 08 01 00 00 53 55 56 33 DB", 0, Sig::Take::Match, &Gear::Addr::rarityFn4AC940}, // 004AC940, 004ACC30

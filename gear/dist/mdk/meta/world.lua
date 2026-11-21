@@ -498,6 +498,15 @@ function Creature:order_ability(ability, target, y) end
 ---@return string? error
 function Creature:learn(ability, level) end
 
+--- Raises the level of an art or spell a hero knows by `levels` (default 1) with the game's own function (the one a skill purchase
+--- uses). For heroes of the local player and the party (ids 1 to 16). Returns true, or nil and why (`the hero does not know it`,
+--- `the level would pass 255`).
+---@param ability integer
+---@param levels? integer
+---@return boolean? ok
+---@return string? error
+function Creature:raise(ability, levels) end
+
 --- Removes an art or spell from a hero's abilities.
 ---@param ability integer
 ---@return boolean? ok

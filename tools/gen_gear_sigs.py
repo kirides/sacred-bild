@@ -295,6 +295,24 @@ GEAR = [
     # choose the sub-command (6 when it is 1, else 5).
     ('cCreature_receiveEvent', 0x0052E590, 'func'),
     ('g_portalListFlag', 0x0182EE48, 'data'),
+    # The combo master's rune exchange tab (cUI_MasterLotto, gear/master.cpp; docs/GearApi.md "master.price"). Render (thiscall (tab, device), 006D49A0,
+    # the vtable's slot 5), layout of the controls (fastcall (tab), 006D5B80), the exchange itself (fastcall (tab), 006D4520: takes the runes of the slots
+    # and makes the chosen rune, the event handler pays before it). The gold the exchange costs is a table by the number of runes in the slots (dword[5] at
+    # 00AD4B2C, filled at run time): found through `mov eax, [edx*4 + 00AD4B2C]` in the price getter 006D3F30.
+    ('masterLayoutFn', 0x006D5B80, 'func'),
+    ('masterExchangeFn', 0x006D4520, 'func'),
+    ('masterPriceTable', 0x00AD4B2C, 'data', 0x006D3F51),
+    # The hero's ability list (stats +0x102): the index of an ability id (thiscall (stats, id) -> index, the list's size when it has none, ret 4) and
+    # the engine's level raise (thiscall (stats, index, amount, byLevel, 0) -> bool, ret 0x10: adds to the level byte (+6) or the item bonus (+7), marks it
+    # changed). 00581F80 is what the hero's skill purchase uses. ENG 0043AF10: the ability a rune item type teaches (thiscall on the type manager (item type)).
+    ('cStats_abilityIndex', 0x00581D40, 'func'),
+    ('cStats_raiseAbility', 0x00581F80, 'func'),
+    ('typeAbilityOfRune', 0x0043AF10, 'func'),
+    # The text of an art / a spell at a level (thiscall (record, wstring* out, level, format), ret 0xC) and a control's screen rect (thiscall (control,
+    # int[3]), ret 4): the combo master page draws the chosen art's "<name> - Level <n>" and its maximum level message with them (gear/master.cpp).
+    ('abilityDescribe1', 0x004D2020, 'func'),
+    ('abilityDescribe2', 0x004D27B0, 'func'),
+    ('cUI_Control_getRect', 0x00732350, 'func'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

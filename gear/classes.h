@@ -25,6 +25,10 @@ namespace Classes
     // known already (then nothing changes).
     bool learn(uint32_t id, uint32_t ability, uint32_t level, const char*& error);
 
+    // Raises the level of the art or spell `ability` hero `id` knows by `levels` (1..255) with the engine's own function (the level byte
+    // of the entry, which it marks changed); false (and `error`) when the hero does not know it or the level would pass 255.
+    bool raise(uint32_t id, uint32_t ability, uint32_t levels, const char*& error);
+
     // Removes the ability from hero `id`; false if it had none.
     bool forget(uint32_t id, uint32_t ability, const char*& error);
 

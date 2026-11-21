@@ -89,6 +89,9 @@ static const BranchSiteSpec kBranchSites[] = {
     {"ai.timer", 0, &Gear::Addr::abilityAiFn, 0x2218, 8}, // 004D7068 in 004D4E50
     {"ability.dispatch", 0, &Gear::Addr::siteFn51D840, 0x1C4, 3}, // 0051DA04 in 0051D840
     {"color.clamp", 0, &Gear::Addr::siteFnColor, 0x238B, 4}, // 004DEF0B in 004DCB80
+    {"master.select", 0, &Gear::Addr::masterSelectFn, 0x24, 6}, // 006D3FF4 in 006D3FD0
+    {"master.ready", 0, &Gear::Addr::masterRenderFn, 0x2F7, 6}, // 006D4C97 in 006D49A0
+    {"master.gold", 0, &Gear::Addr::masterRenderFn, 0x1DA, 0}, // 006D4B7A in 006D49A0
 };
 static const uint32_t kKeySite = 0x5D7, kKeyEnd = 0xC59;
 static const uint32_t kKeyFull[5] = {0x5FF, 0x631, 0x663, 0x691, 0x6BF};
