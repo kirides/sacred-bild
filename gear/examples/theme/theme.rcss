@@ -94,10 +94,10 @@ input.field:focus, select.field:focus { border-color: #ffd780; }
 .link.big { font-size: 1.25em; }
 
 /* Tab headers (not buttons, so nobody takes them for a button that does something in the content): <div class="tabbar"><a class="link tab on">One</a><span class="tab-sep"></span><a class="link tab">Two</a></div>.
-   The anchors are the .link text with its bloom on hover and pad focus, separated by thin vertical lines with a little room around them, and one horizontal line runs under the whole bar. The open tab keeps the hover bloom. */
+   The anchors are the .link text with its bloom on hover and pad focus, separated by thin vertical lines with a little room around them, and one horizontal line runs under the whole bar. The open tab is bright gold with a short bar on the line. */
 .tabbar { display: flex; flex-direction: row; align-items: center; padding: 0 0 4px 0; margin: 0 0 10px 0; border-bottom: 1px #8c7440c0; }
 .tabbar a.link.tab { padding: 3px 14px; font-family: "Sacred Game"; font-size: 17px; }
-.tabbar a.link.tab.on { color: #fff6d0; font-effect: glow(2px 6px 0px 0px #ffb840e6); }   /* the open tab keeps the bloom of the hover */
+.tabbar a.link.tab.on { color: #ffcf40; border-bottom: 2px #ffcf40; margin-bottom: -5px; padding-bottom: 5px; }   /* the open tab: brighter, with a short gold bar on the bar's line */
 .tabbar a.link.tab + a.link.tab { border-left: 1px #8c744099; margin-left: 6px; padding-left: 20px; }   /* tabs made with data-for: the separator is the next tab's left edge */
 .tabbar .tab-sep { width: 1px; height: 20px; margin: 0 6px; background-color: #8c744099; }
 
