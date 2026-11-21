@@ -2081,3 +2081,16 @@ float Ui::canvasScale()
 {
     return placement().scale;
 }
+
+bool Ui::screenExtent(float& right, float& bottom)
+{
+    findBild();
+    float bounds[4];
+    if (!g_screenBounds || !g_screenBounds(bounds))
+    {
+        return false;
+    }
+    right = std::max(right, bounds[2]);
+    bottom = std::max(bottom, bounds[3]);
+    return true;
+}

@@ -139,6 +139,10 @@ namespace Ui
     // Screen pixels per layout unit of the canvas the Lua thread draws in (1 without SacredBild).
     float canvasScale();
 
+    // The right and bottom edge of the whole screen in layout units (at least the 1024 x 768 layout's): where a UI
+    // document has to reach to cover it. False without SacredBild's canvas.
+    bool screenExtent(float& right, float& bottom);
+
     // The UI fonts.
     uint32_t fontCount();
     // The text's size in the font (the widest line, the lines' height); false if the font cannot measure. Call it on
