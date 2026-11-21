@@ -4,8 +4,6 @@
 #include "sacred/engine.h"
 #include "sacred/mouse.h"
 
-#include "log.h"
-
 #include <windows.h>
 #include <cstdint>
 
@@ -28,26 +26,9 @@ namespace
         cObjectManager* manager = cObjectManager::instance();
         if (!manager || (engine->flags & cEngine::noWorldInput) || (*Addr::g_worldInputFlags & 2))
         {
-            static ULONGLONG lastLog = 0;
-            if (GetTickCount64() - lastLog > 1000)
-            {
-                lastLog = GetTickCount64();
-                LOG("HeroMove: world takes no input (manager {} engine flags {:08X} worldInputFlags {:02X})", manager != nullptr,
-                    static_cast<uint32_t>(engine->flags), static_cast<uint32_t>(*Addr::g_worldInputFlags));
-            }
             return nullptr;
         }
-        cCreature* c = manager->creature(engine->controlled);
-        if (!c)
-        {
-            static ULONGLONG lastLog2 = 0;
-            if (GetTickCount64() - lastLog2 > 1000)
-            {
-                lastLog2 = GetTickCount64();
-                LOG("HeroMove: no controlled creature (id {})", static_cast<uint32_t>(engine->controlled));
-            }
-        }
-        return c;
+        return manager->creature(engine->controlled);
     }
 
     // The cMouse's left-button-held bit, as the window procedure keeps it.
@@ -64,15 +45,6 @@ namespace
     void send(void* context)
     {
         const auto packed = reinterpret_cast<uintptr_t>(context);
-        {
-            static ULONGLONG lastEntry = 0;
-            if (GetTickCount64() - lastEntry > 500)
-            {
-                lastEntry = GetTickCount64();
-                cEngine* e = FrameHooks::engine();
-                LOG("HeroMove: send {:08X} (engine {})", static_cast<uint32_t>(packed), e != nullptr);
-            }
-        }
         if (packed & (kStop | kRelease))
         {
             holdLeft(false);
@@ -97,7 +69,6 @@ namespace
             g_lastY = y;
             if (moved)
             {
-                LOG("HeroMove: hero moved ({},{}), keep-alive not needed", x, y);
                 return;
             }
         }
@@ -124,9 +95,6 @@ namespace
             order.y = point.y;
             order.follow = 1;
         }
-        LOG("HeroMove: order {} for creature at {},{} -> world {},{} (mouse flags {:04X}, keep {} stop {})", static_cast<int>(order.mode),
-            x, y, static_cast<int>(order.x), static_cast<int>(order.y),
-            cMouse::instance() ? static_cast<unsigned>(cMouse::instance()->flags) : 0u, (packed & kKeep) != 0, (packed & kStop) != 0);
         engine->sendOrder(creature, order);
     }
 }

@@ -757,7 +757,6 @@ namespace
         if (!g_moving)
         {
             g_moving = true;
-            LOG("Controller: walk order to {},{} (stick {:.2f})", x, y, magnitude);
             HeroMove::follow(x, y);
         }
         else if (seconds(now - g_orderQpc) >= kStallCheck)
