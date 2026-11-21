@@ -4238,6 +4238,33 @@ local function make_ui(mod)
                 local ares = region(akey, r.x, r.y, r.w, r.h, self.area_opts)
                 if ares.hover then hover = true end
             end
+            -- The scroll bars of the boxes that scroll take the real mouse: a press on the knob, the groove or an arrow is RmlUi's own (a drag goes on, the groove
+            -- pages toward the cursor), as for a range input below.
+            local bars = native.rml_scrollbars(id, self.bar_rows)
+            self.bar_rows = bars
+            local bkeys = self.bar_keys
+            if not bkeys then bkeys = {}; self.bar_keys = bkeys end
+            for i, r in ipairs(bars) do
+                local bkey = bkeys[i]
+                if not bkey then bkey = 'rml:' .. id .. ':b' .. i; bkeys[i] = bkey end
+                local bres = region(bkey, r.x, r.y, r.w, r.h, self.ropts)
+                if bres.hover then hover = true end
+                if bres.pressed then
+                    native.rml_mouse(id, 'down', ui_mouse.x, ui_mouse.y)
+                    self.bar_down = i
+                elseif self.bar_down == i then
+                    if bres.held then
+                        hover = true
+                    else
+                        native.rml_mouse(id, 'up', ui_mouse.x, ui_mouse.y)
+                        self.bar_down = nil
+                    end
+                end
+            end
+            if self.bar_down and self.bar_down > #bars then
+                native.rml_mouse(id, 'up', ui_mouse.x, ui_mouse.y)
+                self.bar_down = nil
+            end
             if #areas > 0 then
                 if uis.pad_scroll ~= 0 and native.rml_pad_scroll(id, mx, my, uis.pad_scroll) then uis.pad_scroll = 0 end
                 -- with the controller: the card under its cursor is brought fully into view (the pad's step puts the cursor on a card whose centre is in view)

@@ -2225,6 +2225,71 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 1;
     }
 
+    // Appends the scroll bars of an element that scrolls (overflow-y / overflow-x auto or scroll, with more content than room) to `out` as {x, y, w, h}
+    // (layout units): a vertical one at the right edge of its padding box, a horizontal one at the bottom.
+    void collectScrollbars(Rml::Element* e, std::vector<std::array<float, 4>>& out, float unit)
+    {
+        const Rml::Style::Overflow oy = e->GetComputedValues().overflow_y(), ox = e->GetComputedValues().overflow_x();
+        const bool vertical = (oy == Rml::Style::Overflow::Auto || oy == Rml::Style::Overflow::Scroll) && e->GetScrollHeight() > e->GetClientHeight() + 0.5f;
+        const bool horizontal = (ox == Rml::Style::Overflow::Auto || ox == Rml::Style::Overflow::Scroll) && e->GetScrollWidth() > e->GetClientWidth() + 0.5f;
+        if ((vertical || horizontal) && e->IsVisible(true) && !scrolledOut(e))
+        {
+            const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Padding);
+            const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Padding);
+            const float bar = s.x - e->GetClientWidth();         // the room of a vertical bar
+            const float barH = s.y - e->GetClientHeight();       // of a horizontal one
+            if (vertical && bar > 1.0f)
+            {
+                out.push_back({(o.x + s.x - bar) / unit, o.y / unit, bar / unit, (s.y - (horizontal ? barH : 0.0f)) / unit});
+            }
+            if (horizontal && barH > 1.0f)
+            {
+                out.push_back({o.x / unit, (o.y + s.y - barH) / unit, (s.x - (vertical ? bar : 0.0f)) / unit, barH / unit});
+            }
+        }
+        for (int i = 0; i < e->GetNumChildren(); ++i)
+        {
+            collectScrollbars(e->GetChild(i), out, unit);
+        }
+    }
+
+    // native.rml_scrollbars(id) -> {{x, y, w, h}, ...}: the scroll bars of every box of the document that scrolls: Lua registers a region over each, so a press
+    // on one (the knob, the groove, the arrows) reaches RmlUi as the mouse button (rml_mouse) and a drag goes on.
+    int rmlScrollbars(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        rowsTable(L, 2);
+        std::vector<std::array<float, 4>> bars;
+        if (d.document->IsVisible())
+        {
+            collectScrollbars(d.document, bars, d.unit);
+        }
+        int index = 1;
+        for (const auto& b : bars)
+        {
+            lua_rawgeti(L, -1, index);
+            if (!lua_istable(L, -1))
+            {
+                lua_pop(L, 1);
+                lua_createtable(L, 0, 4);
+                lua_pushvalue(L, -1);
+                lua_rawseti(L, -3, index);
+            }
+            lua_pushnumber(L, b[0]);
+            lua_setfield(L, -2, "x");
+            lua_pushnumber(L, b[1]);
+            lua_setfield(L, -2, "y");
+            lua_pushnumber(L, b[2]);
+            lua_setfield(L, -2, "w");
+            lua_pushnumber(L, b[3]);
+            lua_setfield(L, -2, "h");
+            lua_pop(L, 1);
+            ++index;
+        }
+        trimRows(L, index - 1);
+        return 1;
+    }
+
     // native.rml_scrolls(id) -> {{x, y, w, h}, ...}: the visible boxes marked data-nav-scroll (a list the pad scrolls card by card): the pad's
     // scroll areas.
     int rmlScrolls(lua_State* L)
@@ -2942,6 +3007,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_model_changed", guarded<rmlModelChanged>},
         {"rml_nav", guarded<rmlNav>},
         {"rml_scrolls", guarded<rmlScrolls>},
+        {"rml_scrollbars", guarded<rmlScrollbars>},
         {"rml_pad_scroll", guarded<rmlPadScroll>},
         {"rml_pad_reveal", guarded<rmlPadReveal>},
         {"rml_click", guarded<rmlClick>},

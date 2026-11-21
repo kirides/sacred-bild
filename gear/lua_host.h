@@ -21,6 +21,7 @@ namespace LuaHost
 
     // Automation only: a tick while no in-game frame runs (the menus). Starts the state the first time.
     void idle();
+    void tickIdle();       // the tick itself (idle() and menuFrame() call it; only idle() marks the automation thread as ticking)
 
     // The result of asking the mods for a value from a site hook (sitehook.h): Value (the integer is set), None (no mod
     // answered or the mod's answer was no number), Busy (Lua is running on this or another thread: the engine goes on with its

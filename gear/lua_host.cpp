@@ -4867,12 +4867,18 @@ void LuaHost::menuFrame()
         return;
     }
     g_lastMenuTick = now;
-    idle();
+    // (not idle(): that one stamps g_lastIdle, "the automation thread ticks", and this would hold the menu's own ticks off for 250 ms after each one: 4 a second)
+    tickIdle();
 }
 
 void LuaHost::idle()
 {
     g_lastIdle = GetTickCount64();
+    tickIdle();
+}
+
+void LuaHost::tickIdle()
+{
     std::unique_lock guard(g_running, std::try_to_lock);
     if (!guard.owns_lock())
     {

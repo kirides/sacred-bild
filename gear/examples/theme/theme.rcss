@@ -205,12 +205,12 @@ input.game-slider[disabled] { opacity: 0.5; }
 gear-ring { display: inline-block; width: 40px; height: 40px; }
 
 /* Vertical scroll bars of every scrolling box (overflow: auto) in the look of the game's lists: the round arrow buttons (images 298 up, 299 down), the groove
-   between them (288) and the star orb as the knob (286). */
+   between them (288) and the star orb as the knob (286). The arrow images (298 / 299) point left and right: turned a quarter, they point up and down. */
 scrollbarvertical { width: 30px; }
 scrollbarvertical slidertrack { width: 30px; decorator: image(gear:image/288 repeat-y center top); background-color: transparent; }
 scrollbarvertical sliderbar { width: 30px; height: 30px; decorator: image(gear:image/286 scale-none center center); background-color: transparent; }
-scrollbarvertical sliderarrowdec { width: 30px; height: 30px; decorator: image(gear:image/298 scale-none center center); }
-scrollbarvertical sliderarrowinc { width: 30px; height: 30px; decorator: image(gear:image/299 scale-none center center); }
+scrollbarvertical sliderarrowdec { width: 30px; height: 30px; decorator: image(gear:image/298 scale-none center center); transform: rotate(90deg); }
+scrollbarvertical sliderarrowinc { width: 30px; height: 30px; decorator: image(gear:image/299 scale-none center center); transform: rotate(90deg); }
 
 /* Arrows to step through values or pages (class arrow on an <a>, next for the right one): the game's white arrows (images 236 and 237, 32x18) in a box a little
    larger, so hover and pad focus can put the warm bloom (arrow-glow-left.png / arrow-glow-right.png, the arrow blurred and tinted like the .link bloom) over
