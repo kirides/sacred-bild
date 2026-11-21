@@ -11,7 +11,7 @@
     </style>
 </head>
 <body data-model="model">
-<div id="w" class="window">
+<div id="w" class="window" data-panel="w" data-title="Items" data-resizable data-min-width="200" data-min-height="150">
     <div class="titlebar">Items</div>
     <div class="body">
         <div id="list">

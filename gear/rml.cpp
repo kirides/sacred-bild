@@ -1651,6 +1651,13 @@ namespace
             // data-dividers="142 260": offsets from the window's top where the thick frame draws divider bars.
             push(L, e->GetAttribute<Rml::String>("data-dividers", ""));
             lua_setfield(L, -2, "dividers");
+            // data-resizable: the layout editor sizes the window too (a corner grip); data-min-width / data-min-height (layout units, default 120 / 60).
+            lua_pushboolean(L, e->HasAttribute("data-resizable") ? 1 : 0);
+            lua_setfield(L, -2, "resizable");
+            lua_pushnumber(L, e->GetAttribute<float>("data-min-width", 120.0f));
+            lua_setfield(L, -2, "min_width");
+            lua_pushnumber(L, e->GetAttribute<float>("data-min-height", 60.0f));
+            lua_setfield(L, -2, "min_height");
         }
         lua_pop(L, 1);
     }
@@ -1714,6 +1721,23 @@ namespace
             const double x = luaL_checknumber(L, 3), y = luaL_checknumber(L, 4);
             e->SetProperty("left", std::to_string(static_cast<int>(std::lround(x * d.unit))) + "px");
             e->SetProperty("top", std::to_string(static_cast<int>(std::lround(y * d.unit))) + "px");
+        }
+        lua_pushboolean(L, e != nullptr);
+        return 1;
+    }
+
+    // native.rml_resize(id, selector, w, h) -> found: gives the (absolutely positioned) element the border box w x h of the layout (a resizable
+    // window kept by the layout editor).
+    int rmlResize(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        Rml::Element* e = find(d, str(L, 2));
+        if (e)
+        {
+            const double w = luaL_checknumber(L, 3), h = luaL_checknumber(L, 4);
+            e->SetProperty("box-sizing", "border-box");
+            e->SetProperty("width", std::to_string(static_cast<int>(std::lround(w * d.unit))) + "px");
+            e->SetProperty("height", std::to_string(static_cast<int>(std::lround(h * d.unit))) + "px");
         }
         lua_pushboolean(L, e != nullptr);
         return 1;
@@ -2273,6 +2297,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_draw", guarded<rmlDraw>},
         {"rml_rects", guarded<rmlRects>},
         {"rml_move", guarded<rmlMove>},
+        {"rml_resize", guarded<rmlResize>},
         {"rml_query", guarded<rmlQuery>},
         {"rml_append", guarded<rmlAppend>},
         {"rml_remove", guarded<rmlRemove>},

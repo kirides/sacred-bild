@@ -4159,14 +4159,24 @@ local function make_ui(mod)
                 local x, y = p.x, p.y
                 local saved = layout_get()[key]
                 if saved and saved.x then x, y = from_virtual(saved.x, saved.y) end
+                local sel = '[data-panel="' .. r.panel .. '"]'
+                if r.resizable then
+                    -- data-resizable: the layout editor sizes it (a corner grip, or the popup's numbers); the size is kept like the place
+                    local w, h = r.w, r.h
+                    if saved and saved.w then w, h = size_from_virtual(saved.w, saved.h) end
+                    w, h = math.max(w, r.min_width or 120), math.max(h, r.min_height or 60)
+                    if math.abs(w - r.w) > 0.25 or math.abs(h - r.h) > 0.25 then
+                        if native.rml_resize(id, sel, w, h) then r.w, r.h = w, h end
+                    end
+                end
                 local sl, st, sr, sb = screen_rect()
                 x, y = math.max(sl, math.min(x, sr - r.w)), math.max(st, math.min(y, sb - r.h))
                 if math.abs(x - r.x) > 0.25 or math.abs(y - r.y) > 0.25 then
-                    if native.rml_move(id, '[data-panel="' .. r.panel .. '"]', x, y) then r.x, r.y = x, y end
+                    if native.rml_move(id, sel, x, y) then r.x, r.y = x, y end
                 end
                 ui_panel_list[#ui_panel_list + 1] = {key = key, mod = mod.id, id = r.panel, title = r.title ~= '' and r.title or r.panel,
-                    x = r.x, y = r.y, w = r.w, h = r.h, closable = false, back = false, resizable = false, min_width = 0, min_height = 0,
-                    layer = opts.layer or 'hud'}
+                    x = r.x, y = r.y, w = r.w, h = r.h, closable = false, back = false, resizable = r.resizable and true or false,
+                    min_width = r.min_width or 0, min_height = r.min_height or 0, layer = opts.layer or 'hud'}
                 if ui_edit then ui.frame(r.x, r.y, r.w, r.h, C.accent, 1, {layer = opts.layer}) end
             end
             -- The game's own frame behind a window with class "window" or data-frame (the ornaments overhang the box, so it cannot be a CSS decorator).
