@@ -39,6 +39,20 @@ function GearWorld.object(id) end
 ---@return boolean
 function GearWorld.can_change() end
 
+--- Opens the game's list of the portals the local hero knows (the "Transferportal" window), as a portal does: the hero can move to any of
+--- its open portals. `sub` is the script command's sub-command, 5 (default) or 6; both show the list. Nothing is charged.
+---@param sub integer? 5 (default) or 6.
+---@return boolean? ok
+---@return string? error
+function GearWorld.open_teleporter(sub) end
+
+--- The portals the local hero knows (one bit per portal, as the script command Teleporter sets them). With `mask` they are set (single
+--- player; the other players are not told).
+---@param mask integer?
+---@return integer? mask
+---@return string? error
+function GearWorld.portals(mask) end
+
 --- Creatures within `radius` world units of (x, y), nearest first.
 ---@param x number
 ---@param y number

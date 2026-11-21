@@ -148,13 +148,24 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'ability.route'` | A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil. |
 | `'motion.select'` | A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil. |
 | `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
+| `'item.use'` | A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up), `'keep'` (no effect, the potion stays) or nil (the engine's effect). |
 | `'creature.created'` | The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads. |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
 | `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
 
+### GearItemUse
+
+A handler registered with `gear.on`; pass it to `gear.off` to remove it. What the `item.use` event gets: a potion is drunk.
+
+| Field | Type | |
+|---|---|---|
+| `item` | `integer` | The potion's object id. |
+| `type` | `integer` | The potion's item type. |
+| `creature` | `integer` | The id of the creature that drinks it. |
+
 ### GearCreatureCreated
 
-A handler registered with `gear.on`; pass it to `gear.off` to remove it. What the `creature.created` event gets.
+What the `creature.created` event gets.
 
 | Field | Type | |
 |---|---|---|
@@ -315,6 +326,7 @@ Forms:
 - `fun(event: 'ability.route', fn: fun(type: integer, art: integer, vanilla: integer, action: integer, id: integer): integer?): GearHandler`
 - `fun(event: 'motion.select', fn: fun(type: integer, slot: integer, id: integer): integer?): GearHandler`
 - `fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler`
+- `fun(event: 'item.use', fn: fun(e: GearItemUse): ('consume'|'keep')?): GearHandler`
 - `fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
 - `fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler`
@@ -1115,6 +1127,22 @@ The object with `id` (as a creature handle), or nil if there is none.
 Whether the world may be changed now (a single player game runs).
 
 - returns `boolean`
+
+#### `gear.world.open_teleporter(sub) -> boolean?, string?`
+
+Opens the game's list of the portals the local hero knows (the "Transferportal" window), as a portal does: the hero can move to any of its open portals. `sub` is the script command's sub-command, 5 (default) or 6; both show the list. Nothing is charged.
+
+- `sub`: `integer` (optional) - 5 (default) or 6.
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.world.portals(mask) -> integer?, string?`
+
+The portals the local hero knows (one bit per portal, as the script command Teleporter sets them). With `mask` they are set (single player; the other players are not told).
+
+- `mask`: `integer` (optional)
+- returns `mask` `integer?`
+- returns `error` `string?`
 
 #### `gear.world.creatures_near(x, y, radius, opts) -> Creature[]`
 

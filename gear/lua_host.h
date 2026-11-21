@@ -44,6 +44,10 @@ namespace LuaHost
     // event `rune.usable`: whether a hero of `type` may learn `ability` (the engine's answer `vanilla`, 0/1); `out` 0/1.
     Answer runeUsable(int type, int ability, int vanilla, int& out);
 
+    // event `item.use`: a potion is drunk by `creature` (item object `item`, item type `type`); `out` 0 = the engine's effect, 1 = the potion is
+    // used up and has no effect, 2 = no effect and the potion stays.
+    Answer itemUse(uint32_t item, uint32_t type, uint32_t creature, int& out);
+
     // event `motion.select`: the motion slot to play for a hero of `type` that is about to play `slot`.
     Answer motionSelect(int type, int slot, uint32_t id, int& out);
 

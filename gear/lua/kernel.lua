@@ -1128,6 +1128,12 @@ function world.object(id)
     if native.object(id) then return wrap(id) end
 end
 function world.can_change() return native.world_changes() end
+
+-- world.open_teleporter(sub) -> true | nil, message: opens the game's list of the portals the hero knows, as a portal does
+function world.open_teleporter(sub) return native.open_teleporter(sub or 5) end
+
+-- world.portals(mask?) -> mask | nil, message: the portals the local hero knows (one bit per portal); with `mask` they are set (single player)
+function world.portals(mask) return native.portals(mask) end
 -- The creatures that have modifiers (creature:set_modifiers) now.
 function world.modified()
     local out = {}
@@ -7546,6 +7552,7 @@ local function make_env(mod)
         if event == 'creature.created' then native.created_active(true) end
         if event == 'ability.route' then native.route_active(true) end
         if event == 'rune.usable' then native.usable_active(true) end
+        if event == 'item.use' then native.item_use_active(true) end
         if event == 'motion.select' then native.motion_active(true) end
         if event == 'damage' or event == 'ability.hit' then native.damage_active(true) end
         if event == 'effect.add' then native.effect_active(true) end
@@ -7568,6 +7575,7 @@ local function make_env(mod)
         if h.event == 'creature.created' and #list == 0 then native.created_active(false) end
         if h.event == 'ability.route' and #list == 0 then native.route_active(false) end
         if h.event == 'rune.usable' and #list == 0 then native.usable_active(false) end
+        if h.event == 'item.use' and #list == 0 then native.item_use_active(false) end
         if h.event == 'motion.select' and #list == 0 then native.motion_active(false) end
         if (h.event == 'damage' or h.event == 'ability.hit') and #list == 0 then kernel.boss.sync() end
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
@@ -8228,6 +8236,24 @@ function kernel.rune_usable(type_id, ability, vanilla)
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, 'rune.usable', h.fn, type_id, ability, vanilla)
             if ok and type(result) == 'boolean' then return result end
+        end
+    end
+    return nil
+end
+
+-- `item.use`: a potion is drunk (item object id, item type, drinker's id); a handler returns 'consume' (no effect, the potion is used up),
+-- 'keep' (no effect, the potion stays) or nil (the engine's effect).
+function kernel.item_use(item, type_id, creature)
+    local list = handlers['item.use']
+    if not list then return nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'item.use', h.fn, {item = item, type = type_id, creature = creature})
+            if ok then
+                if result == 'consume' then return 1 end
+                if result == 'keep' then return 2 end
+            end
         end
     end
     return nil

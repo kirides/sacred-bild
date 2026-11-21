@@ -2,6 +2,7 @@
 #include "automation.h"
 #include "chat.h"
 #include "classes.h"
+#include "itemuse.h"
 #include "drops.h"
 #include "gamecfg.h"
 #include "gear.h"
@@ -682,6 +683,43 @@ namespace
     {
         const char* error = nullptr;
         if (!Classes::forget(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.item_use_active(bool): whether some mod handles `item.use`
+    int nativeItemUseActive(lua_State* L)
+    {
+        ItemUse::setActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.portals([mask]) -> mask | nil, message
+    int nativePortals(lua_State* L)
+    {
+        uint32_t mask = 0, set = 0;
+        const bool write = lua_isnumber(L, 1) != 0;
+        if (write)
+        {
+            set = static_cast<uint32_t>(static_cast<int64_t>(lua_tonumber(L, 1)));
+        }
+        const char* error = "failed";
+        if (!ItemUse::portals(mask, write ? &set : nullptr, error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushnumber(L, mask);
+        return 1;
+    }
+
+    // native.open_teleporter(sub) -> true | nil, message
+    int nativeOpenTeleporter(lua_State* L)
+    {
+        const char* error = "failed";
+        if (!ItemUse::openTeleporter(static_cast<int>(luaL_optinteger(L, 1, 5)), error))
         {
             return pushFailure(L, error);
         }
@@ -4589,6 +4627,9 @@ namespace
             {"creature_ability_active", nativeCreatureAbilityActive},
             {"route_active", nativeRouteActive},
             {"usable_active", nativeUsableActive},
+            {"item_use_active", nativeItemUseActive},
+            {"open_teleporter", nativeOpenTeleporter},
+            {"portals", nativePortals},
             {"alias_create", nativeAliasCreate},
             {"alias_remove", nativeAliasRemove},
             {"alias_clear", nativeAliasClear},
@@ -5136,6 +5177,48 @@ LuaHost::Answer LuaHost::runeUsable(int type, int ability, int vanilla, int& out
     else if (lua_isboolean(L, -1))
     {
         out = lua_toboolean(L, -1) ? 1 : 0;
+        answer = Answer::Value;
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::itemUse(uint32_t item, uint32_t type, uint32_t creature, int& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "item_use");
+    lua_remove(L, -2);
+    lua_pushnumber(L, item);
+    lua_pushnumber(L, type);
+    lua_pushnumber(L, creature);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 3, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.item_use failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1))
+    {
+        out = static_cast<int>(lua_tonumber(L, -1));
         answer = Answer::Value;
     }
     lua_pop(L, 1);

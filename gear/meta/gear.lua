@@ -42,11 +42,18 @@
 ---| 'ability.route' # A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil.
 ---| 'motion.select' # A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil.
 ---| 'rune.usable' # A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it.
+---| 'item.use' # A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up), `'keep'` (no effect, the potion stays) or nil (the engine's effect).
 ---| 'creature.created' # The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads.
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
 ---| 'level.factor' # The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers).
 
 --- A handler registered with `gear.on`; pass it to `gear.off` to remove it.
+--- What the `item.use` event gets: a potion is drunk.
+---@class GearItemUse
+---@field item integer The potion's object id.
+---@field type integer The potion's item type.
+---@field creature integer The id of the creature that drinks it.
+
 --- What the `creature.created` event gets.
 ---@class GearCreatureCreated
 ---@field creature Creature The new creature.
@@ -179,6 +186,7 @@ gear = {}
 ---@overload fun(event: 'ability.route', fn: fun(type: integer, art: integer, vanilla: integer, action: integer, id: integer): integer?): GearHandler
 ---@overload fun(event: 'motion.select', fn: fun(type: integer, slot: integer, id: integer): integer?): GearHandler
 ---@overload fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler
+---@overload fun(event: 'item.use', fn: fun(e: GearItemUse): ('consume'|'keep')?): GearHandler
 ---@overload fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler
 ---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler
 ---@overload fun(event: 'level.factor', fn: fun(level: number, site: integer): number?): GearHandler
