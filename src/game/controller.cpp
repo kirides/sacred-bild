@@ -1295,6 +1295,9 @@ void Controller::onFrame()
     const Context context = detect();
     if (context != g_context)
     {
+        LOG("Controller: context {} -> {} (gear modal {} window {} | game window {} cursor mode {} | UiNav modal {})",
+            static_cast<int>(g_context), static_cast<int>(context), GearNav::modal(), GearNav::windowOpen(),
+            UiState::cursorWindowShown(), g_cursorMode, UiNav::modal() != nullptr);
         // Nothing acts in this frame: what is held now is the last context's.
         releaseAll();
         g_context = context;
