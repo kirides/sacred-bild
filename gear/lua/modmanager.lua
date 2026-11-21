@@ -742,7 +742,8 @@ gear.menu.add_item('esc', {id = 'mods', label = 'Mods', order = 900, tooltip = '
 -- The button as an RmlUi element of the theme (class game-button: the game's own button, its font, the yellow hover, a pad prompt): one document per place.
 -- Without the theme mod (or RmlUi) the document cannot load and the button is the old gear.ui one, so nothing depends on it.
 local rml_buttons = {}
-local function rml_button(key, x, y, w)
+-- The button is placed by its real width: its centre goes to `cx` (nil: its left edge to `left`), its top to `y`.
+local function rml_button(key, cx, left, y)
     local entry = rml_buttons[key]
     if entry == nil then
         entry = {retry = 0}
@@ -752,18 +753,30 @@ local function rml_button(key, x, y, w)
     local now = gear.time()
     if entry.failed and now < entry.retry then return nil end
     if not ui.rml then entry.failed, entry.retry = true, now + 5 return nil end
-    local doc = ui.rml.load_string(('<rml><body><button id="b" class="game-button" style="position: absolute; left: %dpx; top: %dpx; min-width: %dpx;">'
-        .. '<img class="padkey" src="gear:pad/a"/>Mods</button></body></rml>'):format(x, y, w))
+    local doc = ui.rml.load_string('<rml><body><button id="b" class="game-button" style="position: absolute; left: -2000px; top: 0px; margin: 0; width: 104px;">'
+        .. '<img class="padkey" src="gear:pad/a"/>Mods</button></body></rml>')
     if not doc then entry.failed, entry.retry = true, now + 5 return nil end
     doc:on('#b', 'click', function() open_screen() end)
     entry.doc = doc
     return doc
 end
 
+local function place_rml_button(doc, entry, cx, left, y)
+    local r = doc:query('#b'):rect()
+    if not r or r.w <= 0 then return end
+    local x = cx and (cx - r.w / 2) or left
+    if entry.x ~= x or entry.y ~= y then
+        entry.x, entry.y = x, y
+        doc:style('#b', 'left', ('%.2fpx'):format(x))
+        doc:style('#b', 'top', ('%.2fpx'):format(y))
+    end
+end
+
 local function escape_menu_button(state)
     if state.mode == 'menus' then
-        local doc = rml_button('menu', 16, 718, 70)
+        local doc = rml_button('menu')
         if doc then
+            place_rml_button(doc, rml_buttons.menu, nil, 16, 718)
             doc:draw({layer = 'top'})
         elseif ui.button('menu_button', 16, 724, 90, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then
             open_screen()
@@ -772,8 +785,12 @@ local function escape_menu_button(state)
         -- With a native menu (a mod that draws the game menu itself) the "Mods" item below is part of it; else this button.
         local l, t, r, b = ui.screen()
         local x = (l + r) / 2 - 60      -- below the escape menu's window (centered in the layout)
-        local doc = rml_button('esc', math.floor((l + r) / 2 - 60), 502, 70)
+        local doc = rml_button('esc')
         if doc then
+            -- Centred under the game menu's window (the one Gear reports), as the old button was; the gap below the frame is the old one's.
+            local win = ui.window('UI_WND_ESCMENU')
+            local cx = win and (win.x + win.width / 2) or (l + r) / 2
+            place_rml_button(doc, rml_buttons.esc, cx, nil, 507)
             doc:draw({layer = 'top'})
         elseif ui.button('esc_button', x, 508, 120, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then
             open_screen()
