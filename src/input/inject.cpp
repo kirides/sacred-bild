@@ -1,4 +1,5 @@
 #include "input/inject.h"
+#include "log.h"
 #include "game/gear_nav.h"
 #include "game/zoom.h"
 
@@ -121,6 +122,10 @@ void Inject::mouseMove()
 
 void Inject::call(void (*fn)(void*), void* context)
 {
+    if (!g_window.load())
+    {
+        LOG("Inject: call dropped, no window set");
+    }
     post(kCallMessage, reinterpret_cast<WPARAM>(fn), reinterpret_cast<LPARAM>(context));
 }
 

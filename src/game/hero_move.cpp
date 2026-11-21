@@ -64,6 +64,15 @@ namespace
     void send(void* context)
     {
         const auto packed = reinterpret_cast<uintptr_t>(context);
+        {
+            static ULONGLONG lastEntry = 0;
+            if (GetTickCount64() - lastEntry > 500)
+            {
+                lastEntry = GetTickCount64();
+                cEngine* e = FrameHooks::engine();
+                LOG("HeroMove: send {:08X} (engine {})", static_cast<uint32_t>(packed), e != nullptr);
+            }
+        }
         if (packed & (kStop | kRelease))
         {
             holdLeft(false);
