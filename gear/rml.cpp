@@ -1539,8 +1539,8 @@ namespace
             push(L, e->GetAttribute<Rml::String>("data-frame", e->IsClassSet("thick-frame") ? "thick" : e->IsClassSet("window") ? "tooltip" : ""));
             lua_setfield(L, -2, "frame");
             // data-fill-inset="16" or "16 20.5 15 17.5": how far the thick frame's fill starts from the box edge (left top right bottom).
-            // The classes bg-fill-settings (22 25 22 28, the character selection) and bg-fill-dialog (16 20 15 18, the popup) set it too; the attribute wins.
-            push(L, e->GetAttribute<Rml::String>("data-fill-inset", e->IsClassSet("bg-fill-dialog") ? "16 20 15 18" : e->IsClassSet("bg-fill-settings") ? "22 25 22 28" : ""));
+            // The classes bg-fill-settings (22 24.5 22 24.5: the fill reaches the thin brown line on every side) and bg-fill-dialog (16 20 15 18, the popup) set it too; the attribute wins.
+            push(L, e->GetAttribute<Rml::String>("data-fill-inset", e->IsClassSet("bg-fill-dialog") ? "16 20 15 18" : e->IsClassSet("bg-fill-settings") ? "22 24.5 22 24.5" : ""));
             lua_setfield(L, -2, "fill_inset");
             // data-dividers="142 260": offsets from the window's top where the thick frame draws divider bars.
             push(L, e->GetAttribute<Rml::String>("data-dividers", ""));

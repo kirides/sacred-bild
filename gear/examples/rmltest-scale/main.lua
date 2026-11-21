@@ -35,6 +35,11 @@ gear.on('draw', function(state)
         ui.rect(0, 0, 1024, 768, 0xFFFF00FF, {layer = 'top'})
         ui.native.frame(200, 150, 620.0, 300.0, {style = 'thick', layer = 'top', fill = false, dividers = {140}})
     end
+    if phase == 4 then
+        ui.rect(0, 0, 1024, 768, 0xFFFF00FF, {layer = 'top'})
+        ui.native.frame(200, 150, 620.0, 300.0, {style = 'thick', layer = 'top'})
+        ui.native.frame(40, 500, 400.0, 200.0, {style = 'thick', layer = 'top'})
+    end
     if phase == 2 then
         ui.native.frame(41.0, 262.0, 300.9, 242.5, {style = 'thick', layer = 'top', fill = false})
     end
@@ -53,5 +58,7 @@ gear.task(function()
     A.screenshot('s2')
     phase = 3; gear.wait(0.8)
     A.screenshot('s3')
+    phase = 4; gear.wait(0.8)
+    A.screenshot('s4')
     A.quit(0)
 end)

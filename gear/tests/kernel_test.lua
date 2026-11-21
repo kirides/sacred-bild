@@ -2163,7 +2163,7 @@ do
                 if c[1] == 'rect' and c[8] == 0x9F000000 then return c[4], c[5], c[6], c[7] end
             end
         end
-        for _, case in ipairs({{'a', 110, 70, 260, 140}, {'b', 112, 62, 276, 176}, {'c', 122, 75, 256, 147}}) do
+        for _, case in ipairs({{'a', 110, 70, 260, 140}, {'b', 112, 62, 276, 176}, {'c', 122, 74.5, 256, 151}}) do
             mode = case[1]
             ui_recording = {}
             kernel.tick(0.016)

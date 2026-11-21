@@ -3729,7 +3729,7 @@ local function make_ui(mod)
         thick = {
             fill = 0x9F000000,
             kind = 'thick',
-            inset = {left = 22, top = 25, right = 22, bottom = 28},
+            inset = {left = 22, top = 24.5, right = 22, bottom = 24.5},
             overhang = {left = 0, top = 0, right = 0, bottom = 0},
         },
     }
@@ -3792,7 +3792,7 @@ local function make_ui(mod)
                 at = at + th
             end
         end
-        -- Where the fill starts, from the box edge: the game sets it per window (the character selection 22 / 25 / 22 / 28, the popup dialog about
+        -- Where the fill starts, from the box edge: the game sets it per window (the character selection and settings 22 / 24.5 / 22 / 24.5, where it touches the thin brown line inside the strips on all four sides, the popup dialog about
         -- 16 / 20.5 / 15 / 17.5, the in-game menu measured 20.5 / 22 / 20.5 (bottom not measured)); opts.fill_inset is one number for all sides or {left, top, right, bottom}.
         local ins = st.inset
         local fi = opts.fill_inset
