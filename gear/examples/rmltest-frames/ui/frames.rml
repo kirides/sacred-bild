@@ -1,7 +1,7 @@
 <rml>
 <head><title>Frames</title></head>
 <body>
-<div id="tf" class="thick-frame" data-panel="tf" data-title="Thick frame" data-dividers="160" style="position: absolute; left: 60px; top: 60px; width: 450px; height: 290px;">
+<div id="tf" class="thick-frame bg-fill-settings" data-panel="tf" data-title="Thick frame" data-dividers="160" style="position: absolute; left: 60px; top: 60px; width: 450px; height: 290px;">
     <p class="heading" style="text-align: center">Thick frame, game buttons</p>
     <div class="row" style="justify-content: center; margin-top: 24px;">
         <button id="gb-wide" class="game-button" style="width: 300px">Neuer Charakter (wide)</button>
@@ -16,7 +16,7 @@
         <button id="gb-plain" class="game-button">Weiter</button>
     </div>
 </div>
-<div id="pop" class="thick-frame" data-panel="pop" data-title="Popup" data-fill-inset="16 20.5 15 17.5" style="position: absolute; left: 560px; top: 60px; width: 420px; height: 190px;">
+<div id="pop" class="thick-frame bg-fill-dialog" data-panel="pop" data-title="Popup" style="position: absolute; left: 560px; top: 60px; width: 420px; height: 190px;">
     <p style="text-align: center; font-family: 'Sacred Game'; font-size: 18px; margin-top: 6px;">Soll das Spiel beendet werden?</p>
     <div class="row" style="justify-content: center; margin-top: 18px;"><button class="game-button" style="min-width: 60px">Ok</button><button class="game-button" style="min-width: 60px">Abbrechen</button></div>
 </div>
