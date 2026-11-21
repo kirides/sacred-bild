@@ -132,6 +132,7 @@ function GearWorld.pickup_refused() end
 
 ---@class GearSpawnOpts
 ---@field layer? integer Default: the hero's layer.
+---@field like? Creature|integer A creature whose allegiance the new one takes (`creature:copy_allegiance`); if that fails the new creature is removed and spawn fails. A plain create has the faction of its type, which can differ from a creature the game placed (a soldier hostile to the hero by its spawn, neutral by its type).
 ---@field label? any Kept for the creature this session (`creature:label()`).
 ---@field modifiers? GearModifiers Boss modifiers (`creature:set_modifiers`) set on the new creature; if they are refused the creature is removed again and spawn fails.
 
@@ -290,6 +291,14 @@ function Creature:name() end
 ---@return boolean? ok
 ---@return string? error
 function Creature:set_hp(hp) end
+
+--- Gives this creature the allegiance of `source`: its faction (the class the game's hostility table is indexed by) and the aggression
+--- flag. A creature made by `gear.world.spawn` has the faction of its type; one the game placed (a sector fill, a script) can have
+--- another, so a copy of a hostile soldier may be neutral until this is called. Single player.
+---@param source Creature|integer
+---@return boolean? ok
+---@return string? error
+function Creature:copy_allegiance(source) end
 
 --- Sets the local hero's gold (0 to 2,147,483,646), also in LAN and Open Net games: through the engine's own gold
 --- setter, as a merchant sale does, so the hero's next update tells the server and the other players. Other heroes

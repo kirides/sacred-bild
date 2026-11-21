@@ -114,6 +114,10 @@ namespace World
 
     // Sets a creature's health (clamped to 1..max: a mod does not kill through this) or a hero's gold.
     bool setHealth(uint32_t id, int32_t health, const char*& error);
+    // Gives creature `id` the allegiance of creature `from`: the faction (the class index of the game's 16x16 relation table, +0x1F0)
+    // and the low word of the behavior flags (+0x1F4: 1 = aggressive). A plain create takes the faction of the type; the game's
+    // sector fill and scripts set it per creature (a soldier can be hostile to the hero by its spawn, neutral by its type).
+    bool copyAllegiance(uint32_t id, uint32_t from, const char*& error);
     // Sets a creature's maximum health (1 and up, not a hero); its current health becomes `health` when `setCurrent`, else keeps its
     // share of the maximum (at least 1). For the boss modifiers (gear.world, creature:set_modifiers).
     bool setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_t health, const char*& error);

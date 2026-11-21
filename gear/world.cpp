@@ -21,6 +21,7 @@ namespace
     // position (WorldPos). Creatures: +0x3B4 experience, +0x3EE gold, +0x3FE level (the "External Data Transfer"
     // dump, 007F49A0, reads them so), +0x4D4 maximum and +0x4D8 current health (the hero portrait, 006D73D0).
     constexpr uintptr_t kId = 0x0C, kType = 0x10, kFlags = 0x14, kPos = 0x18;
+    constexpr uintptr_t kFaction = 0x1F0, kBehavior = 0x1F4;   // the relation class (isEnemy, ENG 00423580) and the behavior flags
     constexpr uintptr_t kExperience = 0x3B4, kGold = 0x3EE, kLevel = 0x3FE, kMaxHealth = 0x4D4, kHealth = 0x4D8;
     constexpr uint32_t kFlagGone = 0x10;    // set on objects the manager freed or parked (create and pop skip them)
     constexpr uint32_t kTypeCount = 0x7E60; // the type records (00425EA0 accepts 0 < type < 0x7E60)
@@ -657,6 +658,33 @@ bool World::setHealth(uint32_t id, int32_t health, const char*& error)
     }
     health = std::clamp<int32_t>(health, 1, std::max<int32_t>(maxHealth, 1));
     if (!safeStore(reinterpret_cast<void*>(o + kHealth), &health, sizeof(health)))
+    {
+        error = "cannot write the creature";
+        return false;
+    }
+    return true;
+}
+
+bool World::copyAllegiance(uint32_t id, uint32_t from, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    const uintptr_t s = o ? live(m, from) : 0;
+    uint32_t faction = 0, behavior = 0, own = 0;
+    if (!o || !s || !callIsCreature(o) || !callIsCreature(s) || !readAt(s, kFaction, faction) || !readAt(s, kBehavior, behavior) ||
+        !readAt(o, kBehavior, own))
+    {
+        error = "no such creature, or world changes are not possible now";
+        return false;
+    }
+    if (faction > 15)
+    {
+        error = "the source has no valid faction";
+        return false;
+    }
+    own = (own & 0xFFFF0000u) | (behavior & 0xFFFFu);
+    if (!safeStore(reinterpret_cast<void*>(o + kFaction), &faction, sizeof(faction)) ||
+        !safeStore(reinterpret_cast<void*>(o + kBehavior), &own, sizeof(own)))
     {
         error = "cannot write the creature";
         return false;

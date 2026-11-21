@@ -1236,6 +1236,7 @@ The number of pickups refused so far.
 | Field | Type | |
 |---|---|---|
 | `layer` | `integer` | Default: the hero's layer. (optional) |
+| `like` | `Creature\|integer` | A creature whose allegiance the new one takes (`creature:copy_allegiance`); if that fails the new creature is removed and spawn fails. A plain create has the faction of its type, which can differ from a creature the game placed (a soldier hostile to the hero by its spawn, neutral by its type). (optional) |
 | `label` | `any` | Kept for the creature this session (`creature:label()`). (optional) |
 | `modifiers` | `GearModifiers` | Boss modifiers (`creature:set_modifiers`) set on the new creature; if they are refused the creature is removed again and spawn fails. (optional) |
 
@@ -1434,6 +1435,14 @@ A hero's name as the game shows it; nil for other creatures (and for a hero the 
 Sets the hit points (1..max: mods do not kill through it). Single player only.
 
 - `hp`: `number`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:copy_allegiance(source) -> boolean?, string?`
+
+Gives this creature the allegiance of `source`: its faction (the class the game's hostility table is indexed by) and the aggression flag. A creature made by `gear.world.spawn` has the faction of its type; one the game placed (a sector fill, a script) can have another, so a copy of a hostile soldier may be neutral until this is called. Single player.
+
+- `source`: `Creature|integer`
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
