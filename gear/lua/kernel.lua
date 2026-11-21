@@ -3722,13 +3722,13 @@ local function make_ui(mod)
             overhang = {left = 11, top = 5, right = 11, bottom = 5},     -- the corner ornaments reach beyond the bars
             inset = {left = 6, top = 6, right = 6, bottom = 6},
         },
-        -- medium: the frame of the character selection and the other big menu screens (pieces of the menus' UI images, positions measured against the
+        -- thick: the frame of the character selection and the other big menu screens (pieces of the menus' UI images, positions measured against the
         -- game's own frame by template matching): the rounded corner pieces 318 / 319 (41x44, 39x44) and 320 / 321 (41x42, 39x42) at the corners of the box,
         -- pattern strips 294 (32x17, 8.5 from the top edge; the bottom one flipped) between them, 310 / 312 (41x32, 24x32) down the sides, the crests 302 + 303
         -- (top) and 304 + 305 (bottom) in the middle of the top and bottom edge, dividers made of 294. The fill stays inside the strips.
-        medium = {
+        thick = {
             fill = 0x9F000000,
-            kind = 'medium',
+            kind = 'thick',
             inset = {left = 22, top = 25, right = 22, bottom = 28},
             overhang = {left = 0, top = 0, right = 0, bottom = 0},
         },
@@ -3744,14 +3744,14 @@ local function make_ui(mod)
     function native_ui.frame(x, y, w, h, opts)
         opts = opts or {}
         local st = NATIVE_FRAMES[opts.style or 'tooltip']
-        if not st then error('unknown frame style (known: tooltip, medium)', 2) end
+        if not st then error('unknown frame style (known: tooltip, thick)', 2) end
         local o = {layer = opts.layer, window = opts.window, color = opts.color}
         local function img(p, ix, iy, iw, ih)
             if iw > 0 and ih > 0 then
                 ui.image(p.id, ix, iy, iw, ih, {layer = o.layer, window = o.window, color = o.color, flip = p.flip})
             end
         end
-        if st.kind == 'medium' then return native_ui.medium_frame(x, y, w, h, opts, st) end     -- its fill is inset, see there
+        if st.kind == 'thick' then return native_ui.thick_frame(x, y, w, h, opts, st) end     -- its fill is inset, see there
         if opts.fill ~= false then
             ui.rect(x, y, w, h, opts.fill or st.fill, {layer = o.layer, window = o.window})
         end
@@ -3768,10 +3768,10 @@ local function make_ui(mod)
         return true
     end
 
-    -- The medium frame: segments of a pattern strip repeated along the sides (the last one cropped, so the pattern keeps its proportions), dividers at
+    -- The thick frame: segments of a pattern strip repeated along the sides (the last one cropped, so the pattern keeps its proportions), dividers at
     -- opts.dividers (offsets from the top of the box to the top of the divider's strip), the corner and crest pieces over the strips. The box is the
     -- outer rectangle of the corner pieces; the fill covers only what the strips enclose, so the rounded corners show the background behind their arcs.
-    function native_ui.medium_frame(x, y, w, h, opts, st)
+    function native_ui.thick_frame(x, y, w, h, opts, st)
         local o = {layer = opts.layer, window = opts.window, color = opts.color}
         local function img(id, ix, iy, iw, ih, flip, crop)
             ui.image(id, ix, iy, iw, ih, {layer = o.layer, window = o.window, color = o.color, flip = flip, crop = crop})

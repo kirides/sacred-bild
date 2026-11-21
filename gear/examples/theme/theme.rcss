@@ -116,10 +116,10 @@ span.padkey.down { decorator: image(gear:pad/down contain); }
 span.padkey.left { decorator: image(gear:pad/left contain); }
 span.padkey.right { decorator: image(gear:pad/right contain); }
 
-/* The medium frame of the character selection and the other big menu screens (class medium-frame, or data-frame="medium" on a top-level element;
+/* The thick frame of the character selection and the other big menu screens (class thick-frame, or data-frame="thick" on a top-level element;
    Gear draws it behind the window like the thin one). The border is 22 units at the sides, 25 on top and 28 at the bottom (the rounded corners are inside the box): keep the padding. Dividers: data-dividers="142"
    (offsets from the top where a bar runs across). */
-.medium-frame { padding: 29px 26px 32px 26px; }
+.thick-frame { padding: 29px 26px 32px 26px; }
 
 /* The game's own button (class game-button on a <button>): the orb caps (images 280 / 282) keep their size, only the middle (281) is tiled, so a button
    of any width works; the label is centred in the middle part and the pad prompt (.padkey) sits in front of it. Normal grey-white label, hover
