@@ -234,6 +234,7 @@ namespace
     {
         uint64_t stamp = 0;
         uint32_t picture = 0;
+        ULONGLONG checked = 0;      // when the file's stamp was last looked at (GetTickCount64)
     };
     std::map<uint32_t, Cached> g_pictures;
 
@@ -402,6 +403,12 @@ std::vector<Savegames::Info> Savegames::list()
 
 uint32_t Savegames::picture(uint32_t slot)
 {
+    // A screen asks for the picture of every row it shows, every frame: the file's stamp (a file system call) is looked at once a second, not every time.
+    const ULONGLONG now = GetTickCount64();
+    if (const auto known = g_pictures.find(slot); known != g_pictures.end() && known->second.stamp && now - known->second.checked < 1000)
+    {
+        return known->second.picture;
+    }
     const std::wstring path = pathOf(slot);
     const uint64_t stamp = stampOf(path);
     auto it = g_pictures.find(slot);
@@ -409,6 +416,7 @@ uint32_t Savegames::picture(uint32_t slot)
     {
         if (it->second.stamp == stamp && stamp)
         {
+            it->second.checked = now;
             return it->second.picture;
         }
         Ui::pictureRelease(it->second.picture);
@@ -421,6 +429,7 @@ uint32_t Savegames::picture(uint32_t slot)
     std::vector<uint16_t> pixels;
     Cached c;
     c.stamp = stamp;
+    c.checked = now;
     if (readPicture(path, pixels))
     {
         c.picture = Ui::pictureCreate(kPictureW, kPictureH, std::move(pixels));

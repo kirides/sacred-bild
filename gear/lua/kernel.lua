@@ -4236,8 +4236,10 @@ local function make_ui(mod)
                 local ares = region(akey, r.x, r.y, r.w, r.h, self.area_opts)
                 if ares.hover then hover = true end
             end
-            if #areas > 0 and uis.pad_scroll ~= 0 then
-                if native.rml_pad_scroll(id, mx, my, uis.pad_scroll) then uis.pad_scroll = 0 end
+            if #areas > 0 then
+                if uis.pad_scroll ~= 0 and native.rml_pad_scroll(id, mx, my, uis.pad_scroll) then uis.pad_scroll = 0 end
+                -- with the controller: the card under its cursor is brought fully into view (the pad's step puts the cursor on a card whose centre is in view)
+                if native.ui_pad_info and native.ui_pad_info() then native.rml_pad_reveal(id, mx, my) end
             end
             local stops = native.rml_nav(id, self.nav_rows)
             self.nav_rows = stops

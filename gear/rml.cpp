@@ -2220,6 +2220,59 @@ namespace
         return 1;
     }
 
+    // native.rml_pad_reveal(id, x, y) -> scrolled: the pad's cursor (x, y, layout units) is on a card of a list marked data-nav-scroll that is only partly in
+    // view (the pad moved it to the next card, whose centre is in view): the list scrolls by the hidden part, so that the whole card is in view. The card is
+    // under the cursor still (less than half of it was hidden).
+    int rmlPadReveal(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        const float px = static_cast<float>(luaL_checknumber(L, 2)) * d.unit, py = static_cast<float>(luaL_checknumber(L, 3)) * d.unit;
+        RootScope scope(d);
+        lua_pushboolean(L, 0);
+        if (!d.document->IsVisible())
+        {
+            return 1;
+        }
+        Rml::ElementList all;
+        d.document->QuerySelectorAll(all, kNavSelector);
+        for (Rml::Element* e : all)
+        {
+            Rml::Element* area = navScrollArea(e);
+            if (!area || !e->IsVisible(true))
+            {
+                continue;
+            }
+            const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
+            const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
+            if (px < o.x || px > o.x + s.x || py < o.y || py > o.y + s.y)
+            {
+                continue;
+            }
+            const Rml::Vector2f ao = area->GetAbsoluteOffset(Rml::BoxArea::Padding);
+            const Rml::Vector2f as = area->GetBox().GetSize(Rml::BoxArea::Padding);
+            float move = 0.0f;
+            if (o.y < ao.y)
+            {
+                move = o.y - ao.y;
+            }
+            else if (o.y + s.y > ao.y + as.y)
+            {
+                move = o.y + s.y - (ao.y + as.y);
+            }
+            if (std::fabs(move) < 0.5f || std::fabs(move) > s.y * 0.6f)
+            {
+                return 1;
+            }
+            const float top = area->GetScrollTop();
+            const float most = std::max(0.0f, area->GetScrollHeight() - area->GetClientHeight());
+            area->SetScrollTop(std::max(0.0f, std::min(most, top + move)));
+            lua_pop(L, 1);
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        return 1;
+    }
+
     // native.rml_mouse(id, "down" | "up"): the left button for the mouse position the last update gave (a press on a range input, which
     // the click at the element's centre of rml_click would not serve).
     int rmlMouse(lua_State* L)
@@ -2791,6 +2844,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_nav", guarded<rmlNav>},
         {"rml_scrolls", guarded<rmlScrolls>},
         {"rml_pad_scroll", guarded<rmlPadScroll>},
+        {"rml_pad_reveal", guarded<rmlPadReveal>},
         {"rml_click", guarded<rmlClick>},
         {"rml_mouse", guarded<rmlMouse>},
         {"rml_nudge", guarded<rmlNudge>},
