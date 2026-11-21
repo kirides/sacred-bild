@@ -1458,7 +1458,11 @@ namespace
     void fitContext(Doc& d)
     {
         const float unit = d.dp ? std::max(0.5f, Ui::canvasScale()) : 1.0f;
-        const Rml::Vector2i dims(static_cast<int>(std::lround(kLayoutWidth * unit)), static_cast<int>(std::lround(kLayoutHeight * unit)));
+        // As large as the screen where that is more than the 1024 x 768 layout (a game laid out in screen pixels, a wide
+        // screen): a document's elements past the context's edge lose their text.
+        float right = kLayoutWidth, bottom = kLayoutHeight;
+        Ui::screenExtent(right, bottom);
+        const Rml::Vector2i dims(static_cast<int>(std::lround(std::ceil(right) * unit)), static_cast<int>(std::lround(std::ceil(bottom) * unit)));
         if (unit != d.unit || d.context->GetDimensions() != dims)
         {
             d.unit = unit;

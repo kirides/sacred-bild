@@ -1204,6 +1204,14 @@ do
             for _, e in ipairs(doc:query_all('.bodybox')) do e:scroll('start') end
         end
         ui.capture_keys(true)
+        -- Centred on the whole screen (the document's own left/top are for the 1024 x 768 layout; a layout that is
+        -- larger or offset, as the game's own in ReBorn, has the screen's edges elsewhere).
+        local cx, cy = math.floor((l + r - 800) / 2 + 0.5), math.floor((t + b - 680) / 2 + 0.5)
+        if R.win_x ~= cx or R.win_y ~= cy then
+            R.win_x, R.win_y = cx, cy
+            doc:style('#win', 'left', ('%dpx'):format(cx))
+            doc:style('#win', 'top', ('%dpx'):format(cy))
+        end
         doc:draw({layer = 'top'})
         if screen.view == 'mod' and screen.tab == 'page' and not screen.osk then
             local area = doc:query('#more')
@@ -1279,7 +1287,8 @@ local function escape_menu_button(state)
             -- Centred under the game menu's window (the one Gear reports), as the old button was; the gap below the frame is the old one's.
             local win = ui.window('UI_WND_ESCMENU')
             local cx = win and (win.x + win.width / 2) or (l + r) / 2
-            place_rml_button(doc, rml_buttons.esc, cx, nil, 507)
+            local by = win and win.height > 0 and (win.y + win.height + 7) or 507      -- 507 is under the window of the 1024 x 768 layout
+            place_rml_button(doc, rml_buttons.esc, cx, nil, by)
             doc:draw({layer = 'top'})
         elseif ui.button('esc_button', x, 508, 120, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then
             open_screen()
