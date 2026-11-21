@@ -41,12 +41,17 @@
 ---| 'ability.hit' # A hit of a creature that has a combat art or spell (or a copy, ids from 100) in flight: `(attacker, victim, art, damage)`; `art` is the id the hero used (a copy's own id).
 ---| 'ability.route' # A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil.
 ---| 'motion.select' # A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil.
+---| 'kill.recorded' # The engine recorded a kill of the local hero or of a creature it owns (minion, summon): `(e)`, see `GearKillRecorded`. Fires for every such kill, also those that give no experience; runs inside the engine's death handling.
 ---| 'rune.usable' # A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it.
 ---| 'creature.created' # The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads.
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
 ---| 'level.factor' # The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers).
 
 --- A handler registered with `gear.on`; pass it to `gear.off` to remove it.
+--- What the `kill.recorded` event gets.
+---@class GearKillRecorded
+---@field id integer The engine's record id of the kill (the first word of its statistics record).
+
 --- What the `creature.created` event gets.
 ---@class GearCreatureCreated
 ---@field creature Creature The new creature.
@@ -178,6 +183,7 @@ gear = {}
 ---@overload fun(event: 'ability.hit', fn: fun(attacker: Creature, victim: Creature, art: integer, damage: integer)): GearHandler
 ---@overload fun(event: 'ability.route', fn: fun(type: integer, art: integer, vanilla: integer, action: integer, id: integer): integer?): GearHandler
 ---@overload fun(event: 'motion.select', fn: fun(type: integer, slot: integer, id: integer): integer?): GearHandler
+---@overload fun(event: 'kill.recorded', fn: fun(e: GearKillRecorded)): GearHandler
 ---@overload fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler
 ---@overload fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler
 ---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler

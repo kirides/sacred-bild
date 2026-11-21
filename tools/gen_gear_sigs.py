@@ -283,6 +283,9 @@ GEAR = [
     ('abilityUsable2', 0x004D24C0, 'func'),
     # Arts whose numbers live in a spell record (thiscall (art record) -> spell id, 0 = none): 0x4D1E10 maps 0x3FA, 0x3FB, 0x414, 0x419..0x41D.
     ('abilityLinkedSpell', 0x004D1E10, 'func'),
+    # The kill statistics record (gear/killstat.cpp): thiscall on the statistics block, 17 stack words (ret 0x44); the death handlers call it for
+    # a kill of the local hero or of a creature it owns. The event `kill.recorded` follows it.
+    ('cKillStat_record', 0x00424250, 'func'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

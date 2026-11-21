@@ -131,6 +131,9 @@ namespace Party
     bool combos(uint32_t id, std::vector<Combo>& out);
     // Writes combo slot `slot` (0..3) as the combo master does: up to four arts the hero knows (at the levels it has).
     bool setCombo(uint32_t id, uint32_t slot, const std::vector<uint16_t>& arts, const char*& error);
+    // Sets how far combo slot `slot` (0..3) has regenerated (what the engine's regeneration adds to; ready when charge >= total). Not clamped
+    // above (the engine's own regeneration and the ready test accept a charge over the total); negative values become 0.
+    bool setComboCharge(uint32_t id, uint32_t slot, float charge, const char*& error);
 
     struct State
     {

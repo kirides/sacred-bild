@@ -1600,6 +1600,12 @@ do
         assert(type(ability) == 'number', 'expected an ability id')
         return native.creature_forget(self.id, ability)
     end
+    -- creature:set_combo_charge(slot, charge): how far the combo of `slot` (0..3) has regenerated, in seconds of its `total` (ready when
+    -- charge >= total; not clamped above). Party heroes of the local player only; true, or nil and a reason.
+    function creature_mt:set_combo_charge(slot, charge)
+        assert(type(slot) == 'number' and type(charge) == 'number', 'expected a slot (0..3) and a charge in seconds')
+        return native.party_set_combo_charge(self.id, slot, charge)
+    end
     function creature_mt:set_combo(slot, arts)
         assert(type(slot) == 'number' and type(arts) == 'table', 'expected a slot (0..3) and a list of combat arts')
         return native.party_set_combo(self.id, slot, arts)
@@ -7546,6 +7552,7 @@ local function make_env(mod)
         if event == 'creature.created' then native.created_active(true) end
         if event == 'ability.route' then native.route_active(true) end
         if event == 'rune.usable' then native.usable_active(true) end
+        if event == 'kill.recorded' then native.kill_recorded_active(true) end
         if event == 'motion.select' then native.motion_active(true) end
         if event == 'damage' or event == 'ability.hit' then native.damage_active(true) end
         if event == 'effect.add' then native.effect_active(true) end
@@ -7568,6 +7575,7 @@ local function make_env(mod)
         if h.event == 'creature.created' and #list == 0 then native.created_active(false) end
         if h.event == 'ability.route' and #list == 0 then native.route_active(false) end
         if h.event == 'rune.usable' and #list == 0 then native.usable_active(false) end
+        if h.event == 'kill.recorded' and #list == 0 then native.kill_recorded_active(false) end
         if h.event == 'motion.select' and #list == 0 then native.motion_active(false) end
         if (h.event == 'damage' or h.event == 'ability.hit') and #list == 0 then kernel.boss.sync() end
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
@@ -8231,6 +8239,12 @@ function kernel.rune_usable(type_id, ability, vanilla)
         end
     end
     return nil
+end
+
+-- `kill.recorded`: the engine's statistics record of a kill by the local hero or by a creature it owns (see gear/killstat.cpp). Called by the
+-- host from inside the engine's death handling, right after the engine's own bookkeeping; `id` is the record's id word.
+function kernel.kill_recorded(id)
+    kernel.dispatch('kill.recorded', {id = id})
 end
 
 -- `motion.select`: a hero of `type` is about to play motion slot `slot`; a handler returns another slot (0..255) or nil.

@@ -147,14 +147,23 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'ability.hit'` | A hit of a creature that has a combat art or spell (or a copy, ids from 100) in flight: `(attacker, victim, art, damage)`; `art` is the id the hero used (a copy's own id). |
 | `'ability.route'` | A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil. |
 | `'motion.select'` | A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil. |
+| `'kill.recorded'` | The engine recorded a kill of the local hero or of a creature it owns (minion, summon): `(e)`, see `GearKillRecorded`. Fires for every such kill, also those that give no experience; runs inside the engine's death handling. |
 | `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
 | `'creature.created'` | The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads. |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
 | `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
 
+### GearKillRecorded
+
+A handler registered with `gear.on`; pass it to `gear.off` to remove it. What the `kill.recorded` event gets.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | The engine's record id of the kill (the first word of its statistics record). |
+
 ### GearCreatureCreated
 
-A handler registered with `gear.on`; pass it to `gear.off` to remove it. What the `creature.created` event gets.
+What the `creature.created` event gets.
 
 | Field | Type | |
 |---|---|---|
@@ -314,6 +323,7 @@ Forms:
 - `fun(event: 'ability.hit', fn: fun(attacker: Creature, victim: Creature, art: integer, damage: integer)): GearHandler`
 - `fun(event: 'ability.route', fn: fun(type: integer, art: integer, vanilla: integer, action: integer, id: integer): integer?): GearHandler`
 - `fun(event: 'motion.select', fn: fun(type: integer, slot: integer, id: integer): integer?): GearHandler`
+- `fun(event: 'kill.recorded', fn: fun(e: GearKillRecorded)): GearHandler`
 - `fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler`
 - `fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
@@ -1577,6 +1587,15 @@ The equipment slot (0..18) an item goes to for this hero, by the engine's own ru
 A hero's combos (the combo master's slots that hold arts), nil for other creatures. Use one with `order_ability(combo.id, target)`.
 
 - returns `GearHeroCombo[]?`
+
+#### `creature:set_combo_charge(slot, charge) -> boolean?, string?`
+
+Sets how far a party hero's combo has regenerated, in seconds of the combo's `total` (`GearHeroCombo`): it is ready when `charge >= total`. The value is not clamped above (the engine accepts a charge over the total); a negative value becomes 0. Single player and the local player's own heroes.
+
+- `slot`: `integer` - 0 to 3.
+- `charge`: `number`
+- returns `ok` `boolean?`
+- returns `error` `string?`
 
 #### `creature:set_combo(slot, arts) -> boolean?, string?`
 

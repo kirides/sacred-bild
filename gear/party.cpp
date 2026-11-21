@@ -1454,6 +1454,36 @@ bool Party::setCombo(uint32_t id, uint32_t slot, const std::vector<uint16_t>& ar
     return true;
 }
 
+bool Party::setComboCharge(uint32_t id, uint32_t slot, float charge, const char*& error)
+{
+    if (!available(error))
+    {
+        return false;
+    }
+    const uintptr_t c = heroObject(id);
+    uintptr_t range[2] = {};
+    if (!c || !sameOwnerAsLocal(c) || !readAt(c, kCombos, range) || !range[0] || range[1] < range[0])
+    {
+        error = "not a party hero";
+        return false;
+    }
+    if (slot >= (range[1] - range[0]) / kComboSize || slot > 3)
+    {
+        error = "a combo has slots 0 to 3";
+        return false;
+    }
+    if (!(charge >= 0.0f))    // also NaN
+    {
+        charge = 0.0f;
+    }
+    if (!writeAt(range[0] + slot * kComboSize, kComboCharge, charge))
+    {
+        error = "the combo slot could not be written";
+        return false;
+    }
+    return true;
+}
+
 bool Party::state(uint32_t id, State& out)
 {
     const uintptr_t c = memberObject(id);

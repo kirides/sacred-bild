@@ -385,4 +385,9 @@ namespace Gear::Addr
     inline Sacred::Thiscall<uint32_t(uint8_t* record, uint32_t heroType, char flag)> abilityUsable2{};
     // ENG 004D1E10: the spell record id an art takes its numbers from (thiscall, ECX = art record; 0 for arts without a spell).
     inline Sacred::Thiscall<uint32_t(uint8_t* record)> abilityLinkedSpell{};
+    // ENG 00424250: the kill statistics record (gear/killstat.cpp), thiscall (statistics block, 17 stack words), ret 0x44. The death handlers call
+    // it when the local hero or a creature it owns killed something; the first word is the record id (a per-id counter below 0x300).
+    inline Sacred::Thiscall<void(void* stats, uint32_t id, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6, uint32_t a7, uint32_t a8, uint32_t a9,
+                                 uint32_t a10, uint32_t a11, uint32_t a12, uint32_t a13, uint32_t a14, uint32_t a15, uint32_t a16, uint32_t a17,
+                                 uint32_t a18)> cKillStat_record{};
 }

@@ -44,6 +44,10 @@ namespace LuaHost
     // event `rune.usable`: whether a hero of `type` may learn `ability` (the engine's answer `vanilla`, 0/1); `out` 0/1.
     Answer runeUsable(int type, int ability, int vanilla, int& out);
 
+    // event `kill.recorded`: the engine recorded a kill of the local hero or a creature it owns (the statistics record `id`). Skipped
+    // while Lua is busy (the engine's own code calls this, never nested in a kernel call).
+    void killRecorded(uint32_t id);
+
     // event `motion.select`: the motion slot to play for a hero of `type` that is about to play `slot`.
     Answer motionSelect(int type, int slot, uint32_t id, int& out);
 
