@@ -138,6 +138,9 @@ static const Sig::Entry kGearSigs[] = {
     {"cStats_abilityIndex", "8B 91 06 01 00 00 53 56 8B B1 02 01 00 00 2B D6 B8 E9 A2 8B 2E F7 EA C1 FA 02 8B C2 33 DB", 0, Sig::Take::Match, &Gear::Addr::cStats_abilityIndex}, // 00581D40, 00581C00
     {"cStats_raiseAbility", "53 55 56 8B F1 8B 4C 24 10 57 8B 96 06 01 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_raiseAbility}, // 00581F80, 00581E40
     {"typeAbilityOfRune", "8B 44 24 04 85 C0 7E 12 3D 60 7E 00 00 7D 0B C1 E0 07 66 8B 44 08 6A", 0, Sig::Take::Match, &Gear::Addr::typeAbilityOfRune}, // 0043AF10, 0043ADE0
+    {"abilityDescribe1", "56 57 8B F9 E8 ?? ?? ?? ?? 66 8B 3F 8B F0 B9 01 00 00 00", 0, Sig::Take::Match, &Gear::Addr::abilityDescribe1}, // 004D2020, 004D1E60
+    {"abilityDescribe2", "81 EC 04 08 00 00 53 56 57 8B F1 E8 ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::abilityDescribe2}, // 004D27B0, 004D25F0
+    {"cUI_Control_getRect", "83 EC 30 66 8B 41 2C 66 8B 51 2E 53", 0, Sig::Take::Match, &Gear::Addr::cUI_Control_getRect}, // 00732350, 00731C70
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
     {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270

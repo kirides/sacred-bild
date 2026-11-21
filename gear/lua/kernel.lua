@@ -7559,7 +7559,7 @@ local function make_env(mod)
         if event == 'skillslot.select' then native.skillslot_active(true) end
         if event == 'skillslot.key' then native.skillkey_active(true) end
         if event == 'combat.branch' then native.branch_active(true) end
-        if event == 'master.price' or event == 'master.layout' or event == 'master.exchange' then native.master_active(event, true) end
+        if event:sub(1, 7) == 'master.' then native.master_active(event, true) end
         if event == 'drops.roll' or event == 'drops.select' then D.dirty = true end
         return h
     end
@@ -7582,7 +7582,7 @@ local function make_env(mod)
         if h.event == 'skillslot.select' and #list == 0 then native.skillslot_active(false) end
         if h.event == 'skillslot.key' and #list == 0 then native.skillkey_active(false) end
         if h.event == 'combat.branch' and #list == 0 then native.branch_active(false) end
-        if (h.event == 'master.price' or h.event == 'master.layout' or h.event == 'master.exchange') and #list == 0 then native.master_active(h.event, false) end
+        if h.event:sub(1, 7) == 'master.' and #list == 0 then native.master_active(h.event, false) end
         if h.event == 'drops.roll' or h.event == 'drops.select' then D.dirty = true end
     end
     -- gear.guard(where, fn) -> a function that calls fn and catches its errors: the first error of each `where` is logged,
@@ -8288,18 +8288,21 @@ function kernel.combat_branch(name, vanilla, index, eax)
     return nil
 end
 
--- `master.price`, `master.layout`, `master.exchange`: the combo master's rune exchange tab (gear/master.cpp). `master.price(rune, ability, count)`
--- returns the gold the exchange costs (an integer, 0 hides the price) or nil for the engine's own; `master.layout()` returns true to take the
--- runes away (hidden slots); `master.exchange(rune, ability, count)` returns true when the mod did the exchange itself. The first answer counts.
+-- `master.price`, `master.layout`, `master.exchange`, `master.describe`, `master.maximum`: the combo master's rune exchange tab (gear/master.cpp).
+-- `master.price(rune, ability, count)` returns the gold the exchange costs (an integer, 0 hides the price) or nil for the engine's own;
+-- `master.layout()` returns true to take the runes away (hidden slots); `master.exchange(rune, ability, count)` returns true when the mod did the
+-- exchange itself; `master.describe(rune, ability, count)` returns the level to show the chosen art's "name - Level n" at (nil or false: no text);
+-- `master.maximum(rune, ability, count)` returns true to show the "maximum level" message. The first answer counts.
 function kernel.master_event(event, rune, ability, count)
     local list = event == 'master.price' and handlers['master.price'] or event == 'master.layout' and handlers['master.layout'] or
-        event == 'master.exchange' and handlers['master.exchange']
+        event == 'master.exchange' and handlers['master.exchange'] or event == 'master.describe' and handlers['master.describe'] or
+        event == 'master.maximum' and handlers['master.maximum']
     if not list then return nil end
     for i = 1, #list do
         local h = list[i]
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, event, h.fn, rune, ability, count)
-            if ok and (type(result) == 'number' or type(result) == 'boolean') then return result end
+            if ok and (type(result) == 'number' or (type(result) == 'boolean' and (result or event ~= 'master.describe'))) then return result end
         end
     end
     return nil

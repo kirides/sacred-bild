@@ -296,6 +296,11 @@ GEAR = [
     ('cStats_abilityIndex', 0x00581D40, 'func'),
     ('cStats_raiseAbility', 0x00581F80, 'func'),
     ('typeAbilityOfRune', 0x0043AF10, 'func'),
+    # The text of an art / a spell at a level (thiscall (record, wstring* out, level, format), ret 0xC) and a control's screen rect (thiscall (control,
+    # int[3]), ret 4): the combo master page draws the chosen art's "<name> - Level <n>" and its maximum level message with them (gear/master.cpp).
+    ('abilityDescribe1', 0x004D2020, 'func'),
+    ('abilityDescribe2', 0x004D27B0, 'func'),
+    ('cUI_Control_getRect', 0x00732350, 'func'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

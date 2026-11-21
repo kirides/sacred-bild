@@ -151,6 +151,8 @@ BRANCH_SITES = [
     # hides it), and enables the exchange button only with two or more (`cmp dx, 2; jb` in the tab's render 006D49A0: taken disables it).
     ('master.select', 0, 'masterSelectFn', 0x006D3FD0, 0x006D3FF4),  # cmp dx, 4; jne
     ('master.ready', 0, 'masterRenderFn', 0x006D49A0, 0x006D4C97),   # cmp dx, 2; jb
+    # The same render function skips the gold label and the price when the price is 0 (`test ecx, ecx; mov [esp+28], ecx; je`: taken hides them).
+    ('master.gold', 0, 'masterRenderFn', 0x006D49A0, 0x006D4B7A),    # test ecx, ecx; je
 ]
 BRANCH_EXTRA = {0x004D7068: 8, 0x0051DA04: 3, 0x004DEF0B: 4, 0x006D3FF4: 6, 0x006D4C97: 6}
 

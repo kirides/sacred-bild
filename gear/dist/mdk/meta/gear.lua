@@ -31,7 +31,7 @@
 ---| 'realm.changed' # `gear.realm.use` switched the online play server: `(realm)`.
 ---| 'combat.constant' # The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it.
 ---| 'skillslot.key' # A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it.
----| 'combat.branch' # A conditional jump in the hit handlers and a few other functions (the combo master's `master.select` and `master.ready`: the rune selector and the exchange button without runes): a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`).
+---| 'combat.branch' # A conditional jump in the hit handlers and a few other functions (the combo master's `master.select`, `master.ready` and `master.gold`: the rune selector, the exchange button without runes, the price at 0 gold): a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`).
 ---| 'skillslot.select' # A digit key selected a skill slot of the HUD (`index`: which of the five places in the key handler).
 ---| 'bonus.constant' # A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another.
 ---| 'drops.roll' # A creature's loot function is about to run; a handler may change the rarity bonus or return false to cancel the roll.
@@ -44,6 +44,8 @@
 ---| 'master.price' # The combo master's rune exchange page asks the gold the exchange costs: `(rune, ability, count)` (the chosen rune's item type, the ability it teaches, the runes in the slots); return an integer (0 hides the price) or nil for the engine's own table.
 ---| 'master.layout' # The rune exchange page lays out its controls: return true to take the runes away (the four slots get no size).
 ---| 'master.exchange' # The player pressed the exchange button (the engine has taken the price): `(rune, ability, count)`; return true when the mod did the exchange, so the engine's own (runes in, chosen rune out) is skipped.
+---| 'master.describe' # The rune exchange page is drawn: `(rune, ability, count)` for the shown rune's art or spell; return a level to have the page write the engine's own "name - Level n" for it at the left of the page, nil or false for no text.
+---| 'master.maximum' # The rune exchange page is drawn: `(rune, ability, count)`; return true to have it write the red "Maximum Level Attained" under the result box.
 ---| 'rune.usable' # A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it.
 ---| 'creature.created' # The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads.
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
@@ -184,6 +186,8 @@ gear = {}
 ---@overload fun(event: 'master.price', fn: fun(rune: integer, ability: integer, count: integer): integer?): GearHandler
 ---@overload fun(event: 'master.layout', fn: fun(): boolean?): GearHandler
 ---@overload fun(event: 'master.exchange', fn: fun(rune: integer, ability: integer, count: integer): boolean?): GearHandler
+---@overload fun(event: 'master.describe', fn: fun(rune: integer, ability: integer, count: integer): integer|false?): GearHandler
+---@overload fun(event: 'master.maximum', fn: fun(rune: integer, ability: integer, count: integer): boolean?): GearHandler
 ---@overload fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler
 ---@overload fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler
 ---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler

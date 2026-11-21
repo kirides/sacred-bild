@@ -400,4 +400,10 @@ namespace Gear::Addr
     inline Sacred::Thiscall<uint32_t(void* stats, int id)> cStats_abilityIndex{};
     inline Sacred::Thiscall<uint32_t(void* stats, uint32_t index, uint32_t amount, int byLevel, int flag)> cStats_raiseAbility{};
     inline Sacred::Thiscall<uint32_t(void* typeManager, int type)> typeAbilityOfRune{};
+    // ENG 004D2020 / 004D27B0: the text of an art / a spell record at a level (thiscall (record, STLport wstring* out, level, format), ret 0xC); format 1 is
+    // "<name> - <Level> <n>" (the text 0x42E is the word Level). ENG 00732350: a control's rect in screen pixels (thiscall (control, int[3] out), ret 4:
+    // x, y, then the width word and the height word), the sum of its own and its parents' positions.
+    inline Sacred::Thiscall<void(uint8_t* record, void* out, uint32_t level, uint32_t format)> abilityDescribe1{};
+    inline Sacred::Thiscall<void(uint8_t* record, void* out, uint32_t level, uint32_t format)> abilityDescribe2{};
+    inline Sacred::Thiscall<void(void* control, int32_t* out)> cUI_Control_getRect{};
 }

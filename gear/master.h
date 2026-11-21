@@ -12,13 +12,18 @@
 //   * master.exchange (rune, ability, count): true when the mod did the exchange (the engine has paid by then): the engine's own exchange, which takes
 //     the runes and puts the chosen rune into the result box, is skipped.
 //
-// The two conditional jumps that tie the selector and the button to the rune count are site hooks (`master.select`, `master.ready` of the event
-// `combat.branch`, gear/sitehook.cpp).
+//   * master.describe (rune, ability, count): a level (not nil or false) makes Gear write the engine's own description of the shown rune's art or spell
+//     at that level, "<name> - Level <n>", at the left of the page (font 3, at 0x10, 0x8C in the pixels of the header's own rect), after the engine drew the page.
+//   * master.maximum (rune, ability, count): true makes Gear write the text "Maximum Level Attained" (the game's text 0x9327CD45) in red under the result
+//     box, centered on it.
+//
+// The conditional jumps that tie the selector, the button and the price label to the rune count and the price are site hooks (`master.select`,
+// `master.ready`, `master.gold` of the event `combat.branch`, gear/sitehook.cpp).
 namespace Master
 {
     // Hooks the tab's render, layout and exchange functions (inside the Patch transaction of Hooks::install).
     bool install();
 
-    // Whether some mod handles `master.price`, `master.layout` or `master.exchange`: the hooks are pass-throughs while not.
+    // Whether some mod handles that event (`master.price`, `master.layout`, `master.exchange`, `master.describe`, `master.maximum`): the hooks are pass-throughs while not.
     void setActive(const char* event, bool active);
 }
