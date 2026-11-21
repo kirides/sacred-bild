@@ -3804,10 +3804,12 @@ local function make_ui(mod)
         if opts.fill ~= false then
             ui.rect(x + ins.left, y + ins.top, w - ins.left - ins.right, h - ins.top - ins.bottom, opts.fill or st.fill, {layer = o.layer, window = o.window})
         end
-        tile_h(294, 32, 17, x + 41, y + 8.5, w - 41 - 39)
-        tile_h(294, 32, 17, x + 41, y + h - 25.5, w - 41 - 39, 'v')
-        tile_v(310, 41, 32, x, y + 44.8, h - 44.8 - 42)
-        tile_v(312, 24, 32, x + w - 24, y + 44.8, h - 44.8 - 42)
+        -- The strips run on 8 units under the corner pieces (they are drawn last): the corner sprites have transparent margins and a hollow, and strips that stop at their edge leave slits.
+        local under = 8
+        tile_h(294, 32, 17, x + 41 - under, y + 8.5, w - 41 - 39 + 2 * under)
+        tile_h(294, 32, 17, x + 41 - under, y + h - 25.5, w - 41 - 39 + 2 * under, 'v')
+        tile_v(310, 41, 32, x, y + 44.8 - under, h - 44.8 - 42 + 2 * under)
+        tile_v(312, 24, 32, x + w - 24, y + 44.8 - under, h - 44.8 - 42 + 2 * under)
         for _, d in ipairs(opts.dividers or {}) do tile_h(294, 32, 17, x + 21, y + d, w - 42) end
         local cx = x + w / 2
         img(302, cx - 32, y + 0.8, 32, 44); img(303, cx, y + 0.8, 32, 44)

@@ -827,6 +827,22 @@ namespace
         Text::draw(device, p, c.style, c.text, c.x, c.y, c.w, c.h, align, c.valign, c.color, setTextureThunk, &state);
     }
 
+    // The UI atlas holds the images side by side: where a quad's edge is magnified (a UI scale of 1 or more) the bilinear filter at the first and last pixel
+    // reaches half a texel past the image into its neighbour (transparent or another sprite), which draws hairline seams between tiles and pieces.
+    // Keeps the sampling inside the image: the texture rectangle shrinks by half a texel on each side.
+    void insetTexels(const ImageRecord& r, float& u0, float& v0, float& u1, float& v1)
+    {
+        if (r.width <= 1 || r.height <= 1 || placement().scale < 0.999f)
+        {
+            return;
+        }
+        const float hu = 0.5f * (u1 - u0) / static_cast<float>(r.width), hv = 0.5f * (v1 - v0) / static_cast<float>(r.height);
+        u0 += hu;
+        u1 -= hu;
+        v0 += hv;
+        v1 -= hv;
+    }
+
     void drawImage(IDirect3DDevice7* device, StateGuard& state, const Command& c)
     {
         ImageRecord r{};
@@ -850,6 +866,10 @@ namespace
         float h = c.h > 0 ? c.h : static_cast<float>(r.height);
         float x = c.x, y = c.y;
         float u0 = r.u0, v0 = r.v0, u1 = r.u1, v1 = r.v1;
+        if (c.image < Ui::kPictureBase)
+        {
+            insetTexels(r, u0, v0, u1, v1);
+        }
         if (c.fit != Fit::Stretch && r.width > 0 && r.height > 0 && w > 0 && h > 0)
         {
             const float sx = w / r.width, sy = h / r.height;
@@ -1074,10 +1094,19 @@ namespace
             premultiplied = false;
         }
         const float inv = c.w > 0 ? 1.0f / c.w : 1.0f;
-        const float tu0 = r.u0, tv0 = r.v0, tdu = r.u1 - r.u0, tdv = r.v1 - r.v0;
+        float mu0 = r.u0, mv0 = r.v0, mu1 = r.u1, mv1 = r.v1;
+        if (c.image < Ui::kPictureBase)
+        {
+            insetTexels(r, mu0, mv0, mu1, mv1);
+        }
+        const float tu0 = mu0, tv0 = mv0, tdu = mu1 - mu0, tdv = mv1 - mv0;
         const bool flipU = (c.flip & 1) != 0, flipV = (c.flip & 2) != 0;
         const std::vector<Ui::MeshVertex>& vs = mesh->vertices;
 
+        // Untransformed meshes land on whole screen pixels, as gear.ui.image's quads do (Text::snap): a document's sprites and text come out as sharp as
+        // the game's own at a UI scale that is not 1, and tiles drawn cell by cell meet without seams.
+        const Text::Placement place = placement();
+        const bool snapToPixels = !c.matrix;
         const auto point = [&](int index) {
             const Ui::MeshVertex& v = vs[static_cast<size_t>(index)];
             MeshPoint p;
@@ -1094,6 +1123,11 @@ namespace
             }
             p.x = px * inv;
             p.y = py * inv;
+            if (snapToPixels)
+            {
+                p.x = Text::snapX(place, p.x);
+                p.y = Text::snapY(place, p.y);
+            }
             const float uu = flipU ? 1.0f - v.u : v.u, vv = flipV ? 1.0f - v.v : v.v;
             p.u = uu;       // mapped into the atlas rectangle when the vertex is emitted (a repeated tile runs past 1)
             p.v = vv;

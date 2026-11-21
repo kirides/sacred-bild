@@ -1,0 +1,1 @@
+return { id = 'rmltest-scale', name = 'UI scale check', version = '0.1.0', author = 'Sacred Gear', description = 'Automation: draws the same game sprites through RmlUi and through gear.ui.image, and the thick frame beside the in-game menu, to compare them at any UI scale or resolution (-gear-ui-scale=N, -gear-window=WxH).', automation = true }
