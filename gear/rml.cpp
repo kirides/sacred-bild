@@ -1490,6 +1490,43 @@ namespace
     constexpr const char* kNavSelector = "button, a, input, select, textarea, [data-nav]";
 
     // The elements the pad and the mouse can press, in document order.
+    // Whether the centre of the element is outside the box of an ancestor that clips (overflow other than visible): a row of a scrolled list that
+    // is out of sight. It is no pad stop then (the pad would put its cursor on something nobody can see).
+    bool scrolledOut(Rml::Element* e)
+    {
+        const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
+        const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
+        const float cx = o.x + s.x * 0.5f, cy = o.y + s.y * 0.5f;
+        for (Rml::Element* p = e->GetParentNode(); p; p = p->GetParentNode())
+        {
+            const Rml::Style::Overflow ox = p->GetComputedValues().overflow_x(), oy = p->GetComputedValues().overflow_y();
+            if (ox == Rml::Style::Overflow::Visible && oy == Rml::Style::Overflow::Visible)
+            {
+                continue;
+            }
+            const Rml::Vector2f po = p->GetAbsoluteOffset(Rml::BoxArea::Padding);
+            const Rml::Vector2f ps = p->GetBox().GetSize(Rml::BoxArea::Padding);
+            if (cx < po.x || cx > po.x + ps.x || cy < po.y || cy > po.y + ps.y)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // The nearest ancestor marked data-nav-scroll: the scrolling list the pad's up / down walks card by card.
+    Rml::Element* navScrollArea(Rml::Element* e)
+    {
+        for (Rml::Element* p = e->GetParentNode(); p; p = p->GetParentNode())
+        {
+            if (p->HasAttribute("data-nav-scroll"))
+            {
+                return p;
+            }
+        }
+        return nullptr;
+    }
+
     std::vector<Rml::Element*> navElements(Doc& d)
     {
         std::vector<Rml::Element*> list;
@@ -1501,7 +1538,7 @@ namespace
         d.document->QuerySelectorAll(all, kNavSelector);
         for (Rml::Element* e : all)
         {
-            if (!e->IsVisible(true) || e->GetAttribute("disabled") != nullptr)
+            if (!e->IsVisible(true) || e->GetAttribute("disabled") != nullptr || scrolledOut(e))
             {
                 continue;
             }
@@ -2089,6 +2126,100 @@ namespace
         return 1;
     }
 
+    // native.rml_scrolls(id) -> {{x, y, w, h}, ...}: the visible boxes marked data-nav-scroll (a list the pad scrolls card by card): the pad's
+    // scroll areas.
+    int rmlScrolls(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        rowsTable(L, 2);
+        int index = 1;
+        if (d.document->IsVisible())
+        {
+            Rml::ElementList all;
+            d.document->QuerySelectorAll(all, "[data-nav-scroll]");
+            for (Rml::Element* e : all)
+            {
+                const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
+                if (e->IsVisible(true) && s.x > 0 && s.y > 0)
+                {
+                    pushRect(L, e, d.unit, index++);
+                }
+            }
+        }
+        trimRows(L, index - 1);
+        return 1;
+    }
+
+    // native.rml_pad_scroll(id, x, y, dir) -> scrolled: the pad's up (-1) / down (+1) with its cursor at x, y (layout units) on a card of a list marked
+    // data-nav-scroll, and no card there to step to in view: the list scrolls by the distance to the next card, so that the cursor (which stays where it is) is
+    // over that card now.
+    int rmlPadScroll(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        const float px = static_cast<float>(luaL_checknumber(L, 2)) * d.unit, py = static_cast<float>(luaL_checknumber(L, 3)) * d.unit;
+        const int dir = luaL_checknumber(L, 4) > 0 ? 1 : -1;
+        RootScope scope(d);
+        if (!d.document->IsVisible())
+        {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+        Rml::ElementList all;
+        d.document->QuerySelectorAll(all, kNavSelector);
+        const auto centre = [](Rml::Element* e) {
+            const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
+            return o.y + e->GetBox().GetSize(Rml::BoxArea::Border).y * 0.5f;
+        };
+        Rml::Element* current = nullptr;
+        Rml::Element* area = nullptr;
+        for (Rml::Element* e : all)
+        {
+            if (!e->IsVisible(true) || scrolledOut(e))
+            {
+                continue;
+            }
+            const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
+            const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
+            if (px >= o.x && px <= o.x + s.x && py >= o.y && py <= o.y + s.y && navScrollArea(e))
+            {
+                current = e;
+                area = navScrollArea(e);
+                break;
+            }
+        }
+        if (!current)
+        {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+        const float here = centre(current);
+        Rml::Element* best = nullptr;
+        float bestDelta = 1e9f;
+        for (Rml::Element* e : all)
+        {
+            if (e == current || !e->IsVisible(true) || e->GetAttribute("disabled") != nullptr || navScrollArea(e) != area)
+            {
+                continue;
+            }
+            const float delta = (centre(e) - here) * static_cast<float>(dir);
+            if (delta > 1.0f && delta < bestDelta)
+            {
+                bestDelta = delta;
+                best = e;
+            }
+        }
+        if (!best)
+        {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+        const float top = area->GetScrollTop();
+        const float most = std::max(0.0f, area->GetScrollHeight() - area->GetClientHeight());
+        area->SetScrollTop(std::max(0.0f, std::min(most, top + (centre(best) - here))));
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.rml_mouse(id, "down" | "up"): the left button for the mouse position the last update gave (a press on a range input, which
     // the click at the element's centre of rml_click would not serve).
     int rmlMouse(lua_State* L)
@@ -2658,6 +2789,8 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_model_set", guarded<rmlModelSet>},
         {"rml_model_changed", guarded<rmlModelChanged>},
         {"rml_nav", guarded<rmlNav>},
+        {"rml_scrolls", guarded<rmlScrolls>},
+        {"rml_pad_scroll", guarded<rmlPadScroll>},
         {"rml_click", guarded<rmlClick>},
         {"rml_mouse", guarded<rmlMouse>},
         {"rml_nudge", guarded<rmlNudge>},

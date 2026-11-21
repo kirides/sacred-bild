@@ -3190,6 +3190,12 @@ namespace
         return 1;
     }
 
+    int nativeAutoScroll(lua_State* L)
+    {
+        PadNav::postScroll(static_cast<int>(luaL_checknumber(L, 1)));
+        return 0;
+    }
+
     int nativeAutoPage(lua_State* L)
     {
         PadNav::postPage(static_cast<int>(luaL_checknumber(L, 1)));
@@ -4776,6 +4782,7 @@ namespace
                 {"auto_key", nativeAutoKey},
                 {"auto_pad", nativeAutoPad},
                 {"auto_page", nativeAutoPage},
+                {"auto_scroll", nativeAutoScroll},
                 {"auto_nav", nativeAutoNav},
                 {"auto_char", nativeAutoChar},
                 {"auto_release", nativeAutoRelease},

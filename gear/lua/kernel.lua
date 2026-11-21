@@ -4221,6 +4221,24 @@ local function make_ui(mod)
             if not ui_edit and region(wkey, r.x, r.y, r.w, r.h, ropts).hover then hover = true end
         end
         if not ui_edit then
+            -- Lists marked data-nav-scroll are the pad's scroll areas (up / down walks their cards; at the edge of the view the list scrolls to the next one).
+            local areas = native.rml_scrolls(id, self.scroll_rows)
+            self.scroll_rows = areas
+            local akeys = self.area_keys
+            if not akeys then
+                akeys = {}
+                self.area_keys = akeys
+                self.area_opts = {layer = opts.layer, _rml_doc = id, _nav_kind = 2}
+            end
+            for i, r in ipairs(areas) do
+                local akey = akeys[i]
+                if not akey then akey = 'rml:' .. id .. ':a' .. i; akeys[i] = akey end
+                local ares = region(akey, r.x, r.y, r.w, r.h, self.area_opts)
+                if ares.hover then hover = true end
+            end
+            if #areas > 0 and uis.pad_scroll ~= 0 then
+                if native.rml_pad_scroll(id, mx, my, uis.pad_scroll) then uis.pad_scroll = 0 end
+            end
             local stops = native.rml_nav(id, self.nav_rows)
             self.nav_rows = stops
             for i, r in ipairs(stops) do
@@ -5688,6 +5706,8 @@ local function make_auto()
     function auto.pad(nudge, back, menu) native.auto_pad(nudge or 0, back or 0, menu or 0) end
     -- auto.pad_page(pages): as LB (-1) / RB (+1) presses of the pad.
     function auto.pad_page(pages) native.auto_page(pages or 0) end
+    -- auto.pad_scroll(steps): the D-pad's up (-1) / down (+1) steps in a scroll area, with the game cursor where it is.
+    function auto.pad_scroll(steps) native.auto_scroll(steps or 0) end
     -- auto.pad_select(): one press of the Select / "-" button.
     function auto.pad_select() native.auto_page(100) end
     function auto.nav() return native.auto_nav() end

@@ -83,6 +83,11 @@ function GearAuto.pad(nudge, back, menu) end
 ---@param pages integer
 function GearAuto.pad_page(pages) end
 
+--- The D-pad's up (-1) / down (+1) steps in a scroll area (a list marked `data-nav-scroll`, or a `ui.scroll` area), as the controller posts them: they
+--- act at the game cursor (`gear.auto.move`).
+---@param steps integer
+function GearAuto.pad_scroll(steps) end
+
 --- The Select / "-" button without a controller: one press, read by `ui.select_pressed`.
 function GearAuto.pad_select() end
 

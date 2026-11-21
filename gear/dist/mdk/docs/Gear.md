@@ -239,10 +239,16 @@ and the gameserver to read the same `balance.bin`.
 
 ## Mod manager
 
-The **Mods** screen is built into Sacred Gear (`gear/lua/modmanager.lua`, loaded as the mod `gear-mods`). It lists every
-installed mod with its name, version, author, description, an On/Off switch and its state (switched off after ten
-errors, off because a mod it requires is off, a key shared with another mod). Each mod has a **Settings** page (made
-from its declared settings, plus a page of its own if it registers one) and a **Keys** page.
+The **Mods** screen is built into Sacred Gear (`gear/lua/modmanager.lua`, loaded as the mod `gear-mods`; its look is the
+RmlUi document `gear/lua/modmanager.rml`, shipped inside the DLL). It lists every installed mod with its name, version,
+author, description, a check orb (On/Off) and its state (switched off after ten errors, off because a mod it requires
+is off, a key shared with another mod). Each mod has **Settings** (made from its declared settings), **Keys** and, if it
+registers a page of its own, **More** (tabs; LB / RB on the controller switch them, and page the list). The document
+uses the game's theme, so the screen needs the **sacred-theme** mod (a mod of sacred-gear-mods: every RmlUi screen gets
+its stylesheet); without it the screen falls back to the plain `gear.ui` drawing of the same lists and says so in the
+list ("requires sacred-theme"). `gear.emit('mods.open', {mod = 'id', tab = 'settings' | 'keys' | 'page'})` opens it on
+a mod's screen (for a mod that links to its own settings). On the controller, **Select / "-"** opens it while the
+escape menu or the main menu is shown.
 
 **Players.** Press **F11** in game, or click **Mods** under the game's escape menu. **Esc**, the Close button, the X or
 F11 close it; while it is open the game gets no keys, so typing into a text setting does not fire hotkeys. Every choice
@@ -316,7 +322,7 @@ open. Pick a default that is free (the table above). The rest: [Settings, key bi
 manager](GearApi.md#settings-key-binds-and-the-mod-manager); remapping the game's own keys:
 [gear.input](GearApi.md#remapping-the-games-keys-gearinput).
 
-Self tests: `gear/examples/modmanagertest` clicks through the real screen in a game; `gear/tests/kernel_test.lua` covers
+Self tests: `gear/examples/modmanagertest` clicks through the real screen in a game (it asks the screen where its elements are with `gear.emit('mods.query')`); `gear/tests/kernel_test.lua` covers
 the kernel side (persistence, broken files, switching mods live, dependencies, key binds and conflicts).
 
 ## Online play: game mode and realms
@@ -419,7 +425,7 @@ of the game folder.
 | `saveinfo` | Loads a savegame and writes where the hero stands and what is around. |
 | `selftest` | Loads a savegame, checks the hero, gold, nearby creatures, types, optionally a spawn, writes `selftest.json` and `types.txt`, quits with 0 or 1. |
 | `itemicontest` | `gear.ui.item_icon` by type id and from live items. |
-| `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test, with a helper mod and a mod that requires it. |
+| `modmanagertest`, `mmtest_aux`, `mmtest_dep` | The Mods screen's in-game self test (needs the sacred-theme mod of sacred-gear-mods), with a helper mod and a mod that requires it. |
 | `scrolltest`, `tooltiptest`, `uitest`, `chesttest`, `padnavtest` | Scroll areas and dropdowns; tooltips at the screen's edges; the UI in game; shop windows at a fixed UI scale; the controller path of the mod UI. |
 | `tabletest` | `gear.ui.table`: tables of labels, dropdowns, checkboxes, sliders and buttons in columns, a scrolling table, an auto column, borders, row and column spans and alignments; the self test checks the geometry and clicks the cells (24 checks). |
 | `partytest` | `gear.party`: recruit, orders, switching control, shared experience, save and load with a companion (`-gear-load=N`, a savegame with an enemy nearby; writes savegame 63). |

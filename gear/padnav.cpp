@@ -14,6 +14,7 @@ namespace
     using PostPageFn = void(__cdecl*)(int pages);
     TakePageFn g_takePage = nullptr;
     TakePageFn g_takeSelect = nullptr;
+    PostPageFn g_postScroll = nullptr;
     PostPageFn g_postPage = nullptr;
     using NavStateFn = int(__cdecl*)(int* flags);
     using PadInfoFn = int(__cdecl*)(int* style);
@@ -35,6 +36,7 @@ namespace
                 g_takePage = reinterpret_cast<TakePageFn>(GetProcAddress(bild, "SacredBild_UiTakePage"));
                 g_postPage = reinterpret_cast<PostPageFn>(GetProcAddress(bild, "SacredBild_UiPostPage"));
                 g_takeSelect = reinterpret_cast<TakePageFn>(GetProcAddress(bild, "SacredBild_UiTakeSelect"));
+                g_postScroll = reinterpret_cast<PostPageFn>(GetProcAddress(bild, "SacredBild_UiPostScroll"));
                 g_navState = reinterpret_cast<NavStateFn>(GetProcAddress(bild, "SacredBild_UiNavState"));
                 g_padInfo = reinterpret_cast<PadInfoFn>(GetProcAddress(bild, "SacredBild_PadInfo"));
                 g_padGlyph = reinterpret_cast<PadGlyphFn>(GetProcAddress(bild, "SacredBild_PadGlyph"));
@@ -78,6 +80,15 @@ int PadNav::takePage()
 {
     find();
     return g_takePage ? g_takePage() : 0;
+}
+
+void PadNav::postScroll(int steps)
+{
+    find();
+    if (g_postScroll)
+    {
+        g_postScroll(steps);
+    }
 }
 
 int PadNav::takeSelect()

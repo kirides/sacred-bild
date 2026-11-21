@@ -4486,7 +4486,7 @@ The options of `load` and `load_string`.
 
 ### GearRmlDrawOpts
 
-The options of `GearRmlDoc.draw`. A top-level element with `position: absolute` and `data-panel="name"` (and optionally `data-title="Title"`) is a window the player can move in the layout editor, like a `gear.ui.panel`; its place is kept under the layout key `<mod id>:name`. Add `data-resizable` (and optionally `data-min-width` / `data-min-height`, layout units, default 120 / 60) and the editor sizes it too (a corner grip, or the numbers in its popup); the size is kept with the place and applied as the element's border box.
+The options of `GearRmlDoc.draw`. A top-level element with `position: absolute` and `data-panel="name"` (and optionally `data-title="Title"`) is a window the player can move in the layout editor, like a `gear.ui.panel`; its place is kept under the layout key `<mod id>:name`. Add `data-resizable` (and optionally `data-min-width` / `data-min-height`, layout units, default 120 / 60) and the editor sizes it too (a corner grip, or the numbers in its popup); the size is kept with the place and applied as the element's border box. A list that scrolls (`overflow-y: auto`) and has the attribute `data-nav-scroll` is a scroll area for the controller: the D-pad's up / down walk its cards (buttons, links) one by one, and at the edge of the view scroll the list by exactly the distance to the next card, so the cursor is on it. Elements scrolled out of sight (their centre outside an ancestor that clips) are no pad stops in any document.
 
 | Field | Type | |
 |---|---|---|
@@ -5733,6 +5733,12 @@ The controller without one: posts pad events as SacredBild's controller does (D-
 The controller's LB / RB without one: posts `pages` page steps (-1 previous, +1 next), read by `ui.page_pressed`.
 
 - `pages`: `integer`
+
+#### `gear.auto.pad_scroll(steps)`
+
+The D-pad's up (-1) / down (+1) steps in a scroll area (a list marked `data-nav-scroll`, or a `ui.scroll` area), as the controller posts them: they act at the game cursor (`gear.auto.move`).
+
+- `steps`: `integer`
 
 #### `gear.auto.pad_select()`
 

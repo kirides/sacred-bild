@@ -162,6 +162,12 @@ extern "C" void __cdecl SacredBild_UiSetWheelHandler(int(__cdecl* fn)(int delta)
     g_wheel.store(fn, std::memory_order_release);
 }
 
+// Automation: the D-pad's up / down steps in a scroll area (+ down), as the controller posts them.
+extern "C" void __cdecl SacredBild_UiPostScroll(int steps)
+{
+    g_scroll += steps;
+}
+
 extern "C" int __cdecl SacredBild_UiTakeScroll()
 {
     return g_scroll.exchange(0);
