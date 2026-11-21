@@ -4294,6 +4294,50 @@ namespace
         return 1;
     }
 
+    bool readObjectBytes(uintptr_t address, uint8_t* out, size_t size)
+    {
+        __try
+        {
+            std::memcpy(out, reinterpret_cast<const void*>(address), size);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    // native.auto_object_bytes(id, offset, size) -> hex string | nil, message: raw bytes of an object (self tests and RE; at most 4096)
+    int nativeAutoObjectBytes(lua_State* L)
+    {
+        const uintptr_t object = World::objectAddress(checkId(L, 1));
+        const lua_Integer offset = luaL_checkinteger(L, 2);
+        const lua_Integer size = luaL_checkinteger(L, 3);
+        if (!object || offset < 0 || size < 1 || size > 4096)
+        {
+            lua_pushnil(L);
+            lua_pushstring(L, "no such object, or the range is not 1..4096 bytes");
+            return 2;
+        }
+        std::vector<uint8_t> bytes(static_cast<size_t>(size));
+        if (!readObjectBytes(object + static_cast<uintptr_t>(offset), bytes.data(), bytes.size()))
+        {
+            lua_pushnil(L);
+            lua_pushstring(L, "the range cannot be read");
+            return 2;
+        }
+        static const char digits[] = "0123456789abcdef";
+        std::string hex;
+        hex.reserve(bytes.size() * 2);
+        for (const uint8_t b : bytes)
+        {
+            hex.push_back(digits[b >> 4]);
+            hex.push_back(digits[b & 15]);
+        }
+        lua_pushlstring(L, hex.data(), hex.size());
+        return 1;
+    }
+
     // native.auto_write(name, text) -> true | nil, message
     int nativeAutoWrite(lua_State* L)
     {
@@ -4699,6 +4743,7 @@ namespace
                 {"auto_load", nativeAutoLoad},
                 {"auto_screenshot", nativeAutoScreenshot},
                 {"auto_write", nativeAutoWrite},
+                {"auto_object_bytes", nativeAutoObjectBytes},
                 {"auto_show_window", nativeAutoShowWindow},
                 {"auto_network_flag", nativeAutoNetworkFlag},
                 {"auto_network_mode", nativeAutoNetworkMode},

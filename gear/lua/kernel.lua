@@ -5705,6 +5705,10 @@ local function make_auto()
         assert(type(name) == 'string' and type(text) == 'string', 'name and text must be strings')
         return native.auto_write(name, text)
     end
+    function auto.object_bytes(id, offset, size)
+        assert(type(id) == 'number' and type(offset) == 'number' and type(size) == 'number', 'id, offset and size must be numbers')
+        return native.auto_object_bytes(id, offset, size)
+    end
     -- Starts the engine's own level function on a worker thread (it answers through the level.factor hook when a mod handles
     -- it); false if one is running or the function was not found. `engine_level_factor_result` gives the integer once done.
     function auto.engine_level_factor_start(level)

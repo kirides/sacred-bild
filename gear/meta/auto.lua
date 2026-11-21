@@ -169,6 +169,14 @@ function GearAuto.site_hook_selftest_start() end
 ---@return {fmul: number, fld: number, registers_kept: boolean, ability_store: integer, ability_add: integer, ability_edx: integer, ability_kept: boolean, damage: integer, effect_exit: integer, effect_entry0: integer, effect_entry1: integer, effect_counter: integer, bonus_int: integer, bonus_float: number, slot_byte: integer, branch_taken: integer, branch2_path: integer, branch2_eax: integer}?
 function GearAuto.site_hook_selftest_result() end
 
+--- The raw bytes of an object as lower-case hex (for self tests and reverse engineering), `size` 1 to 4096 bytes from `offset`.
+---@param id integer
+---@param offset integer
+---@param size integer
+---@return string? hex
+---@return string? error
+function GearAuto.object_bytes(id, offset, size) end
+
 --- Writes a file into `GearAutomation\<instance>`.
 ---@param name string
 ---@param text string

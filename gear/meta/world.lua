@@ -425,7 +425,9 @@ function Creature:order_move(x, y) end
 ---@return string? error
 function Creature:order_stop() end
 
---- Orders a party hero to attack `target` with its weapon (it walks there first), as a click on an enemy does.
+--- Orders a party hero to attack `target` with its weapon (it walks there first), as a click on an enemy does. In single player
+--- (`gear.world.can_change()`) this also works on any other creature, a monster for example: it attacks `target` as a script's
+--- order would make it (a creature made by `gear.world.spawn` does not notice heroes on its own, see the spawn-rate mod).
 ---@param target Creature|integer
 ---@return boolean? ok
 ---@return string? error
