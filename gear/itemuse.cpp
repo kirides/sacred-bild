@@ -14,12 +14,34 @@ namespace
     using namespace Gear;
 
     decltype(Addr::cPotion3D_receiveEvent)::Ptr g_orig = nullptr;
+    decltype(Addr::cCreature_receiveEvent)::Ptr g_creatureOrig = nullptr;
     std::atomic<bool> g_active{false};
+
+    // While the engine's potion handler runs for a drink a mod answered ('consume'): the handler still sends the potion's effect to the
+    // drinker (kind 6 messages of the creature event class) and sets the used-up flag; the creature hook drops the effects.
+    bool g_dropEffects = false;
+
+    // The no-effect item type the 'keep' answer shows the handler: it plays the drinking sound and does nothing else (no effect, no used-up flag).
+    constexpr uint32_t kNoEffectType = 0;
 
     int messageVirtual(void* message, int slot)
     {
         void** vtable = *reinterpret_cast<void***>(message);
         return reinterpret_cast<int(__thiscall*)(void*)>(vtable[slot])(message);
+    }
+
+    void __fastcall hookCreatureReceive(void* creature, void* edx, void* message)
+    {
+        if (g_dropEffects && message && Addr::g_creatureEventVtable)
+        {
+            // the potion effects: kind 6 of the creature event class, word +5 the effect (6 .. 10)
+            const auto* words = static_cast<const uint32_t*>(message);
+            if (words[0] == static_cast<uint32_t>(Addr::g_creatureEventVtable.address) && words[1] == 6 && words[5] >= 6 && words[5] <= 10)
+            {
+                return;
+            }
+        }
+        g_creatureOrig(creature, edx, message);
     }
 
     void __fastcall hookReceive(void* item, void* edx, void* message)
@@ -38,13 +60,48 @@ namespace
                 {
                     if (out == 1)
                     {
-                        *reinterpret_cast<uint32_t*>(bytes + 0x14) |= 0x8000000;
+                        // 'consume': the engine's own handler with its effects dropped: sound, the used-up flag and the item's removal as ever
+                        g_dropEffects = true;
+                        __try
+                        {
+                            g_orig(item, edx, message);
+                        }
+                        __finally
+                        {
+                            g_dropEffects = false;
+                        }
+                    }
+                    else
+                    {
+                        // 'keep': the handler runs for a type without an effect (the sound plays, nothing else happens), then the type is back
+                        *reinterpret_cast<uint32_t*>(bytes + 0x10) = kNoEffectType;
+                        __try
+                        {
+                            g_orig(item, edx, message);
+                        }
+                        __finally
+                        {
+                            *reinterpret_cast<uint32_t*>(bytes + 0x10) = type;
+                        }
                     }
                     return;
                 }
             }
         }
         g_orig(item, edx, message);
+    }
+
+    bool safeRead16(const void* at, uint16_t& out)
+    {
+        __try
+        {
+            out = *static_cast<const volatile uint16_t*>(at);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
     }
 
     // The empty wide string the message's list member holds (begin, end, capacity); the engine copies from it, never frees it.
@@ -56,6 +113,10 @@ bool ItemUse::install()
     if (!Addr::cPotion3D_receiveEvent)
     {
         return false;
+    }
+    if (Addr::cCreature_receiveEvent)
+    {
+        Patch::hook(g_creatureOrig, Addr::cCreature_receiveEvent, hookCreatureReceive, "cCreature_receiveEvent");
     }
     return Patch::hook(g_orig, Addr::cPotion3D_receiveEvent, hookReceive, "cPotion3D_receiveEvent");
 }
@@ -71,6 +132,12 @@ bool ItemUse::openTeleporter(int sub, const char*& error)
     {
         error = "not available in this build";
         return false;
+    }
+    if (sub == 0)
+    {
+        // as the engine's script command and ReBorn's teleporter choose: 6 when the game kind word (0x182EE48) is 1
+        uint16_t kind = 0;
+        sub = Addr::g_portalListFlag && safeRead16(Addr::g_portalListFlag.get(), kind) && kind == 1 ? 6 : 5;
     }
     if (sub != 5 && sub != 6)
     {
@@ -133,6 +200,61 @@ bool ItemUse::portals(uint32_t& mask, const uint32_t* set, const char*& error)
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
         error = "cannot read the hero";
+        return false;
+    }
+}
+
+bool ItemUse::showText(uint32_t textId, uint32_t color, const char*& error)
+{
+    if (!Addr::kernel_instance || !Addr::kernel_send || !textId || textId >= 0x80000000u)
+    {
+        error = textId && textId < 0x80000000u ? "not available in this build" : "bad text id";
+        return false;
+    }
+    __try
+    {
+        // the engine's text line message (class ENG 0x890B38, code 0xB, sub 0x10, word +0xC = 3: the id of a text, red in the HUD as the
+        // game's own refusals): what a script's text command and the engine's "UI_NET_NO_AUTOPICKUP" line send
+        uint32_t message[9] = {};
+        message[0] = 0x890B38;
+        message[1] = 0xB;
+        message[2] = 0x10;
+        message[3] = 3;
+        message[4] = textId | 0x80000000u;
+        message[5] = color;
+        Addr::kernel_send(Addr::kernel_instance(), message, 0, 0);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        error = "the engine refused the message";
+        return false;
+    }
+}
+
+bool ItemUse::applyEffect(void* creature, uint32_t effect, uint32_t value, const char*& error)
+{
+    if (!creature || !Addr::g_creatureEventVtable)
+    {
+        error = "the game's event class was not found";
+        return false;
+    }
+    __try
+    {
+        // the message the potion handler sends the drinker: kind 6 (word +4), the effect (+0x14: 6 health, 7 mana, 8 antidote, 9 and 10 the
+        // rejuvenation and concentration potions) and its value (+0x18), 0x44 bytes, delivered through the creature's vtable slot 6
+        uint32_t message[0x11] = {};
+        message[0] = static_cast<uint32_t>(Addr::g_creatureEventVtable.address);
+        message[1] = 6;
+        message[5] = effect;
+        message[6] = value;
+        void** vtable = *reinterpret_cast<void***>(creature);
+        reinterpret_cast<void(__thiscall*)(void*, void*)>(vtable[6])(creature, message);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        error = "the game faulted on the message";
         return false;
     }
 }

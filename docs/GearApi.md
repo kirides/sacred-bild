@@ -148,7 +148,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'ability.route'` | A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil. |
 | `'motion.select'` | A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil. |
 | `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
-| `'item.use'` | A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up), `'keep'` (no effect, the potion stays) or nil (the engine's effect). |
+| `'item.use'` | A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up as ever), `'keep'` (no effect, the potion stays; the drinking sound plays) or nil (the engine's effect). Not asked while Lua code itself runs, so a drink a mod starts (`creature:drink_potion`) has the engine's effect. |
 | `'creature.created'` | The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads. |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
 | `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
@@ -1130,9 +1130,18 @@ Whether the world may be changed now (a single player game runs).
 
 #### `gear.world.open_teleporter(sub) -> boolean?, string?`
 
-Opens the game's list of the portals the local hero knows (the "Transferportal" window), as a portal does: the hero can move to any of its open portals. `sub` is the script command's sub-command, 5 (default) or 6; both show the list. Nothing is charged.
+Opens the game's list of the portals the local hero knows (the "Transferportal" window), as a portal does: the hero can move to any of its open portals. `sub` is the script command's sub-command, 5 or 6 (both show the list); by default the game's own kind word picks it, as ReBorn's teleportation potion does (6 when the word is 1, which it is in the plain game, else 5). Nothing is charged.
 
-- `sub`: `integer` (optional) - 5 (default) or 6.
+- `sub`: `integer` (optional) - 5, 6 or nil (the game's choice).
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.world.show_text(text_id, color) -> boolean?, string?`
+
+Shows a line of the game's text `text_id` in the HUD, as the game's own refusals ("Enemy is near!") do. `color` is 0xAARRGGBB (the game's refusals use 0xFFFF0000, red; 0 or nil leaves it to the game).
+
+- `text_id`: `integer` - A text id of the game's texts (`gear.text.get`), below 0x80000000.
+- `color`: `integer` (optional)
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
@@ -1322,6 +1331,7 @@ What `creature:info()` returns.
 | `gold` | `integer` | Creatures only (heroes). (optional) |
 | `exp` | `integer` | Creatures only. (optional) |
 | `level` | `integer` | Creatures only. (optional) |
+| `in_combat` | `boolean` | Creatures only: the engine's own "enemies about" state (see `Creature:in_combat`). (optional) |
 
 ### GearItem
 
@@ -1418,6 +1428,21 @@ The sector the object's position is filed under: a slot of the game's sector tab
 True when it has no hit points left or is gone.
 
 - returns `boolean`
+
+#### `creature:in_combat() -> boolean`
+
+Whether the engine's own "enemies about" state is set for the creature (bit 0x8000 of its state word, which the engine's creature code sets while enemies are near and clears a while after): the state that stops ReBorn's teleportation potion.
+
+- returns `boolean`
+
+#### `creature:apply_effect(effect, value) -> boolean?, string?`
+
+Sends the creature the message a drunk potion sends its drinker, so a mod can give a potion its own numbers (the potion handler's effects: 6, 7 and 9 refill health or mana, 8 removes poison by `value` percent, 10 the concentration potions' combo refill).
+
+- `effect`: `integer`
+- `value`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
 
 #### `creature:level() -> integer?`
 
@@ -1684,7 +1709,7 @@ Sets the name the game shows for a party hero (1 to 30 characters, UTF-8). The g
 
 #### `creature:drink_potion(kind) -> boolean?, string?`
 
-Lets a party hero drink a potion from its own backpack, as the potion keys do for the controlled hero (the game picks the potion). Fails if it carries none.
+Lets a party hero drink a potion from its own backpack, as the potion keys do for the controlled hero (the game picks the potion). Fails if it carries none. The `item.use` event is not asked for this drink (a mod's Lua is running), the potion has the engine's effect.
 
 - `kind`: `'health'|integer` (optional) - `'health'` (default, what Space drinks) or the game's potion kind number.
 - returns `ok` `boolean?`

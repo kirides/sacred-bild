@@ -289,6 +289,12 @@ GEAR = [
     ('cPotion3D_receiveEvent', 0x005CAA60, 'func'),
     ('kernel_instance', 0x00808E50, 'func'),
     ('kernel_send', 0x008092F0, 'func'),
+    # cCreature::receiveEvent (vtable slot 6, thiscall (creature, message*), ret 4): every effect of a drunk potion reaches the drinker
+    # as a message of kind 6 (word +5 the effect, +6 its value); while a potion's effect is suppressed (`item.use` answered 'consume'
+    # or 'keep') the hook drops these. 0x182EE48 is the game kind flag the script command Teleporter and ReBorn's teleporter use to
+    # choose the sub-command (6 when it is 1, else 5).
+    ('cCreature_receiveEvent', 0x0052E590, 'func'),
+    ('g_portalListFlag', 0x0182EE48, 'data'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

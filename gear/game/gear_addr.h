@@ -391,4 +391,9 @@ namespace Gear::Addr
     inline Sacred::Thiscall<void(void* item, void* message)> cPotion3D_receiveEvent{};
     inline Sacred::Cdecl<void*()> kernel_instance{};
     inline Sacred::Thiscall<void(void* kernel, void* message, uint32_t a, uint32_t b)> kernel_send{};
+    // ENG 0052E590: cCreature::receiveEvent (vtable slot 6, thiscall (creature, message*), ret 4); the effects of a drunk potion reach the drinker
+    // through it as messages of the class `g_creatureEventVtable` (word +4 = 6, +0x14 the effect, +0x18 its value). ENG 0182EE48: a word the
+    // game sets when it starts (1 for the plain game); the script command Teleporter and ReBorn's teleporter pick sub-command 6 when it is 1, else 5.
+    inline Sacred::Thiscall<void(void* creature, void* message)> cCreature_receiveEvent{};
+    inline Sacred::Global<uint16_t> g_portalListFlag{};
 }

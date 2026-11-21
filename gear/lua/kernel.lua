@@ -896,6 +896,13 @@ function creature_mt:sector() local o = info(self); return o and o.sector end
 function creature_mt:hp() local o = info(self); return o and o.hp end
 function creature_mt:max_hp() local o = info(self); return o and o.max_hp end
 function creature_mt:is_dead() local o = info(self); return not o or not o.creature or o.hp <= 0 end
+-- in_combat(): the engine's own "enemies about" state of the creature (bit 0x8000 of its state word): what stops ReBorn's teleportation potion
+function creature_mt:in_combat() local o = info(self); return o ~= nil and o.in_combat == true end
+-- apply_effect(effect, value) -> true | nil, message: sends the creature the message a drunk potion sends its drinker (see GearCreature)
+function creature_mt:apply_effect(effect, value)
+    assert(type(effect) == 'number' and type(value) == 'number', 'effect and value must be numbers')
+    return native.creature_effect(self.id, math.floor(effect), math.floor(value))
+end
 function creature_mt:gold() local o = info(self); return o and o.gold end
 function creature_mt:level() local o = info(self); return o and o.level end
 function creature_mt:experience() local o = info(self); return o and o.exp end
@@ -1130,7 +1137,13 @@ end
 function world.can_change() return native.world_changes() end
 
 -- world.open_teleporter(sub) -> true | nil, message: opens the game's list of the portals the hero knows, as a portal does
-function world.open_teleporter(sub) return native.open_teleporter(sub or 5) end
+function world.open_teleporter(sub) return native.open_teleporter(sub or 0) end
+
+-- world.show_text(text_id, color?) -> true | nil, message: a line of the game's text `text_id` in the HUD (as the game's own refusals show them)
+function world.show_text(text_id, color)
+    assert(type(text_id) == 'number', 'text_id must be a number')
+    return native.show_text(text_id, color or 0)
+end
 
 -- world.portals(mask?) -> mask | nil, message: the portals the local hero knows (one bit per portal); with `mask` they are set (single player)
 function world.portals(mask) return native.portals(mask) end

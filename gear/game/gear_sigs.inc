@@ -135,6 +135,8 @@ static const Sig::Entry kGearSigs[] = {
     {"cPotion3D_receiveEvent", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC 78 04 00 00", 0, Sig::Take::Match, &Gear::Addr::cPotion3D_receiveEvent}, // 005CAA60, 005CA9D0
     {"kernel_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3C 6A 70", 0, Sig::Take::Match, &Gear::Addr::kernel_instance}, // 00808E50, 00808490
     {"kernel_send", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 83 EC 28 53 8B 5C 24 44", 0, Sig::Take::Match, &Gear::Addr::kernel_send}, // 008092F0, 00808930
+    {"cCreature_receiveEvent", "6A FF 64 A1 00 00 00 00 68 ?? ?? ?? ?? 50 B8 70 19 00 00", 0, Sig::Take::Match, &Gear::Addr::cCreature_receiveEvent}, // 0052E590, 0052E400
+    {"g_portalListFlag", "66 A1 ?? ?? ?? ?? 89 B7 A0 03 00 00 66 3D 01 00", 2, Sig::Take::Abs32, &Gear::Addr::g_portalListFlag}, // 0182EE48, 0182CDC8
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
     {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270

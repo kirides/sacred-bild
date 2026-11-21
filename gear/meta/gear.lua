@@ -42,7 +42,7 @@
 ---| 'ability.route' # A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil.
 ---| 'motion.select' # A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil.
 ---| 'rune.usable' # A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it.
----| 'item.use' # A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up), `'keep'` (no effect, the potion stays) or nil (the engine's effect).
+---| 'item.use' # A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up as ever), `'keep'` (no effect, the potion stays; the drinking sound plays) or nil (the engine's effect). Not asked while Lua code itself runs, so a drink a mod starts (`creature:drink_potion`) has the engine's effect.
 ---| 'creature.created' # The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads.
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
 ---| 'level.factor' # The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers).
