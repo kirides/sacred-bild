@@ -23,8 +23,8 @@ gear.on('draw', function(state)
 </body></rml>]], {theme = false})
     end
     if phase == 1 then ui.rect(0, 0, 1024, 768, 0xFF000000, {layer = 'top'}) end
-    if phase >= 1 and doc then doc:draw({layer = 'top'}) end
-    if phase >= 1 then
+    if phase == 1 and doc then doc:draw({layer = 'top'}) end
+    if phase == 1 then
         ui.image(280, 612, 100, 45, 37, {layer = 'top'})
         tiles(264, 38, 37, 612, 160, 300)
         ui.image(265, 612, 220, 40, 37, {layer = 'top'})
@@ -46,6 +46,7 @@ gear.task(function()
     A.screenshot('s0')
     phase = 1; gear.wait(0.8)
     A.screenshot('s1')
+    phase = 0
     A.press('escape'); gear.wait(1.5)
     A.screenshot('s2e')
     phase = 2; gear.wait(0.8)
