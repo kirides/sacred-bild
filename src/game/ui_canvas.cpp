@@ -52,6 +52,25 @@ namespace
     // ReBorn's menu screens: the start menu has the center offset of its entries; a screen bigger than 1024x768 is
     // laid out for the real screen (the character selection: a 3D scene over the whole screen) and drawn and picked
     // as it is; the others are 1024x768 at the top left.
+    // A menu screen whose window says 1024x768 (or less) but whose children reach past it: the exe lays the screen out
+    // for the real render size (ReBorn's character selection at HD sizes). Judged by what the screen holds, not by
+    // which exe it is.
+    bool spansScreen(const cUI_Window2* menu)
+    {
+        if (menu->width > 1024 || menu->height > 768)
+        {
+            return true;
+        }
+        for (const cUI_Control2* child : menu->children)
+        {
+            if (child && (child->x + child->width > 1024 + 8 || child->y + child->height > 768 + 8))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     const Layout& reBornMenuLayout(const cUI_Manager& manager)
     {
         static const Layout native{1.0f, 0.0f, 0.0f};
@@ -70,8 +89,9 @@ namespace
             {
                 start = true;
             }
-            else if (menu->width > 1024 || menu->height > 768)
+            else if (spansScreen(menu))
             {
+
                 chosen = &native;
                 break;
             }
@@ -159,6 +179,19 @@ namespace
         if (!inGame && Sacred::reBorn() && manager && (manager->flags & cUI_Manager::inMenus))
         {
             return reBornMenuLayout(*manager);
+        }
+        if (!inGame && manager && (manager->flags & cUI_Manager::inMenus))
+        {
+            // Any exe: a menu screen laid out beyond 1024x768 is drawn and picked as it is.
+            for (int i = 1; i < cUI_Manager::menuCount; ++i)
+            {
+                const cUI_Window2* menu = manager->menus[i];
+                if (menu && menu->visible() && spansScreen(menu))
+                {
+                    static const Layout native{1.0f, 0.0f, 0.0f};
+                    return native;
+                }
+            }
         }
         return inGame ? g_game : g_menu;
     }
