@@ -4,6 +4,8 @@
 #include "sacred/engine.h"
 #include "sacred/mouse.h"
 
+#include "log.h"
+
 #include <windows.h>
 #include <cstdint>
 
@@ -26,9 +28,26 @@ namespace
         cObjectManager* manager = cObjectManager::instance();
         if (!manager || (engine->flags & cEngine::noWorldInput) || (*Addr::g_worldInputFlags & 2))
         {
+            static ULONGLONG lastLog = 0;
+            if (GetTickCount64() - lastLog > 1000)
+            {
+                lastLog = GetTickCount64();
+                LOG("HeroMove: world takes no input (manager {} engine flags {:08X} worldInputFlags {:02X})", manager != nullptr,
+                    static_cast<uint32_t>(engine->flags), static_cast<uint32_t>(*Addr::g_worldInputFlags));
+            }
             return nullptr;
         }
-        return manager->creature(engine->controlled);
+        cCreature* c = manager->creature(engine->controlled);
+        if (!c)
+        {
+            static ULONGLONG lastLog2 = 0;
+            if (GetTickCount64() - lastLog2 > 1000)
+            {
+                lastLog2 = GetTickCount64();
+                LOG("HeroMove: no controlled creature (id {})", static_cast<uint32_t>(engine->controlled));
+            }
+        }
+        return c;
     }
 
     // The cMouse's left-button-held bit, as the window procedure keeps it.
