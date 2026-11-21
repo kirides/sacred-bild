@@ -1,0 +1,23 @@
+<rml>
+<head>
+    <title>Item icons and scrolling</title>
+    <style>
+        #w { position: absolute; left: 80px; top: 60px; width: 380px; }
+        #list { height: 300px; overflow-y: auto; }
+        .row { height: 64px; display: flex; flex-direction: row; align-items: center; }
+        .row img { width: 64px; height: 64px; margin-right: 12px; }
+        scrollbarvertical { width: 14px; }
+        scrollbarvertical sliderbar { background-color: #8c7440; width: 14px; }
+    </style>
+</head>
+<body data-model="model">
+<div id="w" class="window">
+    <div class="titlebar">Items</div>
+    <div class="body">
+        <div id="list">
+            <div data-for="r : rows" class="row"><img data-attr-src="r.src"/><span>{{ r.name }}</span></div>
+        </div>
+    </div>
+</div>
+</body>
+</rml>

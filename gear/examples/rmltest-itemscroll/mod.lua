@@ -1,0 +1,1 @@
+return { id = 'rmltest-itemscroll', name = 'RmlUi: item icons and scrolling', version = '0.1.0', author = 'Sacred Gear', description = 'A scrolling list of item models (gear:item/<type>) and element:scroll(). Needs the theme mod. With -gear-auto a self test.', automation = true }

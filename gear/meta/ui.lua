@@ -381,7 +381,7 @@ function GearUiNative.insets(style) end
 --- `doc:draw()`; its buttons, links and inputs take the mouse and the controller (every one is a pad stop), a focused
 --- text field takes the keyboard, and events (`click`, `change` ...) call Lua functions registered with `doc:on`. The default
 --- font is Segoe UI, as for `gear.ui` text; `rml.load_font` adds the mod's own. Images: a file of the mod's folder (PNG, TGA, JPG), or
---- the game's own UI images as `gear:image/<id>` (`gear.ui.images`) and `gear:texture/<NAME.TGA>` (Texture.pak), with `?flip=h`, `?flip=v`
+--- the game's own UI images as `gear:image/<id>` (`gear.ui.images`) `gear:texture/<NAME.TGA>` (Texture.pak) and an item's own model, as the game's inventory windows show it, as `gear:item/<item type id>` (a temporary item of that type, single player only) or `gear:item/id/<item object id>` (a live item; no tint or CSS transform, drawn as large as fits the box of the element, only while the whole box lies inside its clip, so a scrolled list hides the icons it cuts), with `?flip=h`, `?flip=v`
 --- or `?flip=hv` mirroring them: `<img src="gear:image/54">`, `decorator: image(gear:image/54)`. Button prompts of the controller (needs Sacred Bild; the glyphs of the pad in use) as `gear:pad/<button>` (`a b x y lb rb lt rt back start l3 r3 up down left right`, also `confirm` = a, `cancel` = b, `menu` = start): `<img src="gear:pad/a"/>` in front of the label, sized in `em` so it follows the text. `doc:draw` sets the classes `pad` (the controller was used last), `pad-ps` and `pad-switch` (the pad's style) on `<body>`, so a stylesheet shows the prompts only while they matter (the theme mod below ships that rule): `.padkey { display: none; } body.pad .padkey { display: inline-block; }`. The icon is chosen when the image loads, so it follows the pad's style from the next load on. Theme: a running mod whose `mod.lua` has `theme = 'file.rcss'` provides the shared stylesheet (classes for windows, buttons, fields, lists, bars, pad prompts); Gear puts it in front of every document's own styles, so documents only override; `{theme = false}` in the load options opts out. Data binding: load with `{model = {...}, calls = {...}}` and write `<body data-model="model">` with `{{ expression }}`, `data-value`, `data-if`, `data-for`, `data-class-x`, `data-attr-x` and `data-event-click="name(args)"`; change values with `doc.model.key = value` (nested writes work too) and the document refreshes only what depends on them.
 ---
 --- A prototype: no JavaScript (the logic is Lua), no filters, shaders, blur or drop shadows yet (CSS `transform` works: 2D rotate, scale, skew,
@@ -490,6 +490,13 @@ function GearRmlElement:value(text) end
 --- The element's box in layout units.
 ---@return {x: number, y: number, w: number, h: number}?
 function GearRmlElement:rect() end
+
+--- The scroll position of a box with `overflow: auto` or `scroll`, in layout units, after moving it when `to` is given: a number (the top of the visible part), `'start'`, or `'end'` (the bottom of the content: a chat window that sticks to its newest line scrolls to `'end'` while it was at the end).
+---@param to? number|'start'|'end'
+---@return number? top The scroll position (nil if the element is gone).
+---@return number? height The height of the content.
+---@return number? client The height of the visible part.
+function GearRmlElement:scroll(to) end
 
 --- Calls `fn(event, element)` when the event happens on the element or inside it, also for elements added later (the listener sits on the document and matches when the event arrives).
 ---@param event string

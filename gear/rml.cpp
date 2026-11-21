@@ -242,6 +242,9 @@ namespace
         uint32_t id = 0;            // a game image id (picture == false) or a picture id
         uint8_t flip = 0;
         bool picture = false;
+        bool item = false;          // "gear:item/...": an item's model, drawn by the game's model renderer into the box of the geometry
+        uint32_t itemType = 0;      // the item type to draw (a temporary item, single player only) ...
+        uint32_t itemObject = 0;    // ... or the live item object
     };
 
     // "gear:image/54" (the game's UI image 54), "gear:texture/GUI_MOVE_RUNDUM.TGA" (a texture of the game's
@@ -265,6 +268,32 @@ namespace
             }
         }
         info.picture = false;
+        info.item = false;
+        if (s.rfind("item/", 0) == 0)
+        {
+            // "gear:item/1724" (an item of that type) or "gear:item/id/981" (the live item object): the game's own model of the
+            // item, as its inventory windows draw it, in the box of the element (see gear.ui.item_icon).
+            std::string number = s.substr(5);
+            const bool object = number.rfind("id/", 0) == 0;
+            if (object)
+            {
+                number = number.substr(3);
+            }
+            if (number.empty() || number.size() > 9 || number.find_first_not_of("0123456789") != std::string::npos)
+            {
+                return false;
+            }
+            const uint32_t value = static_cast<uint32_t>(std::stoul(number));
+            if (value == 0)
+            {
+                return false;
+            }
+            info.item = true;
+            info.itemType = object ? 0 : value;
+            info.itemObject = object ? value : 0;
+            info.id = 0;
+            return true;
+        }
         if (s.rfind("image/", 0) == 0)
         {
             const std::string number = s.substr(6);
@@ -327,7 +356,25 @@ namespace
                 vs.push_back({v.position.x, v.position.y, color, v.tex_coord.x, v.tex_coord.y});
             }
             std::vector<int> is(indices.data(), indices.data() + indices.size());
-            return Ui::meshCreate(std::move(vs), std::move(is));
+            // The box of the geometry (an element's background or image quad): where an item's model goes.
+            std::array<float, 4> box = {0, 0, 0, 0};
+            if (!vertices.empty())
+            {
+                box = {vertices[0].position.x, vertices[0].position.y, vertices[0].position.x, vertices[0].position.y};
+                for (const Rml::Vertex& v : vertices)
+                {
+                    box[0] = std::min(box[0], v.position.x);
+                    box[1] = std::min(box[1], v.position.y);
+                    box[2] = std::max(box[2], v.position.x);
+                    box[3] = std::max(box[3], v.position.y);
+                }
+            }
+            const uint32_t mesh = Ui::meshCreate(std::move(vs), std::move(is));
+            if (mesh)
+            {
+                m_bounds[mesh] = box;
+            }
+            return mesh;
         }
 
         void RenderGeometry(Rml::CompiledGeometryHandle geometry, Rml::Vector2f translation, Rml::TextureHandle texture) override
@@ -335,6 +382,15 @@ namespace
             if (g_target.count >= kMaxMeshesPerDraw)
             {
                 return;
+            }
+            if (texture)
+            {
+                const auto item = m_textures.find(texture);
+                if (item != m_textures.end() && item->second.item)
+                {
+                    renderItem(geometry, translation, item->second);
+                    return;
+                }
             }
             Ui::Command c;
             c.kind = Ui::Kind::Mesh;
@@ -366,7 +422,11 @@ namespace
             }
         }
 
-        void ReleaseGeometry(Rml::CompiledGeometryHandle geometry) override { Ui::meshRelease(static_cast<uint32_t>(geometry)); }
+        void ReleaseGeometry(Rml::CompiledGeometryHandle geometry) override
+        {
+            m_bounds.erase(static_cast<uint32_t>(geometry));
+            Ui::meshRelease(static_cast<uint32_t>(geometry));
+        }
 
         Rml::TextureHandle LoadTexture(Rml::Vector2i& dimensions, const Rml::String& source) override
         {
@@ -374,7 +434,17 @@ namespace
             if (source.rfind("gear:", 0) == 0)
             {
                 Ui::ImageInfo image;
-                if (parseGearTexture(source, info) && info.picture)
+                if (parseGearTexture(source, info) && info.item)
+                {
+                    dimensions = {64, 64};      // an item's model: any size, drawn contained in the element's box
+                    return add(info);
+                }
+                if (info.item)
+                {
+                    LOG("RmlUi: bad item source {}", source);
+                    return 0;
+                }
+                if (info.picture)
                 {
                     dimensions = {64, 64};      // a pad button prompt
                     return add(info);
@@ -488,6 +558,41 @@ namespace
         }
 
     private:
+        // An item's model ("gear:item/..."): drawn by the game's model renderer into the box of the geometry (translated), as large as
+        // fits; CSS transforms and tints do not apply to it. The clip of the element cuts it as for any item icon.
+        void renderItem(Rml::CompiledGeometryHandle geometry, Rml::Vector2f translation, const TextureInfo& info)
+        {
+            const auto b = m_bounds.find(static_cast<uint32_t>(geometry));
+            if (b == m_bounds.end())
+            {
+                return;
+            }
+            const float unit = g_target.unit > 0 ? g_target.unit : 1.0f;
+            Ui::Command c;
+            c.kind = Ui::Kind::ItemIcon;
+            c.layer = static_cast<Ui::Layer>(g_target.layer);
+            c.window = g_target.window;
+            c.x = (translation.x + b->second[0]) / unit;
+            c.y = (translation.y + b->second[1]) / unit;
+            c.w = (b->second[2] - b->second[0]) / unit;
+            c.h = (b->second[3] - b->second[1]) / unit;
+            c.region = info.itemObject;
+            c.image = info.itemType;
+            if (c.w <= 0 || c.h <= 0)
+            {
+                return;
+            }
+            if (g_target.scissor)
+            {
+                c.clipped = true;
+                std::copy(std::begin(g_target.clip), std::end(g_target.clip), std::begin(c.clip));
+            }
+            if (Ui::add(std::move(c)))
+            {
+                ++g_target.count;
+            }
+        }
+
         Rml::TextureHandle add(const TextureInfo& info)
         {
             const Rml::TextureHandle handle = ++m_next;
@@ -496,6 +601,7 @@ namespace
         }
 
         std::unordered_map<Rml::TextureHandle, TextureInfo> m_textures;
+        std::unordered_map<uint32_t, std::array<float, 4>> m_bounds;      // mesh id -> left, top, right, bottom in RmlUi pixels
         Rml::TextureHandle m_next = 0;
     };
 
@@ -1945,6 +2051,33 @@ namespace
         return 1;
     }
 
+    // native.rml_scroll(id, selector [, top]) -> {top, height, client} | nil: the scroll position of the element (an overflow: auto / scroll
+    // box) in layout units, after setting it to `top` when given (clamped by RmlUi to the content); `height` is the content's height,
+    // `client` the visible height.
+    int rmlScroll(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        Rml::Element* e = find(d, str(L, 2));
+        if (!e)
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        const float unit = d.unit > 0 ? d.unit : 1.0f;
+        if (lua_isnumber(L, 3))
+        {
+            e->SetScrollTop(static_cast<float>(lua_tonumber(L, 3)) * unit);
+        }
+        lua_createtable(L, 0, 3);
+        lua_pushnumber(L, e->GetScrollTop() / unit);
+        lua_setfield(L, -2, "top");
+        lua_pushnumber(L, e->GetScrollHeight() / unit);
+        lua_setfield(L, -2, "height");
+        lua_pushnumber(L, e->GetClientHeight() / unit);
+        lua_setfield(L, -2, "client");
+        return 1;
+    }
+
     // native.rml_tag(id, selector) -> tag name | nil
     int rmlTag(lua_State* L)
     {
@@ -2146,6 +2279,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_relatives", guarded<rmlRelatives>},
         {"rml_rect", guarded<rmlRect>},
         {"rml_tag", guarded<rmlTag>},
+        {"rml_scroll", guarded<rmlScroll>},
         {"rml_model_set", guarded<rmlModelSet>},
         {"rml_model_changed", guarded<rmlModelChanged>},
         {"rml_nav", guarded<rmlNav>},

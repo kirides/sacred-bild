@@ -4070,6 +4070,16 @@ local function make_ui(mod)
     function Element:style(property, value) return self.doc:style(self.sel, property, value) end
     function Element:value(text) return self.doc:value(self.sel, text) end
     function Element:rect() return native.rml_rect(self.doc.id, self.sel) end
+    -- element:scroll([to]) -> top, height, client: the scroll position of a box with overflow: auto / scroll, in layout units, after moving it
+    -- when `to` is given: a number (the top of the visible part), 'start' or 'end' (the bottom of the content).
+    function Element:scroll(to)
+        local info = native.rml_scroll(self.doc.id, self.sel)
+        if not info then return nil end
+        if to == 'start' then to = 0
+        elseif to == 'end' then to = math.max(0, info.height - info.client) end
+        if type(to) == 'number' then info = native.rml_scroll(self.doc.id, self.sel, to) end
+        return info.top, info.height, info.client
+    end
     -- element:on(event, fn): fn(event, element) when the event happens on the element (also for elements added later).
     function Element:on(event, fn)
         assert(type(fn) == 'function', 'on(event, fn)')
