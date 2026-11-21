@@ -202,3 +202,11 @@ input.game-slider[disabled] { opacity: 0.5; }
 /* A data-driven ring (or ring of dots): <gear-ring value="0.4" thickness="3" on="#e0c040" off="#40404080" start="0" dots="0" segments="96"/>, lit clockwise
    from the top for the fraction value of the circle; data-attr-value="expression" redraws it. Its size is its CSS box. */
 gear-ring { display: inline-block; width: 40px; height: 40px; }
+
+/* Vertical scroll bars of every scrolling box (overflow: auto) in the look of the game's lists: the round arrow buttons (images 298 up, 299 down), the groove
+   between them (288) and the star orb as the knob (286). */
+scrollbarvertical { width: 30px; }
+scrollbarvertical slidertrack { width: 30px; decorator: image(gear:image/288 repeat-y center top); background-color: transparent; }
+scrollbarvertical sliderbar { width: 30px; height: 30px; decorator: image(gear:image/286 scale-none center center); background-color: transparent; }
+scrollbarvertical sliderarrowdec { width: 30px; height: 30px; decorator: image(gear:image/298 scale-none center center); }
+scrollbarvertical sliderarrowinc { width: 30px; height: 30px; decorator: image(gear:image/299 scale-none center center); }
