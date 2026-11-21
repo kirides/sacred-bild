@@ -422,4 +422,7 @@ namespace Gear::Addr
     inline Sacred::Thiscall<void(void* stats, uint32_t id, uint32_t a3, uint32_t a4, uint32_t a5, uint32_t a6, uint32_t a7, uint32_t a8, uint32_t a9,
                                  uint32_t a10, uint32_t a11, uint32_t a12, uint32_t a13, uint32_t a14, uint32_t a15, uint32_t a16, uint32_t a17,
                                  uint32_t a18)> cKillStat_record{};
+    // ENG 0043B1A0: the potion picker (gear/potionpick.cpp), stdcall (mode, flag, tier), ret 0xC: the item type of a random potion (the type is only
+    // an address holder: the function is not cdecl).
+    inline Sacred::Cdecl<uint32_t(int32_t mode, int32_t flag, int32_t tier)> potionPick{};
 }

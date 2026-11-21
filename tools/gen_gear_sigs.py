@@ -316,6 +316,9 @@ GEAR = [
     # The kill statistics record (gear/killstat.cpp): thiscall on the statistics block, 17 stack words (ret 0x44); the death handlers call it for
     # a kill of the local hero or of a creature it owns. The event `kill.recorded` follows it.
     ('cKillStat_record', 0x00424250, 'func'),
+    # The potion picker (gear/potionpick.cpp): stdcall (mode, flag, tier), ret 0xC; merchants and the loot of dying creatures call it. The event
+    # `potion.pick` asks the mods first.
+    ('potionPick', 0x0043B1A0, 'func'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

@@ -47,6 +47,7 @@
 ---| 'master.describe' # The rune exchange page is drawn: `(rune, ability, count)` for the shown rune's art or spell; return a level to have the page write the engine's own "name - Level n" for it at the left of the page, nil or false for no text.
 ---| 'master.maximum' # The rune exchange page is drawn: `(rune, ability, count)`; return true to have it write the red "Maximum Level Attained" under the result box.
 ---| 'kill.recorded' # The engine recorded a kill of the local hero or of a creature it owns (minion, summon): `(e)`, see `GearKillRecorded`. Fires for every such kill, also those that give no experience; runs inside the engine's death handling.
+---| 'potion.pick' # The engine picks the item type of a random potion (a merchant's stock, a creature's drop): `(e)`, see `GearPotionPick`; return an item type to use that one, or nil for the engine's pick.
 ---| 'rune.usable' # A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it.
 ---| 'item.use' # A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up as ever), `'keep'` (no effect, the potion stays; the drinking sound plays) or nil (the engine's effect). Not asked while Lua code itself runs, so a drink a mod starts (`creature:drink_potion`) has the engine's effect.
 ---| 'creature.created' # The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads.
@@ -62,6 +63,13 @@
 --- What the `kill.recorded` event gets.
 ---@class GearKillRecorded
 ---@field id integer The engine's record id of the kill (the first word of its statistics record).
+--- What the `potion.pick` event gets: the arguments of the engine's potion picker and who called it.
+---@class GearPotionPick
+---@field mode integer The size rule: 0 small, 1 small or medium, 2 medium or large, other values large (callers pass the game's difficulty).
+---@field flag integer Non-zero: the tier is drawn from 2 to 4 only (no mentor potions, tiers 0 and 1); 0: from 0 to 4.
+---@field tier integer -1, or 0 to 5 to force the tier (5 healing, 4 concentration, 3 antidote, 2 hell's blood, 1 and 0 mentor in the game's table).
+---@field address integer The caller's return address (English Sacred.exe).
+---@field site string? The caller's name: 'merchant.first' (the stock of a merchant the window did not show last), 'merchant.reopen', 'merchant.refresh', 'merchant.wrapper', 'merchant.helper', 'death.drop', 'loot', 'loot.other'; nil for another caller.
 
 --- What the `creature.created` event gets.
 ---@class GearCreatureCreated
@@ -200,6 +208,7 @@ gear = {}
 ---@overload fun(event: 'master.describe', fn: fun(rune: integer, ability: integer, count: integer): integer|false?): GearHandler
 ---@overload fun(event: 'master.maximum', fn: fun(rune: integer, ability: integer, count: integer): boolean?): GearHandler
 ---@overload fun(event: 'kill.recorded', fn: fun(e: GearKillRecorded)): GearHandler
+---@overload fun(event: 'potion.pick', fn: fun(e: GearPotionPick): integer?): GearHandler
 ---@overload fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler
 ---@overload fun(event: 'item.use', fn: fun(e: GearItemUse): ('consume'|'keep')?): GearHandler
 ---@overload fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler

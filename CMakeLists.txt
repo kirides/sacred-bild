@@ -180,6 +180,7 @@ if(SACREDGEAR)
     gear/master.cpp
     gear/killstat.cpp
     gear/party.cpp
+    gear/potionpick.cpp
     gear/buffs.cpp
     gear/tables.cpp
     gear/overlay.cpp

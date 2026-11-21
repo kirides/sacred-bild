@@ -16,6 +16,7 @@
 #include "log.h"
 #include "netmsg.h"
 #include "pickup.h"
+#include "potionpick.h"
 #include "realm.h"
 #include "replace.h"
 #include "rml.h"
@@ -782,6 +783,10 @@ namespace
     int nativeKillRecordedActive(lua_State* L)
     {
         KillStat::setActive(lua_toboolean(L, 1) != 0);
+    // native.potion_pick_active(bool): whether some mod handles `potion.pick`
+    int nativePotionPickActive(lua_State* L)
+    {
+        PotionPick::setActive(lua_toboolean(L, 1) != 0);
         return 0;
     }
 
@@ -4705,6 +4710,7 @@ namespace
             {"creature_effect", nativeCreatureEffect},
             {"portals", nativePortals},
             {"kill_recorded_active", nativeKillRecordedActive},
+            {"potion_pick_active", nativePotionPickActive},
             {"alias_create", nativeAliasCreate},
             {"alias_remove", nativeAliasRemove},
             {"alias_clear", nativeAliasClear},
@@ -5262,6 +5268,7 @@ LuaHost::Answer LuaHost::runeUsable(int type, int ability, int vanilla, int& out
 }
 
 LuaHost::Answer LuaHost::itemUse(uint32_t item, uint32_t type, uint32_t creature, int& out)
+LuaHost::Answer LuaHost::potionPick(int mode, int flag, int tier, uintptr_t address, const char* site, int& out)
 {
     if (t_inLua)
     {
@@ -5291,6 +5298,23 @@ void LuaHost::killRecorded(uint32_t id)
     setBudget(kHookBudget);
     t_inLua = true;
     const int status = lua_pcall(L, 3, 1, 0);
+    lua_getfield(L, -1, "potion_pick");
+    lua_remove(L, -2);
+    lua_pushnumber(L, mode);
+    lua_pushnumber(L, flag);
+    lua_pushnumber(L, tier);
+    lua_pushnumber(L, static_cast<lua_Number>(address));
+    if (site)
+    {
+        lua_pushstring(L, site);
+    }
+    else
+    {
+        lua_pushnil(L);
+    }
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 5, 1, 0);
     t_inLua = false;
     g_deadline = 0;
     Answer answer = Answer::None;
@@ -5298,6 +5322,7 @@ void LuaHost::killRecorded(uint32_t id)
     {
         const char* msg = lua_tostring(L, -1);
         LOG("Lua: kernel.item_use failed: {}", msg ? msg : "(no message)");
+        LOG("Lua: kernel.potion_pick failed: {}", msg ? msg : "(no message)");
     }
     else if (lua_isnumber(L, -1))
     {
