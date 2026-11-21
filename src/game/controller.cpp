@@ -1051,7 +1051,7 @@ namespace
     {
         UiNav::Rect r, under{};
         float skip = 0.0f;  // beside the control under the cursor: A's width
-        if (UiNav::controlAt(g_x, g_y, under))
+        if (UiNav::controlAt(g_x, g_y, under) && !GearNav::nativePrompt(g_x, g_y))
         {
             skip = promptBeside(single(Gamepad::A), under);
         }

@@ -1233,7 +1233,7 @@ local function rml_button(key, cx, left, y, select_key)
     local prompts = '<img class="padkey conf" src="gear:pad/a"/>' .. (select_key and '<img class="padkey sel" src="gear:pad/back"/>' or '')
     local doc = ui.rml.load_string('<rml><head><style>'
         .. 'body.pad button .padkey.conf { display: none; } body.pad button:focus .padkey.conf { display: inline-block; } '
-        .. 'body.pad button:focus .padkey.sel { display: none; } '
+        .. 'body.pad button .padkey.sel { display: inline-block; } body.pad button:focus .padkey.sel { display: none; } '
         .. '</style></head><body><button id="b" class="game-button" style="position: absolute; left: -2000px; top: 0px; margin: 0; width: 104px;">'
         .. prompts .. 'Mods</button></body></rml>')
     if not doc then entry.failed, entry.retry = true, now + 5 return nil end

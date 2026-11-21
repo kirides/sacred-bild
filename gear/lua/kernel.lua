@@ -3268,6 +3268,9 @@ local function ui_push_nav()
         end
     end
     local n = 0
+    local nn = 0
+    local nat = uis.nav_native
+    if not nat then nat = {}; uis.nav_native = nat end
     for i = 1, count do
         local e = ui_nav[i]
         local take
@@ -3281,10 +3284,19 @@ local function ui_push_nav()
             if not row then row = {}; out[n] = row end
             row.x, row.y = e.ax or (e.x + e.w / 2), e.ay or (e.y + e.h / 2)
             row.left, row.top, row.width, row.height, row.kind = e.x, e.y, e.w, e.h, e.kind or 0
+            if e.native and nn < 400 then
+                -- a control that draws its own button prompt (an RmlUi element): SacredBild keeps its own off it
+                nn = nn + 1
+                local nrow = nat[nn]
+                if not nrow then nrow = {}; nat[nn] = nrow end
+                nrow.left, nrow.top, nrow.width, nrow.height = e.x, e.y, e.w, e.h
+            end
         end
     end
     for i = n + 1, #out do out[i] = nil end        -- the host counts the rows by the table's length
+    for i = nn + 1, #nat do nat[i] = nil end
     native.ui_nav(out, flags)
+    if native.ui_nav_native then native.ui_nav_native(nat) end
 end
 
 -- Widest a tooltip's text gets before it wraps, in layout units.
@@ -3881,6 +3893,7 @@ local function make_ui(mod)
             if not ne then ne = {}; ui_nav[nn] = ne end
             ne.mod, ne.x, ne.y, ne.w, ne.h, ne.layer = mod, x, y, w, h, layer
             ne.kind, ne.ax, ne.ay, ne.drop = opts._nav_kind, opts._nav_x, opts._nav_y, opts._nav_drop
+            ne.native = opts._nav_native
         end
         local s = ui_input[handle] or uis.NO_INPUT
         local enabled = opts.enabled ~= false
@@ -4157,7 +4170,7 @@ local function make_ui(mod)
         if not ropts or ropts.layer ~= opts.layer then
             ropts = {layer = opts.layer, nav = false, _rml_doc = id}
             self.ropts = ropts
-            self.nopts = {layer = opts.layer, _rml_doc = id}
+            self.nopts = {layer = opts.layer, _rml_doc = id, _nav_native = true}
             self.keys = {}
         end
         local keys = self.keys

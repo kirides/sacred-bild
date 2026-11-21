@@ -3145,6 +3145,31 @@ namespace
         return 1;
     }
 
+    // native.ui_nav_native(rects): the stops (a list of {left, top, width, height}) that draw their own button prompt: SacredBild draws none beside them.
+    // Nothing happens when SacredBild has no such export.
+    int nativeUiNavNative(lua_State* L)
+    {
+        luaL_checktype(L, 1, LUA_TTABLE);
+        std::vector<float> rects;
+        const int n = static_cast<int>(lua_objlen(L, 1));
+        for (int i = 1; i <= n; ++i)
+        {
+            lua_rawgeti(L, 1, i);
+            if (lua_istable(L, -1))
+            {
+                for (const char* name : {"left", "top", "width", "height"})
+                {
+                    lua_getfield(L, -1, name);
+                    rects.push_back(static_cast<float>(lua_tonumber(L, -1)));
+                    lua_pop(L, 1);
+                }
+            }
+            lua_pop(L, 1);
+        }
+        PadNav::setNativePrompts(rects);
+        return 0;
+    }
+
     // native.ui_pad() -> nudge, back, menu: what the controller did since the last call (slider steps, B presses,
     // mod menu button presses).
     int nativeUiPad(lua_State* L)
@@ -4714,6 +4739,7 @@ namespace
             {"builtin", nativeBuiltin},
             {"ui_events", nativeUiEvents},
             {"ui_nav", nativeUiNav},
+            {"ui_nav_native", nativeUiNavNative},
             {"ui_pad_info", nativeUiPadInfo},
             {"ui_pad", nativeUiPad},
             {"ui_page", nativeUiPage},

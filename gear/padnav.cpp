@@ -15,6 +15,8 @@ namespace
     TakePageFn g_takePage = nullptr;
     TakePageFn g_takeSelect = nullptr;
     PostPageFn g_postScroll = nullptr;
+    using SetNativeFn = void(__cdecl*)(const float* rects, int count);
+    SetNativeFn g_setNative = nullptr;
     PostPageFn g_postPage = nullptr;
     using NavStateFn = int(__cdecl*)(int* flags);
     using PadInfoFn = int(__cdecl*)(int* style);
@@ -37,6 +39,7 @@ namespace
                 g_postPage = reinterpret_cast<PostPageFn>(GetProcAddress(bild, "SacredBild_UiPostPage"));
                 g_takeSelect = reinterpret_cast<TakePageFn>(GetProcAddress(bild, "SacredBild_UiTakeSelect"));
                 g_postScroll = reinterpret_cast<PostPageFn>(GetProcAddress(bild, "SacredBild_UiPostScroll"));
+                g_setNative = reinterpret_cast<SetNativeFn>(GetProcAddress(bild, "SacredBild_UiSetNativePrompts"));
                 g_navState = reinterpret_cast<NavStateFn>(GetProcAddress(bild, "SacredBild_UiNavState"));
                 g_padInfo = reinterpret_cast<PadInfoFn>(GetProcAddress(bild, "SacredBild_PadInfo"));
                 g_padGlyph = reinterpret_cast<PadGlyphFn>(GetProcAddress(bild, "SacredBild_PadGlyph"));
@@ -80,6 +83,15 @@ int PadNav::takePage()
 {
     find();
     return g_takePage ? g_takePage() : 0;
+}
+
+void PadNav::setNativePrompts(const std::vector<float>& rects)
+{
+    find();
+    if (g_setNative)
+    {
+        g_setNative(rects.data(), static_cast<int>(rects.size() / 4));
+    }
 }
 
 void PadNav::postScroll(int steps)

@@ -24,6 +24,8 @@ namespace PadNav
     Events take();
     // Automation: pad events as the controller would post them; SacredBild's stop count (-1 stale, -2 no SacredBild).
     void post(int nudge, int back, int menu);
+    // The stops (left, top, width, height each, in layout units) that draw their own button prompt: SacredBild draws none beside them (it may not know of this).
+    void setNativePrompts(const std::vector<float>& rects);
     void postScroll(int steps);     // automation: the D-pad's up / down in a scroll area
     int takeSelect();               // presses of Select / "-" since the last call
     int takePage();                 // LB / RB since the last call: + next, - previous

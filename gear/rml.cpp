@@ -243,6 +243,7 @@ namespace
         uint32_t id = 0;            // a game image id (picture == false) or a picture id
         uint8_t flip = 0;
         bool picture = false;
+        bool point = false;         // "?point": nearest-texel sampling (no bilinear blur)
         bool item = false;          // "gear:item/...": an item's model, drawn by the game's model renderer into the box of the geometry
         uint32_t itemType = 0;      // the item type to draw (a temporary item, single player only) ...
         uint32_t itemObject = 0;    // ... or the live item object
@@ -254,11 +255,23 @@ namespace
     {
         std::string s = source.substr(5);
         info.flip = 0;
+        info.point = false;
         const size_t q = s.find('?');
         if (q != std::string::npos)
         {
-            const std::string opt = s.substr(q + 1);
+            std::string opt = s.substr(q + 1);
             s.resize(q);
+            // "?point" (nearest-texel sampling), alone or after / before a flip: "?flip=h&point"
+            for (const std::string flag : {"&point", "point&", "point"})
+            {
+                const size_t at = opt.find(flag);
+                if (at != std::string::npos && (flag != "point" || opt == "point"))
+                {
+                    opt.erase(at, flag.size());
+                    info.point = true;
+                    break;
+                }
+            }
             if (opt == "flip=h" || opt == "flip=hv" || opt == "flip=vh")
             {
                 info.flip |= 1;
@@ -542,6 +555,7 @@ namespace
                 }
                 c.image = it->second.id;
                 c.flip = it->second.flip;
+                c.point = it->second.point;
             }
             if (g_target.scissor)
             {
@@ -1549,6 +1563,21 @@ namespace
             }
             list.push_back(e);
         }
+        // Stacking order: the regions Lua registers for the stops are won by the last one at a point, so what is in front (a z-index, as a drop-down list
+        // has over the rows under it) comes after what is behind; the document's order otherwise.
+        const auto rank = [](Rml::Element* e) {
+            float z = 0.0f;
+            for (Rml::Element* p = e; p; p = p->GetParentNode())
+            {
+                const Rml::Style::NumberAuto zi = p->GetComputedValues().z_index();
+                if (zi.type == Rml::Style::NumberAuto::Number)
+                {
+                    z = std::max(z, zi.value);
+                }
+            }
+            return z;
+        };
+        std::stable_sort(list.begin(), list.end(), [&](Rml::Element* a, Rml::Element* b) { return rank(a) < rank(b); });
         return list;
     }
 
@@ -1699,6 +1728,10 @@ scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 16px
 .tabbar .tab-sep { width: 1px; height: 20px; margin: 0 6px; background-color: #8c744099; }
 .padkey { display: none; width: 1.3em; height: 1.3em; margin-right: 0.5em; vertical-align: middle; }
 body.pad .padkey { display: inline-block; }
+body.pad .padkey.a { visibility: hidden; }
+body.pad :focus .padkey.a, body.pad :hover .padkey.a { visibility: visible; }
+body.pad :focus span.padkey.b, body.pad :hover span.padkey.b, body.pad :focus span.padkey.y, body.pad :hover span.padkey.y, body.pad :focus span.padkey.x, body.pad :hover span.padkey.x,
+body.pad :focus span.padkey.lb, body.pad :hover span.padkey.lb, body.pad :focus span.padkey.rb, body.pad :hover span.padkey.rb, body.pad :focus span.padkey.back, body.pad :hover span.padkey.back { decorator: image(gear:pad/a contain); }
 span.padkey.a { decorator: image(gear:pad/a contain); }
 span.padkey.b { decorator: image(gear:pad/b contain); }
 span.padkey.x { decorator: image(gear:pad/x contain); }
@@ -1978,6 +2011,29 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 0;
     }
 
+    // Every button of the document that has no controller prompt gets the confirm one (<span class="padkey a">, shown while the pad is on the button): a
+    // document does not have to carry it, and the buttons of an unstyled or older document show one like the rest.
+    void ensureButtonPrompts(Doc& d)
+    {
+        Rml::ElementList buttons;
+        d.document->QuerySelectorAll(buttons, "button");
+        for (Rml::Element* b : buttons)
+        {
+            bool has = false;
+            for (int i = 0; i < b->GetNumChildren() && !has; ++i)
+            {
+                has = b->GetChild(i)->IsClassSet("padkey");
+            }
+            if (has || b->HasAttribute("data-no-padkey"))
+            {
+                continue;
+            }
+            Rml::ElementPtr span = d.document->CreateElement("span");
+            span->SetClassNames("padkey a");
+            b->InsertBefore(std::move(span), b->GetFirstChild());
+        }
+    }
+
     // native.rml_update(id, mouse_x, mouse_y, hover) -> {event, ...}: lays the document out and runs its animations; the
     // mouse in layout units, `hover` whether it is over this document. An event is {listener, type, target, current,
     // params = {name = text}} for the listeners registered with rml_listen.
@@ -1998,6 +2054,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             d.context->ProcessMouseLeave();
             d.hovering = false;
         }
+        ensureButtonPrompts(d);
         d.context->Update();
         if (d.events.empty())
         {

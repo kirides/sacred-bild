@@ -2,7 +2,7 @@
 <head>
     <title>Mods</title>
     <style>
-        #win { position: absolute; left: 112px; top: 44px; width: 800px; height: 680px; }
+        #win { position: absolute; left: 112px; top: 44px; width: 800px; height: 680px; box-sizing: border-box; }       /* 800 x 680 with the frame's padding: centred in the 1024 x 768 layout */
         .fillbg { position: absolute; left: 24px; top: 27px; right: 24px; bottom: 30px; background-color: #0a0a12e8; z-index: -1; }
         .titlerow { height: 30px; text-align: center; }
         .ttl { font-family: "Sacred Game"; font-size: 20px; color: #ffd780; }
@@ -15,7 +15,7 @@
         .head .tabbar .padkey { margin: 0 8px 0 0; }
         .head .tabbar .padkey.after { margin: 0 0 0 8px; }
         #foot .pg .padkey { margin-right: 4px; }
-        .bodybox { height: 530px; overflow-y: auto; margin-top: 4px; }
+        .bodybox { height: 488px; overflow-y: auto; margin-top: 4px; }
         #foot { display: flex; flex-direction: row; align-items: center; height: 42px; margin-top: 6px; }
         #foot .grow { flex: 1 1 auto; min-width: 0px; }
         #foot .note { color: #8c8c8c; font-size: 12dp; }
@@ -61,7 +61,7 @@
         .sh { font-weight: bold; font-size: 14dp; color: #ffd780; margin: 10px 6px 2px 6px; padding-bottom: 2px; border-bottom: 1px #8c744080; }
         .snote { color: #8c8c8c; font-size: 12dp; margin: 2px 6px 2px 6px; }
         .empty { color: #8c8c8c; margin: 20px; }
-        #more { height: 524px; }
+        #more { height: 484px; }
         .krow button.mini.slot { min-width: 132px; text-align: center; }
 
         /* the on-screen keyboard */

@@ -24,6 +24,8 @@ namespace GearNav
     bool home(float& x, float& y);
     // Whether (x, y) lies on a slider stop (D-pad left / right then nudge it instead of jumping).
     bool onSlider(float x, float y);
+    // Whether (x, y) (screen pixels) is on a stop whose control draws its own button prompt: none is drawn beside it.
+    bool nativePrompt(float x, float y);
     // The scroll area stop (x, y) lies in, false if none (D-pad up / down there scrolls it at the ends).
     bool scrollAreaAt(float x, float y, Stop& out);
 

@@ -1228,11 +1228,21 @@ namespace
         state.enter();
         state.texture(surface);
         device->SetRenderState(D3DRENDERSTATE_SRCBLEND, premultiplied ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
+        if (c.point)
+        {
+            device->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_POINT);
+            device->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFN_POINT);
+        }
         constexpr size_t kChunk = 60000;        // vertices per call (a multiple of 3, below the device's limit)
         for (size_t first = 0; first < out.size(); first += kChunk)
         {
             const size_t n = std::min(kChunk, out.size() - first);
             device->DrawPrimitive(D3DPT_TRIANGLELIST, kFvf, out.data() + first, static_cast<DWORD>(n), 0);
+        }
+        if (c.point)
+        {
+            device->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_LINEAR);
+            device->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFN_LINEAR);
         }
         device->SetRenderState(D3DRENDERSTATE_SRCBLEND, D3DBLEND_SRCALPHA);
     }

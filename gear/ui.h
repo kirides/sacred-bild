@@ -53,6 +53,7 @@ namespace Ui
         float padding = 0;
         // Image
         uint32_t image = 0;
+        bool point = false;         // images / meshes: sampled with the nearest texel (no bilinear blur): "gear:image/N?point" in an RmlUi document
         // Region
         uint32_t region = 0;        // the kernel's handle, reported with the events
         // Mesh: a 4x4 transform (column-major, m[column * 4 + row]) applied to (x + translation, y + translation, 0, 1) in the mesh's

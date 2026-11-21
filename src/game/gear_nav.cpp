@@ -28,6 +28,7 @@ namespace
     std::vector<NavStop> g_stops;
     int g_flags = 0;
     ULONGLONG g_updated = 0;
+    std::vector<float> g_native;      // Sacred Gear's stops that draw their own button prompt: left, top, width, height each (its layout units)
 
     std::atomic<int> g_nudge{0}, g_back{0}, g_menu{0}, g_scroll{0}, g_page{0}, g_select{0};
     using WheelFn = int(__cdecl*)(int delta);
@@ -40,6 +41,24 @@ namespace
 
     float px(float x) { return static_cast<float>(UiCanvas::toPhysicalX(static_cast<int>(std::lround(x)))); }
     float py(float y) { return static_cast<float>(UiCanvas::toPhysicalY(static_cast<int>(std::lround(y)))); }
+}
+
+bool GearNav::nativePrompt(float x, float y)
+{
+    std::lock_guard lock(g_lock);
+    if (!fresh())
+    {
+        return false;
+    }
+    for (size_t i = 0; i + 3 < g_native.size(); i += 4)
+    {
+        const float l = px(g_native[i]), t = py(g_native[i + 1]), r = px(g_native[i] + g_native[i + 2]), b = py(g_native[i + 1] + g_native[i + 3]);
+        if (x >= l && x < r && y >= t && y < b)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::vector<GearNav::Stop> GearNav::stops()
@@ -132,6 +151,14 @@ extern "C" void __cdecl SacredBild_UiSetNavStops(const NavStop* stops, int count
     g_stops.assign(stops, stops + (stops && count > 0 ? std::min(count, kMaxStops) : 0));
     g_flags = flags;
     g_updated = GetTickCount64();
+}
+
+// Sacred Gear, optional: the stops (left, top, width, height each) whose control draws its own button prompt (an RmlUi element), so that no prompt
+// of ours is drawn beside them. Sent every tick with the stops; a Gear without it (or no Gear) leaves the prompts as they are.
+extern "C" void __cdecl SacredBild_UiSetNativePrompts(const float* rects, int count)
+{
+    std::lock_guard lock(g_lock);
+    g_native.assign(rects, rects + (rects && count > 0 ? std::min(count, kMaxStops) * 4 : 0));
 }
 
 // Sacred Gear's automation (self tests without a pad): posts pad events as the controller would, and reads back
