@@ -373,3 +373,15 @@ void Focus::onFrame()
         g_clipped = true;
     }
 }
+
+// Sacred Gear's key block puts its window procedure in front of whatever it finds, and when the game has just replaced
+// its own (a game starts), that is the game's: SacredBild's subclass, which unwraps the controller's messages, would then
+// never come back (Focus::onFrame only subclasses over the game's procedure). Gear calls this first, so SacredBild is in
+// the chain before Gear's.
+extern "C" void __cdecl SacredBild_SubclassWindow()
+{
+    if (HWND window = g_window)
+    {
+        subclass(window, true);
+    }
+}

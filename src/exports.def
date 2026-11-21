@@ -39,3 +39,4 @@ EXPORTS
     SacredBild_UiNavState
     SacredBild_PadInfo
     SacredBild_PadGlyph
+    SacredBild_SubclassWindow

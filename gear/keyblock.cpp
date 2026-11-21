@@ -385,10 +385,35 @@ void KeyBlock::tick()
     {
         return;
     }
-    const auto current = reinterpret_cast<WNDPROC>(GetWindowLongPtrA(g_window, GWLP_WNDPROC));
+    auto current = reinterpret_cast<WNDPROC>(GetWindowLongPtrA(g_window, GWLP_WNDPROC));
     if (current == &windowProc)
     {
         return;
+    }
+    // The game's own procedure in front (a game just started): SacredBild's subclass (the controller's messages) goes in
+    // first, ours in front of it. Taking the front over the game's would leave SacredBild out of the chain for good.
+    if (inGameImage(current))
+    {
+        static const auto subclass = [] {
+            HMODULE bild = GetModuleHandleW(L"ddraw.dll");
+            return bild ? reinterpret_cast<void(__cdecl*)()>(GetProcAddress(bild, "SacredBild_SubclassWindow")) : nullptr;
+        }();
+        if (subclass)
+        {
+            subclass();
+            current = reinterpret_cast<WNDPROC>(GetWindowLongPtrA(g_window, GWLP_WNDPROC));
+            if (current == &windowProc)
+            {
+                return;
+            }
+            if (!inGameImage(current))
+            {
+                g_next = current;       // SacredBild's procedure, now in front of the game's: ours goes before it
+                SetWindowLongPtrA(g_window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&windowProc));
+                LOG("KeyBlock: window procedure in place (over SacredBild's)");
+                return;
+            }
+        }
     }
     // Ours is not in front: take the front when the game put its own procedure there (a new game replaces it), or when
     // there is none of ours yet (someone else's may already call ours, which is why a foreign procedure is left).
