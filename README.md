@@ -69,7 +69,21 @@ The easiest way to get them: extract `sacred-gear-mods-<version>.zip` from the
 [mods releases](https://github.com/kirides/sacred-gear-mods/releases/latest) into the game folder and delete the mods
 you do not want. Writing your own: [Sacred Gear](docs/Gear.md).
 
-## Install
+## Recommended installation: Gear Mod Manager
+
+The easiest way to get SacredBild, Sacred Gear and the mods, with updates, is the
+[**Gear Mod Manager**](https://github.com/kirides/sacred-mod-manager):
+
+1. Download the newest `Gear-Mod-Manager-nightly-win-x64.zip` from its [releases](https://github.com/kirides/sacred-mod-manager/releases) (under **Assets**).
+2. Unzip it into the folder with `Sacred.exe` and start `Gear Mod Manager.exe`.
+3. Open **Browse**, tab **Plugins**: install **Sacred-Bild** and **Sacred Gear**. Tab **Mods**: install the mods you like.
+4. Press **Start Sacred**.
+
+![Gear Mod Manager, Plugins tab](https://raw.githubusercontent.com/kirides/sacred-mod-manager/main/docs/images/09-browse-plugins-dark.png)
+
+Prefer to do it by hand? The manual steps are below.
+
+## Install (by hand)
 
 Download a [release](../../releases) (tagged versions, and a nightly prerelease of every push to `main`) and extract
 the zip into the game folder. It replaces the `ddraw.dll` there (if that is DDrawCompat, move it to
