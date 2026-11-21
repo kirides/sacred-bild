@@ -283,6 +283,19 @@ GEAR = [
     ('abilityUsable2', 0x004D24C0, 'func'),
     # Arts whose numbers live in a spell record (thiscall (art record) -> spell id, 0 = none): 0x4D1E10 maps 0x3FA, 0x3FB, 0x414, 0x419..0x41D.
     ('abilityLinkedSpell', 0x004D1E10, 'func'),
+    # The combo master's rune exchange tab (cUI_MasterLotto, gear/master.cpp; docs/GearApi.md "master.price"). Render (thiscall (tab, device), 006D49A0,
+    # the vtable's slot 5), layout of the controls (fastcall (tab), 006D5B80), the exchange itself (fastcall (tab), 006D4520: takes the runes of the slots
+    # and makes the chosen rune, the event handler pays before it). The gold the exchange costs is a table by the number of runes in the slots (dword[5] at
+    # 00AD4B2C, filled at run time): found through `mov eax, [edx*4 + 00AD4B2C]` in the price getter 006D3F30.
+    ('masterLayoutFn', 0x006D5B80, 'func'),
+    ('masterExchangeFn', 0x006D4520, 'func'),
+    ('masterPriceTable', 0x00AD4B2C, 'data', 0x006D3F51),
+    # The hero's ability list (stats +0x102): the index of an ability id (thiscall (stats, id) -> index, the list's size when it has none, ret 4) and
+    # the engine's level raise (thiscall (stats, index, amount, byLevel, 0) -> bool, ret 0x10: adds to the level byte (+6) or the item bonus (+7), marks it
+    # changed). 00581F80 is what the hero's skill purchase uses. ENG 0043AF10: the ability a rune item type teaches (thiscall on the type manager (item type)).
+    ('cStats_abilityIndex', 0x00581D40, 'func'),
+    ('cStats_raiseAbility', 0x00581F80, 'func'),
+    ('typeAbilityOfRune', 0x0043AF10, 'func'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

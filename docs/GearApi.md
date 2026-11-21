@@ -137,7 +137,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'realm.changed'` | `gear.realm.use` switched the online play server: `(realm)`. |
 | `'combat.constant'` | The engine loads a pooled float constant inside its own code (hit handlers, difficulty factors ...); a handler may return another number for it. |
 | `'skillslot.key'` | A character key reached the skill slot window; a handler routes it to a slot (`slot` or `{slot, 'select'}`), `false` ignores it. |
-| `'combat.branch'` | A conditional jump in the hit handlers and a few other functions: a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`). |
+| `'combat.branch'` | A conditional jump in the hit handlers and a few other functions (the combo master's `master.select` and `master.ready`: the rune selector and the exchange button without runes): a handler may decide whether it is taken (`name`, `vanilla`, `index`, the compared `eax`). |
 | `'skillslot.select'` | A digit key selected a skill slot of the HUD (`index`: which of the five places in the key handler). |
 | `'bonus.constant'` | A number the item bonus code pushes as the argument of a random roll or a text lookup; a handler may return another. |
 | `'drops.roll'` | A creature's loot function is about to run; a handler may change the rarity bonus or return false to cancel the roll. |
@@ -147,6 +147,9 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'ability.hit'` | A hit of a creature that has a combat art or spell (or a copy, ids from 100) in flight: `(attacker, victim, art, damage)`; `art` is the id the hero used (a copy's own id). |
 | `'ability.route'` | A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil. |
 | `'motion.select'` | A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil. |
+| `'master.price'` | The combo master's rune exchange page asks the gold the exchange costs: `(rune, ability, count)` (the chosen rune's item type, the ability it teaches, the runes in the slots); return an integer (0 hides the price) or nil for the engine's own table. |
+| `'master.layout'` | The rune exchange page lays out its controls: return true to take the runes away (the four slots get no size). |
+| `'master.exchange'` | The player pressed the exchange button (the engine has taken the price): `(rune, ability, count)`; return true when the mod did the exchange, so the engine's own (runes in, chosen rune out) is skipped. |
 | `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
 | `'creature.created'` | The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads. |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
@@ -314,6 +317,9 @@ Forms:
 - `fun(event: 'ability.hit', fn: fun(attacker: Creature, victim: Creature, art: integer, damage: integer)): GearHandler`
 - `fun(event: 'ability.route', fn: fun(type: integer, art: integer, vanilla: integer, action: integer, id: integer): integer?): GearHandler`
 - `fun(event: 'motion.select', fn: fun(type: integer, slot: integer, id: integer): integer?): GearHandler`
+- `fun(event: 'master.price', fn: fun(rune: integer, ability: integer, count: integer): integer?): GearHandler`
+- `fun(event: 'master.layout', fn: fun(): boolean?): GearHandler`
+- `fun(event: 'master.exchange', fn: fun(rune: integer, ability: integer, count: integer): boolean?): GearHandler`
 - `fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler`
 - `fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
@@ -1635,6 +1641,15 @@ Adds the art (id from 1000) or spell `ability` to a hero's abilities at `level` 
 
 - `ability`: `integer`
 - `level`: `integer` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:raise(ability, levels) -> boolean?, string?`
+
+Raises the level of an art or spell a hero knows by `levels` (default 1) with the game's own function (the one a skill purchase uses). For heroes of the local player and the party (ids 1 to 16). Returns true, or nil and why (`the hero does not know it`, `the level would pass 255`).
+
+- `ability`: `integer`
+- `levels`: `integer` (optional)
 - returns `ok` `boolean?`
 - returns `error` `string?`
 

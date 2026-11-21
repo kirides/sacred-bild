@@ -385,4 +385,19 @@ namespace Gear::Addr
     inline Sacred::Thiscall<uint32_t(uint8_t* record, uint32_t heroType, char flag)> abilityUsable2{};
     // ENG 004D1E10: the spell record id an art takes its numbers from (thiscall, ECX = art record; 0 for arts without a spell).
     inline Sacred::Thiscall<uint32_t(uint8_t* record)> abilityLinkedSpell{};
+    // The combo master's rune exchange tab (gear/master.cpp). ENG 006D49A0: the tab's render (thiscall (tab, device), ret 4 -- the vtable's slot 5);
+    // 006D3FD0 holds the selector update and 006D49A0 the exchange button's check (site hooks, tools/gear_sites.py). 006D5B80: lays out the tab's controls
+    // (fastcall (tab)); 006D4520: the exchange (fastcall (tab)): takes the runes out of the slots and puts the chosen rune into the result box.
+    // 00AD4B2C: dword[5], the gold the exchange costs by the number of runes in the slots (the engine reads it in ten places).
+    inline uintptr_t masterSelectFn{};
+    inline uintptr_t masterRenderFn{};
+    inline uintptr_t masterLayoutFn{};
+    inline uintptr_t masterExchangeFn{};
+    inline Sacred::Global<uint32_t> masterPriceTable{};
+    // ENG 00581D40: the index of an ability id in a hero's abilities (thiscall (stats, id), ret 4; the list's size if the hero has none).
+    // ENG 00581F80: raises an ability's level (thiscall (stats, index, amount, byLevel, flag), ret 0x10): `byLevel` adds to the level byte (+6) and
+    // marks the entry changed, else to the item bonus (+7). ENG 0043AF10: the ability a rune item type teaches (thiscall on the type manager (type)).
+    inline Sacred::Thiscall<uint32_t(void* stats, int id)> cStats_abilityIndex{};
+    inline Sacred::Thiscall<uint32_t(void* stats, uint32_t index, uint32_t amount, int byLevel, int flag)> cStats_raiseAbility{};
+    inline Sacred::Thiscall<uint32_t(void* typeManager, int type)> typeAbilityOfRune{};
 }

@@ -240,6 +240,53 @@ bool Classes::learn(uint32_t id, uint32_t ability, uint32_t level, const char*& 
     return true;
 }
 
+bool Classes::raise(uint32_t id, uint32_t ability, uint32_t levels, const char*& error)
+{
+    const uintptr_t hero = heroObject(id);
+    if (!hero)
+    {
+        error = "not a hero";
+        return false;
+    }
+    if (!Addr::cStats_abilityIndex || !Addr::cStats_raiseAbility)
+    {
+        error = "the game's level raise function was not found";
+        return false;
+    }
+    if (ability == 0 || ability > 0xFFFF || levels == 0 || levels > 0xFF)
+    {
+        error = "an ability id is 1..65535 and the levels 1..255";
+        return false;
+    }
+    Range range;
+    if (!abilityRange(hero, range))
+    {
+        error = "the hero has no abilities vector";
+        return false;
+    }
+    __try
+    {
+        void* stats = reinterpret_cast<void*>(hero + kStats);
+        const uint32_t index = Addr::cStats_abilityIndex(stats, static_cast<int>(ability)) & 0xFFFF;
+        if (index >= (range.end - range.begin) / kAbilitySize)
+        {
+            error = "the hero does not know it";
+            return false;
+        }
+        if ((Addr::cStats_raiseAbility(stats, index, levels, 1, 0) & 0xFF) == 0)
+        {
+            error = "the level would pass 255";
+            return false;
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        error = "the game faulted on the level raise function";
+        return false;
+    }
+    return true;
+}
+
 bool Classes::forget(uint32_t id, uint32_t ability, const char*& error)
 {
     const uintptr_t hero = heroObject(id);

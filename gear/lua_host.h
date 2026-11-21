@@ -44,6 +44,11 @@ namespace LuaHost
     // event `rune.usable`: whether a hero of `type` may learn `ability` (the engine's answer `vanilla`, 0/1); `out` 0/1.
     Answer runeUsable(int type, int ability, int vanilla, int& out);
 
+    // events of the combo master's rune exchange tab (gear/master.cpp): `master.price` (the gold the exchange costs: `rune` the item type of the
+    // chosen rune, `ability` the art or spell it teaches, `count` the runes in the slots), `master.layout` (true: the tab takes no runes, its slots are hidden)
+    // and `master.exchange` (true: the mod did the exchange, the engine's rune exchange is skipped). `out`: the number the handler returned (a boolean as 0/1).
+    Answer masterEvent(const char* event, int rune, int ability, int count, double& out);
+
     // event `motion.select`: the motion slot to play for a hero of `type` that is about to play `slot`.
     Answer motionSelect(int type, int slot, uint32_t id, int& out);
 

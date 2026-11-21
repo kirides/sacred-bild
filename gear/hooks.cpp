@@ -13,6 +13,7 @@
 #include "save.h"
 #include "savegames.h"
 #include "sitehook.h"
+#include "master.h"
 #include "ui.h"
 #include "world.h"
 #include "game/gear_addr.h"
@@ -50,6 +51,7 @@ bool Hooks::install()
     Party::install();
     Buffs::install();
     Classes::install();
+    Master::install();
     Savegames::install();
     ItemTip::install();
     const bool committed = Patch::commit();

@@ -176,6 +176,7 @@ if(SACREDGEAR)
     gear/lua_host.cpp
     gear/classes.cpp
     gear/classes_alias.cpp
+    gear/master.cpp
     gear/party.cpp
     gear/buffs.cpp
     gear/tables.cpp
