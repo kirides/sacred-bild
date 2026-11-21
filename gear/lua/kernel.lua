@@ -3793,7 +3793,7 @@ local function make_ui(mod)
             end
         end
         -- Where the fill starts, from the box edge: the game sets it per window (the character selection 22 / 25 / 22 / 28, the popup dialog about
-        -- 16 / 20.5 / 15 / 17.5, the in-game menu leaves about 6 more); opts.fill_inset is one number for all sides or {left, top, right, bottom}.
+        -- 16 / 20.5 / 15 / 17.5, the in-game menu measured 20.5 / 22 / 20.5 (bottom not measured)); opts.fill_inset is one number for all sides or {left, top, right, bottom}.
         local ins = st.inset
         local fi = opts.fill_inset
         if type(fi) == 'number' then
