@@ -4408,7 +4408,7 @@ Includes everything of `GearDrawOpts`.
 
 | Field | Type | |
 |---|---|---|
-| `style` | `'tooltip'\|'thick'` | The frame style: `'tooltip'` (default) is the border of the game's item tooltip, dark metal bars with ornaments in the four corners (image 54 top-left, 55 top-right, flipped upside down at the bottom; 52 for the bars). `'thick'` is the heavy ornate frame of the character selection and the other big menu screens: rounded corner pieces (images 318 to 321) at the corners of the box, pattern strips between them (294, with 310 and 312 down the sides), crests on the middle of the top and bottom edge (302 to 305); the fill stays inside the strips (22 units from the sides, 25 from the top, 28 from the bottom) so the scene shows through between the strips and the fill, as in the game. The box is the outer rectangle of the corner pieces; there is no overhang. (optional) |
+| `style` | `'tooltip'\|'medium'` | The frame style: `'tooltip'` (default) is the border of the game's item tooltip, dark metal bars with ornaments in the four corners (image 54 top-left, 55 top-right, flipped upside down at the bottom; 52 for the bars). `'thick'` is the heavy ornate frame of the character selection and the other big menu screens: rounded corner pieces (images 318 to 321) at the corners of the box, pattern strips between them (294, with 310 and 312 down the sides), crests on the middle of the top and bottom edge (302 to 305); the fill stays inside the strips (22 units from the sides, 25 from the top, 28 from the bottom) so the scene shows through between the strips and the fill, as in the game. The box is the outer rectangle of the corner pieces; there is no overhang. (optional) |
 | `dividers` | `number[]` | `'thick'` only: offsets from the top of the box to the top of a divider (a repeated strip, image 294) between the sides. (optional) |
 | `fill` | `GearColor\|false` | The fill inside the bars (default the game's translucent black `0x9F000000`); `false` draws none. (optional) |
 | `color` | `GearColor` | Tint of the border images (white as is). (optional) |
@@ -4428,7 +4428,7 @@ A frame in the game's own style: the fill, the four bars and the four corner orn
 
 How far the border of a frame style reaches into its box (the text goes inside that) and how far its corner ornaments reach out of the box, both as `{left, top, right, bottom}` in layout units.
 
-- `style`: `'tooltip'|'thick'` (optional) - Default `'tooltip'`.
+- `style`: `'tooltip'|'medium'` (optional) - Default `'tooltip'`.
 - returns `inset` `{left: number, top: number, right: number, bottom: number}`
 - returns `overhang` `{left: number, top: number, right: number, bottom: number}`
 

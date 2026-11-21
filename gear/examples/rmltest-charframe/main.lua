@@ -5,7 +5,7 @@ local A, ui = gear.auto, gear.ui
 local X, Y, W, H, DIV = 279.0, 538.5, 464, 214.3, 145
 local show = false
 gear.on('draw', function()
-    if show then ui.native.frame(X, Y - 512, W, H, {style = 'thick', layer = 'top', dividers = {DIV}}) end
+    if show then ui.native.frame(X, Y - 512, W, H, {style = 'medium', layer = 'top', dividers = {DIV}}) end
 end)
 gear.task(function()
     A.wait_for_menu(120); gear.wait(2)
