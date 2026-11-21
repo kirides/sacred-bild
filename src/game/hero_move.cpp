@@ -88,6 +88,7 @@ namespace
             g_lastY = y;
             if (moved)
             {
+                LOG("HeroMove: hero moved ({},{}), keep-alive not needed", x, y);
                 return;
             }
         }
@@ -114,6 +115,9 @@ namespace
             order.y = point.y;
             order.follow = 1;
         }
+        LOG("HeroMove: order {} for creature at {},{} -> world {},{} (mouse flags {:04X}, keep {} stop {})", static_cast<int>(order.mode),
+            x, y, static_cast<int>(order.x), static_cast<int>(order.y),
+            cMouse::instance() ? static_cast<unsigned>(cMouse::instance()->flags) : 0u, (packed & kKeep) != 0, (packed & kStop) != 0);
         engine->sendOrder(creature, order);
     }
 }
