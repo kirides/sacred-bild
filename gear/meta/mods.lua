@@ -164,6 +164,20 @@ local GearMods = {}
 ---@param fn? fun(x: number, y: number, w: number, h: number): number?
 function GearMods.page(fn) end
 
+--- The options of `GearMods.page_rml`: the load options of an RmlUi document plus two hooks.
+---@class GearModsPageRmlOpts
+---@field model? table The data model (as `GearRmlLoadOpts.model`).
+---@field calls? table<string, fun(args: string[], doc: GearRmlDoc, event: GearRmlEvent)> Functions for `data-event-click` attributes.
+---@field on_change? fun(doc: GearRmlDoc, model: table) Called after the document changed a value itself.
+---@field theme? boolean `false`: no theme stylesheet.
+---@field on_load? fun(doc: GearRmlDoc) Called once when the document exists: keep it, fill the model, add listeners.
+---@field update? fun(doc: GearRmlDoc) Called every frame the page is shown.
+
+--- The same page as an RmlUi document of the mod: `path` is a file of the mod's own folder, loaded as the mod (the same path rules, events and limits as any RmlUi document it loads). `opts` are the load options (`model`, `calls`, `on_change`, `theme`) plus `on_load(doc)`, called once when the document exists (keep it and fill the model), and `update(doc)`, called every frame the page is shown. The document's element with `id="page"` is put in the rectangle of the "More" tab and sized to it (give it `overflow: auto` if its content can be taller); the host touches nothing else of the document, and it is drawn only while its tab is open, so a mod cannot reach outside its own tab. The pad and the mouse work as in any RmlUi document.
+---@param path string
+---@param opts? GearModsPageRmlOpts
+function GearMods.page_rml(path, opts) end
+
 --- A file of an installed mod's folder, read only (`relative` is a path inside it, e.g. `arts/venom.json`).
 ---@param id string
 ---@param relative string

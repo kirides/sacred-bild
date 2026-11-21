@@ -4070,6 +4070,12 @@ local function make_ui(mod)
     function Element:style(property, value) return self.doc:style(self.sel, property, value) end
     function Element:value(text) return self.doc:value(self.sel, text) end
     function Element:rect() return native.rml_rect(self.doc.id, self.sel) end
+    -- element:focus([on]) -> focused: gives the element the focus (a text field then takes the keys); `false` takes it away.
+    function Element:focus(on)
+        local found, focused = native.rml_focus(self.doc.id, self.sel, on ~= false)
+        if not found then return nil end
+        return focused
+    end
     -- element:scroll([to]) -> top, height, client: the scroll position of a box with overflow: auto / scroll, in layout units, after moving it
     -- when `to` is given: a number (the top of the visible part), 'start' or 'end' (the bottom of the content).
     function Element:scroll(to)
@@ -6708,6 +6714,39 @@ local function make_mods_api(mod)
         assert(fn == nil or type(fn) == 'function', 'page must be a function')
         mod.page = fn
     end
+    -- page_rml(path, opts): the same page as an RmlUi document of this mod (a file of the mod's own folder, loaded as the mod: the same path rules,
+    -- events and limits as any document the mod loads). opts are the load options (model, calls, on_change ...) plus on_load(doc) once the
+    -- document exists (the mod's chance to keep it and fill the model) and update(doc) every frame the page is shown. The document's element
+    -- with id "page" is put in the rectangle of the tab (put in it, sized to it: give it overflow: auto if it can be taller); nothing else
+    -- of the document is reachable by the host, and it is only drawn while its tab is open.
+    function api.page_rml(path, opts)
+        assert(type(path) == 'string', 'path must be a string')
+        opts = opts or {}
+        local doc, failed
+        mod.page = function(x, y, w, h)
+            if failed then return 0 end
+            if not doc then
+                local o = {}
+                for k, v in pairs(opts) do
+                    if k ~= 'on_load' and k ~= 'update' then o[k] = v end
+                end
+                local err
+                doc, err = mod.ui_api.rml.load(path, o)
+                if not doc then
+                    failed = true
+                    log('[%s] mods page %s failed: %s', mod.id, path, tostring(err))
+                    return 0
+                end
+                if opts.on_load then opts.on_load(doc) end
+            end
+            if opts.update then opts.update(doc) end
+            doc:style('#page', 'position', 'absolute')
+            native.rml_move(doc.id, '#page', x, y)
+            native.rml_resize(doc.id, '#page', w, h)
+            doc:draw({layer = 'top'})
+            return h
+        end
+    end
     function api.list()
         local out = {}
         for _, e in ipairs(catalog_list) do
@@ -7364,6 +7403,7 @@ local function make_env(mod)
     gear.menu = uis.make_menu(mod)
     if mod.builtin then env.admin = admin end
     gear.ui = make_ui(mod)
+    mod.ui_api = gear.ui
     -- gear.on(event, fn) -> handle; gear.off(handle). Events: "load" (all mods loaded), "frame" (dt in seconds,
     -- every in-game frame on the engine thread), "session.start" (hero), "session.stop", and the custom events
     -- mods emit.

@@ -297,11 +297,12 @@ namespace
         if (s.rfind("image/", 0) == 0)
         {
             const std::string number = s.substr(6);
-            if (number.empty() || number.size() > 9 || number.find_first_not_of("0123456789") != std::string::npos)
+            if (number.empty() || number.size() > 10 || number.find_first_not_of("0123456789") != std::string::npos)
             {
                 return false;
             }
-            info.id = static_cast<uint32_t>(std::stoul(number));
+            const unsigned long long value = std::stoull(number);
+            info.id = value < 0xFFFFFFFFull ? static_cast<uint32_t>(value) : 0;
             return info.id != 0;
         }
         if (s.rfind("texture/", 0) == 0)
@@ -577,6 +578,13 @@ namespace
                 if (info.picture)
                 {
                     dimensions = {64, 64};      // a pad button prompt
+                    return add(info);
+                }
+                if (!info.picture && info.id >= Ui::kPictureBase)
+                {
+                    // gear:image/<picture id>: a picture of Gear's own that the mod made (gear.game.save_picture), drawn as it is and
+                    // not released with the document (the mod keeps it).
+                    dimensions = {128, 96};
                     return add(info);
                 }
                 if (!info.picture && (info.id == 0 || !Ui::imageInfo(info.id, image) || image.width <= 0 || image.height <= 0))
@@ -2236,6 +2244,29 @@ namespace
         return 1;
     }
 
+    // native.rml_focus(id, selector [, on]) -> found, focused: gives the element the focus (a text field then takes the keys), or takes
+    // it away with on == false.
+    int rmlFocus(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        Rml::Element* e = find(d, str(L, 2));
+        if (e)
+        {
+            if (lua_isnone(L, 3) || lua_toboolean(L, 3))
+            {
+                e->Focus();
+            }
+            else
+            {
+                e->Blur();
+            }
+        }
+        lua_pushboolean(L, e != nullptr);
+        lua_pushboolean(L, e && e->GetOwnerDocument() && e->GetOwnerDocument()->GetContext() &&
+                               e->GetOwnerDocument()->GetContext()->GetFocusElement() == e);
+        return 2;
+    }
+
     // native.rml_tag(id, selector) -> tag name | nil
     int rmlTag(lua_State* L)
     {
@@ -2438,6 +2469,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_relatives", guarded<rmlRelatives>},
         {"rml_rect", guarded<rmlRect>},
         {"rml_tag", guarded<rmlTag>},
+        {"rml_focus", guarded<rmlFocus>},
         {"rml_scroll", guarded<rmlScroll>},
         {"rml_model_set", guarded<rmlModelSet>},
         {"rml_model_changed", guarded<rmlModelChanged>},
