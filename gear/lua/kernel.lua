@@ -3792,7 +3792,15 @@ local function make_ui(mod)
                 at = at + th
             end
         end
+        -- Where the fill starts, from the box edge: the game sets it per window (the character selection 22 / 25 / 22 / 28, the popup dialog about
+        -- 16 / 20.5 / 15 / 17.5, the in-game menu leaves about 6 more); opts.fill_inset is one number for all sides or {left, top, right, bottom}.
         local ins = st.inset
+        local fi = opts.fill_inset
+        if type(fi) == 'number' then
+            ins = {left = fi, top = fi, right = fi, bottom = fi}
+        elseif type(fi) == 'table' then
+            ins = {left = fi.left or fi[1] or ins.left, top = fi.top or fi[2] or ins.top, right = fi.right or fi[3] or ins.right, bottom = fi.bottom or fi[4] or ins.bottom}
+        end
         if opts.fill ~= false then
             ui.rect(x + ins.left, y + ins.top, w - ins.left - ins.right, h - ins.top - ins.bottom, opts.fill or st.fill, {layer = o.layer, window = o.window})
         end
@@ -4148,7 +4156,13 @@ local function make_ui(mod)
                     divs = {}
                     for n in r.dividers:gmatch('[%d%.]+') do divs[#divs + 1] = tonumber(n) end
                 end
-                ui.native.frame(r.x, r.y, r.w, r.h, {style = r.frame, layer = opts.layer, dividers = divs})
+                local fi
+                if r.fill_inset and r.fill_inset ~= '' then
+                    local n = {}
+                    for v in r.fill_inset:gmatch('[%d%.]+') do n[#n + 1] = tonumber(v) end
+                    fi = #n == 1 and n[1] or (#n >= 4 and n or nil)
+                end
+                ui.native.frame(r.x, r.y, r.w, r.h, {style = r.frame, layer = opts.layer, dividers = divs, fill_inset = fi})
             end
             -- In the layout editor the windows take no mouse: the editor drags them.
             local wkey = keys[-i]

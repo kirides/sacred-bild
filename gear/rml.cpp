@@ -1538,6 +1538,9 @@ namespace
             // The game's own frame (gear.ui.native.frame) behind the window: data-frame="tooltip", or any element with class "window".
             push(L, e->GetAttribute<Rml::String>("data-frame", e->IsClassSet("thick-frame") ? "thick" : e->IsClassSet("window") ? "tooltip" : ""));
             lua_setfield(L, -2, "frame");
+            // data-fill-inset="16" or "16 20.5 15 17.5": how far the thick frame's fill starts from the box edge (left top right bottom).
+            push(L, e->GetAttribute<Rml::String>("data-fill-inset", ""));
+            lua_setfield(L, -2, "fill_inset");
             // data-dividers="142 260": offsets from the window's top where the thick frame draws divider bars.
             push(L, e->GetAttribute<Rml::String>("data-dividers", ""));
             lua_setfield(L, -2, "dividers");

@@ -2150,6 +2150,29 @@ do
     family, real = rml.game_font()
     ok(family == 'Sacred Game' and real == false and rml.fonts().start.family == 'Sacred Start', 'rml.game_font and rml.fonts report what the host registered')
     native.rml_fonts = saved_fonts
+    -- gear.ui.native.frame: the fill of the thick frame starts where fill_inset says (one number, four numbers, or the measured default).
+    do
+        local mode
+        gear_a.on('draw', function()
+            if mode == 'a' then gear_a.ui.native.frame(100, 50, 300, 200, {style = 'thick', fill_inset = {10, 20, 30, 40}})
+            elseif mode == 'b' then gear_a.ui.native.frame(100, 50, 300, 200, {style = 'thick', fill_inset = 12})
+            elseif mode == 'c' then gear_a.ui.native.frame(100, 50, 300, 200, {style = 'thick'}) end
+        end)
+        local function fill_rect()
+            for _, c in ipairs(ui_published) do
+                if c[1] == 'rect' and c[8] == 0x9F000000 then return c[4], c[5], c[6], c[7] end
+            end
+        end
+        for _, case in ipairs({{'a', 110, 70, 260, 140}, {'b', 112, 62, 276, 176}, {'c', 122, 75, 256, 147}}) do
+            mode = case[1]
+            ui_recording = {}
+            kernel.tick(0.016)
+            kernel.tick(0.016)
+            local x, y, w, h = fill_rect()
+            ok(x == case[2] and y == case[3] and w == case[4] and h == case[5], 'native.frame fill_inset case ' .. case[1] .. ' (' .. tostring(x) .. ',' .. tostring(y) .. ',' .. tostring(w) .. ',' .. tostring(h) .. ')')
+        end
+        mode = nil
+    end
     local doc = rml.load('ui/main.rml', {dp = true})
     ok(doc and log_rml[1]:match('^load %S+ ui/main%.rml true$'), 'rml.load asks the host with the mod folder and the dp flag')
     ok(select(2, rml.load_string('<x')) == 'bad markup', 'rml.load_string passes the message of a failure on')
