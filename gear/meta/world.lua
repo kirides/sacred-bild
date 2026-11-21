@@ -445,6 +445,15 @@ function Creature:equip_slot(item) end
 ---@return GearHeroCombo[]?
 function Creature:combos() end
 
+--- Sets how far a party hero's combo has regenerated, in seconds of the combo's `total` (`GearHeroCombo`): it is ready when `charge >= total`.
+--- The value is not clamped above (the engine accepts a charge over the total); a negative value becomes 0. Single player and the local
+--- player's own heroes.
+---@param slot integer 0 to 3.
+---@param charge number
+---@return boolean? ok
+---@return string? error
+function Creature:set_combo_charge(slot, charge) end
+
 --- Writes a combo slot of a party hero as the combo master does: up to four combat arts it knows, at the levels it has
 --- them (an empty list clears the slot). Single player.
 ---@param slot integer 0 to 3.

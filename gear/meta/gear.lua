@@ -46,6 +46,7 @@
 ---| 'master.exchange' # The player pressed the exchange button (the engine has taken the price): `(rune, ability, count)`; return true when the mod did the exchange, so the engine's own (runes in, chosen rune out) is skipped.
 ---| 'master.describe' # The rune exchange page is drawn: `(rune, ability, count)` for the shown rune's art or spell; return a level to have the page write the engine's own "name - Level n" for it at the left of the page, nil or false for no text.
 ---| 'master.maximum' # The rune exchange page is drawn: `(rune, ability, count)`; return true to have it write the red "Maximum Level Attained" under the result box.
+---| 'kill.recorded' # The engine recorded a kill of the local hero or of a creature it owns (minion, summon): `(e)`, see `GearKillRecorded`. Fires for every such kill, also those that give no experience; runs inside the engine's death handling.
 ---| 'rune.usable' # A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it.
 ---| 'item.use' # A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up as ever), `'keep'` (no effect, the potion stays; the drinking sound plays) or nil (the engine's effect). Not asked while Lua code itself runs, so a drink a mod starts (`creature:drink_potion`) has the engine's effect.
 ---| 'creature.created' # The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads.
@@ -58,6 +59,9 @@
 ---@field item integer The potion's object id.
 ---@field type integer The potion's item type.
 ---@field creature integer The id of the creature that drinks it.
+--- What the `kill.recorded` event gets.
+---@class GearKillRecorded
+---@field id integer The engine's record id of the kill (the first word of its statistics record).
 
 --- What the `creature.created` event gets.
 ---@class GearCreatureCreated
@@ -195,6 +199,7 @@ gear = {}
 ---@overload fun(event: 'master.exchange', fn: fun(rune: integer, ability: integer, count: integer): boolean?): GearHandler
 ---@overload fun(event: 'master.describe', fn: fun(rune: integer, ability: integer, count: integer): integer|false?): GearHandler
 ---@overload fun(event: 'master.maximum', fn: fun(rune: integer, ability: integer, count: integer): boolean?): GearHandler
+---@overload fun(event: 'kill.recorded', fn: fun(e: GearKillRecorded)): GearHandler
 ---@overload fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler
 ---@overload fun(event: 'item.use', fn: fun(e: GearItemUse): ('consume'|'keep')?): GearHandler
 ---@overload fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler

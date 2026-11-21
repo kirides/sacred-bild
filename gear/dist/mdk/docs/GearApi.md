@@ -152,6 +152,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'master.exchange'` | The player pressed the exchange button (the engine has taken the price): `(rune, ability, count)`; return true when the mod did the exchange, so the engine's own (runes in, chosen rune out) is skipped. |
 | `'master.describe'` | The rune exchange page is drawn: `(rune, ability, count)` for the shown rune's art or spell; return a level to have the page write the engine's own "name - Level n" for it at the left of the page, nil or false for no text. |
 | `'master.maximum'` | The rune exchange page is drawn: `(rune, ability, count)`; return true to have it write the red "Maximum Level Attained" under the result box. |
+| `'kill.recorded'` | The engine recorded a kill of the local hero or of a creature it owns (minion, summon): `(e)`, see `GearKillRecorded`. Fires for every such kill, also those that give no experience; runs inside the engine's death handling. |
 | `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
 | `'item.use'` | A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up as ever), `'keep'` (no effect, the potion stays; the drinking sound plays) or nil (the engine's effect). Not asked while Lua code itself runs, so a drink a mod starts (`creature:drink_potion`) has the engine's effect. |
 | `'creature.created'` | The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads. |
@@ -167,6 +168,14 @@ A handler registered with `gear.on`; pass it to `gear.off` to remove it. What th
 | `item` | `integer` | The potion's object id. |
 | `type` | `integer` | The potion's item type. |
 | `creature` | `integer` | The id of the creature that drinks it. |
+
+### GearKillRecorded
+
+What the `kill.recorded` event gets.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | The engine's record id of the kill (the first word of its statistics record). |
 
 ### GearCreatureCreated
 
@@ -335,6 +344,7 @@ Forms:
 - `fun(event: 'master.exchange', fn: fun(rune: integer, ability: integer, count: integer): boolean?): GearHandler`
 - `fun(event: 'master.describe', fn: fun(rune: integer, ability: integer, count: integer): integer|false?): GearHandler`
 - `fun(event: 'master.maximum', fn: fun(rune: integer, ability: integer, count: integer): boolean?): GearHandler`
+- `fun(event: 'kill.recorded', fn: fun(e: GearKillRecorded)): GearHandler`
 - `fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler`
 - `fun(event: 'item.use', fn: fun(e: GearItemUse): ('consume'|'keep')?): GearHandler`
 - `fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler`
@@ -1640,6 +1650,15 @@ The equipment slot (0..18) an item goes to for this hero, by the engine's own ru
 A hero's combos (the combo master's slots that hold arts), nil for other creatures. Use one with `order_ability(combo.id, target)`.
 
 - returns `GearHeroCombo[]?`
+
+#### `creature:set_combo_charge(slot, charge) -> boolean?, string?`
+
+Sets how far a party hero's combo has regenerated, in seconds of the combo's `total` (`GearHeroCombo`): it is ready when `charge >= total`. The value is not clamped above (the engine accepts a charge over the total); a negative value becomes 0. Single player and the local player's own heroes.
+
+- `slot`: `integer` - 0 to 3.
+- `charge`: `number`
+- returns `ok` `boolean?`
+- returns `error` `string?`
 
 #### `creature:set_combo(slot, arts) -> boolean?, string?`
 

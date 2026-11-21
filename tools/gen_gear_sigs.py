@@ -313,6 +313,9 @@ GEAR = [
     ('abilityDescribe1', 0x004D2020, 'func'),
     ('abilityDescribe2', 0x004D27B0, 'func'),
     ('cUI_Control_getRect', 0x00732350, 'func'),
+    # The kill statistics record (gear/killstat.cpp): thiscall on the statistics block, 17 stack words (ret 0x44); the death handlers call it for
+    # a kill of the local hero or of a creature it owns. The event `kill.recorded` follows it.
+    ('cKillStat_record', 0x00424250, 'func'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

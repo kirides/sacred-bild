@@ -51,6 +51,9 @@ namespace LuaHost
     // chosen rune, `ability` the art or spell it teaches, `count` the runes in the slots), `master.layout` (true: the tab takes no runes, its slots are hidden)
     // and `master.exchange` (true: the mod did the exchange, the engine's rune exchange is skipped). `out`: the number the handler returned (a boolean as 0/1).
     Answer masterEvent(const char* event, int rune, int ability, int count, double& out);
+    // event `kill.recorded`: the engine recorded a kill of the local hero or a creature it owns (the statistics record `id`). Skipped
+    // while Lua is busy (the engine's own code calls this, never nested in a kernel call).
+    void killRecorded(uint32_t id);
 
     // event `motion.select`: the motion slot to play for a hero of `type` that is about to play `slot`.
     Answer motionSelect(int type, int slot, uint32_t id, int& out);

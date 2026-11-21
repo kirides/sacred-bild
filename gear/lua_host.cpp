@@ -11,6 +11,7 @@
 #include "itemtip.h"
 #include "itemicon.h"
 #include "keyblock.h"
+#include "killstat.h"
 #include "input.h"
 #include "log.h"
 #include "netmsg.h"
@@ -775,6 +776,13 @@ namespace
         }
         lua_pushboolean(L, 1);
         return 1;
+    }
+
+    // native.kill_recorded_active(bool): whether some mod handles `kill.recorded`
+    int nativeKillRecordedActive(lua_State* L)
+    {
+        KillStat::setActive(lua_toboolean(L, 1) != 0);
+        return 0;
     }
 
     // native.usable_active(bool): whether some mod handles `rune.usable`
@@ -2109,6 +2117,18 @@ namespace
         }
         const char* error = nullptr;
         if (!Party::setCombo(id, slot, arts, error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.party_set_combo_charge(id, slot, charge) -> true | nil, message
+    int nativePartySetComboCharge(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Party::setComboCharge(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), static_cast<float>(luaL_checknumber(L, 3)), error))
         {
             return pushFailure(L, error);
         }
@@ -4684,6 +4704,7 @@ namespace
             {"show_text", nativeShowText},
             {"creature_effect", nativeCreatureEffect},
             {"portals", nativePortals},
+            {"kill_recorded_active", nativeKillRecordedActive},
             {"alias_create", nativeAliasCreate},
             {"alias_remove", nativeAliasRemove},
             {"alias_clear", nativeAliasClear},
@@ -4786,6 +4807,7 @@ namespace
             {"party_equipment", nativePartyEquipment},
             {"object_carried", nativeObjectCarried},
             {"party_set_combo", nativePartySetCombo},
+            {"party_set_combo_charge", nativePartySetComboCharge},
             {"party_add_exp", nativePartyAddExp},
             {"party_revive", nativePartyRevive},
             {"party_potion", nativePartyPotion},
@@ -5244,6 +5266,11 @@ LuaHost::Answer LuaHost::itemUse(uint32_t item, uint32_t type, uint32_t creature
     if (t_inLua)
     {
         return Answer::Busy;
+void LuaHost::killRecorded(uint32_t id)
+{
+    if (t_inLua)
+    {
+        return;
     }
     std::unique_lock guard(g_running, std::try_to_lock);
     if (!guard.owns_lock())
@@ -5279,6 +5306,28 @@ LuaHost::Answer LuaHost::itemUse(uint32_t item, uint32_t type, uint32_t creature
     }
     lua_pop(L, 1);
     return answer;
+        return;
+    }
+    if (!g_lua || !g_started)
+    {
+        return;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "kill_recorded");
+    lua_remove(L, -2);
+    lua_pushnumber(L, id);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 1, 0, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.kill_recorded failed: {}", msg ? msg : "(no message)");
+        lua_pop(L, 1);
+    }
 }
 
 LuaHost::Answer LuaHost::motionSelect(int type, int slot, uint32_t id, int& out)
