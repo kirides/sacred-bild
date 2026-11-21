@@ -57,6 +57,7 @@ namespace
 
     std::wstring g_modsDir;
     fs::path g_root;            // the folder the current call may read from (empty: none)
+    bool g_fontDp = false;      // the document being handled is laid out in screen pixels (its text is rasterized as asked, not scaled)
     fs::path g_themeRoot;       // the theme mod's folder, readable too while a document that uses the theme is handled
     bool g_allowFonts = false;  // the Windows font folder is readable too
 
@@ -1067,12 +1068,13 @@ namespace
     class RootScope
     {
     public:
-        explicit RootScope(const Doc& doc) : m_previous(std::move(g_root)), m_previousTheme(std::move(g_themeRoot))
+        explicit RootScope(const Doc& doc) : m_previous(std::move(g_root)), m_previousTheme(std::move(g_themeRoot)), m_previousDp(g_fontDp)
         {
             g_root = doc.root;
             g_themeRoot = doc.themeRoot;
+            g_fontDp = doc.dp;
         }
-        explicit RootScope(fs::path root, fs::path themeRoot = {}) : m_previous(std::move(g_root)), m_previousTheme(std::move(g_themeRoot))
+        explicit RootScope(fs::path root, fs::path themeRoot = {}) : m_previous(std::move(g_root)), m_previousTheme(std::move(g_themeRoot)), m_previousDp(g_fontDp)
         {
             g_root = std::move(root);
             g_themeRoot = std::move(themeRoot);
@@ -1081,12 +1083,14 @@ namespace
         {
             g_root = std::move(m_previous);
             g_themeRoot = std::move(m_previousTheme);
+            g_fontDp = m_previousDp;
         }
         RootScope(const RootScope&) = delete;
         RootScope& operator=(const RootScope&) = delete;
 
     private:
         fs::path m_previous, m_previousTheme;
+        bool m_previousDp;
     };
 
     void loadFont(const fs::path& path, bool fallback)
@@ -1213,6 +1217,182 @@ namespace
             g_fontGame.family, g_fontGame.real ? g_fontGame.file : "fallback", g_fontStart.family, g_fontStart.real ? g_fontStart.file : "fallback");
     }
 
+    // Crisp text: a document laid out in layout units (1px = one layout unit) is stretched to the screen by the renderer, which would
+    // stretch the glyphs of a face rasterized at the layout size too (blurry on every screen larger than 1024x768). This wraps the font
+    // engine: a face of N px is rasterized at N * (the screen's pixels per layout unit) and every measure and vertex it gives back is
+    // divided by that again, so the layout stays in layout units and the glyphs come out at the size they are shown. A document laid
+    // out in screen pixels (dp) already asks for the final size: it keeps its faces as they are (g_fontDp).
+    class ScaledFontEngine : public Rml::FontEngineInterface
+    {
+    public:
+        explicit ScaledFontEngine(Rml::FontEngineInterface* inner) : m_inner(inner) {}
+
+        bool LoadFontFace(const Rml::String& file, int index, bool fallback, Rml::Style::FontWeight weight) override
+        {
+            return m_inner->LoadFontFace(file, index, fallback, weight);
+        }
+        bool LoadFontFace(const Rml::String& file, int index, const Rml::String& family, Rml::Style::FontStyle style, Rml::Style::FontWeight weight,
+            bool fallback) override
+        {
+            return m_inner->LoadFontFace(file, index, family, style, weight, fallback);
+        }
+        bool LoadFontFace(Rml::Span<const Rml::byte> data, int index, const Rml::String& family, Rml::Style::FontStyle style,
+            Rml::Style::FontWeight weight, bool fallback) override
+        {
+            return m_inner->LoadFontFace(data, index, family, style, weight, fallback);
+        }
+
+        Rml::FontFaceHandle GetFontFaceHandle(const Rml::String& family, Rml::Style::FontStyle style, Rml::Style::FontWeight weight, int size) override
+        {
+            const float scale = currentScale();
+            const int milli = static_cast<int>(std::lround(scale * 1000.0f));
+            std::string key = family;
+            key += '|';
+            key += std::to_string(static_cast<int>(style)) + '|' + std::to_string(static_cast<int>(weight)) + '|' + std::to_string(size) + '|' +
+                   std::to_string(milli);
+            const auto found = m_byKey.find(key);
+            if (found != m_byKey.end())
+            {
+                return found->second;
+            }
+            const int raster = std::max(1, static_cast<int>(std::lround(size * scale)));
+            const Rml::FontFaceHandle inner = m_inner->GetFontFaceHandle(family, style, weight, raster);
+            if (!inner)
+            {
+                return 0;
+            }
+            Face face;
+            face.inner = inner;
+            face.scale = scale;
+            face.metrics = m_inner->GetFontMetrics(inner);
+            face.metrics.size = size;
+            face.metrics.ascent /= scale;
+            face.metrics.descent /= scale;
+            face.metrics.line_spacing /= scale;
+            face.metrics.x_height /= scale;
+            face.metrics.underline_position /= scale;
+            face.metrics.underline_thickness /= scale;
+            m_faces.push_back(face);
+            const Rml::FontFaceHandle handle = static_cast<Rml::FontFaceHandle>(m_faces.size());
+            m_byKey.emplace(key, handle);
+            return handle;
+        }
+
+        Rml::FontEffectsHandle PrepareFontEffects(Rml::FontFaceHandle handle, const Rml::FontEffectList& effects) override
+        {
+            const Face* face = faceOf(handle);
+            if (!face)
+            {
+                return 0;
+            }
+            Effects fx;
+            fx.inner = m_inner->PrepareFontEffects(face->inner, effects);
+            m_effects.push_back(fx);
+            return static_cast<Rml::FontEffectsHandle>(m_effects.size());
+        }
+
+        const Rml::FontMetrics& GetFontMetrics(Rml::FontFaceHandle handle) override
+        {
+            const Face* face = faceOf(handle);
+            return face ? face->metrics : m_none;
+        }
+
+        int GetStringWidth(Rml::FontFaceHandle handle, Rml::StringView string, const Rml::TextShapingContext& context, Rml::Character prior) override
+        {
+            const Face* face = faceOf(handle);
+            if (!face)
+            {
+                return 0;
+            }
+            const Rml::TextShapingContext scaled = scaledContext(context, face->scale);
+            const int width = m_inner->GetStringWidth(face->inner, string, scaled, prior);
+            return face->scale == 1.0f ? width : static_cast<int>(std::ceil(static_cast<float>(width) / face->scale));
+        }
+
+        int GenerateString(Rml::RenderManager& manager, Rml::FontFaceHandle handle, Rml::FontEffectsHandle effectsHandle, Rml::StringView string,
+            Rml::Vector2f position, Rml::ColourbPremultiplied colour, float opacity, const Rml::TextShapingContext& context,
+            Rml::TexturedMeshList& meshes) override
+        {
+            const Face* face = faceOf(handle);
+            if (!face)
+            {
+                return 0;
+            }
+            const float scale = face->scale;
+            const Rml::FontEffectsHandle effects = (effectsHandle >= 1 && effectsHandle <= m_effects.size()) ? m_effects[effectsHandle - 1].inner : 0;
+            const size_t first = meshes.size();
+            const Rml::TextShapingContext scaled = scaledContext(context, scale);
+            const int width = m_inner->GenerateString(manager, face->inner, effects, string, position * scale, colour, opacity, scaled, meshes);
+            if (scale != 1.0f)
+            {
+                for (size_t i = first; i < meshes.size(); ++i)
+                {
+                    for (Rml::Vertex& v : meshes[i].mesh.vertices)
+                    {
+                        v.position /= scale;
+                    }
+                }
+                return static_cast<int>(std::ceil(static_cast<float>(width) / scale));
+            }
+            return width;
+        }
+
+        int GetVersion(Rml::FontFaceHandle handle) override
+        {
+            const Face* face = faceOf(handle);
+            return face ? m_inner->GetVersion(face->inner) : 0;
+        }
+
+        void ReleaseFontResources() override
+        {
+            m_faces.clear();
+            m_effects.clear();
+            m_byKey.clear();
+            m_inner->ReleaseFontResources();
+        }
+
+    private:
+        struct Face
+        {
+            Rml::FontFaceHandle inner = 0;
+            float scale = 1.0f;
+            Rml::FontMetrics metrics{};
+        };
+        struct Effects
+        {
+            Rml::FontEffectsHandle inner = 0;
+        };
+
+        // Pixels of the screen per layout unit for a document that is laid out in layout units.
+        static float currentScale()
+        {
+            if (g_fontDp)
+            {
+                return 1.0f;
+            }
+            const float scale = Ui::canvasScale();
+            return scale > 1.0f ? std::min(scale, 8.0f) : 1.0f;
+        }
+        static Rml::TextShapingContext scaledContext(const Rml::TextShapingContext& context, float scale)
+        {
+            Rml::TextShapingContext out{context.language};
+            out.text_direction = context.text_direction;
+            out.font_kerning = context.font_kerning;
+            out.letter_spacing = context.letter_spacing * scale;
+            return out;
+        }
+        const Face* faceOf(Rml::FontFaceHandle handle) const
+        {
+            return (handle >= 1 && handle <= m_faces.size()) ? &m_faces[handle - 1] : nullptr;
+        }
+
+        Rml::FontEngineInterface* m_inner;
+        std::vector<Face> m_faces;
+        std::vector<Effects> m_effects;
+        std::unordered_map<std::string, Rml::FontFaceHandle> m_byKey;
+        Rml::FontMetrics m_none{};
+    };
+
     // RmlUi starts with the first document; false (with the reason logged) if it cannot.
     bool ensureStarted()
     {
@@ -1237,6 +1417,7 @@ namespace
             return false;
         }
         g_started = true;
+        Rml::SetFontEngineInterface(new ScaledFontEngine(Rml::GetFontEngineInterface()));
         {
             static Rml::ElementInstancerGeneric<RingElement> ringInstancer;
             Rml::Factory::RegisterElementInstancer("gear-ring", &ringInstancer);
