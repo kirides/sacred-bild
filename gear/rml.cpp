@@ -1320,21 +1320,24 @@ namespace
             }
             const float scale = face->scale;
             const Rml::FontEffectsHandle effects = (effectsHandle >= 1 && effectsHandle <= m_effects.size()) ? m_effects[effectsHandle - 1].inner : 0;
-            const size_t first = meshes.size();
             const Rml::TextShapingContext scaled = scaledContext(context, scale);
-            const int width = m_inner->GenerateString(manager, face->inner, effects, string, position * scale, colour, opacity, scaled, meshes);
-            if (scale != 1.0f)
+            if (scale == 1.0f)
             {
-                for (size_t i = first; i < meshes.size(); ++i)
-                {
-                    for (Rml::Vertex& v : meshes[i].mesh.vertices)
-                    {
-                        v.position /= scale;
-                    }
-                }
-                return static_cast<int>(std::ceil(static_cast<float>(width) / scale));
+                return m_inner->GenerateString(manager, face->inner, effects, string, position, colour, opacity, scaled, meshes);
             }
-            return width;
+            // The engine adds the line's glyphs to the meshes already in the list (one mesh per atlas texture), so the line goes
+            // into a list of its own to be scaled back, and then in as new meshes.
+            Rml::TexturedMeshList line;
+            const int width = m_inner->GenerateString(manager, face->inner, effects, string, position * scale, colour, opacity, scaled, line);
+            for (Rml::TexturedMesh& part : line)
+            {
+                for (Rml::Vertex& v : part.mesh.vertices)
+                {
+                    v.position /= scale;
+                }
+                meshes.push_back(std::move(part));
+            }
+            return static_cast<int>(std::ceil(static_cast<float>(width) / scale));
         }
 
         int GetVersion(Rml::FontFaceHandle handle) override
