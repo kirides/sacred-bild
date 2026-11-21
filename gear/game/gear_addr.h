@@ -385,4 +385,7 @@ namespace Gear::Addr
     inline Sacred::Thiscall<uint32_t(uint8_t* record, uint32_t heroType, char flag)> abilityUsable2{};
     // ENG 004D1E10: the spell record id an art takes its numbers from (thiscall, ECX = art record; 0 for arts without a spell).
     inline Sacred::Thiscall<uint32_t(uint8_t* record)> abilityLinkedSpell{};
+    // ENG 0043B1A0: the potion picker (gear/potionpick.cpp), stdcall (mode, flag, tier), ret 0xC: the item type of a random potion (the type is only
+    // an address holder: the function is not cdecl).
+    inline Sacred::Cdecl<uint32_t(int32_t mode, int32_t flag, int32_t tier)> potionPick{};
 }

@@ -44,6 +44,10 @@ namespace LuaHost
     // event `rune.usable`: whether a hero of `type` may learn `ability` (the engine's answer `vanilla`, 0/1); `out` 0/1.
     Answer runeUsable(int type, int ability, int vanilla, int& out);
 
+    // event `potion.pick`: the engine's potion picker is called (`mode`, `flag`, `tier` as it takes them; `address` the caller's return address, `site` its
+    // name or nullptr); `out` the item type a mod chose (Answer::Value), else the engine picks.
+    Answer potionPick(int mode, int flag, int tier, uintptr_t address, const char* site, int& out);
+
     // event `motion.select`: the motion slot to play for a hero of `type` that is about to play `slot`.
     Answer motionSelect(int type, int slot, uint32_t id, int& out);
 

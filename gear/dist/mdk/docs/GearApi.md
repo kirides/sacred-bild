@@ -147,14 +147,27 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'ability.hit'` | A hit of a creature that has a combat art or spell (or a copy, ids from 100) in flight: `(attacker, victim, art, damage)`; `art` is the id the hero used (a copy's own id). |
 | `'ability.route'` | A hero has a combat art in flight and the engine asks which class's code runs it: `(type, art, vanilla, action, id)`; return a hero type 1 to 9 or nil. |
 | `'motion.select'` | A hero is about to play a motion slot: `(type, slot, id)`; return another slot (0 to 255) or nil. |
+| `'potion.pick'` | The engine picks the item type of a random potion (a merchant's stock, a creature's drop): `(e)`, see `GearPotionPick`; return an item type to use that one, or nil for the engine's pick. |
 | `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
 | `'creature.created'` | The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads. |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
 | `'level.factor'` | The engine asks for the integer factor of a level (a hook inside its own code; the first handler that returns a number answers). |
 
+### GearPotionPick
+
+A handler registered with `gear.on`; pass it to `gear.off` to remove it. What the `potion.pick` event gets: the arguments of the engine's potion picker and who called it.
+
+| Field | Type | |
+|---|---|---|
+| `mode` | `integer` | The size rule: 0 small, 1 small or medium, 2 medium or large, other values large (callers pass the game's difficulty). |
+| `flag` | `integer` | Non-zero: the tier is drawn from 2 to 4 only (no mentor potions, tiers 0 and 1); 0: from 0 to 4. |
+| `tier` | `integer` | -1, or 0 to 5 to force the tier (5 healing, 4 concentration, 3 antidote, 2 hell's blood, 1 and 0 mentor in the game's table). |
+| `address` | `integer` | The caller's return address (English Sacred.exe). |
+| `site` | `string` | The caller's name: 'merchant.first' (the stock of a merchant the window did not show last), 'merchant.reopen', 'merchant.refresh', 'merchant.wrapper', 'merchant.helper', 'death.drop', 'loot', 'loot.other'; nil for another caller. (optional) |
+
 ### GearCreatureCreated
 
-A handler registered with `gear.on`; pass it to `gear.off` to remove it. What the `creature.created` event gets.
+What the `creature.created` event gets.
 
 | Field | Type | |
 |---|---|---|
@@ -314,6 +327,7 @@ Forms:
 - `fun(event: 'ability.hit', fn: fun(attacker: Creature, victim: Creature, art: integer, damage: integer)): GearHandler`
 - `fun(event: 'ability.route', fn: fun(type: integer, art: integer, vanilla: integer, action: integer, id: integer): integer?): GearHandler`
 - `fun(event: 'motion.select', fn: fun(type: integer, slot: integer, id: integer): integer?): GearHandler`
+- `fun(event: 'potion.pick', fn: fun(e: GearPotionPick): integer?): GearHandler`
 - `fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler`
 - `fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`

@@ -283,6 +283,9 @@ GEAR = [
     ('abilityUsable2', 0x004D24C0, 'func'),
     # Arts whose numbers live in a spell record (thiscall (art record) -> spell id, 0 = none): 0x4D1E10 maps 0x3FA, 0x3FB, 0x414, 0x419..0x41D.
     ('abilityLinkedSpell', 0x004D1E10, 'func'),
+    # The potion picker (gear/potionpick.cpp): stdcall (mode, flag, tier), ret 0xC; merchants and the loot of dying creatures call it. The event
+    # `potion.pick` asks the mods first.
+    ('potionPick', 0x0043B1A0, 'func'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

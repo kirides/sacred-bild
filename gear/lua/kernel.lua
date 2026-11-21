@@ -7546,6 +7546,7 @@ local function make_env(mod)
         if event == 'creature.created' then native.created_active(true) end
         if event == 'ability.route' then native.route_active(true) end
         if event == 'rune.usable' then native.usable_active(true) end
+        if event == 'potion.pick' then native.potion_pick_active(true) end
         if event == 'motion.select' then native.motion_active(true) end
         if event == 'damage' or event == 'ability.hit' then native.damage_active(true) end
         if event == 'effect.add' then native.effect_active(true) end
@@ -7568,6 +7569,7 @@ local function make_env(mod)
         if h.event == 'creature.created' and #list == 0 then native.created_active(false) end
         if h.event == 'ability.route' and #list == 0 then native.route_active(false) end
         if h.event == 'rune.usable' and #list == 0 then native.usable_active(false) end
+        if h.event == 'potion.pick' and #list == 0 then native.potion_pick_active(false) end
         if h.event == 'motion.select' and #list == 0 then native.motion_active(false) end
         if (h.event == 'damage' or h.event == 'ability.hit') and #list == 0 then kernel.boss.sync() end
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
@@ -8228,6 +8230,24 @@ function kernel.rune_usable(type_id, ability, vanilla)
         if h and not h.mod.disabled then
             local ok, result = call(h.mod, 'rune.usable', h.fn, type_id, ability, vanilla)
             if ok and type(result) == 'boolean' then return result end
+        end
+    end
+    return nil
+end
+
+-- `potion.pick`: the engine's potion picker is called; the first handler that returns an item type (a number above 0) answers. Called by the host from
+-- the engine's own code (merchants, loot), never nested in a kernel call.
+function kernel.potion_pick(mode, flag, tier, address, site)
+    local list = handlers['potion.pick']
+    if not list then return nil end
+    local e = {mode = mode, flag = flag, tier = tier, address = address, site = site}
+    for i = 1, #list do
+        local h = list[i]
+        if h and not h.mod.disabled then
+            local ok, result = call(h.mod, 'potion.pick', h.fn, e)
+            if ok and type(result) == 'number' and result > 0 then
+                return math.floor(result)
+            end
         end
     end
     return nil

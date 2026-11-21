@@ -9,6 +9,7 @@
 #include "party.h"
 #include "patch.h"
 #include "pickup.h"
+#include "potionpick.h"
 #include "realm.h"
 #include "save.h"
 #include "savegames.h"
@@ -52,6 +53,7 @@ bool Hooks::install()
     Classes::install();
     Savegames::install();
     ItemTip::install();
+    PotionPick::install();
     const bool committed = Patch::commit();
     // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.
     SiteHook::install();
