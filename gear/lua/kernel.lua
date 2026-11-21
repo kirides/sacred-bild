@@ -1624,6 +1624,7 @@ do
     function creature_mt:raise(ability, levels)
         assert(type(ability) == 'number', 'expected an ability id')
         return native.creature_raise(self.id, ability, levels or 1)
+    end
     -- creature:set_combo_charge(slot, charge): how far the combo of `slot` (0..3) has regenerated, in seconds of its `total` (ready when
     -- charge >= total; not clamped above). Party heroes of the local player only; true, or nil and a reason.
     function creature_mt:set_combo_charge(slot, charge)
@@ -8283,6 +8284,12 @@ function kernel.item_use(item, type_id, creature)
             if ok then
                 if result == 'consume' then return 1 end
                 if result == 'keep' then return 2 end
+            end
+        end
+    end
+    return nil
+end
+
 -- `potion.pick`: the engine's potion picker is called; the first handler that returns an item type (a number above 0) answers. Called by the host from
 -- the engine's own code (merchants, loot), never nested in a kernel call.
 function kernel.potion_pick(mode, flag, tier, address, site)
@@ -8299,6 +8306,8 @@ function kernel.potion_pick(mode, flag, tier, address, site)
         end
     end
     return nil
+end
+
 -- `kill.recorded`: the engine's statistics record of a kill by the local hero or by a creature it owns (see gear/killstat.cpp). Called by the
 -- host from inside the engine's death handling, right after the engine's own bookkeeping; `id` is the record's id word.
 function kernel.kill_recorded(id)
