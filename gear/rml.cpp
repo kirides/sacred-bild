@@ -342,6 +342,136 @@ namespace
         return false;
     }
 
+    // <gear-ring value="0.4" thickness="3" on="#e0c040" off="#40404080" start="0" dots="0" segments="96"/>: a ring (or a ring of dots) that is
+    // lit clockwise from the top (`start` degrees further round) for the fraction `value` of its circle, in the size of its box (CSS width and
+    // height, display: inline-block). Data-driven: data-attr-value="expression" redraws it when the number changes. Its geometry goes through
+    // the same render interface as every other element (no shader or layer needed).
+    class RingElement final : public Rml::Element
+    {
+    public:
+        explicit RingElement(const Rml::String& tag) : Rml::Element(tag) {}
+
+    protected:
+        void OnAttributeChange(const Rml::ElementAttributes& changed) override
+        {
+            Rml::Element::OnAttributeChange(changed);
+            m_dirty = true;
+        }
+
+        void OnResize() override
+        {
+            Rml::Element::OnResize();
+            m_dirty = true;
+        }
+
+        void OnRender() override
+        {
+            const Rml::Vector2f size = GetBox().GetSize(Rml::BoxArea::Content);
+            Rml::RenderManager* manager = GetRenderManager();
+            if (size.x <= 0 || size.y <= 0 || !manager)
+            {
+                return;
+            }
+            if (m_dirty || !m_geometry)
+            {
+                m_dirty = false;
+                m_geometry = manager->MakeGeometry(build(size));
+            }
+            m_geometry.Render(GetAbsoluteOffset(Rml::BoxArea::Content));
+        }
+
+    private:
+        // "#rgb", "#rrggbb" or "#rrggbbaa" (default when the text is none of them).
+        static Rml::ColourbPremultiplied color(const Rml::String& text, Rml::Colourb fallback)
+        {
+            auto hex = [](char c) -> int {
+                if (c >= '0' && c <= '9') return c - '0';
+                if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                return -1;
+            };
+            Rml::Colourb out = fallback;
+            if (!text.empty() && text[0] == '#')
+            {
+                const size_t n = text.size() - 1;
+                int v[8] = {};
+                bool ok = n == 3 || n == 6 || n == 8;
+                for (size_t i = 0; ok && i < n; ++i)
+                {
+                    v[i] = hex(text[i + 1]);
+                    ok = v[i] >= 0;
+                }
+                if (ok && n == 3)
+                {
+                    out = Rml::Colourb(static_cast<Rml::byte>(v[0] * 17), static_cast<Rml::byte>(v[1] * 17), static_cast<Rml::byte>(v[2] * 17), 255);
+                }
+                else if (ok)
+                {
+                    out = Rml::Colourb(static_cast<Rml::byte>(v[0] * 16 + v[1]), static_cast<Rml::byte>(v[2] * 16 + v[3]),
+                                       static_cast<Rml::byte>(v[4] * 16 + v[5]), n == 8 ? static_cast<Rml::byte>(v[6] * 16 + v[7]) : Rml::byte(255));
+                }
+            }
+            return out.ToPremultiplied();
+        }
+
+        Rml::Mesh build(Rml::Vector2f size)
+        {
+            const float value = std::clamp(GetAttribute<float>("value", 1.0f), 0.0f, 1.0f);
+            const float thickness = std::max(0.5f, GetAttribute<float>("thickness", 3.0f));
+            const float start = GetAttribute<float>("start", 0.0f) * 3.14159265f / 180.0f;
+            const int dots = std::clamp(GetAttribute<int>("dots", 0), 0, 400);
+            const int segments = std::clamp(GetAttribute<int>("segments", 96), 8, 360);
+            const Rml::ColourbPremultiplied on = color(GetAttribute<Rml::String>("on", ""), Rml::Colourb(255, 255, 255, 255));
+            const Rml::ColourbPremultiplied off = color(GetAttribute<Rml::String>("off", ""), Rml::Colourb(255, 255, 255, 40));
+            const Rml::Vector2f center(size.x / 2, size.y / 2);
+            const float outer = std::min(size.x, size.y) / 2;
+            const float inner = std::max(0.0f, outer - thickness);
+            const int count = dots > 0 ? dots : segments;
+            const float turn = 6.28318531f;
+            Rml::Mesh mesh;
+            mesh.vertices.reserve(static_cast<size_t>(count) * 4);
+            mesh.indices.reserve(static_cast<size_t>(count) * 6);
+            auto point = [&](float angle, float radius) { return Rml::Vector2f(center.x + radius * std::sin(angle), center.y - radius * std::cos(angle)); };
+            auto quad = [&](Rml::Vector2f a, Rml::Vector2f b, Rml::Vector2f c, Rml::Vector2f d, Rml::ColourbPremultiplied col) {
+                const int base = static_cast<int>(mesh.vertices.size());
+                for (const Rml::Vector2f& v : {a, b, c, d})
+                {
+                    Rml::Vertex vertex;
+                    vertex.position = v;
+                    vertex.colour = col;
+                    vertex.tex_coord = {0, 0};
+                    mesh.vertices.push_back(vertex);
+                }
+                for (int i : {0, 1, 2, 0, 2, 3})
+                {
+                    mesh.indices.push_back(base + i);
+                }
+            };
+            for (int i = 0; i < count; ++i)
+            {
+                const bool lit = (static_cast<float>(i) + 0.5f) / static_cast<float>(count) <= value;
+                if (dots > 0)
+                {
+                    // a dot on the ring, as large as the ring is thick
+                    const float angle = start + turn * (static_cast<float>(i) + 0.5f) / static_cast<float>(count) - turn / static_cast<float>(count) / 2 + turn * 0.5f / static_cast<float>(count);
+                    const Rml::Vector2f c = point(angle, outer - thickness / 2);
+                    const float h = thickness / 2;
+                    quad({c.x - h, c.y - h}, {c.x + h, c.y - h}, {c.x + h, c.y + h}, {c.x - h, c.y + h}, lit ? on : off);
+                }
+                else
+                {
+                    const float a0 = start + turn * static_cast<float>(i) / static_cast<float>(count);
+                    const float a1 = start + turn * static_cast<float>(i + 1) / static_cast<float>(count);
+                    quad(point(a0, outer), point(a1, outer), point(a1, inner), point(a0, inner), lit ? on : off);
+                }
+            }
+            return mesh;
+        }
+
+        Rml::Geometry m_geometry;
+        bool m_dirty = true;
+    };
+
     class RenderInterface final : public Rml::RenderInterface
     {
     public:
@@ -1099,6 +1229,10 @@ namespace
             return false;
         }
         g_started = true;
+        {
+            static Rml::ElementInstancerGeneric<RingElement> ringInstancer;
+            Rml::Factory::RegisterElementInstancer("gear-ring", &ringInstancer);
+        }
         // The UI's own face (Segoe UI, as gear.ui text) with its styles; symbols as the fallback.
         const fs::path fonts = fontsDir();
         g_allowFonts = true;

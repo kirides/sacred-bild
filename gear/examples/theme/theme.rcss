@@ -192,3 +192,6 @@ input.game-slider sliderarrowinc { width: 40px; height: 37px; decorator: image(g
 input.game-slider[disabled] { opacity: 0.5; }
 .slider-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 44px; }
 .slider-row .text { font-family: "Sacred Game"; color: #e4e4e4; font-size: 18px; }
+/* A data-driven ring (or ring of dots): <gear-ring value="0.4" thickness="3" on="#e0c040" off="#40404080" start="0" dots="0" segments="96"/>, lit clockwise
+   from the top for the fraction value of the circle; data-attr-value="expression" redraws it. Its size is its CSS box. */
+gear-ring { display: inline-block; width: 40px; height: 40px; }

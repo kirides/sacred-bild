@@ -1,0 +1,16 @@
+<rml>
+<head><title>Rings</title></head>
+<body data-model="model">
+<div id="w" class="window" data-panel="w" data-title="Rings" style="position: absolute; left: 80px; top: 60px; width: 360px;">
+    <div class="titlebar">Rings</div>
+    <div class="body">
+        <div class="row">
+            <gear-ring id="r1" data-attr-value="v" thickness="5" on="#e0c040" off="#40404080" style="width: 64px; height: 64px"/>
+            <gear-ring id="r2" data-attr-value="v" thickness="4" dots="40" on="#80d8ff" off="#30506080" start="90" style="width: 64px; height: 64px"/>
+            <gear-ring id="r3" data-attr-value="1 - v" thickness="3" on="#ff8060" off="#60303080" style="width: 40px; height: 40px"/>
+        </div>
+        <p>value {{ v }}</p>
+    </div>
+</div>
+</body>
+</rml>

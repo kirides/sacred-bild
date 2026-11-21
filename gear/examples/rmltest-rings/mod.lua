@@ -1,0 +1,1 @@
+return { id = 'rmltest-rings', name = 'RmlUi: data-driven rings', version = '0.1.0', author = 'Sacred Gear', description = 'The gear-ring element: a ring and a ring of dots that follow a value of the data model. Needs the theme mod. With -gear-auto a self test.', automation = true }
