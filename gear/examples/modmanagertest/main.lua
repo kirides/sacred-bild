@@ -1,10 +1,10 @@
 -- Self test of the mod manager screen (gear/lua/modmanager.lua, gear/lua/modmanager.rml): opens it with its hotkey and from the escape menu,
 -- switches a mod off and on, changes every kind of setting with clicks, rebinds a key (and makes a conflict), picks one with the on-screen keys,
--- takes screenshots and quits. It needs the theme mod (the screen is an RmlUi document) and asks the screen where its elements are
+-- takes screenshots and quits. It runs with or without a theme mod (the screen is an RmlUi document) and asks the screen where its elements are
 -- (gear.emit('mods.query')), so it follows the layout.
 --
 -- Run isolated:  Sacred.exe -gear-auto -gear-load=1 -gear-instance=modmgr-1 -gear-timeout=140
---                  -gear-mods=sacred-theme,modmanagertest,mmtest-aux,mmtest-dep
+--                  -gear-mods=modmanagertest,mmtest-aux,mmtest-dep   (optionally with sacred-theme)
 -- gear_mods.json of the run is written to GearAutomation\modmgr-1\ (not the player's), the result to
 -- GearAutomation\modmgr-1\modmanagertest.json.
 

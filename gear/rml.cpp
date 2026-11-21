@@ -1627,11 +1627,110 @@ namespace
                 "em, i { font-style: italic; }"
         "</style>";
 
+    // The look of a document when no theme mod is running (a mod with `theme = 'file.rcss'`): plain and readable, with the class names the themes style, so
+    // that a document written for a theme still works: dark panels, gold edges, simple buttons, check boxes, sliders and scroll bars, the controller prompts.
+    // (The game's own frames behind .window / .thick-frame are Gear's and do not depend on a stylesheet.) A theme replaces all of it.
+    const char* const kBaseStyle = R"CSS(<style>
+body { font-size: 15dp; color: #f0f0f0; }
+.window { padding: 6px; }
+.window > .titlebar { font-family: "Sacred Game"; padding: 4px 10px; background-color: #302418; color: #f0c860; }
+.window > .body { padding: 10px 14px 12px 14px; }
+.thick-frame { padding: 29px 26px 32px 26px; }
+.heading { font-family: "Sacred Game"; color: #f0c860; margin: 8px 0 4px 0; }
+.label { color: #9a9a9a; }
+.value { color: #f0f0f0; }
+.muted { color: #8c8c8c; }
+.accent { color: #ffd780; }
+.good { color: #7fd37f; }
+.bad { color: #e06060; }
+.row { display: flex; flex-direction: row; margin: 6px 0; }
+.row.right { justify-content: flex-end; }
+.row.space { justify-content: space-between; }
+.font-game { font-family: "Sacred Game"; }
+.font-start { font-family: "Sacred Start"; }
+.font-default { font-family: "Segoe UI"; }
+button { margin-right: 8px; padding: 4px 14px; color: #f0f0f0; background-color: #14141f; border: 1px #8c7440; cursor: pointer; }
+button:hover, button:focus { background-color: #24243a; border-color: #ffd780; color: #ffe030; }
+button:active { background-color: #34344e; }
+button.primary { border-color: #c8aa5a; color: #ffd780; }
+button.danger { border-color: #a84030; }
+button:disabled, button[disabled] { color: #8c8c8c; border-color: #3c3c3c; }
+button.game-button { display: inline-block; height: 34px; min-width: 100px; padding: 0 22px; margin: 0 8px 0 0; line-height: 32px; text-align: center; color: #e4e4e4; font-family: "Sacred Game"; font-size: 18px; background-color: #1c1c28; border: 1px #8c7440; }
+button.game-button:hover, button.game-button:focus { color: #ffe030; border-color: #ffe030; background-color: #262636; }
+button.game-button:active { color: #fff2a0; background-color: #34344e; }
+button.game-button:disabled, button.game-button[disabled] { color: #8a8a8a; opacity: 0.55; }
+input.field, select.field { padding: 4px 8px; color: #f0f0f0; background-color: #0c0c14; border: 1px #6e5e3a; }
+input.field:focus, select.field:focus { border-color: #ffd780; }
+input.game-check { display: inline-block; width: 22px; height: 22px; margin: 0 15px; padding: 0; background-color: #0c0c14; border: 2px #8c7440; cursor: pointer; }
+input.game-check:checked { background-color: #ffd780; border-color: #ffd780; }
+input.game-check:hover, input.game-check:focus { border-color: #ffe030; }
+input.game-check[disabled] { opacity: 0.5; }
+.check-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 40px; }
+.check-row .text { font-family: "Sacred Game"; color: #e4e4e4; font-size: 18px; }
+input.game-slider { display: inline-block; width: 300px; height: 24px; margin: 6px 0; padding: 0; border: 0; background-color: transparent; cursor: pointer; }
+input.game-slider slidertrack { height: 8px; margin-top: 8px; background-color: #0c0c14; border: 1px #6e5e3a; }
+input.game-slider sliderbar { width: 14px; height: 24px; background-color: #ffd780; }
+input.game-slider sliderarrowdec, input.game-slider sliderarrowinc { width: 22px; height: 24px; background-color: #24243a; border: 1px #8c7440; }
+input.game-slider[disabled] { opacity: 0.5; }
+.slider-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 44px; }
+.slider-row .text { font-family: "Sacred Game"; color: #e4e4e4; font-size: 18px; }
+scrollbarvertical { width: 16px; }
+scrollbarvertical slidertrack { width: 16px; background-color: #0c0c14; }
+scrollbarvertical sliderbar { width: 16px; min-height: 24px; background-color: #8c7440; }
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 16px; height: 16px; background-color: #24243a; }
+.list { margin: 4px 0; }
+.list .item { padding: 6px 10px; margin-bottom: 4px; background-color: #12121c; border: 1px #4a4030; }
+.list .item:hover { border-color: #c8aa5a; }
+.list button.item { display: block; margin-right: 0; text-align: left; }
+.list .item.selected { background-color: #4a3f2a; border-color: #ffd780; }
+.item .name { font-family: "Sacred Game"; color: #ffd780; font-weight: bold; }
+.item .sub { color: #9a9a9a; }
+.bar { height: 10px; margin: 4px 0; background-color: #0c0c14; border: 1px #6e5e3a; }
+.bar .fill { height: 10px; background-color: #a82828; }
+.bar.mana .fill { background-color: #2f6fd0; }
+.bar.xp .fill { background-color: #7fd37f; }
+.link { display: inline-block; padding: 4px 22px; color: #e8d8a8; cursor: pointer; text-align: center; }
+.link:hover, .link:focus { color: #fff6d0; font-effect: glow(2px 6px 0px 0px #ffb840e6); }
+.link:active { color: #ffffff; }
+.tabbar { display: flex; flex-direction: row; align-items: center; padding: 0 0 4px 0; margin: 0 0 10px 0; border-bottom: 1px #8c7440c0; }
+.tabbar a.link.tab { padding: 3px 14px; font-family: "Sacred Game"; font-size: 17px; }
+.tabbar a.link.tab.on { color: #ffcf40; border-bottom: 2px #ffcf40; margin-bottom: -5px; padding-bottom: 5px; }
+.tabbar a.link.tab + a.link.tab { border-left: 1px #8c744099; margin-left: 6px; padding-left: 20px; }
+.tabbar .tab-sep { width: 1px; height: 20px; margin: 0 6px; background-color: #8c744099; }
+.padkey { display: none; width: 1.3em; height: 1.3em; margin-right: 0.5em; vertical-align: middle; }
+body.pad .padkey { display: inline-block; }
+span.padkey.a { decorator: image(gear:pad/a contain); }
+span.padkey.b { decorator: image(gear:pad/b contain); }
+span.padkey.x { decorator: image(gear:pad/x contain); }
+span.padkey.y { decorator: image(gear:pad/y contain); }
+span.padkey.lb { decorator: image(gear:pad/lb contain); }
+span.padkey.rb { decorator: image(gear:pad/rb contain); }
+span.padkey.lt { decorator: image(gear:pad/lt contain); }
+span.padkey.rt { decorator: image(gear:pad/rt contain); }
+span.padkey.back { decorator: image(gear:pad/back contain); }
+span.padkey.start { decorator: image(gear:pad/start contain); }
+span.padkey.l3 { decorator: image(gear:pad/l3 contain); }
+span.padkey.r3 { decorator: image(gear:pad/r3 contain); }
+span.padkey.up { decorator: image(gear:pad/up contain); }
+span.padkey.down { decorator: image(gear:pad/down contain); }
+span.padkey.left { decorator: image(gear:pad/left contain); }
+span.padkey.right { decorator: image(gear:pad/right contain); }
+a.arrow { display: inline-block; width: 40px; height: 28px; margin: 0 2px; vertical-align: middle; cursor: pointer; decorator: image(gear:image/236 scale-none center center); }
+a.arrow.next { decorator: image(gear:image/237 scale-none center center); }
+a.arrow:hover, a.arrow:focus { opacity: 0.75; }
+a.arrow.off { opacity: 0.35; cursor: default; }
+gear-ring { display: inline-block; width: 40px; height: 40px; }
+</style>)CSS";
+
     // Puts the user agent style and <link> to the theme's stylesheet (if any) at the start of the document's head (a
-    // head is added if there is none).
-    void injectTheme(std::string& markup, const fs::path& themeFile)
+    // head is added if there is none); `base`: the plain base style when there is no theme.
+    void injectTheme(std::string& markup, const fs::path& themeFile, bool base)
     {
         std::string link = kUserAgentStyle;
+        if (themeFile.empty() && base)
+        {
+            link += kBaseStyle;
+        }
         if (!themeFile.empty())
         {
             std::string href = toUtf8(themeFile);
@@ -1774,7 +1873,7 @@ namespace
             }
             if (inMemory)
             {
-                injectTheme(markup, themeFile);
+                injectTheme(markup, themeFile, lua_toboolean(L, fromString ? 9 : 8) != 0);
             }
             // A path with a drive letter ("B:/...") is no URL to RmlUi (it takes "B" for a protocol and logs an error per
             // link); "file:///B:/..." is one, and its relative links resolve against it into plain paths again.
