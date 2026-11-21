@@ -70,8 +70,10 @@ namespace
             {
                 start = true;
             }
-            else if (menu->width > 1024 || menu->height > 768)
+            else if (i == 1 || menu->width > 1024 || menu->height > 768)
             {
+                // Menu 1 (the character selection, also the multiplayer lobby's) reports 1024x768 at HD sizes, but its
+                // 3D scene and pieces cover the whole screen (children out to the screen's size).
                 chosen = &native;
                 break;
             }
