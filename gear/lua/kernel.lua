@@ -3950,7 +3950,15 @@ local function make_ui(mod)
         assert(type(markup) == 'string', 'markup must be a string')
         if not native.rml_load_string then error('RmlUi is not available in this build', 2) end
         opts = opts or {}
-        local id, err = native.rml_load_string(mod.dir, markup, opts.dp and true or false, opts.model, uis.rml_call_names(opts), uis.rml_theme(opts))
+        local dir = mod.dir
+        if mod.builtin then
+            -- A mod built into the DLL has no folder: its inline documents take the theme mod's (they link no files of their own); without a theme there is
+            -- no folder, and the mod keeps drawing what it drew before.
+            dir = uis.theme_provider and uis.theme_provider()
+            if not dir then return nil, 'a built-in mod needs the theme mod for RmlUi documents' end
+        end
+        local theme_dir, theme_file = uis.rml_theme(opts)
+        local id, err = native.rml_load_string(dir, markup, opts.dp and true or false, opts.model, uis.rml_call_names(opts), theme_dir, theme_file, mod.builtin and true or false)
         if not id then return nil, err end
         return rml_open(id, opts)
     end

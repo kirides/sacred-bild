@@ -1,0 +1,1 @@
+return { id = 'rmltest-modsbutton', name = 'Mods button check', version = '0.1.0', author = 'Sacred Gear', description = 'Automation: opens the game menu, screenshots the Mods button and clicks it (the mod manager must open). With the theme mod the button is an RmlUi game-button, without it the old one.', automation = true }

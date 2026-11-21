@@ -1285,7 +1285,7 @@ namespace
         }
         // The theme mod's stylesheet (arguments 6 and 7: its folder and the .rcss in it) goes in front of the document's own.
         fs::path themeFile;
-        if (lua_isstring(L, 6) && lua_isstring(L, 7) && str(L, 6) != dir)
+        if (lua_isstring(L, 6) && lua_isstring(L, 7) && (lua_toboolean(L, 8) || str(L, 6) != dir))      // 8: a built-in mod that borrows the theme's folder
         {
             const fs::path themeRoot = modRoot(str(L, 6));
             const fs::path candidate = themeRoot / fromUtf8(str(L, 7));

@@ -739,14 +739,45 @@ end
 -- The item of the game menu in a native menu (gear.menu); the button below stands in for it otherwise.
 gear.menu.add_item('esc', {id = 'mods', label = 'Mods', order = 900, tooltip = 'Mod manager', on_click = function() open_screen() end})
 
+-- The button as an RmlUi element of the theme (class game-button: the game's own button, its font, the yellow hover, a pad prompt): one document per place.
+-- Without the theme mod (or RmlUi) the document cannot load and the button is the old gear.ui one, so nothing depends on it.
+local rml_buttons = {}
+local function rml_button(key, x, y, w)
+    local entry = rml_buttons[key]
+    if entry == nil then
+        entry = {retry = 0}
+        rml_buttons[key] = entry
+    end
+    if entry.doc then return entry.doc end
+    local now = gear.time()
+    if entry.failed and now < entry.retry then return nil end
+    if not ui.rml then entry.failed, entry.retry = true, now + 5 return nil end
+    local doc = ui.rml.load_string(('<rml><body><button id="b" class="game-button" style="position: absolute; left: %dpx; top: %dpx; min-width: %dpx;">'
+        .. '<img class="padkey" src="gear:pad/a"/>Mods</button></body></rml>'):format(x, y, w))
+    if not doc then entry.failed, entry.retry = true, now + 5 return nil end
+    doc:on('#b', 'click', function() open_screen() end)
+    entry.doc = doc
+    return doc
+end
+
 local function escape_menu_button(state)
     if state.mode == 'menus' then
-        if ui.button('menu_button', 16, 724, 90, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then open_screen() end
+        local doc = rml_button('menu', 16, 718, 70)
+        if doc then
+            doc:draw({layer = 'top'})
+        elseif ui.button('menu_button', 16, 724, 90, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then
+            open_screen()
+        end
     elseif state.escape_menu and not state.message_box and not gear.menu.available('esc') then
         -- With a native menu (a mod that draws the game menu itself) the "Mods" item below is part of it; else this button.
         local l, t, r, b = ui.screen()
         local x = (l + r) / 2 - 60      -- below the escape menu's window (centered in the layout)
-        if ui.button('esc_button', x, 508, 120, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then open_screen() end
+        local doc = rml_button('esc', math.floor((l + r) / 2 - 60), 502, 70)
+        if doc then
+            doc:draw({layer = 'top'})
+        elseif ui.button('esc_button', x, 508, 120, 26, 'Mods', {layer = 'top', tooltip = 'Mod manager'}) then
+            open_screen()
+        end
     end
 end
 
