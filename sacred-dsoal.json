@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "name": "Sacred DSOAL",
+  "author": "kirides",
+  "description": "Positional 3D sound and EAX-style reverb for Sacred Gold through DSOAL and OpenAL Soft (official kcat/dsoal release), with a Speakers or Headphones (HRTF) setting. See docs/Dsoal.md.",
+  "homepage": "https://github.com/kirides/sacred-bild/blob/main/docs/Dsoal.md",
+  "download": {
+    "url": "https://github.com/kcat/dsoal/releases/download/archive/DSOAL_r697.zip",
+    "sha256": "1f7f6b6627290af5c8c882c61ab3461cba1f12d369e155affe006d6919858481",
+    "version": "r697",
+    "inner": "DSOAL_r697.zip"
+  },
+  "mods": [
+    {
+      "kind": "plugin",
+      "platforms": [
+        "win"
+      ],
+      "version": "r697",
+      "author": "DSOAL and OpenAL Soft contributors",
+      "tags": [
+        "audio"
+      ],
+      "id": "sacred-dsoal",
+      "path": "DSOAL/Win32",
+      "name": "sacred-dsoal (base)",
+      "description": "Switches on the 3D audio Sacred was built for: positional 3D sound and EAX-style reverb. DSOAL (dsound.dll) presents a hardware DirectSound3D/EAX device to the game and OpenAL Soft (dsoal-aldrv.dll) mixes on any sound card. Installs only the two DLLs; pick Speakers or Headphones for the output setting. Needs the Microsoft Visual C++ 2015-2022 Redistributable (x86). After installing, choose \"3D, alle Effekte\" in the sound options and restart the game.",
+      "install": {
+        "files": [
+          "dsound.dll",
+          "dsoal-aldrv.dll"
+        ]
+      }
+    },
+    {
+      "kind": "plugin",
+      "platforms": [
+        "win"
+      ],
+      "version": "r697",
+      "author": "DSOAL and OpenAL Soft contributors",
+      "tags": [
+        "audio"
+      ],
+      "id": "sacred-dsoal-headphones",
+      "path": "DSOAL+HRTF/Win32",
+      "name": "DSOAL Headphones (alsoft.ini, HRTF)",
+      "requires": [
+        "sacred-dsoal"
+      ],
+      "description": "Audio setting for headphones: stereo output with HRTF spatialisation (the official DSOAL+HRTF alsoft.ini: channels=stereo, stereo-mode=headphones, stereo-encoding=hrtf). Installs only an alsoft.ini. Installs the base plugin first; replaces the Speakers setting.",
+      "install": {
+        "files": [
+          "alsoft.ini"
+        ]
+      }
+    },
+    {
+      "kind": "plugin",
+      "platforms": [
+        "win"
+      ],
+      "version": "r697",
+      "author": "DSOAL and OpenAL Soft contributors",
+      "tags": [
+        "audio"
+      ],
+      "id": "sacred-dsoal-speakers",
+      "name": "DSOAL Speakers (alsoft.ini)",
+      "requires": [
+        "sacred-dsoal"
+      ],
+      "description": "Audio setting for speakers: stereo output is played as speakers with plain panning and no HRTF; the speaker layout comes from the Windows sound settings. Installs only an alsoft.ini. Installs the base plugin first; replaces the Headphones setting.",
+      "install": {
+        "files": [
+          {
+            "url": "https://raw.githubusercontent.com/kirides/sacred-bild/main/docs/dsoal/alsoft-speakers.ini",
+            "sha256": "4b2f286572b59a86c641400ab1fc5a49088aa3cc6849dc22cef9e3f642320256",
+            "to": "alsoft.ini"
+          }
+        ]
+      }
+    }
+  ]
+}

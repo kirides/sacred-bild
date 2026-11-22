@@ -15,6 +15,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
         echo "push refused: mod-index.json is out of date. Run:  python tools/make_mod_index.py" >&2
         exit 1
       }
+      $PY tools/make_dsoal_index.py --check >/dev/null || {
+        echo "push refused: sacred-dsoal.json is out of date. Run:  python tools/make_dsoal_index.py" >&2
+        exit 1
+      }
       ;;
   esac
 done

@@ -3,3 +3,6 @@ ports/** -text
 
 # Git hooks (tools/bump_versions.py, docs/Versioning.md): LF endings, they run under sh.
 .githooks/* text eol=lf
+
+# DSOAL speaker ini: sacred-dsoal.json pins its sha256, so the bytes must not depend on the platform.
+docs/dsoal/*.ini text eol=lf

@@ -64,6 +64,10 @@
     {
       "url": "https://raw.githubusercontent.com/kirides/sacred-gear-mods/main/mod-index.json",
       "name": "Sacred Gear mods"
+    },
+    {
+      "url": "sacred-dsoal.json",
+      "name": "Sacred DSOAL"
     }
   ]
 }
