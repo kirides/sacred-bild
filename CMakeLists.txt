@@ -143,10 +143,21 @@ set(DDRAW_SOURCES
   src/version.rc
 )
 sort_sources_by_size_desc(DDRAW_SOURCES)
+# Version resources: version_info.h comes from the version files plus the git short sha (and -dirty), regenerated on every
+# build (cmake/VersionInfo.cmake), and is only touched when its text changes.
+set(VERSION_INFO_DIR ${CMAKE_BINARY_DIR}/generated)
+add_custom_target(version_info ALL
+  COMMAND ${CMAKE_COMMAND} -DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DOUT=${VERSION_INFO_DIR}/version_info.h -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/VersionInfo.cmake
+  BYPRODUCTS ${VERSION_INFO_DIR}/version_info.h
+  COMMENT "Generating version_info.h"
+  VERBATIM)
+
 add_library(ddraw SHARED ${DDRAW_SOURCES})
+add_dependencies(ddraw version_info)
+target_include_directories(ddraw PRIVATE ${VERSION_INFO_DIR})
 target_include_directories(ddraw PRIVATE src ${DETOURS_INCLUDE_DIRS})
 # The resource script embeds the button prompts' atlas (tools/gen_prompts.py).
-set_source_files_properties(src/version.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/overlay/prompts.png)
+set_source_files_properties(src/version.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/overlay/prompts.png;${VERSION_INFO_DIR}/version_info.h")
 target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
 target_compile_options(ddraw PRIVATE ${COMMON_OPTIONS})
 target_precompile_headers(ddraw PRIVATE src/pch.h)
@@ -209,8 +220,9 @@ if(SACREDGEAR)
     gear/rml.cpp
     gear/gear.rc
   )
-  target_include_directories(SacredGear PRIVATE gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS} ${STB_INCLUDE_DIRS})
-  set_source_files_properties(gear/gear.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kernel.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/lookup.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/fmt.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/toast.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/store.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.rml")
+  add_dependencies(SacredGear version_info)
+  target_include_directories(SacredGear PRIVATE ${VERSION_INFO_DIR} gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS} ${STB_INCLUDE_DIRS})
+  set_source_files_properties(gear/gear.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kernel.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/lookup.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/fmt.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/toast.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/store.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.rml;${VERSION_INFO_DIR}/version_info.h")
   target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi shell32)
   target_compile_definitions(SacredGear PRIVATE RMLUI_STATIC_LIB)
   target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})
