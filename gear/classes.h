@@ -69,6 +69,16 @@ namespace Classes
     };
     bool cursor(uint32_t exclude, Cursor& out);
 
+    // Item types of Gear's own: the game's type table (Items.pak) has 0x7E60 records of 0x80 bytes, most of them empty. defineItemType makes
+    // record `type` a copy of the record of `base` (any item type: a rune of an art) with the art the item teaches (+0x6A) and the text
+    // resource of its name (+0x20) replaced; `art` / `nameText` 0 keep the base's. The item record the type points to (+0x18) stays the
+    // base's, so the item looks like the base item. Only an empty record (or one made by this function) is overwritten.
+    bool defineItemType(uint32_t type, uint32_t base, uint32_t art, uint32_t nameText, const char*& error);
+
+    // The creature uses an item of its backpack (a potion is drunk, a rune read, a scroll read) with the game's own item use (what a click on
+    // the item does); false if the game refuses.
+    bool useItem(uint32_t creature, uint32_t item, const char*& error);
+
     // Installs the ability lookups and the rune class checks (called by install).
     bool installAliases();
 

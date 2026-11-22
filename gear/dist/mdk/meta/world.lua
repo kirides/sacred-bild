@@ -516,6 +516,13 @@ function Creature:learn(ability, level) end
 ---@return string? error
 function Creature:raise(ability, levels) end
 
+--- The creature uses an item of its own backpack as a click on it does: a potion is drunk, a rune or scroll read. `item` is an item id
+--- or a table with `id`. Returns true, or nil and why.
+---@param item integer|table
+---@return boolean? ok
+---@return string? error
+function Creature:use_item(item) end
+
 --- Removes an art or spell from a hero's abilities.
 ---@param ability integer
 ---@return boolean? ok

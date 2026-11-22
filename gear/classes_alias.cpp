@@ -10,6 +10,7 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 
 // Alias abilities, the rune class checks, hero records and texts for custom classes (classes.h).
@@ -644,6 +645,126 @@ bool Classes::cursor(uint32_t exclude, Cursor& out)
         LOG("Classes: cursor: the game faulted on the pick or the view");
         return false;
     }
+}
+
+namespace
+{
+    std::set<uint32_t> g_definedTypes;
+
+    bool typeRecordAddress(uint32_t type, uintptr_t& out)
+    {
+        if (!Addr::g_pTypeManager || type < 1 || type >= 0x7E60)
+        {
+            return false;
+        }
+        uintptr_t types = 0;
+        if (!readAt(Addr::g_pTypeManager.address, 0, types) || !types)
+        {
+            return false;
+        }
+        out = types + type * kTypeSize;
+        return true;
+    }
+
+    bool copyTypeRecord(uintptr_t dst, uintptr_t src, uint32_t art, uint32_t nameText)
+    {
+        __try
+        {
+            std::memcpy(reinterpret_cast<void*>(dst), reinterpret_cast<const void*>(src), kTypeSize);
+            if (art)
+            {
+                const uint16_t a = static_cast<uint16_t>(art);
+                std::memcpy(reinterpret_cast<void*>(dst + 0x6A), &a, 2);
+            }
+            if (nameText)
+            {
+                std::memcpy(reinterpret_cast<void*>(dst + 0x20), &nameText, 4);
+            }
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    bool recordEmpty(uintptr_t record)
+    {
+        uint8_t bytes[kTypeSize] = {};
+        if (!readAt(record, 0, bytes))
+        {
+            return false;
+        }
+        for (uint8_t b : bytes)
+        {
+            if (b)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    int callUseItem(uintptr_t creature, uint32_t item)
+    {
+        __try
+        {
+            return Addr::cCreature_useItem(reinterpret_cast<void*>(creature), item) & 0xFF ? 1 : 0;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return -1;
+        }
+    }
+}
+
+bool Classes::defineItemType(uint32_t type, uint32_t base, uint32_t art, uint32_t nameText, const char*& error)
+{
+    uintptr_t dst = 0, src = 0;
+    if (!typeRecordAddress(type, dst) || !typeRecordAddress(base, src))
+    {
+        error = "the type table is not there, or a type id is out of 1..0x7E5F";
+        return false;
+    }
+    if (type == base || (!g_definedTypes.count(type) && !recordEmpty(dst)))
+    {
+        error = "the type record is taken by the game";
+        return false;
+    }
+    if (recordEmpty(src))
+    {
+        error = "the base type has no record";
+        return false;
+    }
+    if (!copyTypeRecord(dst, src, art, nameText))
+    {
+        error = "the game faulted on the type record";
+        return false;
+    }
+    g_definedTypes.insert(type);
+    return true;
+}
+
+bool Classes::useItem(uint32_t creature, uint32_t item, const char*& error)
+{
+    const uintptr_t o = World::objectAddress(creature);
+    if (!o || !Addr::cCreature_useItem)
+    {
+        error = "no such creature, or the game's item use was not found";
+        return false;
+    }
+    const int r = callUseItem(o, item);
+    if (r < 0)
+    {
+        error = "the game faulted on the item";
+        return false;
+    }
+    if (r == 0)
+    {
+        error = "the game refused the item (not a potion, scroll or rune, or not usable now)";
+        return false;
+    }
+    return true;
 }
 
 uint32_t Classes::artInFlight(uint32_t id)

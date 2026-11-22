@@ -1743,6 +1743,14 @@ Raises the level of an art or spell a hero knows by `levels` (default 1) with th
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:use_item(item) -> boolean?, string?`
+
+The creature uses an item of its own backpack as a click on it does: a potion is drunk, a rune or scroll read. `item` is an item id or a table with `id`. Returns true, or nil and why.
+
+- `item`: `integer|table`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:forget(ability) -> boolean?, string?`
 
 Removes an art or spell from a hero's abilities.
@@ -2226,6 +2234,29 @@ A hero skill by its id (the u8 ids of the skill lists of `hero_skills`): name an
 Every skill the game has, by id.
 
 - returns `GearSkill[]`
+
+### GearRuneOpts
+
+| Field | Type | |
+|---|---|---|
+| `base_type` | `integer` | The item type whose record is copied (default: a rune of the copy's base art). (optional) |
+| `name_text` | `integer` | The text id of the item's name (default: the copy's name). (optional) |
+
+#### `gear.classes.define_rune(alias, opts) -> integer?, string?`
+
+Makes a rune item type for an ability copy: an item type of Gear's own (id `12800 + alias - 2000`, so copies 2000 to 4559) that is a copy of the base art's rune, teaches the copy and carries its name. Items of that type work like the game's runes: they can be spawned (`gear.world.spawn(type, x, y)`), picked up, traded, stored, and read (`creature:use_item`): the class rules of `rune.usable` apply and the art is learned or levelled like with a native rune. Without Sacred Gear the type is an empty record: a savegame that holds such an item loads it as an unknown item (see CustomClasses.md). Returns the item type, or nil and why.
+
+- `alias`: `integer`
+- `opts`: `GearRuneOpts` (optional)
+- returns `type` `integer?`
+- returns `error` `string?`
+
+#### `gear.classes.rune_type_of(alias) -> integer?`
+
+The rune item type `define_rune` made for a copy.
+
+- `alias`: `integer`
+- returns `integer?`
 
 #### `gear.classes.hero_record(body) -> string?`
 

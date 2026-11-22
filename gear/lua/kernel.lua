@@ -1351,6 +1351,31 @@ do
         return out
     end
 
+    -- Runes for art copies. The game teaches an art from an item type whose record names it (+0x6A). A copy (alias 2000..4559) gets an item type of
+    -- Gear's own, 12800 + (alias - 2000): a copy of the type record of the base art's rune, teaching the alias, named like the copy.
+    C.RUNE_TYPE_FIRST, C.RUNE_TYPE_LAST = 12800, 15359
+    C.rune_types = {}     -- alias -> item type
+    function C.rune_type_of(alias)
+        return C.rune_types[alias]
+    end
+    function C.define_rune(alias, opts)
+        opts = opts or {}
+        local rec = data.abilities[alias]
+        if not rec or not kernel.alias_owner[alias] then return nil, 'not an ability copy of this mod' end
+        local type_id = C.RUNE_TYPE_FIRST + (alias - 2000)
+        if alias < 2000 or type_id > C.RUNE_TYPE_LAST then return nil, 'rune types exist for copies 2000..4559' end
+        local base_runes = C.runes()[rec.base]
+        local base_type = opts.base_type or (base_runes and base_runes[1])
+        if not base_type then
+            -- no rune of its own: any rune of the same kind will do
+            for _, list in pairs(C.runes()) do base_type = list[1] break end
+        end
+        local ok, err = native.item_define_type(type_id, base_type, alias, opts.name_text or rec.name_text)
+        if not ok then return nil, err end
+        C.rune_types[alias] = type_id
+        return type_id
+    end
+
     local rune_cache
     -- {[ability id] = {item type, ...}}: the rune items that teach an ability (item types whose record names one: type record +0x6A).
     function C.runes()
@@ -1614,6 +1639,13 @@ do
     function creature_mt:learn(ability, level)
         assert(type(ability) == 'number', 'expected an ability id')
         return native.creature_learn(self.id, ability, level or 1)
+    end
+    -- creature:use_item(item): the creature uses an item of its backpack as a click on it does: a potion is drunk, a rune or a scroll read.
+    -- `item` is an item id or a table with `id`. Returns true, or nil and why.
+    function creature_mt:use_item(item)
+        local id = type(item) == 'table' and item.id or item
+        assert(type(id) == 'number', 'expected an item or its id')
+        return native.item_use(self.id, id)
     end
     function creature_mt:forget(ability)
         assert(type(ability) == 'number', 'expected an ability id')

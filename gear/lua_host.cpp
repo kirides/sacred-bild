@@ -949,6 +949,29 @@ namespace
         return 1;
     }
 
+    // native.item_define_type(type, base, art, name_text) -> true | nil, message; native.item_use(creature id, item id) -> true | nil, message
+    int nativeItemDefineType(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Classes::defineItemType(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<uint32_t>(luaL_checknumber(L, 2)),
+                                     static_cast<uint32_t>(luaL_optnumber(L, 3, 0)), static_cast<uint32_t>(luaL_optnumber(L, 4, 0)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    int nativeItemUse(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Classes::useItem(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.text_set(id, utf8) -> true | nil, message
     int nativeTextSet(lua_State* L)
     {
@@ -4731,6 +4754,8 @@ namespace
             {"hero_record_set", nativeHeroRecordSet},
             {"text_set", nativeTextSet},
             {"text_add", nativeTextAdd},
+            {"item_define_type", nativeItemDefineType},
+            {"item_use", nativeItemUse},
             {"art_in_flight", nativeArtInFlight},
             {"world_cursor", nativeWorldCursor},
             {"texture_image", nativeTextureImage},
