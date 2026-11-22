@@ -391,10 +391,34 @@ namespace
             }
             else
             {
-                World::Object o;
-                if (World::object(owner, o) && o.creature)
+                // The owner is a creature, or another effect object whose own owner (+0x30) leads to one: walk that link up to the creature.
+                // (Not every effect has one: the cloud of Poison Mist, class 0x17, is made with owner 0 and no creature or ability word in
+                // its object, so the mod still needs its time window for it.)
+                uint32_t at = owner;
+                for (int depth = 0; depth < 6 && at && !creature; ++depth)
                 {
-                    creature = owner;
+                    World::Object o;
+                    if (!World::object(at, o))
+                    {
+                        break;
+                    }
+                    if (o.creature)
+                    {
+                        creature = at;
+                        break;
+                    }
+                    uint32_t up = 0;
+                    const uintptr_t addr = World::objectAddress(at);
+                    if (!addr || !readAt(reinterpret_cast<void*>(addr), kFxOwner, up) || up == at)
+                    {
+                        break;
+                    }
+                    if (const auto c2 = g_fxCaster.find(up); c2 != g_fxCaster.end())
+                    {
+                        creature = c2->second;
+                        break;
+                    }
+                    at = up;
                 }
             }
             if (const auto pv = g_fxVariant.find(owner); pv != g_fxVariant.end())
