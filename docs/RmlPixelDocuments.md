@@ -12,6 +12,15 @@ unit (the context's density ratio is the canvas scale), so text and boxes snap t
 - `ScaledFontEngine` rasterizes at exactly `size * scale` (layout-unit documents) or exactly the asked size (dp documents).
   Layout-unit documents are pixel-identical to before apart from this.
 
+## Spike result (Better SaveLoad, 1600x900)
+
+Built and working: `?dp` on a picture source (`gear:image/280?dp`, `file.png?dp`) reports the natural size times the canvas scale, so the art of the
+game keeps its size in a screen-pixel document and RmlUi's picture cache (per source) never mixes the two kinds of document. The theme mod's
+`mod.lua` names `theme_dp`: Gear puts that stylesheet in front of `{dp = true}` documents (else `theme`). `tools/make_theme_dp.py`
+(mods repo) generates `theme-dp.rcss` from `theme.rcss` (px to dp, hairlines kept, `?dp` on pictures); `tools/rcss_to_dp.py` converts a mod's own
+stylesheet. Better SaveLoad loads with `{dp = true}` and its lengths in dp (also the ones the Lua side writes): the screen looks the same as
+before at 1600x900, with text and edges on whole pixels.
+
 ## What a conversion of a mod means
 
 1. **Units.** In a dp document `px` is a screen pixel and `dp` a layout unit. A stylesheet written for layout units therefore needs every

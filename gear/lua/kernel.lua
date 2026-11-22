@@ -4033,7 +4033,7 @@ local function make_ui(mod)
     -- The theme mod's folder and stylesheet (a running mod whose mod.lua has `theme = 'file.rcss'`), for the natives; nothing with opts.theme = false.
     function uis.rml_theme(opts)
         if opts.theme == false or not uis.theme_provider then return end
-        return uis.theme_provider()
+        return uis.theme_provider(opts.dp)
     end
     -- doc.model: the data model's values, read and written like a table; writing a value (at any depth) has the bindings of the
     -- document refresh. The top-level keys are the ones the model was loaded with.
@@ -6036,9 +6036,10 @@ end
 local catalog = {}          -- mod id -> entry {id, dir, m, builtin, invalid, loaded, want, reason, fail, excluded}
 local catalog_list = {}     -- the entries by id
 -- The theme mod: the first running mod (in the catalog's order) whose mod.lua names a `theme` stylesheet. Returns its folder and the file.
-function uis.theme_provider()
+-- `dp`: for a document laid out in screen pixels: the stylesheet the manifest names as `theme_dp` (the lengths in dp, the pictures sized in layout units), else `theme`.
+function uis.theme_provider(dp)
     for _, e in ipairs(catalog_list) do
-        if e.loaded and e.m and e.m.theme then return e.dir, e.m.theme end
+        if e.loaded and e.m and e.m.theme then return e.dir, (dp and e.m.theme_dp) or e.m.theme end
     end
 end
 local mod_state = nil       -- gear_mods.json decoded: {mods = {id = {enabled, settings, keys, migrated}}, order = {id, ...}}
@@ -7743,6 +7744,9 @@ local function check_manifest(m, dir)
     if m.theme ~= nil and (type(m.theme) ~= 'string' or m.theme:find('%.%.') or m.theme:find('^[/\\]') or m.theme:find(':')) then
         return nil, 'mod.lua: theme must be the path of an .rcss file inside the mod'
     end
+    if m.theme_dp ~= nil and (type(m.theme_dp) ~= 'string' or m.theme_dp:find('%.%.') or m.theme_dp:find('^[/\\]') or m.theme_dp:find(':')) then
+        return nil, 'mod.lua: theme_dp must be the path of an .rcss file inside the mod'
+    end
     local allowed = {}
     for _, name in ipairs(m.pipes or {}) do
         if type(name) ~= 'string' or not name:match('^[%w_%-%.]+$') then
@@ -7774,6 +7778,7 @@ local function check_manifest(m, dir)
         keys = keys,
         keys_by_id = keys_by_id,
         theme = m.theme,
+        theme_dp = m.theme_dp,
         dir = dir,
     }
 end
