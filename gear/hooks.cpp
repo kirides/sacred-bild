@@ -10,6 +10,7 @@
 #include "buffs.h"
 #include "party.h"
 #include "patch.h"
+#include "pfx.h"
 #include "pickup.h"
 #include "potionpick.h"
 #include "realm.h"
@@ -60,6 +61,7 @@ bool Hooks::install()
     ItemUse::install();
     KillStat::install();
     PotionPick::install();
+    Pfx::install();
     const bool committed = Patch::commit();
     // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.
     SiteHook::install();

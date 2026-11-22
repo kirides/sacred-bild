@@ -148,6 +148,12 @@ static const Sig::Entry kGearSigs[] = {
     {"cUI_Control_getRect", "83 EC 30 66 8B 41 2C 66 8B 51 2E 53", 0, Sig::Take::Match, &Gear::Addr::cUI_Control_getRect}, // 00732350, 00731C70
     {"cKillStat_record", "83 EC 10 8B 44 24 18 53 55 8B E9 8B 5C 24 1C", 0, Sig::Take::Match, &Gear::Addr::cKillStat_record}, // 00424250, 00424120
     {"potionPick", "56 BE 05 00 00 00 E8 ?? ?? ?? ?? 99 B9 E8 03 00 00", 0, Sig::Take::Match, &Gear::Addr::potionPick}, // 0043B1A0, 0043B070
+    {"cObjectFX_setup", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 56 8B F1", 0, Sig::Take::Match, &Gear::Addr::cObjectFX_setup}, // 005A0C50, 005A0BC0
+    {"particleMgr_add", "83 EC 0C 53 55 56 8B E9 57 89 6C 24 18", 0, Sig::Take::Match, &Gear::Addr::particleMgr_add}, // 007CB830, 007CB110
+    {"particleMgr_update", "56 8B F1 E8 ?? ?? ?? ?? 8B 44 24 08 8B 4E 18 25 FF FF 00 00 8D 04 81 8B 08 85 C9 74 0A 8B 44 24 0C 8B 11 50 FF 52 08", 0, Sig::Take::Match, &Gear::Addr::particleMgr_update}, // 007CC080, 007CB960
+    {"g_pParticleMgr", "68 00 02 00 00 8B C8 E8 ?? ?? ?? ?? A3 ?? ?? ?? ?? 8B 4C 24 04", 13, Sig::Take::Abs32, &Gear::Addr::g_pParticleMgr}, // 017EEBCC, 017ECB4C
+    {"textureMgr_find", "8B 44 24 04 56 8D B1 94 00 00 00 50 8B CE E8 ?? ?? ?? ?? 83 F8 FF 74 0C 50 8B CE E8 ?? ?? ?? ?? 5E C2 04 00 33 C0 5E C2 04 00 90 90 90 90 90 90 81 EC 5C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::textureMgr_find}, // 00657360, 00657620
+    {"particle_drawSprites", "81 EC C8 01 00 00 DB 84 24 18 02 00 00", 0, Sig::Take::Match, &Gear::Addr::particle_drawSprites}, // 00761B00, 007613E0
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
     {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270

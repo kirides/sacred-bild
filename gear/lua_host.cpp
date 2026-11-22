@@ -22,6 +22,7 @@
 #include "rml.h"
 #include "overlay.h"
 #include "buffs.h"
+#include "pfx.h"
 #include "party.h"
 #include "padnav.h"
 #include "pipe.h"
@@ -805,6 +806,110 @@ namespace
     {
         Classes::setUsableActive(lua_toboolean(L, 1) != 0);
         return 0;
+    }
+
+    // native.pfx_define{id, textures = {{from, to}, ...}, hue, colorize, multiply, alpha, speed} -> true | nil, message
+    // native.pfx_undefine(id) -> bool; native.pfx_watch({fx, ...}, all)
+    // native.pfx_stats() -> {live, applied}
+    int nativePfxDefine(lua_State* L)
+    {
+        luaL_checktype(L, 1, LUA_TTABLE);
+        Pfx::Variant v;
+        lua_getfield(L, 1, "id");
+        v.id = static_cast<uint32_t>(lua_tonumber(L, -1));
+        lua_pop(L, 1);
+        lua_getfield(L, 1, "textures");
+        if (lua_istable(L, -1))
+        {
+            const int n = static_cast<int>(lua_objlen(L, -1));
+            for (int i = 1; i <= n; ++i)
+            {
+                lua_rawgeti(L, -1, i);
+                lua_rawgeti(L, -1, 1);
+                lua_rawgeti(L, -2, 2);
+                const char* from = lua_tostring(L, -2);
+                const char* to = lua_tostring(L, -1);
+                if (from && to)
+                {
+                    v.textures.emplace_back(from, to);
+                }
+                lua_pop(L, 3);
+            }
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, 1, "hue");
+        if (lua_isnumber(L, -1))
+        {
+            v.hasHue = true;
+            v.hue = static_cast<float>(lua_tonumber(L, -1));
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, 1, "colorize");
+        if (lua_isnumber(L, -1))
+        {
+            v.hasColorize = true;
+            v.colorize = static_cast<uint32_t>(lua_tonumber(L, -1)) & 0xFFFFFF;
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, 1, "multiply");
+        if (lua_isnumber(L, -1))
+        {
+            v.hasMultiply = true;
+            v.multiply = static_cast<uint32_t>(lua_tonumber(L, -1));
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, 1, "alpha");
+        if (lua_isnumber(L, -1))
+        {
+            v.alpha = static_cast<float>(lua_tonumber(L, -1));
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, 1, "speed");
+        if (lua_isnumber(L, -1))
+        {
+            v.speed = static_cast<float>(lua_tonumber(L, -1));
+        }
+        lua_pop(L, 1);
+        const char* error = nullptr;
+        if (!Pfx::define(v, error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    int nativePfxUndefine(lua_State* L)
+    {
+        lua_pushboolean(L, Pfx::undefine(static_cast<uint32_t>(luaL_checknumber(L, 1))));
+        return 1;
+    }
+
+    int nativePfxWatch(lua_State* L)
+    {
+        std::vector<uint32_t> types;
+        if (lua_istable(L, 1))
+        {
+            const int n = static_cast<int>(lua_objlen(L, 1));
+            for (int i = 1; i <= n; ++i)
+            {
+                lua_rawgeti(L, 1, i);
+                types.push_back(static_cast<uint32_t>(lua_tonumber(L, -1)));
+                lua_pop(L, 1);
+            }
+        }
+        Pfx::watch(types, lua_toboolean(L, 2) != 0);
+        return 0;
+    }
+
+    int nativePfxStats(lua_State* L)
+    {
+        lua_createtable(L, 0, 2);
+        lua_pushnumber(L, static_cast<lua_Number>(Pfx::liveCount()));
+        lua_setfield(L, -2, "live");
+        lua_pushnumber(L, static_cast<lua_Number>(Pfx::appliedCount()));
+        lua_setfield(L, -2, "applied");
+        return 1;
     }
 
     // native.alias_create(alias, base) -> true | nil, message; native.alias_remove(alias); native.alias_clear();
@@ -4737,6 +4842,10 @@ namespace
             {"creature_ability_active", nativeCreatureAbilityActive},
             {"route_active", nativeRouteActive},
             {"usable_active", nativeUsableActive},
+            {"pfx_define", nativePfxDefine},
+            {"pfx_undefine", nativePfxUndefine},
+            {"pfx_watch", nativePfxWatch},
+            {"pfx_stats", nativePfxStats},
             {"item_use_active", nativeItemUseActive},
             {"open_teleporter", nativeOpenTeleporter},
             {"show_text", nativeShowText},
@@ -5296,6 +5405,50 @@ LuaHost::Answer LuaHost::runeUsable(int type, int ability, int vanilla, int& out
     else if (lua_isboolean(L, -1))
     {
         out = lua_toboolean(L, -1) ? 1 : 0;
+        answer = Answer::Value;
+    }
+    lua_pop(L, 1);
+    return answer;
+}
+
+LuaHost::Answer LuaHost::pfxSelect(uint32_t fx, uint32_t creature, uint32_t ability, uint32_t level, uint32_t parent, uint32_t& out)
+{
+    if (t_inLua)
+    {
+        return Answer::Busy;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return Answer::Busy;
+    }
+    if (!g_lua || !g_started)
+    {
+        return Answer::None;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "pfx_select");
+    lua_remove(L, -2);
+    lua_pushnumber(L, fx);
+    lua_pushnumber(L, creature);
+    lua_pushnumber(L, ability);
+    lua_pushnumber(L, level);
+    lua_pushnumber(L, parent);
+    setBudget(kHookBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 5, 1, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    Answer answer = Answer::None;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.pfx_select failed: {}", msg ? msg : "(no message)");
+    }
+    else if (lua_isnumber(L, -1) && lua_tonumber(L, -1) > 0)
+    {
+        out = static_cast<uint32_t>(lua_tonumber(L, -1));
         answer = Answer::Value;
     }
     lua_pop(L, 1);

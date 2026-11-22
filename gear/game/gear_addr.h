@@ -425,4 +425,18 @@ namespace Gear::Addr
     // ENG 0043B1A0: the potion picker (gear/potionpick.cpp), stdcall (mode, flag, tier), ret 0xC: the item type of a random potion (the type is only
     // an address holder: the function is not cdecl).
     inline Sacred::Cdecl<uint32_t(int32_t mode, int32_t flag, int32_t tier)> potionPick{};
+
+    // Skill particle effects (gear/pfx.cpp). ENG 005A0C50: cObjectFX's effect setup (thiscall (fx, effect id), ret 4): the id (0x300..0x49D,
+    // the object type of the effect) picks the hard-coded particle system class (a byte table at 0x5A3570 and a switch), which is made and
+    // added to the particle manager; the handle goes into the fx object's +0x6E. ENG 007CB830: the manager's add (thiscall (manager, system)
+    // -> handle, ret 4). ENG 007CC080: the manager's update of one system by handle (thiscall (manager, handle, dt), ret 8). ENG 017EEBCC: the
+    // manager singleton (its +0x18 / +0x1C: begin / end of the vector of system pointers by handle). ENG 00657360: the texture lookup by file
+    // name (thiscall (texture manager, name), ret 4) the systems' constructors use. ENG 00761B00: the sprite drawing every particle
+    // system shares (thiscall (system, device, 22 stack words), ret 0x60), +0x68 / +0x6C the particles.
+    inline Sacred::Thiscall<void(void* fx, uint32_t effect)> cObjectFX_setup{};
+    inline Sacred::Thiscall<uint32_t(void* manager, void* system)> particleMgr_add{};
+    inline Sacred::Thiscall<void(void* manager, uint32_t handle, float dt)> particleMgr_update{};
+    inline Sacred::Global<void*> g_pParticleMgr{};
+    inline Sacred::Thiscall<uint32_t(void* textures, const char* name)> textureMgr_find{};
+    inline uintptr_t particle_drawSprites{};
 }
