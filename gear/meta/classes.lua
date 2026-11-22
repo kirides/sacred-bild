@@ -91,13 +91,17 @@ function GearClasses.remove_ability(alias) end
 ---@return string?
 function GearClasses.icon_name(id) end
 
---- The image id (for `gear.ui.image`) of an ability's icon, the game's own 64 x 64 texture, and the tint to draw it with (the
---- game's icons are grey discs: combat arts gold, spells pale blue); nil if it has none. A copy has its base's icon (give it
---- another with `gear.ui.texture_image(name)` and the record's icon string).
+--- The image id (for `gear.ui.image`) of an ability's icon in a state, and the tint to draw it with. The game keeps three 64 x 64 sprites
+--- per art and spell (UI images in the `GUI_spell` sheets; `icon_frame_a`/`_b`/`_main` of a combat art, `icon_frame_normal`/`_hover`/`_pressed`
+--- of a spell): the grey disc of an art the hero does not have or cannot use (`'disabled'`), the pale one while it regenerates
+--- (`'cooldown'`) and the coloured one when it is ready (`'available'`, the default). They are drawn as they are (the tint is white). A copy has
+--- its base's sprites; a copy with an icon string of its own has a plain texture (`gear.ui.texture_image`) and gets a tint for the state
+--- instead. nil if the ability has no icon.
 ---@param id integer
+---@param state? 'available'|'cooldown'|'disabled'
 ---@return integer? image
 ---@return integer? color
-function GearClasses.art_icon(id) end
+function GearClasses.art_icon(id, state) end
 
 --- One hero skill.
 ---@class GearSkill
