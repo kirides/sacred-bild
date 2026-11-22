@@ -785,9 +785,9 @@ One ability record. Reading a field of a table the ability is not in (or an unkn
 | `value2_per_level` | `integer` | T2. |
 | `value3_base` | `integer` | T2. |
 | `value3_per_level` | `integer` | T2. |
-| `icon_frame_a` | `integer` | T1: GUI icon index A (atlas index). |
-| `icon_frame_b` | `integer` | T1: GUI icon index B (atlas index). |
-| `icon_frame_main` | `integer` | T1: GUI icon index (main) (atlas index). |
+| `icon_frame_a` | `integer` | T1: UI image of the icon's disabled / unlearned sprite (the grey disc); `_b` follows it, `_main` is the third (see `gear.classes.art_icon`). |
+| `icon_frame_b` | `integer` | T1: UI image of the icon's cooldown sprite (the pale disc). |
+| `icon_frame_main` | `integer` | T1: UI image of the icon's available sprite (coloured). |
 | `design_value_j` | `integer` | T1: Spreadsheet column J (unused). |
 | `approach_distance` | `integer` | T1: Approach distance (world units (50 = 1 m)). |
 | `effect_base` | `number` | T1: Effect 1 (base) (depends on the art). |
@@ -800,9 +800,9 @@ One ability record. Reading a field of a table the ability is not in (or an unkn
 | `param_b_per_level` | `integer` | T1: Parameter B (per level) (depends on the art). |
 | `class_mask` | `integer` | T1/T2: Class mask. |
 | `flags` | `integer` | T1/T2: Flags. |
-| `icon_frame_normal` | `integer` | T2: Icon frame index (normal) (sprite index). |
-| `icon_frame_hover` | `integer` | T2: Icon frame index (hover) (sprite index). |
-| `icon_frame_pressed` | `integer` | T2: Icon frame index (pressed) (sprite index). |
+| `icon_frame_normal` | `integer` | T2: UI image of the icon's disabled sprite (the grey disc; named for a guess, the three are in the order of a combat art's). |
+| `icon_frame_hover` | `integer` | T2: UI image of the icon's cooldown sprite (the pale disc). |
+| `icon_frame_pressed` | `integer` | T2: UI image of the icon's available sprite (coloured). |
 | `launch_type` | `integer` | T2: Targeting (launch type). |
 | `cooldown_base` | `integer` | T2: Regeneration time (base) (seconds). |
 | `cooldown_per_level` | `integer` | T2: Regeneration time (per level) (seconds). |
@@ -2302,11 +2302,12 @@ The texture file name of an ability's icon (`GUI_MOVE_RUNDUM.TGA`), nil if it ha
 - `id`: `integer`
 - returns `string?`
 
-#### `gear.classes.art_icon(id) -> integer?, integer?`
+#### `gear.classes.art_icon(id, state) -> integer?, integer?`
 
-The image id (for `gear.ui.image`) of an ability's icon, the game's own 64 x 64 texture, and the tint to draw it with (the game's icons are grey discs: combat arts gold, spells pale blue); nil if it has none. A copy has its base's icon (give it another with `gear.ui.texture_image(name)` and the record's icon string).
+The image id (for `gear.ui.image`) of an ability's icon in a state, and the tint to draw it with. The game keeps three 64 x 64 sprites per art and spell (UI images in the `GUI_spell` sheets; `icon_frame_a`/`_b`/`_main` of a combat art, `icon_frame_normal`/`_hover`/`_pressed` of a spell): the grey disc of an art the hero does not have or cannot use (`'disabled'`), the pale one while it regenerates (`'cooldown'`) and the coloured one when it is ready (`'available'`, the default). They are drawn as they are (the tint is white). A copy has its base's sprites; a copy with an icon string of its own has a plain texture (`gear.ui.texture_image`) and gets a tint for the state instead. nil if the ability has no icon.
 
 - `id`: `integer`
+- `state`: `'available'|'cooldown'|'disabled'` (optional)
 - returns `image` `integer?`
 - returns `color` `integer?`
 
@@ -4723,6 +4724,7 @@ The options of `load` and `load_string`.
 | `model` | `table` | Data binding: the values of the document's data model, named `model` (`<body data-model="model">`, then `{{ hp }}`, `data-value="name"`, `data-if="hp < 10"`, `data-for="item : items"`, `data-class-low="hp < 10"` ...). Top-level keys fix what can be bound; their values may be numbers, strings, booleans, lists and records (nested up to 8 deep). Change them through `doc.model`. (optional) |
 | `calls` | `table<string, fun(args: string[], doc: GearRmlDoc, event: GearRmlEvent)>` | Functions for `data-event-click="name(arg, ...)"` attributes; `args` are the call's arguments as text. (optional) |
 | `on_change` | `fun(doc: GearRmlDoc, model: table)` | Called after the document changed a value itself (an input with `data-value`); the table is up to date. (optional) |
+| `origin` | `'layout'\|'screen'` | Where the document's (0, 0) is: `'layout'` (default) the top left of the 1024x768 layout, `'screen'` the top left corner of the whole screen, where the game's own windows start (on a wide screen that is left of the layout: the positions in the document are measured from there, and elements reach the screen's edge with their text). What Lua sees (rectangles, `doc:query(...):rect()`, panel places) stays in layout units. (optional) |
 | `dp` | `boolean` | Lay the document out in screen pixels with `1dp` = one layout unit (crisp text; write sizes in `dp`). Default `false`: `1px` = one layout unit, text is scaled with the UI. (optional) |
 
 ### GearRmlDrawOpts

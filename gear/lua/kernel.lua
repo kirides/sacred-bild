@@ -1320,14 +1320,38 @@ do
         return name ~= '' and name or nil
     end
 
-    -- The image id (for gear.ui.image) of an ability's icon: the game's own texture, 64 x 64; nil if it has none. Copies use their
-    -- base's icon (a copy's record is a copy of the base's).
-    function C.art_icon(id)
+    -- The three sprites of an ability's icon (UI images of 64 x 64 in the GUI_spell sheets): the game's action bar and combat art windows draw
+    -- the first as the unlearned / disabled one (a grey disc), the second while the art regenerates (the disc pale), the third when it is
+    -- available (coloured). T1 (combat arts) keeps them as icon_frame_a / _b / _main, T2 (spells) as icon_frame_normal / _hover / _pressed.
+    local ICON_STATES = {disabled = 1, cooldown = 2, available = 3}
+    local function icon_frames(rec)
+        local a, b, c
+        if rec.kind == 'combat_art' then a, b, c = rec.icon_frame_a, rec.icon_frame_b, rec.icon_frame_main
+        else a, b, c = rec.icon_frame_normal, rec.icon_frame_hover, rec.icon_frame_pressed end
+        if a and b and c and a > 0 and b == a + 1 and c == a + 2 then return {a, b, c} end
+        return nil
+    end
+
+    -- The image id (for gear.ui.image) of an ability's icon in `state` ('available' (default), 'cooldown' or 'disabled'): the game's own sprite
+    -- for that state, drawn as it is (the tint is white). An ability whose icon was changed (a copy with another icon string) has a plain
+    -- 64 x 64 texture: that one, with a tint for the state (the game's own icons are grey discs). nil if it has none.
+    function C.art_icon(id, state)
+        local idx = ICON_STATES[state or 'available']
+        if not idx then error("gear.classes.art_icon: state must be 'available', 'cooldown' or 'disabled'", 2) end
+        local rec = data.abilities[id]
+        if not rec then return nil end
+        local base = rec.base and data.abilities[rec.base] or nil
+        local frames = icon_frames(rec)
+        if frames and (not base or C.icon_name(id) == C.icon_name(rec.base)) then
+            local image = frames[idx]
+            if native.ui_image_info(image) then return image, 0xFFFFFFFF end
+        end
         local name = C.icon_name(id)
         local image = name and native.texture_image(name) or nil
         if not image then return nil end
-        -- the game's icons are grey discs; the combat arts' are drawn gold, the spells' a pale blue
-        return image, id >= 1000 and 0xFFFFD060 or 0xFFB8D0FF
+        local gold = id >= 1000
+        local tint = idx == 3 and (gold and 0xFFFFD060 or 0xFFB8D0FF) or idx == 2 and (gold and 0xFFA08840 or 0xFF8090A8) or 0xFF707070
+        return image, tint
     end
 
     -- A hero skill by id (the u8 ids of Creature.pak's skill lists): {id, name, description} from the game's texts (the skills window's
@@ -4047,6 +4071,7 @@ local function make_ui(mod)
         -- (no theme running and none refused: the plain base style of the host is the look of the document)
         local id, err = native.rml_load(mod.dir, path, opts.dp and true or false, opts.model, uis.rml_call_names(opts), theme_dir, theme_file, theme_dir == nil and opts.theme ~= false)
         if not id then return nil, err end
+        if opts.origin == 'screen' and native.rml_origin then native.rml_origin(id, true) end
         return rml_open(id, opts)
     end
 
@@ -4065,6 +4090,7 @@ local function make_ui(mod)
         local id, err = native.rml_load_string(dir, markup, opts.dp and true or false, opts.model, uis.rml_call_names(opts), theme_dir, theme_file, mod.builtin and true or false,
             theme_dir == nil and opts.theme ~= false)
         if not id then return nil, err end
+        if opts.origin == 'screen' and native.rml_origin then native.rml_origin(id, true) end
         return rml_open(id, opts)
     end
 

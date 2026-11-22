@@ -181,9 +181,9 @@ function GearAbilities:restore() end
 ---@field value2_per_level integer T2.
 ---@field value3_base integer T2.
 ---@field value3_per_level integer T2.
----@field icon_frame_a integer T1: GUI icon index A (atlas index).
----@field icon_frame_b integer T1: GUI icon index B (atlas index).
----@field icon_frame_main integer T1: GUI icon index (main) (atlas index).
+---@field icon_frame_a integer T1: UI image of the icon's disabled / unlearned sprite (the grey disc); `_b` follows it, `_main` is the third (see `gear.classes.art_icon`).
+---@field icon_frame_b integer T1: UI image of the icon's cooldown sprite (the pale disc).
+---@field icon_frame_main integer T1: UI image of the icon's available sprite (coloured).
 ---@field design_value_j integer T1: Spreadsheet column J (unused).
 ---@field approach_distance integer T1: Approach distance (world units (50 = 1 m)).
 ---@field effect_base number T1: Effect 1 (base) (depends on the art).
@@ -196,9 +196,9 @@ function GearAbilities:restore() end
 ---@field param_b_per_level integer T1: Parameter B (per level) (depends on the art).
 ---@field class_mask integer T1/T2: Class mask.
 ---@field flags integer T1/T2: Flags.
----@field icon_frame_normal integer T2: Icon frame index (normal) (sprite index).
----@field icon_frame_hover integer T2: Icon frame index (hover) (sprite index).
----@field icon_frame_pressed integer T2: Icon frame index (pressed) (sprite index).
+---@field icon_frame_normal integer T2: UI image of the icon's disabled sprite (the grey disc; named for a guess, the three are in the order of a combat art's).
+---@field icon_frame_hover integer T2: UI image of the icon's cooldown sprite (the pale disc).
+---@field icon_frame_pressed integer T2: UI image of the icon's available sprite (coloured).
 ---@field launch_type integer T2: Targeting (launch type).
 ---@field cooldown_base integer T2: Regeneration time (base) (seconds).
 ---@field cooldown_per_level integer T2: Regeneration time (per level) (seconds).
