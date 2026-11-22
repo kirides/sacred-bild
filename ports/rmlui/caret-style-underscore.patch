@@ -1,0 +1,29 @@
+--- a/Source/Core/Elements/WidgetTextInput.cpp	2026-11-22 15:08:52.431339100 +0100
++++ b/Source/Core/Elements/WidgetTextInput.cpp	2026-11-22 15:09:00.929296600 +0100
+@@ -1432,6 +1432,17 @@
+ 	cursor_size.x = Math::Round(ElementUtilities::GetDensityIndependentPixelRatio(text_element));
+ 	cursor_size.y = GetLineHeight();
+ 
++	// SacredBild: "caret-style: underscore" (a property Sacred Gear registers) draws the caret as a horizontal bar at the foot of the line, as wide as
++	// a "_", like the game's own text fields, instead of the thin vertical bar.
++	Vector2f cursor_offset(0, 0);
++	if (const Property* style = parent->GetProperty("caret-style"); style && style->unit == Unit::KEYWORD && style->Get<int>() == 1)
++	{
++		const float thickness = Math::Max(2.f * cursor_size.x, 2.f);
++		cursor_offset.y = cursor_size.y - thickness;
++		cursor_size.x = Math::Max(float(ElementUtilities::GetStringWidth(text_element, "_")), 4.f);
++		cursor_size.y = thickness;
++	}
++
+ 	Colourb color;
+ 	if (const Property* property = parent->GetProperty(PropertyId::CaretColor); property && property->unit == Unit::COLOUR)
+ 		color = property->Get<Colourb>();
+@@ -1439,7 +1450,7 @@
+ 		color = parent->GetComputedValues().color();
+ 
+ 	Mesh mesh = cursor_geometry.Release(Geometry::ReleaseMode::ClearMesh);
+-	MeshUtilities::GenerateQuad(mesh, Vector2f(0, 0), cursor_size, color.ToPremultiplied());
++	MeshUtilities::GenerateQuad(mesh, cursor_offset, cursor_size, color.ToPremultiplied());
+ 	cursor_geometry = parent->GetRenderManager()->MakeGeometry(std::move(mesh));
+ }
+ 

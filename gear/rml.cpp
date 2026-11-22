@@ -1437,6 +1437,9 @@ namespace
             return false;
         }
         g_started = true;
+        // caret-style: block (the thin vertical bar, RmlUi's own) or underscore (a bar at the foot of the line, as wide as a "_": the game's text fields).
+        // Needs the patched RmlUi of ports/rmlui (caret-style-underscore.patch); a stock RmlUi ignores the property.
+        Rml::StyleSheetSpecification::RegisterProperty("caret-style", "block", false).AddParser("keyword", "block, underscore");
         Rml::SetFontEngineInterface(new ScaledFontEngine(Rml::GetFontEngineInterface()));
         {
             static Rml::ElementInstancerGeneric<RingElement> ringInstancer;
