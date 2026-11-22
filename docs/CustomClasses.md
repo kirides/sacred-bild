@@ -113,3 +113,15 @@ art alias), so only the copy sees the edited numbers. Measured in game (Poison M
 unchanged after the copy exists; copy with value0 and value3 doubled 175..185 per tick; T1 `effect_base` set to 50 changes nothing.
 Hard Hit copy (routed to the Gladiator class) with `effect_base` 1.9 / 3.8: mean damage 204.6 / 385.4 (ratio 1.88 for factor ratio 2).
 Only Poison Mist was run in game; the other spell-linked arts use the same lookup. Details: `docs/ability-re/ingame.md`.
+
+## Rune items for ability copies
+
+* The game teaches an art from an item type whose record names it: u16 at +0x6A of the 0x80-byte type record (`FUN_0043AF10`). The type table has 0x7E60
+  records, most of them empty in `Items.pak`; `gear.classes.define_rune(alias)` copies the record of the base art's rune into the empty record
+  `6200 + alias - 2000` (copies 2000..3799), sets +0x6A to the alias and +0x20 (the name's text resource) to the copy's name. The item record the
+  type points to (+0x18) stays the base's. The range is below 0x1FFF so that `drops.select` can name the type.
+* Reading is the game's item use (`FUN_0054AA80`, a click on the item: potions, scrolls, runes): `creature:use_item(item)`. The class check is
+  the ability record's mask test (`FUN_004D1B20`), which `rune.usable` hooks.
+* A savegame with such an item loads without Gear (tested): the type record is empty there.
+* The combo master's window is `UI_WND_MASTER`; the custom-classes mod replaces it (`gear.ui.replace_window`) when art files exist. Combos with custom
+  arts work in the engine (`creature:set_combo` accepts them; both steps ran).
