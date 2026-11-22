@@ -527,12 +527,13 @@ namespace
                 __except (EXCEPTION_EXECUTE_HANDLER)
                 {
                 }
-                float age = 0;
-                uint32_t w1 = 0, w2 = 0;
-                readAt(reinterpret_cast<void*>(sys), 0x20A0, age);
-                readAt(reinterpret_cast<void*>(sys), 0x20A4, w1);
-                readAt(reinterpret_cast<void*>(sys), 0x20A8, w2);
-                LOG("PFXTRACE t={} type={:X} sys={:X} dt={} pos={} {} {} alive={} age={} w1={:X} w2={:X}", GetTickCount64(), tt->second, sys, dt, x, y, z, alive, age, w1, w2);
+                uint32_t w[16] = {};
+                for (int i = 0; i < 16; ++i)
+                {
+                    readAt(reinterpret_cast<void*>(sys), 0x20A0 + i * 4, w[i]);
+                }
+                LOG("PFXTRACE t={} type={:X} sys={:X} dt={} pos={} {} {} alive={} w={:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X}", GetTickCount64(), tt->second, sys, dt, x, y, z, alive,
+                    w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9], w[10], w[11], w[12], w[13], w[14], w[15]);
             }
         }
         if (!g_pending.empty() || !g_instances.empty())
