@@ -54,6 +54,7 @@ namespace
     decltype(Addr::particleMgr_update)::Ptr g_origUpdate = nullptr;
     decltype(Addr::textureMgr_find)::Ptr g_origFind = nullptr;
     uintptr_t g_origDraw = 0;
+    uintptr_t g_origDrawGround = 0;
 
     bool g_installed = false;
 
@@ -308,6 +309,33 @@ namespace
         }
     }
 
+    // The detour of the single-quad drawing (thiscall, ECX the system, [esp + 4] the device, ret 0x2C): the ground discs and magic circles of
+    // some effect classes (Poison Mist's cloud, class 0x17) are drawn by it and not by the batch drawing above. Same scheme.
+    __declspec(naked) void hookDrawGroundSprite()
+    {
+        __asm
+        {
+            push ecx
+            push dword ptr [esp + 8]
+            push ecx
+            call pfxDrawEnter
+            add esp, 8
+            mov edx, eax
+            pop ecx
+            test edx, edx
+            jz groundPlain
+            mov eax, [esp]
+            mov g_drawReturn, eax
+            mov dword ptr [esp], offset groundDone
+        groundPlain:
+            jmp g_origDrawGround
+        groundDone:
+            call pfxDrawLeave
+            push g_drawReturn
+            ret
+        }
+    }
+
     // ---- the effect setup ------------------------------------------------------------------------------------------------
 
     void* g_textureManager = nullptr;       // what the engine's lookups use as `this` (captured from the first call)
@@ -525,7 +553,7 @@ bool Pfx::install()
         return true;
     }
     if (!Addr::cObjectFX_setup || !Addr::particleMgr_add || !Addr::particleMgr_update || !Addr::g_pParticleMgr || !Addr::textureMgr_find ||
-        !Addr::particle_drawSprites)
+        !Addr::particle_drawSprites || !Addr::particle_drawGroundSprite)
     {
         LOG("Pfx: addresses missing, gear.pfx changes no effects");
         return false;
@@ -538,6 +566,8 @@ bool Pfx::install()
     ok = Patch::hook(g_origFind, Addr::textureMgr_find, hookFind, "textureMgr_find") && ok;
     g_origDraw = Addr::particle_drawSprites;
     ok = Patch::hook(reinterpret_cast<void**>(&g_origDraw), reinterpret_cast<void*>(hookDrawSprites), "particle_drawSprites") && ok;
+    g_origDrawGround = Addr::particle_drawGroundSprite;
+    ok = Patch::hook(reinterpret_cast<void**>(&g_origDrawGround), reinterpret_cast<void*>(hookDrawGroundSprite), "particle_drawGroundSprite") && ok;
     LOG("Pfx: hooks queued");
     return ok;
 }

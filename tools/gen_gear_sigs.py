@@ -330,6 +330,7 @@ GEAR = [
     ('g_pParticleMgr', 0x017EEBCC, 'data'),
     ('textureMgr_find', 0x00657360, 'func'),
     ('particle_drawSprites', 0x00761B00, 'func'),
+    ('particle_drawGroundSprite', 0x007631E0, 'func'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

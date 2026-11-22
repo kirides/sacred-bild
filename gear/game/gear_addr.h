@@ -439,4 +439,5 @@ namespace Gear::Addr
     inline Sacred::Global<void*> g_pParticleMgr{};
     inline Sacred::Thiscall<uint32_t(void* textures, const char* name)> textureMgr_find{};
     inline uintptr_t particle_drawSprites{};
+    inline uintptr_t particle_drawGroundSprite{};
 }
