@@ -1,3 +1,4 @@
+#include "memfault.h"
 #include "tables.h"
 #include "classes.h"
 #include "game/gear_addr.h"
@@ -17,7 +18,7 @@ namespace
             std::memcpy(dst, src, size);
             return true;
         }
-        __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+        __except (Gear::isMemoryFault(GetExceptionCode()) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
         {
             return false;
         }
@@ -31,7 +32,7 @@ namespace
             std::memcpy(dst, src, size);
             return true;
         }
-        __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+        __except (Gear::isMemoryFault(GetExceptionCode()) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
         {
             return false;
         }
@@ -54,7 +55,7 @@ namespace
             const wchar_t* const* entry = Gear::Addr::textResources_get(table, id);
             return entry ? *entry : nullptr;
         }
-        __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+        __except (Gear::isMemoryFault(GetExceptionCode()) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
         {
             return nullptr;
         }
