@@ -49,6 +49,7 @@
 ---| 'kill.recorded' # The engine recorded a kill of the local hero or of a creature it owns (minion, summon): `(e)`, see `GearKillRecorded`. Fires for every such kill, also those that give no experience; runs inside the engine's death handling.
 ---| 'potion.pick' # The engine picks the item type of a random potion (a merchant's stock, a creature's drop): `(e)`, see `GearPotionPick`; return an item type to use that one, or nil for the engine's pick.
 ---| 'rune.usable' # A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it.
+---| 'pfx.select' # An art or spell is making an effect (the engine sets up an effect object of type `fx`): `(ctx)`, see `GearPfxContext`; return the id of a `gear.pfx` variant to use, or nil for the engine's own look. Asked for every effect while a handler exists, so keep it short.
 ---| 'item.use' # A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up as ever), `'keep'` (no effect, the potion stays; the drinking sound plays) or nil (the engine's effect). Not asked while Lua code itself runs, so a drink a mod starts (`creature:drink_potion`) has the engine's effect.
 ---| 'creature.created' # The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads.
 ---| 'creature.ability' # The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id.
@@ -146,6 +147,7 @@
 ---@field realm GearRealmApi The online play server (realms): list, switch, add.
 ---@field party GearParty Companion heroes in single player: recruit, switch control, orders.
 ---@field buffs GearBuffs Buffs, debuffs and auras on any creature: combat values for a while, with the game's spell overlays.
+---@field pfx GearPfx Skill particle effects: variants of the engine's effects (textures, colours, speed) and rules that pick one when an art or spell makes its effect.
 ---@field classes GearClasses Custom hero classes: the tier of each art for each body, ability copies, hero skills.
 ---@field models GearModels The models' motion slots (which clips a body has, giving it another's).
 ---@field lookup GearLookup Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window.
@@ -210,6 +212,7 @@ gear = {}
 ---@overload fun(event: 'kill.recorded', fn: fun(e: GearKillRecorded)): GearHandler
 ---@overload fun(event: 'potion.pick', fn: fun(e: GearPotionPick): integer?): GearHandler
 ---@overload fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler
+---@overload fun(event: 'pfx.select', fn: fun(ctx: GearPfxContext): integer?): GearHandler
 ---@overload fun(event: 'item.use', fn: fun(e: GearItemUse): ('consume'|'keep')?): GearHandler
 ---@overload fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler
 ---@overload fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler
