@@ -24,7 +24,7 @@ gear.task(function()
     local types = {}
     for t = 0x300, 0x49D do types[#types + 1] = t end
     -- a rule that never changes anything but makes the engine ask (so the notes see every effect)
-    if cfg.tint then gear.pfx.define({id = 1, colorize = cfg.tint}) end
+    if cfg.tint then gear.pfx.define({id = 1, colorize = cfg.tint, textures = cfg.swap}) end
     local rule = gear.pfx.rule({fx = types, select = function(ctx) note(ctx) return cfg.tint and 1 or nil end})
     for _, id in ipairs(cfg.abilities) do
         local x, y = h:position()
