@@ -9,3 +9,24 @@
  	if (error != 0)
  	{
  #ifdef RMLUI_DEBUG
+@@ -333,7 +333,7 @@
+ 
+ 	glyph.bearing.x = ft_glyph->bitmap_left;
+ 	glyph.bearing.y = ft_glyph->bitmap_top;
+-	glyph.advance = ft_glyph->metrics.horiAdvance >> 6;
++	glyph.advance = int((ft_glyph->metrics.horiAdvance + 32) >> 6);     // SacredBild: rounded, not cut (the glyphs are unhinted, their advances are not whole pixels)
+ 	glyph.bitmap_dimensions.x = ft_glyph->bitmap.width;
+ 	glyph.bitmap_dimensions.y = ft_glyph->bitmap.rows;
+ 
+@@ -474,8 +474,9 @@
+ 
+ 	FT_Error error = 0;
+ 
+-	// Set the character size on the font face.
+-	error = FT_Set_Char_Size(ft_face, 0, font_size << 6, 0, 0);
++	// Set the character size on the font face. SacredBild: font sizes are in 1/16 pixel (Sacred Gear asks for the exact size
++	// its scaled documents need, not a rounded one): 16 per pixel is 4 of FreeType's 26.6 units.
++	error = FT_Set_Char_Size(ft_face, 0, font_size << 2, 0, 0);
+ 
+ 	// If setting char size fails, try to select a bitmap strike instead when available.
+ 	if (error != 0 && FT_HAS_FIXED_SIZES(ft_face))
