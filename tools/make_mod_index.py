@@ -61,7 +61,10 @@ def build(repo):
         'description': 'Sacred-Bild and Sacred Gear, the plugins for Sacred Gold. The Gear mods have an index of their own (sacred-gear-mods).',
         'homepage': 'https://github.com/' + REPOSITORY,
         'mods': mods,
-        'indexes': [{'url': 'https://raw.githubusercontent.com/kirides/sacred-gear-mods/main/mod-index.json', 'name': 'Sacred Gear mods'}],
+        'indexes': [
+            {'url': 'https://raw.githubusercontent.com/kirides/sacred-gear-mods/main/mod-index.json', 'name': 'Sacred Gear mods'},
+            {'url': 'sacred-dsoal.json', 'name': 'Sacred DSOAL'},  # sibling file next to this one, written by tools/make_dsoal_index.py
+        ],
     }
 
 

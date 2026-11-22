@@ -173,6 +173,9 @@ jobs:
       - name: Check mod-index.json
         run: python3 tools/make_mod_index.py --check
 
+      - name: Check sacred-dsoal.json
+        run: python3 tools/make_dsoal_index.py --check
+
   create-release:
     if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_type == 'tag')
     needs: [build]
