@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <cstdio>
 #include <map>
@@ -500,8 +501,40 @@ namespace
         swapTextures(system, p.type, it->second);
     }
 
+    // Research trace (environment variable GEAR_PFXTRACE=1): where each effect's system stands (+8/+0xC/+0x10 of the particle system object) per update.
+    std::unordered_map<uintptr_t, uint32_t> g_traceType;
+    const bool g_trace = std::getenv("GEAR_PFXTRACE") != nullptr;
+
     void __fastcall hookUpdate(void* mgr, void* edx, uint32_t handle, float dt)
     {
+        if (g_trace)
+        {
+            const uintptr_t sys = systemOf(mgr, handle);
+            const auto tt = g_traceType.find(sys);
+            if (tt != g_traceType.end())
+            {
+                float x = 0, y = 0, z = 0;
+                readAt(reinterpret_cast<void*>(sys), 8, x);
+                readAt(reinterpret_cast<void*>(sys), 0xC, y);
+                readAt(reinterpret_cast<void*>(sys), 0x10, z);
+                // vtable slot 3 = alive; the age and the next two words of the class's own fields
+                int alive = -1;
+                __try
+                {
+                    void** vt = *reinterpret_cast<void***>(sys);
+                    alive = static_cast<int>(reinterpret_cast<unsigned char(__thiscall*)(void*)>(vt[3])(reinterpret_cast<void*>(sys)) & 0xFF);
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER)
+                {
+                }
+                float age = 0;
+                uint32_t w1 = 0, w2 = 0;
+                readAt(reinterpret_cast<void*>(sys), 0x20A0, age);
+                readAt(reinterpret_cast<void*>(sys), 0x20A4, w1);
+                readAt(reinterpret_cast<void*>(sys), 0x20A8, w2);
+                LOG("PFXTRACE t={} type={:X} sys={:X} dt={} pos={} {} {} alive={} age={} w1={:X} w2={:X}", GetTickCount64(), tt->second, sys, dt, x, y, z, alive, age, w1, w2);
+            }
+        }
         if (!g_pending.empty() || !g_instances.empty())
         {
             const uintptr_t system = systemOf(mgr, handle);
@@ -530,6 +563,17 @@ namespace
     void __fastcall hookSetup(void* fx, void* edx, uint32_t effect)
     {
         g_origSetup(fx, edx, effect);
+        if (g_trace)
+        {
+            uint16_t th = 0;
+            if (readAt(fx, kFxHandle, th))
+            {
+                if (const uintptr_t sys = systemOf(manager(), th))
+                {
+                    g_traceType[sys] = effect;
+                }
+            }
+        }
         const bool interested = g_watchAll || g_watch.count(effect) || !g_fxVariant.empty();
         if (!interested)
         {
