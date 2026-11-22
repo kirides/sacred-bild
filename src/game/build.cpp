@@ -18,6 +18,7 @@
 #include "game/ground_mesh.h"
 #include "game/ground_quads.h"
 #include "game/language.h"
+#include "game/layout_check.h"
 #include "game/map_cache.h"
 #include "game/resolution.h"
 #include "game/screenshot.h"
@@ -113,6 +114,7 @@ bool Sacred::resolveAddresses()
     {
         LOG("{} of {} game addresses not found", missing, std::size(kAddressSigs));
     }
+    Layout::check();
     return missing == 0;
 }
 

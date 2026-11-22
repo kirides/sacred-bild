@@ -1,3 +1,4 @@
+#include "game/layout_check.h"
 #include "game/zoom.h"
 #include "config/camera.h"
 #include "config/debug.h"
@@ -160,6 +161,11 @@ void Zoom::install()
     if (Config::camera.zoom == Camera::Zoom::Original || !Addr::cEngine_handleZoomInput || !Addr::zoomInputCall || !Addr::cWorldView_setZoom ||
         !Addr::getPauseState || !Addr::g_textInputActive || !Addr::g_zoomPrevStep)
     {
+        return;
+    }
+    if (!Sacred::Layout::worldZoom())
+    {
+        LOG("Zoom: off, the world view is laid out differently in this exe");
         return;
     }
     g_orig = Addr::cEngine_handleZoomInput.ptr();

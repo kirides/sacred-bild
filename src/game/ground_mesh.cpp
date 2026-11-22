@@ -1,3 +1,4 @@
+#include "game/layout_check.h"
 #include "game/ground_mesh.h"
 #include "game/d3d_stats.h"
 #include "game/device_proxy.h"
@@ -939,6 +940,11 @@ void GroundMesh::install()
         !Addr::worldState_instance || !Addr::layerRecordCache || !Addr::cTextureManager_get || !Addr::g_pTextureManager)
     {
         LOG("Ground mesh: off, game code not found");
+        return;
+    }
+    if (!Sacred::Layout::worldRows() || !Sacred::Layout::worldZoom())
+    {
+        LOG("Ground mesh: off, the world view is laid out differently in this exe");
         return;
     }
     Patch::begin();

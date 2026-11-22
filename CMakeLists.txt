@@ -88,6 +88,7 @@ set(DDRAW_SOURCES
   src/game/ground_quads.cpp
   src/game/sprite_quads.cpp
   src/game/ground_mesh.cpp
+  src/game/layout_check.cpp
   src/game/skin_check.cpp
   src/game/granny_mesh.cpp
   src/game/gpu_skin.cpp

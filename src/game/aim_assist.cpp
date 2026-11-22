@@ -1,3 +1,4 @@
+#include "game/layout_check.h"
 #include "game/aim_assist.h"
 #include "game/frame_hooks.h"
 #include "game/resolution.h"
@@ -32,7 +33,7 @@ namespace
     cWorldView* worldView()
     {
         cEngine* engine = FrameHooks::engine();
-        return engine ? engine->worldView() : nullptr;
+        return engine && Sacred::Layout::worldPick() ? engine->worldView() : nullptr;
     }
 
     // Calls f(entry) for the view's pick list under its lock, until f returns false.

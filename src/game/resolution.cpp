@@ -1,3 +1,4 @@
+#include "game/layout_check.h"
 #include "game/resolution.h"
 #include "game/build.h"
 #include "game/focus.h"
@@ -1048,10 +1049,18 @@ void Resolution::install()
 
     Patch::hook(g_origLoadingScreen, Addr::dxDriver7_drawLoadingScreen, &hookLoadingScreen, "dxDriver7::drawLoadingScreen");
     Patch::hook(g_origTextureInit, Addr::cTextureManager_init, &hookTextureInit, "cTextureManager::init");
-    Patch::hook(g_origTileRow, Addr::cWorldView_renderTileRow, &hookTileRow, "cWorldView::renderTileRow");
-    Patch::hook(g_origInitRowWalk, Addr::cWorldView_initRowWalk, &hookInitRowWalk, "cWorldView::initRowWalk");
-    const uintptr_t ambience = findAmbience();
-    const uintptr_t waterOffset = findWaterArrayOffset();
+    const bool rows = Sacred::Layout::worldRows();
+    if (!rows)
+    {
+        LOG("Resolution: the ground rows are laid out differently in this exe; the row walk and the water list are left alone");
+    }
+    if (rows)
+    {
+        Patch::hook(g_origTileRow, Addr::cWorldView_renderTileRow, &hookTileRow, "cWorldView::renderTileRow");
+        Patch::hook(g_origInitRowWalk, Addr::cWorldView_initRowWalk, &hookInitRowWalk, "cWorldView::initRowWalk");
+    }
+    const uintptr_t ambience = rows ? findAmbience() : 0;
+    const uintptr_t waterOffset = rows ? findWaterArrayOffset() : 0;
     if (waterOffset)
     {
         g_waterOffset = waterOffset;
