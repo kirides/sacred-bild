@@ -2094,3 +2094,16 @@ bool Ui::screenExtent(float& right, float& bottom)
     bottom = std::max(bottom, bounds[3]);
     return true;
 }
+
+bool Ui::screenOrigin(float& left, float& top)
+{
+    findBild();
+    float bounds[4];
+    if (!g_screenBounds || !g_screenBounds(bounds))
+    {
+        return false;
+    }
+    left = std::min(left, bounds[0]);
+    top = std::min(top, bounds[1]);
+    return true;
+}

@@ -4071,6 +4071,7 @@ local function make_ui(mod)
         -- (no theme running and none refused: the plain base style of the host is the look of the document)
         local id, err = native.rml_load(mod.dir, path, opts.dp and true or false, opts.model, uis.rml_call_names(opts), theme_dir, theme_file, theme_dir == nil and opts.theme ~= false)
         if not id then return nil, err end
+        if opts.origin == 'screen' and native.rml_origin then native.rml_origin(id, true) end
         return rml_open(id, opts)
     end
 
@@ -4089,6 +4090,7 @@ local function make_ui(mod)
         local id, err = native.rml_load_string(dir, markup, opts.dp and true or false, opts.model, uis.rml_call_names(opts), theme_dir, theme_file, mod.builtin and true or false,
             theme_dir == nil and opts.theme ~= false)
         if not id then return nil, err end
+        if opts.origin == 'screen' and native.rml_origin then native.rml_origin(id, true) end
         return rml_open(id, opts)
     end
 

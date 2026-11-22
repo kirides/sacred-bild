@@ -233,6 +233,7 @@ namespace
         float unit = 1.0f;          // RmlUi pixels per layout unit
         bool scissor = false;
         float clip[4] = {};         // layout units
+        Rml::Vector2f origin{0.0f, 0.0f};   // where the context's (0, 0) lies in layout pixels (a document that starts at the screen's edge)
         int count = 0;
         std::shared_ptr<const std::array<float, 16>> matrix;    // the element's transform (SetTransform), null: none
     };
@@ -542,8 +543,8 @@ namespace
             c.layer = static_cast<Ui::Layer>(g_target.layer);
             c.window = g_target.window;
             c.region = static_cast<uint32_t>(geometry);
-            c.x = translation.x;
-            c.y = translation.y;
+            c.x = translation.x + g_target.origin.x;
+            c.y = translation.y + g_target.origin.y;
             c.w = g_target.unit;
             c.matrix = g_target.matrix;
             if (texture)
@@ -704,8 +705,8 @@ namespace
         void SetScissorRegion(Rml::Rectanglei region) override
         {
             const float unit = g_target.unit > 0 ? g_target.unit : 1.0f;
-            g_target.clip[0] = static_cast<float>(region.Left()) / unit;
-            g_target.clip[1] = static_cast<float>(region.Top()) / unit;
+            g_target.clip[0] = (static_cast<float>(region.Left()) + g_target.origin.x) / unit;
+            g_target.clip[1] = (static_cast<float>(region.Top()) + g_target.origin.y) / unit;
             g_target.clip[2] = static_cast<float>(region.Width()) / unit;
             g_target.clip[3] = static_cast<float>(region.Height()) / unit;
         }
@@ -725,8 +726,8 @@ namespace
             c.kind = Ui::Kind::ItemIcon;
             c.layer = static_cast<Ui::Layer>(g_target.layer);
             c.window = g_target.window;
-            c.x = (translation.x + b->second[0]) / unit;
-            c.y = (translation.y + b->second[1]) / unit;
+            c.x = (translation.x + b->second[0] + g_target.origin.x) / unit;
+            c.y = (translation.y + b->second[1] + g_target.origin.y) / unit;
             c.w = (b->second[2] - b->second[0]) / unit;
             c.h = (b->second[3] - b->second[1]) / unit;
             c.region = info.itemObject;
@@ -1019,6 +1020,8 @@ namespace
         Rml::ElementDocument* document = nullptr;
         std::string contextName;
         bool dp = false;
+        bool screenOrigin = false;              // the document's (0, 0) is the screen's top left corner, not the layout's
+        Rml::Vector2f originPx{0.0f, 0.0f};     // that corner in layout pixels (units * unit): layout position = context position + originPx
         float unit = 1.0f;
         bool hovering = false;
         std::vector<std::unique_ptr<Listener>> listeners;
@@ -1462,7 +1465,16 @@ namespace
         // screen): a document's elements past the context's edge lose their text.
         float right = kLayoutWidth, bottom = kLayoutHeight;
         Ui::screenExtent(right, bottom);
-        const Rml::Vector2i dims(static_cast<int>(std::lround(std::ceil(right) * unit)), static_cast<int>(std::lround(std::ceil(bottom) * unit)));
+        // A document that starts at the screen's own corner (the game's windows sit there) reaches left of and above the layout too:
+        // its (0, 0) is that corner and `originPx` is where the corner lies in layout pixels.
+        float left = 0.0f, top = 0.0f;
+        if (d.screenOrigin)
+        {
+            Ui::screenOrigin(left, top);
+        }
+        const Rml::Vector2f origin(std::floor(left * unit), std::floor(top * unit));
+        const Rml::Vector2i dims(static_cast<int>(std::lround(std::ceil(right) * unit - origin.x)), static_cast<int>(std::lround(std::ceil(bottom) * unit - origin.y)));
+        d.originPx = origin;
         if (unit != d.unit || d.context->GetDimensions() != dims)
         {
             d.unit = unit;
@@ -1655,6 +1667,15 @@ namespace
 
     void push(lua_State* L, const std::string& s) { lua_pushlstring(L, s.data(), s.size()); }
 
+    // The origin of the document the current native call works on (see Doc::originPx): zero for the usual document.
+    Rml::Vector2f g_origin{0.0f, 0.0f};
+
+    // An element's offset in layout pixels (the context's pixels, plus the origin of a document that starts at the screen's corner).
+    Rml::Vector2f absOffset(Rml::Element* e, Rml::BoxArea area)
+    {
+        return e->GetAbsoluteOffset(area) + g_origin;
+    }
+
     Doc& docArg(lua_State* L, int arg = 1)
     {
         Doc* d = findDoc(static_cast<int>(luaL_checknumber(L, arg)));
@@ -1662,6 +1683,7 @@ namespace
         {
             throw Failure{"the document is closed"};
         }
+        g_origin = d->originPx;
         return *d;
     }
 
@@ -1957,6 +1979,17 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 1;
     }
 
+    // native.rml_origin(id, on): the document's (0, 0) is the screen's top left corner (where the game's own windows start), not the layout's: it
+    // reaches left of the layout on a wide screen. The positions Lua sees stay in layout units.
+    int rmlOrigin(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        d.screenOrigin = lua_toboolean(L, 2) != 0;
+        fitContext(d);
+        g_origin = d.originPx;
+        return 0;
+    }
+
     // native.rml_load(dir, path, dp) -> id | nil, message
     int rmlLoad(lua_State* L) { return create(L, false); }
 
@@ -2074,7 +2107,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         fitContext(d);
         if (hover)
         {
-            d.context->ProcessMouseMove(static_cast<int>(mx * d.unit), static_cast<int>(my * d.unit), 0);
+            d.context->ProcessMouseMove(static_cast<int>(mx * d.unit - d.originPx.x), static_cast<int>(my * d.unit - d.originPx.y), 0);
             d.hovering = true;
         }
         else if (d.hovering)
@@ -2153,6 +2186,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         g_target.layer = static_cast<uint8_t>(layer);
         g_target.window = static_cast<int8_t>(slot);
         g_target.unit = d.unit;
+        g_target.origin = d.originPx;
         RootScope scope(d);
         d.context->Render();
         lua_pushnumber(L, g_target.count);
@@ -2163,7 +2197,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     // caller that hands the same table in every frame allocates nothing).
     void pushRect(lua_State* L, Rml::Element* e, float unit, int index, bool panel = false)
     {
-        const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
+        const Rml::Vector2f o = absOffset(e, Rml::BoxArea::Border);
         const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
         lua_rawgeti(L, -1, index);
         if (!lua_istable(L, -1))
@@ -2266,8 +2300,8 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         if (e)
         {
             const double x = luaL_checknumber(L, 3), y = luaL_checknumber(L, 4);
-            e->SetProperty("left", std::to_string(static_cast<int>(std::lround(x * d.unit))) + "px");
-            e->SetProperty("top", std::to_string(static_cast<int>(std::lround(y * d.unit))) + "px");
+            e->SetProperty("left", std::to_string(static_cast<int>(std::lround(x * d.unit - d.originPx.x))) + "px");
+            e->SetProperty("top", std::to_string(static_cast<int>(std::lround(y * d.unit - d.originPx.y))) + "px");
         }
         lua_pushboolean(L, e != nullptr);
         return 1;
@@ -2322,7 +2356,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         const bool horizontal = (ox == Rml::Style::Overflow::Auto || ox == Rml::Style::Overflow::Scroll) && e->GetScrollWidth() > e->GetClientWidth() + 0.5f;
         if ((vertical || horizontal) && e->IsVisible(true) && !scrolledOut(e))
         {
-            const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Padding);
+            const Rml::Vector2f o = absOffset(e, Rml::BoxArea::Padding);
             const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Padding);
             const float bar = s.x - e->GetClientWidth();         // the room of a vertical bar
             const float barH = s.y - e->GetClientHeight();       // of a horizontal one
@@ -2429,7 +2463,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         Rml::ElementList all;
         d.document->QuerySelectorAll(all, kNavSelector);
         const auto centre = [](Rml::Element* e) {
-            const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
+            const Rml::Vector2f o = absOffset(e, Rml::BoxArea::Border);
             return o.y + e->GetBox().GetSize(Rml::BoxArea::Border).y * 0.5f;
         };
         Rml::Element* current = nullptr;
@@ -2440,7 +2474,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             {
                 continue;
             }
-            const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
+            const Rml::Vector2f o = absOffset(e, Rml::BoxArea::Border);
             const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
             if (px >= o.x && px <= o.x + s.x && py >= o.y && py <= o.y + s.y && navScrollArea(e))
             {
@@ -2504,13 +2538,13 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             {
                 continue;
             }
-            const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
+            const Rml::Vector2f o = absOffset(e, Rml::BoxArea::Border);
             const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
             if (px < o.x || px > o.x + s.x || py < o.y || py > o.y + s.y)
             {
                 continue;
             }
-            const Rml::Vector2f ao = area->GetAbsoluteOffset(Rml::BoxArea::Padding);
+            const Rml::Vector2f ao = absOffset(area, Rml::BoxArea::Padding);
             const Rml::Vector2f as = area->GetBox().GetSize(Rml::BoxArea::Padding);
             float move = 0.0f;
             if (o.y < ao.y)
@@ -2544,7 +2578,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         RootScope scope(d);
         if (lua_isnumber(L, 3) && lua_isnumber(L, 4))
         {
-            d.context->ProcessMouseMove(static_cast<int>(lua_tonumber(L, 3) * d.unit), static_cast<int>(lua_tonumber(L, 4) * d.unit), 0);
+            d.context->ProcessMouseMove(static_cast<int>(lua_tonumber(L, 3) * d.unit - d.originPx.x), static_cast<int>(lua_tonumber(L, 4) * d.unit - d.originPx.y), 0);
             d.hovering = true;
         }
         if (kind == "down")
@@ -3086,6 +3120,7 @@ void RmlHost::registerNatives(lua_State* L)
     static const luaL_Reg kNatives[] = {
         {"rml_load", guarded<rmlLoad>},
         {"rml_load_string", guarded<rmlLoadString>},
+        {"rml_origin", guarded<rmlOrigin>},
         {"rml_close", guarded<rmlClose>},
         {"rml_show", guarded<rmlShow>},
         {"rml_update", guarded<rmlUpdate>},

@@ -143,6 +143,10 @@ namespace Ui
     // document has to reach to cover it. False without SacredBild's canvas.
     bool screenExtent(float& right, float& bottom);
 
+    // The left and top edge of the whole screen in layout units (at most 0: the canvas leaves room left of and above the 1024 x 768 layout on a wide
+    // screen). False without SacredBild's canvas.
+    bool screenOrigin(float& left, float& top);
+
     // The UI fonts.
     uint32_t fontCount();
     // The text's size in the font (the widest line, the lines' height); false if the font cannot measure. Call it on
