@@ -1,3 +1,4 @@
+#include "memfault.h"
 #include "automation.h"
 #include "game/gear_addr.h"
 #include "instance.h"
@@ -207,7 +208,7 @@ namespace
             std::memcpy(dst, src, size);
             return true;
         }
-        __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+        __except (Gear::isMemoryFault(GetExceptionCode()) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
         {
             return false;
         }

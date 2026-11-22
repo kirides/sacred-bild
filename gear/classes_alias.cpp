@@ -1,3 +1,4 @@
+#include "memfault.h"
 #include "classes.h"
 #include "log.h"
 #include "lua_host.h"
@@ -85,7 +86,7 @@ namespace
             std::memcpy(&out, reinterpret_cast<const void*>(base + offset), sizeof(T));
             return true;
         }
-        __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+        __except (Gear::isMemoryFault(GetExceptionCode()) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
         {
             return false;
         }

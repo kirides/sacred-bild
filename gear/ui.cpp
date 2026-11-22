@@ -1,3 +1,4 @@
+#include "memfault.h"
 #include "ui.h"
 #include "itemicon.h"
 #include "text.h"
@@ -56,7 +57,7 @@ namespace
             std::memcpy(&out, reinterpret_cast<const void*>(address), sizeof(T));
             return true;
         }
-        __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+        __except (Gear::isMemoryFault(GetExceptionCode()) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
         {
             return false;
         }
