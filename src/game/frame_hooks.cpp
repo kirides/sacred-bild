@@ -402,6 +402,14 @@ void FrameHooks::install()
     Patch::hook(g_origUiRender, Addr::cUI_Manager_render, &hookUiRender, "cUI_Manager::render");
     Patch::hook(g_origRenderThreadRun, Addr::cEngine_renderThreadRun, &hookRenderThreadRun, "cEngine::renderThreadRun");
     Patch::hook(g_origLimiter, Addr::frameLimiter, &hookLimiter, "frameLimiter");
+    // The menu loop sleeps 20 ms every frame before drawing (jz over `push 14h; call Sleep` -> jmp), which at the
+    // default timer resolution is ~31 ms: the menus ran at ~30 fps whatever [Display] FpsLimitMenu said. paceFrame
+    // paces them now.
+    if (Patch::verify(Addr::menuLoopSleepJump, {0x74, 0x04, 0x6A, 0x14}) &&
+        Patch::value<uint8_t>(Addr::menuLoopSleepJump, 0xEB))
+    {
+        LOG("Menu loop: 20 ms sleep removed");
+    }
     LOG("Frame limit in game: {}, in the background: {}",
         Config::display.fpsLimit > 0 ? std::to_string(Config::display.fpsLimit) : std::string("off"),
         Config::display.fpsLimitInactive > 0 ? std::to_string(Config::display.fpsLimitInactive) : std::string("off"));

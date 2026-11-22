@@ -136,6 +136,9 @@ namespace Sacred::Addr
     // The render loop calls it with 60 before each flip (skipped if 0x182EE3C has 0x4000), the menu loop too.
     inline Cdecl<void(double unused, uint32_t fps)> frameLimiter{}; // ENG 0060A9F0
     inline uintptr_t renderLimiterReturn{};             // ENG 0060EA6E
+    // The menu loop's `test [ui+8], 1; jz skip; push 0x14; call Sleep` (cUI_Manager thread): a 20 ms sleep every menu
+    // frame, ~31 ms at the default timer resolution, which capped the menus at ~30 fps. Address of the jz.
+    inline uintptr_t menuLoopSleepJump{};               // ENG 0075713C
     // cEngine_updateWorldCursor (0x611E70) asks the UI whether the cursor is over a window before picking.
     inline uintptr_t worldCursorUiTestCall{};           // ENG 00611EE3
     // Its draw of a hover cursor (talk, trade, use, attack, ...): pushed (cMouse ENG 00655060), cMouse_renderCursor,
