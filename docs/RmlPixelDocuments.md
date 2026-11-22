@@ -30,7 +30,7 @@ unit (the context's density ratio is the canvas scale), so text and boxes snap t
 ## Plan
 
 1. Theme conversion (`px` to `dp`, hairlines excepted) and the art decision (2).
-2. One screen as a spike: Better SaveLoad loaded with `{dp = true}`, screenshot diff against the layout-unit version at 1280x720,
-   1600x900 and 1920x1080.
+2. One screen as a spike: Better SaveLoad loaded with `{dp = true}`, screenshot diff against the layout-unit version at the default 1600x900 only (John's standing rule: no multi-resolution testing).
+   
 3. A conversion script for the other mods' stylesheets (and the style values written by Lua), then one mod per commit with a
    before / after screenshot each.
