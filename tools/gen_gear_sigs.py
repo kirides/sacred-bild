@@ -319,6 +319,17 @@ GEAR = [
     # The potion picker (gear/potionpick.cpp): stdcall (mode, flag, tier), ret 0xC; merchants and the loot of dying creatures call it. The event
     # `potion.pick` asks the mods first.
     ('potionPick', 0x0043B1A0, 'func'),
+    # Skill particle effects (gear/pfx.cpp). cObjectFX's effect setup (thiscall (fx, effect id), ret 4: 0x5A0C50 picks the hard-coded
+    # particle system class for the id 0x300..0x49D and registers it), the particle manager's add (thiscall (manager, system) -> handle,
+    # ret 4) and its update by handle (thiscall (manager, handle, dt), ret 8), the manager singleton (+0x18 the vector of systems by
+    # handle), the texture lookup by name (thiscall (texture manager, name) -> handle, ret 4), the shared sprite drawing of the particle
+    # systems (thiscall (system, device, ...), ret 0x60).
+    ('cObjectFX_setup', 0x005A0C50, 'func'),
+    ('particleMgr_add', 0x007CB830, 'func'),
+    ('particleMgr_update', 0x007CC080, 'func'),
+    ('g_pParticleMgr', 0x017EEBCC, 'data'),
+    ('textureMgr_find', 0x00657360, 'func'),
+    ('particle_drawSprites', 0x00761B00, 'func'),
 ]
 # The functions that hold site hooks (tools/gear_sites.py): found by signature, the site is at a fixed offset in them.
 GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]

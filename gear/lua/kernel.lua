@@ -7399,6 +7399,10 @@ local function make_env(mod)
         apply = function(target, buff, opts) return kernel.buffs.apply(mod, target, buff, opts) end,
         remove = kernel.buffs.remove, list = kernel.buffs.list, fields = kernel.buffs.fields,
         change = kernel.buffs.change, overlay = kernel.buffs.overlay, set_overlay = kernel.buffs.set_overlay}
+    gear.pfx = {
+        define = function(def) return kernel.pfx.define(mod, def) end, undefine = kernel.pfx.undefine,
+        definitions = kernel.pfx.definitions, rule = function(r) return kernel.pfx.rule(mod, r) end,
+        remove_rule = kernel.pfx.remove_rule, stats = kernel.pfx.stats}
     -- Hero files (the network game's Save\HeroNN.pax and the mod's own heroes\*.pax): list, bring one into the party,
     -- write the controlled hero to one.
     gear.party.hero_files = function()
@@ -7618,6 +7622,7 @@ local function make_env(mod)
         if event == 'creature.created' then native.created_active(true) end
         if event == 'ability.route' then native.route_active(true) end
         if event == 'rune.usable' then native.usable_active(true) end
+        if event == 'pfx.select' then kernel.pfx.refresh() end
         if event == 'item.use' then native.item_use_active(true) end
         if event == 'kill.recorded' then native.kill_recorded_active(true) end
         if event == 'potion.pick' then native.potion_pick_active(true) end
@@ -7644,6 +7649,7 @@ local function make_env(mod)
         if h.event == 'creature.created' and #list == 0 then native.created_active(false) end
         if h.event == 'ability.route' and #list == 0 then native.route_active(false) end
         if h.event == 'rune.usable' and #list == 0 then native.usable_active(false) end
+        if h.event == 'pfx.select' then kernel.pfx.refresh() end
         if h.event == 'item.use' and #list == 0 then native.item_use_active(false) end
         if h.event == 'kill.recorded' and #list == 0 then native.kill_recorded_active(false) end
         if h.event == 'potion.pick' and #list == 0 then native.potion_pick_active(false) end
@@ -8297,6 +8303,148 @@ function kernel.ability_route(type_id, art, vanilla, action, id)
     end
     return nil
 end
+
+-- Skill particle effects (gear.pfx): variants of the engine's own effects (other textures, colours, speed) and the rules that pick one when
+-- an art or spell makes its effect (gear/pfx.cpp). Variant ids are the mods' numbers and shared by every mod, like ability aliases.
+kernel.pfx = {defs = {}, rules = {}, seq = 0}
+kernel.init_pfx = function()
+    local P = kernel.pfx
+
+    local function number_field(def, name, lo, hi)
+        local v = def[name]
+        if v == nil then return nil end
+        assert(type(v) == 'number' and v >= lo and v <= hi, name .. ' must be a number from ' .. lo .. ' to ' .. hi)
+        return v
+    end
+
+    function P.define(m, def)
+        assert(type(def) == 'table', 'define takes a table')
+        local id = def.id
+        assert(type(id) == 'number' and id >= 1 and id == math.floor(id) and id < 2 ^ 31, 'a variant needs a whole number id of 1 or more')
+        local textures = {}
+        for k, v in pairs(def.textures or {}) do
+            if type(k) == 'number' then
+                assert(type(v) == 'table' and type(v[1]) == 'string' and type(v[2]) == 'string', 'textures: {from, to} pairs or [from] = to')
+                textures[#textures + 1] = {v[1], v[2]}
+            else
+                assert(type(k) == 'string' and type(v) == 'string', 'textures: {from, to} pairs or [from] = to')
+                textures[#textures + 1] = {k, v}
+            end
+        end
+        local d = {id = id, name = def.name, textures = textures, mod = m.id,
+            hue = number_field(def, 'hue', -3600, 3600), colorize = number_field(def, 'colorize', 0, 0xFFFFFF),
+            multiply = number_field(def, 'multiply', 0, 0xFFFFFFFF), alpha = number_field(def, 'alpha', 0, 4),
+            speed = number_field(def, 'speed', 0.01, 100)}
+        local ok, err = native.pfx_define(d)
+        assert(ok, err or 'the variant was not accepted')
+        P.defs[id] = d
+        return id
+    end
+
+    function P.undefine(id)
+        P.defs[id] = nil
+        return native.pfx_undefine(id)
+    end
+
+    function P.definitions()
+        local out = {}
+        for id, d in pairs(P.defs) do out[#out + 1] = d end
+        table.sort(out, function(a, b) return a.id < b.id end)
+        return out
+    end
+
+    local function as_set(v)
+        if v == nil then return nil end
+        local set = {}
+        if type(v) == 'table' then
+            for _, x in ipairs(v) do set[x] = true end
+        else
+            set[v] = true
+        end
+        return set
+    end
+
+    -- The effect types the engine side asks about: all of them if a handler of `pfx.select` or a rule without `fx` exists.
+    function P.refresh()
+        local all, types = false, {}
+        local list = handlers['pfx.select']
+        if list and #list > 0 then all = true end
+        for _, r in ipairs(P.rules) do
+            if not r.fx then
+                all = true
+            else
+                for fx in pairs(r.fx) do types[#types + 1] = fx end
+            end
+        end
+        native.pfx_watch(types, all)
+    end
+
+    function P.rule(m, r)
+        assert(type(r) == 'table', 'rule takes a table')
+        assert(r.use ~= nil or type(r.select) == 'function', 'a rule needs `use` (a variant id) or `select` (a function)')
+        assert(r.use == nil or type(r.use) == 'number', '`use` is a variant id')
+        P.seq = P.seq + 1
+        local rule = {id = P.seq, mod = m, fx = as_set(r.fx), ability = as_set(r.ability), min_level = r.min_level, max_level = r.max_level,
+            use = r.use, select = r.select, priority = r.priority or 0}
+        P.rules[#P.rules + 1] = rule
+        table.sort(P.rules, function(a, b)
+            if a.priority ~= b.priority then return a.priority > b.priority end
+            return a.id < b.id
+        end)
+        P.refresh()
+        return rule
+    end
+
+    function P.remove_rule(rule)
+        for i = #P.rules, 1, -1 do
+            if P.rules[i] == rule or (type(rule) == 'number' and P.rules[i].id == rule) then table.remove(P.rules, i) end
+        end
+        P.refresh()
+    end
+
+    -- The engine asks at the first update of a new effect of type `fx` (made by `creature_id`, with `ability` in flight, at cast `level`; its parent
+    -- effect has the variant `parent`): the id of the variant to use, or nil.
+    function kernel.pfx_select(fx, creature_id, ability, level, parent)
+        local ctx = {fx = fx, creature = creature_id ~= 0 and wrap(creature_id) or nil, ability = ability ~= 0 and ability or nil,
+            level = level > 0 and level or nil, parent = parent ~= 0 and parent or nil}
+        if not ctx.level and ctx.creature and ctx.ability then
+            -- the first effects of a cast come before the level word is set: the creature's own level of the ability then
+            local a = ctx.creature:ability(ctx.ability)
+            if a then ctx.level = a.level + a.bonus end
+        end
+        local list = handlers['pfx.select']
+        if list then
+            for i = 1, #list do
+                local h = list[i]
+                if h and not h.mod.disabled then
+                    local ok, result = call(h.mod, 'pfx.select', h.fn, ctx)
+                    if ok and type(result) == 'number' and P.defs[result] then return result end
+                end
+            end
+        end
+        for _, r in ipairs(P.rules) do
+            if not r.mod.disabled and (not r.fx or r.fx[fx]) and (not r.ability or (ctx.ability and r.ability[ctx.ability])) then
+                local pass = true
+                if r.min_level or r.max_level then
+                    local lv = ctx.level
+                    pass = lv ~= nil and (not r.min_level or lv >= r.min_level) and (not r.max_level or lv <= r.max_level)
+                end
+                if pass then
+                    local id = r.use
+                    if r.select then
+                        local ok, result = call(r.mod, 'pfx rule', r.select, ctx)
+                        id = ok and type(result) == 'number' and result or nil
+                    end
+                    if id and P.defs[id] then return id end
+                end
+            end
+        end
+        return nil
+    end
+
+    function P.stats() return native.pfx_stats() end
+end
+kernel.init_pfx()
 
 -- `rune.usable`: a hero of `type` is checked for the class mask of `ability` (reading a rune); `vanilla` is the engine's answer. A handler
 -- returns true or false, or nil to leave it.

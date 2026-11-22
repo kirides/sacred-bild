@@ -44,6 +44,11 @@ namespace LuaHost
     // event `rune.usable`: whether a hero of `type` may learn `ability` (the engine's answer `vanilla`, 0/1); `out` 0/1.
     Answer runeUsable(int type, int ability, int vanilla, int& out);
 
+    // event `pfx.select`: a new effect object of type `fx` (0x300..0x49D) made by `creature` (0: none known) with `ability` in flight, at cast
+    // `level` (the effect object's level word), whose parent effect has variant `parent` (0: none); `out` the id of the gear.pfx variant to
+    // use (Answer::Value), else the engine's own look.
+    Answer pfxSelect(uint32_t fx, uint32_t creature, uint32_t ability, uint32_t level, uint32_t parent, uint32_t& out);
+
     // event `item.use`: a potion is drunk by `creature` (item object `item`, item type `type`); `out` 0 = the engine's effect, 1 = the potion is
     // used up and has no effect, 2 = no effect and the potion stays.
     Answer itemUse(uint32_t item, uint32_t type, uint32_t creature, int& out);

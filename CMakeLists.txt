@@ -182,6 +182,7 @@ if(SACREDGEAR)
     gear/party.cpp
     gear/potionpick.cpp
     gear/buffs.cpp
+    gear/pfx.cpp
     gear/tables.cpp
     gear/overlay.cpp
     gear/sitehook.cpp

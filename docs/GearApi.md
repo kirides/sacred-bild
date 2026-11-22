@@ -78,6 +78,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [World (gear.world)](#world-gearworld)
 - [Party (gear.party)](#party-gearparty)
 - [Buffs (gear.buffs)](#buffs-gearbuffs)
+- [Skill effects (gear.pfx)](#skill-effects-gearpfx)
 - [Classes (gear.classes)](#classes-gearclasses)
 - [Models (gear.models)](#models-gearmodels)
 - [Drops (gear.drops)](#drops-geardrops)
@@ -155,6 +156,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'kill.recorded'` | The engine recorded a kill of the local hero or of a creature it owns (minion, summon): `(e)`, see `GearKillRecorded`. Fires for every such kill, also those that give no experience; runs inside the engine's death handling. |
 | `'potion.pick'` | The engine picks the item type of a random potion (a merchant's stock, a creature's drop): `(e)`, see `GearPotionPick`; return an item type to use that one, or nil for the engine's pick. |
 | `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
+| `'pfx.select'` | An art or spell is making an effect (the engine sets up an effect object of type `fx`): `(ctx)`, see `GearPfxContext`; return the id of a `gear.pfx` variant to use, or nil for the engine's own look. Asked for every effect while a handler exists, so keep it short. |
 | `'item.use'` | A potion is drunk: `(e)`, see `GearItemUse`; return `'consume'` (no effect, the potion is used up as ever), `'keep'` (no effect, the potion stays; the drinking sound plays) or nil (the engine's effect). Not asked while Lua code itself runs, so a drink a mod starts (`creature:drink_potion`) has the engine's effect. |
 | `'creature.created'` | The engine's own code created a creature (a sector filled with its spawn table, a script, a respawn): `(e)`, see `GearCreatureCreated`. Delivered on the next tick, so the creature is complete. Not for creatures `gear.world.spawn` makes, nor for those a savegame loads. |
 | `'creature.ability'` | The creature AI picks the ability (skill or spell id) a creature uses; a handler may return another id. |
@@ -293,6 +295,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `realm` | `GearRealmApi` | The online play server (realms): list, switch, add. |
 | `party` | `GearParty` | Companion heroes in single player: recruit, switch control, orders. |
 | `buffs` | `GearBuffs` | Buffs, debuffs and auras on any creature: combat values for a while, with the game's spell overlays. |
+| `pfx` | `GearPfx` | Skill particle effects: variants of the engine's effects (textures, colours, speed) and rules that pick one when an art or spell makes its effect. |
 | `classes` | `GearClasses` | Custom hero classes: the tier of each art for each body, ability copies, hero skills. |
 | `models` | `GearModels` | The models' motion slots (which clips a body has, giving it another's). |
 | `lookup` | `GearLookup` | Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window. |
@@ -360,6 +363,7 @@ Forms:
 - `fun(event: 'kill.recorded', fn: fun(e: GearKillRecorded)): GearHandler`
 - `fun(event: 'potion.pick', fn: fun(e: GearPotionPick): integer?): GearHandler`
 - `fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler`
+- `fun(event: 'pfx.select', fn: fun(ctx: GearPfxContext): integer?): GearHandler`
 - `fun(event: 'item.use', fn: fun(e: GearItemUse): ('consume'|'keep')?): GearHandler`
 - `fun(event: 'creature.created', fn: fun(e: GearCreatureCreated)): GearHandler`
 - `fun(event: 'creature.ability', fn: fun(type: integer, vanilla: integer, index: integer, address: integer): integer?): GearHandler`
@@ -2118,6 +2122,100 @@ Ends one of its Gear buffs (`gear.buffs.remove`).
 
 - `key`: `string`
 - returns `found` `boolean`
+
+## Skill effects (gear.pfx)
+
+The game has no effect table a mod can add to. Every skill effect is an object type (0x300 to 0x49D) that the game's effect setup turns into one of about 180 particle system classes, each with its colours, textures and timings in its own code. Sacred Gear leaves those classes alone and gives a mod two things on top: a **variant**, which is an engine effect that looks and runs differently, and **rules** that pick a variant while an art or spell makes its effect.
+
+A variant is a set of changes to an engine effect: other textures (names from the game's own texture list, e.g. `PARTICLE_GLOW01.TGA`), a colour change of every sprite (`hue` turns the hue, `colorize` makes it that colour with its own brightness, `multiply` multiplies, `alpha` fades) and a `speed` (0.5: the effect lasts twice as long). The id is the mod's own number (1 and up, shared by every mod like ability aliases: pick a range that is yours) and is what rules and the `pfx.select` handlers name.
+
+A rule says when: `fx` (an effect type or list; without it every effect), `ability` (the art or spell in flight, an alias too), and the cast level (`min_level`, `max_level`), then `use` a variant, or `select` a function that gets the context and returns one. A handler of `gear.on('pfx.select', function(ctx) ... end)` does the same in code. The context: `fx`, `creature` (the creature whose art or spell state machine makes the effect, nil for an effect the engine made on its own), `ability`, `level` (the cast level), `parent` (the variant of the effect that made this one).
+
+Limits: a variant is chosen when the effect's first frame runs, so a rule decides per effect. An effect made by a variant's effect takes the parent's variant. Effects the engine made on its own have no `creature`. The look is local: in a network game other players see the engine's own effect. The textures are the ones already in the game's texture list (`docs/GearPfx.md` has the names).
+
+### GearPfx
+
+Reached as `gear.pfx`.
+
+### GearPfxDef
+
+A variant.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` | The mod's number for it (1 and up, whole). |
+| `name` | `string` | Shown in lists. (optional) |
+| `textures` | `table<string, string>\|string[][]` | Replacement texture names for the sprites of its effect: `{['PARTICLE_GLOW01.TGA'] = 'PARTICLE_SMOKE01.TGA'}` or `{{from, to}, ...}`. Names of the game's own texture list (`docs/GearPfx.md`); a name the effect does not use changes nothing (the log says so). (optional) |
+| `hue` | `number` | Degrees added to the hue of every sprite's colour (-120: green turns red). (optional) |
+| `colorize` | `integer` | 0xRRGGBB: every sprite takes this colour at its own brightness (white stays white). (optional) |
+| `multiply` | `integer` | 0xAARRGGBB multiplied into every sprite colour. (optional) |
+| `alpha` | `number` | Multiplies the alpha (0 to 4). (optional) |
+| `speed` | `number` | The effect runs this much faster (0.01 to 100; 0.5: twice as long). (optional) |
+
+### GearPfxRule
+
+A rule: when an effect gets a variant.
+
+| Field | Type | |
+|---|---|---|
+| `fx` | `integer\|integer[]` | The engine effect types it applies to (default: all). (optional) |
+| `ability` | `integer\|integer[]` | The art or spell (or alias) in flight, for casts. (optional) |
+| `min_level` | `integer` | The cast level (the effect object's level word), at least. (optional) |
+| `max_level` | `integer` | At most. (optional) |
+| `use` | `integer` | The variant to take. (optional) |
+| `select` | `fun(ctx: GearPfxContext): integer` | Instead of `use`: the variant to take, or nil to go on with the next rule. (optional) |
+| `priority` | `integer` | Higher first (default 0). (optional) |
+
+### GearPfxContext
+
+What `pfx.select` handlers and `select` functions are given.
+
+| Field | Type | |
+|---|---|---|
+| `fx` | `integer` | The engine effect type being set up. |
+| `creature` | `Creature` | The creature whose art or spell makes it (nil: the engine's own, e.g. a projectile's hit). (optional) |
+| `ability` | `integer` | The art or spell it has in flight. (optional) |
+| `level` | `integer` | The level the effect was cast at (the effect object's level word, or the creature's level of the ability for the first effects of a cast, which come before it is set); nil if unknown. (optional) |
+| `parent` | `integer` | The variant of the effect that made this one (it is taken when no rule picks another). (optional) |
+
+#### `gear.pfx.define(def) -> integer`
+
+Defines (or replaces) a variant. Returns its id. Raises an error for a bad definition.
+
+- `def`: `GearPfxDef`
+- returns `id` `integer`
+
+#### `gear.pfx.undefine(id) -> boolean`
+
+Removes a variant (systems that carry it go back to the engine's look).
+
+- `id`: `integer`
+- returns `found` `boolean`
+
+#### `gear.pfx.definitions() -> GearPfxDef[]`
+
+Every defined variant, by id.
+
+- returns `GearPfxDef[]`
+
+#### `gear.pfx.rule(rule) -> table`
+
+Adds a rule; the handle is for `remove_rule`.
+
+- `rule`: `GearPfxRule`
+- returns `handle` `table`
+
+#### `gear.pfx.remove_rule(rule)`
+
+Removes a rule.
+
+- `rule`: `table|integer`
+
+#### `gear.pfx.stats() -> {live: integer, applied: integer}`
+
+For tests: how many particle systems carry a variant now and how often a variant was applied.
+
+- returns `{live: integer, applied: integer}`
 
 ## Classes (gear.classes)
 
