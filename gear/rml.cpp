@@ -245,6 +245,7 @@ namespace
         uint8_t flip = 0;
         bool picture = false;
         bool point = false;         // "?point": nearest-texel sampling (no bilinear blur)
+        bool dp = false;            // "?dp": the picture's natural size is in layout units, not pixels (for documents laid out in screen pixels): its size is scaled by the canvas
         bool item = false;          // "gear:item/...": an item's model, drawn by the game's model renderer into the box of the geometry
         uint32_t itemType = 0;      // the item type to draw (a temporary item, single player only) ...
         uint32_t itemObject = 0;    // ... or the live item object
@@ -257,11 +258,23 @@ namespace
         std::string s = source.substr(5);
         info.flip = 0;
         info.point = false;
+        info.dp = false;
         const size_t q = s.find('?');
         if (q != std::string::npos)
         {
             std::string opt = s.substr(q + 1);
             s.resize(q);
+            // "?dp" (the size in layout units), alone or after / before the others, e.g. "?dp&point"
+            for (const std::string flag : {"&dp", "dp&", "dp"})
+            {
+                const size_t at = opt.find(flag);
+                if (at != std::string::npos && (flag != "dp" || opt == "dp"))
+                {
+                    opt.erase(at, flag.size());
+                    info.dp = true;
+                    break;
+                }
+            }
             // "?point" (nearest-texel sampling), alone or after / before a flip: "?flip=h&point"
             for (const std::string flag : {"&point", "point&", "point"})
             {
@@ -575,6 +588,14 @@ namespace
             Ui::meshRelease(static_cast<uint32_t>(geometry));
         }
 
+        // A picture whose size is in layout units (source "?dp") has its natural size in screen pixels: the size times the canvas scale.
+        static void scaleToLayoutUnits(Rml::Vector2i& dimensions)
+        {
+            const float scale = std::max(0.5f, Ui::canvasScale());
+            dimensions.x = std::max(1, static_cast<int>(std::lround(dimensions.x * scale)));
+            dimensions.y = std::max(1, static_cast<int>(std::lround(dimensions.y * scale)));
+        }
+
         Rml::TextureHandle LoadTexture(Rml::Vector2i& dimensions, const Rml::String& source) override
         {
             TextureInfo info;
@@ -609,10 +630,21 @@ namespace
                     return 0;
                 }
                 dimensions = {image.width, image.height};
+                if (info.dp)
+                {
+                    scaleToLayoutUnits(dimensions);
+                }
                 return add(info);
             }
+            std::string path = plainPath(source);
+            bool dpSize = false;
+            if (path.size() > 3 && path.compare(path.size() - 3, 3, "?dp") == 0)
+            {
+                path.resize(path.size() - 3);       // "file.png?dp": the size of the picture is in layout units (documents in screen pixels)
+                dpSize = true;
+            }
             std::string bytes;
-            if (!readAll(fromUtf8(plainPath(source)), bytes))
+            if (!readAll(fromUtf8(path), bytes))
             {
                 LOG("RmlUi: cannot read the image {}", source);
                 return 0;
@@ -641,6 +673,10 @@ namespace
             }
             info.picture = true;
             dimensions = {w, h};
+            if (dpSize)
+            {
+                scaleToLayoutUnits(dimensions);
+            }
             return add(info);
         }
 
@@ -1266,14 +1302,21 @@ namespace
             std::string key = family;
             key += '|';
             key += std::to_string(static_cast<int>(style)) + '|' + std::to_string(static_cast<int>(weight)) + '|' + std::to_string(size) + '|' +
-                   std::to_string(milli);
+                   std::to_string(milli) + (g_fontDp ? "|dp" : "");
             const auto found = m_byKey.find(key);
             if (found != m_byKey.end())
             {
                 return found->second;
             }
+            // The patched RmlUi of ports/rmlui (font-size-sixteenths.patch, freetype-no-hinting.patch) gives face sizes in 1/16 pixel and rasterizes at what it is
+            // given: the face is rasterized at exactly size * scale, not at a rounded pixel size.
             const int raster = std::max(1, static_cast<int>(std::lround(size * scale)));
-            const Rml::FontFaceHandle inner = m_inner->GetFontFaceHandle(family, style, weight, raster);
+            // Documents laid out in screen pixels (g_fontDp) have their glyphs and baselines on whole pixels: light hinting (vertical grid fitting only)
+            // sharpens them there (bit 28 of the size, see ports/rmlui/freetype-no-hinting.patch); SACRED_FONT_HINT=0 turns it off. The layout-unit documents
+            // are scaled by the renderer, so their grid is not the screen's: no hinting.
+            static const bool lightHinting = [] { const char* v = std::getenv("SACRED_FONT_HINT"); return !(v && v[0] == '0'); }();
+            const int sized = (g_fontDp && lightHinting) ? (raster | (1 << 28)) : raster;
+            const Rml::FontFaceHandle inner = m_inner->GetFontFaceHandle(family, style, weight, sized);
             if (!inner)
             {
                 return 0;
@@ -1282,7 +1325,7 @@ namespace
             face.inner = inner;
             face.scale = scale;
             face.metrics = m_inner->GetFontMetrics(inner);
-            face.metrics.size = size;
+            face.metrics.size = std::max(1, static_cast<int>(std::lround(size / 16.0f)));
             face.metrics.ascent /= scale;
             face.metrics.descent /= scale;
             face.metrics.line_spacing /= scale;
@@ -1437,6 +1480,9 @@ namespace
             return false;
         }
         g_started = true;
+        // caret-style: block (the thin vertical bar, RmlUi's own) or underscore (a bar at the foot of the line, as wide as a "_": the game's text fields).
+        // Needs the patched RmlUi of ports/rmlui (caret-style-underscore.patch); a stock RmlUi ignores the property.
+        Rml::StyleSheetSpecification::RegisterProperty("caret-style", "block", false).AddParser("keyword", "block, underscore");
         Rml::SetFontEngineInterface(new ScaledFontEngine(Rml::GetFontEngineInterface()));
         {
             static Rml::ElementInstancerGeneric<RingElement> ringInstancer;
@@ -1727,7 +1773,7 @@ body { font-size: 15dp; color: #f0f0f0; }
 .font-game { font-family: "Sacred Game"; }
 .font-start { font-family: "Sacred Start"; }
 .font-default { font-family: "Segoe UI"; }
-button { margin-right: 8px; padding: 4px 14px; color: #f0f0f0; background-color: #14141f; border: 1px #8c7440; cursor: pointer; }
+button { margin-right: 8px; padding: 4px 14px; line-height: 1.5; color: #f0f0f0; background-color: #14141f; border: 1px #8c7440; cursor: pointer; }
 button:hover, button:focus { background-color: #24243a; border-color: #ffd780; color: #ffe030; }
 button:active { background-color: #34344e; }
 button.primary { border-color: #c8aa5a; color: #ffd780; }
