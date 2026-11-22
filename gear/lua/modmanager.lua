@@ -55,21 +55,25 @@ end
 -- A text field in the game's pill shape: a rounded box (the fill and a 1 unit edge) built from one-unit rows, the ends of the rows pulled in on a
 -- half circle (h is the diameter). `edge` and `fill` are colours.
 local function pill(x, y, w, h, fill, edge)
-    local r = h / 2
-    local rows = math.floor(h)
-    local prev
-    for i = 0, rows - 1 do
-        local d = (i < rows / 2) and (r - i - 0.5) or (i + 0.5 - r)
-        local inset = math.floor(r - math.sqrt(math.max(0, r * r - d * d)) + 0.5)
-        local top = i == 0 or i == rows - 1
-        ui.rect(x + inset, y + i, w - 2 * inset, 1, top and edge or fill, LAYER)
-        if not top then
-            local step = prev and math.max(1, math.abs(inset - prev)) or 1
-            if i >= rows / 2 and prev then step = math.max(1, math.abs(inset - prev)) end
-            ui.rect(x + inset, y + i, step, 1, edge, LAYER)
-            ui.rect(x + w - inset - step, y + i, step, 1, edge, LAYER)
+    local rows = math.floor(h / 2) * 2          -- an even height: the two halves are mirror images
+    local half, r = rows / 2, rows / 2
+    local inset = {}
+    for i = 0, half - 1 do
+        local d = r - i - 0.5
+        inset[i] = math.floor(r - math.sqrt(math.max(0, r * r - d * d)) + 0.5)
+    end
+    for i = 0, half - 1 do
+        local step = (i == half - 1) and 1 or math.max(1, inset[i] - inset[i + 1])
+        for _, row in ipairs({i, rows - 1 - i}) do
+            local ins = inset[i]
+            if i == 0 then
+                ui.rect(x + ins, y + row, w - 2 * ins, 1, edge, LAYER)       -- the top and bottom edge
+            else
+                ui.rect(x + ins + step, y + row, w - 2 * (ins + step), 1, fill, LAYER)
+                ui.rect(x + ins, y + row, step, 1, edge, LAYER)
+                ui.rect(x + w - ins - step, y + row, step, 1, edge, LAYER)
+            end
         end
-        prev = inset
     end
 end
 
