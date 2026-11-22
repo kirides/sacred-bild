@@ -1302,7 +1302,7 @@ namespace
             std::string key = family;
             key += '|';
             key += std::to_string(static_cast<int>(style)) + '|' + std::to_string(static_cast<int>(weight)) + '|' + std::to_string(size) + '|' +
-                   std::to_string(milli);
+                   std::to_string(milli) + (g_fontDp ? "|dp" : "");
             const auto found = m_byKey.find(key);
             if (found != m_byKey.end())
             {
@@ -1311,7 +1311,12 @@ namespace
             // The patched RmlUi of ports/rmlui (font-size-sixteenths.patch, freetype-no-hinting.patch) gives face sizes in 1/16 pixel and rasterizes at what it is
             // given: the face is rasterized at exactly size * scale, not at a rounded pixel size.
             const int raster = std::max(1, static_cast<int>(std::lround(size * scale)));
-            const Rml::FontFaceHandle inner = m_inner->GetFontFaceHandle(family, style, weight, raster);
+            // Documents laid out in screen pixels (g_fontDp) have their glyphs and baselines on whole pixels: light hinting (vertical grid fitting only)
+            // sharpens them there (bit 28 of the size, see ports/rmlui/freetype-no-hinting.patch); SACRED_FONT_HINT=0 turns it off. The layout-unit documents
+            // are scaled by the renderer, so their grid is not the screen's: no hinting.
+            static const bool lightHinting = [] { const char* v = std::getenv("SACRED_FONT_HINT"); return !(v && v[0] == '0'); }();
+            const int sized = (g_fontDp && lightHinting) ? (raster | (1 << 28)) : raster;
+            const Rml::FontFaceHandle inner = m_inner->GetFontFaceHandle(family, style, weight, sized);
             if (!inner)
             {
                 return 0;
