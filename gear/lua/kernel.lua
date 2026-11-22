@@ -1351,9 +1351,9 @@ do
         return out
     end
 
-    -- Runes for art copies. The game teaches an art from an item type whose record names it (+0x6A). A copy (alias 2000..4559) gets an item type of
-    -- Gear's own, 12800 + (alias - 2000): a copy of the type record of the base art's rune, teaching the alias, named like the copy.
-    C.RUNE_TYPE_FIRST, C.RUNE_TYPE_LAST = 12800, 15359
+    -- Runes for art copies. The game teaches an art from an item type whose record names it (+0x6A). A copy (alias 2000..3799) gets an item type of
+    -- Gear's own, 6200 + (alias - 2000): a copy of the type record of the base art's rune, teaching the alias, named like the copy.
+    C.RUNE_TYPE_FIRST, C.RUNE_TYPE_LAST = 6200, 7999
     C.rune_types = {}     -- alias -> item type
     function C.rune_type_of(alias)
         return C.rune_types[alias]
@@ -1363,7 +1363,7 @@ do
         local rec = data.abilities[alias]
         if not rec or not kernel.alias_owner[alias] then return nil, 'not an ability copy of this mod' end
         local type_id = C.RUNE_TYPE_FIRST + (alias - 2000)
-        if alias < 2000 or type_id > C.RUNE_TYPE_LAST then return nil, 'rune types exist for copies 2000..4559' end
+        if alias < 2000 or type_id > C.RUNE_TYPE_LAST then return nil, 'rune types exist for copies 2000..3799' end
         local base_runes = C.runes()[rec.base]
         local base_type = opts.base_type or (base_runes and base_runes[1])
         if not base_type then
@@ -1373,7 +1373,16 @@ do
         local ok, err = native.item_define_type(type_id, base_type, alias, opts.name_text or rec.name_text)
         if not ok then return nil, err end
         C.rune_types[alias] = type_id
+        local runes = C.runes()
+        runes[alias] = {type_id}
         return type_id
+    end
+    -- The art an item type teaches (type record +0x6A), 0 / nil for items that are no runes.
+    function C.rune_art_of_type(item_type)
+        for art, list in pairs(C.runes()) do
+            for _, t in ipairs(list) do if t == item_type then return art end end
+        end
+        return nil
     end
 
     local rune_cache

@@ -119,7 +119,7 @@ function GearClasses.skills() end
 ---@field base_type? integer The item type whose record is copied (default: a rune of the copy's base art).
 ---@field name_text? integer The text id of the item's name (default: the copy's name).
 
---- Makes a rune item type for an ability copy: an item type of Gear's own (id `12800 + alias - 2000`, so copies 2000 to 4559) that is a copy
+--- Makes a rune item type for an ability copy: an item type of Gear's own (id `6200 + alias - 2000`, so copies 2000 to 3799) that is a copy
 --- of the base art's rune, teaches the copy and carries its name. Items of that type work like the game's runes: they can be spawned
 --- (`gear.world.spawn(type, x, y)`), picked up, traded, stored, and read (`creature:use_item`): the class rules of `rune.usable` apply and the art
 --- is learned or levelled like with a native rune. Without Sacred Gear the type is an empty record: a savegame that holds such an item
@@ -129,6 +129,11 @@ function GearClasses.skills() end
 ---@return integer? type
 ---@return string? error
 function GearClasses.define_rune(alias, opts) end
+
+--- The ability an item type teaches (a rune), nil for other items.
+---@param item_type integer
+---@return integer?
+function GearClasses.rune_art_of_type(item_type) end
 
 --- The rune item type `define_rune` made for a copy.
 ---@param alias integer

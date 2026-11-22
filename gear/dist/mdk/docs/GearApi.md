@@ -2244,12 +2244,19 @@ Every skill the game has, by id.
 
 #### `gear.classes.define_rune(alias, opts) -> integer?, string?`
 
-Makes a rune item type for an ability copy: an item type of Gear's own (id `12800 + alias - 2000`, so copies 2000 to 4559) that is a copy of the base art's rune, teaches the copy and carries its name. Items of that type work like the game's runes: they can be spawned (`gear.world.spawn(type, x, y)`), picked up, traded, stored, and read (`creature:use_item`): the class rules of `rune.usable` apply and the art is learned or levelled like with a native rune. Without Sacred Gear the type is an empty record: a savegame that holds such an item loads it as an unknown item (see CustomClasses.md). Returns the item type, or nil and why.
+Makes a rune item type for an ability copy: an item type of Gear's own (id `6200 + alias - 2000`, so copies 2000 to 3799) that is a copy of the base art's rune, teaches the copy and carries its name. Items of that type work like the game's runes: they can be spawned (`gear.world.spawn(type, x, y)`), picked up, traded, stored, and read (`creature:use_item`): the class rules of `rune.usable` apply and the art is learned or levelled like with a native rune. Without Sacred Gear the type is an empty record: a savegame that holds such an item loads it as an unknown item (see CustomClasses.md). Returns the item type, or nil and why.
 
 - `alias`: `integer`
 - `opts`: `GearRuneOpts` (optional)
 - returns `type` `integer?`
 - returns `error` `string?`
+
+#### `gear.classes.rune_art_of_type(item_type) -> integer?`
+
+The ability an item type teaches (a rune), nil for other items.
+
+- `item_type`: `integer`
+- returns `integer?`
 
 #### `gear.classes.rune_type_of(alias) -> integer?`
 
