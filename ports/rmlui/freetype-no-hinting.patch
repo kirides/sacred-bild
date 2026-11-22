@@ -1,0 +1,11 @@
+--- a/Source/Core/FontEngineDefault/FreeTypeInterface.cpp
++++ b/Source/Core/FontEngineDefault/FreeTypeInterface.cpp
+@@ -293,7 +293,7 @@
+ 	if (index == 0)
+ 		return false;
+ 
+-	FT_Error error = FT_Load_Glyph(ft_face, index, FT_LOAD_COLOR);
++	FT_Error error = FT_Load_Glyph(ft_face, index, FT_LOAD_COLOR | FT_LOAD_NO_HINTING);
+ 	if (error != 0)
+ 	{
+ #ifdef RMLUI_DEBUG

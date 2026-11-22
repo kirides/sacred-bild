@@ -9,6 +9,8 @@ vcpkg_from_github(
         skip-custom-find-modules.patch
         # SacredBild: a "caret-style: underscore" property (registered by Sacred Gear) draws the text caret as a bar at the foot of the line.
         caret-style-underscore.patch
+        # SacredBild: glyphs unhinted: the font is rasterized at a fractional pixel size and scaled back, and the bytecode hinting of Segoe UI flattened the round letters at their foot.
+        freetype-no-hinting.patch
 )
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
