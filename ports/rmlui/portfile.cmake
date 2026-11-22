@@ -11,6 +11,8 @@ vcpkg_from_github(
         caret-style-underscore.patch
         # SacredBild: glyphs unhinted: the font is rasterized at a fractional pixel size and scaled back, and the bytecode hinting of Segoe UI flattened the round letters at their foot.
         freetype-no-hinting.patch
+        # SacredBild: the font size RmlUi asks the font engine for is in 1/16 pixel (it cut it to whole pixels).
+        font-size-sixteenths.patch
 )
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS

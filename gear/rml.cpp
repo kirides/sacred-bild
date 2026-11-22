@@ -1272,8 +1272,9 @@ namespace
             {
                 return found->second;
             }
-            // The patched RmlUi of ports/rmlui takes face sizes in 1/16 pixel: the face is rasterized at exactly size * scale, not at a rounded pixel size.
-            const int raster = std::max(1, static_cast<int>(std::lround(size * scale * 16.0f)));
+            // The patched RmlUi of ports/rmlui (font-size-sixteenths.patch, freetype-no-hinting.patch) gives face sizes in 1/16 pixel and rasterizes at what it is
+            // given: the face is rasterized at exactly size * scale, not at a rounded pixel size.
+            const int raster = std::max(1, static_cast<int>(std::lround(size * scale)));
             const Rml::FontFaceHandle inner = m_inner->GetFontFaceHandle(family, style, weight, raster);
             if (!inner)
             {
@@ -1283,7 +1284,7 @@ namespace
             face.inner = inner;
             face.scale = scale;
             face.metrics = m_inner->GetFontMetrics(inner);
-            face.metrics.size = size;
+            face.metrics.size = std::max(1, static_cast<int>(std::lround(size / 16.0f)));
             face.metrics.ascent /= scale;
             face.metrics.descent /= scale;
             face.metrics.line_spacing /= scale;

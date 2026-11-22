@@ -1,0 +1,11 @@
+--- a/Source/Core/ElementStyle.cpp
++++ b/Source/Core/ElementStyle.cpp
+@@ -997,7 +997,7 @@
+ 	{
+ 		RMLUI_ZoneScopedN("FontFaceHandle");
+ 		values.font_face_handle(
+-			GetFontEngineInterface()->GetFontFaceHandle(values.font_family(), values.font_style(), values.font_weight(), (int)values.font_size()));
++			GetFontEngineInterface()->GetFontFaceHandle(values.font_family(), values.font_style(), values.font_weight(), (int)(values.font_size() * 16.f + 0.5f))); // SacredBild: face sizes in 1/16 pixel (see freetype-no-hinting.patch)
+ 	}
+ 
+ 	// Next, pass inheritable dirty properties onto our children
