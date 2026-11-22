@@ -439,6 +439,15 @@ namespace
     };
     WaterList g_water;
     bool g_waterReady = false;          // both hooks in place
+    // Where the game keeps its water tile array in the world view: the English and the German build at the offset of
+    // cWorldView::waterTiles, ReBorn (it moved the array behind the end of the original object and made the object
+    // larger) elsewhere. Read from drawWaterTiles at install.
+    uintptr_t g_waterOffset = offsetof(cWorldView, waterTiles);
+
+    WaterTile* waterArray(cWorldView* view)
+    {
+        return reinterpret_cast<WaterTile*>(reinterpret_cast<uint8_t*>(view) + g_waterOffset);
+    }
 
     // The ambience calls of the parts while they are drawn.
     struct AmbienceSum
@@ -477,7 +486,7 @@ namespace
         }
         uint32_t& count = self->waterTileCount;
         auto& entries = g_water.entries;
-        entries.insert(entries.end(), self->waterTiles, self->waterTiles + count);
+        entries.insert(entries.end(), waterArray(self), waterArray(self) + count);
         const auto total = static_cast<uint32_t>(entries.size());
         if (total > g_water.most)
         {
@@ -497,7 +506,7 @@ namespace
         for (uint32_t first = 0; first < total; first += cWorldView::waterTileCapacity)
         {
             const uint32_t n = std::min(cWorldView::waterTileCapacity, total - first);
-            std::copy_n(entries.data() + first, n, self->waterTiles);
+            std::copy_n(entries.data() + first, n, waterArray(self));
             count = n;
             g_ambience.part = n;
             g_ambience.tiles += n;
@@ -529,6 +538,32 @@ namespace
         int32_t rel;
         std::memcpy(&rel, reinterpret_cast<const void*>(site + 1), sizeof(rel));
         return site + 5 + static_cast<uintptr_t>(static_cast<intptr_t>(rel));
+    }
+
+    // The array's offset: drawWaterTiles starts its loop with lea esi, [edi + array + 0x18] (the tile's sector word
+    // at -4 is read next). 0 if the code does not look like that.
+    uintptr_t findWaterArrayOffset()
+    {
+        if (!Addr::cWorldView_drawWaterTiles)
+        {
+            return 0;
+        }
+        const auto* code = reinterpret_cast<const uint8_t*>(static_cast<uintptr_t>(Addr::cWorldView_drawWaterTiles));
+        uintptr_t found = 0;
+        for (size_t i = 0; i + 10 <= 0x400; ++i)
+        {
+            if (code[i] == 0x8D && code[i + 1] == 0xB7 && code[i + 6] == 0x0F && code[i + 7] == 0xBF && code[i + 8] == 0x46 && code[i + 9] == 0xFC)
+            {
+                uint32_t disp;
+                std::memcpy(&disp, code + i + 2, sizeof(disp));
+                if (found || disp < 0x18 + 0x1000 || disp > 0x400000)
+                {
+                    return 0;
+                }
+                found = disp - 0x18;
+            }
+        }
+        return found;
     }
 
     // The sound system's water ambience setter, from its calls in drawWaterTiles (0 if they do not agree).
@@ -712,7 +747,7 @@ namespace
         const bool waterList = self == g_water.view;
         if (waterList && water + kRowMargin > cWorldView::waterTileCapacity)
         {
-            g_water.entries.insert(g_water.entries.end(), self->waterTiles, self->waterTiles + water);
+            g_water.entries.insert(g_water.entries.end(), waterArray(self), waterArray(self) + water);
             water = 0;
         }
         if (layers + kRowMargin > cWorldView::layeredTileCapacity || water + kRowMargin > cWorldView::waterTileCapacity)
@@ -1016,11 +1051,20 @@ void Resolution::install()
     Patch::hook(g_origTileRow, Addr::cWorldView_renderTileRow, &hookTileRow, "cWorldView::renderTileRow");
     Patch::hook(g_origInitRowWalk, Addr::cWorldView_initRowWalk, &hookInitRowWalk, "cWorldView::initRowWalk");
     const uintptr_t ambience = findAmbience();
-    g_waterReady = ambience && Patch::hook(g_origAmbience, ambience, &hookAmbience, "water ambience") &&
+    const uintptr_t waterOffset = findWaterArrayOffset();
+    if (waterOffset)
+    {
+        g_waterOffset = waterOffset;
+        if (waterOffset != offsetof(cWorldView, waterTiles))
+        {
+            LOG("Water tiles: the game's list is at +{:x} in the world view", waterOffset);
+        }
+    }
+    g_waterReady = ambience && waterOffset && Patch::hook(g_origAmbience, ambience, &hookAmbience, "water ambience") &&
         Patch::hook(g_origDrawWaterTiles, Addr::cWorldView_drawWaterTiles, &hookDrawWaterTiles, "cWorldView::drawWaterTiles");
     if (!g_waterReady)
     {
-        LOG("Resolution: water ambience call not found, water tiles drawn early when their list fills up");
+        LOG("Resolution: water ambience call or water list not found, water tiles drawn early when their list fills up");
     }
     Patch::hook(g_origPixelsToWorld, Addr::pixelsToWorld, &hookPixelsToWorld, "pixelsToWorld");
     Patch::hook(g_origWorldToPixels, Addr::worldToPixels, &hookWorldToPixels, "worldToPixels");
