@@ -1730,7 +1730,7 @@ body { font-size: 15dp; color: #f0f0f0; }
 .font-game { font-family: "Sacred Game"; }
 .font-start { font-family: "Sacred Start"; }
 .font-default { font-family: "Segoe UI"; }
-button { margin-right: 8px; padding: 4px 14px; color: #f0f0f0; background-color: #14141f; border: 1px #8c7440; cursor: pointer; }
+button { margin-right: 8px; padding: 4px 14px; line-height: 1.5; color: #f0f0f0; background-color: #14141f; border: 1px #8c7440; cursor: pointer; }
 button:hover, button:focus { background-color: #24243a; border-color: #ffd780; color: #ffe030; }
 button:active { background-color: #34344e; }
 button.primary { border-color: #c8aa5a; color: #ffd780; }
