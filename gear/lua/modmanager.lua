@@ -52,6 +52,33 @@ local function fit(text, width, opts)
     return text:sub(1, lo) .. '...'
 end
 
+-- A text field in the game's pill shape: a rounded box (the fill and a 1 unit edge) built from one-unit rows, the ends of the rows pulled in on a
+-- half circle (h is the diameter). `edge` and `fill` are colours.
+local function pill(x, y, w, h, fill, edge)
+    local r = h / 2
+    local rows = math.floor(h)
+    local prev
+    for i = 0, rows - 1 do
+        local d = (i < rows / 2) and (r - i - 0.5) or (i + 0.5 - r)
+        local inset = math.floor(r - math.sqrt(math.max(0, r * r - d * d)) + 0.5)
+        local top = i == 0 or i == rows - 1
+        ui.rect(x + inset, y + i, w - 2 * inset, 1, top and edge or fill, LAYER)
+        if not top then
+            local step = prev and math.max(1, math.abs(inset - prev)) or 1
+            if i >= rows / 2 and prev then step = math.max(1, math.abs(inset - prev)) end
+            ui.rect(x + inset, y + i, step, 1, edge, LAYER)
+            ui.rect(x + w - inset - step, y + i, step, 1, edge, LAYER)
+        end
+        prev = inset
+    end
+end
+
+-- The blinking cursor of a text field: a bar at the foot of the text, as wide as a "_" (like the game's own fields), where the text ends.
+local function underscore(text, x, y, h, color)
+    if math.floor(gear.time() * 2) % 2 ~= 0 then return end
+    ui.rect(x + 5 + text_w(text), y + h - 5, math.max(6, text_w('_')), 2, color, LAYER)
+end
+
 local function format_binding(b)
     if b == nil or b == '' then return '(unbound)' end
     local out = {}
@@ -327,8 +354,7 @@ local function setting_row(t, m, d)
         fy = fy + 2
         local focused = screen.edit == id
         local r = ui.region(id, fx, fy, 200, 20, LAYER)
-        ui.rect(fx, fy, 200, 20, focused and 0xF0202030 or C.bg, LAYER)
-        ui.frame(fx, fy, 200, 20, (focused or r.hover) and C.edge or C.edge_dim, 1, LAYER)
+        pill(fx, fy, 200, 20, focused and 0xF0202030 or C.bg, (focused or r.hover) and C.edge or C.edge_dim)
         if f:button(2, 'Kbd', {id = id .. '#kbd', height = 20,
             tooltip = 'Type with an on-screen keyboard (for a controller)'}) then
             screen.osk = {mode = 'text', mod = m, def = d, label = d.label, text = value, max = d.max_length or 64}
@@ -339,8 +365,9 @@ local function setting_row(t, m, d)
             focused = true
         end
         local shown = focused and screen.edit_text or value
-        local blink = focused and math.floor(gear.time() * 2) % 2 == 0 and '|' or ''
-        ui.text(fit(shown, 188) .. blink, fx + 5, fy, {height = 20, valign = 'middle', layer = 'top'})
+        local shown_fit = fit(shown, 176)
+        ui.text(shown_fit, fx + 10, fy, {height = 20, valign = 'middle', layer = 'top'})
+        if focused then underscore(shown_fit, fx + 5, fy, 20, C.accent) end
         if focused then
             if ui.key_pressed('enter') or ui.key_pressed('tab') then
                 screen.edit = nil
@@ -620,9 +647,10 @@ local function draw_osk(p)
     ui.text(fit(what, w), x, y, {size = 14, bold = true, color = C.accent, height = 22, valign = 'middle', layer = 'top'})
     y = y + 28
     if o.mode == 'text' then
-        ui.rect(x, y, w, 24, C.bg, LAYER)
-        ui.frame(x, y, w, 24, C.edge, 1, LAYER)
-        ui.text(fit(o.text, w - 12) .. '|', x + 6, y, {height = 24, valign = 'middle', layer = 'top'})
+        pill(x, y, w, 24, C.bg, C.edge)
+        local shown_fit = fit(o.text, w - 28)
+        ui.text(shown_fit, x + 12, y, {height = 24, valign = 'middle', layer = 'top'})
+        underscore(shown_fit, x + 7, y, 24, C.accent)
         y = y + 32
         for i, row in ipairs(OSK_TEXT) do
             local hit = osk_row(p, 'r' .. i, y, row, 40, function(k)
