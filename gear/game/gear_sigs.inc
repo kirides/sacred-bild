@@ -154,6 +154,7 @@ static const Sig::Entry kGearSigs[] = {
     {"g_pParticleMgr", "68 00 02 00 00 8B C8 E8 ?? ?? ?? ?? A3 ?? ?? ?? ?? 8B 4C 24 04", 13, Sig::Take::Abs32, &Gear::Addr::g_pParticleMgr}, // 017EEBCC, 017ECB4C
     {"textureMgr_find", "8B 44 24 04 56 8D B1 94 00 00 00 50 8B CE E8 ?? ?? ?? ?? 83 F8 FF 74 0C 50 8B CE E8 ?? ?? ?? ?? 5E C2 04 00 33 C0 5E C2 04 00 90 90 90 90 90 90 81 EC 5C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::textureMgr_find}, // 00657360, 00657620
     {"particle_drawSprites", "81 EC C8 01 00 00 DB 84 24 18 02 00 00", 0, Sig::Take::Match, &Gear::Addr::particle_drawSprites}, // 00761B00, 007613E0
+    {"particle_drawGroundSprite", "81 EC 84 00 00 00 53 55 8B E9 56 57", 0, Sig::Take::Match, &Gear::Addr::particle_drawGroundSprite}, // 007631E0, 00762AC0
     {"levelFn51CC30", "DB 44 24 04 D9 C0 D8 0D ?? ?? ?? ?? D8 05 ?? ?? ?? ?? D9 C9", 0, Sig::Take::Match, &Gear::Addr::levelFn51CC30}, // 0051CC30, 0051CA70
     {"levelFn50E6C0", "55 8B EC 83 E4 F8 6A FF 64 A1 00 00 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn50E6C0}, // 0050E6C0, 0050E500
     {"levelFn5893B0", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 3C 01 00 00", 0, Sig::Take::Match, &Gear::Addr::levelFn5893B0}, // 005893B0, 00589270

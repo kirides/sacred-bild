@@ -40,7 +40,10 @@ a system with the frame time (`0x7CC080`), and every class draws its sprites thr
 | `textures` | texture handles in the system's object | each name of the game's list can be replaced by another: `{PARTICLE_GLOW01.TGA = 'PARTICLE_SMOKE01.TGA'}`. The handle the engine's texture lookup gave the constructor is replaced inside the object (its size is known per type); a name the effect does not use changes nothing and the log says so. |
 
 Colours are changed where the sprites are drawn, so what a texture has baked in stays (a green flame texture stays green under `multiply`; a grey
-glow takes any colour). What a class draws by other code than the shared sprite function (not every class was checked; the hero's own spell overlays, models) is not touched.
+glow takes any colour). Two sprite functions are hooked: the batch drawing at 0x761B00 and the single-quad drawing at 0x7631E0 (ground discs and
+magic circles, e.g. the cloud and circle of Poison Mist, type 0x318, class 0x17). The quads of the second one are mostly white and get their green from
+the texture (FX_GROUNDPOISON.TGA), so `hue` and `colorize` leave that cloud green; recolour it with a `textures` swap or a `multiply` (which darkens it).
+What a class draws by other code than the shared sprite function (not every class was checked; the hero's own spell overlays, models) is not touched.
 
 ## When it is decided
 

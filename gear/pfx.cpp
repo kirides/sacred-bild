@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <cstdio>
 #include <map>
@@ -54,6 +55,7 @@ namespace
     decltype(Addr::particleMgr_update)::Ptr g_origUpdate = nullptr;
     decltype(Addr::textureMgr_find)::Ptr g_origFind = nullptr;
     uintptr_t g_origDraw = 0;
+    uintptr_t g_origDrawGround = 0;
 
     bool g_installed = false;
 
@@ -308,6 +310,33 @@ namespace
         }
     }
 
+    // The detour of the single-quad drawing (thiscall, ECX the system, [esp + 4] the device, ret 0x2C): the ground discs and magic circles of
+    // some effect classes (Poison Mist's cloud, class 0x17) are drawn by it and not by the batch drawing above. Same scheme.
+    __declspec(naked) void hookDrawGroundSprite()
+    {
+        __asm
+        {
+            push ecx
+            push dword ptr [esp + 8]
+            push ecx
+            call pfxDrawEnter
+            add esp, 8
+            mov edx, eax
+            pop ecx
+            test edx, edx
+            jz groundPlain
+            mov eax, [esp]
+            mov g_drawReturn, eax
+            mov dword ptr [esp], offset groundDone
+        groundPlain:
+            jmp g_origDrawGround
+        groundDone:
+            call pfxDrawLeave
+            push g_drawReturn
+            ret
+        }
+    }
+
     // ---- the effect setup ------------------------------------------------------------------------------------------------
 
     void* g_textureManager = nullptr;       // what the engine's lookups use as `this` (captured from the first call)
@@ -391,10 +420,34 @@ namespace
             }
             else
             {
-                World::Object o;
-                if (World::object(owner, o) && o.creature)
+                // The owner is a creature, or another effect object whose own owner (+0x30) leads to one: walk that link up to the creature.
+                // (Not every effect has one: the cloud of Poison Mist, class 0x17, is made with owner 0 and no creature or ability word in
+                // its object, so the mod still needs its time window for it.)
+                uint32_t at = owner;
+                for (int depth = 0; depth < 6 && at && !creature; ++depth)
                 {
-                    creature = owner;
+                    World::Object o;
+                    if (!World::object(at, o))
+                    {
+                        break;
+                    }
+                    if (o.creature)
+                    {
+                        creature = at;
+                        break;
+                    }
+                    uint32_t up = 0;
+                    const uintptr_t addr = World::objectAddress(at);
+                    if (!addr || !readAt(reinterpret_cast<void*>(addr), kFxOwner, up) || up == at)
+                    {
+                        break;
+                    }
+                    if (const auto c2 = g_fxCaster.find(up); c2 != g_fxCaster.end())
+                    {
+                        creature = c2->second;
+                        break;
+                    }
+                    at = up;
                 }
             }
             if (const auto pv = g_fxVariant.find(owner); pv != g_fxVariant.end())
@@ -448,8 +501,41 @@ namespace
         swapTextures(system, p.type, it->second);
     }
 
+    // Research trace (environment variable GEAR_PFXTRACE=1): where each effect's system stands (+8/+0xC/+0x10 of the particle system object) per update.
+    std::unordered_map<uintptr_t, uint32_t> g_traceType;
+    const bool g_trace = std::getenv("GEAR_PFXTRACE") != nullptr;
+
     void __fastcall hookUpdate(void* mgr, void* edx, uint32_t handle, float dt)
     {
+        if (g_trace)
+        {
+            const uintptr_t sys = systemOf(mgr, handle);
+            const auto tt = g_traceType.find(sys);
+            if (tt != g_traceType.end())
+            {
+                float x = 0, y = 0, z = 0;
+                readAt(reinterpret_cast<void*>(sys), 8, x);
+                readAt(reinterpret_cast<void*>(sys), 0xC, y);
+                readAt(reinterpret_cast<void*>(sys), 0x10, z);
+                // vtable slot 3 = alive; the age and the next two words of the class's own fields
+                int alive = -1;
+                __try
+                {
+                    void** vt = *reinterpret_cast<void***>(sys);
+                    alive = static_cast<int>(reinterpret_cast<unsigned char(__thiscall*)(void*)>(vt[3])(reinterpret_cast<void*>(sys)) & 0xFF);
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER)
+                {
+                }
+                uint32_t w[16] = {};
+                for (int i = 0; i < 16; ++i)
+                {
+                    readAt(reinterpret_cast<void*>(sys), 0x20A0 + i * 4, w[i]);
+                }
+                LOG("PFXTRACE t={} type={:X} sys={:X} dt={} pos={} {} {} alive={} w={:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X} {:X}", GetTickCount64(), tt->second, sys, dt, x, y, z, alive,
+                    w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9], w[10], w[11], w[12], w[13], w[14], w[15]);
+            }
+        }
         if (!g_pending.empty() || !g_instances.empty())
         {
             const uintptr_t system = systemOf(mgr, handle);
@@ -478,6 +564,17 @@ namespace
     void __fastcall hookSetup(void* fx, void* edx, uint32_t effect)
     {
         g_origSetup(fx, edx, effect);
+        if (g_trace)
+        {
+            uint16_t th = 0;
+            if (readAt(fx, kFxHandle, th))
+            {
+                if (const uintptr_t sys = systemOf(manager(), th))
+                {
+                    g_traceType[sys] = effect;
+                }
+            }
+        }
         const bool interested = g_watchAll || g_watch.count(effect) || !g_fxVariant.empty();
         if (!interested)
         {
@@ -501,7 +598,7 @@ bool Pfx::install()
         return true;
     }
     if (!Addr::cObjectFX_setup || !Addr::particleMgr_add || !Addr::particleMgr_update || !Addr::g_pParticleMgr || !Addr::textureMgr_find ||
-        !Addr::particle_drawSprites)
+        !Addr::particle_drawSprites || !Addr::particle_drawGroundSprite)
     {
         LOG("Pfx: addresses missing, gear.pfx changes no effects");
         return false;
@@ -514,6 +611,8 @@ bool Pfx::install()
     ok = Patch::hook(g_origFind, Addr::textureMgr_find, hookFind, "textureMgr_find") && ok;
     g_origDraw = Addr::particle_drawSprites;
     ok = Patch::hook(reinterpret_cast<void**>(&g_origDraw), reinterpret_cast<void*>(hookDrawSprites), "particle_drawSprites") && ok;
+    g_origDrawGround = Addr::particle_drawGroundSprite;
+    ok = Patch::hook(reinterpret_cast<void**>(&g_origDrawGround), reinterpret_cast<void*>(hookDrawGroundSprite), "particle_drawGroundSprite") && ok;
     LOG("Pfx: hooks queued");
     return ok;
 }
