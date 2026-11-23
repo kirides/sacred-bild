@@ -117,7 +117,7 @@
                 </div>
                 <div data-if="r.kind == 'num'" class="srow">
                     <div class="slab" data-attr-title="r.tip">{{ r.label }}</div>
-                    <div class="sctl"><input type="range" class="game-slider sl" data-attr-id="r.num_id" data-attr-min="r.min" data-attr-max="r.max" data-attr-step="r.step" data-value="r.value"/><span class="val">{{ r.text }}</span></div>
+                    <div class="sctl"><input type="range" class="game-slider sl" data-attr-id="r.num_id" data-attr-min="r.min" data-attr-max="r.max" data-attr-step="r.step" data-attr-value="r.value"/><span class="val">{{ r.text }}</span></div>
                     <div class="rst"><button data-if="r.changed" class="mini act" data-attr-id="r.rst_id">Reset</button></div>
                 </div>
                 <div data-if="r.kind == 'choice'" class="srow">
@@ -133,10 +133,10 @@
                 <div data-if="r.kind == 'color'" class="srow">
                     <div class="slab" data-attr-title="r.tip">{{ r.label }}</div>
                     <div class="sctl"><div class="swatch" data-style-background-color="r.css"></div>
-                        <div class="cgrid"><input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.a_id" data-value="r.a" title="Alpha"/>
-                        <input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.r_id" data-value="r.r" title="Red"/>
-                        <input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.g_id" data-value="r.g" title="Green"/>
-                        <input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.b_id" data-value="r.b" title="Blue"/></div></div>
+                        <div class="cgrid"><input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.a_id" data-attr-value="r.a" title="Alpha"/>
+                        <input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.r_id" data-attr-value="r.r" title="Red"/>
+                        <input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.g_id" data-attr-value="r.g" title="Green"/>
+                        <input type="range" class="game-slider small sl" min="0" max="255" step="1" data-attr-id="r.b_id" data-attr-value="r.b" title="Blue"/></div></div>
                     <div class="rst"><button data-if="r.changed" class="mini act" data-attr-id="r.rst_id">Reset</button></div>
                 </div>
                 <div data-if="r.kind == 'key'" class="srow krow">
