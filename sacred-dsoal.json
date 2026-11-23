@@ -6,7 +6,7 @@
   "homepage": "https://github.com/kirides/sacred-bild/blob/main/docs/Dsoal.md",
   "download": {
     "url": "https://github.com/kcat/dsoal/releases/download/archive/DSOAL_r697.zip",
-    "sha256": "1f7f6b6627290af5c8c882c61ab3461cba1f12d369e155affe006d6919858481",
+    "sha256": "ba8492ecd2a24810ca419082ec252073c179a56daef777c697a5a29dbea72aca",
     "version": "r697",
     "inner": "DSOAL_r697.zip"
   },

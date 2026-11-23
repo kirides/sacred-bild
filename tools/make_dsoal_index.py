@@ -16,7 +16,7 @@ REPOSITORY = 'kirides/sacred-bild'
 SPEAKERS_INI = 'docs/dsoal/alsoft-speakers.ini'
 # The official release asset. It holds one more zip (DSOAL_r697.zip) with the folders DSOAL and DSOAL+HRTF (Win32 and Win64 files); 'inner' names it.
 OFFICIAL_URL = 'https://github.com/kcat/dsoal/releases/download/archive/DSOAL_r697.zip'
-OFFICIAL_SHA256 = '1f7f6b6627290af5c8c882c61ab3461cba1f12d369e155affe006d6919858481'
+OFFICIAL_SHA256 = 'ba8492ecd2a24810ca419082ec252073c179a56daef777c697a5a29dbea72aca'
 REVISION = 'r697'
 AUTHOR = 'DSOAL and OpenAL Soft contributors'
 
