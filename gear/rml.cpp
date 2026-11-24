@@ -2031,6 +2031,13 @@ body { font-size: 15dp; color: #f0f0f0; }
 .accent { color: #ffd780; }
 .good { color: #7fd37f; }
 .bad { color: #e06060; }
+.small { font-size: 12px; }
+.wrap { white-space: pre-wrap; }
+.grow { flex: 1 1 auto; }
+.warn { color: #ffc878; }
+.gold { color: #ffd778; }
+.xp { color: #9cd0ff; }
+button.dis { color: #8c8c8c; border-color: #3c3c3c; opacity: 0.6; }
 .row { display: flex; flex-direction: row; margin: 6px 0; }
 .row.right { justify-content: flex-end; }
 .row.space { justify-content: space-between; }
