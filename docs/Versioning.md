@@ -34,6 +34,7 @@ Run it on `main`, not on feature branches (parallel branches would all edit the 
 Activate the hooks once per clone (all worktrees share it): `git config core.hooksPath .githooks`.
 
 - `post-merge`: after a merge into `main` the bump runs and is committed automatically.
+  Skip it with `SACRED_NO_BUMP=1` (agents use `tools/agent-git.ps1 <git args>`, which sets it).
 - `pre-push`: pushing `main` or a `v*` tag is refused while a bump is pending or `mod-index.json` is stale (bypass: `git push --no-verify`).
 - `CLAUDE.md` tells the assistant to run the script after committing on `main`.
 - CI checks that `mod-index.json` matches the version files.

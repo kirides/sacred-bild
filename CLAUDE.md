@@ -9,6 +9,8 @@ means minor, `break(<scope>)`/`feat!:` major; scopes `gear`, `bild`) and refresh
 - **On local `main`, after every merge or direct commit, before you report the work as done:** `python tools/bump_versions.py --commit`
   (the `post-merge` hook does this for merges when `core.hooksPath` is `.githooks`; check with `git config core.hooksPath`, set it with
   `git config core.hooksPath .githooks`).
+- **Agents / parallel sessions:** do not bump. Run git through `tools/agent-git.ps1` (or `tools/agent-git.cmd`), or set `SACRED_NO_BUMP=1`;
+  the `post-merge` hook then skips the bump and John's own merges still bump.
 - Write commit messages so the bump level is right: `feat(gear): ...` for a new feature, `break(bild): ...` for a change that breaks
   saves, settings or the mod API, anything else is a patch.
 - Never push (John does). His `pre-push` hook refuses `main` with a pending bump, so a forgotten bump shows up there.
