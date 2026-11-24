@@ -55,7 +55,6 @@
         .srow input.game-slider { width: 220px; flex: none; }
         .srow input.game-slider.small { width: 150px; margin-right: 6px; flex: none; }
         .cgrid { display: flex; flex-direction: row; flex-wrap: wrap; width: 320px; }
-        .srow .chv { min-width: 150px; text-align: center; color: #ffd780; margin: 0 4px; }
         .srow input.field { width: 230px; flex: none; }
         .swatch { width: 26px; height: 22px; flex: none; margin-right: 8px; border: 1px #8c7440; }
         .sh { font-weight: bold; font-size: 14dp; color: #ffd780; margin: 10px 6px 2px 6px; padding-bottom: 2px; border-bottom: 1px #8c744080; }
@@ -122,7 +121,7 @@
                 </div>
                 <div data-if="r.kind == 'choice'" class="srow">
                     <div class="slab" data-attr-title="r.tip">{{ r.label }}</div>
-                    <div class="sctl"><a class="arrow prev act" data-attr-id="r.prev_id"></a><span class="chv">{{ r.text }}</span><a class="arrow next act" data-attr-id="r.next_id"></a></div>
+                    <div class="sctl"><div class="dd" data-class-open="r.open"><button class="game-dropdown act" data-attr-id="r.dd_id">{{ r.text }}</button><div data-if="r.open" class="dd-list" data-nav-scroll><button data-for="o : r.opts" class="mini opt act" data-attr-id="o.id" data-class-on="o.on">{{ o.label }}</button></div></div></div>
                     <div class="rst"><button data-if="r.changed" class="mini act" data-attr-id="r.rst_id">Reset</button></div>
                 </div>
                 <div data-if="r.kind == 'text'" class="srow">
