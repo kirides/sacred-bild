@@ -3270,6 +3270,12 @@ Removes a handler.
 
 - `handle`: `GearKeyHandle`
 
+#### `gear.keys.trigger(id)`
+
+Fires the handlers of the declared key `id` as if the player pressed it. A button with `data-close-key="<key id>"` in a mod's RmlUi document does that when clicked (a window's close button), and the controller's B does it for the window under the pad's cursor.
+
+- `id`: `string`
+
 #### `gear.keys.binding(id) -> string`
 
 The key bound to `id` now: the player's choice or the default, like `'ctrl+m'` (`''`: unbound).

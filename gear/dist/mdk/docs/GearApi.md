@@ -1374,6 +1374,7 @@ What `creature:info()` returns.
 | `exp` | `integer` | Creatures only. (optional) |
 | `level` | `integer` | Creatures only. (optional) |
 | `in_combat` | `boolean` | Creatures only: the engine's own "enemies about" state (see `Creature:in_combat`). (optional) |
+| `casting` | `integer` | Creatures only: the art or spell in flight, 0 for none (see `Creature:casting`). (optional) |
 
 ### GearItem
 
@@ -1476,6 +1477,12 @@ True when it has no hit points left or is gone.
 Whether the engine's own "enemies about" state is set for the creature (bit 0x8000 of its state word, which the engine's creature code sets while enemies are near and clears a while after): the state that stops ReBorn's teleportation potion.
 
 - returns `boolean`
+
+#### `creature:casting() -> integer?`
+
+The id of the art or spell the creature has in flight (a creature's word at +0x120; kept after the cast until the next one starts, so it tells what it cast last, not that it is casting now), nil when none.
+
+- returns `integer?`
 
 #### `creature:apply_effect(effect, value) -> boolean?, string?`
 
@@ -1934,6 +1941,12 @@ Experience a party hero gains from the game (kills, quests) also goes to the oth
 
 - `share`: `number`
 - `radius`: `number` (optional)
+
+#### `gear.party.experience_scale(factor)`
+
+Multiplies every experience gain the game makes for a hero (kills, quests) by `factor` (0 to 1000; 1 is the game's own, 0 stops the gain, 2 doubles it). Single player only: in a network game the server decides the experience. The gains of `creature:add_experience` are not scaled, and what `share_experience` hands on is of the scaled amount. The setting lasts until the game ends; a mod sets it again on `load`.
+
+- `factor`: `number`
 
 ### GearRecruitOpts
 
@@ -3256,6 +3269,12 @@ Calls `fn` when the declared key `id` is pressed.
 Removes a handler.
 
 - `handle`: `GearKeyHandle`
+
+#### `gear.keys.trigger(id)`
+
+Fires the handlers of the declared key `id` as if the player pressed it. A button with `data-close-key="<key id>"` in a mod's RmlUi document does that when clicked (a window's close button), and the controller's B does it for the window under the pad's cursor.
+
+- `id`: `string`
 
 #### `gear.keys.binding(id) -> string`
 

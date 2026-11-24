@@ -4065,6 +4065,11 @@ local function make_ui(mod)
             doc.model = uis.rml_proxy(doc, doc.data)
         end
         uis.rml_docs[id] = {mod = mod, doc = doc}
+        -- close buttons: <button id="x" data-close-key="panel"> fires the declared key `panel` of the mod
+        doc:on('[data-close-key]', 'click', function(e)
+            local key = native.rml_attr(id, '#' .. tostring(e.current), 'data-close-key')
+            if type(key) == 'string' and key ~= '' then uis.key_trigger(mod, key) end
+        end)
         return doc
     end
 
@@ -4447,6 +4452,19 @@ local function make_ui(mod)
         if hover and uis.wheel ~= 0 and not uis.wheel_taken then
             uis.wheel_taken = true
             native.rml_wheel(id, uis.wheel)
+        end
+        if ui_pad.back > 0 then
+            -- the pad's B closes the window under its cursor that has a close button (data-close-key)
+            local key = native.rml_attr(id, '[data-close-key]', 'data-close-key')
+            if type(key) == 'string' and key ~= '' then
+                for _, r in ipairs(native.rml_rects(id, self.rect_rows) or {}) do
+                    if mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h then
+                        ui_pad.back = ui_pad.back - 1
+                        uis.key_trigger(mod, key)
+                        break
+                    end
+                end
+            end
         end
         for _, e in ipairs(native.rml_update(id, mx, my, hover)) do
             -- e.user: a slider's change that the player made (mouse press / drag / release, or the pad's D-pad) this frame; RmlUi also
@@ -6755,6 +6773,13 @@ local function make_keys_api(mod)
             if key_handlers[i] == h then table.remove(key_handlers, i) end
         end
     end
+    -- gear.keys.trigger(id): fires the handlers of the declared key as if the player pressed it (a close button of the mod's own window uses it).
+    function api.trigger(id)
+        def_of(id)
+        for _, h in ipairs({unpack(key_handlers)}) do
+            if h.mod == mod and h.id == id and not mod.disabled then call(mod, 'key ' .. id, h.fn) end
+        end
+    end
     function api.binding(id)
         return key_binding(mod.entry, def_of(id))
     end
@@ -6769,6 +6794,14 @@ local function make_keys_api(mod)
         return table.concat(out, '+')
     end
     return api
+end
+
+-- A button with data-close-key="<key id>" in a mod's document closes its window: the key's handlers fire (see gear.keys.trigger); the pad's B does the same
+-- for the window under the pad's cursor.
+function uis.key_trigger(mod, id)
+    for _, h in ipairs({unpack(key_handlers)}) do
+        if h.mod == mod and h.id == id and not mod.disabled then call(mod, 'key ' .. id, h.fn) end
+    end
 end
 
 -- gear.input: the game's own keys, remapped (gear/input.cpp). State lives in `uis` (the main chunk is at its locals limit).

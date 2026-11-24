@@ -116,6 +116,10 @@ function GearKeys.on(id, fn) end
 ---@param handle GearKeyHandle
 function GearKeys.off(handle) end
 
+--- Fires the handlers of the declared key `id` as if the player pressed it. A button with `data-close-key="<key id>"` in a mod's RmlUi document does that when clicked (a window's close button), and the controller's B does it for the window under the pad's cursor.
+---@param id string
+function GearKeys.trigger(id) end
+
 --- The key bound to `id` now: the player's choice or the default, like `'ctrl+m'` (`''`: unbound).
 ---@param id string
 ---@return string
