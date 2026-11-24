@@ -2054,6 +2054,9 @@ button.game-button { display: inline-block; height: 34px; min-width: 100px; padd
 button.game-button:hover, button.game-button:focus { color: #ffe030; border-color: #ffe030; background-color: #262636; }
 button.game-button:active { color: #fff2a0; background-color: #34344e; }
 button.game-button:disabled, button.game-button[disabled] { color: #8a8a8a; opacity: 0.55; }
+button { flex: none; white-space: nowrap; }
+button.mini { margin: 0 4px 0 0; padding: 0 10px; line-height: 1.4; font-size: 13px; }
+button.mini.dis { color: #8c8c8c; border-color: #3c3c3c; opacity: 0.6; }
 .dd { position: relative; display: inline-block; z-index: 10; }
 .dd.open { z-index: 100; }
 .dd-list { position: absolute; left: 0; top: 100%; min-width: 150px; max-height: 300px; overflow-y: auto; z-index: 200; background-color: #0c0c14; border: 1px #ffd780; padding: 2px; }
