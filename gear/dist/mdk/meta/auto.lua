@@ -127,6 +127,12 @@ function GearAuto.type(text) end
 ---@return integer|string? py The pixel, or the error message when `px` is nil.
 function GearAuto.ui_to_pixels(x, y) end
 
+--- The RmlUi documents that mods have open (of one mod, or all), oldest first: to walk another mod's tabs and pages in a test
+--- (`doc:query_all('.tab')`, `element:rect()`, then `ui_click`).
+---@param mod_id? string
+---@return {mod: string, doc: GearRmlDoc, id: integer}[]
+function GearAuto.rml_docs(mod_id) end
+
 --- Where a mod's widget was drawn in the last tick (UI layout coordinates, as `ui_click` takes them), found by the id it was
 --- given (`gear.ui.button('save', ...)`, a table cell's `id`); clipped to its scroll area. Nil when it was not drawn.
 ---@param id string|integer
