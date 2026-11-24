@@ -1,0 +1,5 @@
+@font-face { font-family: "Icons"; src: url("icons.ttf") format("truetype"), url("icons.woff2") format("woff2"); }
+.ic { font-family: "Icons"; font-size: 40px; color: #ffd060; }
+.home::before { content: "\e88a"; }
+.star::before { content: "\e838"; }
+#w { position: absolute; left: 100px; top: 100px; width: 300px; background-color: #203050; color: white; font-size: 22px; padding: 10px; }

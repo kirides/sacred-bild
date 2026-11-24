@@ -1,6 +1,7 @@
 #include "rml.h"
 #include "log.h"
 #include "padnav.h"
+#include "css_compat.h"
 #include "ui.h"
 
 #include <RmlUi/Core.h>
@@ -25,7 +26,10 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <cstring>
 #include <memory>
+#include <optional>
+#include <iterator>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -293,6 +297,79 @@ namespace
         }
     };
 
+    // The directory part of a document-relative reference ("@id/styles/a.rcss" -> "@id/styles"; a disk path -> its folder).
+    std::string logicalDir(const std::string& ref, const fs::path& real)
+    {
+        if (!ref.empty() && ref[0] == '@')
+        {
+            const size_t slash = ref.rfind('/');
+            return slash == std::string::npos ? ref : ref.substr(0, slash);
+        }
+        return toUtf8(real.parent_path());
+    }
+
+    bool fileExists(const std::string& ref)
+    {
+        bool shared = false;
+        const fs::path p = resolveShared(ref, &shared);
+        std::error_code ec;
+        if (shared)
+        {
+            return !p.empty() && fs::is_regular_file(p, ec);
+        }
+        const fs::path plain = fromUtf8(plainPath(ref));
+        return readable(plain) && fs::is_regular_file(plain, ec);
+    }
+
+    // The web conveniences of a stylesheet (and of the <style> blocks of a document): @font-face with url() and format(), ::before with content.
+    // A font source is looked up next to the stylesheet, in its fonts/ folder, in the mod's fonts/ folder, or as @mod-id/file.
+    std::string preprocessCss(const std::string& text, const std::string& dir, bool markup)
+    {
+        GearCss::CssPreprocessHooks hooks;
+        hooks.resolve_font = [dir](std::string_view url) -> std::optional<std::string> {
+            std::string u(url);
+            const size_t query = u.find_first_of("?#");
+            if (query != std::string::npos)
+            {
+                u.resize(query);
+            }
+            if (u.empty())
+            {
+                return std::nullopt;
+            }
+            if (u[0] == '@')
+            {
+                return fileExists(u) ? std::optional<std::string>(u) : std::nullopt;
+            }
+            if (u.compare(0, 2, "./") == 0)
+            {
+                u.erase(0, 2);
+            }
+            const std::string rootDir = g_root.empty() ? std::string() : toUtf8(g_root);
+            std::vector<std::string> bases = {dir + "/", dir + "/fonts/"};
+            if (!rootDir.empty())
+            {
+                bases.push_back(rootDir + "/fonts/");
+                bases.push_back(rootDir + "/");
+            }
+            for (const std::string& base : bases)
+            {
+                const std::string candidate = base + u;
+                if (u.find("..") == std::string::npos && fileExists(candidate))
+                {
+                    return candidate;
+                }
+            }
+            return std::nullopt;
+        };
+        return markup ? GearCss::preprocessRmlDocument(text, hooks) : GearCss::preprocessStyleSheet(text, hooks);
+    }
+
+    bool hasExtension(const fs::path& p, const char* ext)
+    {
+        return lowered(toUtf8(p.extension())) == ext;
+    }
+
     class FileInterface final : public Rml::FileInterface
     {
     public:
@@ -314,41 +391,81 @@ namespace
                     return 0;
                 }
             }
-            auto file = std::make_unique<std::ifstream>(p, std::ios::binary);
-            if (!*file)
+            auto file = std::make_unique<Handle>();
+            file->in.open(p, std::ios::binary);
+            if (!file->in)
             {
                 return 0;
             }
             recordDep(p);
+            const bool css = hasExtension(p, ".rcss"), rml = hasExtension(p, ".rml");
+            if (css || rml)
+            {
+                // read through the pre-processor (a style sheet may also be a template with <style>)
+                std::string text((std::istreambuf_iterator<char>(file->in)), std::istreambuf_iterator<char>());
+                file->in.close();
+                file->mem = preprocessCss(text, logicalDir(shared ? path : plainPath(path), p), rml);
+                file->memory = true;
+            }
             return reinterpret_cast<Rml::FileHandle>(file.release());
         }
 
-        void Close(Rml::FileHandle file) override { delete stream(file); }
+        void Close(Rml::FileHandle file) override { delete handle(file); }
 
         size_t Read(void* buffer, size_t size, Rml::FileHandle file) override
         {
-            std::ifstream* in = stream(file);
-            in->read(static_cast<char*>(buffer), static_cast<std::streamsize>(size));
-            return static_cast<size_t>(in->gcount());
+            Handle* h = handle(file);
+            if (h->memory)
+            {
+                const size_t n = std::min(size, h->mem.size() - std::min(h->mem.size(), h->pos));
+                std::memcpy(buffer, h->mem.data() + h->pos, n);
+                h->pos += n;
+                return n;
+            }
+            h->in.read(static_cast<char*>(buffer), static_cast<std::streamsize>(size));
+            return static_cast<size_t>(h->in.gcount());
         }
 
         bool Seek(Rml::FileHandle file, long offset, int origin) override
         {
-            std::ifstream* in = stream(file);
-            in->clear();
+            Handle* h = handle(file);
+            if (h->memory)
+            {
+                const long base = origin == 1 ? static_cast<long>(h->pos) : origin == 2 ? static_cast<long>(h->mem.size()) : 0;
+                const long target = base + offset;
+                if (target < 0 || static_cast<size_t>(target) > h->mem.size())
+                {
+                    return false;
+                }
+                h->pos = static_cast<size_t>(target);
+                return true;
+            }
+            h->in.clear();
             const std::ios::seekdir dir = origin == 1 ? std::ios::cur : origin == 2 ? std::ios::end : std::ios::beg;
-            in->seekg(offset, dir);
-            return !in->fail();
+            h->in.seekg(offset, dir);
+            return !h->in.fail();
         }
 
         size_t Tell(Rml::FileHandle file) override
         {
-            const std::streamoff p = stream(file)->tellg();
+            Handle* h = handle(file);
+            if (h->memory)
+            {
+                return h->pos;
+            }
+            const std::streamoff p = h->in.tellg();
             return p < 0 ? 0 : static_cast<size_t>(p);
         }
 
     private:
-        static std::ifstream* stream(Rml::FileHandle file) { return reinterpret_cast<std::ifstream*>(file); }
+        struct Handle
+        {
+            std::ifstream in;
+            std::string mem;
+            size_t pos = 0;
+            bool memory = false;
+        };
+        static Handle* handle(Rml::FileHandle file) { return reinterpret_cast<Handle*>(file); }
     };
 
     // Where the render interface puts what the current draw records (set by rml_draw).
@@ -930,6 +1047,7 @@ namespace
     // Never destroyed: RmlUi's own statics outlive ours when the DLL unloads with the process.
     SystemInterface* g_system = nullptr;
     FileInterface* g_file = nullptr;
+    GearCss::CssContentSupport* g_content = nullptr;    // the CSS `content` property (generated text, icon fonts)
     RenderInterface* g_render = nullptr;
     bool g_started = false;
     bool g_startFailed = false;
@@ -1628,6 +1746,8 @@ namespace
         // Needs the patched RmlUi of ports/rmlui (caret-style-underscore.patch); a stock RmlUi ignores the property.
         Rml::StyleSheetSpecification::RegisterProperty("caret-style", "block", false).AddParser("keyword", "block, underscore");
         Rml::SetFontEngineInterface(new ScaledFontEngine(Rml::GetFontEngineInterface()));
+        g_content = new GearCss::CssContentSupport();
+        g_content->registerProperty();
         {
             static Rml::ElementInstancerGeneric<RingElement> ringInstancer;
             Rml::Factory::RegisterElementInstancer("gear-ring", &ringInstancer);
@@ -2050,6 +2170,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             }
             if (inMemory)
             {
+                markup = preprocessCss(markup, logicalDir(toUtf8(d.file), d.file), true);
                 injectTheme(markup, d.themeFile, d.base);
             }
             // A path with a drive letter ("B:/...") is no URL to RmlUi (it takes "B" for a protocol and logs an error per
@@ -2460,6 +2581,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             d.hovering = false;
         }
         ensureButtonPrompts(d);
+        if (g_content)
+        {
+            g_content->apply(d.context);
+        }
         d.context->Update();
         if (d.events.empty())
         {

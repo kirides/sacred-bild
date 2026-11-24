@@ -219,6 +219,7 @@ if(SACREDGEAR)
     gear/itemicon.cpp
     gear/realm.cpp
     gear/rml.cpp
+    gear/css_compat.cpp
     gear/gear.rc
   )
   add_dependencies(SacredGear version_info)
