@@ -781,6 +781,17 @@ uint32_t Party::importHero(const std::wstring& path, const World::Position& at, 
     const std::string ansi = narrowPath(path);
     uint8_t flag = 0;
     const bool keepFlag = Addr::g_heroFileFlag && safeCopy(&flag, Addr::g_heroFileFlag.get(), 1);
+    // The file's hero comes with the place and id it was saved at: the engine puts the hero of that id there too (the hero
+    // you play, when the file is another savegame's main hero). Every hero goes back where it stood.
+    std::vector<std::pair<uint32_t, World::Position>> before;
+    for (uint32_t h = 1; h <= kLastHeroId; ++h)
+    {
+        World::Object ho;
+        if (h != id && World::object(h, ho) && ho.creature)
+        {
+            before.emplace_back(h, ho.position);
+        }
+    }
     const bool loaded = !ansi.empty() && callHeroLoad(ansi.c_str(), id);
     if (keepFlag)
     {
@@ -810,6 +821,16 @@ uint32_t Party::importHero(const std::wstring& path, const World::Position& at, 
     if (safeCopy(pos, reinterpret_cast<const void*>(o + kPos), sizeof(pos)))
     {
         safeCopy(reinterpret_cast<void*>(o + kHome), pos, sizeof(pos));
+    }
+    for (const auto& [h, was] : before)
+    {
+        World::Object ho;
+        if (World::object(h, ho) && (ho.position.x != was.x || ho.position.y != was.y || ho.position.layer != was.layer))
+        {
+            const char* moveError = nullptr;
+            const bool back = World::teleport(h, was, moveError);
+            LOG("Party: the hero file moved hero {}: put back {} ({})", h, back, moveError ? moveError : "");
+        }
     }
     LOG("Party: imported a hero of class {} level {} as id {}", file.heroClass, file.level, id);
     return id;
