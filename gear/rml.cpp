@@ -2054,6 +2054,9 @@ button.game-button { display: inline-block; height: 34px; min-width: 100px; padd
 button.game-button:hover, button.game-button:focus { color: #ffe030; border-color: #ffe030; background-color: #262636; }
 button.game-button:active { color: #fff2a0; background-color: #34344e; }
 button.game-button:disabled, button.game-button[disabled] { color: #8a8a8a; opacity: 0.55; }
+button.game-dropdown { display: inline-block; height: 37px; min-width: 130px; margin: 0 8px 0 0; padding: 0 42px; line-height: 31px; text-align: center; white-space: nowrap; color: #e4e4e4; font-family: "Sacred Game"; font-size: 16px; background-color: transparent; border: 0; decorator: image(gear:image/281 repeat-x) content-box, image(gear:image/267 scale-none left center) border-box, image(gear:image/270 scale-none right center) border-box; }
+button.game-dropdown:hover, button.game-dropdown:focus { color: #ffe030; background-color: transparent; border: 0; }
+button.game-dropdown:disabled, button.game-dropdown[disabled] { color: #8a8a8a; opacity: 0.55; }
 input.field, select.field { padding: 4px 8px; color: #f0f0f0; background-color: #0c0c14; border: 1px #6e5e3a; }
 input.field:focus, select.field:focus { border-color: #ffd780; }
 input.game-check { display: inline-block; width: 22px; height: 22px; margin: 0 15px; padding: 0; background-color: #0c0c14; border: 2px #8c7440; cursor: pointer; }

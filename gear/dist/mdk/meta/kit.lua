@@ -90,6 +90,13 @@ function GearKit.tabs(o) end
 ---@return string markup
 function GearKit.button(id, label, o) end
 
+--- The button of a drop-down: the game's arrow caps (images 267 / 270, middle 281) with the label between; the list it opens is the mod's (`list`).
+---@param id string
+---@param label string
+---@param o? {tip?: string, disabled?: boolean}
+---@return string markup
+function GearKit.dropdown(id, label, o) end
+
 --- A row with the label and the game's check orb (an `input`: listen for `change`).
 ---@param id string
 ---@param label string

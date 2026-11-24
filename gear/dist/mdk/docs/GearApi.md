@@ -4163,6 +4163,15 @@ A game button.
 - `o`: `GearKitButtonOpts` (optional)
 - returns `markup` `string`
 
+#### `gear.kit.dropdown(id, label, o) -> string`
+
+The button of a drop-down: the game's arrow caps (images 267 / 270, middle 281) with the label between; the list it opens is the mod's (`list`).
+
+- `id`: `string`
+- `label`: `string`
+- `o`: `{tip?: string, disabled?: boolean}` (optional)
+- returns `markup` `string`
+
 #### `gear.kit.check(id, label, checked, o) -> string`
 
 A row with the label and the game's check orb (an `input`: listen for `change`).

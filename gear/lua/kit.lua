@@ -70,6 +70,13 @@ function K.button(id, label, o)
     return '<button' .. attrs({{'id', id}, {'class', (cls:gsub('%s+$', ''))}, {'disabled', o.disabled}}) .. '>' .. esc(label) .. '</button>'
 end
 
+-- kit.dropdown(id, label, {tip, disabled}) -> markup: the button of a drop-down (the game's arrow caps with the label between; no chevron in the label). The
+-- list it opens is the mod's: build it with kit.list and show it under the button while the mod's own state says so.
+function K.dropdown(id, label, o)
+    o = o or {}
+    return '<button' .. attrs({{'id', id}, {'class', 'game-dropdown'}, {'title', o.tip}, {'disabled', o.disabled}}) .. '>' .. esc(label) .. '</button>'
+end
+
 -- kit.check(id, label, checked, {disabled, tip}) -> markup: a row with the label and the game's check orb (an `input`, so `doc:on('#id', 'change', fn)`).
 function K.check(id, label, checked, o)
     o = o or {}
