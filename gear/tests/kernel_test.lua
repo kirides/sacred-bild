@@ -2231,7 +2231,7 @@ do
     ok(log_rml[#log_rml] == 'query [data-gh="3"] .name', 'element:query searches below the element')
     mdoc:close()
     log_rml = {}
-    ok(doc:on('#ok', 'click', function(e) clicked_ev = e end) and listened[1] == '#ok/click', 'doc:on registers a listener')
+    ok(doc:on('#ok', 'click', function(e) clicked_ev = e end) and listened[#listened] == '#ok/click' and listened[1] == '[data-close-key]/click', 'doc:on registers a listener')
     doc:text('#t', 'a<b&c')
     ok(log_rml[#log_rml] == 'html #t a&lt;b&amp;c', 'doc:text escapes the markup')
     local drawn
