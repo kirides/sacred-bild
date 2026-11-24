@@ -1,0 +1,1 @@
+return { id = 'rmlshare', name = 'Shared templates (user)', version = '0.1.0', author = 'Sacred Gear', description = 'Example: a window made from the template of rmlshare-lib', requires = {'rmlshare-lib'}, automation = true }

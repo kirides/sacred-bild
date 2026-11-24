@@ -1,10 +1,12 @@
 #include "rml.h"
 #include "log.h"
 #include "padnav.h"
+#include "css_compat.h"
 #include "ui.h"
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/DataTypes.h>
+#include <RmlUi/Core/Factory.h>
 #include <RmlUi/Core/DataVariable.h>
 #include <RmlUi/Core/Elements/ElementFormControl.h>
 
@@ -24,7 +26,10 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <cstring>
 #include <memory>
+#include <optional>
+#include <iterator>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -110,6 +115,24 @@ namespace
 #endif
     }
 
+    // Hot reload: the files the document being (re)loaded pulls in, with their write times (null while no document loads).
+    std::map<fs::path, fs::file_time_type>* g_deps = nullptr;
+    bool g_hotReload = false;
+
+    void recordDep(const fs::path& path)
+    {
+        if (!g_deps)
+        {
+            return;
+        }
+        std::error_code ec;
+        const fs::file_time_type t = fs::last_write_time(path, ec);
+        if (!ec)
+        {
+            (*g_deps)[path] = t;
+        }
+    }
+
     bool readable(const fs::path& path)
     {
         if (!g_root.empty() && inside(g_root, path))
@@ -133,9 +156,93 @@ namespace
         return fs::path(g_modsDir) / fromUtf8(dir);
     }
 
-    bool readAll(const fs::path& path, std::string& out)
+    // ---- Shared files between mods: "@mod-id/path" ----
+    // A mod lists what it shares in mod.lua (`exports = {'templates/', 'styles/*.rcss', 'images/', 'fonts/', 'file.ext'}`, "*" for all) and, while it
+    // runs, any document can name those files as @mod-id/path (a link, a template, an image, a font). Nothing else of that mod is reachable, and no
+    // path leaves its folder.
+    struct Export
     {
-        if (!readable(path))
+        std::string dir;
+        std::vector<std::string> patterns;
+    };
+    std::map<std::string, Export> g_exports;     // mod id -> its folder name and patterns
+
+    std::string lowered(std::string s)
+    {
+        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
+    }
+
+    bool exportMatches(const std::string& pattern, const std::string& rel)
+    {
+        const std::string p = lowered(pattern), r = lowered(rel);
+        if (p == "*")
+        {
+            return true;
+        }
+        if (!p.empty() && p.back() == '/')
+        {
+            return r.compare(0, p.size(), p) == 0;
+        }
+        const size_t star = p.find('*');
+        if (star == std::string::npos)
+        {
+            return p == r;
+        }
+        const size_t slash = p.rfind('/');
+        const std::string dirPart = slash == std::string::npos ? std::string() : p.substr(0, slash + 1);
+        const std::string name = p.substr(slash == std::string::npos ? 0 : slash + 1);       // "*.ext" (one star)
+        const std::string suffix = name.substr(name.find('*') + 1);
+        if (r.compare(0, dirPart.size(), dirPart) != 0)
+        {
+            return false;
+        }
+        const std::string rest = r.substr(dirPart.size());
+        return rest.find('/') == std::string::npos && rest.size() >= suffix.size() && rest.compare(rest.size() - suffix.size(), suffix.size(), suffix) == 0;
+    }
+
+    // "@mod-id/some/file" -> the file on disk, if the mod runs and exports it; empty otherwise. `isShared` tells the text was a reference at all.
+    fs::path resolveShared(const std::string& text, bool* isShared = nullptr)
+    {
+        if (isShared)
+        {
+            *isShared = !text.empty() && text[0] == '@';
+        }
+        if (text.empty() || text[0] != '@')
+        {
+            return {};
+        }
+        const size_t slash = text.find('/');
+        if (slash == std::string::npos || g_modsDir.empty())
+        {
+            return {};
+        }
+        const auto it = g_exports.find(text.substr(1, slash - 1));
+        std::string rel = text.substr(slash + 1);
+        const size_t query = rel.find('?');
+        if (query != std::string::npos)
+        {
+            rel.resize(query);
+        }
+        if (it == g_exports.end() || rel.empty() || rel.find("..") != std::string::npos || rel.find(':') != std::string::npos || rel.find('\\') != std::string::npos || rel[0] == '/')
+        {
+            return {};
+        }
+        for (const std::string& pattern : it->second.patterns)
+        {
+            if (exportMatches(pattern, rel))
+            {
+                const fs::path root = modRoot(it->second.dir);
+                const fs::path file = root / fromUtf8(rel);
+                return !root.empty() && inside(root, file) ? file : fs::path();
+            }
+        }
+        return {};
+    }
+
+    bool readAll(const fs::path& path, std::string& out, bool trusted = false)
+    {
+        if (!trusted && !readable(path))
         {
             return false;
         }
@@ -144,6 +251,7 @@ namespace
         {
             return false;
         }
+        recordDep(path);
         in.seekg(0, std::ios::end);
         const std::streamoff size = in.tellg();
         if (size < 0 || static_cast<uint64_t>(size) > kMaxFileSize)
@@ -168,6 +276,17 @@ namespace
             return std::chrono::duration<double>(Clock::now() - start).count();
         }
 
+        // "@mod-id/file" is a complete reference, whatever document names it; the links inside a shared file are joined to it as usual.
+        void JoinPath(Rml::String& translated_path, const Rml::String& document_path, const Rml::String& path) override
+        {
+            if (!path.empty() && path[0] == '@')
+            {
+                translated_path = path;
+                return;
+            }
+            Rml::SystemInterface::JoinPath(translated_path, document_path, path);
+        }
+
         bool LogMessage(Rml::Log::Type type, const Rml::String& message) override
         {
             const char* kind = type == Rml::Log::LT_ERROR || type == Rml::Log::LT_ASSERT ? "error"
@@ -178,51 +297,175 @@ namespace
         }
     };
 
+    // The directory part of a document-relative reference ("@id/styles/a.rcss" -> "@id/styles"; a disk path -> its folder).
+    std::string logicalDir(const std::string& ref, const fs::path& real)
+    {
+        if (!ref.empty() && ref[0] == '@')
+        {
+            const size_t slash = ref.rfind('/');
+            return slash == std::string::npos ? ref : ref.substr(0, slash);
+        }
+        return toUtf8(real.parent_path());
+    }
+
+    bool fileExists(const std::string& ref)
+    {
+        bool shared = false;
+        const fs::path p = resolveShared(ref, &shared);
+        std::error_code ec;
+        if (shared)
+        {
+            return !p.empty() && fs::is_regular_file(p, ec);
+        }
+        const fs::path plain = fromUtf8(plainPath(ref));
+        return readable(plain) && fs::is_regular_file(plain, ec);
+    }
+
+    // The web conveniences of a stylesheet (and of the <style> blocks of a document): @font-face with url() and format(), ::before with content.
+    // A font source is looked up next to the stylesheet, in its fonts/ folder, in the mod's fonts/ folder, or as @mod-id/file.
+    std::string preprocessCss(const std::string& text, const std::string& dir, bool markup)
+    {
+        GearCss::CssPreprocessHooks hooks;
+        hooks.resolve_font = [dir](std::string_view url) -> std::optional<std::string> {
+            std::string u(url);
+            const size_t query = u.find_first_of("?#");
+            if (query != std::string::npos)
+            {
+                u.resize(query);
+            }
+            if (u.empty())
+            {
+                return std::nullopt;
+            }
+            if (u[0] == '@')
+            {
+                return fileExists(u) ? std::optional<std::string>(u) : std::nullopt;
+            }
+            if (u.compare(0, 2, "./") == 0)
+            {
+                u.erase(0, 2);
+            }
+            const std::string rootDir = g_root.empty() ? std::string() : toUtf8(g_root);
+            std::vector<std::string> bases = {dir + "/", dir + "/fonts/"};
+            if (!rootDir.empty())
+            {
+                bases.push_back(rootDir + "/fonts/");
+                bases.push_back(rootDir + "/");
+            }
+            for (const std::string& base : bases)
+            {
+                const std::string candidate = base + u;
+                if (u.find("..") == std::string::npos && fileExists(candidate))
+                {
+                    return candidate;
+                }
+            }
+            return std::nullopt;
+        };
+        return markup ? GearCss::preprocessRmlDocument(text, hooks) : GearCss::preprocessStyleSheet(text, hooks);
+    }
+
+    bool hasExtension(const fs::path& p, const char* ext)
+    {
+        return lowered(toUtf8(p.extension())) == ext;
+    }
+
     class FileInterface final : public Rml::FileInterface
     {
     public:
         Rml::FileHandle Open(const Rml::String& path) override
         {
-            const fs::path p = fromUtf8(plainPath(path));
-            if (!readable(p))
+            bool shared = false;
+            fs::path p = resolveShared(path, &shared);
+            if (shared ? p.empty() : false)
             {
-                LOG("RmlUi: a document may not read {}", path);
+                LOG("RmlUi: {} is not shared (the mod does not run, or does not export it)", path);
                 return 0;
             }
-            auto file = std::make_unique<std::ifstream>(p, std::ios::binary);
-            if (!*file)
+            if (!shared)
+            {
+                p = fromUtf8(plainPath(path));
+                if (!readable(p))
+                {
+                    LOG("RmlUi: a document may not read {}", path);
+                    return 0;
+                }
+            }
+            auto file = std::make_unique<Handle>();
+            file->in.open(p, std::ios::binary);
+            if (!file->in)
             {
                 return 0;
+            }
+            recordDep(p);
+            const bool css = hasExtension(p, ".rcss"), rml = hasExtension(p, ".rml");
+            if (css || rml)
+            {
+                // read through the pre-processor (a style sheet may also be a template with <style>)
+                std::string text((std::istreambuf_iterator<char>(file->in)), std::istreambuf_iterator<char>());
+                file->in.close();
+                file->mem = preprocessCss(text, logicalDir(shared ? path : plainPath(path), p), rml);
+                file->memory = true;
             }
             return reinterpret_cast<Rml::FileHandle>(file.release());
         }
 
-        void Close(Rml::FileHandle file) override { delete stream(file); }
+        void Close(Rml::FileHandle file) override { delete handle(file); }
 
         size_t Read(void* buffer, size_t size, Rml::FileHandle file) override
         {
-            std::ifstream* in = stream(file);
-            in->read(static_cast<char*>(buffer), static_cast<std::streamsize>(size));
-            return static_cast<size_t>(in->gcount());
+            Handle* h = handle(file);
+            if (h->memory)
+            {
+                const size_t n = std::min(size, h->mem.size() - std::min(h->mem.size(), h->pos));
+                std::memcpy(buffer, h->mem.data() + h->pos, n);
+                h->pos += n;
+                return n;
+            }
+            h->in.read(static_cast<char*>(buffer), static_cast<std::streamsize>(size));
+            return static_cast<size_t>(h->in.gcount());
         }
 
         bool Seek(Rml::FileHandle file, long offset, int origin) override
         {
-            std::ifstream* in = stream(file);
-            in->clear();
+            Handle* h = handle(file);
+            if (h->memory)
+            {
+                const long base = origin == 1 ? static_cast<long>(h->pos) : origin == 2 ? static_cast<long>(h->mem.size()) : 0;
+                const long target = base + offset;
+                if (target < 0 || static_cast<size_t>(target) > h->mem.size())
+                {
+                    return false;
+                }
+                h->pos = static_cast<size_t>(target);
+                return true;
+            }
+            h->in.clear();
             const std::ios::seekdir dir = origin == 1 ? std::ios::cur : origin == 2 ? std::ios::end : std::ios::beg;
-            in->seekg(offset, dir);
-            return !in->fail();
+            h->in.seekg(offset, dir);
+            return !h->in.fail();
         }
 
         size_t Tell(Rml::FileHandle file) override
         {
-            const std::streamoff p = stream(file)->tellg();
+            Handle* h = handle(file);
+            if (h->memory)
+            {
+                return h->pos;
+            }
+            const std::streamoff p = h->in.tellg();
             return p < 0 ? 0 : static_cast<size_t>(p);
         }
 
     private:
-        static std::ifstream* stream(Rml::FileHandle file) { return reinterpret_cast<std::ifstream*>(file); }
+        struct Handle
+        {
+            std::ifstream in;
+            std::string mem;
+            size_t pos = 0;
+            bool memory = false;
+        };
+        static Handle* handle(Rml::FileHandle file) { return reinterpret_cast<Handle*>(file); }
     };
 
     // Where the render interface puts what the current draw records (set by rml_draw).
@@ -644,7 +887,13 @@ namespace
                 dpSize = true;
             }
             std::string bytes;
-            if (!readAll(fromUtf8(path), bytes))
+            bool sharedImage = false;
+            fs::path imageFile = resolveShared(path, &sharedImage);
+            if (!sharedImage)
+            {
+                imageFile = fromUtf8(path);
+            }
+            if (imageFile.empty() || !readAll(imageFile, bytes, sharedImage))
             {
                 LOG("RmlUi: cannot read the image {}", source);
                 return 0;
@@ -798,6 +1047,7 @@ namespace
     // Never destroyed: RmlUi's own statics outlive ours when the DLL unloads with the process.
     SystemInterface* g_system = nullptr;
     FileInterface* g_file = nullptr;
+    GearCss::CssContentSupport* g_content = nullptr;    // the CSS `content` property (generated text, icon fonts)
     RenderInterface* g_render = nullptr;
     bool g_started = false;
     bool g_startFailed = false;
@@ -1039,6 +1289,7 @@ namespace
         // phase, and fires for events whose target is, or lies within, an element matching the selector: elements added later count.
         Listener(Doc* doc, int id, std::string selector = {}) : m_doc(doc), m_id(id), m_selector(std::move(selector)) {}
         void ProcessEvent(Rml::Event& event) override;
+        const std::string& selector() const { return m_selector; }
 
     private:
         Doc* m_doc;
@@ -1067,6 +1318,17 @@ namespace
         bool hasModel = false;
         unsigned modelSeen = 0;
         int nextHandle = 0;                     // element handles (data-gh), see rml_query
+        // What a reload needs (hot reload): how the document was loaded and the files it read.
+        fs::path file;
+        std::string source;                     // the markup of a string document
+        bool fromString = false;
+        fs::path themeFile;
+        bool base = false;                      // the plain base style (no theme)
+        std::map<fs::path, fs::file_time_type> deps;
+        double hotChecked = 0.0;
+        std::string hotError;                   // the last reload that failed (kept until a reload works)
+        unsigned reloads = 0;
+        std::vector<std::string> listenerEvents;    // the event name of each listener (the same index), to attach them to a reloaded document
     };
 
     std::map<int, std::unique_ptr<Doc>> g_docs;
@@ -1484,6 +1746,8 @@ namespace
         // Needs the patched RmlUi of ports/rmlui (caret-style-underscore.patch); a stock RmlUi ignores the property.
         Rml::StyleSheetSpecification::RegisterProperty("caret-style", "block", false).AddParser("keyword", "block, underscore");
         Rml::SetFontEngineInterface(new ScaledFontEngine(Rml::GetFontEngineInterface()));
+        g_content = new GearCss::CssContentSupport();
+        g_content->registerProperty();
         {
             static Rml::ElementInstancerGeneric<RingElement> ringInstancer;
             Rml::Factory::RegisterElementInstancer("gear-ring", &ringInstancer);
@@ -1891,6 +2155,36 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         markup.insert(at == std::string::npos ? 0 : at, "<head>" + link + "</head>");
     }
 
+    // (Re)loads the document of `d` into its context: reads the markup, puts the theme in front and records the files it pulls in (d.deps).
+    void loadInto(Doc& d)
+    {
+        d.deps.clear();
+        g_deps = &d.deps;
+        {
+            RootScope scope(d);
+            std::string markup = d.source;
+            bool inMemory = d.fromString;
+            if (!d.fromString)
+            {
+                inMemory = readAll(d.file, markup);
+            }
+            if (inMemory)
+            {
+                markup = preprocessCss(markup, logicalDir(toUtf8(d.file), d.file), true);
+                injectTheme(markup, d.themeFile, d.base);
+            }
+            // A path with a drive letter ("B:/...") is no URL to RmlUi (it takes "B" for a protocol and logs an error per
+            // link); "file:///B:/..." is one, and its relative links resolve against it into plain paths again.
+            std::string url = toUtf8(d.file);
+            if (url.size() > 1 && url[1] == ':')
+            {
+                url.insert(0, "file:///");
+            }
+            d.document = inMemory ? d.context->LoadDocumentFromMemory(markup, url) : d.context->LoadDocument(url);
+        }
+        g_deps = nullptr;
+    }
+
     // Creates the context and document; `source` is the file (or, with `fromString`, the markup).
     int create(lua_State* L, bool fromString)
     {
@@ -1992,27 +2286,12 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
                 themeFile = candidate;
             }
         }
-        {
-            RootScope scope(*d);
-            std::string markup = source;
-            bool inMemory = fromString;
-            if (!fromString)
-            {
-                inMemory = readAll(file, markup);
-            }
-            if (inMemory)
-            {
-                injectTheme(markup, themeFile, lua_toboolean(L, fromString ? 9 : 8) != 0);
-            }
-            // A path with a drive letter ("B:/...") is no URL to RmlUi (it takes "B" for a protocol and logs an error per
-            // link); "file:///B:/..." is one, and its relative links resolve against it into plain paths again.
-            std::string url = toUtf8(file);
-            if (url.size() > 1 && url[1] == ':')
-            {
-                url.insert(0, "file:///");
-            }
-            d->document = inMemory ? d->context->LoadDocumentFromMemory(markup, url) : d->context->LoadDocument(url);
-        }
+        d->file = file;
+        d->source = source;
+        d->fromString = fromString;
+        d->themeFile = themeFile;
+        d->base = lua_toboolean(L, fromString ? 9 : 8) != 0;
+        loadInto(*d);
         if (!d->document)
         {
             Rml::RemoveContext(d->contextName);
@@ -2141,6 +2420,142 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         }
     }
 
+    // ---- Hot reload (a developer's tool: g_hotReload) ----
+    // The files a document read are polled; when one changes the document is loaded again into the same context (the data model, the
+    // listeners and the scroll positions of boxes with an id carry over; a document that fails to load stays as it was, the error is kept in
+    // Doc::hotError and logged).
+
+    bool isImageFile(const fs::path& p)
+    {
+        const std::string e = toUtf8(p.extension());
+        return e == ".png" || e == ".tga" || e == ".jpg" || e == ".jpeg";
+    }
+
+    bool depsChanged(const Doc& d, bool& imagesOnly)
+    {
+        bool changed = false;
+        imagesOnly = true;
+        for (const auto& [path, time] : d.deps)
+        {
+            std::error_code ec;
+            const fs::file_time_type now = fs::last_write_time(path, ec);
+            if (ec || now != time)
+            {
+                changed = true;
+                imagesOnly = imagesOnly && isImageFile(path);
+            }
+        }
+        return changed;
+    }
+
+    void hotReload(Doc& d, bool imagesOnly)
+    {
+        // scroll positions by element id
+        std::vector<std::pair<std::string, float>> scrolls;
+        {
+            Rml::ElementList all;
+            d.document->QuerySelectorAll(all, "[id]");
+            for (Rml::Element* e : all)
+            {
+                if (e->GetScrollTop() > 0.0f)
+                {
+                    scrolls.emplace_back(e->GetId(), e->GetScrollTop());
+                }
+            }
+        }
+        Rml::Factory::ClearStyleSheetCache();
+        Rml::Factory::ClearTemplateCache();
+        if (imagesOnly)
+        {
+            Rml::ReleaseTextures();
+        }
+        Rml::ElementDocument* old = d.document;
+        const bool visible = old->IsVisible();
+        const auto oldDeps = d.deps;
+        d.document = nullptr;
+        loadInto(d);
+        if (!d.document)
+        {
+            d.document = old;
+            d.deps = oldDeps;
+            for (auto& [path, time] : d.deps)
+            {
+                std::error_code ec;
+                const auto t = fs::last_write_time(path, ec);
+                if (!ec)
+                {
+                    time = t;       // do not try again until the file changes once more
+                }
+            }
+            d.hotError = "cannot load the document: " + toUtf8(d.file);
+            LOG("RmlUi hot reload: {} (the old one stays)", d.hotError);
+            return;
+        }
+        d.hotError.clear();
+        d.context->UnloadDocument(old);
+        if (visible)
+        {
+            d.document->Show();
+        }
+        for (size_t i = 0; i < d.listeners.size() && i < d.listenerEvents.size(); ++i)
+        {
+            const std::string& sel = d.listeners[i]->selector();
+            d.document->AddEventListener(d.listenerEvents[i], d.listeners[i].get(), !sel.empty());
+        }
+        d.context->Update();
+        for (const auto& [id, top] : scrolls)
+        {
+            if (Rml::Element* e = d.document->GetElementById(id))
+            {
+                e->SetScrollTop(top);
+            }
+        }
+        ++d.reloads;
+        LOG("RmlUi hot reload: {}", toUtf8(d.file));
+    }
+
+    void hotPoll(Doc& d)
+    {
+        const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (now - d.hotChecked < 0.25)
+        {
+            return;
+        }
+        d.hotChecked = now;
+        bool imagesOnly = false;
+        if (depsChanged(d, imagesOnly))
+        {
+            hotReload(d, imagesOnly);
+        }
+    }
+
+    // native.rml_hot([on]) -> on: whether documents reload when their files change (also by the file mods\.rml-hot or the environment variable GEAR_RML_HOT)
+    int rmlHot(lua_State* L)
+    {
+        if (lua_isboolean(L, 1))
+        {
+            g_hotReload = lua_toboolean(L, 1) != 0;
+        }
+        lua_pushboolean(L, g_hotReload ? 1 : 0);
+        return 1;
+    }
+
+    // native.rml_reloads(id) -> how many times the document was reloaded, last error | nil
+    int rmlReloads(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        lua_pushnumber(L, d.reloads);
+        if (d.hotError.empty())
+        {
+            lua_pushnil(L);
+        }
+        else
+        {
+            push(L, d.hotError);
+        }
+        return 2;
+    }
+
     // native.rml_update(id, mouse_x, mouse_y, hover) -> {event, ...}: lays the document out and runs its animations; the
     // mouse in layout units, `hover` whether it is over this document. An event is {listener, type, target, current,
     // params = {name = text}} for the listeners registered with rml_listen.
@@ -2150,6 +2565,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         const double mx = luaL_checknumber(L, 2), my = luaL_checknumber(L, 3);
         const bool hover = lua_toboolean(L, 4) != 0;
         RootScope scope(d);
+        if (g_hotReload)
+        {
+            hotPoll(d);
+        }
         fitContext(d);
         if (hover)
         {
@@ -2162,6 +2581,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             d.hovering = false;
         }
         ensureButtonPrompts(d);
+        if (g_content)
+        {
+            g_content->apply(d.context);
+        }
         d.context->Update();
         if (d.events.empty())
         {
@@ -3009,6 +3432,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         if (selector.empty())
         {
             d.listeners.push_back(std::make_unique<Listener>(&d, id));
+            d.listenerEvents.push_back(event);
             d.document->AddEventListener(event, d.listeners.back().get());
             lua_pushnumber(L, id);
             lua_pushnumber(L, 1);
@@ -3017,6 +3441,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         Rml::ElementList list;
         d.document->QuerySelectorAll(list, selector);
         d.listeners.push_back(std::make_unique<Listener>(&d, id, selector));
+        d.listenerEvents.push_back(event);
         d.document->AddEventListener(event, d.listeners.back().get(), true);
         lua_pushnumber(L, id);
         lua_pushnumber(L, static_cast<lua_Number>(list.size()));
@@ -3134,6 +3559,35 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 1;
     }
 
+    // native.rml_exports(id, dir, patterns | nil): the files of the mod (folder `dir`) that other mods' documents reach as @id/path while it runs
+    int rmlExports(lua_State* L)
+    {
+        const std::string id = str(L, 1);
+        if (id.empty())
+        {
+            return 0;
+        }
+        if (!lua_istable(L, 3))
+        {
+            g_exports.erase(id);
+            return 0;
+        }
+        Export e;
+        e.dir = str(L, 2);
+        const int count = static_cast<int>(lua_objlen(L, 3));
+        for (int i = 1; i <= count && i <= 64; ++i)
+        {
+            lua_rawgeti(L, 3, i);
+            if (const char* t = lua_tostring(L, -1))
+            {
+                e.patterns.emplace_back(t);
+            }
+            lua_pop(L, 1);
+        }
+        g_exports[id] = std::move(e);
+        return 0;
+    }
+
     // native.rml_font(dir, path) -> ok: a font file of the mod (TTF / OTF) for the documents' font-family
     int rmlFont(lua_State* L)
     {
@@ -3144,11 +3598,16 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             lua_pushboolean(L, 0);
             return 1;
         }
-        const fs::path file = root / fromUtf8(str(L, 2));
+        fs::path file = root / fromUtf8(str(L, 2));
         bool ok = false;
-        if (inside(root, file))
+        bool sharedFont = false;
+        if (str(L, 2).compare(0, 1, "@") == 0)
         {
-            RootScope scope(root);
+            file = resolveShared(str(L, 2), &sharedFont);
+        }
+        if (sharedFont ? !file.empty() : inside(root, file))
+        {
+            RootScope scope(root, sharedFont ? file.parent_path() : fs::path());     // a shared font is readable from its own folder while it loads
             ok = Rml::LoadFontFace(toUtf8(file), lua_toboolean(L, 3) != 0);
         }
         lua_pushboolean(L, ok);
@@ -3159,6 +3618,11 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
 void RmlHost::configure(const std::wstring& modsDir)
 {
     g_modsDir = modsDir;
+    {
+        // Hot reload of documents: a developer's switch (an empty file mods\.rml-hot, or the environment variable GEAR_RML_HOT); players never have it.
+        std::error_code ec;
+        g_hotReload = fs::exists(fs::path(modsDir) / L".rml-hot", ec) || (_wgetenv(L"GEAR_RML_HOT") != nullptr);
+    }
 }
 
 void RmlHost::registerNatives(lua_State* L)
@@ -3170,6 +3634,8 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_close", guarded<rmlClose>},
         {"rml_show", guarded<rmlShow>},
         {"rml_update", guarded<rmlUpdate>},
+        {"rml_hot", guarded<rmlHot>},
+        {"rml_reloads", guarded<rmlReloads>},
         {"rml_draw", guarded<rmlDraw>},
         {"rml_rects", guarded<rmlRects>},
         {"rml_move", guarded<rmlMove>},
@@ -3203,6 +3669,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_key", guarded<rmlKey>},
         {"rml_wheel", guarded<rmlWheel>},
         {"rml_font", guarded<rmlFont>},
+        {"rml_exports", guarded<rmlExports>},
         {"rml_fonts", guarded<rmlFonts>},
         {nullptr, nullptr},
     };

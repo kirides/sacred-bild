@@ -4457,6 +4457,18 @@ local function make_ui(mod)
             end
             if self.closed then return 0 end
         end
+        if native.rml_reloads then
+            -- Hot reload (a developer's switch): the document was loaded again from its changed files. What Lua changed in it by hand (doc:text,
+            -- doc:class, doc:style ...) is gone: opts.on_reload(doc, err) puts it back; err is the last failed reload's message.
+            local n, err = native.rml_reloads(id)
+            if n ~= (self.reloads_seen or 0) then
+                self.reloads_seen = n
+                if self.opts.on_reload then
+                    local ok, e2 = xpcall(self.opts.on_reload, traceback, self, err)
+                    if not ok then log('[%s] rml on_reload failed: %s', mod.id, tostring(e2)) end
+                end
+            end
+        end
         if self.data then
             -- A value the document changed itself (data-value): into the table, and the mod's on_change.
             local changed = native.rml_model_changed(id)
@@ -7715,7 +7727,7 @@ local function make_env(mod)
     env.gear = gear
     -- The libraries shipped in the DLL (lua/<name>.lua): each is run in this mod's environment the first time the mod
     -- touches gear.<name>, so a mod that never uses one pays nothing for it.
-    local LIBRARIES = {lookup = true, fmt = true, toast = true, store = true}
+    local LIBRARIES = {lookup = true, fmt = true, toast = true, store = true, kit = true}
     local library_failed = {}
     setmetatable(gear, {__index = function(t, name)
         if not LIBRARIES[name] or library_failed[name] then return nil end
@@ -7750,6 +7762,14 @@ local function check_manifest(m, dir)
     if m.author ~= nil and type(m.author) ~= 'string' then return nil, 'mod.lua: author must be a string' end
     if m.theme ~= nil and (type(m.theme) ~= 'string' or m.theme:find('%.%.') or m.theme:find('^[/\\]') or m.theme:find(':')) then
         return nil, 'mod.lua: theme must be the path of an .rcss file inside the mod'
+    end
+    if m.exports ~= nil then
+        if type(m.exports) ~= 'table' or #m.exports > 64 then return nil, 'mod.lua: exports must be a list of at most 64 paths' end
+        for _, x in ipairs(m.exports) do
+            if type(x) ~= 'string' or x == '' or x:find('%.%.') or x:find('^[/\\]') or x:find(':') or x:find('\\', 1, true) then
+                return nil, 'mod.lua: exports: "*", a folder ("templates/"), a file or "folder/*.ext", inside the mod'
+            end
+        end
     end
     if m.theme_dp ~= nil and (type(m.theme_dp) ~= 'string' or m.theme_dp:find('%.%.') or m.theme_dp:find('^[/\\]') or m.theme_dp:find(':')) then
         return nil, 'mod.lua: theme_dp must be the path of an .rcss file inside the mod'
@@ -7786,6 +7806,7 @@ local function check_manifest(m, dir)
         keys_by_id = keys_by_id,
         theme = m.theme,
         theme_dp = m.theme_dp,
+        exports = m.exports,
         dir = dir,
     }
 end
@@ -7957,6 +7978,7 @@ local function load_mod(e, initial)
     end
     mods[#mods + 1] = m
     e.loaded = true
+    if m.exports and native.rml_exports then native.rml_exports(m.id, m.dir, m.exports) end
     m.loading = true
     local ok = call(m, 'main.lua', chunk)
     m.loading = nil
@@ -8013,6 +8035,7 @@ local function unload_mod(e)
     if ui_dropdown and (ui_handle_key[ui_dropdown] or ''):sub(1, #m.id + 1) == m.id .. '\0' then ui_dropdown = nil end
     m.disabled, m.unloaded = true, true     -- timers, tasks and pipes of the mod notice and go
     e.loaded = false
+    if m.exports and native.rml_exports then native.rml_exports(m.id, m.dir, nil) end
     log('mod %s unloaded', m.id)
 end
 

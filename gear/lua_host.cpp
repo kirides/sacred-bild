@@ -4781,6 +4781,7 @@ namespace
             {"fmt", IDR_GEAR_FMT},
             {"toast", IDR_GEAR_TOAST},
             {"store", IDR_GEAR_STORE},
+            {"kit", IDR_GEAR_KIT},
             {"modmanager.rml", IDR_GEAR_MODMANAGER_UI},
         };
         const char* name = luaL_checkstring(L, 1);

@@ -1,0 +1,1 @@
+return { id = 'rmlkit', name = 'Widget kit demo', version = '0.1.0', author = 'Sacred Gear', description = 'A window made only of gear.kit widgets: the same markup runs in the plain base style and, with the theme mod, in the look of the game. With -gear-auto a self test.', automation = true }
