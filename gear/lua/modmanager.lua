@@ -1122,7 +1122,9 @@ do
         doc:on('.sl', 'change', function(e)
             local f = R.slacts[tostring(e.current)]
             local v = tonumber(e.params and e.params.value)
-            if f and v then f(v) end
+            -- only the player's own move counts: RmlUi also reports a change when the model sets the slider (rows reused for another setting
+            -- are clamped to the old range for a moment), which used to write the range's minimum into the setting
+            if f and v and e.user then f(v) end
         end)
         doc:on('.tx', 'change', function(e)
             local f = R.txacts[tostring(e.current)]
@@ -1165,6 +1167,14 @@ do
                 local br = box:rect()
                 if br and br.w > 0 then return (box:scroll()) end
             end
+        end
+        out.attr = function(sel, name)
+            local doc = R.doc
+            return doc and doc:attr(sel, name)
+        end
+        out.text = function(sel)
+            local doc = R.doc
+            return doc and doc:text(sel)
         end
         out.press = function(id)
             local f = R.acts[id]
