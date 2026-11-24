@@ -1,0 +1,14 @@
+<rml>
+<head><title>Clipboard test</title></head>
+<body>
+<div id="win" class="window" style="position: absolute; left: 120px; top: 120px; width: 460px;">
+    <div class="titlebar">Clipboard test</div>
+    <div class="body">
+        <p class="label">Select text: mouse, Shift + arrows, Ctrl + A / C / X / V</p>
+        <div class="row"><input id="f" class="field" type="text" value="alpha beta gamma delta" style="width: 420px"/></div>
+        <div class="row"><input id="g" class="field" type="text" value="second field" style="width: 420px"/></div>
+        <div class="row"><button id="b">A button</button></div>
+    </div>
+</div>
+</body>
+</rml>

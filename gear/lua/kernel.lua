@@ -4029,6 +4029,11 @@ local function make_ui(mod)
     Doc.__index = Doc
     uis.rml_docs = uis.rml_docs or {}
     local RML_KEYS = {'backspace', 'delete', 'enter', 'tab', 'escape', 'left', 'right', 'up', 'down', 'home', 'end', 'pageup', 'pagedown'}
+    local RML_CHORDS = {'a', 'c', 'x', 'v'}
+    -- The held modifiers as the bits native.rml_key / rml_mouse take: 1 Ctrl, 2 Shift, 4 Alt.
+    local function rml_modifiers()
+        return (native.key_down(0x11) and 1 or 0) + (native.key_down(0x10) and 2 or 0) + (native.key_down(0x12) and 4 or 0)
+    end
 
     -- The names of the callbacks of data-event-* attributes (opts.calls: name -> function).
     function uis.rml_call_names(opts)
@@ -4431,18 +4436,47 @@ local function make_ui(mod)
                         native.rml_nudge(id, i, ui_pad.nudge)
                         ui_pad.nudge = 0
                     end
+                elseif r.text and not (native.ui_pad_info and native.ui_pad_info()) then
+                    -- A text field takes the real mouse (not the pad's A: that keeps the click at its centre): a press puts the caret (Shift extends
+                    -- the selection), a drag selects, a double click takes the word under the cursor (RmlUi's own text widget does all that).
+                    if res.pressed then
+                        native.rml_mouse(id, 'down', ui_mouse.x, ui_mouse.y, rml_modifiers())
+                        self.text_down = i
+                        hover = true
+                    elseif self.text_down == i then
+                        if res.held then
+                            hover = true
+                        else
+                            native.rml_mouse(id, 'up', ui_mouse.x, ui_mouse.y)
+                            self.text_down = nil
+                        end
+                    end
                 elseif res.clicked then native.rml_click(id, i) end
+            end
+            if self.text_down and self.text_down > #stops then
+                native.rml_mouse(id, 'up', ui_mouse.x, ui_mouse.y)
+                self.text_down = nil
             end
         end
         if native.rml_wants_text(id) then
             ui.capture_keys(true)
             self.capturing = true
             local typed = ui.typed()
-            if typed ~= '' then native.rml_text(id, typed) end
+            local mods = rml_modifiers()
+            -- With Ctrl held (and not AltGr) the keyboard's characters are the chord's letter: they are no text (a player's Ctrl+A is the control character,
+            -- which ui.typed drops; automation's injected keys are translated without the Ctrl state and would type it)
+            if typed ~= '' and not (bit.band(mods, 1) ~= 0 and bit.band(mods, 4) == 0) then native.rml_text(id, typed) end
             for _, name in ipairs(RML_KEYS) do
                 if ui.key_pressed(name) then
-                    native.rml_key(id, UI_VK[name], true)
-                    native.rml_key(id, UI_VK[name], false)
+                    native.rml_key(id, UI_VK[name], true, mods)
+                    native.rml_key(id, UI_VK[name], false, mods)
+                end
+            end
+            -- Ctrl + A / C / X / V: select all, copy, cut, paste (RmlUi's text widget through the Windows clipboard); not with AltGr (Ctrl + Alt)
+            for _, name in ipairs(RML_CHORDS) do
+                if ui.key_pressed(name) and bit.band(mods, 1) ~= 0 and bit.band(mods, 4) == 0 then
+                    native.rml_key(id, UI_VK[name], true, mods)
+                    native.rml_key(id, UI_VK[name], false, mods)
                 end
             end
         elseif self.capturing then
