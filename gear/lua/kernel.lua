@@ -4450,6 +4450,18 @@ local function make_ui(mod)
             end
             if self.closed then return 0 end
         end
+        if native.rml_reloads then
+            -- Hot reload (a developer's switch): the document was loaded again from its changed files. What Lua changed in it by hand (doc:text,
+            -- doc:class, doc:style ...) is gone: opts.on_reload(doc, err) puts it back; err is the last failed reload's message.
+            local n, err = native.rml_reloads(id)
+            if n ~= (self.reloads_seen or 0) then
+                self.reloads_seen = n
+                if self.opts.on_reload then
+                    local ok, e2 = xpcall(self.opts.on_reload, traceback, self, err)
+                    if not ok then log('[%s] rml on_reload failed: %s', mod.id, tostring(e2)) end
+                end
+            end
+        end
         if self.data then
             -- A value the document changed itself (data-value): into the table, and the mod's on_change.
             local changed = native.rml_model_changed(id)

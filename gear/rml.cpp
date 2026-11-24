@@ -5,6 +5,7 @@
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/DataTypes.h>
+#include <RmlUi/Core/Factory.h>
 #include <RmlUi/Core/DataVariable.h>
 #include <RmlUi/Core/Elements/ElementFormControl.h>
 
@@ -110,6 +111,24 @@ namespace
 #endif
     }
 
+    // Hot reload: the files the document being (re)loaded pulls in, with their write times (null while no document loads).
+    std::map<fs::path, fs::file_time_type>* g_deps = nullptr;
+    bool g_hotReload = false;
+
+    void recordDep(const fs::path& path)
+    {
+        if (!g_deps)
+        {
+            return;
+        }
+        std::error_code ec;
+        const fs::file_time_type t = fs::last_write_time(path, ec);
+        if (!ec)
+        {
+            (*g_deps)[path] = t;
+        }
+    }
+
     bool readable(const fs::path& path)
     {
         if (!g_root.empty() && inside(g_root, path))
@@ -144,6 +163,7 @@ namespace
         {
             return false;
         }
+        recordDep(path);
         in.seekg(0, std::ios::end);
         const std::streamoff size = in.tellg();
         if (size < 0 || static_cast<uint64_t>(size) > kMaxFileSize)
@@ -194,6 +214,7 @@ namespace
             {
                 return 0;
             }
+            recordDep(p);
             return reinterpret_cast<Rml::FileHandle>(file.release());
         }
 
@@ -1039,6 +1060,7 @@ namespace
         // phase, and fires for events whose target is, or lies within, an element matching the selector: elements added later count.
         Listener(Doc* doc, int id, std::string selector = {}) : m_doc(doc), m_id(id), m_selector(std::move(selector)) {}
         void ProcessEvent(Rml::Event& event) override;
+        const std::string& selector() const { return m_selector; }
 
     private:
         Doc* m_doc;
@@ -1067,6 +1089,17 @@ namespace
         bool hasModel = false;
         unsigned modelSeen = 0;
         int nextHandle = 0;                     // element handles (data-gh), see rml_query
+        // What a reload needs (hot reload): how the document was loaded and the files it read.
+        fs::path file;
+        std::string source;                     // the markup of a string document
+        bool fromString = false;
+        fs::path themeFile;
+        bool base = false;                      // the plain base style (no theme)
+        std::map<fs::path, fs::file_time_type> deps;
+        double hotChecked = 0.0;
+        std::string hotError;                   // the last reload that failed (kept until a reload works)
+        unsigned reloads = 0;
+        std::vector<std::string> listenerEvents;    // the event name of each listener (the same index), to attach them to a reloaded document
     };
 
     std::map<int, std::unique_ptr<Doc>> g_docs;
@@ -1891,6 +1924,35 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         markup.insert(at == std::string::npos ? 0 : at, "<head>" + link + "</head>");
     }
 
+    // (Re)loads the document of `d` into its context: reads the markup, puts the theme in front and records the files it pulls in (d.deps).
+    void loadInto(Doc& d)
+    {
+        d.deps.clear();
+        g_deps = &d.deps;
+        {
+            RootScope scope(d);
+            std::string markup = d.source;
+            bool inMemory = d.fromString;
+            if (!d.fromString)
+            {
+                inMemory = readAll(d.file, markup);
+            }
+            if (inMemory)
+            {
+                injectTheme(markup, d.themeFile, d.base);
+            }
+            // A path with a drive letter ("B:/...") is no URL to RmlUi (it takes "B" for a protocol and logs an error per
+            // link); "file:///B:/..." is one, and its relative links resolve against it into plain paths again.
+            std::string url = toUtf8(d.file);
+            if (url.size() > 1 && url[1] == ':')
+            {
+                url.insert(0, "file:///");
+            }
+            d.document = inMemory ? d.context->LoadDocumentFromMemory(markup, url) : d.context->LoadDocument(url);
+        }
+        g_deps = nullptr;
+    }
+
     // Creates the context and document; `source` is the file (or, with `fromString`, the markup).
     int create(lua_State* L, bool fromString)
     {
@@ -1992,27 +2054,12 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
                 themeFile = candidate;
             }
         }
-        {
-            RootScope scope(*d);
-            std::string markup = source;
-            bool inMemory = fromString;
-            if (!fromString)
-            {
-                inMemory = readAll(file, markup);
-            }
-            if (inMemory)
-            {
-                injectTheme(markup, themeFile, lua_toboolean(L, fromString ? 9 : 8) != 0);
-            }
-            // A path with a drive letter ("B:/...") is no URL to RmlUi (it takes "B" for a protocol and logs an error per
-            // link); "file:///B:/..." is one, and its relative links resolve against it into plain paths again.
-            std::string url = toUtf8(file);
-            if (url.size() > 1 && url[1] == ':')
-            {
-                url.insert(0, "file:///");
-            }
-            d->document = inMemory ? d->context->LoadDocumentFromMemory(markup, url) : d->context->LoadDocument(url);
-        }
+        d->file = file;
+        d->source = source;
+        d->fromString = fromString;
+        d->themeFile = themeFile;
+        d->base = lua_toboolean(L, fromString ? 9 : 8) != 0;
+        loadInto(*d);
         if (!d->document)
         {
             Rml::RemoveContext(d->contextName);
@@ -2141,6 +2188,142 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         }
     }
 
+    // ---- Hot reload (a developer's tool: g_hotReload) ----
+    // The files a document read are polled; when one changes the document is loaded again into the same context (the data model, the
+    // listeners and the scroll positions of boxes with an id carry over; a document that fails to load stays as it was, the error is kept in
+    // Doc::hotError and logged).
+
+    bool isImageFile(const fs::path& p)
+    {
+        const std::string e = toUtf8(p.extension());
+        return e == ".png" || e == ".tga" || e == ".jpg" || e == ".jpeg";
+    }
+
+    bool depsChanged(const Doc& d, bool& imagesOnly)
+    {
+        bool changed = false;
+        imagesOnly = true;
+        for (const auto& [path, time] : d.deps)
+        {
+            std::error_code ec;
+            const fs::file_time_type now = fs::last_write_time(path, ec);
+            if (ec || now != time)
+            {
+                changed = true;
+                imagesOnly = imagesOnly && isImageFile(path);
+            }
+        }
+        return changed;
+    }
+
+    void hotReload(Doc& d, bool imagesOnly)
+    {
+        // scroll positions by element id
+        std::vector<std::pair<std::string, float>> scrolls;
+        {
+            Rml::ElementList all;
+            d.document->QuerySelectorAll(all, "[id]");
+            for (Rml::Element* e : all)
+            {
+                if (e->GetScrollTop() > 0.0f)
+                {
+                    scrolls.emplace_back(e->GetId(), e->GetScrollTop());
+                }
+            }
+        }
+        Rml::Factory::ClearStyleSheetCache();
+        Rml::Factory::ClearTemplateCache();
+        if (imagesOnly)
+        {
+            Rml::ReleaseTextures();
+        }
+        Rml::ElementDocument* old = d.document;
+        const bool visible = old->IsVisible();
+        const auto oldDeps = d.deps;
+        d.document = nullptr;
+        loadInto(d);
+        if (!d.document)
+        {
+            d.document = old;
+            d.deps = oldDeps;
+            for (auto& [path, time] : d.deps)
+            {
+                std::error_code ec;
+                const auto t = fs::last_write_time(path, ec);
+                if (!ec)
+                {
+                    time = t;       // do not try again until the file changes once more
+                }
+            }
+            d.hotError = "cannot load the document: " + toUtf8(d.file);
+            LOG("RmlUi hot reload: {} (the old one stays)", d.hotError);
+            return;
+        }
+        d.hotError.clear();
+        d.context->UnloadDocument(old);
+        if (visible)
+        {
+            d.document->Show();
+        }
+        for (size_t i = 0; i < d.listeners.size() && i < d.listenerEvents.size(); ++i)
+        {
+            const std::string& sel = d.listeners[i]->selector();
+            d.document->AddEventListener(d.listenerEvents[i], d.listeners[i].get(), !sel.empty());
+        }
+        d.context->Update();
+        for (const auto& [id, top] : scrolls)
+        {
+            if (Rml::Element* e = d.document->GetElementById(id))
+            {
+                e->SetScrollTop(top);
+            }
+        }
+        ++d.reloads;
+        LOG("RmlUi hot reload: {}", toUtf8(d.file));
+    }
+
+    void hotPoll(Doc& d)
+    {
+        const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (now - d.hotChecked < 0.25)
+        {
+            return;
+        }
+        d.hotChecked = now;
+        bool imagesOnly = false;
+        if (depsChanged(d, imagesOnly))
+        {
+            hotReload(d, imagesOnly);
+        }
+    }
+
+    // native.rml_hot([on]) -> on: whether documents reload when their files change (also by the file mods\.rml-hot or the environment variable GEAR_RML_HOT)
+    int rmlHot(lua_State* L)
+    {
+        if (lua_isboolean(L, 1))
+        {
+            g_hotReload = lua_toboolean(L, 1) != 0;
+        }
+        lua_pushboolean(L, g_hotReload ? 1 : 0);
+        return 1;
+    }
+
+    // native.rml_reloads(id) -> how many times the document was reloaded, last error | nil
+    int rmlReloads(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        lua_pushnumber(L, d.reloads);
+        if (d.hotError.empty())
+        {
+            lua_pushnil(L);
+        }
+        else
+        {
+            push(L, d.hotError);
+        }
+        return 2;
+    }
+
     // native.rml_update(id, mouse_x, mouse_y, hover) -> {event, ...}: lays the document out and runs its animations; the
     // mouse in layout units, `hover` whether it is over this document. An event is {listener, type, target, current,
     // params = {name = text}} for the listeners registered with rml_listen.
@@ -2150,6 +2333,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         const double mx = luaL_checknumber(L, 2), my = luaL_checknumber(L, 3);
         const bool hover = lua_toboolean(L, 4) != 0;
         RootScope scope(d);
+        if (g_hotReload)
+        {
+            hotPoll(d);
+        }
         fitContext(d);
         if (hover)
         {
@@ -3009,6 +3196,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         if (selector.empty())
         {
             d.listeners.push_back(std::make_unique<Listener>(&d, id));
+            d.listenerEvents.push_back(event);
             d.document->AddEventListener(event, d.listeners.back().get());
             lua_pushnumber(L, id);
             lua_pushnumber(L, 1);
@@ -3017,6 +3205,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         Rml::ElementList list;
         d.document->QuerySelectorAll(list, selector);
         d.listeners.push_back(std::make_unique<Listener>(&d, id, selector));
+        d.listenerEvents.push_back(event);
         d.document->AddEventListener(event, d.listeners.back().get(), true);
         lua_pushnumber(L, id);
         lua_pushnumber(L, static_cast<lua_Number>(list.size()));
@@ -3159,6 +3348,11 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
 void RmlHost::configure(const std::wstring& modsDir)
 {
     g_modsDir = modsDir;
+    {
+        // Hot reload of documents: a developer's switch (an empty file mods\.rml-hot, or the environment variable GEAR_RML_HOT); players never have it.
+        std::error_code ec;
+        g_hotReload = fs::exists(fs::path(modsDir) / L".rml-hot", ec) || (_wgetenv(L"GEAR_RML_HOT") != nullptr);
+    }
 }
 
 void RmlHost::registerNatives(lua_State* L)
@@ -3170,6 +3364,8 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_close", guarded<rmlClose>},
         {"rml_show", guarded<rmlShow>},
         {"rml_update", guarded<rmlUpdate>},
+        {"rml_hot", guarded<rmlHot>},
+        {"rml_reloads", guarded<rmlReloads>},
         {"rml_draw", guarded<rmlDraw>},
         {"rml_rects", guarded<rmlRects>},
         {"rml_move", guarded<rmlMove>},
