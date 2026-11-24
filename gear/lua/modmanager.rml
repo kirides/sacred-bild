@@ -50,7 +50,8 @@
         .srow .slab.amber { color: #ffc060; }
         .srow .sctl { flex: 1 1 auto; min-width: 0px; display: flex; flex-direction: row; align-items: center; }
         .srow .rst { width: 74px; flex: none; text-align: right; }
-        .srow input.game-check { margin: -6px 0; }
+        .srow input.game-check { margin: -6px 0 -6px -8px; }
+        .srow button.game-dropdown { margin: 0 0 0 -4px; }
         .srow .val { width: 54px; flex: none; text-align: right; color: #ffd780; margin-left: 8px; }
         .srow input.game-slider { width: 220px; flex: none; }
         .srow input.game-slider.small { width: 150px; margin-right: 6px; flex: none; }
