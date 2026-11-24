@@ -2084,6 +2084,7 @@ button { flex: none; white-space: nowrap; }
 button.mini { margin: 0 4px 0 0; padding: 0 10px; line-height: 1.4; font-size: 13px; }
 button.ibtn { margin: 0 4px 0 0; padding: 2px 8px; border: 0; background-color: transparent; color: #e8d8a8; font-size: 16px; }
 button.ibtn:hover, button.ibtn:focus { background-color: transparent; color: #fff6d0; }
+button.ibtn + button.ibtn { border-left: 1px #8c744099; margin-left: 4px; padding-left: 12px; }
 button.mini.dis { color: #8c8c8c; border-color: #3c3c3c; opacity: 0.6; }
 .dd { position: relative; display: inline-block; flex: none; z-index: 10; }
 .dd.open { z-index: 100; }
