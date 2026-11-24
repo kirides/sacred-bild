@@ -255,6 +255,7 @@ escape menu or the main menu is shown.
 F11 close it; while it is open the game gets no keys, so typing into a text setting does not fire hotkeys. Every choice
 is saved at once in `mods\gear_mods.json` (On/Off, settings and key binds of all mods; written atomically; a file that
 cannot be read is kept as `gear_mods.json.bak` and the defaults apply).
+**First start.** Without a `gear_mods.json` only **sacred-theme**, **key-bindings** and **better-saveload** are switched on; every other installed mod starts off, and the player turns on what they want in the Mod manager. The choice is written for all installed mods at once; a mod installed later follows its own `enabled` in `mod.lua` (on unless the mod says otherwise). Automation runs (`-gear-auto`) are not affected.
 
 **Load order.** `gear_mods.json` may hold a top-level `"order": ["id", ...]` (the external Mod Manager writes it). Mods in the list load first, in list order; mods not in it follow by `priority`, then id. A mod still loads after the mods it `requires`. Ids of mods that are not installed are ignored, a malformed list is ignored, and Gear keeps the list when it saves. The order is read at start; switching a mod on later does not re-sort the running mods.
 

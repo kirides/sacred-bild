@@ -1051,6 +1051,38 @@ do
     state_file = good
 end
 
+-- first start (no gear_mods.json, no automation): only sacred-theme, key-bindings and better-saveload run; the choice
+-- is written for every mod; an existing file keeps its behaviour (a mod without a flag follows its mod.lua)
+do
+    local good, auto = state_file, native.auto_state
+    local ids = {'sacred-theme', 'key-bindings', 'better-saveload', 'fr_other'}
+    for _, id in ipairs(ids) do files[id] = {['mod.lua'] = "return {id = '" .. id .. "'}", ['main.lua'] = ''} end
+    native.auto_state = nil
+    local function running(file)
+        state_file = file
+        local first = #logs + 1
+        local k = new_kernel()
+        k.load()
+        local on = {}
+        for i = first, #logs do
+            local id = logs[i]:match('^mod ([%w_%-]+) %S+ loaded')
+            if id and id ~= 'gear-mods' then on[#on + 1] = id end
+        end
+        table.sort(on)
+        return table.concat(on, ','), k
+    end
+    local on, k = running(nil)
+    ok(on == 'better-saveload,key-bindings,sacred-theme', 'first start: only the starter mods run (' .. on .. ')')
+    k.flush()
+    ok(state_file and state_file:find('"fr_other":{"enabled":false}', 1, true), 'first start: the choice is written for every mod')
+    ok(running(state_file) == 'better-saveload,key-bindings,sacred-theme', 'second start: the same mods')
+    ok((',' .. running('{"version":1,"mods":{"sacred-theme":{"settings":{"x":1}}}}') .. ','):find(',fr_other,', 1, true),
+       'an existing file: mods without a flag follow their mod.lua')
+    for _, id in ipairs(ids) do files[id] = nil end
+    native.auto_state = auto
+    state_file = good
+end
+
 -- key binds
 local function press(vks, down)
     for _, vk in ipairs(vks) do keys_held[vk] = down or nil end

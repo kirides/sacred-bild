@@ -6062,6 +6062,7 @@ local function state_load()
     if mod_state then return mod_state end
     mod_state = {mods = {}, order = {}}
     local text = native.state_read()
+    mod_state.fresh = text == nil   -- no gear_mods.json: the first start
     if text then
         local v, err = json.decode(text)
         if is_table(v) and (v.mods == nil or is_table(v.mods)) then
@@ -8237,9 +8238,24 @@ function admin.menu_entries()
     return out
 end
 
+-- The mods that are switched on at the very first start (no gear_mods.json); every other installed mod starts off.
 function kernel.load()
+    local FIRST_RUN_MODS = {['sacred-theme'] = true, ['key-bindings'] = true, ['better-saveload'] = true}
     state_load()
     discover()
+    -- First start: only the starter mods run. The choice is written down for every installed mod at once, so a file
+    -- that later holds only a setting or key bind does not bring back the defaults; a mod installed after that
+    -- follows its own mod.lua `enabled` as before. (Automation runs keep the old behaviour: -gear-mods picks the mods.)
+    if mod_state.fresh and not automation_on then
+        for _, e in ipairs(catalog_list) do
+            if not e.builtin and not e.invalid then
+                state_of(e.id, true).enabled = FIRST_RUN_MODS[e.id] == true
+            end
+        end
+        state_dirty = true
+        log('first start (no gear_mods.json): only sacred-theme, key-bindings and better-saveload are switched on')
+    end
+    mod_state.fresh = nil
     -- Automation can name the mods to load (-gear-mods=a,b); their requirements are not added.
     if automation_on then
         local only = native.auto_mods()
