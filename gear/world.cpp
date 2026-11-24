@@ -488,6 +488,8 @@ bool World::object(uint32_t id, Object& out)
         r.level = level;
         uint32_t state = 0;
         r.inCombat = readAt(o, kState, state) && (state & 0x8000) != 0;
+        uint16_t casting = 0;
+        r.casting = readAt(o, 0x120, casting) ? casting : 0;
     }
     out = r;
     return true;

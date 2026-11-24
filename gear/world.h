@@ -35,6 +35,7 @@ namespace World
         uint32_t gold = 0;          // heroes carry gold here; 0 for most creatures
         uint32_t experience = 0;
         uint32_t level = 0;
+        uint32_t casting = 0;       // the art or spell the creature has in flight (word at +0x120), 0 if none
         bool inCombat = false;      // bit 0x8000 of the state word at +0x200: the engine's own "enemies about" flag
     };
 

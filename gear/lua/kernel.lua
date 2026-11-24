@@ -898,6 +898,8 @@ function creature_mt:max_hp() local o = info(self); return o and o.max_hp end
 function creature_mt:is_dead() local o = info(self); return not o or not o.creature or o.hp <= 0 end
 -- in_combat(): the engine's own "enemies about" state of the creature (bit 0x8000 of its state word): what stops ReBorn's teleportation potion
 function creature_mt:in_combat() local o = info(self); return o ~= nil and o.in_combat == true end
+-- casting(): the id of the art or spell the creature has in flight (its word at +0x120), nil when none
+function creature_mt:casting() local o = info(self); local a = o and o.casting; return a and a ~= 0 and a or nil end
 -- apply_effect(effect, value) -> true | nil, message: sends the creature the message a drunk potion sends its drinker (see GearCreature)
 function creature_mt:apply_effect(effect, value)
     assert(type(effect) == 'number' and type(value) == 'number', 'effect and value must be numbers')

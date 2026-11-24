@@ -1374,6 +1374,7 @@ What `creature:info()` returns.
 | `exp` | `integer` | Creatures only. (optional) |
 | `level` | `integer` | Creatures only. (optional) |
 | `in_combat` | `boolean` | Creatures only: the engine's own "enemies about" state (see `Creature:in_combat`). (optional) |
+| `casting` | `integer` | Creatures only: the art or spell in flight, 0 for none (see `Creature:casting`). (optional) |
 
 ### GearItem
 
@@ -1476,6 +1477,12 @@ True when it has no hit points left or is gone.
 Whether the engine's own "enemies about" state is set for the creature (bit 0x8000 of its state word, which the engine's creature code sets while enemies are near and clears a while after): the state that stops ReBorn's teleportation potion.
 
 - returns `boolean`
+
+#### `creature:casting() -> integer?`
+
+The id of the art or spell the creature has in flight (a creature's word at +0x120; kept after the cast until the next one starts, so it tells what it cast last, not that it is casting now), nil when none.
+
+- returns `integer?`
 
 #### `creature:apply_effect(effect, value) -> boolean?, string?`
 
