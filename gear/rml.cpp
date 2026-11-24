@@ -2063,7 +2063,7 @@ button.mini.dis { color: #8c8c8c; border-color: #3c3c3c; opacity: 0.6; }
 .dd-list button.opt { display: block; width: auto; min-width: 0; height: auto; margin: 0; padding: 3px 10px; line-height: 1.4; font-size: 15px; text-align: left; white-space: nowrap; color: #e8e8e8; border: 0; background-color: transparent; }
 .dd-list button.opt:hover, .dd-list button.opt:focus, .dd-list button.opt.on { background-color: #ffd78030; border: 0; color: #ffe030; }
 .dd-shade { position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 5; }
-button.game-dropdown { display: inline-block; height: 37px; min-width: 130px; margin: 0 8px 0 0; padding: 0 42px; line-height: 31px; text-align: center; white-space: nowrap; color: #e4e4e4; font-family: "Sacred Game"; font-size: 16px; background-color: transparent; border: 0; decorator: image(gear:image/281 repeat-x) content-box, image(gear:image/267 scale-none left center) border-box, image(gear:image/270 scale-none right center) border-box; }
+button.game-dropdown { display: inline-block; height: 37px; min-width: 130px; margin: 0 8px 0 0; padding: 0 40px; line-height: 31px; text-align: center; white-space: nowrap; color: #e4e4e4; font-family: "Sacred Game"; font-size: 16px; background-color: transparent; border: 0; decorator: image(gear:image/281 repeat-x) content-box, image(gear:image/267 scale-none left center) border-box, image(gear:image/270 scale-none right center) border-box; }
 button.game-dropdown:hover, button.game-dropdown:focus { color: #ffe030; background-color: transparent; border: 0; }
 button.game-dropdown:disabled, button.game-dropdown[disabled] { color: #8a8a8a; opacity: 0.55; }
 input.field, select.field { padding: 4px 8px; color: #f0f0f0; background-color: #0c0c14; border: 1px #6e5e3a; }
