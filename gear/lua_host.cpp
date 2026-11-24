@@ -3143,6 +3143,41 @@ namespace
         }
     }
 
+    // native.ui_text_focus() -> x, y, w, h | nil: the game's text field that has the keyboard focus (layout units).
+    int nativeUiTextFocus(lua_State* L)
+    {
+        float x, y, w, h;
+        if (!Ui::focusedTextField(x, y, w, h))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, x);
+        lua_pushnumber(L, y);
+        lua_pushnumber(L, w);
+        lua_pushnumber(L, h);
+        return 4;
+    }
+
+    // native.ui_type_text(utf8) -> n: types the text into the game's focused text field (see Ui::typeText).
+    int nativeUiTypeText(lua_State* L)
+    {
+        size_t length = 0;
+        const char* text = luaL_checklstring(L, 1, &length);
+        std::wstring wide;
+        if (length > 0)
+        {
+            const int n = MultiByteToWideChar(CP_UTF8, 0, text, static_cast<int>(length), nullptr, 0);
+            if (n > 0)
+            {
+                wide.resize(static_cast<size_t>(n));
+                MultiByteToWideChar(CP_UTF8, 0, text, static_cast<int>(length), wide.data(), n);
+            }
+        }
+        lua_pushinteger(L, Ui::typeText(wide));
+        return 1;
+    }
+
     // native.ui_windows() -> {window, ...}
     int nativeUiWindows(lua_State* L)
     {
@@ -4996,6 +5031,8 @@ namespace
             {"ui_font_count", nativeUiFontCount},
             {"ui_text_size", nativeUiTextSize},
             {"ui_windows", nativeUiWindows},
+            {"ui_text_focus", nativeUiTextFocus},
+            {"ui_type_text", nativeUiTypeText},
             {"ui_state", nativeUiState},
             {"item", nativeItem},
             {"ui_region", nativeUiRegion},

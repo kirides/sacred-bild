@@ -1921,6 +1921,78 @@ namespace
     }
 }
 
+bool Ui::focusedTextField(float& x, float& y, float& w, float& h)
+{
+    // cUI_Control2: flags +0x10, x/y +0x24/+0x28 (relative to the parent), width/height int16 +0x2C/+0x2E, parent +0x50.
+    // The focused control is cUI_Manager +0x148 (docs/UI_SYSTEM.md section 8).
+    constexpr uint32_t kFocusOff = 0x148, kVisibleFlag = 0x01, kFocusFlag = 0x8000, kReadOnlyFlag = 0x00800000;
+    const uintptr_t m = manager();
+    const uintptr_t control = m ? readOr<uintptr_t>(m + kFocusOff, 0) : 0;
+    if (!control)
+    {
+        return false;
+    }
+    const uint32_t flags = readOr<uint32_t>(control + 0x10, 0);
+    if (!(flags & kFocusFlag) || !(flags & kVisibleFlag) || (flags & kReadOnlyFlag))
+    {
+        return false;
+    }
+    // The class: the type descriptor name behind the vtable's complete object locator (as SacredBild's UI navigation reads it).
+    const uintptr_t vtable = readOr<uintptr_t>(control, 0);
+    const uintptr_t locator = vtable ? readOr<uintptr_t>(vtable - 4, 0) : 0;
+    const uintptr_t descriptor = locator ? readOr<uintptr_t>(locator + 12, 0) : 0;
+    char name[24] = {};
+    if (!descriptor || !read(descriptor + 8, name) || std::strcmp(name, ".?AVcUI_EditControl@@") != 0)
+    {
+        return false;
+    }
+    int ax = 0, ay = 0;
+    uintptr_t c = control;
+    for (int depth = 0; c && depth < 16; ++depth)
+    {
+        if (!(readOr<uint32_t>(c + 0x10, 0) & kVisibleFlag))
+        {
+            return false;           // a hidden window around it
+        }
+        ax += readOr<int32_t>(c + 0x24, 0);
+        ay += readOr<int32_t>(c + 0x28, 0);
+        c = readOr<uintptr_t>(c + 0x50, 0);
+    }
+    const int cw = readOr<int16_t>(control + 0x2C, 0), ch = readOr<int16_t>(control + 0x2E, 0);
+    if (cw <= 0 || ch <= 0 || cw > 1024 || ch > 768)
+    {
+        return false;
+    }
+    x = static_cast<float>(ax);
+    y = static_cast<float>(ay);
+    w = static_cast<float>(cw);
+    h = static_cast<float>(ch);
+    return true;
+}
+
+int Ui::typeText(const std::wstring& text)
+{
+    const HWND window = Automation::window();
+    if (!window)
+    {
+        return 0;
+    }
+    int posted = 0;
+    for (const wchar_t ch : text)
+    {
+        if (ch < 0x20 || ch == 0x7F)
+        {
+            continue;
+        }
+        PostMessageW(window, WM_CHAR, static_cast<WPARAM>(ch), 1);
+        if (++posted >= 512)
+        {
+            break;
+        }
+    }
+    return posted;
+}
+
 bool Ui::setWindowShown(const std::string& name, bool shown)
 {
     WindowInfo info;

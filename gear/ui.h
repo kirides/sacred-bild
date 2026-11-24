@@ -177,6 +177,15 @@ namespace Ui
     // window or the game faulted.
     bool setWindowShown(const std::string& name, bool shown);
 
+    // The game's text field (cUI_EditControl) that has the keyboard focus and is really shown (the control and all its
+    // parents visible, not read-only), as its rect in the 1024x768 layout; false if none. The game leaves the focus flag on
+    // the control of a closed window, so the focus alone says nothing.
+    bool focusedTextField(float& x, float& y, float& w, float& h);
+
+    // Types `text` (UTF-16) into the game as characters of the keyboard (WM_CHAR posted to its window: the focused text
+    // field takes them as typed, with its own length limits). Control characters are skipped. Returns the number posted.
+    int typeText(const std::wstring& text);
+
     // Moves in-game window slot into a frame of its own at (x, y) against the canvas (layout units); set false:
     // back to its own place. Through SacredBild's UI frames: false without them (no SacredBild, its canvas off) and
     // for the windows the game draws alone.
