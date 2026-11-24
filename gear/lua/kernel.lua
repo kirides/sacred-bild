@@ -5954,6 +5954,16 @@ local function make_auto()
             if tostring(r.id) == id and r.mod == mod_id then return r.x, r.y, r.w, r.h end
         end
     end
+    -- auto.rml_docs(mod_id?) -> {{mod = id, doc = GearRmlDoc}, ...}: the RmlUi documents that mods have open (of one mod, or all), oldest first, so a test can
+    -- walk another mod's tabs and pages: doc:query_all('.tab'), element:rect(), then ui_click.
+    function auto.rml_docs(mod_id)
+        local out = {}
+        for id, e in pairs(uis.rml_docs) do
+            if not mod_id or e.mod.id == mod_id then out[#out + 1] = {mod = e.mod.id, doc = e.doc, id = id} end
+        end
+        table.sort(out, function(x, y) return x.id < y.id end)
+        return out
+    end
     -- In a task: click the UI layout point (x, y), or the center of a node from ui().
     function auto.ui_click(x, y, button)
         if type(x) == 'table' then

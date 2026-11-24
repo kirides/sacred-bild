@@ -144,7 +144,7 @@ Rules that hold across the API:
   ([RmlUi](https://mikke89.github.io/RmlUiDoc/): `div`, `button`, `input`, flexbox, `:hover`, animations) and draws it every frame
   with `doc:draw()`; `doc:on('#ok', 'click', fn)` calls Lua, `doc:text`, `doc:class`, `doc:style` and `doc:value` change the
   document. Every button, link and input is a pad stop, a focused text field takes the keyboard, the default font is Segoe UI, and the
-  game's own UI images are available as `gear:image/<id>`, CSS `transform` works. No JavaScript, no filters or drop shadows yet. See
+  game's own UI images are available as `gear:image/<id>`, CSS `transform` works. No JavaScript, no filters or drop shadows yet. Web-style conveniences work: `@font-face` with `url()` (icon fonts: `.home::before { content: "\e88a" }`), templates and styles shared between mods as `@mod-id/path` (a mod lists what it shares as `exports` in `mod.lua`), `gear.kit` widgets that look the same in Gear's plain style and in the theme, and developer hot reload (an empty file `mods\.rml-hot`, or the environment variable `GEAR_RML_HOT`). See
   [HTML/CSS documents](GearApi.md#htmlcss-documents-gearuirml) and `gear/examples/rmldemo`.
 - **Item data:** `gear.inv.values(item)` decodes an item's resolved value record (level, requirements, damage, attack, defense,
   protection, the eight bonus slots with code, attribute and stored value, and the records its sockets merged in), and
@@ -255,6 +255,7 @@ escape menu or the main menu is shown.
 F11 close it; while it is open the game gets no keys, so typing into a text setting does not fire hotkeys. Every choice
 is saved at once in `mods\gear_mods.json` (On/Off, settings and key binds of all mods; written atomically; a file that
 cannot be read is kept as `gear_mods.json.bak` and the defaults apply).
+**First start.** Without a `gear_mods.json` only **sacred-theme**, **key-bindings** and **better-saveload** are switched on; every other installed mod starts off, and the player turns on what they want in the Mod manager. The choice is written for all installed mods at once; a mod installed later follows its own `enabled` in `mod.lua` (on unless the mod says otherwise). Automation runs (`-gear-auto`) are not affected.
 
 **Load order.** `gear_mods.json` may hold a top-level `"order": ["id", ...]` (the external Mod Manager writes it). Mods in the list load first, in list order; mods not in it follow by `priority`, then id. A mod still loads after the mods it `requires`. Ids of mods that are not installed are ignored, a malformed list is ignored, and Gear keeps the list when it saves. The order is read at start; switching a mod on later does not re-sort the running mods.
 
@@ -325,6 +326,18 @@ manager](GearApi.md#settings-key-binds-and-the-mod-manager); remapping the game'
 
 Self tests: `gear/examples/modmanagertest` clicks through the real screen in a game (it asks the screen where its elements are with `gear.emit('mods.query')`); `gear/tests/kernel_test.lua` covers
 the kernel side (persistence, broken files, switching mods live, dependencies, key binds and conflicts).
+
+### Paste button on the game's text boxes
+
+![The Paste button](images/gear-paste-button.png)
+
+While one of the game's own text boxes has the keyboard focus (a savegame or character name, the chat line, a search field), the mod manager's
+built-in code draws a small **Paste** button inside it at its right end. A click types the text on the clipboard into the box as if it had
+been typed (line breaks and tabs become spaces; the box applies its own length limit, 63 characters for the character name). It needs the mouse
+(the controller has the game's own on-screen keyboard) and no mod. Under the hood: `native.ui_text_focus()` finds the focused `cUI_EditControl`
+(`cUI_Manager` +0x148, checked against its RTTI name and against its parents being shown: the game leaves the focus flag on the control of a closed
+window) and gives its rect in the 1024x768 layout, `native.ui_type_text()` posts the characters as `WM_CHAR` to the game window; both are in `gear/ui.cpp`,
+the button is the end of `gear/lua/modmanager.lua`.
 
 ## Online play: game mode and realms
 

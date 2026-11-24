@@ -100,6 +100,7 @@ local function stop_input()
     screen.edit = nil
     screen.capture = nil
     screen.osk = nil
+    screen.dd = nil
 end
 
 local function open_screen()
@@ -791,7 +792,7 @@ do
     -- a row of the model with every field the document reads (a field that is missing in some rows makes the bindings complain)
     local function row(kind)
         return {kind = kind, id = '', bool_id = '', num_id = '', text_id = '', label = '', tip = '', changed = false, rst_id = '', on = false, min = 0, max = 0, step = 1, value = 0,
-            text = '', prev_id = '', next_id = '', max_length = 64, kbd_id = '', css = 'transparent', a = 0, r = 0, g = 0, b = 0,
+            text = '', dd_id = '', open = false, opts = {{id = '', label = '', on = false}}, max_length = 64, kbd_id = '', css = 'transparent', a = 0, r = 0, g = 0, b = 0,
             a_id = '', r_id = '', g_id = '', b_id = '', slot = '', slot_id = '', pick_id = '', has2 = false, slot2 = '',
             slot2_id = '', pick2_id = '', capturing = false, capturing2 = false, conflict = false, conflict2 = false}
     end
@@ -856,9 +857,16 @@ do
                 local index = 1
                 for i, c in ipairs(d.choices) do if c.value == value then index = i end end
                 r.text = d.choices[index].label
-                r.prev_id, r.next_id = id .. 'p', id .. 'n'
-                acts[r.prev_id] = function() set(d.choices[(index - 2) % #d.choices + 1].value) end
-                acts[r.next_id] = function() set(d.choices[index % #d.choices + 1].value) end
+                -- a drop-down: the button shows the value, the list (while open) the choices; Esc / any other click closes it
+                r.dd_id = id .. 'd'
+                r.open = screen.dd == r.dd_id
+                r.opts = {}
+                for i, c in ipairs(d.choices) do
+                    local oid = id .. 'o' .. i
+                    r.opts[i] = {id = oid, label = c.label, on = i == index}
+                    acts[oid] = function() set(c.value) end
+                end
+                acts[r.dd_id] = function() screen.dd = (R.dd_prev ~= r.dd_id) and r.dd_id or nil end
             elseif d.type == 'text' then
                 r.kind, r.text, r.max_length = 'text', value, d.max_length or 64
                 r.kbd_id = id .. 'k'
@@ -1117,7 +1125,9 @@ do
         local doc = R.doc
         doc:on('.act', 'click', function(e)
             local f = R.acts[tostring(e.current)]
+            R.dd_prev, screen.dd = screen.dd, nil       -- a click anywhere else closes an open drop-down (its own button toggles it)
             if f then f() end
+            R.dirty = true
         end)
         doc:on('.sl', 'change', function(e)
             local f = R.slacts[tostring(e.current)]
@@ -1191,13 +1201,15 @@ do
         if blocker.pressed then stop_input() end
         if back then
             -- The controller's B: out of the keyboard, out of a mod's screen, then out of the manager.
-            if screen.osk then screen.osk = nil
+            if screen.dd then screen.dd = nil; R.dirty = true
+            elseif screen.osk then screen.osk = nil
             elseif screen.capture then stop_input()
             elseif screen.view ~= 'list' then screen.view = 'list'; R.reset_scroll = true
             else close_screen() return true end
             R.dirty = true
         elseif escape then
-            if screen.osk or screen.capture then stop_input(); R.dirty = true else close_screen(true) return true end
+            if screen.dd then screen.dd = nil; R.dirty = true
+            elseif screen.osk or screen.capture then stop_input(); R.dirty = true else close_screen(true) return true end
         end
         -- a key being rebound: the next key pressed is the binding
         local cap = screen.capture
@@ -1429,18 +1441,46 @@ gear.on('unload', function() ui.nav_modal(false); admin.modal(false) end)
 -- into the box, as if it had been typed (the box applies its own length limit). The mouse only: the button is not a stop of the
 -- controller's D-pad (the pad has the game's own on-screen keyboard).
 ---------------------------------------------------------------------------------------------------------------
-local PASTE = {w = 46, pad = 3}
+local PASTE = {w = 46, pad = 3, icon_w = 26}
+local function paste_clipboard()
+    local text = gear.clipboard.get()
+    if text and text ~= '' then
+        text = text:gsub('[\r\n\t]+', ' ')
+        admin.type_text(text)
+    end
+end
+-- The paste icon (Gear's icon font, the game's grey): a small RmlUi document that follows the text box; without RmlUi the old text button.
+local paste_doc
+local function paste_icon()
+    if paste_doc ~= nil then return paste_doc or nil end
+    paste_doc = false
+    if ui.rml and ui.rml.load_string then
+        local d = ui.rml.load_string([[<rml><head><style>
+            #pi { position: absolute; left: 0px; top: 0px; width: 26px; height: 22px; margin: 0; padding: 0; border: 0; background-color: transparent; text-align: center; line-height: 22px; font-size: 17px; color: #a6a39c; cursor: pointer; }
+            #pi:hover, #pi:focus { color: #ece8dc; background-color: #ffffff1c; border: 0; transform: none; }
+        </style></head><body><button id="pi" data-no-padkey="" title="Paste"><span class="icon icon-content-paste"></span></button></body></rml>]], {theme = false})
+        paste_doc = d or false
+        if d then d:on('#pi', 'click', function() paste_clipboard() end) end
+    end
+    return paste_doc or nil
+end
 gear.on('draw', function(state)
     if screen.open or type(state) ~= 'table' or not (state.mode == 'game' or state.mode == 'menus') then return end
     local x, y, w, h = admin.text_focus()
     if not x then return end
     local bh = math.max(12, math.min(h - 6, 22))
+    local icon = paste_icon()
+    if icon then
+        local bx, by = x + w - PASTE.icon_w - PASTE.pad, y + math.floor((h - bh) / 2)
+        icon:style('#pi', 'left', ('%dpx'):format(bx))
+        icon:style('#pi', 'top', ('%dpx'):format(by))
+        icon:style('#pi', 'height', ('%dpx'):format(bh))
+        icon:style('#pi', 'line-height', ('%dpx'):format(bh))
+        icon:draw({layer = 'top'})
+        return
+    end
     local bx, by = x + w - PASTE.w - PASTE.pad, y + math.floor((h - bh) / 2)
     if ui.button('paste_overlay', bx, by, PASTE.w, bh, 'Paste', {layer = 'top', nav = false, tooltip = 'Type the clipboard into this box'}) then
-        local text = gear.clipboard.get()
-        if text and text ~= '' then
-            text = text:gsub('[\r\n\t]+', ' ')
-            admin.type_text(text)
-        end
+        paste_clipboard()
     end
 end)

@@ -2,6 +2,7 @@
 #include "log.h"
 #include "padnav.h"
 #include "css_compat.h"
+#include "gear_res.h"
 #include "ui.h"
 
 #include <RmlUi/Core.h>
@@ -1454,6 +1455,20 @@ namespace
         return bytes.size() > 64 && bytes.size() < 32u * 1024 * 1024 ? bytes : std::string();
     }
 
+    // A resource of SacredGear.dll (gear.rc), as bytes.
+    std::string embeddedResource(int id)
+    {
+        HMODULE module = nullptr;
+        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(&embeddedResource), &module))
+        {
+            return {};
+        }
+        HRSRC res = FindResourceW(module, MAKEINTRESOURCEW(id), MAKEINTRESOURCEW(10));
+        HGLOBAL data = res ? LoadResource(module, res) : nullptr;
+        const char* bytes = data ? static_cast<const char*>(LockResource(data)) : nullptr;
+        return bytes ? std::string(bytes, SizeofResource(module, res)) : std::string();
+    }
+
     bool addFace(const std::string& family, const std::string& bytes, Rml::Style::FontStyle style, Rml::Style::FontWeight weight)
     {
         if (bytes.empty())
@@ -1505,6 +1520,11 @@ namespace
             {
                 LOG("RmlUi: neither Segoe UI nor Arial found in {}", toUtf8(system));
             }
+        }
+        // The icon font of Sacred Gear (a subset of Material Symbols): class "icon icon-refresh" ... in every document, see kUserAgentStyle.
+        if (!addFace("Gear Icons", embeddedResource(IDR_GEAR_ICONS), FontStyle::Normal, FontWeight::Normal))
+        {
+            LOG("RmlUi: the icon font did not load");
         }
         const std::string defaultBold = !bold.empty() ? bold : slurpFont(system / "segoeuib.ttf");
         // Game font and start screen font from the folder next to Sacred.exe.
@@ -2030,7 +2050,13 @@ namespace
         "h1, h2, h3, h4, h5, h6, strong, b { font-weight: bold; }"
         "body { font-family: \"Segoe UI\"; }"
                 "em, i { font-style: italic; }"
+        "template { display: block; }"
         "</style>";
+
+    // The icon font's classes (generated: gear/icons_css.inc); <span class="icon icon-refresh"></span>. Pre-processed like every stylesheet (::before, content).
+    const char* const kIconStyle =
+#include "icons_css.inc"
+        ;
 
     // The look of a document when no theme mod is running (a mod with `theme = 'file.rcss'`): plain and readable, with the class names the themes style, so
     // that a document written for a theme still works: dark panels, gold edges, simple buttons, check boxes, sliders and scroll bars, the controller prompts.
@@ -2048,6 +2074,13 @@ body { font-size: 15dp; color: #f0f0f0; }
 .accent { color: #ffd780; }
 .good { color: #7fd37f; }
 .bad { color: #e06060; }
+.small { font-size: 12px; }
+.wrap { white-space: pre-wrap; }
+.grow { flex: 1 1 auto; }
+.warn { color: #ffc878; }
+.gold { color: #ffd778; }
+.xp { color: #9cd0ff; }
+button.dis { color: #8c8c8c; border-color: #3c3c3c; opacity: 0.6; }
 .row { display: flex; flex-direction: row; margin: 6px 0; }
 .row.right { justify-content: flex-end; }
 .row.space { justify-content: space-between; }
@@ -2064,6 +2097,21 @@ button.game-button { display: inline-block; height: 34px; min-width: 100px; padd
 button.game-button:hover, button.game-button:focus { color: #ffe030; border-color: #ffe030; background-color: #262636; }
 button.game-button:active { color: #fff2a0; background-color: #34344e; }
 button.game-button:disabled, button.game-button[disabled] { color: #8a8a8a; opacity: 0.55; }
+button { flex: none; white-space: nowrap; }
+button.mini { margin: 0 4px 0 0; padding: 0 10px; line-height: 1.4; font-size: 13px; }
+button.ibtn { margin: 0 4px 0 0; padding: 2px 8px; border: 0; background-color: transparent; color: #e8d8a8; font-size: 16px; }
+button.ibtn:hover, button.ibtn:focus { background-color: transparent; color: #fff6d0; }
+button.ibtn + button.ibtn { border-left: 1px #8c744099; margin-left: 4px; padding-left: 12px; }
+button.mini.dis { color: #8c8c8c; border-color: #3c3c3c; opacity: 0.6; }
+.dd { position: relative; display: inline-block; flex: none; z-index: 10; }
+.dd.open { z-index: 100; }
+.dd-list { position: absolute; left: 0; top: 100%; min-width: 150px; max-height: 300px; overflow-y: auto; z-index: 200; background-color: #0c0c14; border: 1px #ffd780; padding: 2px; }
+.dd-list button.opt { display: block; width: auto; min-width: 0; height: auto; margin: 0; padding: 3px 10px; line-height: 1.4; font-size: 15px; text-align: left; white-space: nowrap; color: #e8e8e8; border: 0; background-color: transparent; }
+.dd-list button.opt:hover, .dd-list button.opt:focus, .dd-list button.opt.on { background-color: #ffd78030; border: 0; color: #ffe030; }
+.dd-shade { position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 5; }
+button.game-dropdown { display: inline-block; height: 37px; min-width: 130px; margin: 0 8px 0 0; padding: 0 40px; line-height: 31px; text-align: center; white-space: nowrap; color: #e4e4e4; font-family: "Sacred Game"; font-size: 16px; background-color: transparent; border: 0; decorator: image(gear:image/281 repeat-x) content-box, image(gear:image/267 scale-none left center) border-box, image(gear:image/270 scale-none right center) border-box; }
+button.game-dropdown:hover, button.game-dropdown:focus { color: #ffe030; background-color: transparent; border: 0; }
+button.game-dropdown:disabled, button.game-dropdown[disabled] { color: #8a8a8a; opacity: 0.55; }
 input.field, select.field { padding: 4px 8px; color: #f0f0f0; background-color: #0c0c14; border: 1px #6e5e3a; }
 input.field:focus, select.field:focus { border-color: #ffd780; }
 input.game-check { display: inline-block; width: 22px; height: 22px; margin: 0 15px; padding: 0; background-color: #0c0c14; border: 2px #8c7440; cursor: pointer; }
@@ -2137,6 +2185,9 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     void injectTheme(std::string& markup, const fs::path& themeFile, bool base)
     {
         std::string link = kUserAgentStyle;
+        link += "<style>";
+        link += kIconStyle;
+        link += "</style>";
         if (themeFile.empty() && base)
         {
             link += kBaseStyle;
@@ -2187,8 +2238,8 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             }
             if (inMemory)
             {
-                markup = preprocessCss(markup, logicalDir(toUtf8(d.file), d.file), true);
                 injectTheme(markup, d.themeFile, d.base);
+                markup = preprocessCss(markup, logicalDir(toUtf8(d.file), d.file), true);       // (after the injection: the icon classes use ::before)
             }
             // A path with a drive letter ("B:/...") is no URL to RmlUi (it takes "B" for a protocol and logs an error per
             // link); "file:///B:/..." is one, and its relative links resolve against it into plain paths again.

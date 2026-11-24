@@ -4163,9 +4163,24 @@ A game button.
 - `o`: `GearKitButtonOpts` (optional)
 - returns `markup` `string`
 
-#### `gear.kit.check(id, label, checked, o) -> string`
+#### `gear.kit.dropdown(id, label, o) -> string`
 
-A row with the label and the game's check orb (an `input`: listen for `change`).
+The button of a drop-down: the game's arrow caps (images 267 / 270, middle 281) with the label between; the list it opens is the mod's (`list`).
+
+- `id`: `string`
+- `label`: `string`
+- `o`: `{tip?: string, disabled?: boolean}` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.icon(name, o) -> string`
+
+An icon of Gear's icon font (a subset of Material Symbols Sharp, 85 icons: `refresh`, `arrow-back`, `arrow-forward`, `chevron-left`, `delete`, `close`, `check`, `settings`, `search` ...; the list is in `gear/icons_css.inc`). In markup of your own: `<span class="icon icon-refresh"></span>`; it takes the text colour and sizes with the text (`font-size` on the span).
+
+- `name`: `string`
+- `o`: `{class?: string}` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.check(id, label, checked, o) -> string`
 
 - `id`: `string`
 - `label`: `string`
@@ -6244,6 +6259,13 @@ In a task: the client pixel for the UI layout point (x, y); the mapping is measu
 - `y`: `number`
 - returns `px` `integer?`
 - returns `py` `integer|string?` - The pixel, or the error message when `px` is nil.
+
+#### `gear.auto.rml_docs(mod_id) -> {mod: string, doc: GearRmlDoc, id: integer}[]`
+
+The RmlUi documents that mods have open (of one mod, or all), oldest first: to walk another mod's tabs and pages in a test (`doc:query_all('.tab')`, `element:rect()`, then `ui_click`).
+
+- `mod_id`: `string` (optional)
+- returns `{mod: string, doc: GearRmlDoc, id: integer}[]`
 
 #### `gear.auto.widget(id, mod_id) -> number?, number?, number?, number?`
 
