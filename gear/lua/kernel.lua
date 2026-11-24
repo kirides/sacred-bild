@@ -1872,6 +1872,11 @@ do
         assert(type(share) == 'number', 'share must be a number')
         native.party_share(share, radius or 0)
     end
+    -- experience_scale(factor): every experience gain the game makes for a hero (kills, quests) is multiplied by `factor`.
+    function P.experience_scale(factor)
+        assert(type(factor) == 'number' and factor >= 0, 'factor must be a number, 0 or more')
+        native.party_experience_scale(factor)
+    end
 end
 
 -- Multiplayer (gear.mp). A player is a hero object: slots 1..16 are the heroes' object ids. See docs/GearMultiplayer.md.

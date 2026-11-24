@@ -1935,6 +1935,12 @@ Experience a party hero gains from the game (kills, quests) also goes to the oth
 - `share`: `number`
 - `radius`: `number` (optional)
 
+#### `gear.party.experience_scale(factor)`
+
+Multiplies every experience gain the game makes for a hero (kills, quests) by `factor` (0 to 1000; 1 is the game's own, 0 stops the gain, 2 doubles it). Single player only: in a network game the server decides the experience. The gains of `creature:add_experience` are not scaled, and what `share_experience` hands on is of the scaled amount. The setting lasts until the game ends; a mod sets it again on `load`.
+
+- `factor`: `number`
+
 ### GearRecruitOpts
 
 | Field | Type | |
