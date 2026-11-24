@@ -167,4 +167,8 @@ namespace Party
     // Experience the party shares: when a hero gains experience from the game, every other party hero within
     // `radius` world units (0: anywhere) gains `share` times as much. 0 turns it off (the default).
     void setExperienceShare(double share, double radius);
+
+    // Multiplies every experience gain the game makes for a hero (kills, quests; single player). 1 is the default,
+    // 0 stops the gain. Gains a mod makes with `add_experience` are not scaled.
+    void setExperienceScale(double scale);
 }

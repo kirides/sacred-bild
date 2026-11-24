@@ -360,6 +360,7 @@ namespace
 
     decltype(Addr::cStats_addExperience)::Ptr g_origAddExperience = nullptr;
     double g_share = 0;
+    double g_expScale = 1;       // gear.party.experience_scale
     bool g_sharedPurse = true;   // gear.party.shared_purse
     double g_shareRadius = 0;
     bool g_sharing = false;
@@ -367,6 +368,12 @@ namespace
     // The engine's experience gain (kills, quests): the party shares it.
     void __fastcall hookAddExperience(void* stats, void* edx, uint32_t amount)
     {
+        // gear.party.experience_scale: every gain the game itself makes (kills, quests) is multiplied, in single player
+        // only (a network game's experience is the server's). The shared part below is of the scaled amount.
+        if (g_expScale != 1 && !g_sharing && amount != 0 && amount < 0x7FFFFFFF && !World::networkGame())
+        {
+            amount = static_cast<uint32_t>(std::min(amount * g_expScale + 0.5, 2.0e9));
+        }
         g_origAddExperience(stats, edx, amount);
         if (g_sharing || g_share <= 0 || amount == 0 || amount >= 0x7FFFFFFF || World::networkGame())
         {
@@ -1685,6 +1692,11 @@ int Party::portraitImage(uint32_t type)
     }
     const int r = callPortrait(type);
     return r > 0 ? r : -1;
+}
+
+void Party::setExperienceScale(double scale)
+{
+    g_expScale = std::clamp(scale, 0.0, 1000.0);
 }
 
 void Party::setExperienceShare(double share, double radius)

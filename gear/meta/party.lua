@@ -121,6 +121,13 @@ function GearParty.give_gold(from, to, amount) end
 ---@param radius? number
 function GearParty.share_experience(share, radius) end
 
+--- Multiplies every experience gain the game makes for a hero (kills, quests) by `factor` (0 to 1000; 1 is the game's own,
+--- 0 stops the gain, 2 doubles it). Single player only: in a network game the server decides the experience. The gains of
+--- `creature:add_experience` are not scaled, and what `share_experience` hands on is of the scaled amount. The setting
+--- lasts until the game ends; a mod sets it again on `load`.
+---@param factor number
+function GearParty.experience_scale(factor) end
+
 ---@class GearRecruitOpts
 ---@field x? number Where to create it (default: where the leader stands).
 ---@field y? number

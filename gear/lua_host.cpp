@@ -2784,6 +2784,12 @@ namespace
         return 0;
     }
 
+    int nativePartyExpScale(lua_State* L)
+    {
+        Party::setExperienceScale(luaL_checknumber(L, 1));
+        return 0;
+    }
+
     // native.set_health(id, hp) / native.set_gold(id, gold) -> true | nil, message
     int nativeSetHealth(lua_State* L)
     {
@@ -5004,6 +5010,7 @@ namespace
             {"party_import", nativePartyImport},
             {"party_export", nativePartyExport},
             {"party_share", nativePartyShare},
+            {"party_experience_scale", nativePartyExpScale},
             {"party_shared_purse", nativePartySharedPurse},
             {"party_give_gold", nativePartyGiveGold},
             {"party_exp_range", nativePartyExpRange},
