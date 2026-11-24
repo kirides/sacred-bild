@@ -1129,7 +1129,9 @@ namespace
                 p.x = Text::snapX(place, p.x);
                 p.y = Text::snapY(place, p.y);
             }
-            const float uu = flipU ? 1.0f - v.u : v.u, vv = flipV ? 1.0f - v.v : v.v;
+            const bool swapUv = (c.flip & 4) != 0;      // a picture turned by 90 degrees: u and v swapped first
+            const float ua = swapUv ? v.v : v.u, va = swapUv ? v.u : v.v;
+            const float uu = flipU ? 1.0f - ua : ua, vv = flipV ? 1.0f - va : va;
             p.u = uu;       // mapped into the atlas rectangle when the vertex is emitted (a repeated tile runs past 1)
             p.v = vv;
             p.a = static_cast<float>(v.color >> 24);

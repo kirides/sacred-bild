@@ -530,6 +530,20 @@ namespace
                     break;
                 }
             }
+            // "?rot=90" (clockwise), "?rot=180", "?rot=270": the picture turned (a turned picture needs no CSS transform, which a scroll bar's arrow
+            // in a popup list gets drawn in the wrong place with); the flip bits: 1 = u, 2 = v, 4 = u and v swapped first
+            if (opt == "rot=90")
+            {
+                info.flip |= 4 | 2;
+            }
+            else if (opt == "rot=180")
+            {
+                info.flip |= 1 | 2;
+            }
+            else if (opt == "rot=270")
+            {
+                info.flip |= 4 | 1;
+            }
             if (opt == "flip=h" || opt == "flip=hv" || opt == "flip=vh")
             {
                 info.flip |= 1;
@@ -873,7 +887,7 @@ namespace
                     LOG("RmlUi: no game image for {}", source);
                     return 0;
                 }
-                dimensions = {image.width, image.height};
+                dimensions = (info.flip & 4) ? Rml::Vector2i{image.height, image.width} : Rml::Vector2i{image.width, image.height};     // turned by 90 degrees: the sides swap
                 if (info.dp)
                 {
                     scaleToLayoutUnits(dimensions);
