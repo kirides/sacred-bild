@@ -1442,6 +1442,13 @@ gear.on('unload', function() ui.nav_modal(false); admin.modal(false) end)
 -- controller's D-pad (the pad has the game's own on-screen keyboard).
 ---------------------------------------------------------------------------------------------------------------
 local PASTE = {w = 46, pad = 3, icon_w = 26}
+local function paste_clipboard()
+    local text = gear.clipboard.get()
+    if text and text ~= '' then
+        text = text:gsub('[\r\n\t]+', ' ')
+        admin.type_text(text)
+    end
+end
 -- The paste icon (Gear's icon font, the game's grey): a small RmlUi document that follows the text box; without RmlUi the old text button.
 local paste_doc
 local function paste_icon()
@@ -1450,18 +1457,12 @@ local function paste_icon()
     if ui.rml and ui.rml.load_string then
         local d = ui.rml.load_string([[<rml><head><style>
             #pi { position: absolute; left: 0px; top: 0px; width: 26px; height: 22px; text-align: center; line-height: 22px; font-size: 17px; color: #a6a39c; }
-            #pi.hot { color: #ece8dc; background-color: #ffffff1c; }
+            #pi:hover { color: #ece8dc; background-color: #ffffff1c; }
         </style></head><body><div id="pi"><span class="icon icon-content-paste"></span></div></body></rml>]], {theme = false})
         paste_doc = d or false
+        if d then d:on('#pi', 'click', function() paste_clipboard() end) end
     end
     return paste_doc or nil
-end
-local function paste_clipboard()
-    local text = gear.clipboard.get()
-    if text and text ~= '' then
-        text = text:gsub('[\r\n\t]+', ' ')
-        admin.type_text(text)
-    end
 end
 gear.on('draw', function(state)
     if screen.open or type(state) ~= 'table' or not (state.mode == 'game' or state.mode == 'menus') then return end
@@ -1471,14 +1472,11 @@ gear.on('draw', function(state)
     local icon = paste_icon()
     if icon then
         local bx, by = x + w - PASTE.icon_w - PASTE.pad, y + math.floor((h - bh) / 2)
-        local res = ui.region('paste_overlay', bx, by, PASTE.icon_w, bh, {layer = 'top', nav = false, tooltip = 'Paste: type the clipboard into this box'})
         icon:style('#pi', 'left', ('%dpx'):format(bx))
         icon:style('#pi', 'top', ('%dpx'):format(by))
         icon:style('#pi', 'height', ('%dpx'):format(bh))
         icon:style('#pi', 'line-height', ('%dpx'):format(bh))
-        icon:class('#pi', 'hot', res.hover)
         icon:draw({layer = 'top'})
-        if res.clicked then paste_clipboard() end
         return
     end
     local bx, by = x + w - PASTE.w - PASTE.pad, y + math.floor((h - bh) / 2)
