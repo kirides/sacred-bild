@@ -1309,6 +1309,12 @@ namespace
         bool dp = false;
         bool screenOrigin = false;              // the document's (0, 0) is the screen's top left corner, not the layout's
         Rml::Vector2f originPx{0.0f, 0.0f};     // that corner in layout pixels (units * unit): layout position = context position + originPx
+        // Where the <body>'s top left corner lies in layout pixels: the screen's corner (originPx) for a document that starts there, the layout's own
+        // (0, 0) for the usual one, whose body is moved right and down by the screen's margin so that what lies left of or above the layout still
+        // is inside the context (RmlUi draws no text outside it).
+        Rml::Vector2f bodyPx{0.0f, 0.0f};
+        Rml::ElementDocument* shiftedDocument = nullptr;    // the document that has the margin below ...
+        Rml::Vector2f shiftApplied{0.0f, 0.0f};             // ... and its size
         float unit = 1.0f;
         bool hovering = false;
         std::vector<std::unique_ptr<Listener>> listeners;
@@ -1775,21 +1781,32 @@ namespace
         // screen): a document's elements past the context's edge lose their text.
         float right = kLayoutWidth, bottom = kLayoutHeight;
         Ui::screenExtent(right, bottom);
-        // A document that starts at the screen's own corner (the game's windows sit there) reaches left of and above the layout too:
-        // its (0, 0) is that corner and `originPx` is where the corner lies in layout pixels.
+        // The context starts at the screen's own corner (left of and above the layout on a wide or tall screen): text outside the context is not drawn at
+        // all, so a mod's text that lies out of the 1024 x 768 layout would vanish. A document that starts at that corner (the game's windows sit there)
+        // measures its positions from it, `originPx` is where the corner lies in layout pixels; the usual document keeps its (0, 0) at the layout's
+        // corner: its <body> is moved by the margin (the same pixels the other way), so `left: -200px` is where it was, and now has text.
         float left = 0.0f, top = 0.0f;
-        if (d.screenOrigin)
-        {
-            Ui::screenOrigin(left, top);
-        }
+        Ui::screenOrigin(left, top);
         const Rml::Vector2f origin(std::floor(left * unit), std::floor(top * unit));
         const Rml::Vector2i dims(static_cast<int>(std::lround(std::ceil(right) * unit - origin.x)), static_cast<int>(std::lround(std::ceil(bottom) * unit - origin.y)));
         d.originPx = origin;
+        d.bodyPx = d.screenOrigin ? origin : Rml::Vector2f(0.0f, 0.0f);
         if (unit != d.unit || d.context->GetDimensions() != dims)
         {
             d.unit = unit;
             d.context->SetDimensions(dims);
             d.context->SetDensityIndependentPixelRatio(d.dp ? unit : 1.0f);
+        }
+        const Rml::Vector2f shift = d.screenOrigin ? Rml::Vector2f(0.0f, 0.0f) : Rml::Vector2f(-origin.x, -origin.y);
+        if (d.document && (d.shiftedDocument != d.document || shift != d.shiftApplied))
+        {
+            if (shift.x != 0.0f || shift.y != 0.0f || d.shiftedDocument == d.document)
+            {
+                d.document->SetProperty("margin-left", std::to_string(static_cast<int>(std::lround(shift.x))) + "px");
+                d.document->SetProperty("margin-top", std::to_string(static_cast<int>(std::lround(shift.y))) + "px");
+            }
+            d.shiftedDocument = d.document;
+            d.shiftApplied = shift;
         }
     }
 
@@ -2769,8 +2786,8 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         if (e)
         {
             const double x = luaL_checknumber(L, 3), y = luaL_checknumber(L, 4);
-            e->SetProperty("left", std::to_string(static_cast<int>(std::lround(x * d.unit - d.originPx.x))) + "px");
-            e->SetProperty("top", std::to_string(static_cast<int>(std::lround(y * d.unit - d.originPx.y))) + "px");
+            e->SetProperty("left", std::to_string(static_cast<int>(std::lround(x * d.unit - d.bodyPx.x))) + "px");
+            e->SetProperty("top", std::to_string(static_cast<int>(std::lround(y * d.unit - d.bodyPx.y))) + "px");
         }
         lua_pushboolean(L, e != nullptr);
         return 1;
