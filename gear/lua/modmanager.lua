@@ -1456,9 +1456,9 @@ local function paste_icon()
     paste_doc = false
     if ui.rml and ui.rml.load_string then
         local d = ui.rml.load_string([[<rml><head><style>
-            #pi { position: absolute; left: 0px; top: 0px; width: 26px; height: 22px; text-align: center; line-height: 22px; font-size: 17px; color: #a6a39c; }
-            #pi:hover { color: #ece8dc; background-color: #ffffff1c; }
-        </style></head><body><div id="pi"><span class="icon icon-content-paste"></span></div></body></rml>]], {theme = false})
+            #pi { position: absolute; left: 0px; top: 0px; width: 26px; height: 22px; margin: 0; padding: 0; border: 0; background-color: transparent; text-align: center; line-height: 22px; font-size: 17px; color: #a6a39c; cursor: pointer; }
+            #pi:hover, #pi:focus { color: #ece8dc; background-color: #ffffff1c; border: 0; transform: none; }
+        </style></head><body><button id="pi" data-no-padkey="" title="Paste"><span class="icon icon-content-paste"></span></button></body></rml>]], {theme = false})
         paste_doc = d or false
         if d then d:on('#pi', 'click', function() paste_clipboard() end) end
     end
