@@ -1168,6 +1168,14 @@ do
                 if br and br.w > 0 then return (box:scroll()) end
             end
         end
+        out.attr = function(sel, name)
+            local doc = R.doc
+            return doc and doc:attr(sel, name)
+        end
+        out.text = function(sel)
+            local doc = R.doc
+            return doc and doc:text(sel)
+        end
         out.press = function(id)
             local f = R.acts[id]
             if f then f() return true end
