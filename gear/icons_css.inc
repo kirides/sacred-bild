@@ -1,6 +1,6 @@
 // Generated from gear/res/GearIcons.ttf (Material Symbols, Sharp, a subset: see gear/res/README-icons.txt): the class names of the icon font.
 R"CSS(
-.icon { display: inline-block; font-family: "Gear Icons"; font-weight: normal; font-style: normal; font-size: 1.25em; line-height: 1; vertical-align: middle; }
+.icon { display: inline-block; font-family: "Gear Icons"; font-weight: normal; font-style: normal; font-size: 1.25em; line-height: 1; vertical-align: -0.2em; }
 .icon-add::before { content: "\e145"; }
 .icon-add-circle::before { content: "\e147"; }
 .icon-arrow-back::before { content: "\e5c4"; }
