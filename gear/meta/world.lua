@@ -207,6 +207,7 @@ function GearWorld.pickup_refused() end
 ---@field exp? integer Creatures only.
 ---@field level? integer Creatures only.
 ---@field in_combat? boolean Creatures only: the engine's own "enemies about" state (see `Creature:in_combat`).
+---@field casting? integer Creatures only: the art or spell in flight, 0 for none (see `Creature:casting`).
 
 --- An item object, from `gear.world.item` or `items_near`.
 ---@class GearItem
@@ -286,6 +287,11 @@ function Creature:is_dead() end
 --- sets while enemies are near and clears a while after): the state that stops ReBorn's teleportation potion.
 ---@return boolean
 function Creature:in_combat() end
+
+--- The id of the art or spell the creature has in flight (a creature's word at +0x120; kept after the cast until the next one starts, so it
+--- tells what it cast last, not that it is casting now), nil when none.
+---@return integer?
+function Creature:casting() end
 
 --- Sends the creature the message a drunk potion sends its drinker, so a mod can give a potion its own numbers (the potion handler's effects:
 --- 6, 7 and 9 refill health or mana, 8 removes poison by `value` percent, 10 the concentration potions' combo refill).

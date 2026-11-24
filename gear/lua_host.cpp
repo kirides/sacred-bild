@@ -1943,6 +1943,7 @@ namespace
             set("level", o.level);
             lua_pushboolean(L, o.inCombat);
             lua_setfield(L, -2, "in_combat");
+            set("casting", o.casting);
         }
         return 1;
     }
