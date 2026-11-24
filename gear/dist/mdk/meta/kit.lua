@@ -97,7 +97,13 @@ function GearKit.button(id, label, o) end
 ---@return string markup
 function GearKit.dropdown(id, label, o) end
 
---- A row with the label and the game's check orb (an `input`: listen for `change`).
+--- An icon of Gear's icon font (a subset of Material Symbols Sharp, 85 icons: `refresh`, `arrow-back`, `arrow-forward`, `chevron-left`, `delete`, `close`, `check`, `settings`, `search` ...; the list is in `gear/icons_css.inc`). In markup of your own: `<span class="icon icon-refresh"></span>`; it takes the text colour and sizes with the text (`font-size` on the span).
+---@param name string
+---@param o? {class?: string}
+---@return string markup
+function GearKit.icon(name, o) end
+
+ (an `input`: listen for `change`).
 ---@param id string
 ---@param label string
 ---@param checked boolean

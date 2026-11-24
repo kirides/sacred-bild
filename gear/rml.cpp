@@ -2,6 +2,7 @@
 #include "log.h"
 #include "padnav.h"
 #include "css_compat.h"
+#include "gear_res.h"
 #include "ui.h"
 
 #include <RmlUi/Core.h>
@@ -1448,6 +1449,20 @@ namespace
         return bytes.size() > 64 && bytes.size() < 32u * 1024 * 1024 ? bytes : std::string();
     }
 
+    // A resource of SacredGear.dll (gear.rc), as bytes.
+    std::string embeddedResource(int id)
+    {
+        HMODULE module = nullptr;
+        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(&embeddedResource), &module))
+        {
+            return {};
+        }
+        HRSRC res = FindResourceW(module, MAKEINTRESOURCEW(id), MAKEINTRESOURCEW(10));
+        HGLOBAL data = res ? LoadResource(module, res) : nullptr;
+        const char* bytes = data ? static_cast<const char*>(LockResource(data)) : nullptr;
+        return bytes ? std::string(bytes, SizeofResource(module, res)) : std::string();
+    }
+
     bool addFace(const std::string& family, const std::string& bytes, Rml::Style::FontStyle style, Rml::Style::FontWeight weight)
     {
         if (bytes.empty())
@@ -1499,6 +1514,11 @@ namespace
             {
                 LOG("RmlUi: neither Segoe UI nor Arial found in {}", toUtf8(system));
             }
+        }
+        // The icon font of Sacred Gear (a subset of Material Symbols): class "icon icon-refresh" ... in every document, see kUserAgentStyle.
+        if (!addFace("Gear Icons", embeddedResource(IDR_GEAR_ICONS), FontStyle::Normal, FontWeight::Normal))
+        {
+            LOG("RmlUi: the icon font did not load");
         }
         const std::string defaultBold = !bold.empty() ? bold : slurpFont(system / "segoeuib.ttf");
         // Game font and start screen font from the folder next to Sacred.exe.
@@ -2013,7 +2033,13 @@ namespace
         "h1, h2, h3, h4, h5, h6, strong, b { font-weight: bold; }"
         "body { font-family: \"Segoe UI\"; }"
                 "em, i { font-style: italic; }"
+        "template { display: block; }"
         "</style>";
+
+    // The icon font's classes (generated: gear/icons_css.inc); <span class="icon icon-refresh"></span>. Pre-processed like every stylesheet (::before, content).
+    const char* const kIconStyle =
+#include "icons_css.inc"
+        ;
 
     // The look of a document when no theme mod is running (a mod with `theme = 'file.rcss'`): plain and readable, with the class names the themes style, so
     // that a document written for a theme still works: dark panels, gold edges, simple buttons, check boxes, sliders and scroll bars, the controller prompts.
@@ -2139,6 +2165,9 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     void injectTheme(std::string& markup, const fs::path& themeFile, bool base)
     {
         std::string link = kUserAgentStyle;
+        link += "<style>";
+        link += kIconStyle;
+        link += "</style>";
         if (themeFile.empty() && base)
         {
             link += kBaseStyle;
@@ -2189,8 +2218,8 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             }
             if (inMemory)
             {
-                markup = preprocessCss(markup, logicalDir(toUtf8(d.file), d.file), true);
                 injectTheme(markup, d.themeFile, d.base);
+                markup = preprocessCss(markup, logicalDir(toUtf8(d.file), d.file), true);       // (after the injection: the icon classes use ::before)
             }
             // A path with a drive letter ("B:/...") is no URL to RmlUi (it takes "B" for a protocol and logs an error per
             // link); "file:///B:/..." is one, and its relative links resolve against it into plain paths again.

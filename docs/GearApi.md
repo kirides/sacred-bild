@@ -4172,9 +4172,15 @@ The button of a drop-down: the game's arrow caps (images 267 / 270, middle 281) 
 - `o`: `{tip?: string, disabled?: boolean}` (optional)
 - returns `markup` `string`
 
-#### `gear.kit.check(id, label, checked, o) -> string`
+#### `gear.kit.icon(name, o) -> string`
 
-A row with the label and the game's check orb (an `input`: listen for `change`).
+An icon of Gear's icon font (a subset of Material Symbols Sharp, 85 icons: `refresh`, `arrow-back`, `arrow-forward`, `chevron-left`, `delete`, `close`, `check`, `settings`, `search` ...; the list is in `gear/icons_css.inc`). In markup of your own: `<span class="icon icon-refresh"></span>`; it takes the text colour and sizes with the text (`font-size` on the span).
+
+- `name`: `string`
+- `o`: `{class?: string}` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.check(id, label, checked, o) -> string`
 
 - `id`: `string`
 - `label`: `string`

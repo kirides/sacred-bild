@@ -17,6 +17,13 @@ e.g. sacred-theme) or Gear's **plain base style**. Both style the same class nam
 Every button, link and input is a stop for the controller with no extra work. Adding a widget means giving the kit its markup and the base style and the theme
 their classes.
 
+## Icons
+
+Every document can use the icon font of Sacred Gear (a 10 KB subset of Google's Material Symbols Sharp, Apache License 2.0, bundled in the DLL): `<span class="icon icon-refresh"></span>`
+or `kit.icon('refresh')`. It takes the text colour and sizes with the text. 85 icons, among them `refresh`, `restart-alt`, `arrow-back`, `arrow-forward`,
+`chevron-left`, `chevron-right`, `first-page`, `last-page`, `delete`, `close`, `check`, `add`, `remove`, `settings`, `search`, `content-copy`, `content-paste`, `backspace`,
+`save`, `edit`, `undo`, `sort`, `keyboard`, `warning`, `info`; the whole list is `gear/icons_css.inc`, more can be added with `pyftsubset` (see `gear/res/README-icons.txt`).
+
 ## Sharing between mods
 
 A mod lists what it shares in `mod.lua`: `exports = {'templates/', 'styles/*.rcss', 'images/', 'fonts/'}` (a folder, `folder/*.ext`, a file, or `'*'`).
