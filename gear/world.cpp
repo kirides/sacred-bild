@@ -794,6 +794,55 @@ bool World::copyStats(uint32_t id, uint32_t from, const char*& error)
     return true;
 }
 
+namespace
+{
+    using PetSetFn = int(__cdecl*)(unsigned, float, int);
+    using PetClearFn = void(__cdecl*)();
+    PetSetFn g_petSet = nullptr;
+    PetClearFn g_petClear = nullptr;
+    bool g_petLooked = false;
+
+    bool petApi()
+    {
+        if (!g_petLooked)
+        {
+            g_petLooked = true;
+            if (HMODULE bild = GetModuleHandleW(L"ddraw.dll"))
+            {
+                g_petSet = reinterpret_cast<PetSetFn>(GetProcAddress(bild, "SacredBild_PetSet"));
+                g_petClear = reinterpret_cast<PetClearFn>(GetProcAddress(bild, "SacredBild_PetClear"));
+            }
+        }
+        return g_petSet && g_petClear;
+    }
+}
+
+bool World::setPet(uint32_t id, double scale, bool untargetable, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    if (!o || !callIsCreature(o))
+    {
+        error = "no such creature, or world changes are not possible now";
+        return false;
+    }
+    if (!petApi())
+    {
+        error = "pets need a newer SacredBild";
+        return false;
+    }
+    g_petSet(id, static_cast<float>(scale), untargetable ? 1 : 0);
+    return true;
+}
+
+void World::clearPets()
+{
+    if (petApi())
+    {
+        g_petClear();
+    }
+}
+
 bool World::setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_t health, const char*& error)
 {
     void* m = manager();

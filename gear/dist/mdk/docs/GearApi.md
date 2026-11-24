@@ -1556,6 +1556,21 @@ Gives this creature the allegiance of `source`: its faction (the class the game'
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+### GearPetOpts
+
+| Field | Type | |
+|---|---|---|
+| `scale` | `number` | The model is drawn this many times as large (0.1 to 4, default 1), about the creature's own origin. (optional) |
+| `untargetable` | `boolean` | The creature is left out of the world pick: no click, hover cursor or controller aim reaches it (default false). (optional) |
+
+#### `creature:set_pet(opts) -> boolean?, string?`
+
+Makes the creature a pet: drawn larger and/or not targetable (SacredBild; the hitbox and the creature's own logic are unchanged). `nil` or `{}` clears it. Forgotten when the game ends or another savegame loads (object ids then mean other creatures). Single player.
+
+- `opts`: `GearPetOpts` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:set_gold(gold) -> boolean?, string?`
 
 Sets the local hero's gold (0 to 2,147,483,646), also in LAN and Open Net games: through the engine's own gold setter, as a merchant sale does, so the hero's next update tells the server and the other players. Other heroes are refused (only their own computer may change them).

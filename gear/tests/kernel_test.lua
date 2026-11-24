@@ -34,6 +34,7 @@ net_kills = {}
 created_list, created_active, created_suppressed = {}, false, false
 allegiance_copies = {}
 stats_copies = {}
+pet_calls = {}
 chat_queue = {}
 hero_saves = {}
 local op_ids, op_ready, op_sent, op_in = {0x1E0, 0x1E1}, false, {}, {}
@@ -161,6 +162,8 @@ local native = {
     end,
     teleport = function(id, x, y) objects[id].x, objects[id].y = x, y; return true end,
     set_health = function(id, hp) objects[id].hp = hp; return true end,
+    set_pet = function(id, scale, untargetable) pet_calls[#pet_calls + 1] = {id, scale, untargetable}; return true end,
+    clear_pets = function() end,
     copy_allegiance = function(id, from) allegiance_copies[#allegiance_copies + 1] = {id, from}; return true end,
     copy_stats = function(id, from) stats_copies[#stats_copies + 1] = {id, from}; return true end,
     set_gold = function(id, g) objects[id].gold = g; return true end,
@@ -1575,6 +1578,7 @@ do
         allegiance_copies = {}
         local like = mpapi.world.spawn(3, 5, 5, {layer = 0, like = objects[960] and mpapi.world.object(960)})
         ok(like ~= nil and #allegiance_copies == 1 and allegiance_copies[1][1] == like.id and allegiance_copies[1][2] == 960, 'spawn {like}: the new creature takes the allegiance of the source')
+        ok(like:set_pet{scale = 1.3, untargetable = true} == true and pet_calls[#pet_calls][2] == 1.3 and pet_calls[#pet_calls][3] == true and like:set_pet() == true and pet_calls[#pet_calls][2] == 1 and pet_calls[#pet_calls][3] == false, 'creature:set_pet')
         ok(like:copy_allegiance(960) == true and #allegiance_copies == 2 and allegiance_copies[2][1] == like.id, 'creature:copy_allegiance')
         ok(#stats_copies == 1 and stats_copies[1][1] == like.id and stats_copies[1][2] == 960, 'spawn {like}: the level and stats come from the source too')
         ok(like:copy_stats(960) == true and #stats_copies == 2, 'creature:copy_stats')

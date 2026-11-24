@@ -45,3 +45,5 @@ EXPORTS
     SacredBild_PadInfo
     SacredBild_PadGlyph
     SacredBild_SubclassWindow
+    SacredBild_PetSet
+    SacredBild_PetClear

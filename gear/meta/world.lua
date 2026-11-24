@@ -352,6 +352,16 @@ function Creature:copy_stats(source) end
 ---@return string? error
 function Creature:copy_allegiance(source) end
 
+---@class GearPetOpts
+---@field scale? number The model is drawn this many times as large (0.1 to 4, default 1), about the creature's own origin.
+---@field untargetable? boolean The creature is left out of the world pick: no click, hover cursor or controller aim reaches it (default false).
+
+--- Makes the creature a pet: drawn larger and/or not targetable (SacredBild; the hitbox and the creature's own logic are unchanged). `nil` or `{}` clears it. Forgotten when the game ends or another savegame loads (object ids then mean other creatures). Single player.
+---@param opts GearPetOpts?
+---@return boolean? ok
+---@return string? error
+function Creature:set_pet(opts) end
+
 --- Sets the local hero's gold (0 to 2,147,483,646), also in LAN and Open Net games: through the engine's own gold
 --- setter, as a merchant sale does, so the hero's next update tells the server and the other players. Other heroes
 --- are refused (only their own computer may change them).

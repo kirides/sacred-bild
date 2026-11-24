@@ -125,6 +125,12 @@ namespace World
     // creature's type and that level), then its health in the same share of the maximum as the donor's. A plain create is level 1
     // with 100 health whatever the type.
     bool copyStats(uint32_t id, uint32_t from, const char*& error);
+
+    // A pet (SacredBild): the creature's model is drawn `scale` times as large (0.1 to 4) and, if `untargetable`, it is not in the
+    // world pick (no click, hover cursor or controller aim reaches it). Scale 1 and not untargetable removes it. Needs SacredBild's
+    // ddraw.dll; the object id is only valid until the game ends or another savegame loads (clearPets).
+    bool setPet(uint32_t id, double scale, bool untargetable, const char*& error);
+    void clearPets();
     // Sets a creature's maximum health (1 and up, not a hero); its current health becomes `health` when `setCurrent`, else keeps its
     // share of the maximum (at least 1). For the boss modifiers (gear.world, creature:set_modifiers).
     bool setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_t health, const char*& error);

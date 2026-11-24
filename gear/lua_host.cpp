@@ -2893,6 +2893,28 @@ namespace
         return 1;
     }
 
+    // native.set_pet(id, scale, untargetable) -> true | nil, message
+    int nativeSetPet(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const lua_Number scale = luaL_checknumber(L, 2);
+        const bool untargetable = lua_toboolean(L, 3) != 0;
+        const char* error = "no such creature";
+        if (!id || !(scale > 0 && scale <= 4) || !World::setPet(id, scale, untargetable, error))
+        {
+            return pushFailure(L, scale > 0 && scale <= 4 ? error : "the scale is 0.1 to 4");
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.clear_pets()
+    int nativeClearPets(lua_State*)
+    {
+        World::clearPets();
+        return 0;
+    }
+
     // native.set_max_health(id, max, hp?) -> true | nil, message: a creature's maximum health, and its current health (default: the
     // same share of the new maximum as before).
     int nativeSetMaxHealth(lua_State* L)
@@ -5061,6 +5083,8 @@ namespace
             {"set_health", nativeSetHealth},
             {"copy_allegiance", nativeCopyAllegiance},
             {"copy_stats", nativeCopyStats},
+            {"set_pet", nativeSetPet},
+            {"clear_pets", nativeClearPets},
             {"set_max_health", nativeSetMaxHealth},
             {"set_gold", nativeSetGold},
             {"party_available", nativePartyAvailable},
