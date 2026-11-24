@@ -1412,3 +1412,25 @@ gear.on('mods.open', function(t)
 end)
 
 gear.on('unload', function() ui.nav_modal(false); admin.modal(false) end)
+
+---------------------------------------------------------------------------------------------------------------
+-- A Paste button over the game's own text boxes. While one has the keyboard focus (the savegame name, the character name,
+-- the chat line, a search field ...), a small button sits inside it at its right end: a click types what is on the clipboard
+-- into the box, as if it had been typed (the box applies its own length limit). The mouse only: the button is not a stop of the
+-- controller's D-pad (the pad has the game's own on-screen keyboard).
+---------------------------------------------------------------------------------------------------------------
+local PASTE = {w = 46, pad = 3}
+gear.on('draw', function(state)
+    if screen.open or type(state) ~= 'table' or not (state.mode == 'game' or state.mode == 'menus') then return end
+    local x, y, w, h = admin.text_focus()
+    if not x then return end
+    local bh = math.max(12, math.min(h - 6, 22))
+    local bx, by = x + w - PASTE.w - PASTE.pad, y + math.floor((h - bh) / 2)
+    if ui.button('paste_overlay', bx, by, PASTE.w, bh, 'Paste', {layer = 'top', nav = false, tooltip = 'Type the clipboard into this box'}) then
+        local text = gear.clipboard.get()
+        if text and text ~= '' then
+            text = text:gsub('[\r\n\t]+', ' ')
+            admin.type_text(text)
+        end
+    end
+end)

@@ -326,6 +326,18 @@ manager](GearApi.md#settings-key-binds-and-the-mod-manager); remapping the game'
 Self tests: `gear/examples/modmanagertest` clicks through the real screen in a game (it asks the screen where its elements are with `gear.emit('mods.query')`); `gear/tests/kernel_test.lua` covers
 the kernel side (persistence, broken files, switching mods live, dependencies, key binds and conflicts).
 
+### Paste button on the game's text boxes
+
+![The Paste button](images/gear-paste-button.png)
+
+While one of the game's own text boxes has the keyboard focus (a savegame or character name, the chat line, a search field), the mod manager's
+built-in code draws a small **Paste** button inside it at its right end. A click types the text on the clipboard into the box as if it had
+been typed (line breaks and tabs become spaces; the box applies its own length limit, 63 characters for the character name). It needs the mouse
+(the controller has the game's own on-screen keyboard) and no mod. Under the hood: `native.ui_text_focus()` finds the focused `cUI_EditControl`
+(`cUI_Manager` +0x148, checked against its RTTI name and against its parents being shown: the game leaves the focus flag on the control of a closed
+window) and gives its rect in the 1024x768 layout, `native.ui_type_text()` posts the characters as `WM_CHAR` to the game window; both are in `gear/ui.cpp`,
+the button is the end of `gear/lua/modmanager.lua`.
+
 ## Online play: game mode and realms
 
 `gear.mp.mode()` tells the kind of game: `'single'`, `'lan'`, `'open'` or `'closed'` (Closed Internet: the heroes belong

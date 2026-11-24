@@ -8136,6 +8136,14 @@ function admin.draw_page(id, x, y, w, h)
     return ok and tonumber(used) or 0
 end
 -- While the mod manager's screen is open the other mods' hotkeys stay quiet.
+-- The game's focused text field (layout units) and typing into it: the Paste button over the game's text boxes (modmanager.lua).
+-- admin.text_focus() -> x, y, w, h | nil;  admin.type_text(text) -> the number of characters sent.
+function admin.text_focus()
+    if not native.ui_text_focus then return nil end
+    return native.ui_text_focus()       -- (not `a and f()`: that would cut the four results to one)
+end
+function admin.type_text(text) return native.ui_type_text and native.ui_type_text(text) or 0 end
+
 function admin.modal(on)
     keys_blocked = on == true
     local e = catalog['gear-mods']
