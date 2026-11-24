@@ -95,6 +95,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [Lookups (gear.lookup)](#lookups-gearlookup)
 - [Formatting (gear.fmt)](#formatting-gearfmt)
 - [Toasts (gear.toast)](#toasts-geartoast)
+- [Widgets for RmlUi screens (gear.kit)](#widgets-for-rmlui-screens-gearkit)
 - [Stored data (gear.store)](#stored-data-gearstore)
 - [Per savegame data (gear.savegame)](#per-savegame-data-gearsavegame)
 - [Hooks between mods (gear.events)](#hooks-between-mods-gearevents)
@@ -300,6 +301,7 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `models` | `GearModels` | The models' motion slots (which clips a body has, giving it another's). |
 | `lookup` | `GearLookup` | Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window. |
 | `fmt` | `GearFmt` | Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed). |
+| `kit` | `GearKit` | The core widgets of RmlUi screens as markup (window, tabs, buttons, check boxes, sliders, rows, bars, lists, a confirm dialog); the same classes work in Gear's plain look and in the theme mods. |
 | `toast` | `GearToast` | Short messages that stack up on the screen and fade; the layout editor moves them. |
 | `events` | `GearEvents` | Hooks between mods: declare the custom events the mod emits, list what is declared. |
 | `savegame` | `GearSavegame` | The savegame being played: its scope, and the mod's files that belong to it. |
@@ -486,6 +488,8 @@ The table `mod.lua` returns. It runs without any globals, so it can only hold va
 | `config` | `table<string, any>` | Default settings: `gear.config` starts as a copy and `config.lua` overrides them. (optional) |
 | `pipes` | `string[]` | Names of the named pipes the mod may open (`gear.pipe.open`). (optional) |
 | `theme` | `string` | The `.rcss` file (path inside the mod) that Gear puts in front of every RmlUi document of every mod while this mod runs (the shared theme). (optional) |
+| `theme_dp` | `string` | The same stylesheet for documents laid out in screen pixels (`dp = true`; lengths in `dp`); Gear uses it for those documents instead of `theme`. (optional) |
+| `exports` | `string[]` | Files of the mod that the RmlUi documents of other mods may use while this mod runs, as `@<mod id>/<path>` in a link (`<link type="text/template" href="@sacred-theme/templates/window.rml"/>`, `<link type="text/rcss" ...>`), an image (`src`, `image(...)`) or `rml.load_font('@id/fonts/x.ttf')`: `'templates/'` (a folder and below), `'styles/*.rcss'` (the files of one folder with that ending), `'images/logo.png'` (one file), `'*'` (everything). Nothing else of the mod can be reached, and no path leaves its folder. (optional) |
 | `automation` | `boolean` | `true`: the mod gets `gear.auto` when the game runs with `-gear-auto`. (optional) |
 
 ## The standard library a mod gets
@@ -4039,6 +4043,210 @@ How many of this mod's toasts are on the screen.
 
 - returns `integer`
 
+## Widgets for RmlUi screens (gear.kit)
+
+`gear.kit` builds the markup of the usual pieces of a screen (a window, tabs, buttons, check boxes, sliders, rows, bars, lists, a confirm dialog) from the class names that every look understands: the plain base style of Sacred Gear and the theme mods (**sacred-theme**) style the same classes. A screen made of the kit therefore runs and reads well with no theme, and looks like the game with one; every button, link and input is a stop for the controller. The functions return strings of RML to join and give to `gear.ui.rml.load_string` (see `page`); text arguments are escaped, `body` and `control` are markup. The library is shipped in the DLL (`gear/lua/kit.lua`) and runs once per mod, the first time the mod uses `gear.kit`.
+
+### GearKitWindow
+
+The options of `window`.
+
+| Field | Type | |
+|---|---|---|
+| `title` | `string` | The title bar's text (no title bar without it). (optional) |
+| `id` | `string` |  (optional) |
+| `x` | `number` | Where it is placed (layout units; makes it `position: absolute`). (optional) |
+| `y` | `number` |  (optional) |
+| `width` | `number` |  (optional) |
+| `height` | `number` |  (optional) |
+| `panel` | `string` | A window the layout editor can move (`data-panel`; the place is kept under `<mod id>:<panel>`). (optional) |
+| `resizable` | `boolean` | The editor sizes it too (`data-resizable`). (optional) |
+| `close` | `string` | The id of a close button in the title bar. (optional) |
+| `class` | `string` | Extra classes. (optional) |
+| `body` | `string` | The content (markup). (optional) |
+
+### GearKitTab
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` |  |
+| `label` | `string` |  |
+
+### GearKitTabs
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | The prefix of the tab elements' ids (`<id>-<tab id>`, default `tab`). (optional) |
+| `tabs` | `GearKitTab[]` |  |
+| `active` | `string` | The id of the open tab. (optional) |
+
+### GearKitButtonOpts
+
+| Field | Type | |
+|---|---|---|
+| `primary` | `boolean` | The bright gold edge. (optional) |
+| `danger` | `boolean` |  (optional) |
+| `class` | `string` |  (optional) |
+| `disabled` | `boolean` |  (optional) |
+
+### GearKitListItem
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` |  |
+| `name` | `string` |  |
+| `sub` | `string` |  (optional) |
+| `selected` | `boolean` |  (optional) |
+
+### GearKitConfirm
+
+| Field | Type | |
+|---|---|---|
+| `title` | `string` |  (optional) |
+| `text` | `string` |  (optional) |
+| `yes` | `string` | Default `OK`. (optional) |
+| `no` | `string` | Default `Cancel`. (optional) |
+| `danger` | `boolean` | The yes button is the red one. (optional) |
+| `on_result` | `fun(yes: boolean)` | Runs once. (optional) |
+
+### GearKitDialog
+
+A modal question; call `draw` from the mod's draw handler while `open()` is true.
+
+#### `GearKitDialog:open() -> boolean`
+
+Whether the answer is still to come.
+
+- returns `boolean`
+
+#### `GearKitDialog:cancel()`
+
+Answers no.
+
+#### `GearKitDialog:draw()`
+
+Draws it (the game and the other overlays take no mouse and no pad meanwhile).
+
+### GearKit
+
+Reached as `gear.kit`.
+
+The widgets of this mod's screens.
+
+#### `gear.kit.esc(text) -> string`
+
+Text safe in RML (also in an attribute).
+
+- `text`: `any`
+- returns `string`
+
+#### `gear.kit.window(o) -> string`
+
+A window frame with an optional title bar and a body.
+
+- `o`: `GearKitWindow`
+- returns `markup` `string`
+
+#### `gear.kit.tabs(o) -> string`
+
+A tab header bar; the tabs are links (`doc:on('#tab-a', 'click', fn)`).
+
+- `o`: `GearKitTabs`
+- returns `markup` `string`
+
+#### `gear.kit.button(id, label, o) -> string`
+
+A game button.
+
+- `id`: `string`
+- `label`: `string`
+- `o`: `GearKitButtonOpts` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.check(id, label, checked, o) -> string`
+
+A row with the label and the game's check orb (an `input`: listen for `change`).
+
+- `id`: `string`
+- `label`: `string`
+- `checked`: `boolean`
+- `o`: `{disabled?: boolean, tip?: string}` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.slider(id, min, max, step, value, o) -> string`
+
+The game's slider (`change` has `params.value`).
+
+- `id`: `string`
+- `min`: `number`
+- `max`: `number`
+- `step`: `number`
+- `value`: `number`
+- `o`: `{class?: string}` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.row(label, control, o) -> string`
+
+A grey label at the left and the control (markup) at the right.
+
+- `label`: `string`
+- `control`: `string`
+- `o`: `{tip?: string, class?: string}` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.heading(text) -> string`
+
+A section title.
+
+- `text`: `string`
+- returns `markup` `string`
+
+#### `gear.kit.text(text, o) -> string`
+
+A paragraph; `class` may be `muted`, `accent`, `good` or `bad`.
+
+- `text`: `string`
+- `o`: `{class?: string}` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.progress(fraction, o) -> string`
+
+A bar (200 layout units wide unless `width`) filled to a fraction (0 to 1); class `mana` or `xp` for the other colours.
+
+- `fraction`: `number`
+- `o`: `{id?: string, class?: string, width?: number}` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.list(items, o) -> string`
+
+A list of items; each is a button (a pad stop).
+
+- `items`: `GearKitListItem[]`
+- `o`: `{class?: string}` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.buttons(...) -> string`
+
+Buttons side by side at the right (the markup of `button`).
+
+- `...`: `string`
+- returns `markup` `string`
+
+#### `gear.kit.page(markup, o) -> string`
+
+A whole document around the markup, for `gear.ui.rml.load_string`.
+
+- `markup`: `string`
+- `o`: `{head?: string}` (optional)
+- returns `string`
+
+#### `gear.kit.confirm(o) -> GearKitDialog`
+
+A modal question in the middle of the screen.
+
+- `o`: `GearKitConfirm`
+- returns `GearKitDialog`
+
 ## Stored data (gear.store)
 
 A mod keeps its own data (a log, totals, saved lists) in JSON files of its folder (`gear.read` / `gear.save`). `load` and `save` do the reading, decoding, encoding and writing with defaults and one log line per broken file; `file` loads a table once and saves it when it changed, every few seconds and when the mod unloads. The library is shipped in the DLL (`gear/lua/store.lua`) and runs once per mod, the first time the mod uses `gear.store`.
@@ -4724,6 +4932,7 @@ The options of `load` and `load_string`.
 | `model` | `table` | Data binding: the values of the document's data model, named `model` (`<body data-model="model">`, then `{{ hp }}`, `data-value="name"`, `data-if="hp < 10"`, `data-for="item : items"`, `data-class-low="hp < 10"` ...). Top-level keys fix what can be bound; their values may be numbers, strings, booleans, lists and records (nested up to 8 deep). Change them through `doc.model`. (optional) |
 | `calls` | `table<string, fun(args: string[], doc: GearRmlDoc, event: GearRmlEvent)>` | Functions for `data-event-click="name(arg, ...)"` attributes; `args` are the call's arguments as text. (optional) |
 | `on_change` | `fun(doc: GearRmlDoc, model: table)` | Called after the document changed a value itself (an input with `data-value`); the table is up to date. (optional) |
+| `on_reload` | `fun(doc: GearRmlDoc, err: string?)` | Called after hot reload loaded the document again from its changed files (a developer's switch: an empty file `mods\.rml-hot`, or the environment variable `GEAR_RML_HOT`; the data model and the listeners of `doc:on` carry over, what Lua changed by hand does not); `err` is the message of the last reload that failed (the old document stays). Hot reload never runs for players. (optional) |
 | `origin` | `'layout'\|'screen'` | Where the document's (0, 0) is: `'layout'` (default) the top left of the 1024x768 layout, `'screen'` the top left corner of the whole screen, where the game's own windows start (on a wide screen that is left of the layout: the positions in the document are measured from there, and elements reach the screen's edge with their text). What Lua sees (rectangles, `doc:query(...):rect()`, panel places) stays in layout units. (optional) |
 | `dp` | `boolean` | Lay the document out in screen pixels with `1dp` = one layout unit (crisp text; write sizes in `dp`). Default `false`: `1px` = one layout unit, text is scaled with the UI. (optional) |
 

@@ -152,6 +152,7 @@
 ---@field models GearModels The models' motion slots (which clips a body has, giving it another's).
 ---@field lookup GearLookup Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window.
 ---@field fmt GearFmt Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed).
+---@field kit GearKit The core widgets of RmlUi screens as markup (window, tabs, buttons, check boxes, sliders, rows, bars, lists, a confirm dialog); the same classes work in Gear's plain look and in the theme mods.
 ---@field toast GearToast Short messages that stack up on the screen and fade; the layout editor moves them.
 ---@field events GearEvents Hooks between mods: declare the custom events the mod emits, list what is declared.
 ---@field savegame GearSavegame The savegame being played: its scope, and the mod's files that belong to it.
@@ -314,6 +315,8 @@ function gear.save(name, text) end
 ---@field config? table<string, any> Default settings: `gear.config` starts as a copy and `config.lua` overrides them.
 ---@field pipes? string[] Names of the named pipes the mod may open (`gear.pipe.open`).
 ---@field theme? string The `.rcss` file (path inside the mod) that Gear puts in front of every RmlUi document of every mod while this mod runs (the shared theme).
+---@field theme_dp? string The same stylesheet for documents laid out in screen pixels (`dp = true`; lengths in `dp`); Gear uses it for those documents instead of `theme`.
+---@field exports? string[] Files of the mod that the RmlUi documents of other mods may use while this mod runs, as `@<mod id>/<path>` in a link (`<link type="text/template" href="@sacred-theme/templates/window.rml"/>`, `<link type="text/rcss" ...>`), an image (`src`, `image(...)`) or `rml.load_font('@id/fonts/x.ttf')`: `'templates/'` (a folder and below), `'styles/*.rcss'` (the files of one folder with that ending), `'images/logo.png'` (one file), `'*'` (everything). Nothing else of the mod can be reached, and no path leaves its folder.
 ---@field automation? boolean `true`: the mod gets `gear.auto` when the game runs with `-gear-auto`.
 
 -- ## The standard library a mod gets

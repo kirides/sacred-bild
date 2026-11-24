@@ -7720,7 +7720,7 @@ local function make_env(mod)
     env.gear = gear
     -- The libraries shipped in the DLL (lua/<name>.lua): each is run in this mod's environment the first time the mod
     -- touches gear.<name>, so a mod that never uses one pays nothing for it.
-    local LIBRARIES = {lookup = true, fmt = true, toast = true, store = true}
+    local LIBRARIES = {lookup = true, fmt = true, toast = true, store = true, kit = true}
     local library_failed = {}
     setmetatable(gear, {__index = function(t, name)
         if not LIBRARIES[name] or library_failed[name] then return nil end
