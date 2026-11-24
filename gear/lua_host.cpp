@@ -601,6 +601,48 @@ namespace
         return 1;
     }
 
+    // native.map_markers() -> {{x, y, kind, region}, ...} | nil: the service symbols of the world map (bin\merc.bin, 16-byte records
+    // region, tile x, tile y, kind; kind 0 merchant, 1 blacksmith, 2 combo master, 3 horse trader). Read once, then kept.
+    int nativeMapMarkers(lua_State* L)
+    {
+        static std::vector<int32_t> records;
+        static bool loaded = false;
+        if (!loaded)
+        {
+            loaded = true;
+            std::ifstream file(std::filesystem::path(g_gameDir) / L"bin" / L"merc.bin", std::ios::binary);
+            if (file)
+            {
+                std::vector<char> bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+                size_t count = bytes.size() / 16;
+                records.resize(count * 4);
+                if (count) memcpy(records.data(), bytes.data(), count * 16);
+            }
+        }
+        if (records.empty())
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        size_t count = records.size() / 4;
+        lua_createtable(L, (int)count, 0);
+        for (size_t i = 0; i < count; ++i)
+        {
+            const int32_t* r = &records[i * 4];
+            lua_createtable(L, 0, 4);
+            lua_pushnumber(L, r[1]);
+            lua_setfield(L, -2, "x");
+            lua_pushnumber(L, r[2]);
+            lua_setfield(L, -2, "y");
+            lua_pushnumber(L, r[3]);
+            lua_setfield(L, -2, "kind");
+            lua_pushnumber(L, r[0]);
+            lua_setfield(L, -2, "region");
+            lua_rawseti(L, -2, (int)i + 1);
+        }
+        return 1;
+    }
+
     // native.master_active(event, bool): whether some mod handles `master.price`, `master.layout` or `master.exchange`
     int nativeMasterActive(lua_State* L)
     {
@@ -4882,6 +4924,7 @@ namespace
             {"site_hooks", nativeSiteHooks},
             {"combat_constant_active", nativeCombatConstantActive},
             {"difficulty", nativeDifficulty},
+            {"map_markers", nativeMapMarkers},
             {"creature_ability_active", nativeCreatureAbilityActive},
             {"route_active", nativeRouteActive},
             {"usable_active", nativeUsableActive},

@@ -17,6 +17,17 @@ local GearGame = {}
 ---@return integer?
 function GearGame.difficulty() end
 
+--- One service symbol of the world map (what the game draws on it for a trader).
+---@class GearMapMarker
+---@field x integer Tile x (world units / `gear.world.TILE`).
+---@field y integer Tile y.
+---@field kind integer 0 merchant, 1 blacksmith, 2 combo master, 3 horse trader.
+---@field region integer The region id the game files it under.
+
+--- The service symbols of the world map, read from the game's `bin\merc.bin` (once, then kept). nil if the file is not there.
+---@return GearMapMarker[]?
+function GearGame.map_markers() end
+
 --- Sends the game's UI a click at the current cursor position, as ReBorn's quick cast does after a skill slot was chosen: the chosen
 --- skill is used where the cursor is. False if the UI is not there.
 ---@param down? boolean true (default): a mouse button down event, the class ReBorn's cave sends; false: a button up event.
