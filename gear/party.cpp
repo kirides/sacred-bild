@@ -1268,6 +1268,14 @@ bool Party::useWeaponSlot(uint32_t id, uint32_t slot, const char*& error)
     {
         return true;
     }
+    // Only weapons the active slot holds are taken off: a weapon worn outside the weapon slots (put on in the equipment
+    // window) would be unequipped into no slot and lost, and kept beside the new one when it was not taken off.
+    uint32_t worn[19] = {};
+    if (!readAt(c, 0x1A4, worn) || worn[12] != slots.main[slots.active] || worn[13] != slots.off[slots.active])
+    {
+        error = "the hero holds weapons that are not in the active weapon slot";
+        return false;
+    }
     if (!Addr::cCreature_unequip || !Addr::cCreature_equip || !Addr::cContainer_selectWeaponSlot ||
         !Addr::cContainer_takeWeapon || !Addr::cCreature_weaponKind || !Addr::cCreature_refreshMotions ||
         !Addr::g_creatureEventVtable)
