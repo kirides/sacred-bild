@@ -4265,6 +4265,7 @@ local function make_ui(mod)
             end
         end
         local hover = false
+        local user_range = false
         -- Per frame nothing is allocated here: the option tables and the region keys are kept in the document, the rows come back into
         -- the same tables.
         local ropts = self.ropts
@@ -4403,7 +4404,9 @@ local function make_ui(mod)
                     if res.pressed then
                         native.rml_mouse(id, 'down', ui_mouse.x, ui_mouse.y)
                         self.range_down = i
+                        user_range = true
                     elseif self.range_down == i then
+                        user_range = true
                         if res.held then
                             hover = true
                         else
@@ -4412,6 +4415,7 @@ local function make_ui(mod)
                         end
                     end
                     if res.hover and not res.held and ui_pad.nudge ~= 0 then
+                        user_range = true
                         native.rml_nudge(id, i, ui_pad.nudge)
                         ui_pad.nudge = 0
                     end
@@ -4438,6 +4442,9 @@ local function make_ui(mod)
             native.rml_wheel(id, uis.wheel)
         end
         for _, e in ipairs(native.rml_update(id, mx, my, hover)) do
+            -- e.user: a slider's change that the player made (mouse press / drag / release, or the pad's D-pad) this frame; RmlUi also
+            -- reports a change when the document itself sets a slider's value (data binding), which a handler must not take as a choice.
+            if e.type == 'change' then e.user = user_range end
             local fn = e.call and self.calls[e.call] or self.handlers[e.listener]
             if e.call and fn then
                 local ok, err = xpcall(fn, traceback, e.args, self, e)
