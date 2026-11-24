@@ -152,9 +152,93 @@ namespace
         return fs::path(g_modsDir) / fromUtf8(dir);
     }
 
-    bool readAll(const fs::path& path, std::string& out)
+    // ---- Shared files between mods: "@mod-id/path" ----
+    // A mod lists what it shares in mod.lua (`exports = {'templates/', 'styles/*.rcss', 'images/', 'fonts/', 'file.ext'}`, "*" for all) and, while it
+    // runs, any document can name those files as @mod-id/path (a link, a template, an image, a font). Nothing else of that mod is reachable, and no
+    // path leaves its folder.
+    struct Export
     {
-        if (!readable(path))
+        std::string dir;
+        std::vector<std::string> patterns;
+    };
+    std::map<std::string, Export> g_exports;     // mod id -> its folder name and patterns
+
+    std::string lowered(std::string s)
+    {
+        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
+    }
+
+    bool exportMatches(const std::string& pattern, const std::string& rel)
+    {
+        const std::string p = lowered(pattern), r = lowered(rel);
+        if (p == "*")
+        {
+            return true;
+        }
+        if (!p.empty() && p.back() == '/')
+        {
+            return r.compare(0, p.size(), p) == 0;
+        }
+        const size_t star = p.find('*');
+        if (star == std::string::npos)
+        {
+            return p == r;
+        }
+        const size_t slash = p.rfind('/');
+        const std::string dirPart = slash == std::string::npos ? std::string() : p.substr(0, slash + 1);
+        const std::string name = p.substr(slash == std::string::npos ? 0 : slash + 1);       // "*.ext" (one star)
+        const std::string suffix = name.substr(name.find('*') + 1);
+        if (r.compare(0, dirPart.size(), dirPart) != 0)
+        {
+            return false;
+        }
+        const std::string rest = r.substr(dirPart.size());
+        return rest.find('/') == std::string::npos && rest.size() >= suffix.size() && rest.compare(rest.size() - suffix.size(), suffix.size(), suffix) == 0;
+    }
+
+    // "@mod-id/some/file" -> the file on disk, if the mod runs and exports it; empty otherwise. `isShared` tells the text was a reference at all.
+    fs::path resolveShared(const std::string& text, bool* isShared = nullptr)
+    {
+        if (isShared)
+        {
+            *isShared = !text.empty() && text[0] == '@';
+        }
+        if (text.empty() || text[0] != '@')
+        {
+            return {};
+        }
+        const size_t slash = text.find('/');
+        if (slash == std::string::npos || g_modsDir.empty())
+        {
+            return {};
+        }
+        const auto it = g_exports.find(text.substr(1, slash - 1));
+        std::string rel = text.substr(slash + 1);
+        const size_t query = rel.find('?');
+        if (query != std::string::npos)
+        {
+            rel.resize(query);
+        }
+        if (it == g_exports.end() || rel.empty() || rel.find("..") != std::string::npos || rel.find(':') != std::string::npos || rel.find('\\') != std::string::npos || rel[0] == '/')
+        {
+            return {};
+        }
+        for (const std::string& pattern : it->second.patterns)
+        {
+            if (exportMatches(pattern, rel))
+            {
+                const fs::path root = modRoot(it->second.dir);
+                const fs::path file = root / fromUtf8(rel);
+                return !root.empty() && inside(root, file) ? file : fs::path();
+            }
+        }
+        return {};
+    }
+
+    bool readAll(const fs::path& path, std::string& out, bool trusted = false)
+    {
+        if (!trusted && !readable(path))
         {
             return false;
         }
@@ -188,6 +272,17 @@ namespace
             return std::chrono::duration<double>(Clock::now() - start).count();
         }
 
+        // "@mod-id/file" is a complete reference, whatever document names it; the links inside a shared file are joined to it as usual.
+        void JoinPath(Rml::String& translated_path, const Rml::String& document_path, const Rml::String& path) override
+        {
+            if (!path.empty() && path[0] == '@')
+            {
+                translated_path = path;
+                return;
+            }
+            Rml::SystemInterface::JoinPath(translated_path, document_path, path);
+        }
+
         bool LogMessage(Rml::Log::Type type, const Rml::String& message) override
         {
             const char* kind = type == Rml::Log::LT_ERROR || type == Rml::Log::LT_ASSERT ? "error"
@@ -203,11 +298,21 @@ namespace
     public:
         Rml::FileHandle Open(const Rml::String& path) override
         {
-            const fs::path p = fromUtf8(plainPath(path));
-            if (!readable(p))
+            bool shared = false;
+            fs::path p = resolveShared(path, &shared);
+            if (shared ? p.empty() : false)
             {
-                LOG("RmlUi: a document may not read {}", path);
+                LOG("RmlUi: {} is not shared (the mod does not run, or does not export it)", path);
                 return 0;
+            }
+            if (!shared)
+            {
+                p = fromUtf8(plainPath(path));
+                if (!readable(p))
+                {
+                    LOG("RmlUi: a document may not read {}", path);
+                    return 0;
+                }
             }
             auto file = std::make_unique<std::ifstream>(p, std::ios::binary);
             if (!*file)
@@ -665,7 +770,13 @@ namespace
                 dpSize = true;
             }
             std::string bytes;
-            if (!readAll(fromUtf8(path), bytes))
+            bool sharedImage = false;
+            fs::path imageFile = resolveShared(path, &sharedImage);
+            if (!sharedImage)
+            {
+                imageFile = fromUtf8(path);
+            }
+            if (imageFile.empty() || !readAll(imageFile, bytes, sharedImage))
             {
                 LOG("RmlUi: cannot read the image {}", source);
                 return 0;
@@ -3323,6 +3434,35 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 1;
     }
 
+    // native.rml_exports(id, dir, patterns | nil): the files of the mod (folder `dir`) that other mods' documents reach as @id/path while it runs
+    int rmlExports(lua_State* L)
+    {
+        const std::string id = str(L, 1);
+        if (id.empty())
+        {
+            return 0;
+        }
+        if (!lua_istable(L, 3))
+        {
+            g_exports.erase(id);
+            return 0;
+        }
+        Export e;
+        e.dir = str(L, 2);
+        const int count = static_cast<int>(lua_objlen(L, 3));
+        for (int i = 1; i <= count && i <= 64; ++i)
+        {
+            lua_rawgeti(L, 3, i);
+            if (const char* t = lua_tostring(L, -1))
+            {
+                e.patterns.emplace_back(t);
+            }
+            lua_pop(L, 1);
+        }
+        g_exports[id] = std::move(e);
+        return 0;
+    }
+
     // native.rml_font(dir, path) -> ok: a font file of the mod (TTF / OTF) for the documents' font-family
     int rmlFont(lua_State* L)
     {
@@ -3333,11 +3473,16 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             lua_pushboolean(L, 0);
             return 1;
         }
-        const fs::path file = root / fromUtf8(str(L, 2));
+        fs::path file = root / fromUtf8(str(L, 2));
         bool ok = false;
-        if (inside(root, file))
+        bool sharedFont = false;
+        if (str(L, 2).compare(0, 1, "@") == 0)
         {
-            RootScope scope(root);
+            file = resolveShared(str(L, 2), &sharedFont);
+        }
+        if (sharedFont ? !file.empty() : inside(root, file))
+        {
+            RootScope scope(root, sharedFont ? file.parent_path() : fs::path());     // a shared font is readable from its own folder while it loads
             ok = Rml::LoadFontFace(toUtf8(file), lua_toboolean(L, 3) != 0);
         }
         lua_pushboolean(L, ok);
@@ -3399,6 +3544,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_key", guarded<rmlKey>},
         {"rml_wheel", guarded<rmlWheel>},
         {"rml_font", guarded<rmlFont>},
+        {"rml_exports", guarded<rmlExports>},
         {"rml_fonts", guarded<rmlFonts>},
         {nullptr, nullptr},
     };

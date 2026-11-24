@@ -1,0 +1,4 @@
+<template name="rmlshare-panel" content="content">
+<head><link type="text/rcss" href="@rmlshare-lib/styles/panel.rcss"/></head>
+<body><div class="rmlshare-panel"><div class="kit-title">KIT PANEL</div><div id="content"/></div></body>
+</template>

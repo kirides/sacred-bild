@@ -1,0 +1,2 @@
+.kit-panel { position: absolute; left: 100px; top: 100px; width: 320px; background-color: #204080; color: white; font-size: 22px; padding: 8px; }
+.kit-title { color: #ffd060; }

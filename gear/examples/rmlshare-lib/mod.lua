@@ -1,0 +1,1 @@
+return { id = 'rmlshare-lib', name = 'Shared templates (library)', version = '0.1.0', author = 'Sacred Gear', description = 'Example: exports templates and styles for other mods (exports = ...)', exports = {'templates/', 'styles/*.rcss'} }

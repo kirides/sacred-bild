@@ -1,0 +1,2 @@
+<rml><head><link type="text/template" href="@rmlshare-lib/templates/panel.rml"/><style>body{font-family:Segoe UI;}</style></head>
+<body template="rmlshare-panel"><div>content from the user mod</div><div style="background-color:#800">Only what the library exports can be used</div></body></rml>

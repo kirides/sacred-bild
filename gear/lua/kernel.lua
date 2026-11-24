@@ -7756,6 +7756,14 @@ local function check_manifest(m, dir)
     if m.theme ~= nil and (type(m.theme) ~= 'string' or m.theme:find('%.%.') or m.theme:find('^[/\\]') or m.theme:find(':')) then
         return nil, 'mod.lua: theme must be the path of an .rcss file inside the mod'
     end
+    if m.exports ~= nil then
+        if type(m.exports) ~= 'table' or #m.exports > 64 then return nil, 'mod.lua: exports must be a list of at most 64 paths' end
+        for _, x in ipairs(m.exports) do
+            if type(x) ~= 'string' or x == '' or x:find('%.%.') or x:find('^[/\\]') or x:find(':') or x:find('\\', 1, true) then
+                return nil, 'mod.lua: exports: "*", a folder ("templates/"), a file or "folder/*.ext", inside the mod'
+            end
+        end
+    end
     if m.theme_dp ~= nil and (type(m.theme_dp) ~= 'string' or m.theme_dp:find('%.%.') or m.theme_dp:find('^[/\\]') or m.theme_dp:find(':')) then
         return nil, 'mod.lua: theme_dp must be the path of an .rcss file inside the mod'
     end
@@ -7791,6 +7799,7 @@ local function check_manifest(m, dir)
         keys_by_id = keys_by_id,
         theme = m.theme,
         theme_dp = m.theme_dp,
+        exports = m.exports,
         dir = dir,
     }
 end
@@ -7962,6 +7971,7 @@ local function load_mod(e, initial)
     end
     mods[#mods + 1] = m
     e.loaded = true
+    if m.exports and native.rml_exports then native.rml_exports(m.id, m.dir, m.exports) end
     m.loading = true
     local ok = call(m, 'main.lua', chunk)
     m.loading = nil
@@ -8018,6 +8028,7 @@ local function unload_mod(e)
     if ui_dropdown and (ui_handle_key[ui_dropdown] or ''):sub(1, #m.id + 1) == m.id .. '\0' then ui_dropdown = nil end
     m.disabled, m.unloaded = true, true     -- timers, tasks and pipes of the mod notice and go
     e.loaded = false
+    if m.exports and native.rml_exports then native.rml_exports(m.id, m.dir, nil) end
     log('mod %s unloaded', m.id)
 end
 
