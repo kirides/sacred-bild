@@ -2057,7 +2057,7 @@ button.game-button:disabled, button.game-button[disabled] { color: #8a8a8a; opac
 button { flex: none; white-space: nowrap; }
 button.mini { margin: 0 4px 0 0; padding: 0 10px; line-height: 1.4; font-size: 13px; }
 button.mini.dis { color: #8c8c8c; border-color: #3c3c3c; opacity: 0.6; }
-.dd { position: relative; display: inline-block; z-index: 10; }
+.dd { position: relative; display: inline-block; flex: none; z-index: 10; }
 .dd.open { z-index: 100; }
 .dd-list { position: absolute; left: 0; top: 100%; min-width: 150px; max-height: 300px; overflow-y: auto; z-index: 200; background-color: #0c0c14; border: 1px #ffd780; padding: 2px; }
 .dd-list button.opt { display: block; width: auto; margin: 0; padding: 3px 10px; text-align: left; white-space: nowrap; color: #e8e8e8; border: 0; background-color: transparent; }
