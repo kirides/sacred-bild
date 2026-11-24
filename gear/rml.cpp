@@ -997,6 +997,23 @@ namespace
                     (*m)[static_cast<size_t>(column * 4 + row)] = (*transform)[column][row];
                 }
             }
+            // RmlUi's matrix is in the context's coordinates; Gear adds the document's origin (a document that starts at the screen's edge, see
+            // Doc::originPx) to the vertices before the matrix, so the matrix is moved there: M' = T(origin) * M * T(-origin). (Without this
+            // every transformed part of such a document was placed off by its origin: the scroll bar's turned arrows, a button's hover scale.)
+            const float ox = g_target.origin.x, oy = g_target.origin.y;
+            if (ox != 0.0f || oy != 0.0f)
+            {
+                auto& r = *m;
+                for (int row = 0; row < 4; ++row)
+                {
+                    r[static_cast<size_t>(3 * 4 + row)] -= ox * r[static_cast<size_t>(0 * 4 + row)] + oy * r[static_cast<size_t>(1 * 4 + row)];
+                }
+                for (int column = 0; column < 4; ++column)
+                {
+                    r[static_cast<size_t>(column * 4 + 0)] += ox * r[static_cast<size_t>(column * 4 + 3)];
+                    r[static_cast<size_t>(column * 4 + 1)] += oy * r[static_cast<size_t>(column * 4 + 3)];
+                }
+            }
             g_target.matrix = std::move(m);
         }
 
