@@ -3591,6 +3591,18 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 2;
     }
 
+    // native.rml_blur(id): the document's focus goes away (the focused element, if any, is blurred): for a document that is not drawn any more
+    int rmlBlur(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        if (Rml::Element* f = d.context->GetFocusElement())
+        {
+            RootScope scope(d);
+            f->Blur();
+        }
+        return 0;
+    }
+
     // native.rml_tag(id, selector) -> tag name | nil
     int rmlTag(lua_State* L)
     {
@@ -3829,6 +3841,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_rect", guarded<rmlRect>},
         {"rml_tag", guarded<rmlTag>},
         {"rml_focus", guarded<rmlFocus>},
+        {"rml_blur", guarded<rmlBlur>},
         {"rml_scroll", guarded<rmlScroll>},
         {"rml_model_set", guarded<rmlModelSet>},
         {"rml_model_changed", guarded<rmlModelChanged>},

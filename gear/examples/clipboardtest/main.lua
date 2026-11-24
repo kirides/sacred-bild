@@ -121,8 +121,10 @@ local function run()
     A.screenshot('clip-6-second-field')
 
     -- the game's own text boxes (the savegame name): Ctrl+V pastes like the Paste button
-    doc:query('#g'):focus(false); gear.wait(0.4)       -- a focused field of a document that is not drawn any more would keep the keyboard captured
-    shown = false; gear.wait(0.4)
+    -- a document that stops being drawn while a field has the focus gives the focus and the keyboard back by itself
+    check('a field has the focus before the document is hidden', doc:query('input:focus') ~= nil)
+    shown = false; gear.wait(0.6)
+    check('a document that is not drawn has no focused element', doc:query('input:focus') == nil)
     gear.clipboard.set('pasted with Ctrl+V')
     for _, name in ipairs({'UI_WND_SAVEGAME'}) do
         A.show_window(name, true); gear.wait(0.8)

@@ -3217,6 +3217,14 @@ local function ui_begin_tick()
     end
     uis.scroll_prev, uis.scroll_now = uis.scroll_now, uis.scroll_prev      -- two pooled lists (entries overwritten, `n` = live ones)
     uis.scroll_now.n = 0
+    -- A document that was not drawn in the last frame (hidden, its mod stopped drawing it) gives up its focus and the keyboard capture.
+    if uis.rml_docs then
+        for _, entry in pairs(uis.rml_docs) do
+            local d = entry.doc
+            if d.drawn_frame ~= uis.frame and not d.idle_released and (d.drawn_frame or d.capturing) then d:release_focus() end
+        end
+    end
+    uis.frame = (uis.frame or 0) + 1
     uis.modal, uis.modal_next = uis.modal_next, nil      -- the document that was modal in the last frame (draw order between mods is not fixed)
     ui_tick_state = native.ui_state()
     ui_mouse.x, ui_mouse.y = ui_tick_state.mouse_x or 0, ui_tick_state.mouse_y or 0
@@ -4243,7 +4251,21 @@ local function make_ui(mod)
     -- doc:get(key) -> the plain value of a top-level key of the data model (a table for lists and records).
     function Doc:get(key) return self.data and self.data[key] end
     function Doc:show() native.rml_show(self.id, true) end
-    function Doc:hide() native.rml_show(self.id, false) end
+    -- A document that is not on screen has no focus: nothing of it is focused or captures the keyboard (also when it just stops being drawn, see uis.rml_release_idle).
+    function Doc:release_focus()
+        if self.closed then return end
+        if native.rml_blur then native.rml_blur(self.id) end
+        if self.capturing then
+            local entry = uis.rml_docs[self.id]
+            if entry then key_capture[entry.mod] = nil end
+            self.capturing = false
+        end
+        self.idle_released = true
+    end
+    function Doc:hide()
+        native.rml_show(self.id, false)
+        self:release_focus()
+    end
 
     function Doc:close()
         if self.closed then return end
@@ -4258,6 +4280,8 @@ local function make_ui(mod)
     -- animations, calls the handlers of events that happened and draws it.
     function Doc:draw(opts)
         if self.closed then return 0 end
+        self.drawn_frame = uis.frame
+        self.idle_released = false
         opts = opts or {}
         local layer = UI_LAYERS[opts.layer or 'hud']
         if not layer then error('layer is "world", "hud" or "top"', 2) end
