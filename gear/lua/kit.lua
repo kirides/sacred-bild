@@ -46,7 +46,7 @@ function K.window(o)
     if o.x or o.y then style[#style + 1] = 'position: absolute; left: ' .. num(o.x or 0) .. 'px; top: ' .. num(o.y or 0) .. 'px;' end
     if o.width then style[#style + 1] = 'width: ' .. num(o.width) .. 'px;' end
     if o.height then style[#style + 1] = 'height: ' .. num(o.height) .. 'px;' end
-    local close = o.close and ('<button id="' .. esc(o.close) .. '" class="close act" data-no-padkey="" style="float: right; min-width: 0; padding: 0 8px; margin: 0;"><span class="icon icon-close"></span></button>') or ''
+    local close = o.close and ('<button id="' .. esc(o.close) .. '" class="ibtn close act" data-no-padkey="" style="float: right; margin: 0;"><span class="icon icon-close"></span></button>') or ''
     return '<div' .. attrs({{'id', o.id}, {'class', classes('window', o.class)}, {'data-panel', o.panel}, {'data-title', o.panel and (o.title or o.panel)},
         {'data-resizable', o.resizable}, {'style', #style > 0 and table.concat(style, ' ')}}) .. '>'
         .. (o.title and ('<div class="titlebar">' .. close .. esc(o.title) .. '</div>') or '')
