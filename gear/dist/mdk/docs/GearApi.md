@@ -1731,7 +1731,7 @@ What a party hero does now, and the game's raw action and movement states.
 
 #### `creature:order_move(x, y) -> boolean?, string?`
 
-Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground does for the controlled one.
+Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground does for the controlled one. In single player (`gear.world.can_change()`) this also works on any other creature, a summoned wolf for example (a creature of the game's own AI may walk back to what it was doing).
 
 - `x`: `number`
 - `y`: `number`
@@ -1740,7 +1740,7 @@ Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground d
 
 #### `creature:order_stop() -> boolean?, string?`
 
-Orders a party hero to stop.
+Orders a party hero to stop. In single player this also works on any other creature.
 
 - returns `ok` `boolean?`
 - returns `error` `string?`

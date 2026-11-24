@@ -23,8 +23,9 @@ namespace
     SRWLOCK g_lock = SRWLOCK_INIT;
     std::unordered_map<uint32_t, Entry> g_pets;
     std::atomic<int> g_count{0};
-    std::atomic<int> g_untargetable{0};
+    std::atomic<int> g_untargetable{0};   // (kept for the status of the registry)
     thread_local float t_scale = 1.0f;
+    thread_local float t_ax = 0.0f, t_ay = 0.0f;   // the object's screen position (+0x40 / +0x44): the scale is about it
 
     decltype(Addr::cObject3D_drawModel)::Ptr g_origDrawModel = nullptr;
 
@@ -33,6 +34,7 @@ namespace
         uint32_t flagsLow, uint32_t flagsHigh)
     {
         float scale = 1.0f;
+        float ax = 0.0f, ay = 0.0f;
         if (g_count.load(std::memory_order_relaxed) > 0 && self)
         {
             const uint32_t id = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x0C);
@@ -41,13 +43,20 @@ namespace
             if (it != g_pets.end())
             {
                 scale = it->second.scale;
+                // The object's own render position (floats, world model space: the same space the deformed vertices are in).
+                ax = *reinterpret_cast<const float*>(static_cast<const uint8_t*>(self) + 0x7C);
+                ay = *reinterpret_cast<const float*>(static_cast<const uint8_t*>(self) + 0x80);
             }
             ReleaseSRWLockShared(&g_lock);
         }
-        const float before = t_scale;
+        const float before = t_scale, bx = t_ax, by = t_ay;
         t_scale = scale;
+        t_ax = ax;
+        t_ay = ay;
         const uint32_t r = g_origDrawModel(self, edx, device, model, instance, flagsLow, flagsHigh);
         t_scale = before;
+        t_ax = bx;
+        t_ay = by;
         return r;
     }
 
@@ -104,9 +113,17 @@ void Pets::filterPick(cWorldView* view)
         for (PickEntry* p = begin; p < end; ++p)
         {
             const auto it = g_pets.find(p->id);
-            if (it != g_pets.end() && it->second.untargetable)
+            if (it != g_pets.end())
             {
-                continue;
+                if (it->second.untargetable)
+                {
+                    static std::atomic<int> logged{0};
+                    if (logged.fetch_add(1) < 2)
+                    {
+                        LOG("Pets: object {} left out of the pick list", p->id);
+                    }
+                    continue;
+                }
             }
             if (out != p)
             {
@@ -120,6 +137,11 @@ void Pets::filterPick(cWorldView* view)
     LeaveCriticalSection(&view->pickLock);
 }
 
+bool Pets::scaling()
+{
+    return t_scale != 1.0f;
+}
+
 void Pets::scaleWorld(_D3DMATRIX& m)
 {
     const float s = t_scale;
@@ -127,9 +149,21 @@ void Pets::scaleWorld(_D3DMATRIX& m)
     {
         return;
     }
-    m._11 *= s; m._12 *= s; m._13 *= s;
-    m._21 *= s; m._22 *= s; m._23 *= s;
-    m._31 *= s; m._32 *= s; m._33 *= s;
+    // World models are drawn with vertices already in world space (the matrix is the identity; the shadow pass uses a matrix that
+    // flattens them onto the ground), so the pet grows about its own render position at ground level: first A, then the old matrix,
+    // out = A * m with A = [s 0 0 0; 0 s 0 0; 0 0 s 0; ax(1-s) ay(1-s) 0 1].
+    const float tx = t_ax * (1.0f - s), ty = t_ay * (1.0f - s);
+    D3DMATRIX r;
+    const float* in = &m._11;
+    float* out = &r._11;
+    for (int j = 0; j < 4; ++j)
+    {
+        out[0 * 4 + j] = s * in[0 * 4 + j];
+        out[1 * 4 + j] = s * in[1 * 4 + j];
+        out[2 * 4 + j] = s * in[2 * 4 + j];
+        out[3 * 4 + j] = tx * in[0 * 4 + j] + ty * in[1 * 4 + j] + in[3 * 4 + j];
+    }
+    m = r;
 }
 
 // Sacred Gear: registers (or, with scale 1 and untargetable 0, removes) an object. Returns the number of pets.

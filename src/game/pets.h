@@ -24,6 +24,9 @@ namespace Pets
     // Whether any pet is registered (cheap, lock free).
     bool any();
 
+    // Whether the engine is drawing a scaled pet's model on this thread now.
+    bool scaling();
+
     // While the engine draws a scaled pet: multiplies the 3x3 part of a world matrix, the translation stays.
     void scaleWorld(_D3DMATRIX& m);
 }

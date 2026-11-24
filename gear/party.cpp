@@ -1077,9 +1077,11 @@ bool Party::order(uint32_t id, const Order& o, const char*& error)
     {
         c = 0;
     }
-    if (!c && o.kind == OrderKind::Attack && id > kLastHeroId && World::changesAllowed())
+    if (!c && (o.kind == OrderKind::Attack || o.kind == OrderKind::Move || o.kind == OrderKind::Stop) && id > kLastHeroId &&
+        World::changesAllowed())
     {
-        // Single player: a creature that is no party member (a monster) can be ordered to attack, as a script does.
+        // Single player: a creature that is no party member (a monster, a summoned wolf) can be ordered to attack, walk or stop,
+        // as a script does.
         World::Object any;
         if (World::object(id, any) && any.creature)
         {
@@ -1088,7 +1090,7 @@ bool Party::order(uint32_t id, const Order& o, const char*& error)
     }
     if (!c)
     {
-        error = "not a party hero (in single player an attack order works on any creature)";
+        error = "not a party hero (in single player attack, move and stop orders work on any creature)";
         return false;
     }
     if (!Addr::g_creatureEventVtable)

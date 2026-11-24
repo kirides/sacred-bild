@@ -493,14 +493,14 @@ function Creature:set_combo(slot, arts) end
 ---@return integer? movement_state
 function Creature:action() end
 
---- Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground does for the controlled one.
+--- Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground does for the controlled one. In single player (`gear.world.can_change()`) this also works on any other creature, a summoned wolf for example (a creature of the game's own AI may walk back to what it was doing).
 ---@param x number
 ---@param y number
 ---@return boolean? ok
 ---@return string? error
 function Creature:order_move(x, y) end
 
---- Orders a party hero to stop.
+--- Orders a party hero to stop. In single player this also works on any other creature.
 ---@return boolean? ok
 ---@return string? error
 function Creature:order_stop() end
