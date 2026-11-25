@@ -1,3 +1,7 @@
+## v0.3.3 (2026-11-25)
+
+- Fixed: with a Beastmaster animal along, the shadows of NPCs, companions and your hero were drawn displaced and wrongly sized. Only the animals' own shadows are scaled now.
+
 ## v0.3.2 (2026-11-25)
 
 - Fixed: after a Beastmaster animal was dismissed or fell, other creatures (NPCs, wolves) could get a shadow drawn too large and far from them. The pets module now forgets a dismissed animal's model handle before another object reuses it.
