@@ -1,3 +1,7 @@
+## v0.2.15 (2026-11-25)
+
+- Under the hood: no ddraw.dll code changed; only the build files changed, to compile the new Sacred Gear sources (DDS images, packs) and link zlib.
+
 ## v0.2.14 (2026-11-25)
 
 - New: pets for Sacred Gear: creatures drawn larger with their shadow, and optionally left out of world clicks and hover.
