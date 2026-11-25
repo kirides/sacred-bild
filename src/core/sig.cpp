@@ -155,14 +155,29 @@ namespace
     }
 }
 
+namespace
+{
+    size_t resolveIn(std::span<const Sig::Entry> entries, std::span<const uint8_t> code, uintptr_t codeVa, const uint8_t* live);
+}
+
 size_t Sig::resolve(std::span<const Entry> entries)
 {
     const Code code = codeSection();
-    return resolve(entries, code.bytes, code.va);
+    // the file's copy: also compare each hit with memory (a difference is another module's patch, logged)
+    const auto* live = reinterpret_cast<const uint8_t*>(code.va);
+    return resolveIn(entries, code.bytes, code.va, code.bytes.data() == live ? nullptr : live);
 }
 
 size_t Sig::resolve(std::span<const Entry> entries, std::span<const uint8_t> code, uintptr_t codeVa)
 {
+    return resolveIn(entries, code, codeVa, nullptr);
+}
+
+namespace
+{
+size_t resolveIn(std::span<const Sig::Entry> entries, std::span<const uint8_t> code, uintptr_t codeVa, const uint8_t* live)
+{
+    using namespace Sig;
     std::vector<Pattern> patterns(entries.size());
     std::array<std::vector<uint32_t>, 256> byFirstByte;
     for (size_t i = 0; i < entries.size(); ++i)
@@ -203,6 +218,19 @@ size_t Sig::resolve(std::span<const Entry> entries, std::span<const uint8_t> cod
             ++failed;
             continue;
         }
+        if (live && (live[p.hit] != p.bytes[0] || !matches(live + p.hit, p)))
+        {
+            // The bytes in memory are not the file's any more: something patched them before this module looked (the other
+            // of SacredBild / Sacred Gear, or a third DLL). The address comes from the file and is right; a patch of ours
+            // there would meet the other one.
+            size_t first = 0;
+            while (first < p.bytes.size() && !(p.fixed[first] && live[p.hit + first] != p.bytes[first]))
+            {
+                ++first;
+            }
+            LOG("Signature {}: warning, the code at {:08X} is patched in memory (first changed byte +{}): another module hooked it first",
+                e.name, codeVa + p.hit, first);
+        }
         const size_t at = p.hit + e.offset;
         if (e.take == Take::Abs32)
         {
@@ -222,4 +250,5 @@ size_t Sig::resolve(std::span<const Entry> entries, std::span<const uint8_t> cod
         }
     }
     return failed;
+}
 }
