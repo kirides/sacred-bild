@@ -46,6 +46,9 @@
 #define STBI_ONLY_TGA
 #define STBI_NO_STDIO
 #include <stb_image.h>
+
+#include "dds.h"
+#include "vfs.h"
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
@@ -241,6 +244,28 @@ namespace
         return {};
     }
 
+    // The mod folder a file of the mods folder lies in (where its packs are, gear/vfs.h), empty for any other file.
+    fs::path packRootOf(const fs::path& file)
+    {
+        if (g_modsDir.empty())
+        {
+            return {};
+        }
+        const fs::path rel = file.lexically_normal().lexically_relative(fs::path(g_modsDir).lexically_normal());
+        if (rel.empty() || rel.is_absolute() || *rel.begin() == ".." || std::distance(rel.begin(), rel.end()) < 2)
+        {
+            return {};
+        }
+        return fs::path(g_modsDir) / *rel.begin();
+    }
+
+    // A file that is not on disk, from the mod's packs.
+    bool readPacked(const fs::path& path, std::string& out)
+    {
+        const fs::path root = packRootOf(path);
+        return !root.empty() && Gear::Vfs::read(root, path, out);
+    }
+
     bool readAll(const fs::path& path, std::string& out, bool trusted = false)
     {
         if (!trusted && !readable(path))
@@ -250,7 +275,7 @@ namespace
         std::ifstream in(path, std::ios::binary);
         if (!in)
         {
-            return false;
+            return readPacked(path, out);
         }
         recordDep(path);
         in.seekg(0, std::ios::end);
@@ -454,16 +479,26 @@ namespace
             }
             auto file = std::make_unique<Handle>();
             file->in.open(p, std::ios::binary);
-            if (!file->in)
+            std::string packed;
+            const bool fromPack = !file->in && readPacked(p, packed);
+            if (!file->in && !fromPack)
             {
                 return 0;
             }
-            recordDep(p);
+            if (!fromPack)
+            {
+                recordDep(p);
+            }
             const bool css = hasExtension(p, ".rcss"), rml = hasExtension(p, ".rml");
-            if (css || rml)
+            if (fromPack && !css && !rml)
+            {
+                file->mem = std::move(packed);
+                file->memory = true;
+            }
+            else if (css || rml)
             {
                 // read through the pre-processor (a style sheet may also be a template with <style>)
-                std::string text((std::istreambuf_iterator<char>(file->in)), std::istreambuf_iterator<char>());
+                std::string text = fromPack ? std::move(packed) : std::string((std::istreambuf_iterator<char>(file->in)), std::istreambuf_iterator<char>());
                 file->in.close();
                 file->mem = preprocessCss(text, logicalDir(shared ? path : plainPath(path), p), rml);
                 file->memory = true;
@@ -553,6 +588,9 @@ namespace
         bool item = false;          // "gear:item/...": an item's model, drawn by the game's model renderer into the box of the geometry
         uint32_t itemType = 0;      // the item type to draw (a temporary item, single player only) ...
         uint32_t itemObject = 0;    // ... or the live item object
+        uint32_t shared = 0;        // a shared texture (gear.ui.texture): its id in g_shared; the picture belongs to the registry, not to this handle
+        std::string source;         // a file image's source as RmlUi knows it (empty for the game's own): for releasing it when it is not drawn any more
+        uint64_t lastDraw = 0;      // GetTickCount64 of its last draw, or of its load
     };
 
     // "gear:image/54" (the game's UI image 54), "gear:texture/GUI_MOVE_RUNDUM.TGA" (a texture of the game's
@@ -819,6 +857,92 @@ namespace
         bool m_dirty = true;
     };
 
+    // ---- Shared textures: gear.ui.texture.load ----
+    // A mod asks for an image file once and gets a handle; the same file asked for again (by this or another mod) is the same texture with one more
+    // reference. A handle is shown in documents as the image source "gear:tex/<id>". The picture is freed when the mods' references are gone and RmlUi
+    // has let go of the source too (the host purges it from RmlUi's cache at that moment); the surface itself waits for the frames in flight (ui.cpp).
+    struct SharedTexture
+    {
+        uint32_t picture = 0;
+        int width = 0, height = 0;
+        int modRefs = 0;        // handles given to Lua
+        int rmlRefs = 0;        // RmlUi's loads of "gear:tex/<id>"
+        std::string key;
+    };
+    std::unordered_map<uint32_t, SharedTexture> g_shared;
+    std::unordered_map<std::string, uint32_t> g_sharedByKey;
+    uint32_t g_nextShared = 0;
+
+    void destroyIfUnused(uint32_t id)
+    {
+        const auto it = g_shared.find(id);
+        if (it == g_shared.end() || it->second.modRefs > 0 || it->second.rmlRefs > 0)
+        {
+            return;
+        }
+        LOG("RmlUi: shared texture {} freed ({} still loaded)", id, g_shared.size() - 1);
+        Ui::pictureRelease(it->second.picture);
+        g_sharedByKey.erase(it->second.key);
+        g_shared.erase(it);
+    }
+
+    // The picture of an image file's bytes (PNG, TGA, JPG, DDS) and its size; 0 with `error`.
+    uint32_t pictureFromImageBytes(const std::string& bytes, int& w, int& h, std::string& error)
+    {
+        if (Gear::Dds::isDds(bytes.data(), bytes.size()))
+        {
+            Gear::Dds::Image dds;
+            if (!Gear::Dds::load(bytes.data(), bytes.size(), true, dds, error))
+            {
+                return 0;
+            }
+            w = dds.width;
+            h = dds.height;
+            uint32_t id = 0;
+            if (dds.kind == Gear::Dds::Kind::Block)
+            {
+                id = Ui::pictureCreateBlocks(dds.width, dds.height, dds.fourcc, std::move(dds.blocks));
+            }
+            else
+            {
+                for (uint32_t& p : dds.argb)
+                {
+                    // RmlUi blends premultiplied colors.
+                    const uint32_t a = p >> 24, r = (p >> 16 & 255) * a / 255, g = (p >> 8 & 255) * a / 255, b = (p & 255) * a / 255;
+                    p = a << 24 | r << 16 | g << 8 | b;
+                }
+                id = Ui::pictureCreate32(dds.width, dds.height, std::move(dds.argb), true);
+            }
+            if (!id)
+            {
+                error = "the picture is too large";
+            }
+            return id;
+        }
+        int channels = 0;
+        stbi_uc* data = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(bytes.data()), static_cast<int>(bytes.size()), &w, &h, &channels, 4);
+        if (!data)
+        {
+            error = "cannot decode the image";
+            return 0;
+        }
+        std::vector<uint32_t> pixels(size_t(w) * h);
+        for (size_t i = 0; i < pixels.size(); ++i)
+        {
+            const uint32_t a = data[i * 4 + 3];
+            // RmlUi blends premultiplied colors.
+            const uint32_t r = data[i * 4] * a / 255, g = data[i * 4 + 1] * a / 255, b = data[i * 4 + 2] * a / 255;
+            pixels[i] = a << 24 | r << 16 | g << 8 | b;
+        }
+        stbi_image_free(data);
+        const uint32_t id = Ui::pictureCreate32(w, h, std::move(pixels), true);
+        if (!id)
+        {
+            error = "the picture is too large";
+        }
+        return id;
+    }
+
     class RenderInterface final : public Rml::RenderInterface
     {
     public:
@@ -885,6 +1009,10 @@ namespace
                 {
                     return;
                 }
+                if (!it->second.source.empty())
+                {
+                    it->second.lastDraw = GetTickCount64();
+                }
                 c.image = it->second.id;
                 c.flip = it->second.flip;
                 c.point = it->second.point;
@@ -917,6 +1045,21 @@ namespace
         Rml::TextureHandle LoadTexture(Rml::Vector2i& dimensions, const Rml::String& source) override
         {
             TextureInfo info;
+            if (source.rfind("gear:tex/", 0) == 0)
+            {
+                const auto it = g_shared.find(static_cast<uint32_t>(std::strtoul(source.c_str() + 9, nullptr, 10)));
+                if (it == g_shared.end())
+                {
+                    LOG("RmlUi: no shared texture {}", source);
+                    return 0;
+                }
+                ++it->second.rmlRefs;
+                info.id = it->second.picture;
+                info.picture = true;
+                info.shared = it->first;
+                dimensions = {it->second.width, it->second.height};
+                return add(info);
+            }
             if (source.rfind("gear:", 0) == 0)
             {
                 Ui::ImageInfo image;
@@ -955,6 +1098,8 @@ namespace
                 return add(info);
             }
             std::string path = plainPath(source);
+            info.source = source;
+            info.lastDraw = GetTickCount64();
             bool dpSize = false;
             if (path.size() > 3 && path.compare(path.size() - 3, 3, "?dp") == 0)
             {
@@ -973,26 +1118,12 @@ namespace
                 LOG("RmlUi: cannot read the image {}", source);
                 return 0;
             }
-            int w = 0, h = 0, channels = 0;
-            stbi_uc* data = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(bytes.data()), static_cast<int>(bytes.size()),
-                                                  &w, &h, &channels, 4);
-            if (!data)
-            {
-                LOG("RmlUi: cannot decode the image {}", source);
-                return 0;
-            }
-            std::vector<uint32_t> pixels(size_t(w) * h);
-            for (size_t i = 0; i < pixels.size(); ++i)
-            {
-                const uint32_t a = data[i * 4 + 3];
-                // RmlUi blends premultiplied colors.
-                const uint32_t r = data[i * 4] * a / 255, g = data[i * 4 + 1] * a / 255, b = data[i * 4 + 2] * a / 255;
-                pixels[i] = a << 24 | r << 16 | g << 8 | b;
-            }
-            stbi_image_free(data);
-            info.id = Ui::pictureCreate32(w, h, std::move(pixels), true);
+            int w = 0, h = 0;
+            std::string error;
+            info.id = pictureFromImageBytes(bytes, w, h, error);
             if (!info.id)
             {
+                LOG("RmlUi: cannot load the image {}: {}", source, error);
                 return 0;
             }
             info.picture = true;
@@ -1034,11 +1165,21 @@ namespace
             {
                 return;
             }
-            if (it->second.picture)
+            const uint32_t shared = it->second.shared;
+            if (it->second.picture && !shared)
             {
                 Ui::pictureRelease(it->second.id);
             }
             m_textures.erase(it);
+            if (shared)
+            {
+                const auto entry = g_shared.find(shared);
+                if (entry != g_shared.end())
+                {
+                    --entry->second.rmlRefs;
+                }
+                destroyIfUnused(shared);
+            }
         }
 
         // CSS transforms: the matrix goes along with every mesh until it is reset (null).
@@ -1130,6 +1271,34 @@ namespace
             m_textures.emplace(handle, info);
             return handle;
         }
+    public:
+        // RmlUi keeps every texture it ever loaded until it is told to let go. A file image that no frame has drawn for a while (the minimap's
+        // map tiles the hero walked away from) is released: its picture and GPU texture go, RmlUi loads it again if it is needed later.
+        void sweepFileTextures()
+        {
+            constexpr uint64_t kIdleMs = 8000;
+            const uint64_t now = GetTickCount64();
+            if (now - m_lastSweep < 2000)
+            {
+                return;
+            }
+            m_lastSweep = now;
+            std::vector<std::string> idle;
+            for (const auto& [handle, info] : m_textures)
+            {
+                if (!info.source.empty() && now - info.lastDraw > kIdleMs)
+                {
+                    idle.push_back(info.source);
+                }
+            }
+            for (const std::string& source : idle)
+            {
+                Rml::ReleaseTexture(source);
+            }
+        }
+
+    private:
+        uint64_t m_lastSweep = 0;
 
         std::unordered_map<Rml::TextureHandle, TextureInfo> m_textures;
         std::unordered_map<uint32_t, std::array<float, 4>> m_bounds;      // mesh id -> left, top, right, bottom in RmlUi pixels
@@ -2844,6 +3013,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         g_target.unit = d.unit;
         g_target.origin = d.originPx;
         RootScope scope(d);
+        if (g_render)
+        {
+            g_render->sweepFileTextures();
+        }
         d.context->Render();
         lua_pushnumber(L, g_target.count);
         return 1;
@@ -3782,6 +3955,87 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 0;
     }
 
+    // native.texture_load(dir, path) -> id, width, height | nil, message: an image file of the mod (or "@mod/path") as a shared texture, one more reference.
+    int textureLoad(lua_State* L)
+    {
+        const std::string dir = str(L, 1), rel = str(L, 2);
+        fs::path file;
+        bool trusted = false;
+        if (!rel.empty() && rel[0] == '@')
+        {
+            file = resolveShared(rel, &trusted);
+        }
+        else
+        {
+            const fs::path root = modRoot(dir);
+            file = root.empty() || rel.empty() ? fs::path() : root / fromUtf8(rel);
+            if (!file.empty() && !inside(root, file))
+            {
+                file.clear();
+            }
+        }
+        if (file.empty())
+        {
+            lua_pushnil(L);
+            lua_pushstring(L, "no such image in the mod's folder");
+            return 2;
+        }
+        std::error_code ec;
+        const std::string key = lowered(toUtf8(fs::weakly_canonical(file, ec)));
+        const auto known = g_sharedByKey.find(key);
+        if (known != g_sharedByKey.end())
+        {
+            SharedTexture& t = g_shared[known->second];
+            ++t.modRefs;
+            lua_pushinteger(L, known->second);
+            lua_pushinteger(L, t.width);
+            lua_pushinteger(L, t.height);
+            return 3;
+        }
+        std::string bytes;
+        if (!readAll(file, bytes, true))
+        {
+            lua_pushnil(L);
+            lua_pushstring(L, "cannot read the image");
+            return 2;
+        }
+        SharedTexture t;
+        std::string error;
+        t.picture = pictureFromImageBytes(bytes, t.width, t.height, error);
+        if (!t.picture)
+        {
+            lua_pushnil(L);
+            lua_pushstring(L, error.c_str());
+            return 2;
+        }
+        t.modRefs = 1;
+        t.key = key;
+        const uint32_t id = ++g_nextShared;
+        g_shared.emplace(id, t);
+        g_sharedByKey.emplace(key, id);
+        lua_pushinteger(L, id);
+        lua_pushinteger(L, t.width);
+        lua_pushinteger(L, t.height);
+        return 3;
+    }
+
+    // native.texture_release(id): one reference less; the last one purges the source from RmlUi's cache and frees the picture.
+    int textureRelease(lua_State* L)
+    {
+        const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        const auto it = g_shared.find(id);
+        if (it == g_shared.end() || it->second.modRefs <= 0)
+        {
+            return 0;
+        }
+        if (--it->second.modRefs == 0)
+        {
+            Rml::ReleaseTexture("gear:tex/" + std::to_string(id));      // RmlUi's own reference (its release callback drops rmlRefs)
+            destroyIfUnused(id);
+        }
+        return 0;
+    }
+
     // native.rml_font(dir, path) -> ok: a font file of the mod (TTF / OTF) for the documents' font-family
     int rmlFont(lua_State* L)
     {
@@ -3864,6 +4118,8 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_key", guarded<rmlKey>},
         {"rml_wheel", guarded<rmlWheel>},
         {"rml_font", guarded<rmlFont>},
+        {"texture_load", guarded<textureLoad>},
+        {"texture_release", guarded<textureRelease>},
         {"rml_exports", guarded<rmlExports>},
         {"rml_fonts", guarded<rmlFonts>},
         {nullptr, nullptr},

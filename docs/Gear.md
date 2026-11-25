@@ -183,6 +183,10 @@ settings, a file, a savegame's data, a message to a server) follows these rules:
   resolves to nothing as it is, so it survives an update that adds the type. The reader accepts both forms for good.
 - **Protocols.** What a server understands stays what it understands: add the id next to the name instead of replacing it.
 
+### Packs (`*.gpak`)
+
+A mod with many files (a few thousand map tiles, say) can put them in one file: every `*.gpak` in the mod's folder is a ZIP archive (files stored or deflated, no encryption, no ZIP64) whose paths are relative to the mod's folder, so `ui/tiles/a.jpg` inside the pack is `mods\<mod>\ui\tiles\a.jpg`. A file that is not on disk is looked up in the packs (a file on disk wins, so a pack can be patched by dropping a file in). The pack is opened once and mapped into memory, so reading a file costs no file open, permission check or virus scan, and copying or downloading the mod is one file. Documents, style sheets, templates and images (PNG, TGA, JPG, DDS) of RmlUi read through packs; Lua files, fonts and `mod:` paths of the Lua API do not yet. Build one with any ZIP tool, e.g. `zipfile.ZipFile('x.gpak', 'w', zipfile.ZIP_STORED)` for files that are compressed already.
+
 ## Replacing game files (file overlay)
 
 A mod can ship data files that the game opens instead of its own. `mods/<id>/overlay.txt` has one rule per line

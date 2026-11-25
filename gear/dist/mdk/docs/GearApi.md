@@ -482,6 +482,7 @@ The table `mod.lua` returns. It runs without any globals, so it can only hold va
 | `version` | `string` | Part of the mod set (default `'0'`). (optional) |
 | `priority` | `number` | Lower loads first (default 0); ties load by id. (optional) |
 | `requires` | `string[]` | Ids that must load first; the mod is skipped if one is missing. (optional) |
+| `recommended` | `string[]` | Ids of mods that go well with this one (`'id'` or `'id>=version'`). Sacred Gear ignores it; the external mod manager shows it and offers the missing ones on install. (optional) |
 | `enabled` | `boolean` | `false`: off until the player switches it on in the mod manager (the default, not a lock). (optional) |
 | `settings` | `GearSettingDef[]` | Declared settings: the mod manager builds their page; read them with `gear.settings`. (optional) |
 | `keys` | `GearKeyDef[]` | Declared key binds: the player rebinds them in the mod manager; use them with `gear.keys`. (optional) |
@@ -4651,6 +4652,7 @@ Positions and sizes are the UI's 1024x768 layout, the space the game lays its wi
 | `COLORS` | `GearColors` | The widgets' colours. |
 | `native` | `GearUiNative` | Pieces of the game's own look built from its UI images (`gear.ui.native.frame`). |
 | `rml` | `GearUiRml` | HTML/CSS-style documents (RmlUi): `gear.ui.rml.load`. |
+| `texture` | `GearUiTexture` | Reference counted image files: `gear.ui.texture.load`. |
 
 ### GearColors
 
@@ -5010,7 +5012,7 @@ How far the border of a frame style reaches into its box (the text goes inside t
 
 Reached as `gear.ui.rml`.
 
-UI written as documents (RmlUi's HTML and CSS dialect: `.rml` and `.rcss` files with `div`, `button`, `input`, flexbox, `:hover` and animations) in the mod's own folder. A document is loaded once and drawn every frame from a `draw` handler with `doc:draw()`; its buttons, links and inputs take the mouse and the controller (every one is a pad stop), a focused text field takes the keyboard, and events (`click`, `change` ...) call Lua functions registered with `doc:on`. The default font is Segoe UI, as for `gear.ui` text; `rml.load_font` adds the mod's own. Images: a file of the mod's folder (PNG, TGA, JPG), or the game's own UI images as `gear:image/<id>` (`gear.ui.images`, or a picture id of Gear's own such as `gear.game.save_picture`'s: a savegame's thumbnail, drawn as it is, kept by the mod, not released with the document) `gear:texture/<NAME.TGA>` (Texture.pak) and an item's own model, as the game's inventory windows show it, as `gear:item/<item type id>` (a temporary item of that type, single player only) or `gear:item/id/<item object id>` (a live item; no tint or CSS transform, drawn as large as fits the box of the element, only while the whole box lies inside its clip, so a scrolled list hides the icons it cuts), with `?flip=h`, `?flip=v` or `?flip=hv` mirroring them, `?point` sampling them with the nearest texel instead of the bilinear filter (a picture scaled up stays crisp: `gear:image/54?point`): `<img src="gear:image/54">`, `decorator: image(gear:image/54)`. Button prompts of the controller (needs Sacred Bild; the glyphs of the pad in use) as `gear:pad/<button>` (`a b x y lb rb lt rt back start l3 r3 up down left right`, also `confirm` = a, `cancel` = b, `menu` = start): `<img src="gear:pad/a"/>` in front of the label, sized in `em` so it follows the text. `doc:draw` sets the classes `pad` (the controller was used last), `pad-ps` and `pad-switch` (the pad's style) on `<body>`, so a stylesheet shows the prompts only while they matter (the theme mod below ships that rule): `.padkey { display: none; } body.pad .padkey { display: inline-block; }`. The icon is chosen when the image loads, so it follows the pad's style from the next load on. Theme: a running mod whose `mod.lua` has `theme = 'file.rcss'` provides the shared stylesheet (classes for windows, buttons, fields, lists, bars, pad prompts); Gear puts it in front of every document's own styles, so documents only override; `{theme = false}` in the load options opts out. Data binding: load with `{model = {...}, calls = {...}}` and write `<body data-model="model">` with `{{ expression }}`, `data-value`, `data-if`, `data-for`, `data-class-x`, `data-attr-x` (the attribute's text: a false value is still the text "false", so the attribute is there), `data-attrif-x` (a flag attribute such as `checked` or `disabled`: set while the expression is true, removed while it is false) and `data-event-click="name(args)"`. Rings: `<gear-ring value="0.4" thickness="3" on="#e0c040" off="#40404080" start="0" dots="0" segments="96"/>` is an element that draws a ring (or, with `dots="n"`, a ring of n dots) in the size of its CSS box (`display: inline-block; width; height`), lit clockwise from the top (`start` degrees further round) for the fraction `value` (0 to 1) of its circle in the `on` colour, the rest in `off` (`#rgb`, `#rrggbb` or `#rrggbbaa`): `data-attr-value="time_left / total"` makes it follow the data model; change values with `doc.model.key = value` (nested writes work too) and the document refreshes only what depends on them.
+UI written as documents (RmlUi's HTML and CSS dialect: `.rml` and `.rcss` files with `div`, `button`, `input`, flexbox, `:hover` and animations) in the mod's own folder. A document is loaded once and drawn every frame from a `draw` handler with `doc:draw()`; its buttons, links and inputs take the mouse and the controller (every one is a pad stop), a focused text field takes the keyboard, and events (`click`, `change` ...) call Lua functions registered with `doc:on`. The default font is Segoe UI, as for `gear.ui` text; `rml.load_font` adds the mod's own. Images: a file of the mod's folder (PNG, TGA, JPG, or DDS: BC1 to BC3 are uploaded as they are, BC4 to BC7 and uncompressed formats are decoded once; the top mip only), or the game's own UI images as `gear:image/<id>` (`gear.ui.images`, or a picture id of Gear's own such as `gear.game.save_picture`'s: a savegame's thumbnail, drawn as it is, kept by the mod, not released with the document) `gear:texture/<NAME.TGA>` (Texture.pak) and an item's own model, as the game's inventory windows show it, as `gear:item/<item type id>` (a temporary item of that type, single player only) or `gear:item/id/<item object id>` (a live item; no tint or CSS transform, drawn as large as fits the box of the element, only while the whole box lies inside its clip, so a scrolled list hides the icons it cuts), with `?flip=h`, `?flip=v` or `?flip=hv` mirroring them, `?point` sampling them with the nearest texel instead of the bilinear filter (a picture scaled up stays crisp: `gear:image/54?point`): `<img src="gear:image/54">`, `decorator: image(gear:image/54)`. Button prompts of the controller (needs Sacred Bild; the glyphs of the pad in use) as `gear:pad/<button>` (`a b x y lb rb lt rt back start l3 r3 up down left right`, also `confirm` = a, `cancel` = b, `menu` = start): `<img src="gear:pad/a"/>` in front of the label, sized in `em` so it follows the text. `doc:draw` sets the classes `pad` (the controller was used last), `pad-ps` and `pad-switch` (the pad's style) on `<body>`, so a stylesheet shows the prompts only while they matter (the theme mod below ships that rule): `.padkey { display: none; } body.pad .padkey { display: inline-block; }`. The icon is chosen when the image loads, so it follows the pad's style from the next load on. Theme: a running mod whose `mod.lua` has `theme = 'file.rcss'` provides the shared stylesheet (classes for windows, buttons, fields, lists, bars, pad prompts); Gear puts it in front of every document's own styles, so documents only override; `{theme = false}` in the load options opts out. Data binding: load with `{model = {...}, calls = {...}}` and write `<body data-model="model">` with `{{ expression }}`, `data-value`, `data-if`, `data-for`, `data-class-x`, `data-attr-x` (the attribute's text: a false value is still the text "false", so the attribute is there), `data-attrif-x` (a flag attribute such as `checked` or `disabled`: set while the expression is true, removed while it is false) and `data-event-click="name(args)"`. Rings: `<gear-ring value="0.4" thickness="3" on="#e0c040" off="#40404080" start="0" dots="0" segments="96"/>` is an element that draws a ring (or, with `dots="n"`, a ring of n dots) in the size of its CSS box (`display: inline-block; width; height`), lit clockwise from the top (`start` degrees further round) for the fraction `value` (0 to 1) of its circle in the `on` colour, the rest in `off` (`#rgb`, `#rrggbb` or `#rrggbbaa`): `data-attr-value="time_left / total"` makes it follow the data model; change values with `doc.model.key = value` (nested writes work too) and the document refreshes only what depends on them.
 
 Controller prompts: every `button` that has no `.padkey` child gets `<span class="padkey a">` (the confirm prompt, shown while the pad is on that button; the themes and the base style show it only then), and every RmlUi control is a stop that draws its own prompt: Sacred Bild draws none beside it. A `.padkey` of another button (`b`, `y`, `lb` ...) is the shortcut of the control and becomes the confirm prompt while the pad is on it; `data-no-padkey` on a button keeps it without one. Scroll bars of boxes that scroll take the mouse (knob drag, groove, arrows); stops are in stacking order (a `z-index` list over rows takes the pad and the mouse first). A prototype: no JavaScript (the logic is Lua), no filters, shaders, blur or drop shadows yet (CSS `transform` works: 2D rotate, scale, skew, translate and perspective, applied to the vertices; the mouse and the pad still hit the untransformed boxes), and a mesh counts as a draw command (at most 1500 per document and draw). The document's windows (its top-level elements) take the mouse where they are; the rest of the canvas stays the game's. Documents are laid out in the 1024x768 layout; `dp = true` lays them out in screen pixels instead (1dp is one layout unit), so text is crisp at any resolution (write sizes in `dp` then).
 
@@ -5233,6 +5235,34 @@ Adds a font file of the mod (TTF or OTF) for `font-family` in the documents.
 - `path`: `string`
 - `fallback`: `boolean` (optional) - Use it for characters the other fonts lack.
 - returns `ok` `boolean`
+
+### GearUiTexture
+
+Reference counted textures: an image file of the mod (PNG, TGA, JPG or DDS) loaded once, shared by everything that asks for the same file.
+
+### GearTexture
+
+A loaded image file. Show it in a document with `<img data-attr-src="tex.src">` (or `decorator: image(...)` with the same source).
+
+| Field | Type | |
+|---|---|---|
+| `id` | `integer` |  |
+| `src` | `string` | The image source for RmlUi documents (`gear:tex/<id>`). |
+| `width` | `integer` | In pixels. |
+| `height` | `integer` |  |
+| `released` | `boolean` | True after `release`. |
+
+#### `GearUiTexture.load(path) -> GearTexture?, string?`
+
+Loads an image file of the mod (a path in its folder, or `@mod-id/path` of a file another mod exports), or takes one more reference to it if it is loaded already (by this or another mod). The file is decoded now; the GPU texture is made when it is first drawn. BC1 to BC3 DDS files are uploaded as they are.
+
+- `path`: `string`
+- returns `texture` `GearTexture?`
+- returns `message` `string?`
+
+#### `GearTexture:release()`
+
+Lets go of this reference. The last one frees the texture: RmlUi's copy is purged and the GPU resource is destroyed once the frames that may still use it are done (no frame in flight draws a freed texture). A mod's textures are released when it stops.
 
 ### GearRmlFont
 

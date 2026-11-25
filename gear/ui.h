@@ -122,7 +122,13 @@ namespace Ui
     // The same in 32 bits (ARGB, rows top to bottom, 0xAARRGGBB); `premultiplied`: the color channels are already scaled by
     // alpha (the mesh blends them as they are).
     uint32_t pictureCreate32(int width, int height, std::vector<uint32_t> pixels, bool premultiplied);
+    // A picture of DXT1 / DXT3 / DXT5 blocks (`fourcc` as in a DDS file; a power of two in both sides, at least 4), straight alpha, uploaded as it is: no
+    // decoding, a quarter or an eighth of the memory. 0 if the size or the data do not fit.
+    uint32_t pictureCreateBlocks(int width, int height, uint32_t fourcc, std::vector<uint8_t> blocks);
     void pictureRelease(uint32_t id);
+    // How many frames a released picture's texture waits before it is freed (default 2): the frames queued before the release may still draw it.
+    // A backend with fences or several swap chain images sets its number of frames in flight here.
+    void setFramesInFlight(int frames);
 
     // Meshes (Kind::Mesh): vertices with positions in the mesh's units, a color (0xAARRGGBB, alpha premultiplied) and texture
     // coordinates (0..1 over the whole texture or game image); indices into them, three per triangle. Any thread; a

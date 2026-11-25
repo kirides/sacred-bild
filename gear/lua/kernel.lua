@@ -4175,6 +4175,29 @@ local function make_ui(mod)
         return native.rml_font and native.rml_font(mod.dir, path, fallback and true or false) or false
     end
 
+    -- ui.texture.load(path) -> texture | nil, message: an image file of the mod as a reference counted texture (shared by every mod that asks for the same
+    -- file); texture.src is its source in documents, texture:release() lets go. A mod's textures are released when it stops.
+    local texture = {}
+    ui.texture = texture
+    local Texture = {}
+    Texture.__index = Texture
+    uis.textures = uis.textures or {}
+    function texture.load(path)
+        assert(type(path) == 'string', 'path must be a string')
+        if not native.texture_load then error('RmlUi is not available in this build', 2) end
+        local id, w, h = native.texture_load(mod.dir, path)
+        if not id then return nil, w end
+        local t = setmetatable({id = id, src = 'gear:tex/' .. id, width = w, height = h, released = false}, Texture)
+        uis.textures[t] = mod
+        return t
+    end
+    function Texture:release()
+        if self.released then return end
+        self.released = true
+        uis.textures[self] = nil
+        native.texture_release(self.id)
+    end
+
     -- rml.fonts() -> {default, game, start}, each {family, real, file}: the font families the theme uses (font-family: Sacred Game ...) and whether
     -- each is its real file (the game's ANTQS__.TTF and CAROLING.TTF from the font folder next to Sacred.exe, Segoe UI) or the fallback.
     function rml.fonts() return native.rml_fonts and native.rml_fonts() or nil end
@@ -8186,6 +8209,11 @@ local function unload_mod(e)
     if uis.rml_docs then
         for id, entry in pairs(uis.rml_docs) do
             if entry.mod == m then uis.rml_docs[id] = nil; native.rml_close(id) end
+        end
+    end
+    if uis.textures then
+        for t, owner in pairs(uis.textures) do
+            if owner == m then t:release() end
         end
     end
     if uis.input.rules[m] then uis.input.rules[m] = nil; uis.input.dirty = true end

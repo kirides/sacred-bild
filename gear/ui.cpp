@@ -436,13 +436,25 @@ namespace
         std::vector<uint16_t> pixels;       // ARGB 4444, until the texture is made
         std::vector<uint32_t> pixels32;     // or ARGB 8888 (pictureCreate32)
         bool premultiplied = false;         // pixels32: the colors are scaled by alpha
+        std::vector<uint8_t> blocks;        // or DXT1 / DXT3 / DXT5 blocks (pictureCreateBlocks), uploaded as they are
+        uint32_t fourcc = 0;
         IDirectDrawSurface7* surface = nullptr;
         int texWidth = 0, texHeight = 0;
         bool failed = false;
     };
     std::mutex g_pictureLock;
     std::map<uint32_t, Picture> g_pictures;
-    std::vector<IDirectDrawSurface7*> g_deadSurfaces;      // released by the next draw (the render thread)
+    // A released picture's surface is not freed at once: the frames that were queued before the release may still draw it. It is freed on the render
+    // thread once `g_framesInFlight` more frames have been drawn (the Direct3D 9 backend refcounts its resources itself, so 2 is generous; a backend with
+    // fences or several swap chain images sets how many frames it has in flight: Ui::setFramesInFlight).
+    struct DeadSurface
+    {
+        IDirectDrawSurface7* surface;
+        uint64_t frame;     // the frame counter at the release
+    };
+    std::vector<DeadSurface> g_deadSurfaces;
+    uint64_t g_frame = 0;
+    int g_framesInFlight = 2;
     uint32_t g_nextPicture = Ui::kPictureBase;
 
     int powerOfTwo(int n)
@@ -471,6 +483,47 @@ namespace
             return false;
         }
         const int tw = powerOfTwo(pic.width), th = powerOfTwo(pic.height);
+        if (!pic.blocks.empty())
+        {
+            // Compressed: the file's blocks go to a DXT texture as they are (the picture is a power of two, a multiple of 4 in both sides).
+            DDSURFACEDESC2 desc = {};
+            desc.dwSize = sizeof(desc);
+            desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
+            desc.dwWidth = tw;
+            desc.dwHeight = th;
+            desc.ddsCaps.dwCaps = DDSCAPS_TEXTURE;
+            desc.ddsCaps.dwCaps2 = DDSCAPS2_TEXTUREMANAGE;
+            desc.ddpfPixelFormat.dwSize = sizeof(DDPIXELFORMAT);
+            desc.ddpfPixelFormat.dwFlags = DDPF_FOURCC;
+            desc.ddpfPixelFormat.dwFourCC = pic.fourcc;
+            const HRESULT created = ddraw->CreateSurface(&desc, &pic.surface, nullptr);
+            ddraw->Release();
+            if (FAILED(created))
+            {
+                pic.surface = nullptr;
+                LOG("UI: no compressed texture for a picture ({:08x})", static_cast<uint32_t>(created));
+                return false;
+            }
+            DDSURFACEDESC2 locked = {};
+            locked.dwSize = sizeof(locked);
+            if (FAILED(pic.surface->Lock(nullptr, &locked, DDLOCK_WAIT | DDLOCK_WRITEONLY, nullptr)))
+            {
+                pic.surface->Release();
+                pic.surface = nullptr;
+                return false;
+            }
+            const size_t rowBytes = size_t(tw / 4) * (pic.fourcc == 0x31545844 ? 8 : 16);      // DXT1: 8 bytes a block, DXT3 / DXT5: 16
+            for (int y = 0; y < th / 4; ++y)
+            {
+                std::memcpy(static_cast<uint8_t*>(locked.lpSurface) + size_t(y) * locked.lPitch, pic.blocks.data() + size_t(y) * rowBytes, rowBytes);
+            }
+            pic.surface->Unlock(nullptr);
+            pic.texWidth = tw;
+            pic.texHeight = th;
+            pic.blocks.clear();
+            pic.blocks.shrink_to_fit();
+            return true;
+        }
         bool wide = false;
         HRESULT hr = E_FAIL;
         for (const bool w : {false, true})
@@ -600,7 +653,20 @@ namespace
         std::vector<IDirectDrawSurface7*> dead;
         {
             std::scoped_lock lock(g_pictureLock);
-            dead.swap(g_deadSurfaces);
+            ++g_frame;
+            size_t keep = 0;
+            for (const DeadSurface& d : g_deadSurfaces)
+            {
+                if (g_frame >= d.frame + static_cast<uint64_t>(g_framesInFlight))
+                {
+                    dead.push_back(d.surface);
+                }
+                else
+                {
+                    g_deadSurfaces[keep++] = d;
+                }
+            }
+            g_deadSurfaces.resize(keep);
         }
         for (IDirectDrawSurface7* s : dead)
         {
@@ -2163,6 +2229,12 @@ uint32_t Ui::pictureCreate(int width, int height, std::vector<uint16_t> pixels)
     return id;
 }
 
+void Ui::setFramesInFlight(int frames)
+{
+    std::scoped_lock lock(g_pictureLock);
+    g_framesInFlight = std::clamp(frames, 1, 8);
+}
+
 void Ui::pictureRelease(uint32_t id)
 {
     std::scoped_lock lock(g_pictureLock);
@@ -2173,7 +2245,7 @@ void Ui::pictureRelease(uint32_t id)
     }
     if (it->second.surface)
     {
-        g_deadSurfaces.push_back(it->second.surface);
+        g_deadSurfaces.push_back({it->second.surface, g_frame});
     }
     g_pictures.erase(it);
 }
@@ -2191,6 +2263,25 @@ uint32_t Ui::pictureCreate32(int width, int height, std::vector<uint32_t> pixels
     pic.height = height;
     pic.pixels32 = std::move(pixels);
     pic.premultiplied = premultiplied;
+    return id;
+}
+
+uint32_t Ui::pictureCreateBlocks(int width, int height, uint32_t fourcc, std::vector<uint8_t> blocks)
+{
+    const bool dxt1 = fourcc == 0x31545844, dxt3 = fourcc == 0x33545844, dxt5 = fourcc == 0x35545844;       // 'DXT1', 'DXT3', 'DXT5'
+    if (!(dxt1 || dxt3 || dxt5) || width < 4 || height < 4 || width > 4096 || height > 4096 || (width & (width - 1)) || (height & (height - 1)) ||
+        blocks.size() < size_t(width / 4) * (height / 4) * (dxt1 ? 8 : 16))
+    {
+        return 0;
+    }
+    std::scoped_lock lock(g_pictureLock);
+    const uint32_t id = g_nextPicture++;
+    Picture& pic = g_pictures[id];
+    pic.width = width;
+    pic.height = height;
+    pic.blocks = std::move(blocks);
+    pic.fourcc = fourcc;
+    pic.premultiplied = false;
     return id;
 }
 

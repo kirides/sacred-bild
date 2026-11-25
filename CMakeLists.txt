@@ -18,6 +18,7 @@ find_package(kcp CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 # RmlUi (Sacred Gear's HTML/CSS-style mod UI, gear/rml.cpp) and stb_image (the images its documents name).
 find_package(RmlUi CONFIG REQUIRED)
+find_package(ZLIB REQUIRED)
 find_path(STB_INCLUDE_DIRS "stb_image.h" REQUIRED)
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h" REQUIRED)
 find_library(DETOURS_LIBRARY_RELEASE detours PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH REQUIRED)
@@ -220,13 +221,15 @@ if(SACREDGEAR)
     gear/itemicon.cpp
     gear/realm.cpp
     gear/rml.cpp
+    gear/dds.cpp
+    gear/vfs.cpp
     gear/css_compat.cpp
     gear/gear.rc
   )
   add_dependencies(SacredGear version_info)
   target_include_directories(SacredGear PRIVATE ${VERSION_INFO_DIR} gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS} ${STB_INCLUDE_DIRS})
   set_source_files_properties(gear/gear.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kernel.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/lookup.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/fmt.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/toast.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/store.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kit.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/res/GearIcons.ttf;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.rml;${VERSION_INFO_DIR}/version_info.h")
-  target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi shell32)
+  target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32)
   target_compile_definitions(SacredGear PRIVATE RMLUI_STATIC_LIB)
   target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})
   # SAFESEH off as for ddraw (Detours trampolines); /MAP for profiles.
