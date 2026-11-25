@@ -23,6 +23,16 @@ local screen = {
     capture = nil, edit = nil, edit_text = '', restart = false,
 }
 
+-- Text settings are typed with gear.kit.osk (a small window of its own); the key picker below (screen.osk, mode 'key') is the manager's own.
+local kb = gear.kit.osk and gear.kit.osk{back = false}
+local function open_text_kb(mod_id, d, value, changed)
+    if not kb then return end
+    kb:open{title = d.label, text = value, max = d.max_length or 64, on_change = function(t)
+        admin.set(mod_id, d.id, t)
+        if changed then changed() end
+    end}
+end
+
 ---------------------------------------------------------------------------------------------------------------
 -- Helpers
 ---------------------------------------------------------------------------------------------------------------
@@ -102,6 +112,7 @@ local function stop_input()
     screen.capture = nil
     screen.osk = nil
     screen.dd = nil
+    if kb then kb:close() end
 end
 
 local function open_screen()
@@ -363,7 +374,7 @@ local function setting_row(t, m, d)
         pill(fx, fy, 200, 20, focused and 0xF0202030 or C.bg, (focused or r.hover) and C.edge or C.edge_dim)
         if f:button(2, 'Kbd', {id = id .. '#kbd', height = 20,
             tooltip = 'Type with an on-screen keyboard (for a controller)'}) then
-            screen.osk = {mode = 'text', mod = m, def = d, label = d.label, text = value, max = d.max_length or 64}
+            open_text_kb(m, d, value)
             screen.edit, screen.capture = nil, nil
         end
         if r.clicked and not focused then
@@ -649,78 +660,44 @@ end
 local function draw_osk(p)
     local o = screen.osk
     local x, y, w = p.content_x, p.content_y, p.content_w
-    local what = o.mode == 'text' and ('Typing: ' .. o.label) or ('Pick a key for: ' .. o.label)
+    local what = 'Pick a key for: ' .. o.label
     ui.text(fit(what, w), x, y, {size = 14, bold = true, color = C.accent, height = 22, valign = 'middle', layer = 'top'})
     y = y + 28
-    if o.mode == 'text' then
-        pill(x, y, w, 24, C.bg, C.edge)
-        local shown_fit = fit(o.text, w - 28)
-        ui.text(shown_fit, x + 12, y, {height = 24, valign = 'middle', layer = 'top'})
-        underscore(shown_fit, x + 7, y, 24, C.accent)
-        y = y + 32
-        for i, row in ipairs(OSK_TEXT) do
-            local hit = osk_row(p, 'r' .. i, y, row, 40, function(k)
-                return (o.shift and k:match('%a')) and k:upper() or k
-            end)
-            if hit and #o.text < o.max then
-                o.text = o.text .. ((o.shift and hit:match('%a')) and hit:upper() or hit)
-                o.shift = false
-                admin.set(o.mod, o.def.id, o.text)
-            end
-            y = y + 30
-        end
-        local t = ui.table('osk:bottom', x + 40, y, nil, {columns = {90, 180, 110, 110}, spacing = {8, 0}, row_height = 26,
-            layer = 'top'})
-        t:row()
-        if t:button(1, o.shift and 'SHIFT' or 'Shift', {id = 'osk:shift', color = o.shift and C.accent or nil}) then
-            o.shift = not o.shift
-        end
-        if t:button(2, 'Space', {id = 'osk:space'}) and #o.text < o.max then
-            o.text = o.text .. ' '
-            admin.set(o.mod, o.def.id, o.text)
-        end
-        if t:button(3, 'Backspace', {id = 'osk:back'}) then
-            o.text = o.text:sub(1, -2)
-            admin.set(o.mod, o.def.id, o.text)
-        end
-        if t:button(4, 'Done', {id = 'osk:done'}) then screen.osk = nil end
-    else
-        local names = {ctrl = 'Ctrl', shift = 'Shift', alt = 'Alt'}
-        -- the modifiers, a gap, Unbind and Cancel
-        local t = ui.table('osk:mods', x + 40, y, nil, {columns = {80, 80, 80, 12, 110, 110}, spacing = {8, 0},
-            row_height = 26, layer = 'top'})
-        t:row()
-        for i, m in ipairs({'ctrl', 'shift', 'alt'}) do
-            if t:button(i, names[m], {id = 'osk:mod' .. m, color = o[m] and C.accent or nil}) then o[m] = not o[m] end
-        end
-        if t:button(5, 'Unbind', {id = 'osk:none'}) then
-            admin.set_binding(o.mod, o.key, '')
-            screen.osk = nil
-            return
-        end
-        if t:button(6, 'Cancel', {id = 'osk:cancel'}) then
-            screen.osk = nil
-            return
-        end
-        y = y + 34
-        local hit
-        for i, row in ipairs(OSK_TEXT) do
-            hit = osk_row(p, 'r' .. i, y, row, 40) or hit
-            y = y + 30
-        end
-        hit = osk_row(p, 'f', y, OSK_F, 42, function(k) return k:upper() end) or hit
-        y = y + 30
-        hit = osk_row(p, 's', y, OSK_SPECIAL, 42, function(k)
-            return OSK_SHORT[k] or (k:sub(1, 1):upper() .. k:sub(2, 3))
-        end) or hit
-        if hit then
-            local b = (o.ctrl and 'ctrl+' or '') .. (o.shift and 'shift+' or '') .. (o.alt and 'alt+' or '') .. hit
-            admin.set_binding(o.mod, o.key, b)
-            screen.osk = nil
-            return
-        end
-        ui.text('Pick the modifiers first, then the key.', x, y + 34, {size = 11, color = DIM, layer = 'top'})
+    local names = {ctrl = 'Ctrl', shift = 'Shift', alt = 'Alt'}
+    -- the modifiers, a gap, Unbind and Cancel
+    local t = ui.table('osk:mods', x + 40, y, nil, {columns = {80, 80, 80, 12, 110, 110}, spacing = {8, 0},
+        row_height = 26, layer = 'top'})
+    t:row()
+    for i, m in ipairs({'ctrl', 'shift', 'alt'}) do
+        if t:button(i, names[m], {id = 'osk:mod' .. m, color = o[m] and C.accent or nil}) then o[m] = not o[m] end
     end
+    if t:button(5, 'Unbind', {id = 'osk:none'}) then
+        admin.set_binding(o.mod, o.key, '')
+        screen.osk = nil
+        return
+    end
+    if t:button(6, 'Cancel', {id = 'osk:cancel'}) then
+        screen.osk = nil
+        return
+    end
+    y = y + 34
+    local hit
+    for i, row in ipairs(OSK_TEXT) do
+        hit = osk_row(p, 'r' .. i, y, row, 40) or hit
+        y = y + 30
+    end
+    hit = osk_row(p, 'f', y, OSK_F, 42, function(k) return k:upper() end) or hit
+    y = y + 30
+    hit = osk_row(p, 's', y, OSK_SPECIAL, 42, function(k)
+        return OSK_SHORT[k] or (k:sub(1, 1):upper() .. k:sub(2, 3))
+    end) or hit
+    if hit then
+        local b = (o.ctrl and 'ctrl+' or '') .. (o.shift and 'shift+' or '') .. (o.alt and 'alt+' or '') .. hit
+        admin.set_binding(o.mod, o.key, b)
+        screen.osk = nil
+        return
+    end
+    ui.text('Pick the modifiers first, then the key.', x, y + 34, {size = 11, color = DIM, layer = 'top'})
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -877,7 +854,7 @@ do
                     set(text:sub(1, d.max_length or 64))
                 end
                 acts[r.kbd_id] = function()
-                    screen.osk = {mode = 'text', mod = e.id, def = d, label = d.label, text = value, max = d.max_length or 64}
+                    open_text_kb(e.id, d, value, function() R.dirty = true end)
                     screen.capture = nil
                     R.dirty = true
                 end
@@ -967,12 +944,11 @@ do
         end
     end
 
+    -- the key picker (a keyboard of keys with modifiers); text is typed with gear.kit.osk (kb)
     local function osk_model(m)
         local o = screen.osk
         local acts = R.acts
-        m.osk_text_mode = o.mode == 'text'
-        m.osk_title = o.mode == 'text' and ('Typing: ' .. o.label) or ('Pick a key for: ' .. o.label)
-        m.osk_text = o.text or ''
+        m.osk_title = 'Pick a key for: ' .. o.label
         m.osk_shift = o.shift and true or false
         m.osk_ctrl, m.osk_alt = o.ctrl and true or false, o.alt and true or false
         local function key_row(list, prefix, label)
@@ -981,40 +957,21 @@ do
                 local id = prefix .. i
                 out[#out + 1] = {id = id, label = label and label(k) or k}
                 acts[id] = function()
-                    if o.mode == 'text' then
-                        if #o.text < o.max then
-                            o.text = o.text .. ((o.shift and k:match('%a')) and k:upper() or k)
-                            o.shift = false
-                            admin.set(o.mod, o.def.id, o.text)
-                        end
-                    else
-                        local b = (o.ctrl and 'ctrl+' or '') .. (o.shift and 'shift+' or '') .. (o.alt and 'alt+' or '') .. k
-                        admin.set_binding(o.mod, o.key, b)
-                        screen.osk = nil
-                    end
+                    local b = (o.ctrl and 'ctrl+' or '') .. (o.shift and 'shift+' or '') .. (o.alt and 'alt+' or '') .. k
+                    admin.set_binding(o.mod, o.key, b)
+                    screen.osk = nil
                     R.dirty = true
                 end
             end
             return out
         end
         local rows = {}
-        for i, list in ipairs(OSK_TEXT) do
-            rows[#rows + 1] = key_row(list, 'o' .. i .. '_', function(k) return (o.mode == 'text' and o.shift and k:match('%a')) and k:upper() or k end)
-        end
-        if o.mode ~= 'text' then
-            rows[#rows + 1] = key_row(OSK_F, 'of_', function(k) return k:upper() end)
-            rows[#rows + 1] = key_row(OSK_SPECIAL, 'os_', function(k) return OSK_SHORT[k] or (k:sub(1, 1):upper() .. k:sub(2, 3)) end)
-        end
+        for i, list in ipairs(OSK_TEXT) do rows[#rows + 1] = key_row(list, 'o' .. i .. '_') end
+        rows[#rows + 1] = key_row(OSK_F, 'of_', function(k) return k:upper() end)
+        rows[#rows + 1] = key_row(OSK_SPECIAL, 'os_', function(k) return OSK_SHORT[k] or (k:sub(1, 1):upper() .. k:sub(2, 3)) end)
         m.osk_rows = rows
         local function toggle(name) return function() o[name] = not o[name]; R.dirty = true end end
-        acts.osk_ctrl, acts.osk_alt = toggle('ctrl'), toggle('alt')
-        acts.osk_shift, acts.osk_shift2 = toggle('shift'), toggle('shift')
-        acts.osk_space = function()
-            if #o.text < o.max then o.text = o.text .. ' '; admin.set(o.mod, o.def.id, o.text) end
-            R.dirty = true
-        end
-        acts.osk_back = function() o.text = o.text:sub(1, -2); admin.set(o.mod, o.def.id, o.text); R.dirty = true end
-        acts.osk_done = function() screen.osk = nil; R.dirty = true end
+        acts.osk_ctrl, acts.osk_alt, acts.osk_shift = toggle('ctrl'), toggle('alt'), toggle('shift')
         acts.osk_none = function() admin.set_binding(o.mod, o.key, ''); screen.osk = nil; R.dirty = true end
         acts.osk_cancel = function() screen.osk = nil; R.dirty = true end
     end
@@ -1025,7 +982,7 @@ do
         local acts = R.acts
         local m = {open = true, view = 'list', message = screen.message or '', restart = screen.restart and true or false,
             count_text = '', mods = {}, mod_name = '', tabs = {}, tab = 'none', multi_tab = false, rows = {},
-            osk_title = '', osk_text = '', osk_text_mode = true, osk_rows = {}, osk_ctrl = false, osk_shift = false, osk_alt = false}
+            osk_title = '', osk_rows = {}, osk_ctrl = false, osk_shift = false, osk_alt = false}
         local list = admin.entries()
         m.count_text = ('%d installed'):format(#list - 1)
         if screen.view == 'list' then
@@ -1203,7 +1160,8 @@ do
         if blocker.pressed then stop_input() end
         if back then
             -- The controller's B: out of the keyboard, out of a mod's screen, then out of the manager.
-            if screen.dd then screen.dd = nil; R.dirty = true
+            if kb and kb:back() then R.dirty = true
+            elseif screen.dd then screen.dd = nil; R.dirty = true
             elseif screen.osk then screen.osk = nil
             elseif screen.capture then stop_input()
             elseif screen.view ~= 'list' then screen.view = 'list'; R.reset_scroll = true
@@ -1211,6 +1169,7 @@ do
             R.dirty = true
         elseif escape then
             if screen.dd then screen.dd = nil; R.dirty = true
+            elseif kb and kb:back() then R.dirty = true
             elseif screen.osk or screen.capture then stop_input(); R.dirty = true else close_screen(true) return true end
         end
         -- a key being rebound: the next key pressed is the binding
@@ -1269,6 +1228,7 @@ do
             doc:style('#win', 'top', ('%dpx'):format(cy))
         end
         doc:draw({layer = 'top'})
+        if kb then kb:draw() end
         if screen.view == 'mod' and screen.tab == 'page' and not screen.osk then
             local area = doc:query('#more')
             local rect = area and area:rect()
@@ -1400,12 +1360,16 @@ gear.on('draw', function(state)
     end
     if back then
         -- The controller's B: out of the keyboard, out of a mod's screen, then out of the manager.
-        if screen.osk then screen.osk = nil
+        if kb and kb:back() then
+            -- (the keyboard first)
+        elseif screen.osk then screen.osk = nil
         elseif screen.capture or screen.edit then stop_input()
         elseif screen.view ~= 'list' then screen.view = 'list'
         else close_screen() return end
     elseif escape then
-        if screen.osk or screen.capture or screen.edit then stop_input() else close_screen(true) return end
+        if (kb and kb:back()) then
+            -- (the keyboard first)
+        elseif screen.osk or screen.capture or screen.edit then stop_input() else close_screen(true) return end
     end
     if screen.osk then
         draw_osk(p)
@@ -1414,6 +1378,7 @@ gear.on('draw', function(state)
     else
         draw_mod(p)
     end
+    if kb then kb:draw() end
 end)
 
 gear.keys.on('open', toggle_screen)

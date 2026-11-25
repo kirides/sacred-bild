@@ -11,6 +11,7 @@
 - Fixed: clicking an NPC far away walks the hero up again: the engine ends the hero's walk after the next waypoint without a held mouse button, so the order is sent again every few tenths of a second. An NPC on a routine whose first walk order the engine dropped gets it again (three orders over 4.5 seconds) before it is called blocked and put at its point.
 - New: `gear/examples/npctest` and `npcsavetest`, in-game tests of the above.
 - Under the hood: `World::setNameText` writes the creature's name text id (+0x3C), `gear.world.clock` reads the game's calendar (hour at +0x20, minute at +0x22 of the object 0x417560 returns).
+- New: `gear.kit.osk`, an on-screen keyboard for mod screens, and `kit.ibtn` (the keyboard icon button). A small window of its own with bordered keys, a number pad (`digits`), a longest text (`max`), Paste with clean-up rules and the pad and the mouse on every key; `kit.field` makes a text input whose keyboard button shows only while the controller is in use (A on the field opens it); the same widget works in the plain base style and in the sacred-theme look. The mod manager's text settings use it, and `gear/examples/rmlosk` is a demo and in-game test.
 
 ## v0.13.0 (2026-11-25)
 

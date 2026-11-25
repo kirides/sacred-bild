@@ -2386,9 +2386,29 @@ button.game-button:disabled, button.game-button[disabled] { color: #8a8a8a; opac
 button { flex: none; white-space: nowrap; }
 button.mini { margin: 0 4px 0 0; padding: 0 10px; line-height: 1.4; font-size: 13px; }
 button.ibtn { margin: 0 4px 0 0; padding: 2px 8px; border: 0; background-color: transparent; color: #e8d8a8; font-size: 16px; }
+button.ibtn { align-self: center; }
 button.ibtn:hover, button.ibtn:focus { background-color: transparent; color: #fff6d0; }
 button.ibtn + button.ibtn { border-left: 1px #8c744099; margin-left: 4px; padding-left: 12px; }
 button.mini.dis { color: #8c8c8c; border-color: #3c3c3c; opacity: 0.6; }
+/* the on-screen keyboard (gear.kit.osk): the typed text, rows of bordered keys */
+.kit-osk > .body { background-color: #0d0c12; }
+.kit-osk .osk-line { display: flex; flex-direction: row; align-items: center; height: 30px; margin: 0 0 8px 0; padding: 0 8px; background-color: #0c0c14; border: 1px #6e5e3a; white-space: pre; overflow: hidden; }
+.kit-osk .osk-text { color: #f0f0f0; }
+.kit-osk .osk-caret { color: #ffd780; }
+.kit-osk .osk-count { margin-left: auto; padding-left: 10px; color: #8c8c8c; font-size: 12px; }
+.kit-osk .osk-row { display: flex; flex-direction: row; justify-content: center; margin: 3px 0; }
+button.osk-key { display: inline-block; width: 42px; height: 34px; margin: 0 3px; padding: 0; line-height: 32px; text-align: center; font-size: 16px; background-color: #14141f; border: 1px #8c7440; }
+button.osk-key.wide { width: 62px; font-size: 14px; }
+button.osk-key.space { width: 182px; font-size: 14px; }
+button.osk-key.pad { width: 64px; height: 44px; line-height: 42px; font-size: 20px; }
+button.osk-key.txt { font-size: 14px; }
+button.osk-key.half { width: 100px; font-size: 14px; }
+button.osk-key.on { color: #ffd54a; border-color: #ffd54a; }
+button.osk-key.done { border-color: #c8aa5a; color: #ffd780; }
+/* the keyboard button of a text field: only while the controller is the input */
+button.ibtn.kit-kbd { display: none; }
+body.pad button.ibtn.kit-kbd { display: inline-block; }
+.kit-field { display: flex; flex-direction: row; align-items: center; }
 .dd { position: relative; display: inline-block; flex: none; z-index: 10; }
 .dd.open { z-index: 100; }
 .dd-list { position: absolute; left: 0; top: 100%; min-width: 150px; max-height: 300px; overflow-y: auto; z-index: 200; background-color: #0c0c14; border: 1px #ffd780; padding: 2px; }

@@ -1,0 +1,1 @@
+return { id = 'rmlosk', name = 'On-screen keyboard demo', version = '0.1.0', author = 'Sacred Gear', description = 'src/gear.kit.osk: a name field and an amount field, each with a keyboard button. The same markup runs in the plain base style and, with the theme mod, in the look of the game. With -gear-auto a self test (clicks every kind of key).', automation = true }
