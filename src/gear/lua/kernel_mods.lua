@@ -2940,37 +2940,70 @@ end
 -- One in-game frame: sessions, pipes, timers, the frame handlers, then the draw handlers; the frame's drawing is
 -- published at the end.
 function kernel.tick(dt)
+    local pr = kernel.prof
+    if pr then pr.begin() end
     if apply_pending then apply(false) end
+    if pr then pr.mark('apply') end
     kernel.savegame.poll()
+    if pr then pr.mark('kernel.savegame.poll') end
     check_session()
+    if pr then pr.mark('check_session') end
     poll_keys()
+    if pr then pr.mark('poll_keys') end
     uis.input_poll()
+    if pr then pr.mark('uis.input_poll') end
     poll_saves()
+    if pr then pr.mark('poll_saves') end
     uis.chat_poll()
+    if pr then pr.mark('uis.chat_poll') end
     kernel.poll_kills()
+    if pr then pr.mark('kernel.poll_kills') end
     kernel.poll_created()
+    if pr then pr.mark('kernel.poll_created') end
     kernel.boss.poll()
+    if pr then pr.mark('kernel.boss.poll') end
     kernel.buffs.poll()
+    if pr then pr.mark('kernel.buffs.poll') end
     kernel.poll_mp(dt)
+    if pr then pr.mark('kernel.poll_mp') end
     poll_pipes()
+    if pr then pr.mark('poll_pipes') end
     run_timers()
+    if pr then pr.mark('run_timers') end
     uis.publish_replace()
+    if pr then pr.mark('uis.publish_replace') end
     uis.typed = native.ui_take_typed and native.ui_take_typed() or ''
+    if pr then pr.mark('uis.typed') end
     ui_begin_tick()
+    if pr then pr.mark('ui_begin_tick') end
     apply_game_layout()
+    if pr then pr.mark('apply_game_layout') end
     run_tasks()
+    if pr then pr.mark('run_tasks') end
     kernel.dispatch('frame', dt)
+    if pr then pr.mark('dispatch.frame') end
     kernel.dispatch('draw', gear_ui_state())
+    if pr then pr.mark('dispatch.draw') end
     uis.chat_publish()
+    if pr then pr.mark('uis.chat_publish') end
     ui_end_tick()
+    if pr then pr.mark('ui_end_tick') end
     native.ui_commit()
+    if pr then pr.mark('native.ui_commit') end
     save_layout()
+    if pr then pr.mark('save_layout') end
     publish_pickup_rules()
+    if pr then pr.mark('publish_pickup_rules') end
     D.publish()
+    if pr then pr.mark('D.publish') end
     realm_poll()
+    if pr then pr.mark('realm_poll') end
     realm_flush()
+    if pr then pr.mark('realm_flush') end
     state_flush()
+    if pr then pr.mark('state_flush') end
     native.ui_block_keys(next(key_capture) ~= nil)
+    if pr then pr.mark('native.ui_block_keys'); pr.memtick(); pr.dump() end
 end
 
 -- Automation only: a tick in the menus (every 50 ms while no in-game frame runs), on the automation thread.

@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -10,4 +11,6 @@ namespace GameCfg
 {
     // Whole file, keys as written (upper case).
     const std::map<std::string, std::string>& all();
+    // Counts the rereads: a cached copy of all() is current while this has not changed.
+    uint64_t generation();
 }

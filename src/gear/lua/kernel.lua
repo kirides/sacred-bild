@@ -27,6 +27,74 @@
 local native = ...
 local kernel = {slot_reservations = {}}   -- slot_reservations: mod -> its gear.game.reserve_slots list
 
+-- Opt-in profiler (environment SACREDGEAR_PROF): per-native, per-handler and per-tick-phase times, Lua memory; dumped to the log every 5 s.
+if os.getenv('SACREDGEAR_PROF') then
+    local clock, wrapnat = native.time, {}
+    local P = {clock = clock, nat = {}, ev = {}, ph = {}, mem = {n = 0, grow = 0, shrink = 0, last = collectgarbage('count'), max = 0}, nm = {}, last = 0, report_at = clock() + 5}
+    kernel.prof = P
+    P.nogc = os.getenv('SACREDGEAR_PROF') == 'nogc'
+    if P.nogc then collectgarbage('stop') end
+    local function rec(t, k) local r = t[k]; if not r then r = {n = 0, t = 0, max = 0}; t[k] = r end; return r end
+    for name, f in pairs(native) do
+        if type(f) == 'function' and name ~= 'time' and name ~= 'log' then
+            local r = rec(P.nat, name)
+            native[name] = function(...)
+                local t0 = clock()
+                return (function(...)
+                    local d = clock() - t0
+                    r.n = r.n + 1; r.t = r.t + d
+                    if d > r.max then r.max = d end
+                    local cur = kernel.current and kernel.current()
+                    if cur then
+                        local m = P.nm[cur]; if not m then m = {}; P.nm[cur] = m end
+                        local x = rec(m, name); x.n = x.n + 1; x.t = x.t + d
+                    end
+                    return ...
+                end)(f(...))
+            end
+        end
+    end
+    P.lastkb = 0
+    function P.begin() P.last = clock(); P.lastkb = collectgarbage('count') end
+    function P.mark(name)
+        local t = clock()
+        local r = rec(P.ph, name)
+        local d = t - P.last
+        local kb = collectgarbage('count')
+        if kb > P.lastkb then r.kb = (r.kb or 0) + kb - P.lastkb end
+        P.lastkb = kb
+        r.n = r.n + 1; r.t = r.t + d
+        if d > r.max then r.max = d end
+        P.last = t
+    end
+    function P.event(mod, what, d, kb0)
+        local m = P.ev[mod.id]; if not m then m = {}; P.ev[mod.id] = m end
+        local r = rec(m, what)
+        local kb = collectgarbage('count') - kb0
+        if kb > 0 then r.kb = (r.kb or 0) + kb end
+        r.n = r.n + 1; r.t = r.t + d
+        if d > r.max then r.max = d end
+    end
+    function P.memtick()
+        local c, M = collectgarbage('count'), P.mem
+        M.n = M.n + 1
+        if c > M.last then M.grow = M.grow + (c - M.last) else M.shrink = M.shrink + (M.last - c) end
+        M.last = c
+        if c > M.max then M.max = c end
+    end
+    function P.dump()
+        local t = clock()
+        if t < P.report_at then return end
+        P.report_at = t + 5
+        local M = P.mem
+        native.log(('PROFL|%.3f|mem|%d|%.1f|%.1f|%.1f|%.1f'):format(t, M.n, M.last, M.max, M.grow, M.shrink))
+        for k, r in pairs(P.nat) do if r.n > 0 then native.log(('PROFL|%.3f|nat|%s|%d|%.4f|%.4f'):format(t, k, r.n, r.t * 1000, r.max * 1000)) end end
+        for k, r in pairs(P.ph) do native.log(('PROFL|%.3f|ph|%s|%d|%.4f|%.4f|%.1f'):format(t, k, r.n, r.t * 1000, r.max * 1000, r.kb or 0)) end
+        for id, m in pairs(P.ev) do for k, r in pairs(m) do native.log(('PROFL|%.3f|ev|%s/%s|%d|%.4f|%.4f|%.1f'):format(t, id, k, r.n, r.t * 1000, r.max * 1000, r.kb or 0)) end end
+        for id, m in pairs(P.nm) do for k, r in pairs(m) do native.log(('PROFL|%.3f|nm|%s/%s|%d|%.4f|0'):format(t, id, k, r.n, r.t * 1000)) end end
+    end
+end
+
 local MAX_ERRORS = 10   -- a mod whose handlers raised this many errors is switched off for the session
 
 local mods = {}         -- loaded mods in load order: {id, name, version, dir, env, errors, disabled}
@@ -68,7 +136,11 @@ local function call(mod, what, fn, ...)
     local previous = current
     current = mod
     native.reset_budget()
+    local pr = kernel.prof
+    local t0 = pr and pr.clock()
+    local kb0 = pr and collectgarbage('count')
     local ok, result = xpcall(fn, traceback, ...)
+    if pr then pr.event(mod, what, pr.clock() - t0, kb0) end
     current = previous
     if not ok then
         mod.errors = mod.errors + 1
