@@ -1553,6 +1553,80 @@ namespace
         }
     }
 
+    // Whether two values are the same (rml_model_set of an unchanged value leaves the document clean).
+    bool sameNode(const Node& a, const Node& b)
+    {
+        if (a.type != b.type)
+        {
+            return false;
+        }
+        switch (a.type)
+        {
+        case Node::Type::Bool: return a.b == b.b;
+        case Node::Type::Num: return a.n == b.n || (a.n != a.n && b.n != b.n);
+        case Node::Type::Str: return a.s == b.s;
+        case Node::Type::Arr:
+            if (a.arr.size() != b.arr.size())
+            {
+                return false;
+            }
+            for (size_t i = 0; i < a.arr.size(); ++i)
+            {
+                if (!sameNode(a.arr[i], b.arr[i]))
+                {
+                    return false;
+                }
+            }
+            return true;
+        case Node::Type::Obj:
+            if (a.obj.size() != b.obj.size())
+            {
+                return false;
+            }
+            for (size_t i = 0; i < a.obj.size(); ++i)
+            {
+                if (a.obj[i].first != b.obj[i].first || !sameNode(a.obj[i].second, b.obj[i].second))
+                {
+                    return false;
+                }
+            }
+            return true;
+        default: return true;
+        }
+    }
+
+    // Whether `e`'s inline style already holds what `value` parses to for `property` (every longhand of a shorthand): setting it again would change
+    // nothing.
+    bool hasLocalProperty(Rml::Element* e, const std::string& property, const std::string& value)
+    {
+        Rml::PropertyDictionary parsed;
+        if (!Rml::StyleSheetSpecification::ParsePropertyDeclaration(parsed, property, value) || parsed.GetProperties().empty())
+        {
+            return false;
+        }
+        for (const auto& [id, prop] : parsed.GetProperties())
+        {
+            const Rml::Property* local = e->GetLocalProperty(id);
+            if (!local || !(*local == prop))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Whether `e`'s attribute `name` is there with the text `value` (has = false: whether it is missing).
+    bool attributeIs(Rml::Element* e, const std::string& name, bool has, const std::string& value = {})
+    {
+        const Rml::Variant* v = e->GetAttribute(name);
+        if (!has || !v)
+        {
+            return !has && !v;
+        }
+        Rml::String text;
+        return v->GetInto(text) && text == value;
+    }
+
     // Whether `e` matches a selector: simple ones ("#id", ".class", "tag", [data-gh="N"]) by plain comparison, others through RmlUi
     // (which parses the selector on every call).
     bool matchesSelector(Rml::Element* e, const std::string& selector)
@@ -2995,6 +3069,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         const std::string key = str(L, 2);
         if (!d.hasModel)
         {
+            g_unchanged = true;
             lua_pushboolean(L, 0);
             return 1;
         }
@@ -3002,8 +3077,17 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         {
             if (name == key)
             {
-                toNode(L, 3, value, 0);
-                d.modelHandle.DirtyVariable(key);
+                Node next;
+                toNode(L, 3, next, 0);
+                if (sameNode(next, value))
+                {
+                    g_unchanged = true;     // a mod that hands the same value in every frame leaves the document clean
+                }
+                else
+                {
+                    value = std::move(next);
+                    d.modelHandle.DirtyVariable(key);
+                }
                 lua_pushboolean(L, 1);
                 return 1;
             }
@@ -3603,8 +3687,21 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         if (e)
         {
             const double x = luaL_checknumber(L, 3), y = luaL_checknumber(L, 4);
-            e->SetProperty("left", std::to_string(static_cast<int>(std::lround(x * d.unit - d.bodyPx.x))) + "px");
-            e->SetProperty("top", std::to_string(static_cast<int>(std::lround(y * d.unit - d.bodyPx.y))) + "px");
+            const std::string left = std::to_string(static_cast<int>(std::lround(x * d.unit - d.bodyPx.x))) + "px";
+            const std::string top = std::to_string(static_cast<int>(std::lround(y * d.unit - d.bodyPx.y))) + "px";
+            if (hasLocalProperty(e, "left", left) && hasLocalProperty(e, "top", top))
+            {
+                g_unchanged = true;     // already there (an element that stays where its own style puts it)
+            }
+            else
+            {
+                e->SetProperty("left", left);
+                e->SetProperty("top", top);
+            }
+        }
+        else
+        {
+            g_unchanged = true;
         }
         lua_pushboolean(L, e != nullptr);
         return 1;
@@ -3619,9 +3716,22 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         if (e)
         {
             const double w = luaL_checknumber(L, 3), h = luaL_checknumber(L, 4);
-            e->SetProperty("box-sizing", "border-box");
-            e->SetProperty("width", std::to_string(static_cast<int>(std::lround(w * d.unit))) + "px");
-            e->SetProperty("height", std::to_string(static_cast<int>(std::lround(h * d.unit))) + "px");
+            const std::string width = std::to_string(static_cast<int>(std::lround(w * d.unit))) + "px";
+            const std::string height = std::to_string(static_cast<int>(std::lround(h * d.unit))) + "px";
+            if (hasLocalProperty(e, "box-sizing", "border-box") && hasLocalProperty(e, "width", width) && hasLocalProperty(e, "height", height))
+            {
+                g_unchanged = true;
+            }
+            else
+            {
+                e->SetProperty("box-sizing", "border-box");
+                e->SetProperty("width", width);
+                e->SetProperty("height", height);
+            }
+        }
+        else
+        {
+            g_unchanged = true;
         }
         lua_pushboolean(L, e != nullptr);
         return 1;
@@ -3977,19 +4087,30 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         Rml::Element* e = find(d, str(L, 2));
         if (!e)
         {
+            g_unchanged = true;
             lua_pushnil(L);
             return 1;
         }
+        Rml::String inner = e->GetInnerRML();
         if (lua_isstring(L, 3))
         {
-            RootScope scope(d);
-            e->SetInnerRML(str(L, 3));
+            std::string markup = str(L, 3);
+            if (markup == inner)
+            {
+                g_unchanged = true;     // the same text again (a label a mod sets every frame)
+            }
+            else
+            {
+                RootScope scope(d);
+                e->SetInnerRML(markup);
+                inner = e->GetInnerRML();
+            }
         }
         else
         {
             g_unchanged = true;
         }
-        push(L, e->GetInnerRML());
+        push(L, inner);
         return 1;
     }
 
@@ -4006,15 +4127,37 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         }
         if (lua_type(L, 4) == LUA_TBOOLEAN && !lua_toboolean(L, 4))
         {
-            e->RemoveAttribute(name);
+            if (attributeIs(e, name, false))
+            {
+                g_unchanged = true;
+            }
+            else
+            {
+                e->RemoveAttribute(name);
+            }
         }
         else if (lua_type(L, 4) == LUA_TBOOLEAN)
         {
-            e->SetAttribute(name, Rml::String());      // a flag attribute (checked, disabled)
+            if (attributeIs(e, name, true))
+            {
+                g_unchanged = true;
+            }
+            else
+            {
+                e->SetAttribute(name, Rml::String());      // a flag attribute (checked, disabled)
+            }
         }
         else if (lua_isstring(L, 4))
         {
-            e->SetAttribute(name, str(L, 4));
+            const std::string value = str(L, 4);
+            if (attributeIs(e, name, true, value))
+            {
+                g_unchanged = true;
+            }
+            else
+            {
+                e->SetAttribute(name, value);
+            }
         }
         else
         {
@@ -4038,9 +4181,15 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     {
         Doc& d = docArg(L);
         Rml::Element* e = find(d, str(L, 2));
-        if (e)
+        const std::string name = str(L, 3);
+        const bool on = lua_toboolean(L, 4) != 0;
+        if (e && e->IsClassSet(name) != on)
         {
-            e->SetClass(str(L, 3), lua_toboolean(L, 4) != 0);
+            e->SetClass(name, on);
+        }
+        else
+        {
+            g_unchanged = true;
         }
         lua_pushboolean(L, e != nullptr);
         return 1;
@@ -4051,16 +4200,34 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     {
         Doc& d = docArg(L);
         Rml::Element* e = find(d, str(L, 2));
+        g_unchanged = e == nullptr;
         if (e)
         {
             const std::string property = str(L, 3);
             if (lua_type(L, 4) == LUA_TBOOLEAN || lua_isnil(L, 4))
             {
-                e->RemoveProperty(property);
+                // a longhand that is not set inline: nothing to take off (a shorthand is always taken off: its longhands are not looked at)
+                const Rml::PropertyId id = Rml::StyleSheetSpecification::GetPropertyId(property);
+                if (id != Rml::PropertyId::Invalid && !e->GetLocalProperty(id))
+                {
+                    g_unchanged = true;
+                }
+                else
+                {
+                    e->RemoveProperty(property);
+                }
             }
             else
             {
-                e->SetProperty(property, str(L, 4));
+                const std::string value = str(L, 4);
+                if (hasLocalProperty(e, property, value))
+                {
+                    g_unchanged = true;
+                }
+                else
+                {
+                    e->SetProperty(property, value);
+                }
             }
         }
         lua_pushboolean(L, e != nullptr);
@@ -4077,7 +4244,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             lua_pushnil(L);
             return 1;
         }
-        if (lua_isstring(L, 3))
+        if (lua_isstring(L, 3) && e->GetValue() != str(L, 3))
         {
             e->SetValue(str(L, 3));
         }
@@ -4273,7 +4440,13 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         Rml::Element* e = find(d, str(L, 2));
         if (e)
         {
-            if (lua_isnone(L, 3) || lua_toboolean(L, 3))
+            const bool focused = d.context->GetFocusElement() == e;
+            const bool want = lua_isnone(L, 3) || lua_toboolean(L, 3);
+            if (want == focused)
+            {
+                g_unchanged = true;
+            }
+            else if (want)
             {
                 e->Focus();
             }
@@ -4281,6 +4454,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             {
                 e->Blur();
             }
+        }
+        else
+        {
+            g_unchanged = true;
         }
         lua_pushboolean(L, e != nullptr);
         lua_pushboolean(L, e && e->GetOwnerDocument() && e->GetOwnerDocument()->GetContext() &&
@@ -4296,6 +4473,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         {
             RootScope scope(d);
             f->Blur();
+        }
+        else
+        {
+            g_unchanged = true;
         }
         return 0;
     }
