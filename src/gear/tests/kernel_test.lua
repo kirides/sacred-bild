@@ -1240,7 +1240,15 @@ do
     local real = rf:read('*a')
     rf:close()
     local saved_builtin = native.builtin
-    native.builtin = function(name) if name == 'modmanager' then return real end end
+    native.builtin = function(name)
+        if name == 'modmanager' then return real end
+        -- the libraries the manager uses (gear.kit)
+        local lf = io.open('src/gear/lua/' .. name .. '.lua', 'rb')
+        if not lf then return nil end
+        local text = lf:read('*a')
+        lf:close()
+        return text
+    end
     state_file = nil
     local k = new_kernel()
     k.load()
