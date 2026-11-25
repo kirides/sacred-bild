@@ -2,6 +2,7 @@
 #include "log.h"
 
 #include <windows.h>
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <vector>
@@ -65,27 +66,99 @@ namespace
         return true;
     }
 
-    // The host exe's code: the first executable section.
-    std::span<const uint8_t> codeSection()
+    // The host exe's code: the first executable section, and its address in the running image.
+    struct Code
     {
-        const auto* base = reinterpret_cast<const uint8_t*>(GetModuleHandleW(nullptr));
-        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+        std::span<const uint8_t> bytes;
+        uintptr_t va = 0;
+    };
+
+    const IMAGE_SECTION_HEADER* codeHeader(const IMAGE_NT_HEADERS* nt)
+    {
         const auto* section = IMAGE_FIRST_SECTION(nt);
         for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section)
         {
             if (section->Characteristics & IMAGE_SCN_MEM_EXECUTE)
             {
-                return {base + section->VirtualAddress, section->Misc.VirtualSize};
+                return section;
             }
         }
-        return {};
+        return nullptr;
+    }
+
+    // The code section as the exe file on disk has it: what the game's code was before any module patched it. Hooks of
+    // another DLL (SacredBild's, Sacred Gear's, a third one's) put jumps over the first bytes of functions; a signature
+    // searched in memory would then miss the functions the other module hooked first, depending on the load order. The
+    // exe is not relocated (no ASLR), so an address found in the file's copy is valid in memory. Read once per module;
+    // nothing if the file cannot be read or is not the image that runs (then the caller searches memory).
+    const std::vector<uint8_t>& diskCode(const IMAGE_NT_HEADERS* running, const IMAGE_SECTION_HEADER* section)
+    {
+        static std::vector<uint8_t> code;
+        static bool tried = false;
+        if (tried)
+        {
+            return code;
+        }
+        tried = true;
+        wchar_t path[MAX_PATH] = {};
+        if (!GetModuleFileNameW(nullptr, path, MAX_PATH))
+        {
+            return code;
+        }
+        HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (file == INVALID_HANDLE_VALUE)
+        {
+            LOG("Signatures: cannot open the exe ({}), searching memory", GetLastError());
+            return code;
+        }
+        auto readAt = [&](uint32_t offset, void* out, uint32_t size) {
+            OVERLAPPED at{};
+            at.Offset = offset;
+            DWORD got = 0;
+            return ReadFile(file, out, size, &got, &at) && got == size;
+        };
+        IMAGE_DOS_HEADER dos{};
+        IMAGE_NT_HEADERS nt{};
+        std::vector<uint8_t> bytes;
+        const bool ok = readAt(0, &dos, sizeof(dos)) && dos.e_magic == IMAGE_DOS_SIGNATURE && readAt(dos.e_lfanew, &nt, sizeof(nt)) &&
+                        nt.Signature == IMAGE_NT_SIGNATURE && nt.FileHeader.TimeDateStamp == running->FileHeader.TimeDateStamp &&
+                        nt.OptionalHeader.ImageBase == running->OptionalHeader.ImageBase && section->SizeOfRawData > 0 &&
+                        (bytes.resize(section->Misc.VirtualSize), readAt(section->PointerToRawData, bytes.data(),
+                                                                          std::min<uint32_t>(section->SizeOfRawData, section->Misc.VirtualSize)));
+        CloseHandle(file);
+        if (ok)
+        {
+            code = std::move(bytes);
+        }
+        else
+        {
+            LOG("Signatures: the exe file is not the running image or cannot be read, searching memory");
+        }
+        return code;
+    }
+
+    Code codeSection()
+    {
+        const auto* base = reinterpret_cast<const uint8_t*>(GetModuleHandleW(nullptr));
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+        const IMAGE_SECTION_HEADER* section = codeHeader(nt);
+        if (!section)
+        {
+            return {};
+        }
+        const uintptr_t va = reinterpret_cast<uintptr_t>(base) + section->VirtualAddress;
+        if (const auto& disk = diskCode(nt, section); !disk.empty())
+        {
+            return {disk, va};
+        }
+        return {{base + section->VirtualAddress, section->Misc.VirtualSize}, va};
     }
 }
 
 size_t Sig::resolve(std::span<const Entry> entries)
 {
-    const auto code = codeSection();
-    return resolve(entries, code, reinterpret_cast<uintptr_t>(code.data()));
+    const Code code = codeSection();
+    return resolve(entries, code.bytes, code.va);
 }
 
 size_t Sig::resolve(std::span<const Entry> entries, std::span<const uint8_t> code, uintptr_t codeVa)

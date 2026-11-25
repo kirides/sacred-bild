@@ -5,8 +5,9 @@
 
 // The sacred.exe addresses Sacred Gear uses (English GOG build in the comments). Found at startup by signature
 // (gear_sigs.inc, written by tools/sigs/gen_gear_sigs.py), never fixed: an address whose signature does not match stays 0
-// and the feature that needs it stays off. tools/sigs/check_gear_overlap.py checks that none of them shares bytes with
-// SacredBild's, so the two work in either load order.
+// and the feature that needs it stays off. The signatures are searched in the exe file's code (Sig::resolve), so SacredBild's
+// hooks never hide them; tools/sigs/check_gear_overlap.py checks that the two never patch the same bytes (two Detours hooks
+// of one function chain), so they work in either load order.
 namespace Gear::Addr
 {
     // ENG 0060DD20. The in-game loop (cEngine_renderThreadRun, 0x60E350) calls it once per frame after the world

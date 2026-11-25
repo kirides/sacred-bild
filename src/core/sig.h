@@ -37,7 +37,8 @@ namespace Sig
         Out out;                // receives the address; 0 if the pattern does not match exactly once
     };
 
-    // Scans the host exe's code section once for all entries; returns how many did not resolve (each is logged).
+    // Scans the host exe's code section once for all entries; returns how many did not resolve (each is logged). The bytes are
+    // the exe file's (as before any module patched them), the addresses the running image's.
     size_t resolve(std::span<const Entry> entries);
 
     // The same over `code`, which is mapped at `codeVa` in the image the addresses are for (tests).

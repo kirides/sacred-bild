@@ -241,7 +241,7 @@ Python 3 with `pefile` and `capstone`, `SACRED_ENG` as for SacredBild's tools:
 | Tool | Does |
 |---|---|
 | `tools/sigs/gen_gear_sigs.py` | Writes `src/gear/engine/gear_sigs.inc` from the entries listed in it |
-| `tools/sigs/check_gear_overlap.py` | Fails if a Sacred Gear signature window overlaps one SacredBild patches, or the other way round |
+| `tools/sigs/check_gear_overlap.py` | Fails if Sacred Gear and SacredBild patch the same bytes (two Detours hooks of one function are fine: they chain). Signatures are searched in the exe file's code, so a patch of one never hides the bytes the other's signatures read |
 | `tools/gearapi/check_gear_api.py` | Fails if the annotations and the Lua API disagree, or `docs/GearApi.md` is out of date |
 | `tools/gearapi/gen_gear_api_docs.py` | Writes `docs/GearApi.md` from `src/gear/meta/*.lua` and `docs/GearApi.head.md` |
 | `tools/gearapi/gen_gear_mdk.py` | Writes the MDK to `out/mdk/sacred-gear-mdk` (`--zip`: also the zip); CI runs it and publishes the kit |

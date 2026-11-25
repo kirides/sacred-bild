@@ -20,8 +20,7 @@ GEAR = [
     # The object whose +0x563008 / +0x56300C vector holds Creature.pak's 0x56-byte records (0x7E0708 loads it into
     # ECX before calling the loader 0x4371C0 with "Pak\\Creature.pak").
     ('g_pTypeManager', 0x00AAB5E4, 'data'),
-    # Objects (src/gear/world/world.cpp). SacredBild reads some of these too (never patches them): check_gear_overlap.py
-    # allows windows that only read the same bytes.
+    # Objects (src/gear/world/world.cpp). SacredBild reads some of these too (never patches them).
     ('g_pObjectManager', 0x00AD5C40, 'data'),
     ('cObjectManager_hero', 0x00603E30, 'func'),
     ('cObjectManager_create', 0x005FBA40, 'func'),
