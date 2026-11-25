@@ -3225,6 +3225,14 @@ local function ui_begin_tick()
     end
     uis.scroll_prev, uis.scroll_now = uis.scroll_now, uis.scroll_prev      -- two pooled lists (entries overwritten, `n` = live ones)
     uis.scroll_now.n = 0
+    -- A document that was not drawn in the last frame (hidden, its mod stopped drawing it) gives up its focus and the keyboard capture.
+    if uis.rml_docs then
+        for _, entry in pairs(uis.rml_docs) do
+            local d = entry.doc
+            if d.drawn_frame ~= uis.frame and not d.idle_released and (d.drawn_frame or d.capturing) then d:release_focus() end
+        end
+    end
+    uis.frame = (uis.frame or 0) + 1
     uis.modal, uis.modal_next = uis.modal_next, nil      -- the document that was modal in the last frame (draw order between mods is not fixed)
     ui_tick_state = native.ui_state()
     ui_mouse.x, ui_mouse.y = ui_tick_state.mouse_x or 0, ui_tick_state.mouse_y or 0
@@ -4037,6 +4045,11 @@ local function make_ui(mod)
     Doc.__index = Doc
     uis.rml_docs = uis.rml_docs or {}
     local RML_KEYS = {'backspace', 'delete', 'enter', 'tab', 'escape', 'left', 'right', 'up', 'down', 'home', 'end', 'pageup', 'pagedown'}
+    local RML_CHORDS = {'a', 'c', 'x', 'v'}
+    -- The held modifiers as the bits native.rml_key / rml_mouse take: 1 Ctrl, 2 Shift, 4 Alt.
+    local function rml_modifiers()
+        return (native.key_down(0x11) and 1 or 0) + (native.key_down(0x10) and 2 or 0) + (native.key_down(0x12) and 4 or 0)
+    end
 
     -- The names of the callbacks of data-event-* attributes (opts.calls: name -> function).
     function uis.rml_call_names(opts)
@@ -4246,7 +4259,21 @@ local function make_ui(mod)
     -- doc:get(key) -> the plain value of a top-level key of the data model (a table for lists and records).
     function Doc:get(key) return self.data and self.data[key] end
     function Doc:show() native.rml_show(self.id, true) end
-    function Doc:hide() native.rml_show(self.id, false) end
+    -- A document that is not on screen has no focus: nothing of it is focused or captures the keyboard (also when it just stops being drawn, see uis.rml_release_idle).
+    function Doc:release_focus()
+        if self.closed then return end
+        if native.rml_blur then native.rml_blur(self.id) end
+        if self.capturing then
+            local entry = uis.rml_docs[self.id]
+            if entry then key_capture[entry.mod] = nil end
+            self.capturing = false
+        end
+        self.idle_released = true
+    end
+    function Doc:hide()
+        native.rml_show(self.id, false)
+        self:release_focus()
+    end
 
     function Doc:close()
         if self.closed then return end
@@ -4261,6 +4288,8 @@ local function make_ui(mod)
     -- animations, calls the handlers of events that happened and draws it.
     function Doc:draw(opts)
         if self.closed then return 0 end
+        self.drawn_frame = uis.frame
+        self.idle_released = false
         opts = opts or {}
         local layer = UI_LAYERS[opts.layer or 'hud']
         if not layer then error('layer is "world", "hud" or "top"', 2) end
@@ -4439,18 +4468,47 @@ local function make_ui(mod)
                         native.rml_nudge(id, i, ui_pad.nudge)
                         ui_pad.nudge = 0
                     end
+                elseif r.text and not (native.ui_pad_info and native.ui_pad_info()) then
+                    -- A text field takes the real mouse (not the pad's A: that keeps the click at its centre): a press puts the caret (Shift extends
+                    -- the selection), a drag selects, a double click takes the word under the cursor (RmlUi's own text widget does all that).
+                    if res.pressed then
+                        native.rml_mouse(id, 'down', ui_mouse.x, ui_mouse.y, rml_modifiers())
+                        self.text_down = i
+                        hover = true
+                    elseif self.text_down == i then
+                        if res.held then
+                            hover = true
+                        else
+                            native.rml_mouse(id, 'up', ui_mouse.x, ui_mouse.y)
+                            self.text_down = nil
+                        end
+                    end
                 elseif res.clicked then native.rml_click(id, i) end
+            end
+            if self.text_down and self.text_down > #stops then
+                native.rml_mouse(id, 'up', ui_mouse.x, ui_mouse.y)
+                self.text_down = nil
             end
         end
         if native.rml_wants_text(id) then
             ui.capture_keys(true)
             self.capturing = true
             local typed = ui.typed()
-            if typed ~= '' then native.rml_text(id, typed) end
+            local mods = rml_modifiers()
+            -- With Ctrl held (and not AltGr) the keyboard's characters are the chord's letter: they are no text (a player's Ctrl+A is the control character,
+            -- which ui.typed drops; automation's injected keys are translated without the Ctrl state and would type it)
+            if typed ~= '' and not (bit.band(mods, 1) ~= 0 and bit.band(mods, 4) == 0) then native.rml_text(id, typed) end
             for _, name in ipairs(RML_KEYS) do
                 if ui.key_pressed(name) then
-                    native.rml_key(id, UI_VK[name], true)
-                    native.rml_key(id, UI_VK[name], false)
+                    native.rml_key(id, UI_VK[name], true, mods)
+                    native.rml_key(id, UI_VK[name], false, mods)
+                end
+            end
+            -- Ctrl + A / C / X / V: select all, copy, cut, paste (RmlUi's text widget through the Windows clipboard); not with AltGr (Ctrl + Alt)
+            for _, name in ipairs(RML_CHORDS) do
+                if ui.key_pressed(name) and bit.band(mods, 1) ~= 0 and bit.band(mods, 4) == 0 then
+                    native.rml_key(id, UI_VK[name], true, mods)
+                    native.rml_key(id, UI_VK[name], false, mods)
                 end
             end
         elseif self.capturing then

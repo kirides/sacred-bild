@@ -339,6 +339,21 @@ been typed (line breaks and tabs become spaces; the box applies its own length l
 window) and gives its rect in the 1024x768 layout, `native.ui_type_text()` posts the characters as `WM_CHAR` to the game window; both are in `gear/ui.cpp`,
 the button is the end of `gear/lua/modmanager.lua`.
 
+**Ctrl+V** does the same as the button (the text is typed once Ctrl is released; not with AltGr).
+
+### Text fields of RmlUi documents: selection and clipboard
+
+Every `<input type="text">` / `<textarea>` of a mod's document (the shared sacred-theme and Gear's own base style highlight the selection) takes:
+
+| | |
+|---|---|
+| Ctrl+A / Ctrl+C / Ctrl+X / Ctrl+V | select all, copy, cut, paste (the Windows clipboard, Unicode; a single-line field turns a pasted line break into nothing) |
+| Shift+Left / Right / Home / End | extend the selection (Ctrl+Shift+arrows by word) |
+| mouse | click puts the caret, Shift+click extends, click-drag selects, double click selects the word |
+
+The controller keeps its flow: with the pad the last used input, A on a field still clicks its centre and the on-screen keyboard types. Mods style the
+highlight with the `selection` pseudo-element (`input.field selection { background-color: ...; color: ... }`). Test: `gear/examples/clipboardtest`.
+
 ## Online play: game mode and realms
 
 `gear.mp.mode()` tells the kind of game: `'single'`, `'lan'`, `'open'` or `'closed'` (Closed Internet: the heroes belong

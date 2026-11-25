@@ -288,6 +288,66 @@ namespace
             Rml::SystemInterface::JoinPath(translated_path, document_path, path);
         }
 
+        // The Windows clipboard (Unicode text) for the text fields' Ctrl+C / Ctrl+X / Ctrl+V.
+        void SetClipboardText(const Rml::String& text) override
+        {
+            const int n = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
+            if (n < 0 || text.size() > (1u << 20))
+            {
+                return;
+            }
+            HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, (static_cast<size_t>(n) + 1) * sizeof(wchar_t));
+            if (!memory)
+            {
+                return;
+            }
+            if (auto* dst = static_cast<wchar_t*>(GlobalLock(memory)))
+            {
+                if (n > 0)
+                {
+                    MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), dst, n);
+                }
+                dst[n] = 0;
+                GlobalUnlock(memory);
+                if (OpenClipboard(nullptr))
+                {
+                    EmptyClipboard();
+                    if (SetClipboardData(CF_UNICODETEXT, memory))
+                    {
+                        memory = nullptr;           // the clipboard owns it now
+                    }
+                    CloseClipboard();
+                }
+            }
+            if (memory)
+            {
+                GlobalFree(memory);
+            }
+        }
+
+        void GetClipboardText(Rml::String& text) override
+        {
+            text.clear();
+            if (!OpenClipboard(nullptr))
+            {
+                return;
+            }
+            if (HANDLE data = GetClipboardData(CF_UNICODETEXT))
+            {
+                if (const auto* src = static_cast<const wchar_t*>(GlobalLock(data)))
+                {
+                    const int n = WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
+                    if (n > 1)
+                    {
+                        text.resize(static_cast<size_t>(n) - 1);
+                        WideCharToMultiByte(CP_UTF8, 0, src, -1, text.data(), n, nullptr, nullptr);
+                    }
+                    GlobalUnlock(data);
+                }
+            }
+            CloseClipboard();
+        }
+
         bool LogMessage(Rml::Log::Type type, const Rml::String& message) override
         {
             const char* kind = type == Rml::Log::LT_ERROR || type == Rml::Log::LT_ASSERT ? "error"
@@ -1895,6 +1955,33 @@ namespace
         return e && e->GetTagName() == "input" && e->GetAttribute<Rml::String>("type", "") == "range";
     }
 
+    // The modifier bits Lua passes (1 Ctrl, 2 Shift, 4 Alt) as RmlUi's key modifier state.
+    int modifiersArg(lua_State* L, int index)
+    {
+        const int bits = lua_isnumber(L, index) ? static_cast<int>(lua_tonumber(L, index)) : 0;
+        return ((bits & 1) ? Rml::Input::KM_CTRL : 0) | ((bits & 2) ? Rml::Input::KM_SHIFT : 0) | ((bits & 4) ? Rml::Input::KM_ALT : 0);
+    }
+
+    // A text field: a textarea or an input of a typing kind (the elements that take Ctrl+A / C / X / V, the mouse selection and Shift + arrows).
+    bool isTextField(Rml::Element* e)
+    {
+        if (!e)
+        {
+            return false;
+        }
+        const std::string tag = e->GetTagName();
+        if (tag == "textarea")
+        {
+            return true;
+        }
+        if (tag != "input")
+        {
+            return false;
+        }
+        const std::string type = e->GetAttribute<Rml::String>("type", "text");
+        return type != "checkbox" && type != "radio" && type != "submit" && type != "button" && type != "range" && type != "hidden";
+    }
+
     constexpr const char* kNavSelector = "button, a, input, select, textarea, [data-nav]";
 
     // The elements the pad and the mouse can press, in document order.
@@ -2145,6 +2232,7 @@ button.game-dropdown:hover, button.game-dropdown:focus { color: #ffe030; backgro
 button.game-dropdown:disabled, button.game-dropdown[disabled] { color: #8a8a8a; opacity: 0.55; }
 input.field, select.field { padding: 4px 8px; color: #f0f0f0; background-color: #0c0c14; border: 1px #6e5e3a; }
 input.field:focus, select.field:focus { border-color: #ffd780; }
+input selection, textarea selection { background-color: #c8aa5aa0; color: #ffffff; }
 input.game-check { display: inline-block; width: 22px; height: 22px; margin: 0 15px; padding: 0; background-color: #0c0c14; border: 2px #8c7440; cursor: pointer; }
 input.game-check:checked { background-color: #ffd780; border-color: #ffd780; }
 input.game-check:hover, input.game-check:focus { border-color: #ffe030; }
@@ -2906,6 +2994,9 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             lua_rawgeti(L, -1, index - 1);
             lua_pushboolean(L, isRange(e) ? 1 : 0);
             lua_setfield(L, -2, "range");
+            // A text field takes the real mouse as well (caret, drag selection, double click on a word), see Doc:draw.
+            lua_pushboolean(L, isTextField(e) ? 1 : 0);
+            lua_setfield(L, -2, "text");
             // data-nav-home: where the pad's cursor starts when the document opens (the topmost savegame, not the search field).
             lua_pushboolean(L, e->HasAttribute("data-nav-home") ? 1 : 0);
             lua_setfield(L, -2, "home");
@@ -3137,7 +3228,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 1;
     }
 
-    // native.rml_mouse(id, "down" | "up"): the left button for the mouse position the last update gave (a press on a range input, which
+    // native.rml_mouse(id, "down" | "up" [, x, y [, modifiers]]): the left button for the mouse position the last update gave (a press on a range input, which
     // the click at the element's centre of rml_click would not serve).
     int rmlMouse(lua_State* L)
     {
@@ -3149,13 +3240,14 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             d.context->ProcessMouseMove(static_cast<int>(lua_tonumber(L, 3) * d.unit - d.originPx.x), static_cast<int>(lua_tonumber(L, 4) * d.unit - d.originPx.y), 0);
             d.hovering = true;
         }
+        const int mods = modifiersArg(L, 5);
         if (kind == "down")
         {
-            d.context->ProcessMouseButtonDown(0, 0);
+            d.context->ProcessMouseButtonDown(0, mods);
         }
         else
         {
-            d.context->ProcessMouseButtonUp(0, 0);
+            d.context->ProcessMouseButtonUp(0, mods);
         }
         return 0;
     }
@@ -3499,6 +3591,18 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 2;
     }
 
+    // native.rml_blur(id): the document's focus goes away (the focused element, if any, is blurred): for a document that is not drawn any more
+    int rmlBlur(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        if (Rml::Element* f = d.context->GetFocusElement())
+        {
+            RootScope scope(d);
+            f->Blur();
+        }
+        return 0;
+    }
+
     // native.rml_tag(id, selector) -> tag name | nil
     int rmlTag(lua_State* L)
     {
@@ -3551,22 +3655,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     int rmlWantsText(lua_State* L)
     {
         Doc& d = docArg(L);
-        Rml::Element* f = d.context->GetFocusElement();
-        bool wants = false;
-        if (f)
-        {
-            const std::string tag = f->GetTagName();
-            if (tag == "textarea")
-            {
-                wants = true;
-            }
-            else if (tag == "input")
-            {
-                const std::string type = f->GetAttribute<Rml::String>("type", "text");
-                wants = type != "checkbox" && type != "radio" && type != "submit" && type != "button" && type != "range" &&
-                        type != "hidden";
-            }
-        }
+        const bool wants = isTextField(d.context->GetFocusElement());
         lua_pushboolean(L, wants);
         return 1;
     }
@@ -3597,12 +3686,17 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         case 0x27: return K::KI_RIGHT;
         case 0x28: return K::KI_DOWN;
         case 0x2E: return K::KI_DELETE;
+        // the clipboard and select-all chords (Lua passes them with Ctrl held)
+        case 0x41: return K::KI_A;
+        case 0x43: return K::KI_C;
+        case 0x56: return K::KI_V;
+        case 0x58: return K::KI_X;
         default: return K::KI_UNKNOWN;
         }
     }
 
-    // native.rml_key(id, vk, down) -> whether the key is one RmlUi takes (Backspace, Delete, Enter, Tab, Escape, arrows,
-    // Home, End, Page Up / Down)
+    // native.rml_key(id, vk, down [, modifiers]) -> whether the key is one RmlUi takes (Backspace, Delete, Enter, Tab, Escape, arrows,
+    // Home, End, Page Up / Down, A / C / V / X); modifiers: 1 Ctrl, 2 Shift, 4 Alt (Shift + arrows select, Ctrl + A / C / X / V)
     int rmlKey(lua_State* L)
     {
         Doc& d = docArg(L);
@@ -3612,13 +3706,14 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             lua_pushboolean(L, 0);
             return 1;
         }
+        const int mods = modifiersArg(L, 4);
         if (lua_toboolean(L, 3))
         {
-            d.context->ProcessKeyDown(key, 0);
+            d.context->ProcessKeyDown(key, mods);
         }
         else
         {
-            d.context->ProcessKeyUp(key, 0);
+            d.context->ProcessKeyUp(key, mods);
         }
         lua_pushboolean(L, 1);
         return 1;
@@ -3746,6 +3841,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_rect", guarded<rmlRect>},
         {"rml_tag", guarded<rmlTag>},
         {"rml_focus", guarded<rmlFocus>},
+        {"rml_blur", guarded<rmlBlur>},
         {"rml_scroll", guarded<rmlScroll>},
         {"rml_model_set", guarded<rmlModelSet>},
         {"rml_model_changed", guarded<rmlModelChanged>},

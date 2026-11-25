@@ -1439,9 +1439,10 @@ gear.on('unload', function() ui.nav_modal(false); admin.modal(false) end)
 -- A Paste button over the game's own text boxes. While one has the keyboard focus (the savegame name, the character name,
 -- the chat line, a search field ...), a small button sits inside it at its right end: a click types what is on the clipboard
 -- into the box, as if it had been typed (the box applies its own length limit). The mouse only: the button is not a stop of the
--- controller's D-pad (the pad has the game's own on-screen keyboard).
+-- controller's D-pad (the pad has the game's own on-screen keyboard). Ctrl+V pastes too.
 ---------------------------------------------------------------------------------------------------------------
 local PASTE = {w = 46, pad = 3, icon_w = 26}
+local paste_pending = false
 local function paste_clipboard()
     local text = gear.clipboard.get()
     if text and text ~= '' then
@@ -1467,7 +1468,16 @@ end
 gear.on('draw', function(state)
     if screen.open or type(state) ~= 'table' or not (state.mode == 'game' or state.mode == 'menus') then return end
     local x, y, w, h = admin.text_focus()
-    if not x then return end
+    -- Ctrl+V into the focused box does what the Paste button does (not with AltGr, which is Ctrl+Alt; the key is polled every frame for its edge).
+    -- The characters are typed once Ctrl is up: the game's box ignores characters while it sees Ctrl held.
+    local v_pressed = ui.key_pressed('v')
+    local ctrl = ui.key_down('ctrl')
+    if v_pressed and ctrl and not ui.key_down('alt') and x then paste_pending = true end
+    if not x then paste_pending = false return end
+    if paste_pending and not ctrl then
+        paste_pending = false
+        paste_clipboard()
+    end
     local bh = math.max(12, math.min(h - 6, 22))
     local icon = paste_icon()
     if icon then
