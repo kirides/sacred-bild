@@ -1,3 +1,7 @@
+## v0.11.1 (2026-11-25)
+
+- New: mod manifests can list `recommended` mods; Gear ignores them, the mod manager offers the missing ones on install
+
 ## v0.11.0 (2026-11-25)
 
 - New: `creature:set_level(level)` sets a creature's level, stats and maximum health, keeping its share of health (not heroes).
