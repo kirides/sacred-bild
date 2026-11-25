@@ -22,10 +22,20 @@ local function ui_color(c, default)
     error('a color is 0xAARRGGBB or {r, g, b, a}', 3)
 end
 
+local uis = {}            -- the scroll areas' and deferred drawing's state (one local: the main chunk has few left)
+-- The game's windows for this tick: callers (the layout, window slots, mods asking for a window every frame) share one native call and
+-- one table per tick. Moving a window drops it.
+function uis.windows_now()
+    if uis.win_frame ~= uis.frame or not uis.win_cache then
+        uis.win_cache, uis.win_frame = native.ui_windows(), uis.frame
+    end
+    return uis.win_cache
+end
+
 local function ui_window_slot(name)
     if not ui_slots then
         ui_slots = {}
-        for _, w in ipairs(native.ui_windows()) do ui_slots[w.name:upper()] = w.slot end
+        for _, w in ipairs(uis.windows_now()) do ui_slots[w.name:upper()] = w.slot end
     end
     return ui_slots[name:upper()]
 end
@@ -79,7 +89,6 @@ local ui_menu_items = {}    -- mod -> {{id, label, fn}} (ui.menu_item)
 -- Clipping and scrolling: a scroll area clips what is drawn inside it (and the regions: a widget scrolled out of
 -- sight takes no mouse); things that must lie over everything (an open dropdown's list) are drawn after all draw
 -- handlers (uis.defer).
-local uis = {}            -- the scroll areas' and deferred drawing's state (one local: the main chunk has few left)
 uis.clip_stack = {}    -- this tick's open clips {x, y, w, h}, innermost last
 uis.deferred = {}      -- functions run after every mod's draw handlers, in order
 uis.wheel = 0          -- wheel notches over mod UI this tick (+ away from the player, as WM_MOUSEWHEEL)
@@ -713,11 +722,12 @@ end
 local function apply_game_layout()
     local lay = layout_get()
     if not next(lay) or not native.ui_can_move_windows() then return end
-    for _, w in ipairs(native.ui_windows()) do
+    for _, w in ipairs(uis.windows_now()) do
         local e = w.movable and lay['game:' .. w.name]
         if e then
             local sx, sy = from_virtual(e.x, e.y)
             native.ui_move_window(w.slot, sx - w.x, sy - w.y, true)
+            uis.win_frame = nil
         end
     end
 end
@@ -2788,8 +2798,9 @@ local function make_ui(mod)
     end
     -- The game window `name` (a control name) with its top-left corner at (x, y) of the canvas; kept in the layout.
     function ui.set_window_position(name, x, y)
-        for _, w in ipairs(native.ui_windows()) do
+        for _, w in ipairs(uis.windows_now()) do
             if w.name:upper() == tostring(name):upper() and w.movable then
+                uis.win_frame = nil
                 if not native.ui_move_window(w.slot, x - w.x, y - w.y, true) then return false end
                 local vx, vy = to_virtual(x, y)
                 layout_set('game:' .. w.name, {x = vx, y = vy})
@@ -2800,8 +2811,9 @@ local function make_ui(mod)
     end
     -- Back to its own place (and out of the layout).
     function ui.reset_window(name)
-        for _, w in ipairs(native.ui_windows()) do
+        for _, w in ipairs(uis.windows_now()) do
             if w.name:upper() == tostring(name):upper() then
+                uis.win_frame = nil
                 native.ui_move_window(w.slot, 0, 0, false)
                 if layout_get()['game:' .. w.name] then layout_set('game:' .. w.name, nil) end
                 return true
@@ -2834,9 +2846,15 @@ local function make_ui(mod)
         return ui_measure(tostring(text), type(font) == 'table' and font or {font = font})
     end
     function ui.windows() return native.ui_windows() end
+    -- (one window of the tick's shared list, as a copy: a mod may change what it gets)
     function ui.window(name)
-        for _, w in ipairs(native.ui_windows()) do
-            if w.name:upper() == tostring(name):upper() then return w end
+        local want = tostring(name):upper()
+        for _, w in ipairs(uis.windows_now()) do
+            if w.name:upper() == want then
+                local c = {}
+                for k, v in pairs(w) do c[k] = v end
+                return c
+            end
         end
         return nil
     end
