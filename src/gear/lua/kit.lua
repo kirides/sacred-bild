@@ -41,13 +41,18 @@ end
 -- kit.window{title, id, x, y, width, height, panel, close, class, body} -> markup
 -- A frame in the look of the game's tooltip window with a title bar and a body. With `x` / `y` it is placed (layout units); `panel = 'name'` makes it a
 -- window the layout editor can move (data-panel; `resizable = true` for the corner grip); `close = 'id'` adds a close button (id) to the title bar.
+-- A window with a title and an `id` is a panel named after its id (`panel = false` keeps it fixed): the player drags it by its title bar too, and
+-- the place is kept like the layout editor's.
 function K.window(o)
+    local panel = o.panel
+    if panel == nil and o.title and o.id then panel = o.id end
+    if not panel then panel = nil end
     local style = {}
     if o.x or o.y then style[#style + 1] = 'position: absolute; left: ' .. num(o.x or 0) .. 'px; top: ' .. num(o.y or 0) .. 'px;' end
     if o.width then style[#style + 1] = 'width: ' .. num(o.width) .. 'px;' end
     if o.height then style[#style + 1] = 'height: ' .. num(o.height) .. 'px;' end
     local close = o.close and ('<button id="' .. esc(o.close) .. '" class="ibtn close act" data-no-padkey="" style="float: right; margin: 0;"><span class="icon icon-close"></span></button>') or ''
-    return '<div' .. attrs({{'id', o.id}, {'class', classes('window', o.class)}, {'data-panel', o.panel}, {'data-title', o.panel and (o.title or o.panel)},
+    return '<div' .. attrs({{'id', o.id}, {'class', classes('window', o.class)}, {'data-panel', panel}, {'data-title', panel and (o.title or panel)},
         {'data-resizable', o.resizable}, {'style', #style > 0 and table.concat(style, ' ')}}) .. '>'
         .. (o.title and ('<div class="titlebar">' .. close .. esc(o.title) .. '</div>') or '')
         .. '<div class="body">' .. (o.body or '') .. '</div></div>'
@@ -306,7 +311,7 @@ function K.osk(cfg)
     local function build()
         local content = body()
         local markup = K.page(K.window{id = 'kit-osk', title = st.title or cfg.title or 'Keyboard', width = cfg.width,
-            class = 'kit-osk', x = 0, y = 0, close = 'kit-osk-close', body = content})
+            class = 'kit-osk', panel = false, x = 0, y = 0, close = 'kit-osk-close', body = content})
         doc = ui.rml.load_string(markup, {})
         if not doc then drop('closed') return end
         actions['kit-osk-close'] = function() drop('close') end
@@ -423,7 +428,7 @@ function K.confirm(o)
             local body = K.text(o.text or '') .. '<div style="height: 14px"></div>'
                 .. K.buttons(K.button('kit-no', o.no or 'Cancel'), K.button('kit-yes', o.yes or 'OK', {primary = not o.danger, danger = o.danger}))
             local markup = K.page(K.window{id = 'kit-dialog', title = o.title or '', width = 380, body = body,
-                class = 'kit-dialog', x = 0, y = 0})
+                class = 'kit-dialog', panel = false, x = 0, y = 0})
             local err
             doc, err = ui.rml.load_string(markup, {})
             if not doc then done = true; if o.on_result then o.on_result(false) end return end

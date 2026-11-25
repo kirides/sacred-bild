@@ -3087,6 +3087,32 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             lua_setfield(L, -2, "min_width");
             lua_pushnumber(L, e->GetAttribute<float>("data-min-height", 60.0f));
             lua_setfield(L, -2, "min_height");
+            // The window's title bar (a direct child with class "titlebar"): its height in layout units, 0 if there is none. The kernel makes it a
+            // drag handle for windows with a data-panel (data-no-drag opts out).
+            float titleBox[4] = {0.0f, 0.0f, 0.0f, 0.0f};      // x, y (from the window's corner), w, h
+            if (!e->HasAttribute("data-no-drag"))
+            {
+                for (int i = 0; i < e->GetNumChildren(); ++i)
+                {
+                    Rml::Element* c = e->GetChild(i);
+                    if (c->IsClassSet("titlebar") && c->IsVisible())
+                    {
+                        const Rml::Vector2f co = absOffset(c, Rml::BoxArea::Border);
+                        const Rml::Vector2f cs = c->GetBox().GetSize(Rml::BoxArea::Border);
+                        titleBox[0] = (co.x - o.x) / unit;
+                        titleBox[1] = (co.y - o.y) / unit;
+                        titleBox[2] = cs.x / unit;
+                        titleBox[3] = cs.y / unit;
+                        break;
+                    }
+                }
+            }
+            static const char* const titleKeys[4] = {"title_x", "title_y", "title_w", "title_h"};
+            for (int k = 0; k < 4; ++k)
+            {
+                lua_pushnumber(L, titleBox[k]);
+                lua_setfield(L, -2, titleKeys[k]);
+            }
         }
         lua_pop(L, 1);
     }
