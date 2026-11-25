@@ -1080,3 +1080,19 @@ std::vector<World::Created> World::takeCreated(uint64_t* dropped)
     }
     return out;
 }
+
+bool World::gait(uint32_t id, int32_t& value, bool set)
+{
+    World::Object o;
+    if (!World::object(id, o) || !o.creature)
+    {
+        return false;
+    }
+    const uintptr_t address = World::objectAddress(id);
+    if (!address)
+    {
+        return false;
+    }
+    void* field = reinterpret_cast<void*>(address + 0x1F8);
+    return set ? safeCopy(field, &value, sizeof(value)) : safeCopy(&value, field, sizeof(value));
+}
