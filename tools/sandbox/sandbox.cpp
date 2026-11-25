@@ -572,6 +572,10 @@ namespace
         return buf;
     }
 
+    // Layout floats of two documents laid out along different update paths may differ in the last bits.
+    bool closeTo(float a, float b) { return std::fabs(a - b) <= 1e-3f; }
+    bool closeTo4(const float* a, const float* b) { return closeTo(a[0], b[0]) && closeTo(a[1], b[1]) && closeTo(a[2], b[2]) && closeTo(a[3], b[3]); }
+
     // Two commands draw the same: everything but the mesh id, and the meshes' vertices and indices.
     bool sameCommand(const Ui::Command& a, const Ui::Command& b, std::string& why)
     {
@@ -581,12 +585,12 @@ namespace
         };
         if (a.kind != b.kind) return fail("kind");
         if (a.layer != b.layer || a.window != b.window) return fail("layer / window");
-        if (a.x != b.x || a.y != b.y || a.w != b.w || a.h != b.h) return fail("position / size");
+        if (!closeTo(a.x, b.x) || !closeTo(a.y, b.y) || !closeTo(a.w, b.w) || !closeTo(a.h, b.h)) return fail("position / size");
         if (a.color != b.color) return fail("color");
         if (a.image != b.image) return fail("image");
         if (a.flip != b.flip || a.point != b.point || a.fit != b.fit) return fail("flip / point / fit");
         if (std::memcmp(a.crop, b.crop, sizeof(a.crop)) != 0) return fail("crop");
-        if (a.clipped != b.clipped || (a.clipped && std::memcmp(a.clip, b.clip, sizeof(a.clip)) != 0)) return fail("clip");
+        if (a.clipped != b.clipped || (a.clipped && !closeTo4(a.clip, b.clip))) return fail("clip");
         if (!a.matrix != !b.matrix || (a.matrix && *a.matrix != *b.matrix)) return fail("transform");
         if (a.kind == Ui::Kind::Text && (a.text != b.text || a.font != b.font || a.flags != b.flags)) return fail("text");
         if (a.kind == Ui::Kind::Mesh)
@@ -596,8 +600,23 @@ namespace
             const bool ha = Ui::hostMesh(a.region, va, ia), hb = Ui::hostMesh(b.region, vb, ib);
             if (ha != hb) return fail("mesh exists");
             if (ia != ib) return fail("mesh indices");
-            if (va.size() != vb.size() || (!va.empty() && std::memcmp(va.data(), vb.data(), va.size() * sizeof(Ui::MeshVertex)) != 0))
-                return fail("mesh vertices");
+            if (va.size() != vb.size())
+            {
+                why = "mesh vertex count " + std::to_string(va.size()) + " vs " + std::to_string(vb.size());
+                return false;
+            }
+            for (size_t i = 0; i < va.size(); ++i)
+            {
+                if (!closeTo(va[i].x, vb[i].x) || !closeTo(va[i].y, vb[i].y) || va[i].color != vb[i].color || !closeTo(va[i].u, vb[i].u) || !closeTo(va[i].v, vb[i].v))
+                {
+                    char buf[200];
+                    std::snprintf(buf, sizeof(buf), "mesh vertex %u of %u: (%.3f %.3f %08x %.4f %.4f) vs (%.3f %.3f %08x %.4f %.4f)",
+                                  static_cast<unsigned>(i), static_cast<unsigned>(va.size()), va[i].x, va[i].y, va[i].color, va[i].u, va[i].v,
+                                  vb[i].x, vb[i].y, vb[i].color, vb[i].u, vb[i].v);
+                    why = buf;
+                    return false;
+                }
+            }
         }
         if (a.kind == Ui::Kind::Region && a.region != b.region) return fail("region handle");
         return true;
@@ -793,6 +812,14 @@ namespace
         return 0;
     }
 
+    // sbx.clip(on [, x, y, w, h]): the clip of the commands recorded from now on (Ui::setClip, as gear.ui.scroll_begin sets it).
+    int sbxClip(lua_State* L)
+    {
+        Ui::setClip(lua_toboolean(L, 1) != 0, static_cast<float>(luaL_optnumber(L, 2, 0)), static_cast<float>(luaL_optnumber(L, 3, 0)),
+                    static_cast<float>(luaL_optnumber(L, 4, 0)), static_cast<float>(luaL_optnumber(L, 5, 0)));
+        return 0;
+    }
+
     int sbxLog(lua_State* L)
     {
         const char* s = luaL_checkstring(L, 1);
@@ -833,7 +860,7 @@ namespace
             {"wheel", sbxWheel}, {"snapshot", sbxSnapshot}, {"draw", sbxDraw}, {"commit", sbxCommit}, {"log", sbxLog},
             {"size", sbxSize}, {"image", sbxImage}, {"capture_begin", sbxCaptureBegin}, {"capture_end", sbxCaptureEnd},
             {"capture_info", sbxCaptureInfo}, {"capture_clear", sbxCaptureClear}, {"compare", sbxCompare},
-            {"render_compare", sbxRenderCompare}, {nullptr, nullptr},
+            {"render_compare", sbxRenderCompare}, {"clip", sbxClip}, {nullptr, nullptr},
         };
         lua_newtable(L);
         for (const luaL_Reg* r = kSbx; r->name; ++r)
