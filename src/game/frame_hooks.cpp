@@ -43,6 +43,7 @@ namespace
     decltype(Addr::dxDriver7_lockBack)::Ptr g_origLockBack = nullptr;
     decltype(Addr::cWorldView0_render)::Ptr g_origWorldRender = nullptr;
     decltype(Addr::cUI_Manager_render)::Ptr g_origUiRender = nullptr;
+    decltype(Addr::weatherRender)::Ptr g_origWeatherRender = nullptr;
     ThreadRunFn g_origRenderThreadRun = nullptr;
     cEngine* volatile g_engine = nullptr;
     dxDriver7* volatile g_dxDriver = nullptr;
@@ -285,6 +286,20 @@ namespace
         return bits;
     }
 
+    // The weather manager keeps the screen size it saw when it was constructed (`+0x14` width, `+0x18` height, floats)
+    // and spreads its rain drops over it: built before the display mode reached its final size (a window that was
+    // resized afterwards, Wine/Lutris) the rain covered only part of the screen. Keep it at the real size.
+    void __fastcall hookWeatherRender(void* self, void* edx, void* device, uint32_t a, uint32_t b, uint32_t c)
+    {
+        if (dxDriver7* driver = g_dxDriver)
+        {
+            auto* size = static_cast<float*>(self);
+            size[0x14 / 4] = static_cast<float>(driver->width);
+            size[0x18 / 4] = static_cast<float>(driver->height);
+        }
+        g_origWeatherRender(self, edx, device, a, b, c);
+    }
+
     bool g_worldDrawn = false;      // the world view was drawn since the last UI render (SMAA)
 
     void __fastcall hookWorldRender(cWorldView* self, void* edx, IDirect3DDevice7* device)
@@ -400,6 +415,7 @@ void FrameHooks::install()
     Patch::hook(g_origLockBack, Addr::dxDriver7_lockBack, &hookLockBack, "dxDriver7::lockBack");
     Patch::hook(g_origWorldRender, Addr::cWorldView0_render, &hookWorldRender, "cWorldView0::render");
     Patch::hook(g_origUiRender, Addr::cUI_Manager_render, &hookUiRender, "cUI_Manager::render");
+    Patch::hook(g_origWeatherRender, Addr::weatherRender, &hookWeatherRender, "weather::render");
     Patch::hook(g_origRenderThreadRun, Addr::cEngine_renderThreadRun, &hookRenderThreadRun, "cEngine::renderThreadRun");
     Patch::hook(g_origLimiter, Addr::frameLimiter, &hookLimiter, "frameLimiter");
     // The menu loop sleeps 20 ms every frame before drawing (jz over `push 14h; call Sleep` -> jmp), which at the

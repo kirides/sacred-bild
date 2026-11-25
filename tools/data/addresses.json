@@ -655,6 +655,11 @@
    "451BBE74": "0060AA90",
    "451BBE74:sacredreborn.exe": "0060AA90"
   },
+  "weatherRender": {
+   "452F85C7": "004190D0",
+   "451BBE74": "004190B0",
+   "451BBE74:sacredreborn.exe": "004190B0"
+  },
   "renderLimiterReturn": {
    "452F85C7": "0060EA6E",
    "451BBE74": "0060EB0E",

@@ -135,6 +135,10 @@ namespace Sacred::Addr
     // Frame limiter: cdecl (double, uint16 fps); spins with Sleep(0) until 1/fps passed since its last return.
     // The render loop calls it with 60 before each flip (skipped if 0x182EE3C has 0x4000), the menu loop too.
     inline Cdecl<void(double unused, uint32_t fps)> frameLimiter{}; // ENG 0060A9F0
+    // The weather overlay (rain lines, fog layers, snow), drawn after the world each frame: thiscall on the weather
+    // manager (`+0x14` / `+0x18` = the screen width / height as floats, copied from the display mode when the manager
+    // was constructed and never updated), (device, x, y, zoom bits), ret 0x10. ENG 004190D0
+    inline Thiscall<void(void* weather, void* device, uint32_t a, uint32_t b, uint32_t c)> weatherRender{};
     inline uintptr_t renderLimiterReturn{};             // ENG 0060EA6E
     // The menu loop's `test [ui+8], 1; jz skip; push 0x14; call Sleep` (cUI_Manager thread): a 20 ms sleep every menu
     // frame, ~31 ms at the default timer resolution, which capped the menus at ~30 fps. Address of the jz.
