@@ -1,3 +1,7 @@
+## v0.3.6 (2026-11-25)
+
+- Under the hood: Sacred Gear's mod windows can now be drawn from vertex buffers that hold screen positions already; Sacred Bild passes those draws straight through instead of applying its 3D overlay mapping to them.
+
 ## v0.3.5 (2026-11-25)
 
 - Fixed: Steam. The previous update stopped Sacred Bild from finding the game's code in Steam's `Sacred.exe` (its code is encrypted on disk and only decoded in memory), so features that need those addresses stayed off. Sacred Bild now notices that the file differs from the running code and searches the running code instead; GOG and ReBorn still use the file. We are sorry for the inconvenience this caused Steam players.

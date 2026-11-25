@@ -1,3 +1,9 @@
+## v0.15.3 (2026-11-25)
+
+- Improved: mod windows written as HTML/CSS documents now cost almost nothing while they do not change. A document is laid out and drawn again only after a mouse move over it, a click or key, a change from its mod, or while an animation or a blinking text cursor runs; otherwise its last picture is reused and kept on the graphics card. With 38 mods loaded the idle frame time at 1600x900 went from 3.16 to about 2.1 ms (walking 3.41 -> 2.28 ms).
+- Improved: a mod that sets the same value, text, class, style or position on its document every frame no longer makes the document redraw (the minimap and the world events bar profit without any change to them).
+- Under the hood: `GEAR_RML_NOCACHE=1` in the environment turns this off for comparing; with `SACREDGEAR_PROF` the log shows per document how often it was updated and what changed it. Design and numbers: docs/RmlRetained.md.
+
 ## v0.15.2 (2026-11-25)
 
 - Fixed: Steam. The previous update stopped Sacred Gear from finding the game's code in Steam's `Sacred.exe` (its code is encrypted on disk and only decoded in memory), so Sacred Gear and its mods did not start. It now searches the running code when the file differs from it. We are sorry for the inconvenience this caused Steam players.
