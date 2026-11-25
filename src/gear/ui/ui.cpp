@@ -464,9 +464,14 @@ namespace
         IDirectDrawSurface7* surface = nullptr;
         int texWidth = 0, texHeight = 0;
         bool failed = false;
+        // pictureRelease: the id stays drawable for a few more frames (commands recorded before the release, in this frame or in a
+        // published one the render thread still draws, name it: an RmlUi font atlas that another document's render rebuilt), then it goes.
+        bool released = false;
+        uint64_t releasedAt = 0;    // g_frame at the release
     };
     std::mutex g_pictureLock;
     std::map<uint32_t, Picture> g_pictures;
+    std::vector<uint32_t> g_releasedPictures;  // released, still drawable for a few frames (Picture::released)
     // A released picture's surface is not freed at once: the frames that were queued before the release may still draw it. It is freed on the render
     // thread once `g_framesInFlight` more frames have been drawn (the Direct3D 9 backend refcounts its resources itself, so 2 is generous; a backend with
     // fences or several swap chain images sets how many frames it has in flight: Ui::setFramesInFlight).
@@ -671,12 +676,36 @@ namespace
     std::map<uint32_t, std::shared_ptr<const MeshData>> g_meshes;
     uint32_t g_nextMesh = 1;
 
+    // How many g_frame steps (one per layer drawn) a released picture's id stays drawable: the rest of the frame being drawn and the next
+    // published one, with room (three layers a frame).
+    constexpr uint64_t kReleasedPictureFrames = 8;
+
     void releaseDeadPictures()
     {
         std::vector<IUnknown*> dead;
         {
             std::scoped_lock lock(g_pictureLock);
             ++g_frame;
+            size_t pending = 0;
+            for (const uint32_t id : g_releasedPictures)
+            {
+                auto it = g_pictures.find(id);
+                if (it == g_pictures.end())
+                {
+                    continue;
+                }
+                if (g_frame < it->second.releasedAt + kReleasedPictureFrames)
+                {
+                    g_releasedPictures[pending++] = id;
+                    continue;
+                }
+                if (it->second.surface)
+                {
+                    g_deadSurfaces.push_back({it->second.surface, g_frame});
+                }
+                g_pictures.erase(it);
+            }
+            g_releasedPictures.resize(pending);
             size_t keep = 0;
             for (const DeadSurface& d : g_deadSurfaces)
             {
@@ -2652,15 +2681,14 @@ void Ui::pictureRelease(uint32_t id)
 {
     std::scoped_lock lock(g_pictureLock);
     auto it = g_pictures.find(id);
-    if (it == g_pictures.end())
+    if (it == g_pictures.end() || it->second.released)
     {
         return;
     }
-    if (it->second.surface)
-    {
-        g_deadSurfaces.push_back({it->second.surface, g_frame});
-    }
-    g_pictures.erase(it);
+    // Not erased yet: commands recorded before the release may still draw it (releaseDeadPictures erases it a few frames on).
+    it->second.released = true;
+    it->second.releasedAt = g_frame;
+    g_releasedPictures.push_back(id);
 }
 
 IDirectDrawSurface7* Ui::surfaceFor(IDirect3DDevice7* device, uint32_t id)
