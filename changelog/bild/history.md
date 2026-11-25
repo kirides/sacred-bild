@@ -1,3 +1,7 @@
+## v0.3.0 (2026-11-25)
+
+- New: `Fullscreen` in the Display settings (`[Display] Fullscreen`): the window covers the whole screen at any resolution, e.g. 1024x768 or 1280x720 on a 1920x1080 screen, and the picture is scaled up to it. `Fit` keeps the picture's proportions with black bars, `Stretch` fills the screen. The mouse follows the scaled picture.
+
 ## v0.2.16 (2026-11-25)
 
 - Fixed: rain (and the other weather overlays) covered only part of the screen, e.g. two thirds of the width at 1920x1080 with the right third dry. The weather effects keep the screen size they saw when they were created; SacredBild now sets the real size every frame.

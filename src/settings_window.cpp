@@ -165,8 +165,15 @@ namespace
             .tip(L"Automatic: a frame with a title bar (to move the window) when the window is smaller than the screen, "
                  L"none when it fills the screen.\nBorderless: never a frame.\nWindow frame: always a frame.\n"
                  L"The area inside the frame has the chosen resolution either way.");
+        ui.combo(L"Fullscreen:", {L"Display", L"Fullscreen"},
+              {{L"Off", L"0"}, {L"Fit (black bars)", L"1"}, {L"Stretch", L"2"}},
+              Config::display.fullscreen == Config::Display::Fullscreen::Fit ? L"1" : Config::display.fullscreen == Config::Display::Fullscreen::Stretch ? L"2" : L"0")
+            .tip(L"Covers the whole screen at any resolution: the game keeps the resolution chosen above and the picture is "
+                 L"scaled up to the screen. Fit keeps the picture's proportions (black bars where the screen is wider or "
+                 L"taller), Stretch fills the screen.\n"
+                 L"Overrides the window frame setting.");
         ui.check(L"Resizable window (with a frame)", {L"Display", L"Resizable"}, Config::display.resizable)
-            .enabledIf([](const Form& f) { return f.value(L"Display", L"Borderless") != L"1"; })
+            .enabledIf([](const Form& f) { return f.value(L"Display", L"Borderless") != L"1" && f.value(L"Display", L"Fullscreen") == L"0"; })
             .tip(L"A window with a frame can be resized and maximized. The game keeps its resolution: the picture is "
                  L"stretched to the window, which keeps the picture's proportions.");
         const int refresh = displayRefresh();

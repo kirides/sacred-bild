@@ -14,6 +14,7 @@ namespace
     GetCursorPosFn g_origGetCursorPos = nullptr;
     HWND g_window = nullptr;
     bool g_resizable = false;
+    bool g_fixedSize = false;       // fullscreen: the window's size is not the user's to change
 
     // "Maximized": the largest window of the frame's aspect ratio in the work area, not Windows' own maximized
     // state (which would stretch the frame over the whole work area). The window it was before is kept for restoring.
@@ -212,7 +213,7 @@ namespace
 
 void WindowFit::install()
 {
-    if (!Config::display.resizable)
+    if (!Config::display.resizable && Config::display.fullscreen == Config::Display::Fullscreen::Off)
     {
         return;
     }
@@ -224,12 +225,13 @@ void WindowFit::install()
     }
 }
 
-void WindowFit::windowCreated(HWND window)
+void WindowFit::windowCreated(HWND window, bool fixedSize)
 {
     g_window = window;
     g_resizable = true;
-    LOG("Window: resizable, the {}x{} frame is stretched to the client area at its aspect ratio", Resolution::width(),
-        Resolution::height());
+    g_fixedSize = fixedSize;
+    LOG("Window: {}, the {}x{} frame is stretched to the client area", fixedSize ? "fullscreen" : "resizable",
+        Resolution::width(), Resolution::height());
 }
 
 bool WindowFit::scaled()
@@ -271,6 +273,15 @@ bool WindowFit::message(HWND window, UINT message, WPARAM wParam, LPARAM lParam,
     if (!g_resizable || window != g_window)
     {
         return false;
+    }
+    if (g_fixedSize)
+    {
+        if (message != WM_ERASEBKGND)
+        {
+            return false;
+        }
+        result = 1;
+        return true;
     }
     switch (message)
     {
