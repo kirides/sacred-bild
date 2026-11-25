@@ -1,3 +1,4 @@
+#include "prof.h"
 #include "memfault.h"
 #include "bild_gear.h"
 #include "save.h"
@@ -1427,13 +1428,22 @@ namespace
 
     std::atomic<uint32_t> g_faults{0};
 
+    void drawLayerImpl(Layer layer, IDirect3DDevice7* device);
+
     void drawLayer(Layer layer, IDirect3DDevice7* device)
+    {
+        GearProf::Scope s(layer == Layer::Hud ? GearProf::DrawHud : layer == Layer::World ? GearProf::DrawWorld : GearProf::DrawTop);
+        drawLayerImpl(layer, device);
+    }
+
+    void drawLayerImpl(Layer layer, IDirect3DDevice7* device)
     {
         if (layer == Layer::Hud)
         {
             const uintptr_t m = manager();
             if (m && (managerFlags(m) & (kManagerMenus | kManagerCinematic)) == kManagerMenus)
             {
+                GearProf::Scope s(GearProf::MenuTick);
                 LuaHost::menuFrame();
             }
         }
@@ -1454,8 +1464,10 @@ namespace
             {
                 return;
             }
+            GearProf::Scope copy(GearProf::DrawCopy);
             t_draw = list;
         }
+        GearProf::count(GearProf::DrawCmds, t_draw.size());
         findBild();
         const uintptr_t m = manager();
         StateGuard state(device);

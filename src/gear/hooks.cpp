@@ -1,4 +1,5 @@
 #include "hooks.h"
+#include "prof.h"
 #include "chat.h"
 #include "world/classes.h"
 #include "items/itemtip.h"
@@ -30,19 +31,27 @@ namespace
     // The game's update first, so handlers see this frame's state; then the mods, before the world view draws.
     void __fastcall hookUpdateZoom(void* engine, void* edx, float dt)
     {
-        g_updateZoom(engine, edx, dt);
+        {
+            GearProf::Scope s(GearProf::GameUpdate);
+            g_updateZoom(engine, edx, dt);
+        }
         Ui::setEngine(engine);
-        Save::frame(engine);
-        ItemTip::frame();
-        Drops::frame();
-        Party::frame();
-        Buffs::frame();
-        LuaHost::frame(dt);
+        { GearProf::Scope s(GearProf::Save); Save::frame(engine); }
+        { GearProf::Scope s(GearProf::ItemTip); ItemTip::frame(); }
+        { GearProf::Scope s(GearProf::Drops); Drops::frame(); }
+        { GearProf::Scope s(GearProf::Party); Party::frame(); }
+        { GearProf::Scope s(GearProf::Buffs); Buffs::frame(); }
+        {
+            GearProf::Scope s(GearProf::LuaFrame);
+            LuaHost::frame(dt);
+        }
+        GearProf::report();
     }
 }
 
 bool Hooks::install()
 {
+    GearProf::init();
     Patch::begin();
     const bool ok = Patch::hook(g_updateZoom, Gear::Addr::cEngine_updateZoom, hookUpdateZoom, "cEngine_updateZoom");
     // Mod drawing is optional: without it the mods still run.
