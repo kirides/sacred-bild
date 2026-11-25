@@ -309,6 +309,7 @@ function gear.save(name, text) end
 ---@field version? string Part of the mod set (default `'0'`).
 ---@field priority? number Lower loads first (default 0); ties load by id.
 ---@field requires? string[] Ids that must load first; the mod is skipped if one is missing.
+---@field recommended? string[] Ids of mods that go well with this one (`'id'` or `'id>=version'`). Sacred Gear ignores it; the external mod manager shows it and offers the missing ones on install.
 ---@field enabled? boolean `false`: off until the player switches it on in the mod manager (the default, not a lock).
 ---@field settings? GearSettingDef[] Declared settings: the mod manager builds their page; read them with `gear.settings`.
 ---@field keys? GearKeyDef[] Declared key binds: the player rebinds them in the mod manager; use them with `gear.keys`.

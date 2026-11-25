@@ -482,6 +482,7 @@ The table `mod.lua` returns. It runs without any globals, so it can only hold va
 | `version` | `string` | Part of the mod set (default `'0'`). (optional) |
 | `priority` | `number` | Lower loads first (default 0); ties load by id. (optional) |
 | `requires` | `string[]` | Ids that must load first; the mod is skipped if one is missing. (optional) |
+| `recommended` | `string[]` | Ids of mods that go well with this one (`'id'` or `'id>=version'`). Sacred Gear ignores it; the external mod manager shows it and offers the missing ones on install. (optional) |
 | `enabled` | `boolean` | `false`: off until the player switches it on in the mod manager (the default, not a lock). (optional) |
 | `settings` | `GearSettingDef[]` | Declared settings: the mod manager builds their page; read them with `gear.settings`. (optional) |
 | `keys` | `GearKeyDef[]` | Declared key binds: the player rebinds them in the mod manager; use them with `gear.keys`. (optional) |

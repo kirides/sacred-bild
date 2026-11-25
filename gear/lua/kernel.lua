@@ -7918,6 +7918,7 @@ local function check_manifest(m, dir)
     if m.version ~= nil and type(m.version) ~= 'string' then return nil, 'mod.lua: version must be a string' end
     if m.priority ~= nil and type(m.priority) ~= 'number' then return nil, 'mod.lua: priority must be a number' end
     if m.requires ~= nil and type(m.requires) ~= 'table' then return nil, 'mod.lua: requires must be a list' end
+    -- m.recommended (ids of mods that go well with this one) is not checked or used here: the external mod manager reads it
     if m.pipes ~= nil and type(m.pipes) ~= 'table' then return nil, 'mod.lua: pipes must be a list' end
     if m.config ~= nil and type(m.config) ~= 'table' then return nil, 'mod.lua: config must be a table' end
     if m.description ~= nil and type(m.description) ~= 'string' then return nil, 'mod.lua: description must be a string' end
