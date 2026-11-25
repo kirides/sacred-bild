@@ -134,7 +134,14 @@ namespace World
     // world pick (no click, hover cursor or controller aim reaches it). Scale 1 and not untargetable removes it. Needs SacredBild's
     // ddraw.dll; the object id is only valid until the game ends or another savegame loads (clearPets).
     bool setPet(uint32_t id, double scale, bool untargetable, const char*& error);
-    void clearPets();
+    void clearPets();     // also forgets every tint
+    // Tints an object's model (SacredBild): the colour (0xAARRGGBB; 0 or 0xFFFFFFFF: none) multiplied over the whole model (`part` 0) or over
+    // one of its meshes (`part` 1..8, in the order the engine draws them). The object id is only valid until the game ends or another
+    // savegame loads (clearPets).
+    bool setTint(uint32_t id, uint32_t part, uint32_t argb, const char*& error);
+    // Draws one mesh (`part` 1..8) or the whole model (0) with another texture: `image` is a Texture.pak image (Ui::textureImage) or a picture
+    // (Ui::pictureCreate*; its sides must be powers of two so the model's texture coordinates fit), 0 takes it away. SacredBild.
+    bool setTexture(uint32_t id, uint32_t part, uint32_t image, const char*& error);
     // Sets a creature's maximum health (1 and up, not a hero); its current health becomes `health` when `setCurrent`, else keeps its
     // share of the maximum (at least 1). For the boss modifiers (gear.world, creature:set_modifiers).
     bool setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_t health, const char*& error);
@@ -182,6 +189,15 @@ namespace World
     // The local player's hero id as the players object keeps it (+0x14; 1 in single player unless gear.party switched
     // control), 0 if there is none. Objects tick only on the computer whose id is their owner byte (+0x39).
     uint32_t localId();
+
+    // The text id of a creature's own name (+0x3C; 0: it shows its type's name) and setting it (not for heroes: their name is
+    // 0x26FF + id, see Party::setName). The name shown over the creature, in its hover label and the game's lists comes from this
+    // text. The field is part of the savegame, so a text id of Gear's own (Classes::keyText) comes back after a load.
+    bool nameText(uint32_t id, uint32_t& text);
+    bool setNameText(uint32_t id, uint32_t text, const char*& error);
+
+    // The game's clock: minutes since midnight (0..1439) of the calendar that runs the day and night; false if not found.
+    bool clockMinutes(uint32_t& minutes);
 
     // Destroys an object through the engine (heroes too: the caller checked that it may). False if there was none.
     bool destroyObject(uint32_t id);

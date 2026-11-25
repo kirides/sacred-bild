@@ -1140,6 +1140,74 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fv
     DWORD vertCount, LPWORD indices, DWORD indexCount, DWORD flags)
 {
     Scope p{TProxy};
+    // A tinted or re-textured model (Pets::tintNext, Sacred Gear's creature:set_tint and set_texture). A texture of Sacred Gear's replaces the
+    // mesh's texture in stage 0 for this draw; a tint is one more texture stage that multiplies what the engine's stages made by the colour
+    // (stage 1 must be unused: a glow effect that uses it is left as it is).
+    uint32_t tint = 0, texture = 0;
+    if (!m_inTint && !m_ui && Pets::tinting() && Pets::tintNext(tint, texture))
+    {
+        IDirectDrawSurface7* replacement = texture ? Pets::resolveTexture(m_real, texture) : nullptr;
+        IDirectDrawSurface7* original = nullptr;
+        bool swapped = false;
+        if (replacement && SUCCEEDED(GetTexture(0, &original)))
+        {
+            SetTexture(0, replacement);
+            swapped = true;
+        }
+        bool tinted = false;
+        DWORD op1 = D3DTOP_DISABLE;
+        DWORD op0 = D3DTOP_DISABLE;
+        struct Saved
+        {
+            D3DTEXTURESTAGESTATETYPE type;
+            DWORD value;
+        } saved[] = {{D3DTSS_COLOROP, 0}, {D3DTSS_COLORARG1, 0}, {D3DTSS_COLORARG2, 0}, {D3DTSS_ALPHAOP, 0}, {D3DTSS_ALPHAARG1, 0}};
+        DWORD factor = 0;
+        if (tint && SUCCEEDED(GetTextureStageState(1, D3DTSS_COLOROP, &op1)) && op1 == D3DTOP_DISABLE &&
+            SUCCEEDED(GetTextureStageState(0, D3DTSS_COLOROP, &op0)) && op0 != D3DTOP_DISABLE)
+        {
+            for (Saved& sv : saved)
+            {
+                GetTextureStageState(1, sv.type, &sv.value);
+            }
+            GetRenderState(D3DRENDERSTATE_TEXTUREFACTOR, &factor);
+            SetRenderState(D3DRENDERSTATE_TEXTUREFACTOR, tint);
+            SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_CURRENT);
+            SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_TFACTOR);
+            SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_MODULATE);
+            SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_CURRENT);
+            SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+            tinted = true;
+        }
+        if (tinted || swapped)
+        {
+            m_inTint = true;
+            const HRESULT hr = DrawIndexedPrimitiveStrided(type, fvf, data, vertCount, indices, indexCount, flags);
+            m_inTint = false;
+            if (tinted)
+            {
+                SetTextureStageState(1, D3DTSS_COLOROP, saved[0].value);
+                SetTextureStageState(1, D3DTSS_COLORARG1, saved[1].value);
+                SetTextureStageState(1, D3DTSS_COLORARG2, saved[2].value);
+                SetTextureStageState(1, D3DTSS_ALPHAOP, saved[3].value);
+                SetTextureStageState(1, D3DTSS_ALPHAARG1, saved[4].value);
+                SetRenderState(D3DRENDERSTATE_TEXTUREFACTOR, factor);
+            }
+            if (swapped)
+            {
+                SetTexture(0, original);
+            }
+            if (original)
+            {
+                original->Release();
+            }
+            return hr;
+        }
+        if (original)
+        {
+            original->Release();
+        }
+    }
     D3DStats::count(CDrawIndexed);
     D3DStats::count(CVerts, vertCount);
     CallLock lock(*this, _ReturnAddress());

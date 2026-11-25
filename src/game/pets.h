@@ -7,6 +7,8 @@
 #include <cstdint>
 
 struct _D3DMATRIX;
+struct IDirectDrawSurface7;
+struct IDirect3DDevice7;
 
 namespace Sacred
 {
@@ -26,6 +28,17 @@ namespace Pets
 
     // Whether the engine is drawing a scaled pet's model on this thread now.
     bool scaling();
+
+    // Tints (a colour multiplied over an object's model, whole or per mesh): a character's model is drawn as a few meshes, one
+    // DrawIndexedPrimitiveStrided each, in a fixed order; `part` 0 is the whole model, 1.. the meshes in the order they are drawn.
+    // While the engine draws an object that has tints (its drawModel, not its shadow), `tintNext` answers for each mesh draw in
+    // turn whether it has a colour (0xAARRGGBB, white 0xFFFFFFFF: none).
+    bool tinting();
+    // `argb` the colour (0: none) and `texture` the token of another texture for the mesh (0: none), true if either is set. (A mesh is
+    // counted whether it has them or not.)
+    bool tintNext(uint32_t& argb, uint32_t& texture);
+    // The surface of a texture token, from Sacred Gear's resolver (render thread); nullptr if there is none.
+    IDirectDrawSurface7* resolveTexture(IDirect3DDevice7* device, uint32_t token);
 
     // While the engine draws a scaled pet: multiplies the 3x3 part of a world matrix, the translation stays.
     void scaleWorld(_D3DMATRIX& m);

@@ -330,6 +330,8 @@ GEAR = [
     # The potion picker (gear/potionpick.cpp): stdcall (mode, flag, tier), ret 0xC; merchants and the loot of dying creatures call it. The event
     # `potion.pick` asks the mods first.
     ('potionPick', 0x0043B1A0, 'func'),
+    # The game's calendar singleton (gear/world.cpp clockMinutes): cdecl () -> object, +0x20 hour, +0x22 minute.
+    ('gameClock', 0x00417560, 'func'),
     # The merchant window's stock (gear/shop.cpp; docs/GearApi.md "gear.shop", event `shop.stock`). The window's event handler (thiscall (window, event),
     # ret 4; event kind 5 / id 0x2E with the sub-kind in +8: 8 a merchant opened, 9 the refresh message) rebuilds or tops up the stock: the clear
     # (thiscall (window, all), ret 4: all = 1 empties the grid, 0 removes a random handful), the random stock (thiscall (window, count), ret 4) and the

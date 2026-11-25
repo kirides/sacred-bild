@@ -50,13 +50,14 @@ namespace
         const wchar_t* entry[3] = {};
     };
     std::map<uint32_t, VirtualText> g_texts;
+    std::map<uint32_t, std::string> g_keyOf;   // key text id -> its key
     uint32_t g_nextText = Classes::kTextFirst;
     std::mutex g_textLock;
     std::atomic<bool> g_haveTexts{false};
 
     const wchar_t* const* __fastcall hookTextGet(void* self, void* edx, uint32_t id)
     {
-        if (id >= Classes::kTextFirst && id <= Classes::kTextFirst + 0xFFFF && g_haveTexts.load(std::memory_order_acquire))
+        if (id >= Classes::kTextFirst && id <= Classes::kTextFirst + 0x1FFFF && g_haveTexts.load(std::memory_order_acquire))
         {
             std::lock_guard lock(g_textLock);
             const auto it = g_texts.find(id);
@@ -528,6 +529,45 @@ uint32_t Classes::addText(const char* utf8, const char*& error)
     return id;
 }
 
+uint32_t Classes::keyText(const char* key, const char* utf8, const char*& error)
+{
+    wchar_t wide[1024] = {};
+    if (!key || !*key || std::strlen(key) > 120)
+    {
+        error = "the key must be 1 to 120 characters";
+        return 0;
+    }
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8, -1, wide, 1023) < 1)
+    {
+        error = "the text is not valid UTF-8 or too long";
+        return 0;
+    }
+    uint32_t h = 2166136261u;
+    for (const char* c = key; *c; ++c)
+    {
+        h = (h ^ static_cast<uint8_t>(*c)) * 16777619u;
+    }
+    const uint32_t id = kKeyTextFirst + ((h ^ (h >> 16)) & 0xFFFF);
+    std::lock_guard lock(g_textLock);
+    const auto it = g_keyOf.find(id);
+    if (it != g_keyOf.end() && it->second != key)
+    {
+        error = "another key has the same text id, choose a different key";
+        return 0;
+    }
+    g_keyOf[id] = key;
+    storeText(g_texts[id], wide);
+    g_haveTexts.store(true, std::memory_order_release);
+    return id;
+}
+
+std::string Classes::keyOfText(uint32_t id)
+{
+    std::lock_guard lock(g_textLock);
+    const auto it = g_keyOf.find(id);
+    return it == g_keyOf.end() ? std::string() : it->second;
+}
+
 namespace
 {
     bool engineSetText(uint32_t id, const char* utf8, const char*& error)
@@ -570,7 +610,7 @@ namespace
 
 bool Classes::setText(uint32_t id, const char* utf8, const char*& error)
 {
-    if (id >= kTextFirst && id <= kTextFirst + 0xFFFF)
+    if (id >= kTextFirst && id <= kTextFirst + 0x1FFFF)
     {
         wchar_t wide[1024] = {};
         if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8, -1, wide, 1023) < 1)

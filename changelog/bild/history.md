@@ -1,3 +1,8 @@
+## v0.3.4 (2026-11-25)
+
+- New: model tints for Sacred Gear mods (`SacredBild_TintSet`, `SacredBild_TintClear`): a creature's model is drawn with a colour multiplied over it, whole or per mesh, through one more texture stage; its shadow stays untinted.
+- New: model textures for Sacred Gear mods (`SacredBild_TextureSet`, `SacredBild_TextureResolver`): a mesh of a creature's model is drawn with another texture of Sacred Gear's (a Texture.pak image or an image file of a mod).
+
 ## v0.3.3 (2026-11-25)
 
 - Fixed: with a Beastmaster animal along, the shadows of NPCs, companions and your hero were drawn displaced and wrongly sized. Only the animals' own shadows are scaled now.

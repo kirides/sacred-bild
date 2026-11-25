@@ -27,6 +27,21 @@ namespace
     thread_local float t_scale = 1.0f;
     thread_local float t_ax = 0.0f, t_ay = 0.0f;   // the object's screen position (+0x40 / +0x44): the scale is about it
 
+    // Tints: object id -> a colour for the whole model and for the first kParts meshes (0: none).
+    constexpr int kParts = 8;
+    struct Tint
+    {
+        uint32_t all = 0;
+        uint32_t part[kParts] = {};
+        uint32_t texAll = 0;                // tokens of other textures (Sacred Gear's resolver gives the surface)
+        uint32_t texPart[kParts] = {};
+    };
+    std::unordered_map<uint32_t, Tint> g_tints;
+    std::atomic<int> g_tintCount{0};
+    thread_local const Tint* t_tint = nullptr;      // the object being drawn (valid while its drawModel runs: the map entry is copied below)
+    thread_local Tint t_tintCopy;
+    thread_local int t_part = 0;
+
     decltype(Addr::cGranny_renderShadow)::Ptr g_origShadow = nullptr;
     decltype(Addr::cObject3D_drawModel)::Ptr g_origDrawModel = nullptr;
 
@@ -68,6 +83,22 @@ namespace
         float scale = 1.0f, ax = 0.0f, ay = 0.0f;
         const bool pet = petOf(self, scale, ax, ay);
         const float before = t_scale, bx = t_ax, by = t_ay;
+        const Tint* beforeTint = t_tint;
+        const int beforePart = t_part;
+        t_tint = nullptr;
+        if (g_tintCount.load(std::memory_order_relaxed) > 0 && self)
+        {
+            const uint32_t id = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x0C);
+            AcquireSRWLockShared(&g_lock);
+            const auto it = g_tints.find(id);
+            if (it != g_tints.end())
+            {
+                t_tintCopy = it->second;
+                t_tint = &t_tintCopy;
+                t_part = 0;
+            }
+            ReleaseSRWLockShared(&g_lock);
+        }
         if (pet)
         {
             t_scale = scale;
@@ -95,6 +126,8 @@ namespace
         t_scale = before;
         t_ax = bx;
         t_ay = by;
+        t_tint = beforeTint;
+        t_part = beforePart;
         return r;
     }
 
@@ -115,6 +148,8 @@ namespace
             ReleaseSRWLockShared(&g_lock);
         }
         const float before = t_scale, bx = t_ax, by = t_ay;
+        const Tint* beforeTint = t_tint;     // a shadow is not tinted
+        t_tint = nullptr;
         if (pet)
         {
             t_scale = sh.scale;
@@ -122,6 +157,7 @@ namespace
             t_ay = sh.ay;
         }
         g_origShadow(self, edx, device, handle0, handle1, extra, flag);
+        t_tint = beforeTint;
         t_scale = before;
         t_ax = bx;
         t_ay = by;
@@ -209,6 +245,46 @@ void Pets::filterPick(cWorldView* view)
     LeaveCriticalSection(&view->pickLock);
 }
 
+bool Pets::tinting()
+{
+    return t_tint != nullptr;
+}
+
+bool Pets::tintNext(uint32_t& argb, uint32_t& texture)
+{
+    argb = 0;
+    texture = 0;
+    if (!t_tint)
+    {
+        return false;
+    }
+    const int part = ++t_part;
+    uint32_t c = part >= 1 && part <= kParts ? t_tint->part[part - 1] : 0;
+    if (!c)
+    {
+        c = t_tint->all;
+    }
+    if (c && c != 0xFFFFFFFFu)
+    {
+        argb = c;
+    }
+    uint32_t t = part >= 1 && part <= kParts ? t_tint->texPart[part - 1] : 0;
+    texture = t ? t : t_tint->texAll;
+    return argb != 0 || texture != 0;
+}
+
+namespace
+{
+    using Resolver = IDirectDrawSurface7*(__cdecl*)(IDirect3DDevice7*, unsigned);
+    std::atomic<Resolver> g_resolver{nullptr};
+}
+
+IDirectDrawSurface7* Pets::resolveTexture(IDirect3DDevice7* device, uint32_t token)
+{
+    const Resolver r = g_resolver.load();
+    return r && token ? r(device, token) : nullptr;
+}
+
 bool Pets::scaling()
 {
     return t_scale != 1.0f;
@@ -265,4 +341,85 @@ extern "C" void __cdecl SacredBild_PetClear()
     g_pets.clear();
     recount();
     ReleaseSRWLockExclusive(&g_lock);
+}
+
+// Sacred Gear: tints an object's model: `part` 0 the whole model, 1..8 one mesh (in drawing order); `argb` 0 or 0xFFFFFFFF removes it.
+extern "C" int __cdecl SacredBild_TintSet(unsigned id, unsigned part, unsigned argb)
+{
+    AcquireSRWLockExclusive(&g_lock);
+    if (part <= static_cast<unsigned>(kParts))
+    {
+        const uint32_t value = argb == 0xFFFFFFFFu ? 0 : argb;
+        if (value || g_tints.count(id))
+        {
+            Tint& t = g_tints[id];
+            if (part == 0)
+            {
+                t.all = value;
+            }
+            else
+            {
+                t.part[part - 1] = value;
+            }
+            bool any = t.all != 0 || t.texAll != 0;
+            for (int k = 0; k < kParts; ++k)
+            {
+                any = any || t.part[k] != 0 || t.texPart[k] != 0;
+            }
+            if (!any)
+            {
+                g_tints.erase(id);
+            }
+        }
+    }
+    g_tintCount.store(static_cast<int>(g_tints.size()));
+    const int n = g_tintCount.load();
+    ReleaseSRWLockExclusive(&g_lock);
+    return n;
+}
+
+// Sacred Gear: forgets every tint (a savegame was loaded: the object ids mean other objects now).
+extern "C" void __cdecl SacredBild_TintClear()
+{
+    AcquireSRWLockExclusive(&g_lock);
+    g_tints.clear();
+    g_tintCount.store(0);
+    ReleaseSRWLockExclusive(&g_lock);
+}
+
+// Sacred Gear: Sacred Gear's function that gives the surface of a texture token (a Texture.pak image or a picture of its own).
+extern "C" void __cdecl SacredBild_TextureResolver(IDirectDrawSurface7* (__cdecl* resolver)(IDirect3DDevice7*, unsigned))
+{
+    g_resolver.store(resolver);
+}
+
+// Sacred Gear: draws an object's mesh (`part` 1..8, 0 the whole model) with another texture; `token` 0 takes it away.
+extern "C" int __cdecl SacredBild_TextureSet(unsigned id, unsigned part, unsigned token)
+{
+    AcquireSRWLockExclusive(&g_lock);
+    if (part <= static_cast<unsigned>(kParts) && (token || g_tints.count(id)))
+    {
+        Tint& t = g_tints[id];
+        if (part == 0)
+        {
+            t.texAll = token;
+        }
+        else
+        {
+            t.texPart[part - 1] = token;
+        }
+        bool any = t.all != 0 || t.texAll != 0;
+        for (int i = 0; i < kParts; ++i)
+        {
+            any = any || t.part[i] != 0 || t.texPart[i] != 0;
+        }
+        if (!any)
+        {
+            g_tints.erase(id);
+        }
+    }
+    g_tintCount.store(static_cast<int>(g_tints.size()));
+    const int n = g_tintCount.load();
+    ReleaseSRWLockExclusive(&g_lock);
+    return n;
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include <cstdint>
 
 // Custom classes (docs/Gear.md "Classes"): what the engine binds to a hero's creature type, made answerable by mods.
@@ -97,6 +98,13 @@ namespace Classes
     // ids kTextFirst .. kTextFirst + 0xFFFF, are served by the text lookup (a hook): addText makes a new one, setText on such an id
     // changes it. They work wherever the game looks a text up by id (names and descriptions of alias abilities).
     constexpr uint32_t kTextFirst = 0x100000;
+    // Texts by a mod's stable key (gear.text.key): the id is kKeyTextFirst + a hash of the key (16 bits), the same in every session, so an
+    // id a savegame keeps (a creature's name text) means the same text after the mod registered the key again. Two keys with the same
+    // hash are refused (the second one must choose another key). Returns 0 with `error` set.
+    constexpr uint32_t kKeyTextFirst = kTextFirst + 0x10000;
+    uint32_t keyText(const char* key, const char* utf8, const char*& error);
+    // The key of a key text id registered this session ("" if none).
+    std::string keyOfText(uint32_t id);
     bool setText(uint32_t id, const char* utf8, const char*& error);
     uint32_t addText(const char* utf8, const char*& error);
 }

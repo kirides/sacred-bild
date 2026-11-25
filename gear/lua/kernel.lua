@@ -890,7 +890,29 @@ function creature_mt:info() return info(self) end
 function creature_mt:is_creature() local o = info(self); return o ~= nil and o.creature end
 function creature_mt:type() local o = info(self); return o and o.type end
 function creature_mt:type_name() local o = info(self); return o and data.object_types:name(o.type) end
-function creature_mt:display_name() local o = info(self); return o and data.object_types:label(o.type) end
+-- display_name(): the name the game shows: the creature's own name text (creature:set_name_text, a hero's name) or its type's name.
+function creature_mt:display_name()
+    local o = info(self)
+    if not o then return nil end
+    local text = native.name_text(self.id)
+    if text and text ~= 0 then
+        local own = native.text_get(text)
+        if own and own ~= '' then return own end
+    end
+    return data.object_types:label(o.type)
+end
+-- name_text() -> the text id of the creature's own name (+0x3C), 0 if it shows its type's name, nil if there is no such creature.
+function creature_mt:name_text() return native.name_text(self.id) end
+-- set_name_text(id): the name the game shows over the creature (0: its type's name again); `id` is a text id (gear.text.key, gear.text.add).
+function creature_mt:set_name_text(id)
+    assert(type(id) == 'number', 'id must be a text id')
+    return native.set_name_text(self.id, id)
+end
+-- name_key() -> the gear.text.key key of the creature's own name text, if a mod registered it this session.
+function creature_mt:name_key()
+    local text = native.name_text(self.id)
+    return text and text ~= 0 and native.text_key_of(text) or nil
+end
 function creature_mt:position() local o = info(self); if o then return o.x, o.y, o.layer end end
 function creature_mt:sector() local o = info(self); return o and o.sector end
 function creature_mt:hp() local o = info(self); return o and o.hp end
@@ -937,6 +959,57 @@ function creature_mt:set_pet(opts)
     local scale = opts.scale == nil and 1 or opts.scale
     assert(type(scale) == 'number' and scale >= 0.1 and scale <= 4, 'scale must be a number from 0.1 to 4')
     return native.set_pet(self.id, scale, opts.untargetable == true)
+end
+-- set_tint(spec): the model is drawn with a colour multiplied over it. spec: a colour (0xAARRGGBB; a number below 0x1000000 is taken as
+-- 0xRRGGBB, opaque) for the whole model, or {all = colour, parts = {[1] = colour, ...}} (the meshes of the model in the order the game
+-- draws them: a character is a few meshes, e.g. body, cloth). nil clears it. Needs SacredBild; single player; ends with the savegame.
+function creature_mt:set_tint(spec)
+    local function argb(c)
+        if c == nil or c == false then return 0 end
+        assert(type(c) == 'number' and c >= 0 and c <= 0xFFFFFFFF, 'a colour is a number 0xAARRGGBB')
+        if c < 0x1000000 then c = c + 0xFF000000 end
+        return c
+    end
+    if spec == nil then
+        for part = 0, 8 do
+            local ok, err = native.set_tint(self.id, part, 0)
+            if not ok then return nil, err end
+        end
+        return true
+    end
+    if type(spec) == 'number' then spec = {all = spec} end
+    assert(type(spec) == 'table', 'the tint is a colour, a table or nil')
+    local parts = spec.parts or {}
+    local ok, err = native.set_tint(self.id, 0, argb(spec.all))
+    if not ok then return nil, err end
+    for part = 1, 8 do
+        ok, err = native.set_tint(self.id, part, argb(parts[part]))
+        if not ok then return nil, err end
+    end
+    return true
+end
+-- set_texture(spec): the model is drawn with other textures: spec is an image id (gear.ui.texture_image(name) for a Texture.pak texture, or the
+-- `picture` of a gear.ui.texture.load handle for an image file of the mod) for the whole model, or {all = id, parts = {[n] = id}} for single
+-- meshes (in the order the game draws them, as set_tint's). The texture takes the place of the mesh's own one, so it must fit its texture
+-- coordinates (the same layout; a file's sides must be powers of two). nil clears it. Needs SacredBild; single player; ends with the savegame.
+function creature_mt:set_texture(spec)
+    if spec == nil then
+        for part = 0, 8 do
+            local ok, err = native.set_texture(self.id, part, 0)
+            if not ok then return nil, err end
+        end
+        return true
+    end
+    if type(spec) == 'number' then spec = {all = spec} end
+    assert(type(spec) == 'table', 'the texture is an image id, a table or nil')
+    local parts = spec.parts or {}
+    local ok, err = native.set_texture(self.id, 0, spec.all or 0)
+    if not ok then return nil, err end
+    for part = 1, 8 do
+        ok, err = native.set_texture(self.id, part, parts[part] or 0)
+        if not ok then return nil, err end
+    end
+    return true
 end
 function creature_mt:set_gold(gold)
     assert(type(gold) == 'number', 'gold must be a number')
@@ -3015,6 +3088,13 @@ function world.around(x, y, min, max)
     return math.floor(x + math.cos(a) * r + 0.5), math.floor(y + math.sin(a) * r + 0.5)
 end
 
+-- world.clock() -> minutes since midnight (0..1439) of the game's day and night clock, hour, minute | nil.
+function world.clock()
+    local m = native.clock()
+    if not m then return nil end
+    return m, math.floor(m / 60), m % 60
+end
+
 -- spawn(type, x, y, opts) -> creature | nil, message. `type` is a type id or an object type name;
 -- opts.layer (default: the hero's), opts.like (a creature whose faction, aggression, level and health share the new one takes), opts.label (a text kept for the creature, see creature:label()), opts.modifiers (see creature:set_modifiers).
 local function spawn(mod, kind, x, y, opts)
@@ -4263,7 +4343,7 @@ local function make_ui(mod)
         if not native.texture_load then error('RmlUi is not available in this build', 2) end
         local id, w, h = native.texture_load(mod.dir, path)
         if not id then return nil, w end
-        local t = setmetatable({id = id, src = 'gear:tex/' .. id, width = w, height = h, released = false}, Texture)
+        local t = setmetatable({id = id, src = 'gear:tex/' .. id, width = w, height = h, released = false, picture = native.texture_picture(id)}, Texture)
         uis.textures[t] = mod
         return t
     end
@@ -7521,6 +7601,15 @@ local function make_env(mod)
             -- add(text) -> id | nil, reason: a new text of Gear's own (id from 0x100000) that the game's text lookup serves, for the
             -- names and descriptions of ability copies (`copy.name_text = gear.text.add('Venom')`); same text forms as set.
             add = function(text) return native.text_add(kernel.pick_text(text)) end,
+            -- key(key, text) -> id | nil, reason: a text of Gear's own whose id comes from `key` (a string that is yours alone: 'mymod.smith'),
+            -- so it is the same in every session; call it again with the same key to change the text. For what a savegame keeps by id
+            -- (a creature's name text, creature:set_name_text): register the key when the mod starts, before a savegame loads.
+            key = function(key, text)
+                assert(type(key) == 'string' and key ~= '', 'key must be a string')
+                return native.text_key(key, kernel.pick_text(text))
+            end,
+            -- key_of(id) -> the key, if it was registered this session.
+            key_of = function(id) return native.text_key_of(id) end,
         },
         -- The mod's file overlay (mods/<id>/overlay.txt, applied when Sacred Gear starts).
         files = {
@@ -8005,7 +8094,7 @@ local function make_env(mod)
     env.gear = gear
     -- The libraries shipped in the DLL (lua/<name>.lua): each is run in this mod's environment the first time the mod
     -- touches gear.<name>, so a mod that never uses one pays nothing for it.
-    local LIBRARIES = {lookup = true, fmt = true, toast = true, store = true, kit = true}
+    local LIBRARIES = {lookup = true, fmt = true, toast = true, store = true, kit = true, npc = true}
     local library_failed = {}
     setmetatable(gear, {__index = function(t, name)
         if not LIBRARIES[name] or library_failed[name] then return nil end

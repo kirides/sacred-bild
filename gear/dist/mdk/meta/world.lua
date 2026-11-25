@@ -35,6 +35,13 @@ function GearWorld.hero() end
 ---@return Creature?
 function GearWorld.object(id) end
 
+--- The game's clock, the one the day and night cycle runs on: minutes since midnight (0 to 1439), the hour and the minute. nil if
+--- the game's clock was not found (no game running).
+---@return integer? minutes
+---@return integer? hour
+---@return integer? minute
+function GearWorld.clock() end
+
 --- Whether the world may be changed now (a single player game runs).
 ---@return boolean
 function GearWorld.can_change() end
@@ -257,10 +264,48 @@ function Creature:type() end
 ---@return string?
 function Creature:type_name() end
 
---- The creature's name for the player: the localized name of its type (`gear.data.object_types:display_name`), the internal type
---- name when the game has no text for it. Use it for anything the player reads; `type_name` stays the identifier to match on.
+--- The creature's name for the player: its own name text (`creature:set_name_text`) if it has one, else the localized name
+--- of its type (`gear.data.object_types:display_name`), the internal type name when the game has no text for it. Use it for
+--- anything the player reads; `type_name` stays the identifier to match on.
 ---@return string?
 function Creature:display_name() end
+
+--- The text id of the creature's own name (the creature's `+0x3C`), 0 if it shows its type's name, nil if there is no such creature.
+---@return integer?
+function Creature:name_text() end
+
+--- Gives the creature (not a hero) a name of its own: the game shows this text over it, in its hover label and its lists, instead
+--- of its type's name; 0 gives the type's name back. The field is saved with the savegame, so use an id of `gear.text.key`, which
+--- is the same in every session. Single player.
+---@param id integer
+---@return boolean? ok
+---@return string? error
+function Creature:set_name_text(id) end
+
+--- Draws the creature's model with a colour multiplied over it. `spec`: a colour (0xAARRGGBB; a number below 0x1000000 is taken as
+--- 0xRRGGBB, opaque) for the whole model, or `{all = colour, parts = {[1] = colour, ...}}` for single meshes in the order the game
+--- draws them (a character is made of a few meshes, for example the body and the cloth); a part's colour wins over `all`. nil clears it.
+--- Textures are multiplied, so a light texture takes the colour best. Needs SacredBild; single player; the tints end with the savegame
+--- (ids then mean other creatures), so a mod sets them again after a load.
+---@param spec integer|{all: integer?, parts: table<integer, integer>?}?
+---@return boolean? ok
+---@return string? error
+function Creature:set_tint(spec) end
+
+--- Draws the creature's model with other textures. `spec`: an image id for the whole model, or `{all = id, parts = {[n] = id}}` for single
+--- meshes in the order the game draws them (as `set_tint`'s parts). An id is `gear.ui.texture_image(name)` (a texture of the game's
+--- Texture.pak) or the `picture` of a `gear.ui.texture.load(path)` handle (an image file of the mod: PNG, TGA, JPG or DDS, both sides a
+--- power of two; keep the handle as long as the creature uses it). The texture replaces the mesh's own one, so it needs the same texture
+--- layout (the skin of a model of the same family); opaque images only. nil clears it. Needs SacredBild; single player; the textures end
+--- with the savegame, so a mod sets them again after a load.
+---@param spec integer|{all: integer?, parts: table<integer, integer>?}?
+---@return boolean? ok
+---@return string? error
+function Creature:set_texture(spec) end
+
+--- The `gear.text.key` key of the creature's own name text, if a mod registered it this session.
+---@return string?
+function Creature:name_key() end
 
 --- World position and layer.
 ---@return integer? x

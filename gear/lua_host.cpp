@@ -1150,6 +1150,70 @@ namespace
         return 1;
     }
 
+    // native.text_key(key, utf8) -> id | nil, message: Gear's own text with an id taken from the key (the same in every session)
+    int nativeTextKey(lua_State* L)
+    {
+        const char* error = nullptr;
+        const uint32_t id = Classes::keyText(luaL_checkstring(L, 1), luaL_checkstring(L, 2), error);
+        if (!id)
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushnumber(L, id);
+        return 1;
+    }
+
+    // native.text_key_of(id) -> the key | nil
+    int nativeTextKeyOf(lua_State* L)
+    {
+        const std::string key = Classes::keyOfText(static_cast<uint32_t>(luaL_checknumber(L, 1)));
+        if (key.empty())
+        {
+            lua_pushnil(L);
+        }
+        else
+        {
+            lua_pushlstring(L, key.data(), key.size());
+        }
+        return 1;
+    }
+
+    // native.name_text(id) -> text id (0: the type's name) | nil; native.set_name_text(id, text) -> true | nil, message
+    int nativeNameText(lua_State* L)
+    {
+        uint32_t text = 0;
+        if (!World::nameText(checkId(L, 1), text))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, text);
+        return 1;
+    }
+    int nativeSetNameText(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::setNameText(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.clock() -> minutes since midnight | nil
+    int nativeClock(lua_State* L)
+    {
+        uint32_t minutes = 0;
+        if (!World::clockMinutes(minutes))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, minutes);
+        return 1;
+    }
+
     // native.texture_image(name) -> image id for gear.ui.image | nil
     int nativeTextureImage(lua_State* L)
     {
@@ -3009,6 +3073,30 @@ namespace
         if (!id || !(scale > 0 && scale <= 4) || !World::setPet(id, scale, untargetable, error))
         {
             return pushFailure(L, scale > 0 && scale <= 4 ? error : "the scale is 0.1 to 4");
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.set_tint(id, part, argb) -> true | nil, message
+    int nativeSetTint(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::setTint(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), static_cast<uint32_t>(static_cast<int64_t>(luaL_checknumber(L, 3))), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.set_texture(id, part, image) -> true | nil, message
+    int nativeSetTexture(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::setTexture(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), static_cast<uint32_t>(luaL_checknumber(L, 3)), error))
+        {
+            return pushFailure(L, error);
         }
         lua_pushboolean(L, 1);
         return 1;
@@ -4991,6 +5079,7 @@ namespace
             {"toast", IDR_GEAR_TOAST},
             {"store", IDR_GEAR_STORE},
             {"kit", IDR_GEAR_KIT},
+            {"npc", IDR_GEAR_NPC},
             {"modmanager.rml", IDR_GEAR_MODMANAGER_UI},
         };
         const char* name = luaL_checkstring(L, 1);
@@ -5114,6 +5203,11 @@ namespace
             {"hero_record_set", nativeHeroRecordSet},
             {"text_set", nativeTextSet},
             {"text_add", nativeTextAdd},
+            {"text_key", nativeTextKey},
+            {"text_key_of", nativeTextKeyOf},
+            {"name_text", nativeNameText},
+            {"set_name_text", nativeSetNameText},
+            {"clock", nativeClock},
             {"item_define_type", nativeItemDefineType},
             {"item_use", nativeItemUse},
             {"art_in_flight", nativeArtInFlight},
@@ -5195,6 +5289,8 @@ namespace
             {"copy_allegiance", nativeCopyAllegiance},
             {"copy_stats", nativeCopyStats},
             {"set_pet", nativeSetPet},
+            {"set_tint", nativeSetTint},
+            {"set_texture", nativeSetTexture},
             {"set_level", nativeSetLevel},
             {"clear_pets", nativeClearPets},
             {"set_max_health", nativeSetMaxHealth},
