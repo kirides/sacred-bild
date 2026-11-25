@@ -1,4 +1,5 @@
 #include "memfault.h"
+#include "bild_gear.h"
 #include "save.h"
 #include "ui.h"
 #include "items/itemicon.h"
@@ -193,22 +194,22 @@ namespace
             {
                 return;
             }
-            auto push = reinterpret_cast<PushFrameFn>(GetProcAddress(bild, "SacredBild_UiPushFrame"));
-            auto pop = reinterpret_cast<PopFrameFn>(GetProcAddress(bild, "SacredBild_UiPopFrame"));
+            auto push = reinterpret_cast<decltype(&SacredBild_UiPushFrame)>(GetProcAddress(bild, "SacredBild_UiPushFrame"));
+            auto pop = reinterpret_cast<decltype(&SacredBild_UiPopFrame)>(GetProcAddress(bild, "SacredBild_UiPopFrame"));
             if (push && pop)
             {
                 g_pushFrame = push;
                 g_popFrame = pop;
                 LOG("UI: SacredBild's UI frames found: overlays follow its HUD layout");
             }
-            g_screenBounds = reinterpret_cast<BoundsFn>(GetProcAddress(bild, "SacredBild_UiScreenBounds"));
-            g_setWindowFrame = reinterpret_cast<SetWindowFrameFn>(GetProcAddress(bild, "SacredBild_UiSetWindowFrame"));
-            g_getWindowFrame = reinterpret_cast<GetWindowFrameFn>(GetProcAddress(bild, "SacredBild_UiGetWindowFrame"));
-            g_windowBounds = reinterpret_cast<WindowBoundsFn>(GetProcAddress(bild, "SacredBild_UiGetWindowBounds"));
-            g_setCursorFilter = reinterpret_cast<SetCursorFilterFn>(GetProcAddress(bild, "SacredBild_UiSetCursorFilter"));
-            g_placement = reinterpret_cast<PlacementFn>(GetProcAddress(bild, "SacredBild_UiPlacement"));
-            g_setWheel = reinterpret_cast<SetWheelFn>(GetProcAddress(bild, "SacredBild_UiSetWheelHandler"));
-            g_takeScroll = reinterpret_cast<TakeScrollFn>(GetProcAddress(bild, "SacredBild_UiTakeScroll"));
+            g_screenBounds = reinterpret_cast<decltype(&SacredBild_UiScreenBounds)>(GetProcAddress(bild, "SacredBild_UiScreenBounds"));
+            g_setWindowFrame = reinterpret_cast<decltype(&SacredBild_UiSetWindowFrame)>(GetProcAddress(bild, "SacredBild_UiSetWindowFrame"));
+            g_getWindowFrame = reinterpret_cast<decltype(&SacredBild_UiGetWindowFrame)>(GetProcAddress(bild, "SacredBild_UiGetWindowFrame"));
+            g_windowBounds = reinterpret_cast<decltype(&SacredBild_UiGetWindowBounds)>(GetProcAddress(bild, "SacredBild_UiGetWindowBounds"));
+            g_setCursorFilter = reinterpret_cast<decltype(&SacredBild_UiSetCursorFilter)>(GetProcAddress(bild, "SacredBild_UiSetCursorFilter"));
+            g_placement = reinterpret_cast<decltype(&SacredBild_UiPlacement)>(GetProcAddress(bild, "SacredBild_UiPlacement"));
+            g_setWheel = reinterpret_cast<decltype(&SacredBild_UiSetWheelHandler)>(GetProcAddress(bild, "SacredBild_UiSetWheelHandler"));
+            g_takeScroll = reinterpret_cast<decltype(&SacredBild_UiTakeScroll)>(GetProcAddress(bild, "SacredBild_UiTakeScroll"));
         });
     }
 

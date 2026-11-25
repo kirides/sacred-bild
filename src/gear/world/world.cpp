@@ -1,4 +1,5 @@
 #include "memfault.h"
+#include "bild_gear.h"
 #include "world.h"
 #include "engine/gear_addr.h"
 #include "log.h"
@@ -848,12 +849,12 @@ namespace
             g_petLooked = true;
             if (HMODULE bild = GetModuleHandleW(L"ddraw.dll"))
             {
-                g_petSet = reinterpret_cast<PetSetFn>(GetProcAddress(bild, "SacredBild_PetSet"));
-                g_petClear = reinterpret_cast<PetClearFn>(GetProcAddress(bild, "SacredBild_PetClear"));
-                g_tintSet = reinterpret_cast<TintSetFn>(GetProcAddress(bild, "SacredBild_TintSet"));
-                g_tintClear = reinterpret_cast<PetClearFn>(GetProcAddress(bild, "SacredBild_TintClear"));
-                g_textureSet = reinterpret_cast<TextureSetFn>(GetProcAddress(bild, "SacredBild_TextureSet"));
-                if (const auto setResolver = reinterpret_cast<SetResolverFn>(GetProcAddress(bild, "SacredBild_TextureResolver")))
+                g_petSet = reinterpret_cast<decltype(&SacredBild_PetSet)>(GetProcAddress(bild, "SacredBild_PetSet"));
+                g_petClear = reinterpret_cast<decltype(&SacredBild_PetClear)>(GetProcAddress(bild, "SacredBild_PetClear"));
+                g_tintSet = reinterpret_cast<decltype(&SacredBild_TintSet)>(GetProcAddress(bild, "SacredBild_TintSet"));
+                g_tintClear = reinterpret_cast<decltype(&SacredBild_TintClear)>(GetProcAddress(bild, "SacredBild_TintClear"));
+                g_textureSet = reinterpret_cast<decltype(&SacredBild_TextureSet)>(GetProcAddress(bild, "SacredBild_TextureSet"));
+                if (const auto setResolver = reinterpret_cast<decltype(&SacredBild_TextureResolver)>(GetProcAddress(bild, "SacredBild_TextureResolver")))
                 {
                     setResolver(&resolveTexture);
                 }

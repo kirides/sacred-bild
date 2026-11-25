@@ -253,7 +253,7 @@ if(SACREDGEAR)
   list(APPEND GEAR_EMBEDDED ${VERSION_INFO_DIR}/gear_kernel.lua ${VERSION_INFO_DIR}/version_info.h)
   set_source_files_properties(src/gear/gear.rc PROPERTIES OBJECT_DEPENDS "${GEAR_EMBEDDED}")
   target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32)
-  target_compile_definitions(SacredGear PRIVATE RMLUI_STATIC_LIB)
+  target_compile_definitions(SacredGear PRIVATE RMLUI_STATIC_LIB SACREDGEAR_BUILD)
   target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})
   # SAFESEH off as for ddraw (Detours trampolines); /MAP for profiles.
   target_link_options(SacredGear PRIVATE /SAFESEH:NO /MAP)

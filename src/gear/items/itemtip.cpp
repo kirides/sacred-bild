@@ -1,4 +1,5 @@
 #include "itemtip.h"
+#include "bild_gear.h"
 #include "engine/gear_addr.h"
 #include "inventory.h"
 #include "log.h"
@@ -19,7 +20,7 @@ namespace
         using Fn = int(__cdecl*)(const void*, float*, float*);
         static const Fn fn = [] {
             const HMODULE bild = GetModuleHandleW(L"ddraw.dll");
-            return bild ? reinterpret_cast<Fn>(GetProcAddress(bild, "SacredBild_UiGetPopupFrame")) : nullptr;
+            return bild ? reinterpret_cast<decltype(&SacredBild_UiGetPopupFrame)>(GetProcAddress(bild, "SacredBild_UiGetPopupFrame")) : nullptr;
         }();
         return fn && fn(popup, &x, &y) == 2;
     }

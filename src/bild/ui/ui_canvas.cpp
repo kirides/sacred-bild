@@ -1,4 +1,5 @@
 #include "ui_canvas.h"
+#include "bild_gear.h"
 #include "engine/build.h"
 #include "controller/controller.h"
 #include "render/device_proxy.h"

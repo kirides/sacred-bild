@@ -1,4 +1,5 @@
 #include "game/pets.h"
+#include "bild_gear.h"
 #include "diag/layout_check.h"
 #include "log.h"
 #include "patch.h"

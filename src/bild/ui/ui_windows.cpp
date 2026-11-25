@@ -1,4 +1,5 @@
 #include "ui_windows.h"
+#include "bild_gear.h"
 #include "engine/sacred_addr.h"
 #include "controller/ui_nav.h"
 #include "log.h"

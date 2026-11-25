@@ -1,4 +1,5 @@
 #include "memfault.h"
+#include "bild_gear.h"
 #include "automation.h"
 #include "engine/gear_addr.h"
 #include "instance.h"

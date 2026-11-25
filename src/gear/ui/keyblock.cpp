@@ -1,4 +1,5 @@
 #include "keyblock.h"
+#include "bild_gear.h"
 #include "input.h"
 #include "log.h"
 #include "patch.h"
@@ -396,7 +397,7 @@ void KeyBlock::tick()
     {
         static const auto subclass = [] {
             HMODULE bild = GetModuleHandleW(L"ddraw.dll");
-            return bild ? reinterpret_cast<void(__cdecl*)()>(GetProcAddress(bild, "SacredBild_SubclassWindow")) : nullptr;
+            return bild ? reinterpret_cast<decltype(&SacredBild_SubclassWindow)>(GetProcAddress(bild, "SacredBild_SubclassWindow")) : nullptr;
         }();
         if (subclass)
         {

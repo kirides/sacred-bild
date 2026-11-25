@@ -1,4 +1,5 @@
 #include "focus.h"
+#include "bild_gear.h"
 #include "controller/controller.h"
 #include "controller/gear_nav.h"
 #include "window_fit.h"
@@ -47,7 +48,7 @@ namespace
         {
             if (HMODULE gear = GetModuleHandleW(L"SacredGear.dll"))
             {
-                f = reinterpret_cast<Fn>(GetProcAddress(gear, "SacredGear_IsolatedForeground"));
+                f = reinterpret_cast<decltype(&SacredGear_IsolatedForeground)>(GetProcAddress(gear, "SacredGear_IsolatedForeground"));
                 fn = f;
             }
         }

@@ -1,4 +1,5 @@
 #include "gear_nav.h"
+#include "bild_gear.h"
 #include "ui/ui_canvas.h"
 #include "gamepad.h"
 #include "input_mode.h"
@@ -14,12 +15,7 @@
 namespace
 {
     // The layout Gear reports (its Ui::Command space); POD so that the DLLs need no shared headers.
-    struct NavStop
-    {
-        float x, y;
-        float left, top, width, height;
-        int32_t kind;
-    };
+    using NavStop = SacredBild_NavStop;
     constexpr int kModal = 1, kWindow = 2;
     constexpr int kMaxStops = 512;
     constexpr ULONGLONG kStaleMs = 600;

@@ -1,4 +1,5 @@
 #include "ui_anchor.h"
+#include "bild_gear.h"
 #include "engine/build.h"
 #include "display/resolution.h"
 #include "ui_canvas.h"

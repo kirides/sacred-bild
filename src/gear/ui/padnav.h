@@ -1,3 +1,4 @@
+#include "bild_gear.h"
 #pragma once
 #include <vector>
 
@@ -6,12 +7,7 @@
 // the pad events Gear takes back (slider nudges, B, the mod menu button).
 namespace PadNav
 {
-    struct Stop
-    {
-        float x, y;                 // where the cursor goes
-        float left, top, width, height;
-        int kind;                   // 0 button, 1 slider
-    };
+    using Stop = SacredBild_NavStop;   // what SacredBild_UiSetNavStops takes (bild_gear.h)
     enum Flags { Modal = 1, Window = 2 };
 
     // True if SacredBild takes them.

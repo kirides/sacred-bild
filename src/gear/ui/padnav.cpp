@@ -1,4 +1,5 @@
 #include "padnav.h"
+#include "bild_gear.h"
 
 #include <windows.h>
 #include <mutex>
@@ -32,17 +33,17 @@ namespace
         std::call_once(g_once, [] {
             if (HMODULE bild = GetModuleHandleW(L"ddraw.dll"))
             {
-                g_setStops = reinterpret_cast<SetStopsFn>(GetProcAddress(bild, "SacredBild_UiSetNavStops"));
-                g_takePad = reinterpret_cast<TakePadFn>(GetProcAddress(bild, "SacredBild_UiTakePad"));
-                g_postPad = reinterpret_cast<PostPadFn>(GetProcAddress(bild, "SacredBild_UiPostPad"));
-                g_takePage = reinterpret_cast<TakePageFn>(GetProcAddress(bild, "SacredBild_UiTakePage"));
-                g_postPage = reinterpret_cast<PostPageFn>(GetProcAddress(bild, "SacredBild_UiPostPage"));
-                g_takeSelect = reinterpret_cast<TakePageFn>(GetProcAddress(bild, "SacredBild_UiTakeSelect"));
-                g_postScroll = reinterpret_cast<PostPageFn>(GetProcAddress(bild, "SacredBild_UiPostScroll"));
-                g_setNative = reinterpret_cast<SetNativeFn>(GetProcAddress(bild, "SacredBild_UiSetNativePrompts"));
-                g_navState = reinterpret_cast<NavStateFn>(GetProcAddress(bild, "SacredBild_UiNavState"));
-                g_padInfo = reinterpret_cast<PadInfoFn>(GetProcAddress(bild, "SacredBild_PadInfo"));
-                g_padGlyph = reinterpret_cast<PadGlyphFn>(GetProcAddress(bild, "SacredBild_PadGlyph"));
+                g_setStops = reinterpret_cast<decltype(&SacredBild_UiSetNavStops)>(GetProcAddress(bild, "SacredBild_UiSetNavStops"));
+                g_takePad = reinterpret_cast<decltype(&SacredBild_UiTakePad)>(GetProcAddress(bild, "SacredBild_UiTakePad"));
+                g_postPad = reinterpret_cast<decltype(&SacredBild_UiPostPad)>(GetProcAddress(bild, "SacredBild_UiPostPad"));
+                g_takePage = reinterpret_cast<decltype(&SacredBild_UiTakePage)>(GetProcAddress(bild, "SacredBild_UiTakePage"));
+                g_postPage = reinterpret_cast<decltype(&SacredBild_UiPostPage)>(GetProcAddress(bild, "SacredBild_UiPostPage"));
+                g_takeSelect = reinterpret_cast<decltype(&SacredBild_UiTakeSelect)>(GetProcAddress(bild, "SacredBild_UiTakeSelect"));
+                g_postScroll = reinterpret_cast<decltype(&SacredBild_UiPostScroll)>(GetProcAddress(bild, "SacredBild_UiPostScroll"));
+                g_setNative = reinterpret_cast<decltype(&SacredBild_UiSetNativePrompts)>(GetProcAddress(bild, "SacredBild_UiSetNativePrompts"));
+                g_navState = reinterpret_cast<decltype(&SacredBild_UiNavState)>(GetProcAddress(bild, "SacredBild_UiNavState"));
+                g_padInfo = reinterpret_cast<decltype(&SacredBild_PadInfo)>(GetProcAddress(bild, "SacredBild_PadInfo"));
+                g_padGlyph = reinterpret_cast<decltype(&SacredBild_PadGlyph)>(GetProcAddress(bild, "SacredBild_PadGlyph"));
             }
         });
     }
