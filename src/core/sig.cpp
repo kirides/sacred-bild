@@ -137,6 +137,12 @@ size_t Sig::resolve(std::span<const Entry> entries, std::span<const uint8_t> cod
             std::memcpy(&value, data + at, 4);
             *e.out.address = value;
         }
+        else if (e.take == Take::Rel32)
+        {
+            int32_t rel;
+            std::memcpy(&rel, data + at, 4);
+            *e.out.address = codeVa + at + 4 + static_cast<uintptr_t>(static_cast<intptr_t>(rel));
+        }
         else
         {
             *e.out.address = codeVa + at;

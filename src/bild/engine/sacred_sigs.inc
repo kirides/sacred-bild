@@ -21,7 +21,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"worldCursorUiTestCall", "E8 ?? ?? ?? ?? 84 C0 0F 85 ?? ?? ?? ?? 39 5C 24 18 0F 84 ?? ?? ?? ?? 33 C0", 0, Sig::Take::Match, &Sacred::Addr::worldCursorUiTestCall}, // 00611EE3, 00611F83, 00611F83
     {"worldCursorSpecialRenderReturn", "E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? EB 19 8B 44 24 54 8B 8C 24 10 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::worldCursorSpecialRenderReturn}, // 00612E6F, 00612F0F, 00612F0F
     {"cEngine_worldMouse", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC D8 00 00 00 53 55 56 8B F1", 0, Sig::Take::Match, &Sacred::Addr::cEngine_worldMouse}, // 006172C0, 00617360, 00617360
-    {"cEngine_handleZoomInput", "56 57 8B F1 E8 ?? ?? ?? ?? 80 38 00 75 61 A0 ?? ?? ?? ?? 84 C0", 0, Sig::Take::Match, &Sacred::Addr::cEngine_handleZoomInput}, // 0060DD20, 0060DDC0, 0060DDC0
+    {"cEngine_handleZoomInput", "8B CE E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 53 8B B9 CC 00 00 00", 3, Sig::Take::Rel32, &Sacred::Addr::cEngine_handleZoomInput}, // 0060DD20, 0060DDC0, 0060DDC0
     {"zoomInputCall", "8B CE E8 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 53 8B B9 CC 00 00 00", 2, Sig::Take::Match, &Sacred::Addr::zoomInputCall}, // 0060E6DC, 0060E77C, 0060E77C
     {"g_zoomPrevStep", "8B 4C 86 08 D9 81 60 0B 00 00 D9 05 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::g_zoomPrevStep}, // 0095DCAC, 0095BCC4, 0095BCC4
     {"cWorldView_setZoom", "83 EC 50 53 56 8B F1 32 DB 57 D9 86 60 0B 00 00", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_setZoom}, // 00628130, 00628210, 00628210
@@ -195,7 +195,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"cUI_Book_lineAt", "83 EC 3C 53 55 56 57 8B F1 E8 ?? ?? ?? ?? 89 44 24 1C", 0, Sig::Take::Match, &Sacred::Addr::cUI_Book_lineAt}, // 006B3640, 006B3320, 006B3320
     {"cUI_Savegame_selectRow", "53 55 56 8B F1 57 BD 04 00 00 00 8D BE 94 45 00 00", 0, Sig::Take::Match, &Sacred::Addr::cUI_Savegame_selectRow}, // 0071C360, 0071BBF0, 0071BBF0
     {"textResources_instance", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 A1 ?? ?? ?? ?? 64 89 25 00 00 00 00 83 EC 0C", 0, Sig::Take::Match, &Sacred::Addr::textResources_instance}, // 006725E0, 006728C0, 006728C0
-    {"textResources_get", "8B 44 24 04 56 83 F8 FF 8B F1 74 4A", 0, Sig::Take::Match, &Sacred::Addr::textResources_get}, // 00672C90, 00672F70, 00672F70
+    {"textResources_get", "E8 ?? ?? ?? ?? 8B 00 50 68 ?? ?? ?? ?? EB 34 8B 06 85 C0 74 28", 1, Sig::Take::Rel32, &Sacred::Addr::textResources_get}, // 00672C90, 00672F70, 00672F70
     {"g_pFontManager", "64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 24", 9, Sig::Take::Abs32, &Sacred::Addr::g_pFontManager}, // 00CDCA70, 00CDA9F0, 00CDA9F0
     {"g_hasAddon", "0F 94 44 24 13 EB 04 8B 74 24 14 A0 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::g_hasAddon}, // 0182EBEC, 0182CB6C, 0182CB6C
     {"g_gameSettings", "89 5D C8 03 C2 89 45 C4 A0 ?? ?? ?? ?? DF 6D C4", 9, Sig::Take::Abs32, &Sacred::Addr::g_gameSettings}, // 0182EE78, 0182CDF8, 0182CDF8

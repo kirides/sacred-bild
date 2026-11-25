@@ -12,6 +12,8 @@ namespace Sig
     {
         Match,  // the match + offset
         Abs32,  // the absolute address stored at match + offset (an instruction's address operand)
+        Rel32,  // the target of the relative operand at match + offset (where a call or jmp there goes): finds a function
+                // from a call site, so the function's own bytes may be detoured by another module
     };
 
     // Where an entry's address goes: a uintptr_t, or the `address` of a typed one (sacred/address.h).

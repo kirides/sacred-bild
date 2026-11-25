@@ -34,7 +34,7 @@ GEAR = [
     ('cObject_typeDescriptor', 0x008EB648, 'data'),
     ('cCreature_typeDescriptor', 0x008EB660, 'data'),
     # Automation (src/gear/automation.cpp).
-    ('g_pApp', 0x00CDCA1C, 'data'),
+    ('g_pApp', 0x00CDCA1C, 'data', 0x00401CF7),   # not the reference in cGranny_renderShadow, which SacredBild detours
     ('g_pUiManager', 0x017EEBBC, 'data'),
     ('g_pNetPlayers', 0x0182EBE8, 'data'),
     ('cMouse_instance', 0x00654F60, 'func'),

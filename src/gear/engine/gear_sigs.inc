@@ -11,7 +11,7 @@ static const Sig::Entry kGearSigs[] = {
     {"rtDynamicCast", "55 8B EC 6A FF 68 ?? ?? ?? ?? 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 3C", 0, Sig::Take::Match, &Gear::Addr::rtDynamicCast}, // 0084A961, 00849701
     {"cObject_typeDescriptor", "8D 14 80 68 ?? ?? ?? ?? 56 8D 04 50 8B 0C 81 51", 4, Sig::Take::Abs32, &Gear::Addr::cObject_typeDescriptor}, // 008EB648, 008E9648
     {"cCreature_typeDescriptor", "8B 44 24 04 83 EC 44 56 57 6A 00 68 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Gear::Addr::cCreature_typeDescriptor}, // 008EB660, 008E9660
-    {"g_pApp", "A1 ?? ?? ?? ?? 53 8B D9 C7 44 24 04 00 00 00 00", 1, Sig::Take::Abs32, &Gear::Addr::g_pApp}, // 00CDCA1C, 00CDA99C
+    {"g_pApp", "8B 0D ?? ?? ?? ?? 8D 44 24 64 83 CE 03 50 6A 20", 2, Sig::Take::Abs32, &Gear::Addr::g_pApp}, // 00CDCA1C, 00CDA99C
     {"g_pUiManager", "6A 01 C7 05 ?? ?? ?? ?? 00 00 00 00 FF 50 04 C3", 4, Sig::Take::Abs32, &Gear::Addr::g_pUiManager}, // 017EEBBC, 017ECB3C
     {"g_pNetPlayers", "A1 ?? ?? ?? ?? 55 3B C3 56 75 47 68 D0 3A 00 00", 1, Sig::Take::Abs32, &Gear::Addr::g_pNetPlayers}, // 0182EBE8, 0182CB68
     {"cMouse_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 70", 0, Sig::Take::Match, &Gear::Addr::cMouse_instance}, // 00654F60, 006550F0

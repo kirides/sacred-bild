@@ -5,7 +5,7 @@
 # Each signature comes from the English GOG build and must match exactly once in it and in every other build that is
 # there (the German one: SACRED_DE / GAMESERVER_DE; skipped with a warning if missing).
 # Usage: python tools/sigs/gen_sigs.py   (set SACRED_ENG / GAMESERVER_ENG / SACRED_DE / GAMESERVER_DE to your copies)
-import json, os, sys
+import json, os, struct, sys
 sys.path[:0] = [os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *p)) for p in [(), ('..',), ('..', 'sigs'), ('..', 'gearapi')]]  # tools/, tools/sigs, tools/gearapi
 import sigs
 import paths
@@ -33,7 +33,9 @@ def other_builds(*paths):
 
 
 # (name, ENG address, kind). Kinds: func = entry point (window starts there), code = an instruction or an operand
-# inside one, data = a global used by some instruction (resolved through that instruction's address operand).
+# inside one, data = a global used by some instruction (resolved through that instruction's address operand),
+# call = a function found through a call to it (the fourth value: the call instruction; Sig::Take::Rel32), for a
+# function the other module detours, whose own bytes are not there to match then.
 SACRED = [
     # dxDriver7
     ('dxDriver7_init', 0x00645260, 'func'),
@@ -57,7 +59,7 @@ SACRED = [
     ('worldCursorUiTestCall', 0x00611EE3, 'code'),
     ('worldCursorSpecialRenderReturn', 0x00612E6F, 'code'),
     ('cEngine_worldMouse', 0x006172C0, 'func'),
-    ('cEngine_handleZoomInput', 0x0060DD20, 'func'),
+    ('cEngine_handleZoomInput', 0x0060DD20, 'call', 0x0060E6DC),   # through zoomInputCall: Gear detours the function itself
     ('zoomInputCall', 0x0060E6DC, 'code'),
     ('g_zoomPrevStep', 0x0095DCAC, 'data'),
     ('cWorldView_setZoom', 0x00628130, 'func'),
@@ -171,7 +173,7 @@ SACRED = [
     ('cUI_Book_lineAt', 0x006B3640, 'func'),
     ('cUI_Savegame_selectRow', 0x0071C360, 'func'),
     ('textResources_instance', 0x006725E0, 'func'),
-    ('textResources_get', 0x00672C90, 'func'),
+    ('textResources_get', 0x00672C90, 'call', 0x0041E626),         # through a call: Gear detours the function itself
     ('g_pFontManager', 0x00CDCA70, 'data'),
     ('g_hasAddon', 0x0182EBEC, 'data'),
     ('g_gameSettings', 0x0182EE78, 'data'),
@@ -199,6 +201,15 @@ OPTIONAL = {'cTextTable_load', 'textTableAllocCall'}
 
 
 def resolve(ref, others, name, va, kind, start=None):
+    if kind == 'call':
+        if start is None or ref.rd(start, 1)[0] not in (0xE8, 0xE9) or start + 5 + struct.unpack('<i', ref.rd(start + 1, 4))[0] != va:
+            print(f'{name}: {start:#x} is not a call to {va:#x}' if start else f'{name}: a call entry needs its call site', file=sys.stderr)
+            return None
+        r = sigs.make(ref, start + 1, others)
+        if not r:
+            return None
+        sig, off, found = r
+        return sig, off, 'Rel32', [va] + [f + 4 + struct.unpack('<i', o.rd(f, 4))[0] for o, f in zip(others, found)]
     if kind == 'data':
         refs = [sigs.operand_of(ref, start, va)] if start is not None else sigs.xrefs(ref, va, 40)
         best = None
