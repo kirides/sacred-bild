@@ -97,6 +97,7 @@ SACRED = [
     # engine and frame
     ('cEngine_renderThreadRun', 0x0060E350, 'func'),
     ('frameLimiter', 0x0060A9F0, 'func'),
+    ('weatherRender', 0x004190D0, 'func'),
     ('renderLimiterReturn', 0x0060EA6E, 'code'),
     ('captureLockBackReturn', 0x006136AB, 'code'),
     ('captureScreenshot', 0x006487D0, 'func'),
