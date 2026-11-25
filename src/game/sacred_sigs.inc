@@ -133,7 +133,6 @@ static const Sig::Entry kAddressSigs[] = {
     {"cEngine_renderThreadRun", "55 8B EC 83 E4 F8 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 60 03 00 00", 0, Sig::Take::Match, &Sacred::Addr::cEngine_renderThreadRun}, // 0060E350, 0060E3F0, 0060E3F0
     {"frameLimiter", "83 EC 20 8D 44 24 18 56 57 50 FF 15 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::frameLimiter}, // 0060A9F0, 0060AA90, 0060AA90
     {"renderLimiterReturn", "83 C4 0C 8B 46 54 F6 C4 80 74 0B 8B 4E 54", 0, Sig::Take::Match, &Sacred::Addr::renderLimiterReturn}, // 0060EA6E, 0060EB0E, 0060EB0E
-    {"menuLoopSleepJump", "A8 01 74 04 6A 14 FF D3 6A 01 E8", 2, Sig::Take::Match, &Sacred::Addr::menuLoopSleepJump}, // 0075713C
     {"captureLockBackReturn", "85 C0 0F 84 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 8B 85 A0 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::captureLockBackReturn}, // 006136AB, 0061374B, 0061374B
     {"captureScreenshot", "6A 00 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 08 85 C0 74 0D 68 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::captureScreenshot}, // 006487D0, 00648900, 00648900
     {"pixelsToWorld", "8B 4C 24 0C 8B 44 24 10 8B 54 24 08", 0, Sig::Take::Match, &Sacred::Addr::pixelsToWorld}, // 00623940, 00623A20, 00623A20
@@ -157,6 +156,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"cWorldView_drawObjects", "81 EC D4 01 00 00 53 55 56 8B F1 8A 0D ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_drawObjects}, // 0062E410, 0062E580, 0062E580
     {"cWorldView_drawObjects2", "55 8B EC 83 E4 F8 81 EC 04 02 00 00", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_drawObjects2}, // 0062FF60, 006300D0, 006300D0
     {"cObject3D_drawModel", "56 8B F1 57 8B 7C 24 0C F6 46 14 02", 0, Sig::Take::Match, &Sacred::Addr::cObject3D_drawModel}, // 0044A9D0, 0044ABA0, 0044ABA0
+    {"cGranny_renderShadow", "81 EC C4 01 00 00 A1 ?? ?? ?? ?? 53 8B D9 C7 44 24 04 00 00 00 00", 0, Sig::Take::Match, &Sacred::Addr::cGranny_renderShadow}, // 00406FF0, 00407030, 00407030
     {"cWorldView_initRowWalk", "A0 ?? ?? ?? ?? 83 EC 24 A8 01 53 56 8B F1 75 59", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_initRowWalk}, // 006328C0, 00632A30, 00632A30
     {"g_viewCameraX", "8B 80 C4 9D 00 00 8B 4E 18 03 C8 A1 ?? ?? ?? ??", 12, Sig::Take::Abs32, &Sacred::Addr::g_viewCameraX}, // 00AD7998, 00AD5918, 00AD5918
     {"g_viewCameraY", "89 0D ?? ?? ?? ?? 2B CD 89 4C 24 3C 8B 4E 08 8D 54 24 34", 2, Sig::Take::Abs32, &Sacred::Addr::g_viewCameraY}, // 00AD799C, 00AD591C, 00AD591C

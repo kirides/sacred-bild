@@ -1556,6 +1556,29 @@ Gives this creature the allegiance of `source`: its faction (the class the game'
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:set_level(level) -> boolean?, string?`
+
+Sets the level of a creature (not a hero) through the game's own level function, the one its sector fill uses: the experience the level starts at, the derived stats and the maximum health come from the creature's type and that level (a creature made by `gear.world.spawn` is level 1). It keeps its share of the health. Level 1 to 250. Single player.
+
+- `level`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+### GearPetOpts
+
+| Field | Type | |
+|---|---|---|
+| `scale` | `number` | The model is drawn this many times as large (0.1 to 4, default 1), about the creature's own origin. (optional) |
+| `untargetable` | `boolean` | The creature is left out of the world pick: no click, hover cursor or controller aim reaches it (default false). (optional) |
+
+#### `creature:set_pet(opts) -> boolean?, string?`
+
+Makes the creature a pet: drawn larger and/or not targetable (SacredBild; the hitbox and the creature's own logic are unchanged). `nil` or `{}` clears it. Forgotten when the game ends or another savegame loads (object ids then mean other creatures). Single player.
+
+- `opts`: `GearPetOpts` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:set_gold(gold) -> boolean?, string?`
 
 Sets the local hero's gold (0 to 2,147,483,646), also in LAN and Open Net games: through the engine's own gold setter, as a merchant sale does, so the hero's next update tells the server and the other players. Other heroes are refused (only their own computer may change them).
@@ -1716,7 +1739,7 @@ What a party hero does now, and the game's raw action and movement states.
 
 #### `creature:order_move(x, y) -> boolean?, string?`
 
-Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground does for the controlled one.
+Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground does for the controlled one. In single player (`gear.world.can_change()`) this also works on any other creature, a summoned wolf for example (a creature of the game's own AI may walk back to what it was doing).
 
 - `x`: `number`
 - `y`: `number`
@@ -1725,7 +1748,7 @@ Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground d
 
 #### `creature:order_stop() -> boolean?, string?`
 
-Orders a party hero to stop.
+Orders a party hero to stop. In single player this also works on any other creature.
 
 - returns `ok` `boolean?`
 - returns `error` `string?`

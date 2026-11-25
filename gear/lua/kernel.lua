@@ -924,6 +924,20 @@ function creature_mt:copy_stats(source)
     assert(type(id) == 'number', 'source must be a creature or its id')
     return native.copy_stats(self.id, id)
 end
+-- set_level(level): the level of a creature (not a hero) through the engine's own level function (single player).
+function creature_mt:set_level(level)
+    assert(type(level) == 'number', 'level must be a number')
+    return native.set_level(self.id, math.floor(level))
+end
+-- set_pet{scale = 1.3, untargetable = true}: the model is drawn `scale` times as large and, if untargetable, cannot be picked in the
+-- world (no click, hover cursor or controller aim). nil or {} clears it. Needs SacredBild; single player.
+function creature_mt:set_pet(opts)
+    if opts ~= nil and type(opts) ~= 'table' then error('the pet options are a table or nil', 2) end
+    opts = opts or {}
+    local scale = opts.scale == nil and 1 or opts.scale
+    assert(type(scale) == 'number' and scale >= 0.1 and scale <= 4, 'scale must be a number from 0.1 to 4')
+    return native.set_pet(self.id, scale, opts.untargetable == true)
+end
 function creature_mt:set_gold(gold)
     assert(type(gold) == 'number', 'gold must be a number')
     return native.set_gold(self.id, math.min(math.max(0, math.floor(gold)), 2147483646))
@@ -5849,6 +5863,7 @@ local function check_session()
         kernel.dispatch('session.stop')
         labels = {}
         kernel.boss.reset()
+        native.clear_pets()
     end
     if h then
         session_hero = h
@@ -8923,6 +8938,7 @@ function kernel.savegame.poll()
         -- Before the working copy is replaced: a mod may still write into the data kept for the game that ends.
         kernel.dispatch('savegame.leaving', kernel.savegame.scope, kind)
         kernel.boss.reset()
+        native.clear_pets()
         kernel.savegame.kind = kind
         kernel.savegame.scope = kind ~= 'new' and scope or nil
         kernel.savegame.each(kernel.savegame.enter)

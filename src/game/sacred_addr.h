@@ -192,6 +192,9 @@ namespace Sacred::Addr
     // ENG 0044A9D0; flagsLow, flagsHigh: one 64-bit argument
     inline Thiscall<uint32_t(void* self, IDirect3DDevice7* device, void* model, void* instance, uint32_t flagsLow,
         uint32_t flagsHigh)> cObject3D_drawModel{};
+    // The shadow of a Granny model: thiscall on the renderer (device, the model's handle pair, a pointer, flag), ret 0x14. The object that owns
+    // the model keeps the same handle pair at +0x40 / +0x44. ENG 00406FF0
+    inline Thiscall<void(void* self, void* device, uint32_t handle0, uint32_t handle1, uint8_t* extra, char flag)> cGranny_renderShadow{};
     // Row walk (Sacred::RowPos): initRowWalk sets the view's even and odd rows from its top-left corner. The camera
     // position (view coordinates) is set by the same frame.
     // ENG 006328C0; pos: +4 x, +8 y

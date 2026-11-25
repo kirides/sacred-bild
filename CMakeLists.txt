@@ -94,6 +94,7 @@ set(DDRAW_SOURCES
   src/game/gpu_skin.cpp
   src/game/world_passes.cpp
   src/game/aim_assist.cpp
+  src/game/pets.cpp
   src/game/controller.cpp
   src/game/hero_move.cpp
   src/game/click_walk.cpp

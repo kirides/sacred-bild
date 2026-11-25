@@ -28,6 +28,7 @@
 #include "game/ui_anchor.h"
 #include "game/ui_windows.h"
 #include "game/ui_canvas.h"
+#include "game/pets.h"
 #include "game/world_passes.h"
 #include "net/connection.h"
 #include "net/lan_client.h"
@@ -152,6 +153,7 @@ void Sacred::installHooks()
     {
         LOG("Game hooks installed");
     }
+    Pets::install();
     if (Config::debug.d3dStats)
     {
         WorldPasses::install();

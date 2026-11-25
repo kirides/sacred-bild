@@ -352,6 +352,22 @@ function Creature:copy_stats(source) end
 ---@return string? error
 function Creature:copy_allegiance(source) end
 
+--- Sets the level of a creature (not a hero) through the game's own level function, the one its sector fill uses: the experience the level starts at, the derived stats and the maximum health come from the creature's type and that level (a creature made by `gear.world.spawn` is level 1). It keeps its share of the health. Level 1 to 250. Single player.
+---@param level integer
+---@return boolean? ok
+---@return string? error
+function Creature:set_level(level) end
+
+---@class GearPetOpts
+---@field scale? number The model is drawn this many times as large (0.1 to 4, default 1), about the creature's own origin.
+---@field untargetable? boolean The creature is left out of the world pick: no click, hover cursor or controller aim reaches it (default false).
+
+--- Makes the creature a pet: drawn larger and/or not targetable (SacredBild; the hitbox and the creature's own logic are unchanged). `nil` or `{}` clears it. Forgotten when the game ends or another savegame loads (object ids then mean other creatures). Single player.
+---@param opts GearPetOpts?
+---@return boolean? ok
+---@return string? error
+function Creature:set_pet(opts) end
+
 --- Sets the local hero's gold (0 to 2,147,483,646), also in LAN and Open Net games: through the engine's own gold
 --- setter, as a merchant sale does, so the hero's next update tells the server and the other players. Other heroes
 --- are refused (only their own computer may change them).
@@ -483,14 +499,14 @@ function Creature:set_combo(slot, arts) end
 ---@return integer? movement_state
 function Creature:action() end
 
---- Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground does for the controlled one.
+--- Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground does for the controlled one. In single player (`gear.world.can_change()`) this also works on any other creature, a summoned wolf for example (a creature of the game's own AI may walk back to what it was doing).
 ---@param x number
 ---@param y number
 ---@return boolean? ok
 ---@return string? error
 function Creature:order_move(x, y) end
 
---- Orders a party hero to stop.
+--- Orders a party hero to stop. In single player this also works on any other creature.
 ---@return boolean? ok
 ---@return string? error
 function Creature:order_stop() end

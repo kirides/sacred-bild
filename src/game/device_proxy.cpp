@@ -2,6 +2,7 @@
 #include "game/build.h"
 #include "game/d3d_stats.h"
 #include "game/gpu_skin.h"
+#include "game/pets.h"
 #include "game/resolution.h"
 #include "game/ui_canvas.h"
 #include "game/ui_state.h"
@@ -743,6 +744,14 @@ HRESULT DeviceProxy::SetTransform(D3DTRANSFORMSTATETYPE type, LPD3DMATRIX m)
     D3DStats::count(CTransform);
     CallLock lock(*this, _ReturnAddress());
     HRESULT hr;
+    // A scaled pet's model: its world matrix is enlarged about the object's origin (Pets).
+    D3DMATRIX scaled;
+    if (m && type == D3DTRANSFORMSTATE_WORLD && Pets::any())
+    {
+        scaled = *m;
+        Pets::scaleWorld(scaled);
+        m = &scaled;
+    }
     if (batching() && m)
     {
         hr = m_batcher->setTransform(type, *m);
