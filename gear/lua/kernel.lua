@@ -934,6 +934,33 @@ function creature_mt:set_hp(hp)
     assert(type(hp) == 'number', 'hp must be a number')
     return native.set_health(self.id, math.floor(hp))
 end
+-- allegiance() -> faction (0..15), aggressive: the creature's relation class and whether its behavior flags say aggressive (bit 0).
+function creature_mt:allegiance()
+    local faction, behavior = native.allegiance(self.id)
+    if not faction then return nil end
+    return faction, behavior % 2 == 1
+end
+-- set_allegiance{faction = 0..15, aggressive = bool}: a field left out stays (single player; not heroes).
+function creature_mt:set_allegiance(spec)
+    assert(type(spec) == 'table', 'the allegiance is a table {faction =, aggressive =}')
+    local faction, behavior = native.allegiance(self.id)
+    if not faction then return nil, 'no such creature' end
+    if spec.faction ~= nil then
+        assert(type(spec.faction) == 'number' and spec.faction >= 0 and spec.faction <= 15, 'faction is 0 to 15')
+        faction = math.floor(spec.faction)
+    end
+    if spec.aggressive ~= nil then
+        behavior = behavior - behavior % 2 + (spec.aggressive and 1 or 0)
+    end
+    return native.set_allegiance(self.id, faction, behavior)
+end
+-- carry(slot, item): puts an item object (made with gear.world.spawn, lying in the world) into equipment slot 0..18 of a creature that is no hero:
+-- it leaves the world and the creature carries it there, as the creatures the game places do (single player).
+function creature_mt:carry(slot, item)
+    local id = type(item) == 'table' and item.id or item
+    assert(type(slot) == 'number' and type(id) == 'number', 'carry(slot, item)')
+    return native.carry(self.id, slot, id)
+end
 -- copy_allegiance(source): the faction and aggression of another creature (single player).
 function creature_mt:copy_allegiance(source)
     local id = type(source) == 'table' and source.id or source

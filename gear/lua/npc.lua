@@ -15,7 +15,7 @@ local N = {}
 local PREFIX = 'npc:'
 local kinds = {}                 -- kind id -> definition
 local order = {}                 -- kind ids in the order they were defined
-local handlers = {talk = {}, button = {}, close = {}, arrived = {}}
+local handlers = {talk = {}, button = {}, close = {}, arrived = {}, hostile = {}, calm = {}}
 local store                      -- gear.store.game handle, made on first use
 local dialog                     -- {creature, kind, page, history} while a dialog is open
 local pending                    -- {creature, until} the hero is walking to
@@ -72,7 +72,9 @@ end
 --   name      the name shown (a string or {en = ..., de = ...}); default: the type's name
 --   level     the creature's level (default 1: the engine's plain create)
 --   like      a creature whose faction, level and health the NPC takes (default: the hero's faction, so the NPC is friendly)
---   hostile   true: keep the faction of the type
+--   stance    'friendly' (default: the hero's side), 'neutral' (an enemy of nobody) or 'hostile' (an enemy of the hero from the start); npc.hostile
+--             turns any NPC hostile later
+--   hostile   true: the same as stance = 'hostile'
 --   dialog    {start = 'page', pages = {page = {text = string|fun(e), options = {...}}}}, see the docs
 --   routine   {{time = 'HH:MM', x =, y =, layer =}, ...}: where the NPC stands from that time on
 --   talk_range  how close the hero must be to talk (world units, default 140)
@@ -162,6 +164,8 @@ local function texture_spec(spec)
     return {all = id}
 end
 
+local ordered_at = {}        -- creature id -> time of the last attack order
+local looked_hostile = {}   -- creature id -> true: its boss modifiers were set this session (they end with the savegame)
 local looked = {}            -- creature id -> true: its tint was set this session (the tints end with the savegame)
 
 local function apply_look(c, def, inst)
@@ -180,7 +184,43 @@ local function apply_look(c, def, inst)
     looked[c.id] = true
 end
 
--- spawn(kind, x, y, opts) -> creature | nil, message. opts: layer, like, level, tint and texture (replace the kind's), routine (replaces the kind's),
+-- The faction that is an enemy of neither the hero nor the monsters about (found once by trying the factions on the creature), nil if none.
+local neutral_cache
+local function neutral_faction(c)
+    if neutral_cache then return neutral_cache end
+    local hero = gear.world.hero()
+    if not hero then return nil end
+    local own = c:allegiance()
+    local x, y, layer = hero:position()
+    local foes = {}
+    for _, o in ipairs(gear.world.creatures_near(x, y, 900, {limit = 40})) do
+        if o.id ~= hero.id and o.id ~= c.id and hero:is_enemy(o) then foes[#foes + 1] = o end
+    end
+    for _, f in ipairs({3, 4, 7, 0}) do
+        c:set_allegiance{faction = f, aggressive = false}
+        local ok = not c:is_enemy(hero) and not hero:is_enemy(c)
+        for _, o in ipairs(foes) do
+            if ok and (c:is_enemy(o) or o:is_enemy(c)) then ok = false end
+        end
+        if ok then neutral_cache = f break end
+    end
+    c:set_allegiance{faction = own}
+    return neutral_cache
+end
+
+local function apply_stance(c, stance, faction0)
+    local hero = gear.world.hero()
+    if stance == 'hostile' then
+        c:set_allegiance{aggressive = true}
+    elseif stance == 'neutral' then
+        local f = neutral_faction(c)
+        if f then c:set_allegiance{faction = f, aggressive = false} elseif hero then c:copy_allegiance(hero) end
+    elseif hero then
+        c:copy_allegiance(hero)
+    end
+end
+
+-- spawn(kind, x, y, opts) -> creature | nil, message. opts: layer, like, stance, level, tint and texture (replace the kind's), routine (replaces the kind's),
 -- data (kept with the NPC: inst.data)
 function N.spawn(kind, x, y, opts)
     opts = opts or {}
@@ -193,15 +233,18 @@ function N.spawn(kind, x, y, opts)
         local ok, why = c:set_name_text(def.name_text)
         if not ok then c:remove(); return nil, why end
     end
-    if not (opts.like or def.like) and not def.hostile then
-        -- a plain create has the faction of its type: take the hero's side, so the NPC is no enemy (its label is not red, a click does not attack)
-        local hero = gear.world.hero()
-        if hero then c:copy_allegiance(hero) end
-    end
+    -- A plain create has the faction of its type, which is often an enemy of the hero. The stance says what the NPC is: 'friendly' (the default:
+    -- the hero's side), 'neutral' (an enemy of nobody) or 'hostile' (the type's own faction, aggressive). The faction the type gave is kept so
+    -- that npc.hostile can restore it.
+    local faction0, aggressive0 = c:allegiance()
+    local stance = opts.stance or def.stance or (def.hostile and 'hostile') or 'friendly'
+    if not (opts.like or def.like) then apply_stance(c, stance, faction0) end
     local level = opts.level or def.level
     if level then c:set_level(level) end
     local d, h = data()
-    local inst = {id = c.id, kind = kind, type = c:type(), routine = opts.routine and normalize_routine(opts.routine), data = opts.data, tint = opts.tint, texture = opts.texture}
+    local inst = {id = c.id, kind = kind, type = c:type(), routine = opts.routine and normalize_routine(opts.routine), data = opts.data, tint = opts.tint, texture = opts.texture,
+        stance = stance, faction0 = faction0, aggressive0 = aggressive0}
+    if stance == 'hostile' then inst.hostile = {} end
     apply_look(c, def, inst)
     d.list[#d.list + 1] = inst
     h:changed()
@@ -259,7 +302,7 @@ end
 -- on(name, fn) -> handle: 'talk' (e: npc, creature, hero), 'button' (e: npc, creature, page, option, ...), 'close', 'arrived'
 -- (e: npc, creature, point: a routine point was reached).
 function N.on(name, fn)
-    assert(handlers[name], "event must be 'talk', 'button', 'close' or 'arrived'")
+    assert(handlers[name], "event must be 'talk', 'button', 'close', 'arrived', 'hostile' or 'calm'")
     assert(type(fn) == 'function', 'fn must be a function')
     local list = handlers[name]
     list[#list + 1] = fn
@@ -284,6 +327,7 @@ local function event_for(extra)
     function e.close() dialog.closing = true end
     function e.go(page) dialog.next = page end
     function e.say(text) dialog.say = text end
+    function e.hostile(opts) dialog.turn = opts or {} end
     for k, v in pairs(extra or {}) do e[k] = v end
     return e
 end
@@ -337,6 +381,14 @@ local function press(opt, index)
         if not ok then gear.log('npc option: ' .. tostring(err)) end
     end
     fire(handlers.button, e)
+    if dialog and opt.hostile and not dialog.turn then dialog.turn = type(opt.hostile) == 'table' and opt.hostile or {} end
+    if dialog and dialog.turn then
+        -- the option made the NPC an enemy: the dialog ends and the fight starts
+        local c, turn = dialog.creature, dialog.turn
+        N.close()
+        N.hostile(c, turn)
+        return
+    end
     local target = dialog and dialog.next
     if dialog then
         if dialog.closing then N.close(); return end
@@ -440,6 +492,20 @@ local function npc_under_cursor(hero)
     if kind and def.dialog then return c, kind, def end
 end
 
+-- Walks the hero toward the NPC: to the point `range - 40` units from it on the hero's side. The engine ends the hero's walk order after
+-- the next waypoint unless the left button is held, so the order is sent again every few tenths of a second until the hero is there.
+local function walk_hero_to(hero, c, range)
+    local x, y = c:position()
+    local hx, hy = hero:position()
+    if not x or not hx then return end
+    local dx, dy = hx - x, hy - y
+    local len = math.sqrt(dx * dx + dy * dy)
+    if len > 1 then
+        local k = math.max(range - 40, 30) / len
+        hero:order_move(x + dx * k, y + dy * k)
+    end
+end
+
 local function click_frame(state)
     if state.mode ~= 'game' or state.escape_menu or state.message_box or state.exclusive or dialog then return end
     local hero = gear.world.hero()
@@ -452,6 +518,9 @@ local function click_frame(state)
         elseif d <= pending.range then
             pending = nil
             N.talk(c)
+        elseif gear.time() - pending.ordered >= 0.3 then
+            pending.ordered = gear.time()
+            walk_hero_to(hero, c, pending.range)
         end
     end
     -- (ui.over_ui() would be true from the second frame on: it counts the region this very function declares. A panel above the
@@ -465,15 +534,8 @@ local function click_frame(state)
         if d and d <= def.talk_range then
             N.talk(c)
         else
-            local x, y = c:position()
-            local hx, hy = hero:position()
-            local dx, dy = hx - x, hy - y
-            local len = math.sqrt(dx * dx + dy * dy)
-            if len > 1 then
-                local k = math.max(def.talk_range - 40, 30) / len
-                hero:order_move(x + dx * k, y + dy * k)
-            end
-            pending = {creature = c, range = def.talk_range, untilt = gear.time() + 12}
+            walk_hero_to(hero, c, def.talk_range)
+            pending = {creature = c, range = def.talk_range, untilt = gear.time() + 20, ordered = gear.time()}
         end
     end
 end
@@ -505,6 +567,27 @@ local function routine_tick()
             local c = gear.world.object(inst.id)
             if c and c:is_creature() then apply_look(c, def, inst) end
         end
+        if inst.hostile and def then
+            local hc = gear.world.object(inst.id)
+            if hc and hc:is_creature() and not hc:is_dead() then
+                local h = inst.hostile
+                if not looked_hostile[inst.id] then
+                    looked_hostile[inst.id] = true
+                    local mods = {}
+                    for _, k in ipairs({'health', 'damage', 'taken', 'deflect', 'reflect', 'regen'}) do mods[k] = h[k] end
+                    if next(mods) then
+                        mods.base_hp = h.base_hp
+                        hc:set_modifiers(mods)
+                    end
+                    if h.tint ~= nil then hc:set_tint(h.tint) end
+                end
+                local d = hero:distance(hc)
+                if d and d <= (h.aggro or 1500) and not hero:is_dead() and t - (ordered_at[inst.id] or -100) >= 1.5 then
+                    ordered_at[inst.id] = t
+                    hc:order_attack(hero)
+                end
+            end
+        else
         local routine = inst.routine or (def and def.routine)
         local c = routine and gear.world.object(inst.id)
         if c and c:is_creature() and not c:is_dead() and not (dialog and dialog.creature and dialog.creature.id == inst.id) then
@@ -529,15 +612,22 @@ local function routine_tick()
                     gear.log(('npc %s: walking %d units: %s'):format(inst.kind, d, ok and 'ok' or tostring(why)))
                     inst.walk = {to = p, since = t, last = t, x = x, y = y}
                 else
-                    -- walking: moved at all in the last 3 seconds? else blocked
-                    if t - w.last >= 3 then
+                    -- walking: moved at all in the last 1.5 seconds? The engine often drops the first order (the NPC's own AI is busy), so
+                    -- the order is sent again; only after three orders that got it nowhere is it blocked, and put at its point.
+                    if t - w.last >= 1.5 then
                         local moved = math.sqrt((x - w.x) ^ 2 + (y - w.y) ^ 2)
                         if moved < 8 then
-                            gear.log(('npc %s: blocked, put at its point'):format(inst.kind))
-                            c:teleport(p.x, p.y)
-                            inst.walk = nil
+                            w.tries = (w.tries or 0) + 1
+                            if w.tries >= 3 then
+                                gear.log(('npc %s: blocked, put at its point'):format(inst.kind))
+                                c:teleport(p.x, p.y)
+                                inst.walk = nil
+                            else
+                                w.last = t
+                                c:order_move(p.x, p.y)
+                            end
                         else
-                            w.last, w.x, w.y = t, x, y
+                            w.last, w.x, w.y, w.tries = t, x, y, 0
                             c:order_move(p.x, p.y)
                         end
                     end
@@ -548,6 +638,7 @@ local function routine_tick()
                     end
                 end
             end
+        end
         end
     end
 end
@@ -568,6 +659,86 @@ gear.every(1, function()
     if not ok then gear.log('npc routine: ' .. tostring(err)) end
 end)
 gear.on('savegame.changed', function() dialog, pending, looked = nil, nil, {} end)
+
+-- hostile(creature, opts) -> true | nil, message: the NPC turns into an enemy of the hero: the faction the object type gave it (an enemy of the
+-- hero), aggressive, and it attacks the hero (a created creature does not notice heroes on its own, so the library orders it to). opts:
+--   level       the creature's level (creature:set_level: the game derives health, damage and attributes from the type and the level)
+--   health, damage, taken, deflect, reflect, regen   boss modifiers (creature:set_modifiers; health is a multiple of the maximum)
+--   weapon      an item type (id or name) the NPC wields, or {main = type, off = type} (a shield or second weapon)
+--   tint        a colour for the model (creature:set_tint)
+--   aggro       how far away from the hero it attacks (world units, default 1500)
+function N.hostile(creature, opts)
+    opts = opts or {}
+    local inst = inst_of(creature)
+    if not inst then return nil, 'not an NPC of this mod' end
+    local c = gear.world.object(inst.id)
+    local hero = gear.world.hero()
+    if not c or not c:is_creature() or not hero then return nil, 'no such creature' end
+    if inst.hostile and inst.hostile.done then return true end
+    -- the faction of the type, if that is an enemy of the hero; else the first enemy faction
+    local ok = false
+    for _, f in ipairs({inst.faction0 or 12, 12, 13, 2, 5}) do
+        c:set_allegiance{faction = f, aggressive = true}
+        if c:is_enemy(hero) then ok = true break end
+    end
+    if not ok then return nil, 'no faction hostile to the hero' end
+    local h = {done = true, aggro = opts.aggro, level = opts.level, tint = opts.tint, weapon = opts.weapon}
+    inst.hostile = h
+    if opts.level then c:set_level(opts.level) end
+    h.base_hp = c:max_hp()
+    local mods = {}
+    for _, k in ipairs({'health', 'damage', 'taken', 'deflect', 'reflect', 'regen'}) do
+        if opts[k] ~= nil then mods[k] = opts[k]; h[k] = opts[k] end
+    end
+    if next(mods) then
+        local good, why = c:set_modifiers(mods)
+        if not good then gear.log(('npc %s: modifiers: %s'):format(inst.kind, tostring(why))) end
+        looked_hostile[inst.id] = true
+    end
+    if opts.weapon ~= nil then
+        local w = opts.weapon
+        if type(w) ~= 'table' then w = {main = w} end
+        local x, y, layer = c:position()
+        for slot, typ in pairs({[12] = w.main, [13] = w.off}) do
+            local item, why = gear.world.spawn(typ, x, y, {layer = layer})
+            if item then
+                local carried, why2 = c:carry(slot, item)
+                if not carried then gear.log(('npc %s: weapon: %s'):format(inst.kind, tostring(why2))) item:remove() end
+            else
+                gear.log(('npc %s: weapon: %s'):format(inst.kind, tostring(why)))
+            end
+        end
+    end
+    if opts.tint ~= nil then c:set_tint(opts.tint) end
+    c:order_attack(hero)
+    local _, store_h = data()
+    store_h:changed()
+    fire(handlers.hostile, {npc = inst.kind, creature = c, hero = hero})
+    return true
+end
+
+-- calm(creature): the NPC is as it was spawned again (its stance), its modifiers are taken off and it stops fighting.
+function N.calm(creature)
+    local inst = inst_of(creature)
+    if not inst then return nil, 'not an NPC of this mod' end
+    local c = gear.world.object(inst.id)
+    if not c then return nil, 'no such creature' end
+    c:set_modifiers(nil)
+    c:order_stop()
+    apply_stance(c, inst.stance == 'hostile' and 'friendly' or inst.stance or 'friendly', inst.faction0)
+    inst.hostile = nil
+    looked_hostile[inst.id] = nil
+    local _, h = data()
+    h:changed()
+    fire(handlers.calm, {npc = inst.kind, creature = c})
+    return true
+end
+
+-- is_hostile(creature) -> boolean
+function N.is_hostile(creature)
+    local inst = inst_of(creature)
+    return inst ~= nil and inst.hostile ~= nil
+end
 
 -- where(kind or creature) -> the routine point an NPC should be at now: x, y, layer.
 function N.where(creature)
