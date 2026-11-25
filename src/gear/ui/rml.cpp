@@ -2390,6 +2390,7 @@ button.ibtn:hover, button.ibtn:focus { background-color: transparent; color: #ff
 button.ibtn + button.ibtn { border-left: 1px #8c744099; margin-left: 4px; padding-left: 12px; }
 button.mini.dis { color: #8c8c8c; border-color: #3c3c3c; opacity: 0.6; }
 /* the on-screen keyboard (gear.kit.osk): the typed text, rows of bordered keys */
+.kit-osk > .body { background-color: #0d0c12; }
 .kit-osk .osk-line { display: flex; flex-direction: row; align-items: center; height: 30px; margin: 0 0 8px 0; padding: 0 8px; background-color: #0c0c14; border: 1px #6e5e3a; white-space: pre; overflow: hidden; }
 .kit-osk .osk-text { color: #f0f0f0; }
 .kit-osk .osk-caret { color: #ffd780; }

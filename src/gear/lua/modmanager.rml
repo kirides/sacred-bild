@@ -67,7 +67,6 @@
         /* the on-screen keyboard */
         .osk { padding: 4px 8px; }
         .osk .otitle { font-weight: bold; font-size: 15dp; color: #ffd780; margin-bottom: 8px; }
-        .osk .otext { height: 28px; line-height: 28px; padding: 0 8px; margin-bottom: 10px; background-color: #0c0c14; border: 1px #8c7440; }
         .osk .orow { display: flex; flex-direction: row; justify-content: center; margin: 4px 0; }
         .osk button.mini.key { min-width: 44px; margin: 0 3px; text-align: center; padding: 6px 0; }
         .osk button.mini.wide { min-width: 100px; margin: 0 6px; text-align: center; padding: 6px 0; }
@@ -157,16 +156,12 @@
     <div data-if="view == 'osk'" class="head"></div>
     <div data-if="view == 'osk'" class="bodybox osk">
         <div class="otitle">{{ osk_title }}</div>
-        <div data-if="osk_text_mode" class="otext">{{ osk_text }}|</div>
-        <div data-if="!osk_text_mode" class="orow">
+        <div class="orow">
             <button class="mini wide act" id="osk_ctrl" data-class-on="osk_ctrl"><span class="padkey a"></span>Ctrl</button><button class="mini wide act" id="osk_shift" data-class-on="osk_shift"><span class="padkey a"></span>Shift</button><button class="mini wide act" id="osk_alt" data-class-on="osk_alt"><span class="padkey a"></span>Alt</button>
             <button class="mini wide act" id="osk_none"><span class="padkey a"></span>Unbind</button><button class="mini wide act" id="osk_cancel"><span class="padkey b"></span>Cancel</button>
         </div>
         <div data-for="row : osk_rows" class="orow"><button data-for="k : row" class="mini key act" data-attr-id="k.id"><span class="padkey a"></span>{{ k.label }}</button></div>
-        <div data-if="osk_text_mode" class="orow">
-            <button class="mini wide act" id="osk_shift2" data-class-on="osk_shift"><span class="padkey a"></span>Shift</button><button class="mini wide act" id="osk_space"><span class="padkey a"></span>Space</button><button class="mini wide act" id="osk_back"><span class="padkey a"></span>Backspace</button><button class="mini wide act" id="osk_done"><span class="padkey a"></span>Done</button>
-        </div>
-        <div data-if="!osk_text_mode" class="ohint">Pick the modifiers first, then the key.</div>
+        <div class="ohint">Pick the modifiers first, then the key.</div>
     </div>
 
     <!-- the footer -->

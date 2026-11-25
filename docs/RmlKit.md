@@ -31,6 +31,22 @@ While that mod runs, documents of other mods name the files as `@mod-id/path`: `
 `<link type="text/rcss" href="@lib/styles/panel.rcss"/>`, `src="@lib/images/a.png"`, `rml.load_font('@lib/fonts/x.ttf')`. Nothing else of that mod is
 reachable and no path leaves its folder. Use `requires` in the user mod so the library runs first (`src/gear/examples/rmlshare-lib`, `rmlshare`).
 
+## On-screen keyboard
+
+`gear.kit.osk{layout = 'qwertz'}` makes a keyboard for text a controller player has to type (a search, a name, an amount): a small window of its own at the bottom of the
+screen with the typed text, rows of bordered keys (not game buttons: there are too many of them) and Shift, Space, Backspace, Clear, Paste and Done; `digits = true` is a
+number pad. Both looks style it (`.kit-osk`, `button.osk-key`), so it works without a theme too. The mod keeps its own field and gives the keyboard `on_change`:
+
+```lua
+local kb = gear.kit.osk{}                                   -- once; call kb:draw() every frame
+kb:toggle{title = 'Search', text = q, max = 30, on_change = function(t) q = t; doc.model.q = t end, get = function() return q end}
+kb:toggle{title = 'Gold', digits = true, text = gold, max = 8, on_change = set_gold}   -- a number pad
+```
+
+The button that opens it is `kit.ibtn('kbd', 'keyboard', {tip = 'On-screen keyboard'})` (or, in an `.rml` file, `<button class="ibtn" id="kbd"><span class="padkey a"></span><span class="icon icon-keyboard"></span></button>`).
+Every key is a stop for the D-pad (A types); the keyboard is modal, so the pad stays on it. B and Escape close it (`kb:back()` for a mod that handles B itself, with `back = false`).
+Paste takes the clipboard without line breaks and other control characters, digits only on a number pad, cut to `max`. Demo and self test: `gear/examples/rmlosk`.
+
 ## Web-style CSS
 
 `@font-face { font-family: "Icons"; src: url("icons.ttf") format("truetype"); }` works (the file is looked for next to the stylesheet, in its `fonts/`

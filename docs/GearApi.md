@@ -4738,6 +4738,80 @@ Answers no.
 
 Draws it (the game and the other overlays take no mouse and no pad meanwhile).
 
+### GearKitOskConfig
+
+The options of `osk`.
+
+| Field | Type | |
+|---|---|---|
+| `title` | `string` | The window's default title (default `Keyboard`). (optional) |
+| `layout` | `'qwerty'\|'qwertz'` | The letter rows (default `qwerty`; `qwertz` adds ß ü ö ä and swaps y / z). (optional) |
+| `x` | `number` | Where the window sits (layout units); default: centred at the bottom of the screen. (optional) |
+| `y` | `number` |  (optional) |
+| `width` | `number` |  (optional) |
+| `modal` | `boolean` | Default true: while it is open the game and every other overlay take no mouse and no pad, so the pad stays on its keys. (optional) |
+| `back` | `boolean` | Default true: the keyboard asks `ui.back_pressed()` and Escape itself. `false` for a mod that handles B itself: it calls `back()` first. (optional) |
+
+### GearKitOskOpen
+
+What `open` and `toggle` take.
+
+| Field | Type | |
+|---|---|---|
+| `text` | `string` | The text to start from. (optional) |
+| `digits` | `boolean` | A number pad: digits only (also from the clipboard). (optional) |
+| `max` | `integer` | The longest text in characters (default 64). (optional) |
+| `title` | `string` |  (optional) |
+| `get` | `fun(): string` | What the mod's own field holds now; when the player types there the keyboard follows. (optional) |
+| `on_change` | `fun(text: string)` | After every edit. (optional) |
+| `on_close` | `fun(text: string, how: 'done'\|'back'\|'close'\|'closed')` | Once, when it closes. (optional) |
+
+### GearKitOsk
+
+An on-screen keyboard: a small window of its own with the typed text, rows of bordered keys and Shift / Space / Backspace / Clear / Paste / Done (a number pad with `digits`). Every key is a stop for the controller (A types), the mouse works too. Paste takes the clipboard without line breaks, tabs and other control characters, digits only on a number pad, and as much as `max` allows.
+
+#### `GearKitOsk:open(o)`
+
+Opens it for a text (replaces an open one: its `on_close` runs with `'closed'`).
+
+- `o`: `GearKitOskOpen` (optional)
+
+#### `GearKitOsk:toggle(o)`
+
+Opens it, or closes it when it is open.
+
+- `o`: `GearKitOskOpen` (optional)
+
+#### `GearKitOsk:close()`
+
+Closes it.
+
+#### `GearKitOsk:is_open() -> boolean`
+
+- returns `boolean`
+
+#### `GearKitOsk:text() -> string?`
+
+The typed text (nil while closed).
+
+- returns `string?`
+
+#### `GearKitOsk:set_text(text)`
+
+Replaces the text from the mod's side.
+
+- `text`: `string`
+
+#### `GearKitOsk:back() -> boolean`
+
+Closes it when open and returns true: call it first in the mod's own handling of B or Escape, so that one press closes the keyboard only (with `back = false`).
+
+- returns `boolean`
+
+#### `GearKitOsk:draw()`
+
+Draws it; call it every frame from the mod's draw handler (nothing happens while it is closed).
+
 ### GearKit
 
 Reached as `gear.kit`.
@@ -4872,6 +4946,30 @@ A modal question in the middle of the screen.
 
 - `o`: `GearKitConfirm`
 - returns `GearKitDialog`
+
+#### `gear.kit.ibtn(id, icon, o) -> string`
+
+A frameless icon button with the controller prompt in front (`ibtn`): `kit.ibtn('kbd', 'keyboard', {tip = 'On-screen keyboard'})` is the button that opens a keyboard.
+
+- `id`: `string`
+- `icon`: `string` - The icon's name (see `icon`).
+- `o`: `{tip?: string, label?: string, class?: string, disabled?: boolean}` (optional)
+- returns `markup` `string`
+
+#### `gear.kit.osk(o) -> GearKitOsk`
+
+A new on-screen keyboard (one per mod is enough); see `GearKitOsk`.
+
+- `o`: `GearKitOskConfig` (optional)
+- returns `GearKitOsk`
+
+#### `gear.kit.osk_clean(text, digits) -> string`
+
+What the clipboard may put into a field: line breaks and tabs become one blank, other control characters go, the ends are trimmed; `digits` keeps digits only.
+
+- `text`: `string`
+- `digits`: `boolean` (optional)
+- returns `string`
 
 ## Stored data (gear.store)
 
