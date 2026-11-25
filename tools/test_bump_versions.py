@@ -66,7 +66,7 @@ class Tests(unittest.TestCase):
 
     def test_test_and_doc_files_do_not_bump(self):
         for rel in ('src/bild/net/udp_test.cpp', 'src/bild/tests/a.cpp', 'src/gear/tests/a.lua', 'src/gear/examples/hello/main.lua', 'src/gear/mdk/README.md',
-                    'gear/dist/mdk/x.lua', 'src/gear/meta/ui.lua', 'docs/Gear.md', 'tools/x.py', 'matchmaker/main.go'):
+                    'src/gear/meta/ui.lua', 'docs/Gear.md', 'tools/x.py', 'matchmaker/main.go'):
             self.r.touch(rel, 'not code of a DLL')
         self.assertIn('nothing to bump', self.plan())
 

@@ -37,7 +37,7 @@ LUA_HOST = os.path.join(GEAR, 'lua_host.cpp')
 GEAR_META = os.path.join(GEAR, 'meta')
 GEAR_MDK_SRC = os.path.join(GEAR, 'mdk')
 GEAR_EXAMPLES = os.path.join(GEAR, 'examples')
-GEAR_MDK_OUT = os.path.join(ROOT, 'gear', 'dist', 'mdk')
+GEAR_MDK_OUT = os.path.join(ROOT, 'out', 'mdk', 'sacred-gear-mdk')   # generated, not committed
 
 # Documentation
 DOCS = os.path.join(ROOT, 'docs')

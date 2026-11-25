@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Builds the Sacred Gear MDK (mod development kit) from the sources in this repository.
 
-    python tools/gen_gear_mdk.py            regenerates gear/dist/mdk (committed; run after changing src/gear/meta, docs/Gear.md,
-                                            src/gear/mdk or the examples)
-    python tools/gen_gear_mdk.py --check    fail if gear/dist/mdk is not what the sources produce
-    python tools/gen_gear_mdk.py --zip      ... and write out/mdk/sacred-gear-mdk.zip from gear/dist/mdk
+    python tools/gen_gear_mdk.py            writes the kit to out/mdk/sacred-gear-mdk (not committed: CI builds and publishes it)
+    python tools/gen_gear_mdk.py --zip      ... and out/mdk/sacred-gear-mdk.zip
+    python tools/gen_gear_mdk.py --out DIR --check    fail if DIR is not what the sources produce
 
 Nothing in the kit is a hand-kept copy: meta/ is every src/gear/meta/*.lua (so new definition files are picked up),
 docs/GearApi.md is generated from them the same way gen_gear_api_docs.py does, the examples are copied from
@@ -110,9 +109,9 @@ def main():
         with tempfile.TemporaryDirectory() as tmp:
             fresh = build(os.path.join(tmp, 'mdk'))
             if not os.path.isdir(out) or snapshot(fresh) != snapshot(out):
-                print('gear/dist/mdk is out of date: run python tools/gen_gear_mdk.py')
+                print('%s is out of date: run python tools/gen_gear_mdk.py' % paths.rel(out))
                 return 1
-        print('gear/dist/mdk is up to date')
+        print('%s is up to date' % paths.rel(out))
         return 0
     build(out)
     print('wrote', out)
