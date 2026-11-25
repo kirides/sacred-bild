@@ -89,7 +89,7 @@ Generated files in the repository, and the checks:
 |---|---|
 | `tools/gen_sigs.py` | Writes `src/bild/engine/sacred_sigs.inc`, `gameserver_sigs.inc` and `tools/data/addresses.json`: a signature for every address, taken from the English build and accepted only if it matches exactly once in it and in the German one |
 | `tools/gen_res_sites.py` | Writes `src/bild/display/resolution_sites.inc`: the 1024x768 constants to patch, each verified and with a signature |
-| `tools/check_hooks.py` | Checks that every hook declares as many stack arguments as the hooked function pops |
+| `tools/check_hooks.py` | Checks that every hook and typed function (SacredBild's `sacred_addr.h` and Sacred Gear's `gear_addr.h`) declares as many stack arguments as the function pops |
 | `tools/gen_prompts.py` | Writes `src/bild/controller/prompts.png`: the button prompt atlas, from the [Input Prompts](https://github.com/meritite-union/input-prompts) images (needs Pillow; see the script's header) |
 | `tools/gen_shaders.py` | Writes `src/bild/ddraw9/skin_shaders.inc`, `ground_shaders.inc` and `smaa_shaders.inc`: `skin.hlsl` and `ground.hlsl` compiled to vs_2_0, `smaa.hlsl` to vs_3_0 / ps_3_0 per preset, with `fxc` from the Windows SDK |
 | `tools/sigs.py`, `funcs.py`, `eng.py` | Shared code: signature search, function boundaries and names (`tools/data/functions_eng.tsv`, exported from Ghidra), the English exe |

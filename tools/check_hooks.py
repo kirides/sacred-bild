@@ -109,27 +109,36 @@ HOOKS = {
     0x006B3640: ('cUI_Book::lineAt (called)', 3),
 }
 
-# The typed functions in src/bild/engine/sacred_addr.h (Thiscall<R(Self, Args...)> / Cdecl<R(Args...)>, with "ENG address"
+# The typed functions in src/bild/engine/sacred_addr.h and src/gear/engine/gear_addr.h (Thiscall<R(Self, Args...)> / Cdecl<R(Args...)>, with "ENG address"
 # in the comment on their line or the line above): their stack arguments come from the signature, so every one is
 # checked whether or not the table above lists it, and a table entry that disagrees with it is an error.
-def declared():
-    path = paths.SACRED_ADDR
+def declared(path, owner, addr_of=None):
+    """addr_of: name -> ENG address, for a header whose comments name several addresses (gear_addr.h: from gen_gear_sigs.GEAR)."""
     with open(path, encoding='utf-8') as f:
         text = f.read()
     out = {}
-    for m in re.finditer(r'inline (Thiscall|Cdecl)<', text):
+    for m in re.finditer(r'inline (?:Sacred::)?(Thiscall|Cdecl)<', text):
         depth, i = 1, m.end()
         while depth:
             depth += {'<': 1, '>': -1}.get(text[i], 0)
             i += 1
         signature = text[m.end():i - 1]
-        name = re.match(r'\s*(\w+)\{\};', text[i:]).group(1)
+        nm = re.match(r'\s*(\w+)\{\};', text[i:])
+        if not nm:
+            continue                    # derived from another address (cUI_Popup_setText)
+        name = nm.group(1)
         line_end = text.find('\n', i)
         line_start = text.rfind('\n', 0, m.start()) + 1
         above = text[text.rfind('\n', 0, line_start - 1) + 1:line_start]
-        eng = re.search(r'ENG ([0-9A-F]{8})', text[line_start:line_end]) or re.search(r'//.*ENG ([0-9A-F]{8})', above)
-        if not eng:
-            continue
+        if addr_of is not None:
+            if name not in addr_of:
+                continue
+            address = addr_of[name]
+        else:
+            eng = re.search(r'ENG ([0-9A-F]{8})', text[line_start:line_end]) or re.search(r'//.*ENG ([0-9A-F]{8})', above)
+            if not eng:
+                continue
+            address = int(eng.group(1), 16)
         args, depth, cur = [], 0, ''
         for c in signature[signature.index('(') + 1:signature.rindex(')')]:
             depth += {'<': 1, '(': 1, '>': -1, ')': -1}.get(c, 0)
@@ -143,17 +152,38 @@ def declared():
         slots = 0
         if m.group(1) == 'Thiscall':
             slots = sum(2 if re.match(r'(const )?(double|u?int64_t)\b', a) else 1 for a in args[1:])
-        out[int(eng.group(1), 16)] = (name, slots)
+        out[address] = (name, slots, owner)
     return out
 
 ok = True
-for addr, (name, args) in declared().items():
+decl = declared(paths.SACRED_ADDR, 'sacred_addr.h')
+import gen_gear_sigs
+# Gear functions whose declaration does not give their stack arguments, or whose end the function table misses.
+GEAR_ARGS = {
+    'potionPick': 3,             # stdcall (mode, flag, tier); declared Cdecl only as an address holder for its hook
+    'cStats_learnAbility': 6,    # a 0x18-byte entry by value
+}
+GEAR_END = {
+    'cItemType_size': 0x00428DC5,
+    'cObjectFactory_create': 0x0045187A,
+    'cStats_recalc': 0x0057D552,
+}
+GEAR_SKIP = {'cCreature_receiveEvent'}   # data inside the function body defeats the linear disassembly (rets 4 and 28 found)
+for addr, entry in declared(paths.GEAR_ADDR, 'gear_addr.h', {e[0]: e[1] for e in gen_gear_sigs.GEAR if e[2] == 'func'}).items():
+    if addr in decl and decl[addr][1] != entry[1]:
+        print(f'BAD {addr:08x} {entry[0]:34} gear_addr.h declares {entry[1]} args, sacred_addr.h {decl[addr][1]}')
+        ok = False
+    if entry[0] in GEAR_SKIP:
+        continue
+    entry = (entry[0], GEAR_ARGS.get(entry[0], entry[1]), entry[2])
+    decl.setdefault(addr, entry)
+for addr, (name, args, owner) in decl.items():
     if addr in HOOKS:
         if HOOKS[addr][1] != args:
-            print(f'BAD {addr:08x} {name:34} sacred_addr.h declares {args} args, the table {HOOKS[addr][1]}')
+            print(f'BAD {addr:08x} {name:34} {owner} declares {args} args, the table {HOOKS[addr][1]}')
             ok = False
     else:
-        HOOKS[addr] = (f'{name} (declared)', args)
+        HOOKS[addr] = (f'{name} (declared, {owner})', args) + ((GEAR_END[name],) if name in GEAR_END else ())
 
 
 def rets_of(read, addr, length):
