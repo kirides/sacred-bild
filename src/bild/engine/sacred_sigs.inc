@@ -134,6 +134,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"frameLimiter", "83 EC 20 8D 44 24 18 56 57 50 FF 15 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::frameLimiter}, // 0060A9F0, 0060AA90, 0060AA90
     {"weatherRender", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 83 EC 38", 0, Sig::Take::Match, &Sacred::Addr::weatherRender}, // 004190D0, 004190B0, 004190B0
     {"renderLimiterReturn", "83 C4 0C 8B 46 54 F6 C4 80 74 0B 8B 4E 54", 0, Sig::Take::Match, &Sacred::Addr::renderLimiterReturn}, // 0060EA6E, 0060EB0E, 0060EB0E
+    {"menuLoopSleepJump", "D9 5C 24 14 A8 01 74 04 6A 14 FF D3", 6, Sig::Take::Match, &Sacred::Addr::menuLoopSleepJump}, // 0075713C, 00756A1C, 00756A1C
     {"captureLockBackReturn", "85 C0 0F 84 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 8B 85 A0 01 00 00", 0, Sig::Take::Match, &Sacred::Addr::captureLockBackReturn}, // 006136AB, 0061374B, 0061374B
     {"captureScreenshot", "6A 00 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 C4 08 85 C0 74 0D 68 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::captureScreenshot}, // 006487D0, 00648900, 00648900
     {"pixelsToWorld", "8B 4C 24 0C 8B 44 24 10 8B 54 24 08", 0, Sig::Take::Match, &Sacred::Addr::pixelsToWorld}, // 00623940, 00623A20, 00623A20
