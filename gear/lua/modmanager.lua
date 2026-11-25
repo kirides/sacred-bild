@@ -3,6 +3,7 @@
 -- extra global `admin` the kernel gives only to it. Opened with its hotkey (F11, rebindable in this screen) or the
 -- "Mods" button beside the game's escape menu.
 
+local paste_shown = false      -- whether the Paste button was drawn in the last frame (mods.query, for the self test)
 local ui = gear.ui
 local C = ui.COLORS
 
@@ -1148,6 +1149,7 @@ do
     -- visible part of the list) and press(id) (what a click on that element does).
     gear.on('mods.query', function(out)
         out.open, out.view, out.mod, out.tab = screen.open, screen.view, screen.mod, screen.tab
+        out.paste_shown = paste_shown
         out.index = R.index
         out.tab_order = R.tab_order
         out.capturing = screen.capture ~= nil
@@ -1466,7 +1468,9 @@ local function paste_icon()
     return paste_doc or nil
 end
 gear.on('draw', function(state)
-    if screen.open or type(state) ~= 'table' or not (state.mode == 'game' or state.mode == 'menus') then return end
+    if type(state) ~= 'table' or not (state.mode == 'game' or state.mode == 'menus') then return end
+    paste_shown = false
+    if screen.open then return end
     local x, y, w, h = admin.text_focus()
     -- Ctrl+V into the focused box does what the Paste button does (not with AltGr, which is Ctrl+Alt; the key is polled every frame for its edge).
     -- The characters are typed once Ctrl is up: the game's box ignores characters while it sees Ctrl held.
@@ -1478,6 +1482,7 @@ gear.on('draw', function(state)
         paste_pending = false
         paste_clipboard()
     end
+    paste_shown = true
     local bh = math.max(12, math.min(h - 6, 22))
     local icon = paste_icon()
     if icon then
