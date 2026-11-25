@@ -1,76 +1,76 @@
 # Development
 
 SacredBild is one DLL, `ddraw.dll`, which the game loads from its folder in place of Windows' own. Start in
-`src/main.cpp`: `DllMain` reads `SacredBild.ini` (`src/config.*`); with the settings window, the rest waits for the
-exe's entry point, after the window (`src/settings_window.*`). Then it loads the DirectDraw implementation the game
-will get (`src/proxy.*`), finds the game's code by byte signature (`Sacred::resolveAddresses`) and installs the
-patches (`Sacred::installHooks` in `src/game/build.cpp`, which lists every module in order). Each module patches
+`src/bild/main.cpp`: `DllMain` reads `SacredBild.ini` (`src/bild/settings/config.*`); with the settings window, the rest waits for the
+exe's entry point, after the window (`src/bild/settings/settings_window.*`). Then it loads the DirectDraw implementation the game
+will get (`src/bild/proxy.*`), finds the game's code by byte signature (`Sacred::resolveAddresses`) and installs the
+patches (`Sacred::installHooks` in `src/bild/engine/build.cpp`, which lists every module in order). Each module patches
 the game in its `install()` with [Detours](https://github.com/microsoft/Detours) hooks or checked byte patches
 (`src/core/patch.*`: a write happens only if the bytes there are the expected ones).
 
 What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md), in the comments of
-`src/game/sacred_addr.h` and in the game's classes in `src/core/sacred/`; the addresses refer to the English GOG build
+`src/bild/engine/sacred_addr.h` and in the game's classes in `src/bild/sacred/`; the addresses refer to the English GOG build
 (Ghidra program `/Sacred.exe (GOG)`).
 
 ## Source files
 
 | Path | What it is |
 |---|---|
-| `src/main.cpp` | DLL entry: game (`sacred.exe`) or LAN gameserver (`gameserver.exe`) setup |
-| `src/proxy.*`, `src/exports.def` | The `ddraw.dll` exports, to the Direct3D 9 backend or the chain-loaded ddraw |
-| `src/system_ddraw.*` | `Backend=chain` on Windows' own ddraw: render targets over 2048 pixels |
-| `src/config.*`, `src/config/` | `SacredBild.ini`: loading it, and the settings in a header per ini section (`Config::render`, `Config::net`, ...) |
-| `src/settings_window.*` | The settings window before the game starts (`[Launcher] HideSettingsWindow`): what it shows, declared control by control |
-| `src/ui/form.*` | `Ui::Form`: settings windows declared in code (pages, groups, rows of controls bound to ini keys), laid out and run as dialogs |
-| `src/core/log.*`, `src/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
+| `src/bild/main.cpp` | DLL entry: game (`sacred.exe`) or LAN gameserver (`gameserver.exe`) setup |
+| `src/bild/proxy.*`, `src/bild/exports.def` | The `ddraw.dll` exports, to the Direct3D 9 backend or the chain-loaded ddraw |
+| `src/bild/system_ddraw.*` | `Backend=chain` on Windows' own ddraw: render targets over 2048 pixels |
+| `src/bild/settings/config.*`, `src/bild/settings/config/` | `SacredBild.ini`: loading it, and the settings in a header per ini section (`Config::render`, `Config::net`, ...) |
+| `src/bild/settings/settings_window.*` | The settings window before the game starts (`[Launcher] HideSettingsWindow`): what it shows, declared control by control |
+| `src/bild/settings/form.*` | `Ui::Form`: settings windows declared in code (pages, groups, rows of controls bound to ini keys), laid out and run as dialogs |
+| `src/core/log.*`, `src/bild/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
 | `src/core/patch.*`, `src/core/sig.*` | Code patches and hooks; byte signature search |
 | `sacred_core` (CMake) | `src/core/fmt.*`, `log.*`, `patch.*`, `sig.*` as a static library, linked by SacredBild and by Sacred Gear (`gear/`, see [Sacred Gear](Gear.md)) |
-| `src/spin_lock.h` | Locks for the render thread's hot paths |
-| `src/mem.h` | Fields of granny.dll's objects by byte offset (`Mem::field`) |
-| `src/profiler.*` | `[Debug] Profiler` |
-| `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `smaa.*` (SMAA antialiasing, `smaa.hlsl` over the reference shader and lookup textures in `smaa/`), `sharp.hlsl` (the pixel shader of `[Render] TextureFilter=Sharp`, bound by `Device::updateSharp` for draws whose stage 0/1 combiner it reproduces), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
-| `src/game/build.*` | Which exe this is, address lookup, the list of game modules |
-| `src/game/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses SacredBild uses, functions with their signatures (`Sacred::Thiscall`, `Cdecl`; `tools/check_hooks.py` checks them) and globals with their types (`Sacred::Global`); their signatures (generated) |
-| `src/core/sacred/` | The game's classes as structs (the Sacred Gold API): fields at their offsets and vtables as structs of function pointers, both checked by `static_assert`, member functions calling the game's code. `engine.h` (cEngine, orders), `object.h` (cObject / cCreature, cObjectManager), `world.h` (cWorldView, sectors, tiles, map data), `render.h` (dxDriver7, textures, cQuadBatcher), `ui.h` (cUI_Control2 / cUI_Window2 and their subclasses, cUI_Manager, events, fonts), `mouse.h`, `text.h`, `net.h` (cGCclass; gameserver.exe's cApp / cNetServer); `address.h` the typed addresses, `vector.h` the exe's std::vector |
-| `src/game/gameserver*` | The same for gameserver.exe, and its patches |
-| `src/game/resolution.*`, `resolution_sites.inc` | Any resolution: window, back buffer, world view; the 1024x768 constants patched (generated) |
-| `src/game/ui_state.*` | What the UI manager shows and who gets the input, by its own rules (mode, windows drawn alone, HUD, message box, focus); see `docs/UI_SYSTEM.md` |
-| `src/game/ui_windows.*` | The manager's windows, menus, message box, popups and text lines with their virtual functions wrapped: which one runs on a thread (`current()`), frames per object for UiAnchor |
-| `src/game/ui_canvas.*` | The 1024x768 UI in a scaled, centered canvas; cursor mapping |
-| `src/game/ui_anchor.*` | HUD windows placed at the screen edges (`[UI] Anchor`, `[UI.Layout]`) |
-| `src/game/device_proxy.*` | The IDirect3DDevice7 the game gets: UI draws into the canvas, world draws to the batcher |
-| `src/game/frame_hooks.*` | Device creation, flip, world and UI render; frame limits |
-| `src/game/focus.*` | Input only in the foreground, `ClipCursor`, close button |
-| `src/game/movie.*` | Intro and cutscene movies through Media Foundation |
-| `src/game/screenshot.*` | Print Screen as PNG / JPEG |
-| `src/game/language.*` | Text and speech files of the game's language |
-| `src/game/granny_async.*` | Animation update on a worker thread (`[Render] AsyncAnimation`) |
-| `src/game/granny_parallel.*` | `[Render] AnimationThreads`: Granny's animation controls sampled on several threads, split by skeleton |
-| `src/game/granny_mesh.*` | Granny's meshes, bone bindings and influence lists as its deform routine sees them |
-| `src/game/gpu_skin.*` | `[Render] GpuSkinning`: Granny's deform reduced to the bone matrices, characters drawn by the backend's skinning shader |
-| `src/game/skin_check.*` | `[Debug] SkinCheck`: Granny's skinning data read back and checked |
-| `src/game/ground_quads.*` | The ground's quad batcher straight to the batcher (`[Render] BatchGround`) |
-| `src/game/sprite_quads.*` | The sprite batcher's flushes (water tiles, objects) straight to the batcher (`[Render] BatchSprites`) |
-| `src/game/ground_mesh.*` | `[Render] GroundMesh`: the ground's tiles and blend layers in vertex buffers per sector, drawn by the backend's ground shader |
-| `src/game/map_cache.*` | Hash index in front of the map record caches (`[Render] RecordIndex`) |
-| `src/game/fast_math.*` | Faster replacements for the game's x87 math helpers (`[Render] FastMath`) |
-| `src/game/sound_lock.*` | The sound system's kernel mutex as a user-mode lock (`[Render] SoundLock`) |
-| `src/game/d3d_stats.*` | `[Debug] D3DStats` frame statistics |
-| `src/game/file_cache.*` | The pak files and music read once in the background into Windows' file cache (`[Render] WarmFileCache`) |
-| `src/game/file_io_stats.*` | `[Debug] D3DStats`: the game's and Miles' file opens and reads timed, slow ones logged |
-| `src/game/controller.*` | `[Controller]`: the pad driving the game through injected input and its own cursor (walking, attacks, windows) |
-| `src/game/click_walk.*` | Click-to-walk targets beyond the path finders' 64x64 tile grid pulled back into it (large views) |
-| `src/game/hero_move.*` | Controller walking: the game's follow-the-cursor move order sent directly, with the left button's held state it needs |
-| `src/game/aim_assist.*` | Controller targets from the game's list of what can be picked on the screen; the world pick hooked for walking and aiming |
-| `src/game/ui_nav.*` | D-pad navigation: the controls of the open windows, told apart by the exe's RTTI |
-| `src/game/options_screen.*` | The game's Options window as SacredBild's own screen while the controller is in use, with the controller's settings and bindings |
-| `src/input/` | `gamepad.*` (SDL3 on a thread of its own), `inject.*` (keys and mouse buttons handed to the game's window procedure and polls), `input_mode.*` (controller or keyboard and mouse), `bindings.*` (`[Controller.Bindings]`) |
-| `src/overlay/` | Drawn into the back buffer before each present (Direct3D 9 backend): `overlay.*` (Dear ImGui screens), `prompts.*` (controller button prompts, one draw call from the atlas `prompts.png`) |
-| `src/game/world_passes.*` | `[Debug] D3DStats`: the world view's passes timed separately |
-| `src/render/batcher.*`, `atlas.*`, `fvf.h` | Draw merging, the texture atlas, vertex format layout |
-| `src/net/` | LAN games over VPNs: `lan_client.*` (sacred.exe), `lan_server.*` (gameserver.exe), `lan_protocol.*` (announcements), `adapters.*` (network adapters), `connection.*` (`NoDelay`, one send per message, TCP statistics) |
-| `src/net/udp_*`, `tincat_shim.*`, `address.*` | `[Net] Udp`: `udp_endpoint.*` (the IPv4 and IPv6 sockets and their I/O thread), `address.*` (either family), `udp_transport.*` (KCP sessions), `tincat_shim.*` (TinCat's sockets on those sessions), `udp_protocol.*` (wire formats) |
-| `src/net/matchmaker.*` | `[Net] Matchmaker` client: publishing (gameserver), listing and joining (sacred.exe) |
+| `src/bild/spin_lock.h` | Locks for the render thread's hot paths |
+| `src/bild/mem.h` | Fields of granny.dll's objects by byte offset (`Mem::field`) |
+| `src/bild/diag/profiler.*` | `[Debug] Profiler` |
+| `src/bild/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `smaa.*` (SMAA antialiasing, `smaa.hlsl` over the reference shader and lookup textures in `smaa/`), `sharp.hlsl` (the pixel shader of `[Render] TextureFilter=Sharp`, bound by `Device::updateSharp` for draws whose stage 0/1 combiner it reproduces), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
+| `src/bild/engine/build.*` | Which exe this is, address lookup, the list of game modules |
+| `src/bild/engine/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses SacredBild uses, functions with their signatures (`Sacred::Thiscall`, `Cdecl`; `tools/check_hooks.py` checks them) and globals with their types (`Sacred::Global`); their signatures (generated) |
+| `src/bild/sacred/` | The game's classes as structs (the Sacred Gold API): fields at their offsets and vtables as structs of function pointers, both checked by `static_assert`, member functions calling the game's code. `engine.h` (cEngine, orders), `object.h` (cObject / cCreature, cObjectManager), `world.h` (cWorldView, sectors, tiles, map data), `render.h` (dxDriver7, textures, cQuadBatcher), `ui.h` (cUI_Control2 / cUI_Window2 and their subclasses, cUI_Manager, events, fonts), `mouse.h`, `text.h`, `net.h` (cGCclass; gameserver.exe's cApp / cNetServer); `address.h` the typed addresses, `vector.h` the exe's std::vector |
+| `src/bild/net/gameserver.*`, `src/bild/engine/gameserver_*` | The same for gameserver.exe, and its patches |
+| `src/bild/display/resolution.*`, `resolution_sites.inc` | Any resolution: window, back buffer, world view; the 1024x768 constants patched (generated) |
+| `src/bild/ui/ui_state.*` | What the UI manager shows and who gets the input, by its own rules (mode, windows drawn alone, HUD, message box, focus); see `docs/UI_SYSTEM.md` |
+| `src/bild/ui/ui_windows.*` | The manager's windows, menus, message box, popups and text lines with their virtual functions wrapped: which one runs on a thread (`current()`), frames per object for UiAnchor |
+| `src/bild/ui/ui_canvas.*` | The 1024x768 UI in a scaled, centered canvas; cursor mapping |
+| `src/bild/ui/ui_anchor.*` | HUD windows placed at the screen edges (`[UI] Anchor`, `[UI.Layout]`) |
+| `src/bild/render/device_proxy.*` | The IDirect3DDevice7 the game gets: UI draws into the canvas, world draws to the batcher |
+| `src/bild/render/frame_hooks.*` | Device creation, flip, world and UI render; frame limits |
+| `src/bild/display/focus.*` | Input only in the foreground, `ClipCursor`, close button |
+| `src/bild/game/movie.*` | Intro and cutscene movies through Media Foundation |
+| `src/bild/game/screenshot.*` | Print Screen as PNG / JPEG |
+| `src/bild/game/language.*` | Text and speech files of the game's language |
+| `src/bild/render/granny_async.*` | Animation update on a worker thread (`[Render] AsyncAnimation`) |
+| `src/bild/render/granny_parallel.*` | `[Render] AnimationThreads`: Granny's animation controls sampled on several threads, split by skeleton |
+| `src/bild/render/granny_mesh.*` | Granny's meshes, bone bindings and influence lists as its deform routine sees them |
+| `src/bild/render/gpu_skin.*` | `[Render] GpuSkinning`: Granny's deform reduced to the bone matrices, characters drawn by the backend's skinning shader |
+| `src/bild/diag/skin_check.*` | `[Debug] SkinCheck`: Granny's skinning data read back and checked |
+| `src/bild/render/ground_quads.*` | The ground's quad batcher straight to the batcher (`[Render] BatchGround`) |
+| `src/bild/render/sprite_quads.*` | The sprite batcher's flushes (water tiles, objects) straight to the batcher (`[Render] BatchSprites`) |
+| `src/bild/render/ground_mesh.*` | `[Render] GroundMesh`: the ground's tiles and blend layers in vertex buffers per sector, drawn by the backend's ground shader |
+| `src/bild/perf/map_cache.*` | Hash index in front of the map record caches (`[Render] RecordIndex`) |
+| `src/bild/perf/fast_math.*` | Faster replacements for the game's x87 math helpers (`[Render] FastMath`) |
+| `src/bild/perf/sound_lock.*` | The sound system's kernel mutex as a user-mode lock (`[Render] SoundLock`) |
+| `src/bild/diag/d3d_stats.*` | `[Debug] D3DStats` frame statistics |
+| `src/bild/perf/file_cache.*` | The pak files and music read once in the background into Windows' file cache (`[Render] WarmFileCache`) |
+| `src/bild/diag/file_io_stats.*` | `[Debug] D3DStats`: the game's and Miles' file opens and reads timed, slow ones logged |
+| `src/bild/controller/controller.*` | `[Controller]`: the pad driving the game through injected input and its own cursor (walking, attacks, windows) |
+| `src/bild/controller/click_walk.*` | Click-to-walk targets beyond the path finders' 64x64 tile grid pulled back into it (large views) |
+| `src/bild/controller/hero_move.*` | Controller walking: the game's follow-the-cursor move order sent directly, with the left button's held state it needs |
+| `src/bild/controller/aim_assist.*` | Controller targets from the game's list of what can be picked on the screen; the world pick hooked for walking and aiming |
+| `src/bild/controller/ui_nav.*` | D-pad navigation: the controls of the open windows, told apart by the exe's RTTI |
+| `src/bild/controller/options_screen.*` | The game's Options window as SacredBild's own screen while the controller is in use, with the controller's settings and bindings |
+| `src/bild/controller/` | `gamepad.*` (SDL3 on a thread of its own), `inject.*` (keys and mouse buttons handed to the game's window procedure and polls), `input_mode.*` (controller or keyboard and mouse), `bindings.*` (`[Controller.Bindings]`) |
+| `src/bild/overlay/`, `src/bild/controller/prompts.*` | Drawn into the back buffer before each present (Direct3D 9 backend): `overlay.*` (Dear ImGui screens), `prompts.*` (controller button prompts, one draw call from the atlas `prompts.png`) |
+| `src/bild/diag/world_passes.*` | `[Debug] D3DStats`: the world view's passes timed separately |
+| `src/bild/render/batcher.*`, `atlas.*`, `fvf.h` | Draw merging, the texture atlas, vertex format layout |
+| `src/bild/net/` | LAN games over VPNs: `lan_client.*` (sacred.exe), `lan_server.*` (gameserver.exe), `lan_protocol.*` (announcements), `adapters.*` (network adapters), `connection.*` (`NoDelay`, one send per message, TCP statistics) |
+| `src/bild/net/udp_*`, `tincat_shim.*`, `address.*` | `[Net] Udp`: `udp_endpoint.*` (the IPv4 and IPv6 sockets and their I/O thread), `address.*` (either family), `udp_transport.*` (KCP sessions), `tincat_shim.*` (TinCat's sockets on those sessions), `udp_protocol.*` (wire formats) |
+| `src/bild/net/matchmaker.*` | `[Net] Matchmaker` client: publishing (gameserver), listing and joining (sacred.exe) |
 | `matchmaker/` | The matchmaking server (Go) |
 | `tools/nettest/` | Test bench for the UDP connection and the matchmaker without the game: loss, delay, outages, address changes (`-DSACREDBILD_NETTEST=ON`) |
 
@@ -87,11 +87,11 @@ Generated files in the repository, and the checks:
 
 | Tool | Does |
 |---|---|
-| `tools/gen_sigs.py` | Writes `src/game/sacred_sigs.inc`, `gameserver_sigs.inc` and `tools/data/addresses.json`: a signature for every address, taken from the English build and accepted only if it matches exactly once in it and in the German one |
-| `tools/gen_res_sites.py` | Writes `src/game/resolution_sites.inc`: the 1024x768 constants to patch, each verified and with a signature |
+| `tools/gen_sigs.py` | Writes `src/bild/engine/sacred_sigs.inc`, `gameserver_sigs.inc` and `tools/data/addresses.json`: a signature for every address, taken from the English build and accepted only if it matches exactly once in it and in the German one |
+| `tools/gen_res_sites.py` | Writes `src/bild/display/resolution_sites.inc`: the 1024x768 constants to patch, each verified and with a signature |
 | `tools/check_hooks.py` | Checks that every hook declares as many stack arguments as the hooked function pops |
-| `tools/gen_prompts.py` | Writes `src/overlay/prompts.png`: the button prompt atlas, from the [Input Prompts](https://github.com/meritite-union/input-prompts) images (needs Pillow; see the script's header) |
-| `tools/gen_shaders.py` | Writes `src/ddraw9/skin_shaders.inc`, `ground_shaders.inc` and `smaa_shaders.inc`: `skin.hlsl` and `ground.hlsl` compiled to vs_2_0, `smaa.hlsl` to vs_3_0 / ps_3_0 per preset, with `fxc` from the Windows SDK |
+| `tools/gen_prompts.py` | Writes `src/bild/controller/prompts.png`: the button prompt atlas, from the [Input Prompts](https://github.com/meritite-union/input-prompts) images (needs Pillow; see the script's header) |
+| `tools/gen_shaders.py` | Writes `src/bild/ddraw9/skin_shaders.inc`, `ground_shaders.inc` and `smaa_shaders.inc`: `skin.hlsl` and `ground.hlsl` compiled to vs_2_0, `smaa.hlsl` to vs_3_0 / ps_3_0 per preset, with `fxc` from the Windows SDK |
 | `tools/sigs.py`, `funcs.py`, `eng.py` | Shared code: signature search, function boundaries and names (`tools/data/functions_eng.tsv`, exported from Ghidra), the English exe |
 
 Reverse engineering helpers (how addresses and offsets were found):

@@ -1,4 +1,4 @@
-# Emits the patch-site table for the resolution module (src/game/resolution_sites.inc), verifying each encoding.
+# Emits the patch-site table for the resolution module (src/bild/display/resolution_sites.inc), verifying each encoding.
 # Sites are picked in the English build; each gets a signature (tools/sigs.py) that must match exactly once in it and
 # in the German build if that is there (SACRED_DE), and the value the site must hold there: the immediate itself, or
 # for memory operands the constant they point to (as float bits), or for g_unzoomedProjection the offset into it.

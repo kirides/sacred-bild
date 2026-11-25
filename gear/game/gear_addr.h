@@ -43,7 +43,7 @@ namespace Gear::Addr
     // Automation (gear/automation.cpp). ENG 00CDCA1C: the application object; +0xB0 is the game window, which the
     // menu's "load savegame" posts its message to (007561E0).
     inline Sacred::Global<uint8_t*> g_pApp{};
-    // ENG 017EEBBC: the UI manager (SacredBild's src/core/sacred/ui.h has its layout), nullptr before the menus exist.
+    // ENG 017EEBBC: the UI manager (SacredBild's src/bild/sacred/ui.h has its layout), nullptr before the menus exist.
     inline Sacred::Global<uint8_t*> g_pUiManager{};
     // ENG 0182EBE8: the players; +0x14 is the local hero's id, which loading a savegame sets to 1 first.
     inline Sacred::Global<uint8_t*> g_pNetPlayers{};

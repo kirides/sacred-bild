@@ -57,7 +57,7 @@ fullscreen mode, the mode's size centered on the primary screen when windowed. (
 `DefWindowProcA`. Starting a game (`cCommand_armaPlay::execute` `0x7561E0` posts `0x8002`) replaces the window
 procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]`): subclasses don't survive it.
 
-## What the game needs from DirectDraw (SacredBild's Direct3D 9 backend, `src/ddraw9/`)
+## What the game needs from DirectDraw (SacredBild's Direct3D 9 backend, `src/bild/ddraw9/`)
 
 - Imports `DirectDrawCreateEx`, `DirectDrawCreate`, `DirectDrawEnumerateExA`. Interfaces it asks for: IDirectDraw7,
   IDirect3D7, the HAL / T&L HAL device GUIDs, and IDirectDraw + IDirectDrawSurface (version 1) for the video stream
@@ -89,7 +89,7 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   (`GetAsyncKeyState`). amstream doesn't work on SacredBild's emulated DirectDraw (no picture, then the window hung
   after skipping), so with the Direct3D 9 backend `openMovieStream` only records the file and `playVideo` plays it
   through Media Foundation, or through amstream on Windows' own DirectDraw (a system memory sample surface, copied
-  into a texture) where Media Foundation can't (`src/game/movie.cpp`).
+  into a texture) where Media Foundation can't (`src/bild/game/movie.cpp`).
 - `dxDriver7_beginScene` (`0x646E20`, ref-counted at `+0x1D8`) retries `IDirect3DDevice7::BeginScene` until it
   succeeds: a device whose BeginScene fails hangs the calling thread.
 
@@ -198,7 +198,7 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   a player only while cMouse `+0` bit `0x100` (left button held, set and cleared only by the window procedure) is
   set (`0x4F681A`); otherwise it ends after the next waypoint. Hold-to-walk re-sends the order only while the hero
   is still moving, so a walk something blocked never restarts while the button stays down. SacredBild's stick walk
-  (`src/game/hero_move.*`) sends the follow order itself and sets that bit, without the click's path-finding start.
+  (`src/bild/controller/hero_move.*`) sends the follow order itself and sets that bit, without the click's path-finding start.
 - Path finding: `cPath` (vtable `0x890A0C`), `cPathAstar` (`0x890A18`), `cPathFloodfill` (`0x890A24`, search
   `0x421B90`). The flood fill marks a 64x64 byte grid at `0xAA4554` (row 0x40, cells tested with `& 0xC0`, origin
   `0xAA4550` = 0x20, 0x20: start - 32 .. start + 31 per tile axis); a target outside finds no path and the walker
@@ -229,7 +229,7 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   `0x643110` (cdecl), set `0x643430` (thiscall (flag, on)).
 - With `[Render] GroundMesh`, SacredBild skips the quad batcher's add (`0x629180`) and texture (`0x6292C0`) calls
   inside `renderTileRow`, empties the layer list after each row and draws its cached sectors in place of
-  `drawTileLayers` (`src/game/ground_mesh.*`). The cached ground of every loaded sector is drawn there, walked yet
+  `drawTileLayers` (`src/bild/render/ground_mesh.*`). The cached ground of every loaded sector is drawn there, walked yet
   or not, in case it comes in the middle of the walk (water tiles drawn early when their list could not be moved
   aside, below). A sector object's `+0x44`/`+0x48` hold its first tile's world column/row.
 - The lit ground (caves: the light falls off around the hero and the light sources, darker towards the walls) is
@@ -248,7 +248,7 @@ procedure with `0x811A20` through the delay-loaded `SetWindowLongA` (`[0xA23FB4]
   all rows (glow pass, tile pass) and sets the water ambience from their count and average position. Entry 1750
   lands on the count: a large water area fully zoomed out at 2560x1440 overwrote it and crashed in
   `renderTileRow` (`0x62B57C`). SacredBild draws ground and layers between rows before their array fills up, and
-  moves water entries out of theirs into a longer list (`src/game/resolution.cpp`). `drawWaterTiles` then runs once
+  moves water entries out of theirs into a longer list (`src/bild/display/resolution.cpp`). `drawWaterTiles` then runs once
   per part of up to 1750 entries copied back. It costs little (a 2560x1440 frame with lots of water: ~0.13 ms):
   its own batcher (`0x628D50` add, FVF `0x1C4` indexed quads, flushes every 99 quads
   and at texture changes `0x628F90`, end `0x629050`) feeds the proxy's TL merging, ~50 draws -> 2.
@@ -327,10 +327,10 @@ texture than the one before, so the game's own batching rarely gets past one qua
   256x256 ARGB4444, some ARGB8888, no mipmaps or color keys. The texture manager (`0x65ED90`) loads and
   evicts them on the render thread while drawing.
 
-SacredBild batches the world view (`src/render/batcher.*`, active inside `cWorldView0_render`): state calls
+SacredBild batches the world view (`src/bild/render/batcher.*`, active inside `cWorldView0_render`): state calls
 are recorded; at each pretransformed triangle draw the recorded state is compared with the device, and
 draws that match are appended to one pending triangle-list `DrawIndexedPrimitive`. Small textures are used
-through copies in 8192x8192 atlas pages with a one-texel gutter (`src/render/atlas.*`), with texture
+through copies in 8192x8192 atlas pages with a one-texel gutter (`src/bild/render/atlas.*`), with texture
 coordinates remapped, when the draw's coordinates stay within half a texel of the texture. The gutter holds
 the opposite edge for wrap addressing and repeats the edge for clamp/mirror (identical that close to the edge).
 Copies are refreshed when a texture's uniqueness value changes; destroyed textures are noticed through
@@ -425,12 +425,12 @@ streams for positions, normals and texture coordinates, the piece's index range,
   buffers (the whole mesh, vertex count = the mesh's), texture coordinates at the mesh's static array, the piece's
   indices; `SetTransform(WORLD)` from the state before.
 
-`[Debug] SkinCheck` (`src/game/skin_check.*`) rebuilds per-vertex weights from these lists and compares its own
+`[Debug] SkinCheck` (`src/bild/diag/skin_check.*`) rebuilds per-vertex weights from these lists and compares its own
 skinning with Granny's output, with all influences and with at most four per vertex. Measured (66 meshes, 16.5M
 vertices): at most 4 influences, at most 56 bones per mesh, normals weighted exactly like their positions, paths
 rigid / vertex-major / normal lists; differences of one float step (Granny accumulates in x87 extended precision).
 
-`[Render] GpuSkinning` (`src/game/gpu_skin.*`, `src/ddraw9/device_skin.cpp`, `skin.hlsl`): for the rendering
+`[Render] GpuSkinning` (`src/bild/render/gpu_skin.*`, `src/bild/ddraw9/device_skin.cpp`, `skin.hlsl`): for the rendering
 path's deforms (the model pass wants positions and normals, the shadow pass positions only) the deform runs with both
 outputs off, which still computes every binding's matrix; the module keeps those and CPU-skins only the vertices
 `cGranny_render` samples for its bounding box (every `count < 12 ? 1 : count < 23 ? 2 : count < 34 ? 3 : count / 11`-th).
@@ -482,7 +482,7 @@ Curve evaluation (`0x1001B120`, keyframe tracks and spline track classes) only r
 writes under any of it (disassembly sweep of 65 functions); the one shared write is the handle lock/release around
 an animation control's sampling (`0x100043B0` / `0x10005370`): plain 16-bit increments at handle `+8`/`+0xA`, the
 handle being shared by every control playing that animation. The API entry points spin on a global reentrancy
-count (`0x1006CB38`), so Granny is single-threaded by design. `[Render] AnimationThreads` (`src/game/granny_parallel.*`)
+count (`0x1006CB38`), so Granny is single-threaded by design. `[Render] AnimationThreads` (`src/bild/render/granny_parallel.*`)
 replaces the walk: controls grouped by their target's bone array, groups spread over threads (each group's
 controls in list order), the handle lock/release atomic meanwhile, then the expiry part on the calling thread.
 
@@ -519,7 +519,7 @@ equipment -> (656,388), mercenaries -> (932,0), ...).
 windows into `+0x80..+0xD8` (taskbar, inventory, equipment, blacksmith, merchant, megamap, overview map,
 minimap ("UI_WND_MERC": minimap and party portraits, 932,0 92x676), stats, console, questbook, escape menu,
 purchase, master, savegame, options, chest, horse, net info, net portraits, character, cube, trade; rects and
-fields in `Sacred::cUI_Manager`, `src/core/sacred/ui.h`). The shop windows (blacksmith, merchant, master, chest, cube, trade) are 640 wide
+fields in `Sacred::cUI_Manager`, `src/bild/sacred/ui.h`). The shop windows (blacksmith, merchant, master, chest, cube, trade) are 640 wide
 at 0,0, next to the inventory at 0,388. `cUI_Manager_render` (`0x758ED0`, arg: device) draws the
 cinematic letterbox bars (float immediates 1024/768) and all windows. Full-screen menus are separate
 `cUI_Window2`s with rect (0,0,1024,768) or (0,0,1023,767). In game (mode bits `0x04` and `0x40`) a visible savegame (`+0xAC`),
@@ -571,7 +571,7 @@ world code, the other 72 in the UI (55 `cMouse_instance()` followed by reads of 
 
 Per-window re-anchoring does not work: children are absolute, many renderers draw at absolute
 1024x768 positions, and windows are "hidden" by parking them off-screen. Instead the whole UI stays in
-1024x768 space and is drawn into a centered canvas (`src/game/ui_canvas.*`):
+1024x768 space and is drawn into a centered canvas (`src/bild/ui/ui_canvas.*`):
 
 - UI scopes: `cUI_Manager_render`, `playVideo` (confined to the canvas) and `cMouse_renderCursor`
   (overlay: mapped, but not culled or clipped, so the cursor also shows beside the canvas; its 3D draws, the
@@ -602,11 +602,11 @@ Per-window re-anchoring does not work: children are absolute, many renderers dra
   strided), are logged once per call site; changes of the engine fade flags and the UI manager mode
   (`+8`: `0x10` cinematic) are logged as `State:` lines.
 
-Anchored HUD (`src/game/ui_anchor.*`): moving the windows themselves would miss the fixed positions listed
+Anchored HUD (`src/bild/ui/ui_anchor.*`): moving the windows themselves would miss the fixed positions listed
 above, so each anchored window keeps its 1024x768 coordinates and runs in a frame, a copy of the 1024x768
 space placed against a screen edge. The frame is per thread (`UiCanvas::FrameScope`); the proxy maps draws into
 the current frame and confines them to its rect; the 72 UI reads of the cursor return it relative to the
-current frame. `UiWindows` (`src/game/ui_windows.*`) points the vtable slots `+0x10`, `+0x14`, `+0x1C`, `+0x24`
+current frame. `UiWindows` (`src/bild/ui/ui_windows.*`) points the vtable slots `+0x10`, `+0x14`, `+0x1C`, `+0x24`
 (and `+0x44` where the manager calls it as render2) of the classes of all of the manager's objects (windows, menu
 screens, message box, popups, text lines) at thunks that record which object runs on the thread
 (`UiWindows::current()`) and ask UiAnchor for its frame; UiAnchor enters it and shifts mouse button events and
@@ -655,7 +655,7 @@ mask and the children's layout moved to the screen's size.
 |---|---|---|
 | `cEngine_captureInternal` (`0x613670`), savegame thumbnail | copies `desc.dwHeight` rows into a 1024x768 buffer: **heap overflow** | `lockBack` hook hands it the centered 1024x768 (return address `0x6136AB`) |
 | `renderSavePortrait` | size-aware (centered region) | projection constants patched; runs outside the UI canvas |
-| `captureScreenshot` (`0x6487D0`) / `writeTga1024x768` (`0x6482C0`) | screenshots of the top-left 1024x768, sheared at 32 bits (`writeTga` `0x6604B0` ignores the pitch), JPEG copy assumes 1024x768 too | mode -1 replaced: whole back buffer as PNG/JPEG through WIC (`src/game/screenshot.*`) |
+| `captureScreenshot` (`0x6487D0`) / `writeTga1024x768` (`0x6482C0`) | screenshots of the top-left 1024x768, sheared at 32 bits (`writeTga` `0x6604B0` ignores the pitch), JPEG copy assumes 1024x768 too | mode -1 replaced: whole back buffer as PNG/JPEG through WIC (`src/bild/game/screenshot.*`) |
 | `captureScreenshot` modes >= 0 / < -1 (frame sequence into the mapped file `vidobj`, then `cap%04d.tga`) | 3 MB frames copied without pitch: garbled | unreachable: every `dxDriver7_startCapture` (`0x648660`) caller asks for 1 frame; left as is |
 | `debugCaptureCharacter` (`0x6F54D0`) | developer tool, reads fixed offsets inside the surface | ignored |
 
@@ -699,7 +699,7 @@ L3 VPNs carry no broadcasts at all), and the announced address is often not the 
 itself into the gameserver (Detours `DetourCreateProcessWithDllExA` from a `CreateProcessA` IAT hook) and
 replaces the `send` import: the game's broadcast carries the address of the adapter it leaves on, every other
 adapter gets a subnet broadcast with its own address (XOR format), and players that subscribed at UDP 2105 get
-the plain announcement and fill in the address they received it from (`src/net/`).
+the plain announcement and fill in the address they received it from (`src/bild/net/`).
 
 ## Networking: game connection and the "data flow" (ISDN / LAN) setting
 
@@ -739,7 +739,7 @@ joining in MODEM/ISDN works and switching to LAN afterwards is fine; ISDN hides 
 `0x1000D1C0`) and, with `drv_disable_nagle`, immediately calls `NET_SetTCPNodelay` (`0x1000D130`). Windows refuses
 TCP_NODELAY with WSAEINVAL while the handshake is under way, and TinCat fails the join with the default code -20
 (its table text: "Kernel: Cannot allocate logdata message"). On a LAN the handshake is usually done by then.
-SacredBild hooks tincat2's WSOCK32 imports and sets the option before the first send instead (`src/net/connection.cpp`). Switching after
+SacredBild hooks tincat2's WSOCK32 imports and sets the option before the first send instead (`src/bild/net/connection.cpp`). Switching after
 the join keeps TCP_NODELAY off (TinCat is not re-initialised) but makes the player an owner candidate.
 
 **TinCat's sockets** (all through tincat2's WSOCK32 imports, by ordinal): `NET_Connect` `0x1000D9E0` (blocking
@@ -755,7 +755,7 @@ player, **blocking** once connected: a reader thread blocks in `recv` (`0x1000CC
 thread (`0x10002360`) waits on an event and sends queued messages (`0x1000CBC0` / loop `0x1000CAF0`). Message
 framing: a 0x1C-byte header (+0 magic `0xDABAFBEF`, +0x14 payload length, +0x18 payload checksum `0x1000EA10`) and
 the payload, sent with **two** `send()` calls. Close: `shutdown(SD_BOTH)` + `closesocket` (`0x1000CD60`).
-SacredBild uses this to send each message with one `send()`, and for `[Net] Udp` (`src/net/tincat_shim.cpp`).
+SacredBild uses this to send each message with one `send()`, and for `[Net] Udp` (`src/bild/net/tincat_shim.cpp`).
 
 Server time-outs (`cNetServer_watchdogThread` `0x4DBCB0`, 5 ms loop, times from `0x6340C8`; player record =
 `net + 0x1B0 + slot * 0x518`): first contact must arrive within **5 s** of the connection (`+0x60`, checked every
@@ -790,7 +790,7 @@ second; SacredBild makes that `[Net] JoinTimeout`, 30 s by default); loading may
   `+0x158`) stores them under their settings.cfg keys and applies them (`0x717C20`). Check boxes and radio buttons
   are bit 0x10 of the control flags (`0x732550` sets, `0x7325C0` clears; both call show on visibility changes);
   sliders: `0x753430` fastcall get (0..count-1, count at `+0x88`), `0x7533B0` thiscall set. Controls: see
-  `Sacred::cUI_Options` in `src/core/sacred/ui.h` (the fourth slider is MINIMAP_ALPHA). The main menu uses the same
+  `Sacred::cUI_Options` in `src/bild/sacred/ui.h` (the fourth slider is MINIMAP_ALPHA). The main menu uses the same
   class. Labels are text keys (`UI_CFG_*`) looked up by `0x672740`: id = hash of the key (`0x80EAA0`: upper case,
   `id = (c + id * 0x71) % 0x3B9AC9F7` in signed 32-bit arithmetic, then `& 0x7FFFFFFF`), searched in the text table.
 - UI manager windows: the table of `createGameWindows` (`0x759AF0`) is in [UI_SYSTEM.md](UI_SYSTEM.md#3-the-in-game-window-table).

@@ -1,6 +1,6 @@
 # Verifies that every Detours hook declares as many stack arguments as the target pops (ret N), in the English build
 # and, for targets with a signature (tools/data/addresses.json), in the German one if it is there (SACRED_DE).
-# A mismatch corrupts the stack on the first call. Keep this table in sync with src/game/*.cpp.
+# A mismatch corrupts the stack on the first call. Keep this table in sync with the hooks in src/bild.
 import sys, bisect, json, os, re
 sys.path.insert(0, 'tools')
 from eng import *
@@ -109,7 +109,7 @@ HOOKS = {
     0x006B3640: ('cUI_Book::lineAt (called)', 3),
 }
 
-# The typed functions in src/game/sacred_addr.h (Thiscall<R(Self, Args...)> / Cdecl<R(Args...)>, with "ENG address"
+# The typed functions in src/bild/engine/sacred_addr.h (Thiscall<R(Self, Args...)> / Cdecl<R(Args...)>, with "ENG address"
 # in the comment on their line or the line above): their stack arguments come from the signature, so every one is
 # checked whether or not the table above lists it, and a table entry that disagrees with it is an error.
 def declared():

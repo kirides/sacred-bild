@@ -1,6 +1,6 @@
-# Builds src/overlay/prompts.png, the controller button prompts' texture atlas, from the Meritite Union's Input
+# Builds src/bild/controller/prompts.png, the controller button prompts' texture atlas, from the Meritite Union's Input
 # Prompts 2.0 (CC0, https://github.com/meritite-union/input-prompts), dark theme, solid fill.
-# Layout (src/overlay/prompts.h relies on it): 64x64 cells, 8 per row; per pad style (Xbox, PlayStation, Switch) 18
+# Layout (src/bild/controller/prompts.h relies on it): 64x64 cells, 8 per row; per pad style (Xbox, PlayStation, Switch) 18
 # cells in the order of Gamepad::Button's bits (A B X Y LB RB LT RT Back Start L3 R3 Up Down Left Right), then the
 # left and right stick; after the three styles one "+" for two-button bindings. Each icon is 60x60 in its cell (a
 # transparent border keeps bilinear filtering from reaching the next one); colors are premultiplied by alpha.

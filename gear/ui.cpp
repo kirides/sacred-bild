@@ -2000,7 +2000,7 @@ namespace
     constexpr uintptr_t kOwnerSpan = 0x20000;
     constexpr uint32_t kMenusOff = 0x130, kMenuCount = 5, kSavegameMenu = 3;
     constexpr int kSavegameSlot = 11;           // UI_WND_SAVEGAME
-    // cUI_Savegame (docs: src/sacred/ui.h): mode +0x75C (1 saving, 2 loading ...); the four boxes (the quicksave first) are members
+    // cUI_Savegame (docs: src/bild/sacred/ui.h): mode +0x75C (1 saving, 2 loading ...); the four boxes (the quicksave first) are members
     // from +0x4594 on, 0xED0 apart; typing reaches them in saving mode only, and the quicksave box never takes it.
     constexpr uint32_t kSavegameModeOff = 0x75C, kSavegameBoxesOff = 0x4594;
     constexpr uintptr_t kSavegameBoxStride = 0xED0;

@@ -86,14 +86,14 @@ jobs:
         id: package
         shell: pwsh
         run: |
-          # The version comes from src/SacredBild_version.txt (tools/bump_versions.py); the mod index looks for SacredBild-v*.zip.
-          $version = (Get-Content "src/SacredBild_version.txt" -Raw).Trim()
+          # The version comes from src/bild/SacredBild_version.txt (tools/bump_versions.py); the mod index looks for SacredBild-v*.zip.
+          $version = (Get-Content "src/bild/SacredBild_version.txt" -Raw).Trim()
           $relDir = "SacredBild-v$version"
           $buildDir = "out/build/msvc-x86/RelWithDebInfo"
 
           # Laid out like the game folder, so the zip extracts directly on top of it.
           New-Item -Path "$relDir/SacredBild" -ItemType Directory -Force | Out-Null
-          Copy-Item -Path "$buildDir/ddraw.dll", "$buildDir/ddraw.pdb", "$buildDir/ddraw.map", "dist/SacredBild.ini", "src/SacredBild_version.txt" -Destination $relDir
+          Copy-Item -Path "$buildDir/ddraw.dll", "$buildDir/ddraw.pdb", "$buildDir/ddraw.map", "src/bild/settings/SacredBild.ini", "src/bild/SacredBild_version.txt" -Destination $relDir
           Copy-Item -Path "LICENSE" -Destination "$relDir/SacredBild"
 
           "release-dir=$relDir" >> $env:GITHUB_OUTPUT

@@ -66,84 +66,84 @@ function(sort_sources_by_size_desc var)
 endfunction()
 
 set(DDRAW_SOURCES
-  src/main.cpp
-  src/proxy.cpp
-  src/config.cpp
-  src/crash_dump.cpp
-  src/profiler.cpp
-  src/settings_window.cpp
-  src/system_ddraw.cpp
-  src/game/build.cpp
-  src/game/focus.cpp
-  src/game/window_fit.cpp
-  src/game/frame_hooks.cpp
-  src/game/gameserver.cpp
-  src/game/granny_async.cpp
-  src/game/granny_parallel.cpp
-  src/game/language.cpp
-  src/game/map_cache.cpp
-  src/game/sound_lock.cpp
-  src/game/fast_math.cpp
-  src/game/file_io_stats.cpp
-  src/game/file_cache.cpp
-  src/game/ground_quads.cpp
-  src/game/sprite_quads.cpp
-  src/game/ground_mesh.cpp
-  src/game/layout_check.cpp
-  src/game/skin_check.cpp
-  src/game/granny_mesh.cpp
-  src/game/gpu_skin.cpp
-  src/game/world_passes.cpp
-  src/game/aim_assist.cpp
-  src/game/pets.cpp
-  src/game/controller.cpp
-  src/game/hero_move.cpp
-  src/game/click_walk.cpp
-  src/game/zoom.cpp
-  src/game/options_screen.cpp
-  src/game/ui_nav.cpp
-  src/game/gear_nav.cpp
-  src/game/ui_state.cpp
-  src/game/ui_windows.cpp
-  src/game/movie.cpp
-  src/game/d3d_stats.cpp
-  src/game/device_proxy.cpp
-  src/game/resolution.cpp
-  src/game/screenshot.cpp
-  src/game/ui_anchor.cpp
-  src/game/ui_canvas.cpp
-  src/input/bindings.cpp
-  src/input/gamepad.cpp
-  src/input/inject.cpp
-  src/input/input_mode.cpp
-  src/overlay/overlay.cpp
-  src/overlay/prompts.cpp
-  src/ddraw9/device.cpp
-  src/ddraw9/device_skin.cpp
-  src/ddraw9/device_ground.cpp
-  src/ddraw9/smaa.cpp
-  src/ddraw9/directdraw.cpp
-  src/ddraw9/format.cpp
-  src/ddraw9/gpu.cpp
-  src/ddraw9/surface.cpp
-  src/ddraw9/vertex_buffer.cpp
-  src/render/atlas.cpp
-  src/render/batcher.cpp
-  src/ui/form.cpp
-  src/ui/form.rc
-  src/net/address.cpp
-  src/net/adapters.cpp
-  src/net/connection.cpp
-  src/net/lan_client.cpp
-  src/net/lan_protocol.cpp
-  src/net/lan_server.cpp
-  src/net/matchmaker.cpp
-  src/net/tincat_shim.cpp
-  src/net/udp_endpoint.cpp
-  src/net/udp_protocol.cpp
-  src/net/udp_transport.cpp
-  src/exports.def
-  src/version.rc
+  src/bild/main.cpp
+  src/bild/proxy.cpp
+  src/bild/settings/config.cpp
+  src/bild/crash_dump.cpp
+  src/bild/diag/profiler.cpp
+  src/bild/settings/settings_window.cpp
+  src/bild/system_ddraw.cpp
+  src/bild/engine/build.cpp
+  src/bild/display/focus.cpp
+  src/bild/display/window_fit.cpp
+  src/bild/render/frame_hooks.cpp
+  src/bild/net/gameserver.cpp
+  src/bild/render/granny_async.cpp
+  src/bild/render/granny_parallel.cpp
+  src/bild/game/language.cpp
+  src/bild/perf/map_cache.cpp
+  src/bild/perf/sound_lock.cpp
+  src/bild/perf/fast_math.cpp
+  src/bild/diag/file_io_stats.cpp
+  src/bild/perf/file_cache.cpp
+  src/bild/render/ground_quads.cpp
+  src/bild/render/sprite_quads.cpp
+  src/bild/render/ground_mesh.cpp
+  src/bild/diag/layout_check.cpp
+  src/bild/diag/skin_check.cpp
+  src/bild/render/granny_mesh.cpp
+  src/bild/render/gpu_skin.cpp
+  src/bild/diag/world_passes.cpp
+  src/bild/controller/aim_assist.cpp
+  src/bild/game/pets.cpp
+  src/bild/controller/controller.cpp
+  src/bild/controller/hero_move.cpp
+  src/bild/controller/click_walk.cpp
+  src/bild/display/zoom.cpp
+  src/bild/controller/options_screen.cpp
+  src/bild/controller/ui_nav.cpp
+  src/bild/controller/gear_nav.cpp
+  src/bild/ui/ui_state.cpp
+  src/bild/ui/ui_windows.cpp
+  src/bild/game/movie.cpp
+  src/bild/diag/d3d_stats.cpp
+  src/bild/render/device_proxy.cpp
+  src/bild/display/resolution.cpp
+  src/bild/game/screenshot.cpp
+  src/bild/ui/ui_anchor.cpp
+  src/bild/ui/ui_canvas.cpp
+  src/bild/controller/bindings.cpp
+  src/bild/controller/gamepad.cpp
+  src/bild/controller/inject.cpp
+  src/bild/controller/input_mode.cpp
+  src/bild/overlay/overlay.cpp
+  src/bild/controller/prompts.cpp
+  src/bild/ddraw9/device.cpp
+  src/bild/ddraw9/device_skin.cpp
+  src/bild/ddraw9/device_ground.cpp
+  src/bild/ddraw9/smaa.cpp
+  src/bild/ddraw9/directdraw.cpp
+  src/bild/ddraw9/format.cpp
+  src/bild/ddraw9/gpu.cpp
+  src/bild/ddraw9/surface.cpp
+  src/bild/ddraw9/vertex_buffer.cpp
+  src/bild/render/atlas.cpp
+  src/bild/render/batcher.cpp
+  src/bild/settings/form.cpp
+  src/bild/settings/form.rc
+  src/bild/net/address.cpp
+  src/bild/net/adapters.cpp
+  src/bild/net/connection.cpp
+  src/bild/net/lan_client.cpp
+  src/bild/net/lan_protocol.cpp
+  src/bild/net/lan_server.cpp
+  src/bild/net/matchmaker.cpp
+  src/bild/net/tincat_shim.cpp
+  src/bild/net/udp_endpoint.cpp
+  src/bild/net/udp_protocol.cpp
+  src/bild/net/udp_transport.cpp
+  src/bild/exports.def
+  src/bild/version.rc
 )
 sort_sources_by_size_desc(DDRAW_SOURCES)
 # Version resources: version_info.h comes from the version files plus the git short sha (and -dirty), regenerated on every
@@ -158,12 +158,12 @@ add_custom_target(version_info ALL
 add_library(ddraw SHARED ${DDRAW_SOURCES})
 add_dependencies(ddraw version_info)
 target_include_directories(ddraw PRIVATE ${VERSION_INFO_DIR})
-target_include_directories(ddraw PRIVATE src ${DETOURS_INCLUDE_DIRS})
+target_include_directories(ddraw PRIVATE src/bild ${DETOURS_INCLUDE_DIRS})
 # The resource script embeds the button prompts' atlas (tools/gen_prompts.py).
-set_source_files_properties(src/version.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/overlay/prompts.png;${VERSION_INFO_DIR}/version_info.h")
+set_source_files_properties(src/bild/version.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/bild/controller/prompts.png;${VERSION_INFO_DIR}/version_info.h")
 target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
 target_compile_options(ddraw PRIVATE ${COMMON_OPTIONS})
-target_precompile_headers(ddraw PRIVATE src/pch.h)
+target_precompile_headers(ddraw PRIVATE src/bild/pch.h)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.
 # The map file lets tools/profile_report.py name functions in SacredBild's own samples.
 target_link_options(ddraw PRIVATE /SAFESEH:NO /MAP)
@@ -248,20 +248,20 @@ option(SACREDBILD_NETTEST "Build tools/nettest" OFF)
 if(SACREDBILD_NETTEST)
   add_executable(nettest
     tools/nettest/nettest.cpp
-    src/config.cpp
+    src/bild/settings/config.cpp
     src/core/fmt.cpp
     src/core/log.cpp
-    src/net/address.cpp
-    src/net/adapters.cpp
-    src/net/lan_protocol.cpp
-    src/net/matchmaker.cpp
-    src/net/udp_endpoint.cpp
-    src/net/udp_protocol.cpp
-    src/net/udp_transport.cpp
+    src/bild/net/address.cpp
+    src/bild/net/adapters.cpp
+    src/bild/net/lan_protocol.cpp
+    src/bild/net/matchmaker.cpp
+    src/bild/net/udp_endpoint.cpp
+    src/bild/net/udp_protocol.cpp
+    src/bild/net/udp_transport.cpp
   )
-  target_include_directories(nettest PRIVATE src src/core)
+  target_include_directories(nettest PRIVATE src/bild src/core)
   target_link_libraries(nettest PRIVATE kcp::kcp ws2_32 iphlpapi winmm)
   target_compile_definitions(nettest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
   target_compile_options(nettest PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
-  target_precompile_headers(nettest PRIVATE src/pch.h)
+  target_precompile_headers(nettest PRIVATE src/bild/pch.h)
 endif()

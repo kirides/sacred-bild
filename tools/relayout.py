@@ -20,7 +20,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAGES = {
     'core': {
         'rules': [
-            ('src/sacred/', 'src/core/sacred/'),
+            ('src/sacred/address.h', 'src/core/sacred/'),   # the typed addresses; the classes call SacredBild's table
             ('src/fmt.*', 'src/core/'),
             ('src/log.*', 'src/core/'),
             ('src/patch.*', 'src/core/'),
@@ -32,9 +32,12 @@ STAGES = {
     },
     'bild': {
         'rules': [
+            ('src/core/sacred/address.h', None),
+            ('src/core/sacred/', 'src/bild/sacred/'),  # (a branch that ran the first version of the core stage)
             ('src/core/', None),                     # stays
             ('src/bild/', None),
             ('src/SacredBild_version.txt', 'src/bild/'),
+            ('src/sacred/', 'src/bild/sacred/'),
             ('src/main.cpp', 'src/bild/'),
             ('src/pch.h', 'src/bild/'),
             ('src/exports.def', 'src/bild/'),
@@ -139,7 +142,7 @@ STAGES = {
 
 SOURCE_EXT = ('.cpp', '.h', '.hpp', '.inc', '.hlsl', '.rc')
 # Text files whose path references follow the move (besides every moved file itself).
-TEXT_GLOBS = ['CMakeLists.txt', 'CMakePresets.json', 'cmake/*', '.github/workflows/*', '.githooks/*', '.luarc.json', '.clangd',
+TEXT_GLOBS = ['src/*', 'gear/*', 'CMakeLists.txt', 'CMakePresets.json', 'cmake/*', '.github/workflows/*', '.githooks/*', '.luarc.json', '.clangd',
               '.gitignore', '.gitattributes', 'README.md', 'CLAUDE.md', 'docs/*.md', 'docs/**/*.md', 'tools/*.py', 'tools/*.ps1',
               'tools/**/*.cpp', 'tools/**/*.md', 'install.ps1', 'uninstall.ps1', 'import-language.ps1',
               'src/**/*', 'gear/**/*']
@@ -279,7 +282,7 @@ def main(argv=None):
         git('mv', old, new)
 
     refs = reference_map(moves, old_files)
-    pattern = re.compile(r'(?<![\w./-])(?:%s)(?![\w])' % '|'.join(re.escape(k) for k in sorted(refs, key=len, reverse=True)))
+    pattern = re.compile(r'(?<![\w.-])(?<![\w.-]/)(?:%s)(?![\w])' % '|'.join(re.escape(k) for k in sorted(refs, key=len, reverse=True)))
     inverse = {v: k for k, v in moves.items()}
     text_files = set()
     for g in TEXT_GLOBS:

@@ -148,7 +148,7 @@ SacredBild builds on:
   [Dear ImGui](https://github.com/ocornut/imgui) (SacredBild's own screens), [SDL3](https://www.libsdl.org)
   (controllers), [KCP](https://github.com/skywind3000/kcp) (the UDP connection) and [LuaJIT](https://luajit.org)
   (Sacred Gear), linked in;
-- [SMAA](https://github.com/iryoku/smaa) by Jorge Jimenez et al. (MIT, `src/ddraw9/smaa/`): the antialiasing;
+- [SMAA](https://github.com/iryoku/smaa) by Jorge Jimenez et al. (MIT, `src/bild/ddraw9/smaa/`): the antialiasing;
 - [Input Prompts](https://github.com/meritite-union/input-prompts) by the Meritite Union (CC0): the controller
   button images of the button prompts;
 - [DDrawCompat](https://github.com/narzoul/DDrawCompat) and [DXVK](https://github.com/doitsujin/dxvk), which it can

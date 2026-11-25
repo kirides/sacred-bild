@@ -1,6 +1,6 @@
 # Emits the signature tables that locate SacredBild's patch sites at startup:
-#   src/game/sacred_sigs.inc      named sacred.exe addresses (Sacred::Addr)
-#   src/game/gameserver_sigs.inc  gameserver.exe addresses (GameServer::Addr)
+#   src/bild/engine/sacred_sigs.inc      named sacred.exe addresses (Sacred::Addr)
+#   src/bild/engine/gameserver_sigs.inc  gameserver.exe addresses (GameServer::Addr)
 #   tools/data/addresses.json     the address of every entry in each checked build (for check_hooks.py)
 # Each signature comes from the English GOG build and must match exactly once in it and in every other build that is
 # there (the German one: SACRED_DE / GAMESERVER_DE; skipped with a warning if missing).

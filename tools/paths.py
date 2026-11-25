@@ -12,17 +12,17 @@ DATA = os.path.join(TOOLS, 'data')
 
 # The three code roots: the code both DLLs link (sacred_core), ddraw.dll, SacredGear.dll.
 CORE = os.path.join(ROOT, 'src', 'core')
-BILD = os.path.join(ROOT, 'src')
+BILD = os.path.join(ROOT, 'src', 'bild')
 GEAR = os.path.join(ROOT, 'gear')
 
 # SacredBild
-BILD_ENGINE = os.path.join(BILD, 'game')            # sacred_addr.h, sacred_sigs.inc, gameserver_sigs.inc
+BILD_ENGINE = os.path.join(BILD, 'engine')          # sacred_addr.h, sacred_sigs.inc, gameserver_sigs.inc
 SACRED_ADDR = os.path.join(BILD_ENGINE, 'sacred_addr.h')
 SACRED_SIGS = os.path.join(BILD_ENGINE, 'sacred_sigs.inc')
 GAMESERVER_SIGS = os.path.join(BILD_ENGINE, 'gameserver_sigs.inc')
-RESOLUTION_SITES = os.path.join(BILD, 'game', 'resolution_sites.inc')
+RESOLUTION_SITES = os.path.join(BILD, 'display', 'resolution_sites.inc')
 DDRAW9 = os.path.join(BILD, 'ddraw9')                # the shaders and their compiled .inc files
-PROMPTS_PNG = os.path.join(BILD, 'overlay', 'prompts.png')
+PROMPTS_PNG = os.path.join(BILD, 'controller', 'prompts.png')
 
 # Sacred Gear
 GEAR_ENGINE = os.path.join(GEAR, 'game')            # gear_addr.h and the generated .inc files

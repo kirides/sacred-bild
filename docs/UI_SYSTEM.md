@@ -2,7 +2,7 @@
 
 How `Sacred.exe` builds its UI, draws it and routes input to it: the UI manager, the window table, the named UI
 events that open and close windows, the event and draw order, focus and popups. Addresses are the English GOG build's
-(image base 0x400000); names are those of `src/core/sacred/ui.h` and [RE_NOTES.md](RE_NOTES.md) where they exist, else the
+(image base 0x400000); names are those of `src/bild/sacred/ui.h` and [RE_NOTES.md](RE_NOTES.md) where they exist, else the
 RTTI class names, else Ghidra's `FUN_<va>`. Confidence: **[V]** read in the decompile, **[I]** inferred from several
 call sites, **[?]** not verified (listed in section 13).
 
@@ -332,7 +332,7 @@ events: first).
 
 ## 11. How SacredBild uses it
 
-`UiState` (`src/game/ui_state.*`) mirrors the rules above on the manager's live state: the mode (section 4), the window
+`UiState` (`src/bild/ui/ui_state.*`) mirrors the rules above on the manager's live state: the mode (section 4), the window
 the manager draws alone (section 7), whether a window is actually drawn (`shown`: visible and not hidden by that window),
 the message box (modal), the escape menu, the keyboard focus and text input (section 8), the help screen and the input
 block. The window pointers are read only while manager flag `0x08` is set. The canvas, the HUD anchoring, the

@@ -1,0 +1,757 @@
+#include "options_screen.h"
+#include "controller.h"
+#include "game/language.h"
+#include "ui/ui_canvas.h"
+#include "bindings.h"
+#include "gamepad.h"
+#include "input_mode.h"
+#include "overlay/overlay.h"
+#include "settings/config.h"
+#include "settings/config/controller.h"
+#include "settings/config/ddraw.h"
+#include "log.h"
+#include "patch.h"
+#include "sacred/ui.h"
+
+#include <imgui.h>
+
+#include <windows.h>
+#include <initializer_list>
+#include <string_view>
+#include <array>
+#include <atomic>
+#include <string>
+
+namespace
+{
+    using namespace Sacred;
+    using Bindings::Action;
+    using Bindings::Binding;
+
+    decltype(cUI_Window2::Vtable::show) g_origShow = nullptr;
+    decltype(cUI_Window2::Vtable::render) g_origRender = nullptr;
+    decltype(cUI_Window2::Vtable::render2) g_origRender2 = nullptr;
+    decltype(cUI_Window2::Vtable::receiveEvent) g_origReceiveEvent = nullptr;
+
+    // The game's options window while the screen stands in for it, and until the game closes it after Accept /
+    // Cancel (or a moment later, should the click not close it: then the game's own window shows).
+    std::atomic<cUI_Options*> g_window{nullptr};
+    std::atomic<DWORD> g_hideUntil{0};
+    std::atomic<bool> g_screen{false};          // the screen is up (not yet accepted or cancelled)
+    std::atomic<DWORD> g_openTick{0};
+
+    constexpr DWORD kCloseGraceMs = 750;
+    constexpr DWORD kCaptureTimeoutMs = 8000;
+
+    std::string utf8(const std::wstring& w)
+    {
+        if (w.empty())
+        {
+            return {};
+        }
+        const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
+        std::string s(static_cast<size_t>(n), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), s.data(), n, nullptr, nullptr);
+        return s;
+    }
+
+    // The game's own text for `key`, else the English one.
+    std::string label(const char* key, const char* fallback)
+    {
+        const std::string s = utf8(Language::text(key));
+        return s.empty() ? fallback : s;
+    }
+
+    // ---- The game window's controls ----
+
+    bool checked(const cUI_Control2* c)
+    {
+        return c && c->checked();
+    }
+
+    bool shown(const cUI_Control2* c)
+    {
+        return c && c->visible();
+    }
+
+    void setChecked(cUI_Control2* c, bool on)
+    {
+        if (c)
+        {
+            on ? c->setFlags(cUI_Control2::checkedFlag) : c->clearFlags(cUI_Control2::checkedFlag);
+        }
+    }
+
+    // A radio group: the buttons in the order of the setting's values.
+    template <size_t N>
+    int radio(cUI_Control2* const (&buttons)[N])
+    {
+        for (size_t i = 0; i < N; ++i)
+        {
+            if (checked(buttons[i]))
+            {
+                return static_cast<int>(i);
+            }
+        }
+        return 0;
+    }
+
+    template <size_t N>
+    void setRadio(cUI_Control2* const (&buttons)[N], int value)
+    {
+        for (size_t i = 0; i < N; ++i)
+        {
+            setChecked(buttons[i], static_cast<int>(i) == value);
+        }
+    }
+
+    struct Slider
+    {
+        int value = 0;
+        int max = 0;    // 0: no slider
+    };
+
+    Slider readSlider(cUI_Slider* s)
+    {
+        if (!s)
+        {
+            return {};
+        }
+        const uint32_t count = s->count;
+        if (count == 0 || count > 100000)
+        {
+            return {};
+        }
+        return {static_cast<int>(s->value()), static_cast<int>(count - 1)};
+    }
+
+    void writeSlider(cUI_Slider* s, const Slider& slider)
+    {
+        if (s && slider.max > 0)
+        {
+            s->setValue(static_cast<uint32_t>(slider.value));
+        }
+    }
+
+    // A click at the center of one of the window's buttons, the way the player would.
+    void press(cUI_Control2* button)
+    {
+        if (!button)
+        {
+            return;
+        }
+        const UiRect r = button->absoluteRect();
+        Controller::clickAt(UiCanvas::toPhysicalX(r.x + r.width / 2), UiCanvas::toPhysicalY(r.y + r.height / 2));
+    }
+
+    // ---- What the screen edits ----
+
+    struct GameOptions
+    {
+        Slider sfx, voice, music, mapAlpha;
+        int detail = 0, pickupAuto = 0, soundQuality = 0;
+        bool netSlow = false;
+        bool pickupAnim = false, autoTrack = false, violence = false, sound = false, exploreMap = false;
+        bool autosave = false, fsaa = false;
+        bool violenceShown = false;
+    };
+
+    struct ControllerOptions
+    {
+        int deadzone, cursorSpeed, moveRadius, aimRange, aimCone;
+        bool artClick, walk, prompts;
+        std::array<Binding, Bindings::actionCount> bindings;
+
+        bool operator==(const ControllerOptions&) const = default;
+    };
+
+    struct Labels
+    {
+        std::string volume, sfx, speech, music;
+        std::string soundOptions, sound, quality, qualityLow, qualityMid, qualityHigh;
+        std::string graphics, detail, low, medium, high, mapAlpha;
+        std::string collectTitle, anim, collect, gold, uniques, everything;
+        std::string other, follow, autosave, explore, fsaa, violence;
+        std::string multiplayer, dataFlow, fast, slow;
+    };
+
+    GameOptions g_game;
+    ControllerOptions g_pad, g_padOriginal;
+    Labels g_labels;
+    int g_tab = 0;              // 0 game, 1 controller
+    int g_selectTab = -1;       // switch to this tab next frame (LB / RB)
+    bool g_first = true;
+
+    // Waiting for a button to bind: until the buttons are up, then the first button pressed, with a second one
+    // pressed while it is held making the first its modifier.
+    struct Capture
+    {
+        int action = -1;
+        bool waitRelease = true;
+        uint32_t first = 0;
+        DWORD started = 0;
+    };
+    Capture g_capture;
+    bool g_navCooldown = false;     // gamepad navigation comes back once all buttons are up
+    std::string g_note;             // e.g. what a new binding took over
+
+    GameOptions readGame(const cUI_Options* w)
+    {
+        GameOptions o;
+        o.sfx = readSlider(w->sfxVolume);
+        o.voice = readSlider(w->voiceVolume);
+        o.music = readSlider(w->musicVolume);
+        o.mapAlpha = readSlider(w->mapAlpha);
+        o.detail = radio(w->detail);
+        o.pickupAuto = radio(w->pickupAuto);
+        o.soundQuality = radio(w->soundQuality);
+        o.netSlow = checked(w->netSlow);
+        o.pickupAnim = checked(w->pickupAnim);
+        o.autoTrack = checked(w->autoTrack);
+        o.violence = checked(w->violence);
+        o.violenceShown = shown(w->violence);
+        o.sound = checked(w->sound);
+        o.exploreMap = checked(w->exploreMap);
+        o.autosave = checked(w->autosave);
+        o.fsaa = checked(w->fsaa);
+        return o;
+    }
+
+    void writeGame(const cUI_Options* w, const GameOptions& o)
+    {
+        writeSlider(w->sfxVolume, o.sfx);
+        writeSlider(w->voiceVolume, o.voice);
+        writeSlider(w->musicVolume, o.music);
+        writeSlider(w->mapAlpha, o.mapAlpha);
+        setRadio(w->detail, o.detail);
+        setRadio(w->pickupAuto, o.pickupAuto);
+        setRadio(w->soundQuality, o.soundQuality);
+        setChecked(w->netFast, !o.netSlow);
+        setChecked(w->netSlow, o.netSlow);
+        setChecked(w->pickupAnim, o.pickupAnim);
+        setChecked(w->autoTrack, o.autoTrack);
+        if (o.violenceShown)
+        {
+            setChecked(w->violence, o.violence);
+        }
+        setChecked(w->sound, o.sound);
+        setChecked(w->exploreMap, o.exploreMap);
+        setChecked(w->autosave, o.autosave);
+        setChecked(w->fsaa, o.fsaa);
+    }
+
+    ControllerOptions readController()
+    {
+        const Config::Controller& c = Config::controller;
+        ControllerOptions o{c.deadzone, c.cursorSpeed, c.moveRadius, c.aimRange, c.aimCone, c.artClick, c.walk, c.prompts, {}};
+        for (int i = 0; i < Bindings::actionCount; ++i)
+        {
+            o.bindings[i] = Bindings::get(static_cast<Action>(i));
+        }
+        return o;
+    }
+
+    ControllerOptions defaultController()
+    {
+        const Config::Controller d;
+        ControllerOptions o{d.deadzone, d.cursorSpeed, d.moveRadius, d.aimRange, d.aimCone, d.artClick, d.walk, d.prompts, {}};
+        for (int i = 0; i < Bindings::actionCount; ++i)
+        {
+            o.bindings[i] = Bindings::info(static_cast<Action>(i)).defaults;
+        }
+        return o;
+    }
+
+    // Applies the controller settings and stores them in SacredBild.ini.
+    void saveController(const ControllerOptions& o)
+    {
+        Config::controller.deadzone = o.deadzone;
+        Config::controller.cursorSpeed = o.cursorSpeed;
+        Config::controller.moveRadius = o.moveRadius;
+        Config::controller.aimRange = o.aimRange;
+        Config::controller.aimCone = o.aimCone;
+        Config::controller.artClick = o.artClick;
+        Config::controller.walk = o.walk;
+        Config::controller.prompts = o.prompts;
+        for (int i = 0; i < Bindings::actionCount; ++i)
+        {
+            Bindings::set(static_cast<Action>(i), o.bindings[i]);
+        }
+        const wchar_t* ini = ConfigFile::path().c_str();
+        const auto put = [&](const wchar_t* key, int value) {
+            return WritePrivateProfileStringW(L"Controller", key, std::to_wstring(value).c_str(), ini) != 0;
+        };
+        const bool ok = put(L"Deadzone", o.deadzone) & put(L"CursorSpeed", o.cursorSpeed) &
+            put(L"MoveRadius", o.moveRadius) & put(L"AimRange", o.aimRange) & put(L"AimCone", o.aimCone) &
+            put(L"ArtClick", o.artClick) & put(L"Walk", o.walk) & put(L"Prompts", o.prompts) &
+            Bindings::save(ConfigFile::path());
+        LOG("Controller: settings and bindings {} SacredBild.ini", ok ? "saved to" : "could not all be written to");
+    }
+
+    Labels readLabels()
+    {
+        Labels l;
+        l.volume = label("UI_CFG_SOUND_VOLUME", "Sound Volume");
+        l.sfx = label("UI_CFG_SFX", "SFX");
+        l.speech = label("UI_CFG_SPEECH", "Speech");
+        l.music = label("UI_CFG_SOUND", "Music");
+        l.soundOptions = label("UI_CFG_SOUND_QUALITY_TITLE", "Sound Options");
+        l.sound = label("UI_CFG_SOUNDPLAYBACK", "Sound");
+        l.quality = label("UI_CFG_SOUND_QUALITY", "Sound Quality");
+        l.qualityLow = label("UI_BTN_SNDQ_LOW", "2D - Low effects");
+        l.qualityMid = label("UI_BTN_SNDQ_MID", "2D - All effects");
+        l.qualityHigh = label("UI_BTN_SNDQ_HIGH", "3D - All effects");
+        l.graphics = label("UI_CFG_GFX_SETTINGS", "Graphic Settings");
+        l.detail = label("UI_CFG_GFX_DETAIL", "Graphic Details");
+        l.low = label("UI_CFG_LOW", "Low");
+        l.medium = label("UI_CFG_MEDIUM", "Medium");
+        l.high = label("UI_CFG_HIGH", "High");
+        l.mapAlpha = label("UI_CFG_MAPTRANS", "Map Transparency");
+        l.collectTitle = label("UI_CFG_AUTOPICKUP", "Auto-collect");
+        l.anim = label("UI_CFG_ANIM", "Atmospheric Animation");
+        l.collect = label("UI_CFG_COLLECT", "Collect");
+        l.gold = label("UI_CFG_AUTO_GOLD", "Gold");
+        l.uniques = label("UI_CFG_AUTO_UNIQUE", "Gold / Uniques");
+        l.everything = label("UI_CFG_AUTO_ALL", "Everything");
+        l.other = label("UI_CFG_VARIOUS", "Other Options");
+        l.follow = label("UI_CFG_AUTOFOLLOW", "Mouse: Follow opponents");
+        l.autosave = label("UI_CFG_AUTOSAVE", "Autosave");
+        l.explore = label("UI_CFG_EXPLORE", "Mini-Map Fog of War");
+        l.fsaa = label("UI_CFG_FSAA_FILTER", "FSAA Filter");
+        l.violence = label("UI_CFG_VIOLENCE", "Display of violence");
+        l.multiplayer = label("UI_CFG_WAN", "Multiplayer Options");
+        l.dataFlow = label("UI_CFG_LANSPEED", "Data flow");
+        l.fast = label("UI_CFG_AB_DSL", "For DSL / Cable / LAN");
+        l.slow = label("UI_CFG_AB_ISDN", "For MODEM / ISDN");
+        return l;
+    }
+
+    // ---- Drawing ----
+
+    void heading(const std::string& text)
+    {
+        ImGui::Spacing();
+        ImGui::SeparatorText(text.c_str());
+    }
+
+    void sliderRow(const std::string& text, Slider& s, const char* id)
+    {
+        if (s.max <= 0)
+        {
+            return;
+        }
+        ImGui::TextUnformatted(text.c_str());
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x * 0.4f);
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::SliderInt(id, &s.value, 0, s.max);
+    }
+
+    void radioRow(const std::string& text, int& value, std::initializer_list<const std::string*> choices, const char* id)
+    {
+        ImGui::TextUnformatted(text.c_str());
+        ImGui::PushID(id);
+        int i = 0;
+        for (const std::string* choice : choices)
+        {
+            ImGui::SameLine(i == 0 ? ImGui::GetContentRegionAvail().x * 0.4f : 0.0f);
+            ImGui::PushID(i);
+            ImGui::RadioButton(choice->c_str(), &value, i);
+            ImGui::PopID();
+            ++i;
+        }
+        ImGui::PopID();
+    }
+
+    void drawGame()
+    {
+        GameOptions& o = g_game;
+        const Labels& l = g_labels;
+        heading(l.volume);
+        sliderRow(l.sfx, o.sfx, "##sfx");
+        sliderRow(l.speech, o.voice, "##voice");
+        sliderRow(l.music, o.music, "##music");
+        heading(l.soundOptions);
+        ImGui::Checkbox((l.sound + "##sound").c_str(), &o.sound);
+        radioRow(l.quality, o.soundQuality, {&l.qualityLow, &l.qualityMid, &l.qualityHigh}, "quality");
+        heading(l.graphics);
+        radioRow(l.detail, o.detail, {&l.low, &l.medium, &l.high}, "detail");
+        sliderRow(l.mapAlpha, o.mapAlpha, "##mapAlpha");
+        heading(l.collectTitle);
+        ImGui::Checkbox((l.anim + "##anim").c_str(), &o.pickupAnim);
+        radioRow(l.collect, o.pickupAuto, {&l.gold, &l.uniques, &l.everything}, "collect");
+        heading(l.other);
+        ImGui::Checkbox((l.follow + "##follow").c_str(), &o.autoTrack);
+        ImGui::Checkbox((l.autosave + "##autosave").c_str(), &o.autosave);
+        ImGui::Checkbox((l.explore + "##explore").c_str(), &o.exploreMap);
+        ImGui::Checkbox((l.fsaa + "##fsaa").c_str(), &o.fsaa);
+        if (o.violenceShown)
+        {
+            ImGui::Checkbox((l.violence + "##violence").c_str(), &o.violence);
+        }
+        heading(l.multiplayer);
+        int slow = o.netSlow ? 1 : 0;
+        radioRow(l.dataFlow, slow, {&l.fast, &l.slow}, "net");
+        o.netSlow = slow == 1;
+    }
+
+    uint32_t lowestBit(uint32_t v)
+    {
+        return v & (~v + 1);
+    }
+
+    void finishCapture(Binding b)
+    {
+        const int action = g_capture.action;
+        g_capture = {};
+        g_navCooldown = true;
+        g_note.clear();
+        for (int i = 0; i < Bindings::actionCount; ++i)
+        {
+            if (i != action && b.button && g_pad.bindings[i] == b)
+            {
+                g_pad.bindings[i] = {};
+                g_note = std::string(Bindings::format(b)) + " no longer does: " + Bindings::info(static_cast<Action>(i)).label;
+            }
+        }
+        g_pad.bindings[action] = b;
+    }
+
+    void updateCapture()
+    {
+        const uint32_t held = Gamepad::state().buttons;
+        if (g_navCooldown && g_capture.action < 0)
+        {
+            if (held == 0)
+            {
+                g_navCooldown = false;
+                Overlay::setGamepadNavigation(true);
+            }
+            return;
+        }
+        if (g_capture.action < 0)
+        {
+            return;
+        }
+        if (GetTickCount() - g_capture.started > kCaptureTimeoutMs)
+        {
+            g_capture = {};
+            g_navCooldown = true;
+            return;
+        }
+        if (g_capture.waitRelease)
+        {
+            g_capture.waitRelease = held != 0;
+            return;
+        }
+        if (!g_capture.first)
+        {
+            g_capture.first = lowestBit(Gamepad::pressed());
+            return;
+        }
+        if (const uint32_t second = Gamepad::pressed() & ~g_capture.first)
+        {
+            finishCapture({lowestBit(second), g_capture.first});
+        }
+        else if (!(held & g_capture.first))
+        {
+            finishCapture({g_capture.first, 0});
+        }
+    }
+
+    void drawController()
+    {
+        ControllerOptions& o = g_pad;
+        heading("Controller");
+        const auto slider = [](const char* text, int& v, int lo, int hi, const char* format, const char* tip) {
+            ImGui::TextUnformatted(text);
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x * 0.4f);
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::PushID(text);
+            ImGui::SliderInt("##v", &v, lo, hi, format);
+            ImGui::SetItemTooltip("%s", tip);
+            ImGui::PopID();
+        };
+        slider("Stick deadzone", o.deadzone, 0, 60, "%d %%", "How far a stick moves before it counts.");
+        slider("Cursor speed", o.cursorSpeed, 200, 3000, "%d", "Cursor speed in menus and windows at full deflection.");
+        slider("Walk distance", o.moveRadius, 60, 400, "%d px", "How far ahead of the hero the left stick walks to.");
+        slider("Aim range", o.aimRange, 100, 1200, "%d px", "Enemies within this distance are targeted.");
+        slider("Aim cone", o.aimCone, 20, 180, "%d deg", "Enemies within this angle around the stick come first.");
+        ImGui::Checkbox("Combat art slots also cast at the target", &o.artClick);
+        ImGui::SetItemTooltip("On: the slot button selects the combat art and right-clicks the target.\nOff: it only selects it.");
+        ImGui::Checkbox("Walk when the stick is pushed less than halfway", &o.walk);
+        ImGui::Checkbox("Show button prompts", &o.prompts);
+        ImGui::SetItemTooltip("Button icons beside the control a button presses, and the bindings at the HUD's slots\n"
+            "while Show names is held or the help screen (H) is up.");
+
+        heading("Buttons");
+        ImGui::TextDisabled("A: change   X: clear   hold a button and press another for a two-button binding");
+        if (!g_note.empty())
+        {
+            ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.35f, 1.0f), "%s", g_note.c_str());
+        }
+        uint32_t modifiers = 0;
+        for (const Binding& b : o.bindings)
+        {
+            if (b.button)
+            {
+                modifiers |= b.modifier;
+            }
+        }
+        const char* group = "";
+        if (ImGui::BeginTable("bindings", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+        {
+            for (int i = 0; i < Bindings::actionCount; ++i)
+            {
+                const Bindings::Info& info = Bindings::info(static_cast<Action>(i));
+                if (std::string_view(info.group) != group)
+                {
+                    group = info.group;
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::TextDisabled("%s", group);
+                }
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(info.label);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::PushID(i);
+                const Binding& b = o.bindings[i];
+                std::string text = g_capture.action == i ? "press a button..." : Bindings::format(b);
+                if (text.empty())
+                {
+                    text = "-";
+                }
+                if (ImGui::Button((text + "##bind").c_str(), ImVec2(-1.0f, 0.0f)) && g_capture.action < 0)
+                {
+                    g_capture = {i, true, 0, GetTickCount()};
+                    Overlay::setGamepadNavigation(false);
+                }
+                if (ImGui::IsItemFocused() && g_capture.action < 0 && (Gamepad::pressed() & Gamepad::X))
+                {
+                    o.bindings[i] = {};
+                }
+                if (b.button && !b.modifier && (b.button & modifiers))
+                {
+                    ImGui::SetItemTooltip("%s is held for two-button bindings, so this one never fires.", Bindings::format(b).c_str());
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+        if (ImGui::Button("Restore controller defaults"))
+        {
+            o = defaultController();
+            g_note.clear();
+        }
+    }
+
+    void close(bool accept)
+    {
+        cUI_Options* window = g_window.load();
+        g_screen = false;
+        g_capture = {};
+        Overlay::setGamepadNavigation(true);
+        if (!window)
+        {
+            return;
+        }
+        if (accept)
+        {
+            writeGame(window, g_game);
+            if (!(g_pad == g_padOriginal))
+            {
+                saveController(g_pad);
+            }
+        }
+        g_hideUntil = GetTickCount() + kCloseGraceMs;
+        press(accept ? window->ok : window->cancel);
+    }
+
+    bool draw()
+    {
+        cUI_Options* window = g_window.load();
+        if (!window || !g_screen.load())
+        {
+            LOG("Controller: options screen closed (the game's window {})", window ? "closed" : "went away");
+            return false;
+        }
+        updateCapture();
+        ImGuiIO& io = ImGui::GetIO();
+        const bool capturing = g_capture.action >= 0;
+
+        // LB / RB: tabs; Start: accept; B: cancel (not while binding or editing).
+        const uint32_t pressed = capturing || g_navCooldown ? 0 : Gamepad::pressed();
+        if (pressed & (Gamepad::LB | Gamepad::RB))
+        {
+            g_selectTab = g_tab == 0 ? 1 : 0;
+        }
+        bool accept = (pressed & Gamepad::Start) != 0;
+        bool cancel = (pressed & Gamepad::B) && !ImGui::IsAnyItemActive();
+        if (!capturing && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        {
+            cancel = true;
+        }
+
+        ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, 200));
+        const float s = Overlay::scale();
+        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(760.0f * s, 640.0f * s), ImGuiCond_Always);
+        if (g_first)
+        {
+            ImGui::SetNextWindowFocus();
+        }
+        ImGui::Begin("Options##SacredBild", nullptr,
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+        if (ImGui::BeginTabBar("tabs"))
+        {
+            const char* names[] = {"Game", "Controller"};
+            for (int t = 0; t < 2; ++t)
+            {
+                const ImGuiTabItemFlags flags = g_selectTab == t ? ImGuiTabItemFlags_SetSelected : 0;
+                if (ImGui::BeginTabItem(names[t], nullptr, flags))
+                {
+                    g_tab = t;
+                    ImGui::BeginChild("page", ImVec2(0.0f, -ImGui::GetFrameHeightWithSpacing() * 1.6f));
+                    t == 0 ? drawGame() : drawController();
+                    ImGui::EndChild();
+                    ImGui::EndTabItem();
+                }
+            }
+            ImGui::EndTabBar();
+        }
+        g_selectTab = -1;
+        g_first = false;
+        ImGui::Separator();
+        const float buttonWidth = 160.0f * s;
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 2.0f * buttonWidth - ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().WindowPadding.x);
+        accept |= ImGui::Button("Accept", ImVec2(buttonWidth, 0.0f));
+        ImGui::SetItemTooltip("Start");
+        ImGui::SameLine();
+        cancel |= ImGui::Button("Cancel", ImVec2(buttonWidth, 0.0f));
+        ImGui::SetItemTooltip("B");
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetFrameHeightWithSpacing());
+        ImGui::TextDisabled("LB / RB: page   Start: accept   B: cancel");
+        ImGui::End();
+
+        if (capturing)
+        {
+            accept = cancel = false;
+        }
+        if (accept || cancel)
+        {
+            LOG("Controller: options screen {}", accept ? "accepted" : "cancelled");
+            close(accept);
+            return false;
+        }
+        return true;
+    }
+
+    void open(cUI_Options* window)
+    {
+        g_window = window;
+        g_game = readGame(window);
+        g_pad = g_padOriginal = readController();
+        g_labels = readLabels();
+        g_tab = 0;
+        g_selectTab = -1;
+        g_first = true;
+        g_capture = {};
+        g_navCooldown = true;       // the button that opened the options is still down
+        g_note.clear();
+        g_openTick = GetTickCount();
+        g_screen = true;
+        Overlay::setGamepadNavigation(false);
+        Overlay::open(&draw);
+        LOG("Controller: options as SacredBild's screen");
+    }
+
+    bool hidden(const cUI_Control2* self)
+    {
+        if (self != g_window.load())
+        {
+            return false;
+        }
+        if (g_screen.load())
+        {
+            if (Overlay::isOpen() || GetTickCount() - g_openTick.load() < 500)
+            {
+                return true;
+            }
+            g_screen = false;   // the overlay couldn't show the screen: the game's own window it is
+            LOG("Controller: options screen not shown, the game's window instead");
+        }
+        else if (static_cast<int>(GetTickCount() - g_hideUntil.load()) < 0)
+        {
+            return true;
+        }
+        g_window = nullptr;     // the click didn't close it: the game's own window takes over
+        return false;
+    }
+
+    // Only the options window has this vtable.
+    uint32_t __fastcall hookShow(cUI_Window2* self, void* edx, uint32_t show)
+    {
+        const uint32_t result = g_origShow(self, edx, show);
+        if (show & 0xFF)
+        {
+            if (InputMode::controller() && Overlay::available() && !Overlay::isOpen())
+            {
+                open(static_cast<cUI_Options*>(self));
+            }
+        }
+        else if (self == g_window.load())
+        {
+            if (g_screen.load())
+            {
+                LOG("Controller: the game closed the options window under the screen");
+            }
+            g_screen = false;
+            g_window = nullptr;
+        }
+        return result;
+    }
+
+    // While the screen covers the options window, the game's window gets no mouse events: the click that opened it
+    // (or one of the controller's) would hit its hidden controls. Its OK / Cancel are pressed after the screen closed.
+    uint32_t __fastcall hookReceiveEvent(cUI_Control2* self, void* edx, cEvent* event)
+    {
+        if (self == g_window.load() && g_screen.load() && cEventMouse::of(event))
+        {
+            return 0;
+        }
+        return g_origReceiveEvent(self, edx, event);
+    }
+
+    uint32_t __fastcall hookRender(cUI_Control2* self, void* edx, IDirect3DDevice7* device)
+    {
+        return hidden(self) ? 0 : g_origRender(self, edx, device);
+    }
+
+    uint32_t __fastcall hookRender2(cUI_Window2* self, void* edx, IDirect3DDevice7* device, uint32_t a, uint32_t b)
+    {
+        return hidden(self) ? 0 : g_origRender2(self, edx, device, a, b);
+    }
+
+    // Points a vtable slot at `hook`, which has the slot's type.
+    template <class F>
+    bool patchSlot(F& slot, F hook)
+    {
+        return Patch::value(reinterpret_cast<uintptr_t>(&slot), hook);
+    }
+}
+
+void OptionsScreen::install()
+{
+    if (!Config::controller.enabled || !Config::ddraw.d3d9)
+    {
+        return;
+    }
+    auto* table = reinterpret_cast<cUI_Window2::Vtable*>(Addr::cUI_Options_vtable);
+    g_origShow = table->show;
+    g_origRender = table->render;
+    g_origRender2 = table->render2;
+    g_origReceiveEvent = table->receiveEvent;
+    const bool ok = patchSlot(table->show, &hookShow) && patchSlot(table->render, &hookRender) &&
+        patchSlot(table->render2, &hookRender2) && patchSlot(table->receiveEvent, &hookReceiveEvent);
+    LOG("Controller: options window {}", ok ? "wrapped" : "could not be wrapped");
+}

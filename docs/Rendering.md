@@ -5,7 +5,7 @@ How SacredBild draws the game, and what it measures. The settings named here are
 
 ## Direct3D 9Ex backend
 
-`src/ddraw9/`: DirectDraw 7 and Direct3D 7 implemented on Direct3D 9Ex, for the subset Sacred uses (windowed swap
+`src/bild/ddraw9/`: DirectDraw 7 and Direct3D 7 implemented on Direct3D 9Ex, for the subset Sacred uses (windowed swap
 chain, one render target with z-buffer, managed textures, system memory surfaces for GDI text, the fixed-function
 device). Both APIs are fixed-function with the same vertex formats and render states, so device calls translate
 almost one to one. Frames are presented with the flip model (the blit model with `VSync=0`, which is not held to
@@ -53,7 +53,7 @@ each sector's terrain once).
 
 The game has no antialiasing: its `FSAA_FILTER` option (Options, `Settings.cfg`) only pulls sprite texture coordinates
 in by a fraction of a texel (`0x62E410`, `0x62FF60`) so bilinear filtering doesn't bleed at their edges, and stays as
-it is. With `[Render] SMAA`, the backend runs [SMAA](https://github.com/iryoku/smaa) 1x (`src/ddraw9/smaa.*`, the
+it is. With `[Render] SMAA`, the backend runs [SMAA](https://github.com/iryoku/smaa) 1x (`src/bild/ddraw9/smaa.*`, the
 reference shader at shader model 3) after the world view and before the interface: the frame is copied into a texture,
 edges are found by luma, blending weights come from SMAA's area and search textures, and the blend writes back into
 the frame, in linear light where the GPU can read and write sRGB. The interface drawn afterwards stays sharp.

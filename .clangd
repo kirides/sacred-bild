@@ -7,5 +7,7 @@ CompileFlags:
     - /EHsc
     - /DWIN32_LEAN_AND_MEAN
     - /DNOMINMAX
-    - /IE:/git/github/sacred-bild/src
+    - /IE:/git/github/sacred-bild/src/bild
+    - /IE:/git/github/sacred-bild/src/core
+    - /IE:/git/github/sacred-bild/gear
     - /IE:/git/github/sacred-bild/vcpkg_installed/x86-windows-static/include

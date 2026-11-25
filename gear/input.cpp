@@ -44,7 +44,7 @@ namespace
         g_dropUntil = GetTickCount64() + 100;
     }
 
-    // Offsets in the UI manager (SacredBild's src/sacred/ui.h).
+    // Offsets in the UI manager (SacredBild's src/bild/sacred/ui.h).
     constexpr uint32_t kFlagsOff = 0x08, kWindowsOff = 0x80, kDialogOff = 0x144;
     constexpr uint32_t kInMenus = 0x01, kInGame = 0x04, kWindowsCreated = 0x08, kCinematic = 0x10, kInputBlocked = 0x80;
     constexpr int kConsole = 9, kSavegame = 11, kEscapeMenu = 12, kOptions = 15, kCharacter = 20;

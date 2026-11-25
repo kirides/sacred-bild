@@ -27,7 +27,7 @@ namespace
 {
     using namespace Gear;
 
-    // UI manager and control layout (SacredBild's src/sacred/ui.h, which documents them).
+    // UI manager and control layout (SacredBild's src/bild/sacred/ui.h, which documents them).
     constexpr uintptr_t kUiFlags = 0x08, kUiWindows = 0x80, kUiMenus = 0x130, kUiDialog = 0x144;
     constexpr int kUiWindowCount = 23, kUiMenuCount = 5;
     constexpr uint32_t kUiInMenus = 0x01, kUiInGame = 0x04, kUiCinematic = 0x10, kUiHelp = 0x200;

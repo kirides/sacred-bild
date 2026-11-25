@@ -16,7 +16,7 @@
 #include "net/matchmaker.h"
 #include "net/udp_endpoint.h"
 #include "net/udp_transport.h"
-#include "config/net.h"
+#include "settings/config/net.h"
 #include "log.h"
 
 #include <winsock2.h>

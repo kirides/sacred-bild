@@ -78,7 +78,7 @@ namespace Automation
         std::string group;          // "menu", "window", "dialog", "child"
         int index = 0;              // the menu / window slot, or the child's index in its parent
         int parent = -1;            // index into the list, -1 for top level
-        uint32_t vtable = 0;        // tells the classes apart (see SacredBild's src/sacred/ui.h)
+        uint32_t vtable = 0;        // tells the classes apart (see SacredBild's src/bild/sacred/ui.h)
         uint32_t flags = 0;
         int x = 0, y = 0, width = 0, height = 0;
     };

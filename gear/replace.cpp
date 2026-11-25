@@ -10,7 +10,7 @@
 #include <cstring>
 #include <mutex>
 
-// See replace.h. The manager's layout (SacredBild's src/sacred/ui.h, docs/UI_SYSTEM.md): flags at +0x08 (0x01 menus,
+// See replace.h. The manager's layout (SacredBild's src/bild/sacred/ui.h, docs/UI_SYSTEM.md): flags at +0x08 (0x01 menus,
 // 0x04 in game, 0x08 the in-game windows exist), the in-game windows at +0x80 (23 slots), the menus' screens at
 // +0x130 (5). A control's flags at +0x10 (bit 0 visible), its vtable at +0: slot 4 receiveEvent (thiscall (control,
 // event) -> bool, ret 4), slot 5 render (thiscall (control, device), ret 4). An event's vtable slot 1 returns its
@@ -209,7 +209,7 @@ namespace
         return p && p->render ? p->render(self, edx, device) : 0;
     }
 
-    // SacredBild wraps the windows' vtables itself (src/game/ui_windows.cpp) and only takes slots that point into the
+    // SacredBild wraps the windows' vtables itself (src/bild/ui/ui_windows.cpp) and only takes slots that point into the
     // exe; so with SacredBild loaded, Gear patches a vtable only after SacredBild did (its slots then point into
     // ddraw.dll) and chains to SacredBild's thunks. Without it, the slots are the exe's.
     bool exeCode(uintptr_t p)

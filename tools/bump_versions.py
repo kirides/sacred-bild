@@ -3,7 +3,7 @@
 
 Every component has one flat text file with its version, a few lines like `1.2.3` and a newline:
 
-    src/SacredBild_version.txt      ddraw.dll
+    src/bild/SacredBild_version.txt      ddraw.dll
     gear/SacredGear_version.txt     SacredGear.dll
 
 For each component the history since the last commit that changed its version file (a new file counts as that commit) is read:
@@ -41,8 +41,8 @@ def norm(name):
 
 COMPONENTS = [
     # ddraw.dll: the SacredBild sources and what they are built with. gear/ is a separate DLL.
-    Component('SacredBild', 'sacred-bild', 'src/SacredBild_version.txt',
-              ['src/', 'CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'ports/', 'triplets/', 'dist/SacredBild.ini'],
+    Component('SacredBild', 'sacred-bild', 'src/bild/SacredBild_version.txt',
+              ['src/bild/', 'src/core/', 'CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'ports/', 'triplets/'],
               [], ['bild', 'sacredbild', 'ddraw', 'sacred-bild']),
     # SacredGear.dll: gear/ plus the sources it shares with SacredBild (sacred_core, src/core/: its code and the game's classes). The examples, the MDK, its generated copy and the
     # API annotations are documentation, not part of the DLL.
