@@ -1,3 +1,8 @@
+## v0.15.1 (2026-11-25)
+
+- Fixed: buttons inside a box scaled with CSS `transform: scale(...)` take their mouse clicks where they are drawn. Before, the click went to the place the unscaled layout would have them, so for example a click on a companion's portrait did nothing when the portraits were set smaller than 100 %.
+- Under the hood: the self test `rmltest-transform` clicks three buttons in a scaled box.
+
 ## v0.15.0 (2026-11-25)
 
 - New: windows of mods (RmlUi documents) that have a title bar and a `data-panel` can be moved by dragging the title bar with the mouse, not only in the layout editor. The place is kept in the layout like the editor's, and "Reset" in the editor puts it back.
