@@ -182,6 +182,9 @@ namespace World
     // loot self test calls the engine's loot function with a creature). Valid until the object is destroyed.
     uintptr_t objectAddress(uint32_t id);
 
+    // The gait of a creature (its field at +0x1F8: 1 walk, 2 run): reads it, or writes it when `set` is true. False when the creature is not found.
+    bool gait(uint32_t id, int32_t& value, bool set);
+
     // The 19 item ids a live creature carries (its equipment words at +0x1A4; heroes, monsters and mercenaries share the layout), 0 for an empty
     // slot. False if there is no such creature.
     bool carried(uint32_t id, uint32_t (&slots)[19]);

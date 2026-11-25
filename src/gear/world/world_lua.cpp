@@ -993,6 +993,24 @@ namespace LuaNative
         return 0;
     }
 
+    // native.gait(id, value?) -> gait | nil, message: a creature's gait (1 walk, 2 run); with a value it is set first.
+    int nativeGait(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        int32_t value = static_cast<int32_t>(luaL_optnumber(L, 2, 0));
+        const bool set = lua_isnumber(L, 2) != 0;
+        if (!id || (set && (value < 0 || value > 3)))
+        {
+            return pushFailure(L, "bad gait (0 to 3)");
+        }
+        if (!World::gait(id, value, set) || (set && !World::gait(id, value, false)))
+        {
+            return pushFailure(L, "no such creature");
+        }
+        lua_pushnumber(L, value);
+        return 1;
+    }
+
     // native.set_max_health(id, max, hp?) -> true | nil, message: a creature's maximum health, and its current health (default: the
     // same share of the new maximum as before).
     int nativeSetMaxHealth(lua_State* L)
@@ -1102,6 +1120,7 @@ namespace LuaNative
             {"clear_pets", nativeClearPets},
             {"set_max_health", nativeSetMaxHealth},
             {"set_gold", nativeSetGold},
+            {"gait", nativeGait},
             {nullptr, nullptr},
         };
         setFunctions(L, kNatives);
