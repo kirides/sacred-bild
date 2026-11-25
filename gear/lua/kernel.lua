@@ -918,6 +918,12 @@ function creature_mt:copy_allegiance(source)
     assert(type(id) == 'number', 'source must be a creature or its id')
     return native.copy_allegiance(self.id, id)
 end
+-- copy_stats(source): the level, stats and health share of another creature (single player, not heroes).
+function creature_mt:copy_stats(source)
+    local id = type(source) == 'table' and source.id or source
+    assert(type(id) == 'number', 'source must be a creature or its id')
+    return native.copy_stats(self.id, id)
+end
 function creature_mt:set_gold(gold)
     assert(type(gold) == 'number', 'gold must be a number')
     return native.set_gold(self.id, math.min(math.max(0, math.floor(gold)), 2147483646))
@@ -2892,7 +2898,7 @@ function world.around(x, y, min, max)
 end
 
 -- spawn(type, x, y, opts) -> creature | nil, message. `type` is a type id or an object type name;
--- opts.layer (default: the hero's), opts.like (a creature whose faction and aggression the new one takes), opts.label (a text kept for the creature, see creature:label()), opts.modifiers (see creature:set_modifiers).
+-- opts.layer (default: the hero's), opts.like (a creature whose faction, aggression, level and health share the new one takes), opts.label (a text kept for the creature, see creature:label()), opts.modifiers (see creature:set_modifiers).
 local function spawn(mod, kind, x, y, opts)
     opts = opts or {}
     assert(type(x) == 'number' and type(y) == 'number', 'x and y must be numbers')
@@ -2911,7 +2917,9 @@ local function spawn(mod, kind, x, y, opts)
     local oid, err = native.spawn(id, math.floor(x), math.floor(y), layer)
     if not oid then return nil, err end
     if opts.like ~= nil then
-        local ok, why = native.copy_allegiance(oid, type(opts.like) == 'table' and opts.like.id or opts.like)
+        local like = type(opts.like) == 'table' and opts.like.id or opts.like
+        local ok, why = native.copy_allegiance(oid, like)
+        if ok then ok, why = native.copy_stats(oid, like) end
         if not ok then
             native.remove(oid)
             return nil, why

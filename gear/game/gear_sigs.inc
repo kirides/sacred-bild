@@ -73,6 +73,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cItem_bonusLine", "51 53 55 8B 6C 24 14 56 85 ED 57 0F 84 ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::cItem_bonusLine}, // 005C4450, 005C43C0
     {"cCreature_equipSlot", "56 57 8B 7C 24 0C 8B F1 81 FF 00 16 00 00", 0, Sig::Take::Match, &Gear::Addr::cCreature_equipSlot}, // 0054ACC0, 0054AB30
     {"engine_alloc", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 08 8B 44 24 18 53 48", 0, Sig::Take::Match, &Gear::Addr::engine_alloc}, // 008321A0, 00830F60
+    {"engine_new", "6A 01 FF 74 24 08 E8 ?? ?? ?? ?? 59 59 C3 56 8B 74 24 08", 0, Sig::Take::Match, &Gear::Addr::engine_new}, // 00849842, 008485E2
     {"engine_free", "8B 4C 24 04 85 C9 74 23 8B 44 24 08", 0, Sig::Take::Match, &Gear::Addr::engine_free}, // 0041D3B0, 0041D390
     {"cItem_setRecord", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 8B 44 24 10 64 89 25 00 00 00 00 81 EC 88 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_setRecord}, // 005C0810, 005C0780
     {"cObjectFactory_create", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 53 8B 5C 24 14", 0, Sig::Take::Match, &Gear::Addr::cObjectFactory_create}, // 00451300, 004514D0
@@ -104,6 +105,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cItem_pickType", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 18 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cItem_pickType}, // 005C7FA0, 005C7F10
     {"g_rarityTable", "8B 35 ?? ?? ?? ?? 8B C8 83 C4 14 33 C0 D8 4C 24 18", 2, Sig::Take::Abs32, &Gear::Addr::g_rarityTable}, // 00AD4438, 00AD23B8
     {"cStats_addExperience", "55 8B EC 6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 38 02 00 00", 0, Sig::Take::Match, &Gear::Addr::cStats_addExperience}, // 0057E160, 0057E020
+    {"cStats_setLevel", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 78 53 55 56 8B E9", 0, Sig::Take::Match, &Gear::Addr::cStats_setLevel}, // 00564D60, 00564C20
     {"cStats_levelOnExp", "83 EC 50 53 55 56 57 66 8B 79 56 33 F6", 0, Sig::Take::Match, &Gear::Addr::cStats_levelOnExp}, // 0057F8D0, 0057F790
     {"cCreature_unequip", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 8B 44 24 10 64 89 25 00 00 00 00 83 EC 78 66 3D 13 00", 0, Sig::Take::Match, &Gear::Addr::cCreature_unequip}, // 00556A30, 00556870
     {"cCreature_equip", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC 84 00 00 00 53 55 8B AC 24 9C 00 00 00", 0, Sig::Take::Match, &Gear::Addr::cCreature_equip}, // 00555E00, 00555C40
