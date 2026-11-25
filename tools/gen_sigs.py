@@ -122,6 +122,7 @@ SACRED = [
     ('cWorldView_drawObjects', 0x0062E410, 'func'),
     ('cWorldView_drawObjects2', 0x0062FF60, 'func'),
     ('cObject3D_drawModel', 0x0044A9D0, 'func'),
+    ('cGranny_renderShadow', 0x00406FF0, 'func'),
     ('cWorldView_initRowWalk', 0x006328C0, 'func'),
     ('g_viewCameraX', 0x00AD7998, 'data'),
     ('g_viewCameraY', 0x00AD799C, 'data', 0x00632410),           # mov [g_viewCameraY], ecx (ReBorn patched its other uses)

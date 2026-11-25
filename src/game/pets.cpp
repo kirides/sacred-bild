@@ -27,37 +27,90 @@ namespace
     thread_local float t_scale = 1.0f;
     thread_local float t_ax = 0.0f, t_ay = 0.0f;   // the object's screen position (+0x40 / +0x44): the scale is about it
 
+    decltype(Addr::cGranny_renderShadow)::Ptr g_origShadow = nullptr;
     decltype(Addr::cObject3D_drawModel)::Ptr g_origDrawModel = nullptr;
 
-    // The engine's object id at +0x0C; the hook knows `self` is an object (cObject3D::drawModel is its method).
-    uint32_t __fastcall hookDrawModel(void* self, void* edx, IDirect3DDevice7* device, void* model, void* instance,
-        uint32_t flagsLow, uint32_t flagsHigh)
+    // A pet's model handle (the first of the pair at object +0x40) with the scale and anchor the shadow pass needs: the shadow is drawn
+    // later, by cModelInstance::draw, which knows the handles of the model but not the object.
+    struct Shadow
     {
-        float scale = 1.0f;
-        float ax = 0.0f, ay = 0.0f;
-        if (g_count.load(std::memory_order_relaxed) > 0 && self)
+        float scale, ax, ay;
+    };
+    std::unordered_map<uint32_t, Shadow> g_shadows;
+
+    // Reads the pet entry of the object `self` and returns whether it is one; the scale and the anchor go to the out parameters.
+    bool petOf(const void* self, float& scale, float& ax, float& ay)
+    {
+        if (g_count.load(std::memory_order_relaxed) <= 0 || !self)
         {
-            const uint32_t id = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x0C);
-            AcquireSRWLockShared(&g_lock);
-            const auto it = g_pets.find(id);
-            if (it != g_pets.end())
-            {
-                scale = it->second.scale;
-                // The object's own render position (floats, world model space: the same space the deformed vertices are in).
-                ax = *reinterpret_cast<const float*>(static_cast<const uint8_t*>(self) + 0x7C);
-                ay = *reinterpret_cast<const float*>(static_cast<const uint8_t*>(self) + 0x80);
-            }
-            ReleaseSRWLockShared(&g_lock);
+            return false;
         }
+        const uint32_t id = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x0C);
+        bool found = false;
+        AcquireSRWLockShared(&g_lock);
+        const auto it = g_pets.find(id);
+        if (it != g_pets.end())
+        {
+            scale = it->second.scale;
+            ax = *reinterpret_cast<const float*>(static_cast<const uint8_t*>(self) + 0x7C);
+            ay = *reinterpret_cast<const float*>(static_cast<const uint8_t*>(self) + 0x80);
+            found = true;
+        }
+        ReleaseSRWLockShared(&g_lock);
+        return found;
+    }
+
+    // The model draw of an object. Sets the scale for the model and remembers the handle for the shadow.
+    uint32_t __fastcall hookDrawModel(void* self, void* edx, IDirect3DDevice7* device, void* model, void* instance, uint32_t flagsLow,
+        uint32_t flagsHigh)
+    {
+        float scale = 1.0f, ax = 0.0f, ay = 0.0f;
+        const bool pet = petOf(self, scale, ax, ay);
         const float before = t_scale, bx = t_ax, by = t_ay;
-        t_scale = scale;
-        t_ax = ax;
-        t_ay = ay;
+        if (pet)
+        {
+            t_scale = scale;
+            t_ax = ax;
+            t_ay = ay;
+            const uint32_t handle = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x40);
+            AcquireSRWLockExclusive(&g_lock);
+            g_shadows[handle] = {scale, ax, ay};
+            ReleaseSRWLockExclusive(&g_lock);
+        }
         const uint32_t r = g_origDrawModel(self, edx, device, model, instance, flagsLow, flagsHigh);
         t_scale = before;
         t_ax = bx;
         t_ay = by;
         return r;
+    }
+
+    // The shadow of a model: found by the model's handle (object +0x40), drawn scaled like the model.
+    void __fastcall hookShadow(void* self, void* edx, void* device, uint32_t handle0, uint32_t handle1, uint8_t* extra, char flag)
+    {
+        Shadow sh{1.0f, 0.0f, 0.0f};
+        bool pet = false;
+        if (g_count.load(std::memory_order_relaxed) > 0)
+        {
+            AcquireSRWLockShared(&g_lock);
+            const auto it = g_shadows.find(handle0);
+            if (it != g_shadows.end())
+            {
+                sh = it->second;
+                pet = true;
+            }
+            ReleaseSRWLockShared(&g_lock);
+        }
+        const float before = t_scale, bx = t_ax, by = t_ay;
+        if (pet)
+        {
+            t_scale = sh.scale;
+            t_ax = sh.ax;
+            t_ay = sh.ay;
+        }
+        g_origShadow(self, edx, device, handle0, handle1, extra, flag);
+        t_scale = before;
+        t_ax = bx;
+        t_ay = by;
     }
 
     decltype(Addr::worldPick)::Ptr g_origPick = nullptr;
@@ -78,12 +131,17 @@ namespace
         }
         g_count.store(static_cast<int>(g_pets.size()));
         g_untargetable.store(untargetable);
+        if (g_pets.empty())
+        {
+            g_shadows.clear();
+        }
     }
 }
 
 void Pets::install()
 {
     Patch::begin();
+    Patch::hook(g_origShadow, Addr::cGranny_renderShadow, &hookShadow, "cGranny::renderShadow (pets)");
     Patch::hook(g_origDrawModel, Addr::cObject3D_drawModel, &hookDrawModel, "cObject3D::drawModel (pets)");
     Patch::hook(g_origPick, Addr::worldPick, &hookPick, "worldPick (pets)");
     if (Patch::commit())

@@ -352,6 +352,12 @@ function Creature:copy_stats(source) end
 ---@return string? error
 function Creature:copy_allegiance(source) end
 
+--- Sets the level of a creature (not a hero) through the game's own level function, the one its sector fill uses: the experience the level starts at, the derived stats and the maximum health come from the creature's type and that level (a creature made by `gear.world.spawn` is level 1). It keeps its share of the health. Level 1 to 250. Single player.
+---@param level integer
+---@return boolean? ok
+---@return string? error
+function Creature:set_level(level) end
+
 ---@class GearPetOpts
 ---@field scale? number The model is drawn this many times as large (0.1 to 4, default 1), about the creature's own origin.
 ---@field untargetable? boolean The creature is left out of the world pick: no click, hover cursor or controller aim reaches it (default false).

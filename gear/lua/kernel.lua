@@ -924,6 +924,11 @@ function creature_mt:copy_stats(source)
     assert(type(id) == 'number', 'source must be a creature or its id')
     return native.copy_stats(self.id, id)
 end
+-- set_level(level): the level of a creature (not a hero) through the engine's own level function (single player).
+function creature_mt:set_level(level)
+    assert(type(level) == 'number', 'level must be a number')
+    return native.set_level(self.id, math.floor(level))
+end
 -- set_pet{scale = 1.3, untargetable = true}: the model is drawn `scale` times as large and, if untargetable, cannot be picked in the
 -- world (no click, hover cursor or controller aim). nil or {} clears it. Needs SacredBild; single player.
 function creature_mt:set_pet(opts)

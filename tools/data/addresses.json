@@ -775,6 +775,11 @@
    "451BBE74": "0044ABA0",
    "451BBE74:sacredreborn.exe": "0044ABA0"
   },
+  "cGranny_renderShadow": {
+   "452F85C7": "00406FF0",
+   "451BBE74": "00407030",
+   "451BBE74:sacredreborn.exe": "00407030"
+  },
   "cWorldView_initRowWalk": {
    "452F85C7": "006328C0",
    "451BBE74": "00632A30",

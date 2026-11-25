@@ -2893,6 +2893,20 @@ namespace
         return 1;
     }
 
+    // native.set_level(id, level) -> true | nil, message
+    int nativeSetLevel(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const lua_Number level = luaL_checknumber(L, 2);
+        const char* error = "no such creature";
+        if (!id || !(level >= 1 && level <= 250) || !World::setLevel(id, static_cast<uint32_t>(level), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.set_pet(id, scale, untargetable) -> true | nil, message
     int nativeSetPet(lua_State* L)
     {
@@ -5084,6 +5098,7 @@ namespace
             {"copy_allegiance", nativeCopyAllegiance},
             {"copy_stats", nativeCopyStats},
             {"set_pet", nativeSetPet},
+            {"set_level", nativeSetLevel},
             {"clear_pets", nativeClearPets},
             {"set_max_health", nativeSetMaxHealth},
             {"set_gold", nativeSetGold},

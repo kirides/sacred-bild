@@ -1556,6 +1556,14 @@ Gives this creature the allegiance of `source`: its faction (the class the game'
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:set_level(level) -> boolean?, string?`
+
+Sets the level of a creature (not a hero) through the game's own level function, the one its sector fill uses: the experience the level starts at, the derived stats and the maximum health come from the creature's type and that level (a creature made by `gear.world.spawn` is level 1). It keeps its share of the health. Level 1 to 250. Single player.
+
+- `level`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 ### GearPetOpts
 
 | Field | Type | |

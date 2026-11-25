@@ -716,6 +716,30 @@ namespace
     }
 }
 
+bool World::setLevel(uint32_t id, uint32_t level, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    int32_t oldMax = 0, oldHealth = 0, max = 0;
+    if (!Addr::cStats_setLevel || id <= kHeroIds || !o || !callIsCreature(o) || level == 0 || level > 250 || !readAt(o, kMaxHealth, oldMax) ||
+        !readAt(o, kHealth, oldHealth))
+    {
+        error = "no such creature, a hero, a level outside 1 to 250, or world changes are not possible now";
+        return false;
+    }
+    if (!callSetLevel(o, level) || !readAt(o, kMaxHealth, max))
+    {
+        error = "the game faulted while setting the level";
+        return false;
+    }
+    if (oldMax > 0 && max > 0)
+    {
+        const int32_t health = std::clamp<int32_t>(static_cast<int32_t>(static_cast<int64_t>(max) * std::max(oldHealth, 1) / oldMax + 0.5), 1, max);
+        safeStore(reinterpret_cast<void*>(o + kHealth), &health, sizeof(health));
+    }
+    return true;
+}
+
 bool World::copyStats(uint32_t id, uint32_t from, const char*& error)
 {
     void* m = manager();
