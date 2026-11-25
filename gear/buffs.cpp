@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <map>
 
@@ -24,9 +25,18 @@ namespace Buffs
     };
     const size_t kFieldCount = std::size(kFields);
 
+    const uint16_t kSpeedFields[] = {0x3C, 0x3E, 0x40};
+    const size_t kSpeedFieldCount = std::size(kSpeedFields);
+
+    bool isSpeedField(uint16_t offset)
+    {
+        return std::find(std::begin(kSpeedFields), std::end(kSpeedFields), offset) != std::end(kSpeedFields);
+    }
+
     bool isField(uint16_t offset)
     {
-        return std::find(std::begin(kFields), std::end(kFields), offset) != std::end(kFields);
+        return isSpeedField(offset) ||
+               std::find(std::begin(kFields), std::end(kFields), offset) != std::end(kFields);
     }
 }
 
@@ -108,6 +118,18 @@ namespace
                 {
                     if (m.factor != (pass == 1))
                     {
+                        continue;
+                    }
+                    if (Buffs::isSpeedField(m.offset))
+                    {
+                        // After the engine's own cap (220, 260 for some creatures): this is what lifts it.
+                        int16_t sv = 0;
+                        if (readAt(stats, m.offset, sv))
+                        {
+                            const double nv = m.factor ? sv * static_cast<double>(m.value) : sv + static_cast<double>(m.value);
+                            writeAt(stats, m.offset, static_cast<int16_t>(std::clamp(std::lround(nv), 0L,
+                                static_cast<long>(Buffs::kMaxSpeed))));
+                        }
                         continue;
                     }
                     float v = 0;
@@ -373,6 +395,26 @@ namespace Buffs
         for (uint16_t f : kFields)
         {
             float v = 0;
+            if (!readAt(c + kStats, f, v))
+            {
+                return false;
+            }
+            out.emplace_back(f, v);
+        }
+        return true;
+    }
+
+    bool speeds(uint32_t id, std::vector<std::pair<uint16_t, int>>& out)
+    {
+        out.clear();
+        const uintptr_t c = creature(id);
+        if (!c)
+        {
+            return false;
+        }
+        for (uint16_t f : kSpeedFields)
+        {
+            int16_t v = 0;
             if (!readAt(c + kStats, f, v))
             {
                 return false;

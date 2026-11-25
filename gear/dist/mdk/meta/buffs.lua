@@ -18,6 +18,7 @@
 ---@class GearBuffs
 ---@field STATS table<string, integer> The values a buff adds to, by name: `resist_physical`, `resist_fire`, `resist_magic`, `resist_poison`, `damage_min_physical` / `_fire` / `_magic` / `_poison`, `damage_max_physical` / `_fire` / `_magic` / `_poison` (their stats block offsets).
 ---@field FACTORS table<string, integer> The values a buff multiplies, by name: `attack_factor`, `speed_factor`, `armor_factor`, `regen_factor`, `art_regen_factor`.
+---@field SPEEDS table<string, integer> The speed values (attack, cast, movement), by name: `attack_speed`, `cast_speed`, `move_speed` (their stats block offsets). 100 is normal speed; the animation runs value / 100 as fast. The engine caps each at 220 (260 for creatures with flag 0x10000, movement 380 for some); a buff's `speeds` are added after the cap, so they go beyond it. Values are clamped to 0..1000.
 ---@field OVERLAYS table<string, integer> The game's spell overlays: `light` (6, Lichtschild), `stone` (7, Steinhaut), `flame` (10, Flammenhaut).
 local GearBuffs = {}
 
@@ -29,6 +30,8 @@ local GearBuffs = {}
 ---@field icon? string The game's texture name of its icon (for lists and editors).
 ---@field stats? table<string|integer, number> What it adds: `{resist_fire = 50}` (names of `STATS`, or stats block offsets).
 ---@field factors? table<string|integer, number> What it multiplies: `{armor_factor = 1.5}` (names of `FACTORS`, or offsets).
+---@field speeds? table<string|integer, number> What it adds to the speed values, past the engine's cap of 220: `{move_speed = 80}` (names of `SPEEDS`, or offsets).
+---@field speed_factors? table<string|integer, number> What it multiplies them by, past the cap: `{attack_speed = 2}` (names of `SPEEDS`, or offsets).
 ---@field overlay? string|integer The spell overlay shown while it runs: a name of `OVERLAYS` or its number.
 ---@field seconds? number How long it lasts (0 or nil: until removed).
 ---@field debuff? boolean Marks a harmful one (for lists; the values decide what it does).
@@ -88,6 +91,12 @@ function GearBuffs.list(target) end
 ---@param target Creature|integer
 ---@return table<integer, number>?
 function GearBuffs.fields(target) end
+
+--- The creature's speed values now, by name (`{attack_speed = 140, cast_speed = 120, move_speed = 130}`), beyond the
+--- engine's cap when a buff lifted it. nil when it is no creature.
+---@param target Creature|integer
+---@return table<string, integer>?
+function GearBuffs.speeds(target) end
 
 --- What changed between two `fields` snapshots, as `stats` and `factors` of a definition (by offset).
 ---@param before table<integer, number>

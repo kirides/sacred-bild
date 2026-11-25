@@ -2305,6 +2305,25 @@ do
     ok(menu.remove_item('esc', 'a') and menu.remove_item('esc', 'b') and menu.remove_item('esc', 'c') and #menu.items('esc') == 0, 'menu.remove_item')
 end
 
+-- gear.buffs speeds: mods on the int16 speed values (past the engine's cap), by name or offset
+do
+    local applied, raw = nil, {[0x3C] = 220, [0x3E] = 220, [0x40] = 130}
+    native.buff_apply = function(id, key, mods, seconds, overlay) applied = {id = id, key = key, mods = mods}; return true end
+    native.buff_speeds = function(id) if id == 99 then return raw end end
+    local B = kernel.buffs
+    ok(B.SPEEDS.attack_speed == 0x3C and B.SPEEDS.cast_speed == 0x3E and B.SPEEDS.move_speed == 0x40, 'buffs.SPEEDS offsets')
+    local m = {id = 'speedtest'}
+    B.apply(m, 99, {id = 'fast', speeds = {move_speed = 100}, speed_factors = {attack_speed = 2}}, {strength = 0.5})
+    local by = {}
+    for _, mod in ipairs(applied.mods) do by[mod[1]] = mod end
+    ok(by[0x40] and by[0x40][2] == false and by[0x40][3] == 50, 'buffs: speeds add, scaled by the strength')
+    ok(by[0x3C] and by[0x3C][2] == true and by[0x3C][3] == 1.5, 'buffs: speed_factors multiply, halfway to 1 at half strength')
+    ok(not pcall(B.define, m, {id = 'bad', speeds = {walk = 1}}), 'buffs: an unknown speed name is refused')
+    local sp = B.speeds(99)
+    ok(sp.attack_speed == 220 and sp.cast_speed == 220 and sp.move_speed == 130, 'buffs.speeds reads the values by name')
+    ok(B.speeds(5) == nil, 'buffs.speeds: no creature gives nil')
+end
+
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end

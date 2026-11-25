@@ -1490,14 +1490,19 @@ do
     B.FACTORS = {
         attack_factor = 0x9A, speed_factor = 0xE6, armor_factor = 0xEA, regen_factor = 0xEE, art_regen_factor = 0xF2,
     }
+    -- The speed values (int16 in the stats block; 100 is normal, the animation runs value / 100 as fast). The engine
+    -- caps them in cStats::recalc (220, 260 with creature flag 0x10000, movement 380 for some creatures); a buff's
+    -- speeds are added after the cap, so they lift it. Clamped to 0..1000.
+    B.SPEEDS = {attack_speed = 0x3C, cast_speed = 0x3E, move_speed = 0x40}
     -- The spell overlays the game draws a hero with (creature +0x60).
     B.OVERLAYS = {light = 6, stone = 7, flame = 10}
     B.defs = {}
     B.order = {}
     B.meta = {}
 
-    local function offset_of(name, factor)
+    local function offset_of(name, factor, speed)
         if type(name) == 'number' then return name end
+        if speed then return B.SPEEDS[name] end
         return (factor and B.FACTORS or B.STATS)[name]
     end
 
@@ -1512,10 +1517,19 @@ do
             assert(offset_of(name, true), 'unknown factor ' .. tostring(name))
             assert(type(v) == 'number', 'factors are numbers')
         end
+        for name, v in pairs(def.speeds or {}) do
+            assert(offset_of(name, false, true), 'unknown speed ' .. tostring(name))
+            assert(type(v) == 'number', 'speeds are numbers')
+        end
+        for name, v in pairs(def.speed_factors or {}) do
+            assert(offset_of(name, false, true), 'unknown speed ' .. tostring(name))
+            assert(type(v) == 'number', 'speed factors are numbers')
+        end
         local overlay = def.overlay
         if type(overlay) == 'string' then overlay = assert(B.OVERLAYS[overlay], 'unknown overlay ' .. overlay) end
         local d = {id = id, name = def.name or def.id, description = def.description, icon = def.icon,
-            stats = def.stats or {}, factors = def.factors or {}, overlay = overlay or 0, seconds = def.seconds or 0,
+            stats = def.stats or {}, factors = def.factors or {}, speeds = def.speeds or {},
+            speed_factors = def.speed_factors or {}, overlay = overlay or 0, seconds = def.seconds or 0,
             debuff = def.debuff and true or false, mod = m.id}
         if not B.defs[id] then B.order[#B.order + 1] = id end
         B.defs[id] = d
@@ -1534,6 +1548,10 @@ do
         local list = {}
         for name, v in pairs(d.stats) do list[#list + 1] = {offset_of(name, false), false, v * strength} end
         for name, v in pairs(d.factors) do list[#list + 1] = {offset_of(name, true), true, 1 + (v - 1) * strength} end
+        for name, v in pairs(d.speeds or {}) do list[#list + 1] = {offset_of(name, false, true), false, v * strength} end
+        for name, v in pairs(d.speed_factors or {}) do
+            list[#list + 1] = {offset_of(name, false, true), true, 1 + (v - 1) * strength}
+        end
         return list
     end
 
@@ -1576,6 +1594,16 @@ do
     -- The creature's combat value fields now, by offset ({[0x66] = 12.5, ...}).
     function B.fields(target)
         return native.buff_fields(type(target) == 'table' and target.id or target)
+    end
+
+    -- The creature's speed values now, by name ({attack_speed = 140, cast_speed = 120, move_speed = 130}), past the engine's
+    -- cap when a buff lifted it. nil when it is no creature.
+    function B.speeds(target)
+        local raw = native.buff_speeds(type(target) == 'table' and target.id or target)
+        if not raw then return nil end
+        local out = {}
+        for name, o in pairs(B.SPEEDS) do out[name] = raw[o] end
+        return out
     end
 
     -- What changed between two `fields` snapshots, as a definition's stats and factors (by offset): copies a buff the
@@ -7557,10 +7585,10 @@ local function make_env(mod)
     end
     gear.party = {}
     for k, v in pairs(kernel.party) do gear.party[k] = v end
-    gear.buffs = {STATS = kernel.buffs.STATS, FACTORS = kernel.buffs.FACTORS, OVERLAYS = kernel.buffs.OVERLAYS,
+    gear.buffs = {STATS = kernel.buffs.STATS, FACTORS = kernel.buffs.FACTORS, SPEEDS = kernel.buffs.SPEEDS, OVERLAYS = kernel.buffs.OVERLAYS,
         define = function(def) return kernel.buffs.define(mod, def) end, definitions = kernel.buffs.definitions,
         apply = function(target, buff, opts) return kernel.buffs.apply(mod, target, buff, opts) end,
-        remove = kernel.buffs.remove, list = kernel.buffs.list, fields = kernel.buffs.fields,
+        remove = kernel.buffs.remove, list = kernel.buffs.list, fields = kernel.buffs.fields, speeds = kernel.buffs.speeds,
         change = kernel.buffs.change, overlay = kernel.buffs.overlay, set_overlay = kernel.buffs.set_overlay}
     gear.pfx = {
         define = function(def) return kernel.pfx.define(mod, def) end, undefine = kernel.pfx.undefine,
