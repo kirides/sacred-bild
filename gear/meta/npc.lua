@@ -24,6 +24,7 @@
 ---@field on? fun(e: GearNpcEvent) Called when it is pressed.
 ---@field go? string The page to show afterwards.
 ---@field close? boolean Close the dialog afterwards (when nothing else was chosen).
+---@field hostile? boolean|GearNpcHostile The wrong answer: the dialog ends and the NPC turns hostile (`npc.hostile`) with these options (`true`: the defaults).
 ---@field when? fun(e: GearNpcEvent): boolean Whether the option is shown (default: always).
 ---@field enabled? fun(e: GearNpcEvent): boolean Whether it can be pressed (default: always).
 
@@ -44,13 +45,27 @@
 ---@field y number
 ---@field layer? integer
 
+--- How an NPC turns hostile (`gear.npc.hostile`, the `hostile` option of a dialog button): the boss.
+---@class GearNpcHostile
+---@field level? integer The creature's level (`creature:set_level`): the game derives health, damage and attributes from the type and the level.
+---@field health? number Boss modifier: maximum health as a multiple of the creature's own (`creature:set_modifiers`).
+---@field damage? number Boss modifier: multiplier of the damage it deals.
+---@field taken? number Boss modifier: multiplier of the damage it takes.
+---@field deflect? number Boss modifier: chance 0 to 1 that a hit does no damage.
+---@field reflect? number Boss modifier: share of the damage it takes that the attacker takes back.
+---@field regen? number Boss modifier: health regained per second as a share of the maximum.
+---@field weapon? integer|string|{main: (integer|string)?, off: (integer|string)?} An item type (id or name) the NPC wields, or `{main = ..., off = ...}` (a shield or a second weapon).
+---@field tint? integer|{all: integer?, parts: table<integer, integer>?} A colour for the model.
+---@field aggro? number How far from the hero it attacks (world units, default 1500).
+
 --- What `gear.npc.define` takes.
 ---@class GearNpcDef
 ---@field type integer|string The object type (id or name) whose model the NPC uses.
 ---@field name? string|table<string, string> The name shown (a string or `{en = ..., de = ...}`); default: the type's name.
 ---@field level? integer The creature's level (`creature:set_level`).
+---@field stance? 'friendly'|'neutral'|'hostile' What the NPC is to the others: `'friendly'` (default) is on the hero's side, `'neutral'` an enemy of nobody (it stands among monsters and none fights it), `'hostile'` an enemy of the hero from the start.
 ---@field like? Creature|integer A creature whose faction, level and health the NPC takes (default: the hero's faction, so the NPC is friendly: its label is not red and a click does not attack it).
----@field hostile? boolean Keep the faction of the type (an enemy NPC).
+---@field hostile? boolean The same as `stance = 'hostile'`.
 ---@field dialog? GearNpcDialog
 ---@field routine? GearNpcPoint[]
 ---@field talk_range? number How close the hero must be to talk (world units, default 140).
@@ -71,6 +86,7 @@
 ---@field close fun() Closes the dialog (after the handlers).
 ---@field go fun(page: string) Shows another page (after the handlers).
 ---@field say fun(text: string) Replaces the page's text until the page changes.
+---@field hostile fun(opts: GearNpcHostile?) Ends the dialog and turns the NPC hostile (after the handlers).
 
 --- An NPC of the mod, as `list` gives it.
 ---@class GearNpcInfo
@@ -83,6 +99,7 @@
 ---@field layer? integer Default: the hero's.
 ---@field like? Creature|integer
 ---@field level? integer
+---@field stance? 'friendly'|'neutral'|'hostile'
 ---@field tint? integer|{all: integer?, parts: table<integer, integer>?} This NPC's own tint (instead of the kind's).
 ---@field texture? any This NPC's own texture (instead of the kind's), as `GearNpcDef.texture`.
 ---@field routine? GearNpcPoint[] This NPC's own routine (instead of the kind's).
@@ -136,8 +153,8 @@ function GearNpc.list(kind) end
 function GearNpc.remove(creature) end
 
 --- Handlers: `'talk'` (a dialog opened), `'button'` (an option pressed), `'close'` (the dialog ended), `'arrived'` (an NPC reached a
---- routine point); the argument is a `GearNpcEvent`.
----@param name 'talk'|'button'|'close'|'arrived'
+--- routine point), `'hostile'` and `'calm'` (an NPC turned hostile, or calm again); the argument is a `GearNpcEvent`.
+---@param name 'talk'|'button'|'close'|'arrived'|'hostile'|'calm'
 ---@param fn fun(e: GearNpcEvent)
 ---@return table handle
 function GearNpc.on(name, fn) end
@@ -145,6 +162,28 @@ function GearNpc.on(name, fn) end
 --- Removes a handler of `on`.
 ---@param handle table
 function GearNpc.off(handle) end
+
+--- Turns the NPC into an enemy of the hero: the faction its object type gave it (an enemy of the hero), aggressive. A created creature does not
+--- notice heroes on its own, so the library orders it to attack the hero whenever the hero is within `aggro`. The options make it a boss: a level
+--- (health, damage and attributes follow from the type and the level), boss modifiers, a weapon it wields and a tint. The state is kept with the
+--- savegame: the modifiers and the tint are set again after a load. The hero meeting it as a `stance = 'neutral'` NPC and picking the wrong
+--- dialog option is the intended use (`hostile` on the option).
+---@param creature Creature|integer
+---@param opts? GearNpcHostile
+---@return boolean? ok
+---@return string? error
+function GearNpc.hostile(creature, opts) end
+
+--- Makes a hostile NPC what it was spawned as (its stance), takes the boss modifiers off and stops the fight.
+---@param creature Creature|integer
+---@return boolean? ok
+---@return string? error
+function GearNpc.calm(creature) end
+
+--- Whether the NPC was turned hostile (and not calmed since).
+---@param creature Creature|integer
+---@return boolean
+function GearNpc.is_hostile(creature) end
 
 --- Opens an NPC's dialog (at `page`, default the start page).
 ---@param creature Creature|integer

@@ -3035,6 +3035,42 @@ namespace
         return 1;
     }
 
+    // native.allegiance(id) -> faction, behavior | nil; native.set_allegiance(id, faction, behavior) -> true | nil, message
+    int nativeAllegiance(lua_State* L)
+    {
+        uint32_t faction = 0, behavior = 0;
+        if (!World::allegiance(checkId(L, 1), faction, behavior))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, faction);
+        lua_pushnumber(L, behavior);
+        return 2;
+    }
+    int nativeSetAllegiance(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::setAllegiance(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), static_cast<uint32_t>(luaL_checknumber(L, 3)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.carry(id, slot, item) -> true | nil, message
+    int nativeCarry(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::carry(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), checkId(L, 3), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.copy_stats(id, from) -> true | nil, message
     int nativeCopyStats(lua_State* L)
     {
@@ -5306,6 +5342,9 @@ namespace
             {"set_health", nativeSetHealth},
             {"copy_allegiance", nativeCopyAllegiance},
             {"copy_stats", nativeCopyStats},
+            {"allegiance", nativeAllegiance},
+            {"carry", nativeCarry},
+            {"set_allegiance", nativeSetAllegiance},
             {"set_pet", nativeSetPet},
             {"set_tint", nativeSetTint},
             {"set_texture", nativeSetTexture},

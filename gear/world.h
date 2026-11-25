@@ -120,6 +120,10 @@ namespace World
     // and the low word of the behavior flags (+0x1F4: 1 = aggressive). A plain create takes the faction of the type; the game's
     // sector fill and scripts set it per creature (a soldier can be hostile to the hero by its spawn, neutral by its type).
     bool copyAllegiance(uint32_t id, uint32_t from, const char*& error);
+    // A creature's faction (0..15, the class of the relation table) and the low word of its behavior flags (bit 0: aggressive); false if there is no
+    // such creature. setAllegiance writes them (not for heroes); `behavior` is the low word only.
+    bool allegiance(uint32_t id, uint32_t& faction, uint32_t& behavior);
+    bool setAllegiance(uint32_t id, uint32_t faction, uint32_t behavior, const char*& error);
     // Gives creature `id` (not a hero) the level of creature `from` through the engine's own setLevel (ENG 00564D60, which the sector
     // fill calls for the creatures it places: the experience the level starts at, the derived stats and the health come from the
     // creature's type and that level), then its health in the same share of the maximum as the donor's. A plain create is level 1
@@ -188,6 +192,9 @@ namespace World
     // The 19 item ids a live creature carries (its equipment words at +0x1A4; heroes, monsters and mercenaries share the layout), 0 for an empty
     // slot. False if there is no such creature.
     bool carried(uint32_t id, uint32_t (&slots)[19]);
+    // Puts item object `item` (made with spawn, lying in the world) into equipment word `slot` (0..18) of a creature that is no hero: the item
+    // leaves the world (the engine's unlink) and the creature carries it there, as the creatures the game fills a sector with do. Single player.
+    bool carry(uint32_t id, uint32_t slot, uint32_t item, const char*& error);
 
     // The local player's hero id as the players object keeps it (+0x14; 1 in single player unless gear.party switched
     // control), 0 if there is none. Objects tick only on the computer whose id is their owner byte (+0x39).
