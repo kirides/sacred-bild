@@ -16,6 +16,7 @@
 #include "realm.h"
 #include "save.h"
 #include "savegames.h"
+#include "shop.h"
 #include "sitehook.h"
 #include "master.h"
 #include "ui.h"
@@ -61,6 +62,7 @@ bool Hooks::install()
     ItemUse::install();
     KillStat::install();
     PotionPick::install();
+    Shop::install();
     Pfx::install();
     const bool committed = Patch::commit();
     // Site hooks write into the middle of functions (gear/sitehook.cpp); they are optional like mod drawing.

@@ -429,6 +429,17 @@ namespace Gear::Addr
     // an address holder: the function is not cdecl).
     inline Sacred::Cdecl<uint32_t(int32_t mode, int32_t flag, int32_t tier)> potionPick{};
 
+    // The merchant window's stock (gear/shop.cpp). ENG 006DAD90: the window's event handler, thiscall (window, event), ret 4. ENG 006D9B90: clears
+    // the grid (all = 1) or removes a random handful of items (0), thiscall (window, all), ret 4. ENG 006DA320: the random stock, thiscall (window,
+    // count), ret 4. ENG 006D9DE0: stocks one item of a type (finds room in the grid at window +0x154, makes the object, rolls its properties),
+    // thiscall (window, item type, quality, 0), ret 0xC. ENG 005D5080: the item generator, cdecl (level, quality, a3, rarity 0..3, a5, a6, item, type, 0).
+    inline Sacred::Thiscall<uint32_t(void* window, void* event)> merchantReceive{};
+    inline Sacred::Thiscall<uint32_t(void* window, uint32_t all)> merchantClear{};  // returns how many items it removed
+    inline Sacred::Thiscall<void(void* window, uint32_t count)> merchantRestock{};
+    inline Sacred::Thiscall<uint32_t(void* window, uint32_t type, uint32_t quality, uint32_t zero)> merchantAddItem{};
+    inline Sacred::Cdecl<void(uint32_t level, uint32_t quality, uint32_t a3, uint32_t rarity, uint32_t a5, uint32_t a6, uint32_t item, uint32_t type,
+                              uint32_t a9)> itemGenerate{};
+
     // Skill particle effects (gear/pfx.cpp). ENG 005A0C50: cObjectFX's effect setup (thiscall (fx, effect id), ret 4): the id (0x300..0x49D,
     // the object type of the effect) picks the hard-coded particle system class (a byte table at 0x5A3570 and a switch), which is made and
     // added to the particle manager; the handle goes into the fx object's +0x6E. ENG 007CB830: the manager's add (thiscall (manager, system)

@@ -1,3 +1,10 @@
+## v0.13.0 (2026-11-25)
+
+- New: `gear.shop` and the `shop.stock` event let a mod add wares to merchants and take them out again. The game fills a merchant's three stock pages when another merchant is opened and only swaps a few wares when the same one is opened again; the event fires right after the game did that (once per page, with the reason `new`, `refresh` or `restock`), so wares a mod adds stay until the game resets the page and a shop is never rerolled just because it was opened again.
+- New: `gear.shop.add{category, quality, level}` stocks a ware through the game's own stocking code (the item picker for the category, room in the grid, the item's random properties for the level and quality you ask for); `type` stocks an exact item type. `gear.shop.info()`, `items()`, `container()`, `pick()` and `remove()` read and edit the pages.
+- New: `gear/examples/shoptest`, an in-game test that opens a merchant, adds and removes wares and checks that a reopened merchant keeps its stock.
+- Under the hood: `gear/shop.cpp` wraps the merchant window's event handler (0x6DAD90) and its clear, restock, one-item stocker and item generator, found by signature.
+
 ## v0.12.0 (2026-11-25)
 
 - New: DDS images in mod documents (`<img src="x.dds">`, `image(x.dds)`): BC1, BC2 and BC3 (DXT1/3/5, also as DX10 files) go to the GPU as they are, with no decoding and a quarter to an eighth of the memory of a PNG; BC4, BC5, BC6H, BC7 and the usual uncompressed formats are decoded once on load. Only the top mip is read.

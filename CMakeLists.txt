@@ -195,6 +195,7 @@ if(SACREDGEAR)
     gear/killstat.cpp
     gear/party.cpp
     gear/potionpick.cpp
+    gear/shop.cpp
     gear/buffs.cpp
     gear/pfx.cpp
     gear/tables.cpp

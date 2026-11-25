@@ -147,6 +147,11 @@ Rules that hold across the API:
   document. Every button, link and input is a pad stop, a focused text field takes the keyboard, the default font is Segoe UI, and the
   game's own UI images are available as `gear:image/<id>`, CSS `transform` works. No JavaScript, no filters or drop shadows yet. Web-style conveniences work: `@font-face` with `url()` (icon fonts: `.home::before { content: "\e88a" }`), templates and styles shared between mods as `@mod-id/path` (a mod lists what it shares as `exports` in `mod.lua`), `gear.kit` widgets that look the same in Gear's plain style and in the theme, and developer hot reload (an empty file `mods\.rml-hot`, or the environment variable `GEAR_RML_HOT`). See
   [HTML/CSS documents](GearApi.md#htmlcss-documents-gearuirml) and `gear/examples/rmldemo`.
+- **Merchants' stock:** `gear.shop` and the `shop.stock` event hook the game's own shop code. A merchant's wares sit on three pages
+  (its tabs), each a stock grid; the game fills them when another merchant is opened and only swaps a few wares when the same one is
+  opened again. `shop.stock` fires after the game did that (once per page, with the reason), and a handler adds wares with
+  `gear.shop.add{category, quality, level}` or removes them, so what a mod adds stays until the game resets the page: a mod never rolls on
+  every opening. See [Shops](GearApi.md#shops-gearshop).
 - **Item data:** `gear.inv.values(item)` decodes an item's resolved value record (level, requirements, damage, attack, defense,
   protection, the eight bonus slots with code, attribute and stored value, and the records its sockets merged in), and
   `gear.inv.bonus_text(item, entry, slot)` gives the game's own tooltip line for one bonus slot (the engine's routine, so the
@@ -479,6 +484,7 @@ of the game folder.
 | `droptest` | The drop hooks: the loot function run a few hundred times per phase with changed chances, rarity weights, a veto, a replaced item and the generators; 31 checks. See [Gear drops](https://github.com/kirides/sacred-bild/blob/main/docs/GearDrops.md). |
 | `pfxtest` | `gear.pfx`: a Wood Elf casts spells as the game does and with a colour rule, a level rule, a `select` function and a texture swap; 8 checks and screenshots. See [Skill effects](https://github.com/kirides/sacred-bild/blob/main/docs/GearPfx.md). |
 | `bosstest` | Creature modifiers: health, damage dealt and taken, reflection, regeneration, spawn with modifiers, save and load with a boss (a savegame with a hostile creature 1266; 24 checks). |
+| `shoptest` | `gear.shop` and the `shop.stock` event: finds a merchant by teleporting to the world map's trader symbols, checks that a reopened merchant keeps its stock, adds wares by category and by type and removes them. |
 | `savegametest` | Per-savegame data (`gear.store.game`) across saves and loads. |
 | `mptest`, `netopstest` | The mod channel and `gear.net` (loopback, or a hosted LAN game; `netopstest` against the stock or the SacredEngineRemake server). |
 | `realmtest`, `closedtest` | `gear.realm` in the menus; Closed Internet end to end against a test lobby. |

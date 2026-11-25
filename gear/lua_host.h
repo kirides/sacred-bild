@@ -59,6 +59,8 @@ namespace LuaHost
     // event `kill.recorded`: the engine recorded a kill of the local hero or a creature it owns (the statistics record `id`). Skipped
     // while Lua is busy (the engine's own code calls this, never nested in a kernel call).
     void killRecorded(uint32_t id);
+    // event `shop.stock`: the engine stocked the merchant window (`reason` 'new', 'restock' or 'refresh'; see gear/shop.cpp). Skipped while Lua is busy.
+    void shopStock(const char* reason, uint32_t merchant, uint32_t container, uint32_t heroLevel);
     // event `potion.pick`: the engine's potion picker is called (`mode`, `flag`, `tier` as it takes them; `address` the caller's return address, `site` its
     // name or nullptr); `out` the item type a mod chose (Answer::Value), else the engine picks.
     Answer potionPick(int mode, int flag, int tier, uintptr_t address, const char* site, int& out);

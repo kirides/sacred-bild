@@ -47,6 +47,7 @@
 ---| 'master.describe' # The rune exchange page is drawn: `(rune, ability, count)` for the shown rune's art or spell; return a level to have the page write the engine's own "name - Level n" for it at the left of the page, nil or false for no text.
 ---| 'master.maximum' # The rune exchange page is drawn: `(rune, ability, count)`; return true to have it write the red "Maximum Level Attained" under the result box.
 ---| 'kill.recorded' # The engine recorded a kill of the local hero or of a creature it owns (minion, summon): `(e)`, see `GearKillRecorded`. Fires for every such kill, also those that give no experience; runs inside the engine's death handling.
+---| 'shop.stock' # The game stocked a page of the merchant window (another merchant, a refresh, or a swap of some wares): `(e)`, see `GearShopStock`; add and remove wares with `gear.shop`. Fires once per page and only when the game itself changed it, so what a mod adds stays until the game resets that page.
 ---| 'potion.pick' # The engine picks the item type of a random potion (a merchant's stock, a creature's drop): `(e)`, see `GearPotionPick`; return an item type to use that one, or nil for the engine's pick.
 ---| 'rune.usable' # A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it.
 ---| 'pfx.select' # An art or spell is making an effect (the engine sets up an effect object of type `fx`): `(ctx)`, see `GearPfxContext`; return the id of a `gear.pfx` variant to use, or nil for the engine's own look. Asked for every effect while a handler exists, so keep it short.
@@ -160,6 +161,7 @@ function GearVfs.list(prefix) end
 ---@field world GearWorld The world: hero, creatures, items, spawning, pickup rules.
 ---@field drops GearDrops Item drops: chance, rarity weights, the generator, the roll and select events.
 ---@field inv GearInv Inventories: containers, items, export and import of items.
+---@field shop GearShop Merchants' stock: the pages of the merchant window, `shop.stock`, adding and removing wares.
 ---@field game GearGame The game itself: difficulty and saving.
 ---@field chat GearChat The game's chat and message lines: who sent them, the session's history, the game's overlay.
 ---@field clipboard GearClipboard The Windows clipboard: copy text out of the game.
@@ -232,6 +234,7 @@ gear = {}
 ---@overload fun(event: 'master.maximum', fn: fun(rune: integer, ability: integer, count: integer): boolean?): GearHandler
 ---@overload fun(event: 'kill.recorded', fn: fun(e: GearKillRecorded)): GearHandler
 ---@overload fun(event: 'potion.pick', fn: fun(e: GearPotionPick): integer?): GearHandler
+---@overload fun(event: 'shop.stock', fn: fun(e: GearShopStock)): GearHandler
 ---@overload fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler
 ---@overload fun(event: 'pfx.select', fn: fun(ctx: GearPfxContext): integer?): GearHandler
 ---@overload fun(event: 'item.use', fn: fun(e: GearItemUse): ('consume'|'keep')?): GearHandler

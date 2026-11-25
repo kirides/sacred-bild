@@ -7,7 +7,7 @@ import os
 import re
 
 # The meta files in the order they appear in the reference.
-FILES = ['gear.lua', 'data.lua', 'world.lua', 'party.lua', 'buffs.lua', 'pfx.lua', 'classes.lua', 'drops.lua', 'game.lua', 'realm.lua', 'mp.lua', 'net.lua', 'chat.lua', 'mods.lua', 'menu.lua', 'input.lua', 'inv.lua', 'lookup.lua', 'fmt.lua', 'toast.lua', 'kit.lua', 'store.lua', 'savegame.lua', 'events.lua', 'ui.lua', 'ui_widgets.lua', 'auto.lua']
+FILES = ['gear.lua', 'data.lua', 'world.lua', 'party.lua', 'buffs.lua', 'pfx.lua', 'classes.lua', 'drops.lua', 'game.lua', 'realm.lua', 'mp.lua', 'net.lua', 'chat.lua', 'mods.lua', 'menu.lua', 'input.lua', 'inv.lua', 'shop.lua', 'lookup.lua', 'fmt.lua', 'toast.lua', 'kit.lua', 'store.lua', 'savegame.lua', 'events.lua', 'ui.lua', 'ui_widgets.lua', 'auto.lua']
 
 
 class Param:

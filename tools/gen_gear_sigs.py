@@ -326,6 +326,16 @@ GEAR = [
     # The potion picker (gear/potionpick.cpp): stdcall (mode, flag, tier), ret 0xC; merchants and the loot of dying creatures call it. The event
     # `potion.pick` asks the mods first.
     ('potionPick', 0x0043B1A0, 'func'),
+    # The merchant window's stock (gear/shop.cpp; docs/GearApi.md "gear.shop", event `shop.stock`). The window's event handler (thiscall (window, event),
+    # ret 4; event kind 5 / id 0x2E with the sub-kind in +8: 8 a merchant opened, 9 the refresh message) rebuilds or tops up the stock: the clear
+    # (thiscall (window, all), ret 4: all = 1 empties the grid, 0 removes a random handful), the random stock (thiscall (window, count), ret 4) and the
+    # one-item stocker (thiscall (window, item type, quality, 0), ret 0xC: finds room in the grid at window +0x154, makes the item and rolls its
+    # properties with the item generator, cdecl with 9 arguments: level, quality, ..., rarity 0..3 in the fourth).
+    ('merchantReceive', 0x006DAD90, 'func'),
+    ('merchantClear', 0x006D9B90, 'func'),
+    ('merchantRestock', 0x006DA320, 'func'),
+    ('merchantAddItem', 0x006D9DE0, 'func'),
+    ('itemGenerate', 0x005D5080, 'func'),
     # Skill particle effects (gear/pfx.cpp). cObjectFX's effect setup (thiscall (fx, effect id), ret 4: 0x5A0C50 picks the hard-coded
     # particle system class for the id 0x300..0x49D and registers it), the particle manager's add (thiscall (manager, system) -> handle,
     # ret 4) and its update by handle (thiscall (manager, handle, dt), ret 8), the manager singleton (+0x18 the vector of systems by
