@@ -1,3 +1,9 @@
+## v0.15.2 (2026-11-25)
+
+- Fixed: Steam. The previous update stopped Sacred Gear from finding the game's code in Steam's `Sacred.exe` (its code is encrypted on disk and only decoded in memory), so Sacred Gear and its mods did not start. It now searches the running code when the file differs from it. We are sorry for the inconvenience this caused Steam players.
+- Improved: less time per frame with many mods loaded (idle frame time with 38 mods 3.79 -> 3.51 ms at 1600x900): mod documents with generated CSS content are walked more cheaply, the game's settings are read at most four times a second, mod meshes that follow each other are drawn with one call, the controller's list of mod documents is cheaper to build, and the list of the game's windows is built once per tick.
+- New: opt-in frame profiler. With the environment variable `SACREDGEAR_PROF` set, `SacredGear.log` gets a time and allocation report every 5 seconds, per hook, UI layer, tick phase and mod (`nogc` also stops the Lua collector). Off by default.
+
 ## v0.15.1 (2026-11-25)
 
 - Fixed: buttons inside a box scaled with CSS `transform: scale(...)` take their mouse clicks where they are drawn. Before, the click went to the place the unscaled layout would have them, so for example a click on a companion's portrait did nothing when the portraits were set smaller than 100 %.

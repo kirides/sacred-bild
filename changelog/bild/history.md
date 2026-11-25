@@ -1,3 +1,8 @@
+## v0.3.5 (2026-11-25)
+
+- Fixed: Steam. The previous update stopped Sacred Bild from finding the game's code in Steam's `Sacred.exe` (its code is encrypted on disk and only decoded in memory), so features that need those addresses stayed off. Sacred Bild now notices that the file differs from the running code and searches the running code instead; GOG and ReBorn still use the file. We are sorry for the inconvenience this caused Steam players.
+- Fixed: the menus are paced by `[Display] FpsLimitMenu` again instead of being held near 30 fps by the game's 20 ms sleep. The fix for that had silently stopped working because its address was no longer found.
+
 ## v0.3.4 (2026-11-25)
 
 - New: model tints for Sacred Gear mods (`SacredBild_TintSet`, `SacredBild_TintClear`): a creature's model is drawn with a colour multiplied over it, whole or per mesh, through one more texture stage; its shadow stays untinted.
