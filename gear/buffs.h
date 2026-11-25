@@ -31,6 +31,15 @@ namespace Buffs
     extern const size_t kFieldCount;
     bool isField(uint16_t offset);
 
+    // The speed values (int16 at stats +0x3C attack speed, +0x3E cast speed, +0x40 movement speed; 100 is normal
+    // speed, the animation runs value / 100 as fast). cStats::recalc caps each at the end (220, 260 with creature flag
+    // 0x10000, +0x40 380 for some creatures); a buff's mod on one of these is added AFTER that cap, so it lifts it.
+    // Clamped to 0..kMaxSpeed.
+    extern const uint16_t kSpeedFields[];
+    extern const size_t kSpeedFieldCount;
+    bool isSpeedField(uint16_t offset);
+    constexpr int kMaxSpeed = 1000;
+
     struct Buff
     {
         std::string key;        // one per creature: applying the same key again replaces it
@@ -56,6 +65,8 @@ namespace Buffs
 
     // The stats block's float fields of a creature as they are now (offset, value), nil when it has none.
     bool fields(uint32_t id, std::vector<std::pair<uint16_t, float>>& out);
+    // The creature's speed values now (offset, value), see kSpeedFields.
+    bool speeds(uint32_t id, std::vector<std::pair<uint16_t, int>>& out);
     // The spell overlay slot: what shows and for how many seconds more.
     bool overlay(uint32_t id, int& which, float& seconds);
     bool setOverlay(uint32_t id, int which, float seconds);

@@ -2684,6 +2684,24 @@ namespace
         return 1;
     }
 
+    // native.buff_speeds(id) -> {[offset] = value} | nil: the stats block's speed values (attack, cast, movement)
+    int nativeBuffSpeeds(lua_State* L)
+    {
+        std::vector<std::pair<uint16_t, int>> f;
+        if (!Buffs::speeds(checkId(L, 1), f))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, static_cast<int>(f.size()));
+        for (const auto& [offset, value] : f)
+        {
+            lua_pushnumber(L, value);
+            lua_rawseti(L, -2, offset);
+        }
+        return 1;
+    }
+
     // native.buff_overlay(id) -> which, seconds | nil;  native.buff_set_overlay(id, which, seconds) -> bool
     int nativeBuffOverlay(lua_State* L)
     {
@@ -5038,6 +5056,7 @@ namespace
             {"buff_ended", nativeBuffEnded},
             {"buff_clear", nativeBuffClear},
             {"buff_fields", nativeBuffFields},
+            {"buff_speeds", nativeBuffSpeeds},
             {"buff_overlay", nativeBuffOverlay},
             {"buff_set_overlay", nativeBuffSetOverlay},
             {"pipe_open", nativePipeOpen},

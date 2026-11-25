@@ -2017,6 +2017,7 @@ Reached as `gear.buffs`.
 |---|---|---|
 | `STATS` | `table<string, integer>` | The values a buff adds to, by name: `resist_physical`, `resist_fire`, `resist_magic`, `resist_poison`, `damage_min_physical` / `_fire` / `_magic` / `_poison`, `damage_max_physical` / `_fire` / `_magic` / `_poison` (their stats block offsets). |
 | `FACTORS` | `table<string, integer>` | The values a buff multiplies, by name: `attack_factor`, `speed_factor`, `armor_factor`, `regen_factor`, `art_regen_factor`. |
+| `SPEEDS` | `table<string, integer>` | The speed values (attack, cast, movement), by name: `attack_speed`, `cast_speed`, `move_speed` (their stats block offsets). 100 is normal speed; the animation runs value / 100 as fast. The engine caps each at 220 (260 for creatures with flag 0x10000, movement 380 for some); a buff's `speeds` are added after the cap, so they go beyond it. Values are clamped to 0..1000. |
 | `OVERLAYS` | `table<string, integer>` | The game's spell overlays: `light` (6, Lichtschild), `stone` (7, Steinhaut), `flame` (10, Flammenhaut). |
 
 ### GearBuffDef
@@ -2031,6 +2032,8 @@ A buff's definition.
 | `icon` | `string` | The game's texture name of its icon (for lists and editors). (optional) |
 | `stats` | `table<string\|integer, number>` | What it adds: `{resist_fire = 50}` (names of `STATS`, or stats block offsets). (optional) |
 | `factors` | `table<string\|integer, number>` | What it multiplies: `{armor_factor = 1.5}` (names of `FACTORS`, or offsets). (optional) |
+| `speeds` | `table<string\|integer, number>` | What it adds to the speed values, past the engine's cap of 220: `{move_speed = 80}` (names of `SPEEDS`, or offsets). (optional) |
+| `speed_factors` | `table<string\|integer, number>` | What it multiplies them by, past the cap: `{attack_speed = 2}` (names of `SPEEDS`, or offsets). (optional) |
 | `overlay` | `string\|integer` | The spell overlay shown while it runs: a name of `OVERLAYS` or its number. (optional) |
 | `seconds` | `number` | How long it lasts (0 or nil: until removed). (optional) |
 | `debuff` | `boolean` | Marks a harmful one (for lists; the values decide what it does). (optional) |
@@ -2108,6 +2111,13 @@ The creature's combat values now, by stats block offset (`{[0x66] = 12.5, ...}`;
 
 - `target`: `Creature|integer`
 - returns `table<integer, number>?`
+
+#### `gear.buffs.speeds(target) -> table<string, integer>?`
+
+The creature's speed values now, by name (`{attack_speed = 140, cast_speed = 120, move_speed = 130}`), beyond the engine's cap when a buff lifted it. nil when it is no creature.
+
+- `target`: `Creature|integer`
+- returns `table<string, integer>?`
 
 #### `gear.buffs.change(before, after) -> table<integer, number>, table<integer, number>`
 
