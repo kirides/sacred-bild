@@ -12,6 +12,20 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 `src/bild/engine/sacred_addr.h` and in the game's classes in `src/bild/sacred/`; the addresses refer to the English GOG build
 (Ghidra program `/Sacred.exe (GOG)`).
 
+## Source layout
+
+All code is under `src/`, one folder per DLL plus the code both link, and at most one folder level below each:
+
+| Folder | What it holds |
+|---|---|
+| `src/core/` | `sacred_core`, linked by both DLLs: log, formatting, patches and hooks, signature search, instances, `sacred/address.h` (the typed addresses), `bild_gear.h` (the exports the two DLLs call on each other). Counts for both versions |
+| `src/bild/` | `ddraw.dll`: entry, proxy and exports at the root; `engine/` (sacred.exe and gameserver.exe addresses, module list), `sacred/` (the game's classes), `settings/` (ini, settings window, `SacredBild.ini`), `ddraw9/` (Direct3D 9 backend), `render/`, `perf/`, `display/`, `ui/`, `controller/`, `overlay/`, `net/`, `game/`, `diag/` |
+| `src/gear/` | `SacredGear.dll`: the Lua host and what every area uses at the root (with the natives of each area in a `*_lua.cpp` next to its module), `world/`, `items/`, `ui/`, `engine/` (sacred.exe addresses and the generated tables), `lua/` (the kernel in parts listed in `kernel.parts`, the libraries), `meta/` (the Lua API annotations), `mdk/`, `examples/`, `tests/`, `res/` |
+
+The repository paths every tool uses are in `tools/paths.py`. `tools/relayout.py <stage>` holds the moves that made this
+layout (stages `core`, `bild`, `gear`, `tools`) with the include and path rewrite; run a stage again on a branch cut
+before it (after rebasing) to move the files the branch added.
+
 ## Source files
 
 | Path | What it is |
@@ -24,7 +38,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 | `src/bild/settings/form.*` | `Ui::Form`: settings windows declared in code (pages, groups, rows of controls bound to ini keys), laid out and run as dialogs |
 | `src/core/log.*`, `src/bild/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
 | `src/core/patch.*`, `src/core/sig.*` | Code patches and hooks; byte signature search |
-| `sacred_core` (CMake) | `src/core/fmt.*`, `log.*`, `patch.*`, `sig.*` as a static library, linked by SacredBild and by Sacred Gear (`gear/`, see [Sacred Gear](Gear.md)) |
+| `sacred_core` (CMake) | `src/core/fmt.*`, `log.*`, `patch.*`, `sig.*` as a static library, linked by SacredBild and by Sacred Gear (`src/gear/`, see [Sacred Gear](Gear.md)) |
 | `src/bild/spin_lock.h` | Locks for the render thread's hot paths |
 | `src/bild/mem.h` | Fields of granny.dll's objects by byte offset (`Mem::field`) |
 | `src/bild/diag/profiler.*` | `[Debug] Profiler` |
@@ -143,7 +157,7 @@ release.
 
 ## Sacred Gear
 
-Sources are in `gear/`. Sacred Gear links the code it shares with SacredBild (log, patches and hooks, signature search)
+Sources are in `src/gear/`. Sacred Gear links the code it shares with SacredBild (log, patches and hooks, signature search)
 from the `sacred_core` library. Building: part of the normal build (`out/build/msvc-x86/RelWithDebInfo/SacredGear.dll`;
 `-DSACREDGEAR=OFF` leaves it out); vcpkg provides LuaJIT, statically linked. The engine facts it relies on are in
 [RE notes](RE_NOTES.md#objects-items-saving-and-the-ui-pass-sacred-gear).
@@ -151,8 +165,8 @@ from the `sacred_core` library. Building: part of the normal build (`out/build/m
 | Path | What it is |
 |---|---|
 | `src/gear/main.cpp` | DLL entry: one instance per process, signatures, hooks; headless in `gameserver.exe` (file overlay only) |
-| `src/gear/lua_host.*` | The LuaJIT state on the engine thread, native functions for the kernel, time budget |
-| `src/gear/lua/kernel.lua` | The trusted Lua side (embedded as a resource): manifests, load order, sandboxes, events, table views, the mod catalog (settings, key binds, live load and unload, `gear_mods.json`) |
+| `src/gear/lua_host.*`, `lua_native.h`, `*_lua.cpp` | The LuaJIT state on the engine thread, the time budget and the kernel calls; the native functions for the kernel, each area's in a `*_lua.cpp` next to its module (`world/world_lua.cpp`, `items/items_lua.cpp`, `ui/ui_lua.cpp`, `save_lua.cpp` ...), the helpers they share in `lua_native.h` |
+| `src/gear/lua/kernel*.lua`, `kernel.parts` | The trusted Lua side, in parts by area joined in the order of `kernel.parts` into one chunk (one scope) at build time and embedded as a resource: manifests, load order, sandboxes, events, table views, the mod catalog (settings, key binds, live load and unload, `gear_mods.json`) |
 | `src/gear/lua/modmanager.lua` | The Mods screen, loaded as the mod `gear-mods`; the only mod that gets the kernel's `admin` table |
 | `src/gear/lua/*.lua` | Libraries shipped in the DLL (`fmt`, `lookup`, `store`, `toast`, ...) |
 | `src/gear/hooks.*` | The engine hooks: the per-frame tick (the game's per-frame zoom function: anything replacing that call must still let it run) |
@@ -189,7 +203,7 @@ Without SacredBild the layout is drawn as the game draws it and game windows sta
 The annotations in `src/gear/meta/*.lua` are part of the API: a change to what the Lua side offers is not done until
 they say so.
 
-1. Change the code (`src/gear/lua/kernel.lua`, and the native tables in `src/gear/lua_host.cpp`).
+1. Change the code (the kernel part of the area, `src/gear/lua/kernel_<area>.lua`, and the native tables in the area's `*_lua.cpp`).
 2. Change the matching annotation: a new function gets a description, `---@param` and `---@return` lines; a new
    field a `---@field`; a new option goes into the options class of the function; a new event gets a `gear.on`
    overload and a `GearEventName` entry.
@@ -197,7 +211,7 @@ they say so.
    tools/gearapi/check_gear_api.py`. The MDK is built from the same sources by CI (`python tools/gearapi/gen_gear_mdk.py` builds it locally
    in `out/mdk`).
 
-`check_gear_api.py` reads `kernel.lua` and `lua_host.cpp` as text and compares names both ways (functions, fields,
+`check_gear_api.py` reads the kernel's parts and `lua_host.cpp` with every `*_lua.cpp` as text and compares names both ways (functions, fields,
 events, options, manifest keys); types and signatures are reviewed by hand. It also fails if `docs/GearApi.md` is not
 what the generator produces. If it cannot find a place in the code it expects, the code changed shape: update the check
 rather than silence it. CI runs it, with the kernel tests, in its text-checks job.
