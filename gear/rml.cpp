@@ -3955,6 +3955,106 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 0;
     }
 
+    // native.vfs_configure(dir, layers | nil): the layers of the mod's packs from mod.lua ({file, mount} in order, a later one wins); nil: the folder's *.gpak.
+    int vfsConfigure(lua_State* L)
+    {
+        const fs::path root = modRoot(str(L, 1));
+        if (root.empty())
+        {
+            return 0;
+        }
+        if (!lua_istable(L, 2))
+        {
+            Gear::Vfs::unmount(root);
+            return 0;
+        }
+        std::vector<Gear::Vfs::Layer> layers;
+        const int count = static_cast<int>(lua_objlen(L, 2));
+        for (int i = 1; i <= count && i <= 32; ++i)
+        {
+            lua_rawgeti(L, 2, i);
+            lua_getfield(L, -1, "file");
+            lua_getfield(L, -2, "mount");
+            const char* file = lua_tostring(L, -2);
+            const char* mount = lua_tostring(L, -1);
+            if (file)
+            {
+                const fs::path path = root / fromUtf8(file);
+                if (inside(root, path))
+                {
+                    layers.push_back({path, mount ? mount : "/"});
+                }
+                else
+                {
+                    LOG("vfs: {}: the pack {} is not inside the mod's folder", str(L, 1), file);
+                }
+            }
+            lua_pop(L, 3);
+        }
+        Gear::Vfs::configure(root, std::move(layers));
+        return 0;
+    }
+
+    // native.vfs_unmount(dir): the mod stopped.
+    int vfsUnmount(lua_State* L)
+    {
+        const fs::path root = modRoot(str(L, 1));
+        if (!root.empty())
+        {
+            Gear::Vfs::unmount(root);
+        }
+        return 0;
+    }
+
+    // native.vfs_read(dir, path) -> string | nil: a file of the mod's folder, from the disk or else from its layers.
+    int vfsRead(lua_State* L)
+    {
+        const fs::path root = modRoot(str(L, 1));
+        const std::string rel = str(L, 2);
+        const fs::path file = root.empty() || rel.empty() ? fs::path() : root / fromUtf8(rel);
+        std::string bytes;
+        if (!file.empty() && inside(root, file) && readAll(file, bytes, true))
+        {
+            lua_pushlstring(L, bytes.data(), bytes.size());
+            return 1;
+        }
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // native.vfs_exists(dir, path) -> bool
+    int vfsExists(lua_State* L)
+    {
+        const fs::path root = modRoot(str(L, 1));
+        const std::string rel = str(L, 2);
+        const fs::path file = root.empty() || rel.empty() ? fs::path() : root / fromUtf8(rel);
+        std::error_code ec;
+        lua_pushboolean(L, !file.empty() && inside(root, file) && (fs::is_regular_file(file, ec) || Gear::Vfs::contains(root, file)));
+        return 1;
+    }
+
+    // native.vfs_list(dir, prefix) -> {path, ...}: the files below `prefix` that the layers provide (not the loose files on disk), in order.
+    int vfsList(lua_State* L)
+    {
+        const fs::path root = modRoot(str(L, 1));
+        lua_newtable(L);
+        if (root.empty())
+        {
+            return 1;
+        }
+        int i = 0;
+        for (const std::string& path : Gear::Vfs::list(root, str(L, 2)))
+        {
+            lua_pushlstring(L, path.data(), path.size());
+            lua_rawseti(L, -2, ++i);
+            if (i >= 100000)
+            {
+                break;
+            }
+        }
+        return 1;
+    }
+
     // native.texture_load(dir, path) -> id, width, height | nil, message: an image file of the mod (or "@mod/path") as a shared texture, one more reference.
     int textureLoad(lua_State* L)
     {
@@ -4118,6 +4218,11 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_key", guarded<rmlKey>},
         {"rml_wheel", guarded<rmlWheel>},
         {"rml_font", guarded<rmlFont>},
+        {"vfs_configure", guarded<vfsConfigure>},
+        {"vfs_unmount", guarded<vfsUnmount>},
+        {"vfs_read", guarded<vfsRead>},
+        {"vfs_exists", guarded<vfsExists>},
+        {"vfs_list", guarded<vfsList>},
         {"texture_load", guarded<textureLoad>},
         {"texture_release", guarded<textureRelease>},
         {"rml_exports", guarded<rmlExports>},

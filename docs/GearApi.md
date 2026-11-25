@@ -268,13 +268,36 @@ What `gear.mod` tells a mod about itself.
 | `version` | `string` | The manifest's `version` (default `'0'`). |
 | `dir` | `string` | The mod's folder name under `mods`. |
 
-### Gear
+### GearVfs
 
 Reached as `gear`.
 
 The `gear` global: Sacred Gear's API, one copy per mod (each mod has its own globals).
 
-All mod code runs on the engine thread, between the game's update and the drawing of the frame, one handler at a time, so handlers see a consistent state and need no locks.
+All mod code runs on the engine thread, between the game's update and the drawing of the frame, one handler at a time, so handlers see a consistent state and need no locks. The files of the mod's folder as the game sees them: on disk, or else in the layers of `vfs` in mod.lua (packs).
+
+#### `gear.read(path) -> string?`
+
+The bytes of a file of the mod (a path relative to its folder, forward slashes).
+
+- `path`: `string`
+- returns `bytes` `string?` - nil if there is no such file.
+
+#### `gear.exists(path) -> boolean`
+
+Whether the file exists, on disk or in a layer.
+
+- `path`: `string`
+- returns `boolean`
+
+#### `gear.list(prefix) -> string[]`
+
+The files below a folder that the layers provide (not the loose files on disk), as paths relative to the mod's folder, lower case, in order.
+
+- `prefix`: `string` (optional) - A folder of the mod (`ui/maps`); default all.
+- returns `string[]`
+
+### Gear
 
 | Field | Type | |
 |---|---|---|
@@ -314,9 +337,10 @@ All mod code runs on the engine thread, between the game's update and the drawin
 | `mods` | `GearMods` | The installed mods; a page of this mod's own in the mod manager. |
 | `menu` | `GearMenu` | Menus mods add items to (the game menu) and the mod that draws them. |
 | `ui` | `GearUi` | Drawing on top of the game, widgets, panels and the layout. |
+| `vfs` | `GearVfs` | The files of the mod's folder, from the disk or the layers of its `vfs` packs. |
 | `auto` | `GearAuto` | Automation (only with `-gear-auto` and `automation = true` in `mod.lua`). (optional) |
 
-#### `gear.on(event, fn) -> GearHandler`
+#### `Gear.on(event, fn) -> GearHandler`
 
 Calls `fn` for `event`; returns a handle for `gear.off`. Built-in events: see `GearEventName`. Any other name is a custom event that `gear.emit` fires (it has a dot: `twitch.command`).
 
@@ -375,20 +399,20 @@ Forms:
 - `fn`: `fun(...: any)`
 - returns `GearHandler`
 
-#### `gear.off(handle)`
+#### `Gear.off(handle)`
 
 Removes a handler.
 
 - `handle`: `GearHandler`
 
-#### `gear.emit(event, ...)`
+#### `Gear.emit(event, ...)`
 
 Calls every handler of a custom event now. Custom names have a dot (`twitch.command`); the built-in events and the prefixes `session.`, `gear.`, `pipe.`, `game.`, `chat.` and `settings.` are reserved. Handlers may emit events too, up to 8 levels deep. Handlers of `prefix.*` (`gear.on('bounty.*', fn)`) also get every custom event below the prefix, with the event name first. See `gear.events` for publishing hooks.
 
 - `event`: `string`
 - `...`: `any`
 
-#### `gear.after(seconds, fn) -> GearTimer`
+#### `Gear.after(seconds, fn) -> GearTimer`
 
 Runs `fn` once after `seconds` (real seconds while the game runs frames, not in menus or loading screens).
 
@@ -396,7 +420,7 @@ Runs `fn` once after `seconds` (real seconds while the game runs frames, not in 
 - `fn`: `fun()`
 - returns `GearTimer`
 
-#### `gear.every(seconds, fn) -> GearTimer`
+#### `Gear.every(seconds, fn) -> GearTimer`
 
 Runs `fn` every `seconds`. A timer whose function raised an error stops. At most 1000 timers per mod.
 
@@ -404,25 +428,25 @@ Runs `fn` every `seconds`. A timer whose function raised an error stops. At most
 - `fn`: `fun()`
 - returns `GearTimer`
 
-#### `gear.cancel(timer)`
+#### `Gear.cancel(timer)`
 
 Stops a timer.
 
 - `timer`: `GearTimer`
 
-#### `gear.task(fn)`
+#### `Gear.task(fn)`
 
 Runs `fn` as a task: a coroutine that may wait with `gear.wait` and `gear.wait_until` without holding up the frame. It is resumed every tick (in game every frame; with automation in the menus too).
 
 - `fn`: `fun()`
 
-#### `gear.wait(seconds)`
+#### `Gear.wait(seconds)`
 
 Inside a task: waits `seconds`.
 
 - `seconds`: `number`
 
-#### `gear.wait_until(test, timeout) -> boolean`
+#### `Gear.wait_until(test, timeout) -> boolean`
 
 Inside a task: waits until `test()` returns true, at most `timeout` seconds.
 
@@ -430,7 +454,7 @@ Inside a task: waits until `test()` returns true, at most `timeout` seconds.
 - `timeout`: `number` (optional) - Default 30.
 - returns `satisfied` `boolean` - True when `test()` returned true, false after the timeout.
 
-#### `gear.guard(where, fn) -> F`
+#### `Gear.guard(where, fn) -> F`
 
 A function that calls `fn` with its arguments and catches its errors: the first error of each `where` is logged with its traceback, later ones are not, and none of them counts against the mod (a mod is switched off after many errors). Use it for handlers that run every frame: `gear.on('draw', gear.guard('draw', draw))`. Returns fn's first result, nil after an error.
 
@@ -438,19 +462,19 @@ A function that calls `fn` with its arguments and catches its errors: the first 
 - `fn`: `F`
 - returns `F`
 
-#### `gear.log(...)`
+#### `Gear.log(...)`
 
 A line in `SacredGear.log`, prefixed with the mod's id. Same as `print`.
 
 - `...`: `any`
 
-#### `gear.time() -> number`
+#### `Gear.time() -> number`
 
 Seconds, high resolution, from an arbitrary start.
 
 - returns `number`
 
-#### `gear.read(name) -> string?, string?`
+#### `Gear.read(name) -> string?, string?`
 
 Reads a file of the mod's own folder (directly in it, no subfolders).
 
@@ -458,7 +482,7 @@ Reads a file of the mod's own folder (directly in it, no subfolders).
 - returns `text` `string?`
 - returns `error` `string?`
 
-#### `gear.save(name, text) -> boolean?, string?`
+#### `Gear.save(name, text) -> boolean?, string?`
 
 Writes a file in the mod's folder, for settings a mod's own UI changes: `*.json`, `*.txt` or `*.lua` other than `mod.lua` and `main.lua`, at most 8 MB. The write is atomic: the text goes to `<name>.tmp`, is flushed and then replaces the file, so a crash leaves the old file or the new one, never part of one.
 
@@ -469,9 +493,16 @@ Writes a file in the mod's folder, for settings a mod's own UI changes: `*.json`
 
 ## The manifest (mod.lua)
 
-### GearModManifest
+### GearVfsLayer
 
-The table `mod.lua` returns. It runs without any globals, so it can only hold values. Annotate it with `---@type GearModManifest` above the `return`.
+The table `mod.lua` returns. It runs without any globals, so it can only hold values. Annotate it with `---@type GearModManifest` above the `return`. One pack of a mod's `vfs` list.
+
+| Field | Type | |
+|---|---|---|
+| `file` | `string` | The pack, a path inside the mod's folder (`resources/data01.pak`): a ZIP, files stored or deflated, no encryption, no ZIP64. |
+| `mount` | `string` | Where its files appear inside the mod's folder: `/` (default) the pack's `ui/a.jpg` is the mod's `ui/a.jpg`, `ui/maps` it is `ui/maps/ui/a.jpg`. (optional) |
+
+### GearModManifest
 
 | Field | Type | |
 |---|---|---|
@@ -490,6 +521,7 @@ The table `mod.lua` returns. It runs without any globals, so it can only hold va
 | `pipes` | `string[]` | Names of the named pipes the mod may open (`gear.pipe.open`). (optional) |
 | `theme` | `string` | The `.rcss` file (path inside the mod) that Gear puts in front of every RmlUi document of every mod while this mod runs (the shared theme). (optional) |
 | `theme_dp` | `string` | The same stylesheet for documents laid out in screen pixels (`dp = true`; lengths in `dp`); Gear uses it for those documents instead of `theme`. (optional) |
+| `vfs` | `GearVfsLayer[]` | Packs (ZIP archives) the mod's resources come from, in order; a later layer wins over an earlier one, and a file in the mod's folder wins over every layer. Without it every `*.gpak` in the mod's folder is one layer mounted at `/`. Documents, style sheets, templates and images read through the layers; `gear.vfs` reads any file. At most 32. (optional) |
 | `exports` | `string[]` | Files of the mod that the RmlUi documents of other mods may use while this mod runs, as `@<mod id>/<path>` in a link (`<link type="text/template" href="@sacred-theme/templates/window.rml"/>`, `<link type="text/rcss" ...>`), an image (`src`, `image(...)`) or `rml.load_font('@id/fonts/x.ttf')`: `'templates/'` (a folder and below), `'styles/*.rcss'` (the files of one folder with that ending), `'images/logo.png'` (one file), `'*'` (everything). Nothing else of the mod can be reached, and no path leaves its folder. (optional) |
 | `automation` | `boolean` | `true`: the mod gets `gear.auto` when the game runs with `-gear-auto`. (optional) |
 

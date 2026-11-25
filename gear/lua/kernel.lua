@@ -7836,6 +7836,20 @@ local function make_env(mod)
     gear.menu = uis.make_menu(mod)
     if mod.builtin then env.admin = admin end
     gear.ui = make_ui(mod)
+    -- gear.vfs: the files of the mod's folder as the game sees them: on disk, or else in the layers of mod.lua's `vfs` (packs).
+    gear.vfs = {
+        read = function(path)
+            assert(type(path) == 'string', 'path must be a string')
+            return native.vfs_read and native.vfs_read(mod.dir, path) or nil
+        end,
+        exists = function(path)
+            assert(type(path) == 'string', 'path must be a string')
+            return native.vfs_exists and native.vfs_exists(mod.dir, path) or false
+        end,
+        list = function(prefix)
+            return native.vfs_list and native.vfs_list(mod.dir, prefix or '') or {}
+        end,
+    }
     mod.ui_api = gear.ui
     -- gear.on(event, fn) -> handle; gear.off(handle). Events: "load" (all mods loaded), "frame" (dt in seconds,
     -- every in-game frame on the engine thread), "session.start" (hero), "session.stop", and the custom events
@@ -7957,6 +7971,18 @@ local function check_manifest(m, dir)
             end
         end
     end
+    if m.vfs ~= nil then
+        if type(m.vfs) ~= 'table' or #m.vfs > 32 then return nil, 'mod.lua: vfs must be a list of at most 32 layers {file = ..., mount = ...}' end
+        for _, layer in ipairs(m.vfs) do
+            local f, mount = type(layer) == 'table' and layer.file, type(layer) == 'table' and layer.mount
+            if type(f) ~= 'string' or f == '' or f:find('%.%.') or f:find('^[/\\]') or f:find(':') then
+                return nil, 'mod.lua: vfs: each layer needs file = the path of a pack inside the mod'
+            end
+            if mount ~= nil and (type(mount) ~= 'string' or mount:find('%.%.') or mount:find(':')) then
+                return nil, 'mod.lua: vfs: mount is a folder inside the mod ("/" or "ui/maps")'
+            end
+        end
+    end
     if m.theme_dp ~= nil and (type(m.theme_dp) ~= 'string' or m.theme_dp:find('%.%.') or m.theme_dp:find('^[/\\]') or m.theme_dp:find(':')) then
         return nil, 'mod.lua: theme_dp must be the path of an .rcss file inside the mod'
     end
@@ -7993,6 +8019,7 @@ local function check_manifest(m, dir)
         theme = m.theme,
         theme_dp = m.theme_dp,
         exports = m.exports,
+        vfs = m.vfs,
         dir = dir,
     }
 end
@@ -8164,6 +8191,7 @@ local function load_mod(e, initial)
     end
     mods[#mods + 1] = m
     e.loaded = true
+    if m.vfs and native.vfs_configure then native.vfs_configure(m.dir, m.vfs) end
     if m.exports and native.rml_exports then native.rml_exports(m.id, m.dir, m.exports) end
     m.loading = true
     local ok = call(m, 'main.lua', chunk)
@@ -8227,6 +8255,7 @@ local function unload_mod(e)
     m.disabled, m.unloaded = true, true     -- timers, tasks and pipes of the mod notice and go
     e.loaded = false
     if m.exports and native.rml_exports then native.rml_exports(m.id, m.dir, nil) end
+    if native.vfs_unmount then native.vfs_unmount(m.dir) end
     log('mod %s unloaded', m.id)
 end
 

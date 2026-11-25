@@ -128,6 +128,25 @@
 ---
 --- All mod code runs on the engine thread, between the game's update and the drawing of the frame, one handler at a
 --- time, so handlers see a consistent state and need no locks.
+--- The files of the mod's folder as the game sees them: on disk, or else in the layers of `vfs` in mod.lua (packs).
+---@class GearVfs
+local GearVfs = {}
+
+--- The bytes of a file of the mod (a path relative to its folder, forward slashes).
+---@param path string
+---@return string? bytes nil if there is no such file.
+function GearVfs.read(path) end
+
+--- Whether the file exists, on disk or in a layer.
+---@param path string
+---@return boolean
+function GearVfs.exists(path) end
+
+--- The files below a folder that the layers provide (not the loose files on disk), as paths relative to the mod's folder, lower case, in order.
+---@param prefix? string A folder of the mod (`ui/maps`); default all.
+---@return string[]
+function GearVfs.list(prefix) end
+
 ---@class Gear
 ---@field version string Sacred Gear's version.
 ---@field mod GearModInfo This mod's identity.
@@ -165,6 +184,7 @@
 ---@field mods GearMods The installed mods; a page of this mod's own in the mod manager.
 ---@field menu GearMenu Menus mods add items to (the game menu) and the mod that draws them.
 ---@field ui GearUi Drawing on top of the game, widgets, panels and the layout.
+---@field vfs GearVfs The files of the mod's folder, from the disk or the layers of its `vfs` packs.
 ---@field auto? GearAuto Automation (only with `-gear-auto` and `automation = true` in `mod.lua`).
 gear = {}
 
@@ -301,6 +321,11 @@ function gear.save(name, text) end
 
 --- The table `mod.lua` returns. It runs without any globals, so it can only hold values. Annotate it with
 --- `---@type GearModManifest` above the `return`.
+--- One pack of a mod's `vfs` list.
+---@class GearVfsLayer
+---@field file string The pack, a path inside the mod's folder (`resources/data01.pak`): a ZIP, files stored or deflated, no encryption, no ZIP64.
+---@field mount? string Where its files appear inside the mod's folder: `/` (default) the pack's `ui/a.jpg` is the mod's `ui/a.jpg`, `ui/maps` it is `ui/maps/ui/a.jpg`.
+
 ---@class GearModManifest
 ---@field id string Required: letters, digits, `_` and `-`; unique among the installed mods.
 ---@field name? string Shown in the mod manager and the log (default: the id).
@@ -317,6 +342,7 @@ function gear.save(name, text) end
 ---@field pipes? string[] Names of the named pipes the mod may open (`gear.pipe.open`).
 ---@field theme? string The `.rcss` file (path inside the mod) that Gear puts in front of every RmlUi document of every mod while this mod runs (the shared theme).
 ---@field theme_dp? string The same stylesheet for documents laid out in screen pixels (`dp = true`; lengths in `dp`); Gear uses it for those documents instead of `theme`.
+---@field vfs? GearVfsLayer[] Packs (ZIP archives) the mod's resources come from, in order; a later layer wins over an earlier one, and a file in the mod's folder wins over every layer. Without it every `*.gpak` in the mod's folder is one layer mounted at `/`. Documents, style sheets, templates and images read through the layers; `gear.vfs` reads any file. At most 32.
 ---@field exports? string[] Files of the mod that the RmlUi documents of other mods may use while this mod runs, as `@<mod id>/<path>` in a link (`<link type="text/template" href="@sacred-theme/templates/window.rml"/>`, `<link type="text/rcss" ...>`), an image (`src`, `image(...)`) or `rml.load_font('@id/fonts/x.ttf')`: `'templates/'` (a folder and below), `'styles/*.rcss'` (the files of one folder with that ending), `'images/logo.png'` (one file), `'*'` (everything). Nothing else of the mod can be reached, and no path leaves its folder.
 ---@field automation? boolean `true`: the mod gets `gear.auto` when the game runs with `-gear-auto`.
 

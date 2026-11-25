@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <cstring>
 #include <cwctype>
-#include <map>
 #include <mutex>
+#include <vector>
 
 namespace Gear::Vfs
 {
@@ -23,17 +23,30 @@ namespace Gear::Vfs
             return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24;
         }
 
+        // A path as the index keys it: lower case, forward slashes, no leading "./" or "/".
         std::string key(std::string rel)
         {
             for (char& c : rel)
             {
                 c = c == '\\' ? '/' : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             }
-            while (rel.size() > 1 && rel[0] == '.' && rel[1] == '/')
+            size_t start = 0;
+            while (start < rel.size() && (rel[start] == '/' || rel.compare(start, 2, "./") == 0))
             {
-                rel.erase(0, 2);
+                start += rel[start] == '/' ? 1 : 2;
             }
-            return rel;
+            return rel.substr(start);
+        }
+
+        // "a/b" -> "a/b/" ("" and "/" -> "")
+        std::string mountPrefix(const std::string& mount)
+        {
+            std::string k = key(mount);
+            while (!k.empty() && k.back() == '/')
+            {
+                k.pop_back();
+            }
+            return k.empty() ? k : k + "/";
         }
 
         constexpr size_t kMaxFile = 256u * 1024 * 1024;     // what one file of a pack may unpack to
@@ -41,18 +54,32 @@ namespace Gear::Vfs
 
     Pack::~Pack()
     {
-        if (m_data)
-        {
-            UnmapViewOfFile(m_data);
-        }
-        if (m_mapping)
-        {
-            CloseHandle(static_cast<HANDLE>(m_mapping));
-        }
         if (m_file && m_file != INVALID_HANDLE_VALUE)
         {
             CloseHandle(static_cast<HANDLE>(m_file));
         }
+    }
+
+    // `n` bytes at `offset` of the pack file: a positioned read on the open handle (nothing of the file stays mapped into the 32-bit address space).
+    bool Pack::readAt(uint64_t offset, void* buffer, size_t n) const
+    {
+        std::scoped_lock lock(m_readLock);      // the position is part of the handle
+        auto* out = static_cast<uint8_t*>(buffer);
+        while (n > 0)
+        {
+            OVERLAPPED at{};
+            at.Offset = static_cast<DWORD>(offset);
+            at.OffsetHigh = static_cast<DWORD>(offset >> 32);
+            DWORD got = 0;
+            if (!ReadFile(static_cast<HANDLE>(m_file), out, static_cast<DWORD>(std::min<size_t>(n, 1u << 24)), &got, &at) || got == 0)
+            {
+                return false;
+            }
+            out += got;
+            offset += got;
+            n -= got;
+        }
+        return true;
     }
 
     std::unique_ptr<Pack> Pack::open(const std::filesystem::path& file, std::string& error)
@@ -71,31 +98,24 @@ namespace Gear::Vfs
             error = "bad size";
             return nullptr;
         }
-        HANDLE mapping = CreateFileMappingW(f, nullptr, PAGE_READONLY, 0, 0, nullptr);
-        if (!mapping)
+        pack->m_size = static_cast<uint64_t>(size.QuadPart);
+        // end of central directory: in the last 22 + comment bytes
+        const size_t tailSize = static_cast<size_t>(std::min<uint64_t>(pack->m_size, 22 + 65535));
+        std::vector<uint8_t> tail(tailSize);
+        if (!pack->readAt(pack->m_size - tailSize, tail.data(), tailSize))
         {
-            error = "cannot map";
+            error = "cannot read";
             return nullptr;
         }
-        pack->m_mapping = mapping;
-        pack->m_data = static_cast<const uint8_t*>(MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0));
-        if (!pack->m_data)
-        {
-            error = "cannot map";
-            return nullptr;
-        }
-        pack->m_size = static_cast<size_t>(size.QuadPart);
-        const uint8_t* d = pack->m_data;
-        // end of central directory: the last 22 + comment bytes
         size_t eocd = std::string::npos;
-        for (size_t i = pack->m_size - 22, stop = pack->m_size > 22 + 65535 ? pack->m_size - 22 - 65535 : 0;; --i)
+        for (size_t i = tailSize - 22;; --i)
         {
-            if (rd32(d + i) == 0x06054b50)
+            if (rd32(tail.data() + i) == 0x06054b50)
             {
                 eocd = i;
                 break;
             }
-            if (i == stop)
+            if (i == 0)
             {
                 break;
             }
@@ -105,16 +125,26 @@ namespace Gear::Vfs
             error = "not a ZIP file";
             return nullptr;
         }
-        const uint32_t entries = rd16(d + eocd + 10), dirSize = rd32(d + eocd + 12), dirOffset = rd32(d + eocd + 16);
-        if (entries == 0xFFFF || dirOffset == 0xFFFFFFFF || size_t(dirOffset) + dirSize > pack->m_size)
+        const uint8_t* e0 = tail.data() + eocd;
+        const uint32_t entries = rd16(e0 + 10), dirSize = rd32(e0 + 12), dirOffset32 = rd32(e0 + 16);
+        if (entries == 0xFFFF || dirOffset32 == 0xFFFFFFFF || uint64_t(dirOffset32) + dirSize > pack->m_size)
         {
             error = "ZIP64 or damaged";
             return nullptr;
         }
-        size_t p = dirOffset;
+        // the central directory is read once and parsed; the file's data stays on disk
+        std::vector<uint8_t> dirBytes(dirSize);
+        if (dirSize && !pack->readAt(dirOffset32, dirBytes.data(), dirSize))
+        {
+            error = "cannot read";
+            return nullptr;
+        }
+        const uint8_t* d = dirBytes.data();
+        const size_t dirEnd = dirBytes.size();
+        size_t p = 0;
         for (uint32_t i = 0; i < entries; ++i)
         {
-            if (p + 46 > pack->m_size || rd32(d + p) != 0x02014b50)
+            if (p + 46 > dirEnd || rd32(d + p) != 0x02014b50)
             {
                 error = "damaged central directory";
                 return nullptr;
@@ -126,7 +156,7 @@ namespace Gear::Vfs
             e.compressed = rd32(d + p + 20);
             e.size = rd32(d + p + 24);
             e.headerOffset = rd32(d + p + 42);
-            if (p + 46 + nameLen > pack->m_size)
+            if (p + 46 + nameLen > dirEnd)
             {
                 error = "damaged central directory";
                 return nullptr;
@@ -150,17 +180,18 @@ namespace Gear::Vfs
     bool Pack::read(const std::string& rel, std::string& out) const
     {
         const auto it = m_entries.find(key(rel));
-        if (it == m_entries.end())
+        return it != m_entries.end() && read(it->second, out);
+    }
+
+    bool Pack::read(const Entry& e, std::string& out) const
+    {
+        const uint64_t h = e.headerOffset;
+        uint8_t header[30];
+        if (h + 30 > m_size || !readAt(h, header, 30) || rd32(header) != 0x04034b50)
         {
             return false;
         }
-        const Entry& e = it->second;
-        const size_t h = e.headerOffset;
-        if (h + 30 > m_size || rd32(m_data + h) != 0x04034b50)
-        {
-            return false;
-        }
-        const size_t start = h + 30 + rd16(m_data + h + 26) + rd16(m_data + h + 28);
+        const uint64_t start = h + 30 + rd16(header + 26) + rd16(header + 28);
         if (start + e.compressed > m_size || e.size > kMaxFile)
         {
             return false;
@@ -171,8 +202,13 @@ namespace Gear::Vfs
             {
                 return false;
             }
-            out.assign(reinterpret_cast<const char*>(m_data + start), e.size);
-            return true;
+            out.resize(e.size);
+            return e.size == 0 || readAt(start, out.data(), e.size);
+        }
+        std::vector<uint8_t> packed(e.compressed);
+        if (!readAt(start, packed.data(), packed.size()))
+        {
+            return false;
         }
         out.resize(e.size);
         z_stream z{};
@@ -180,7 +216,7 @@ namespace Gear::Vfs
         {
             return false;
         }
-        z.next_in = const_cast<Bytef*>(m_data + start);
+        z.next_in = packed.data();
         z.avail_in = e.compressed;
         z.next_out = reinterpret_cast<Bytef*>(out.data());
         z.avail_out = e.size;
@@ -191,8 +227,21 @@ namespace Gear::Vfs
 
     namespace
     {
+        // The merged view of a mod's layers: virtual path -> the pack and entry that win.
+        struct Hit
+        {
+            const Pack* pack = nullptr;
+            Pack::Entry entry;
+        };
+        struct Mounted
+        {
+            std::vector<std::unique_ptr<Pack>> packs;
+            std::map<std::string, Hit> index;
+        };
+
         std::mutex g_lock;
-        std::map<std::wstring, std::vector<std::unique_ptr<Pack>>> g_mounted;     // lower-cased root -> its packs
+        std::map<std::wstring, std::vector<Layer>> g_layers;      // lower-cased root -> the layers mod.lua declared
+        std::map<std::wstring, Mounted> g_mounted;
 
         std::wstring rootKey(const std::filesystem::path& root)
         {
@@ -216,14 +265,25 @@ namespace Gear::Vfs
             {
                 return {};
             }
-            return rel.generic_string();
+            return key(rel.generic_string());
         }
 
-        std::vector<std::unique_ptr<Pack>>& mount(const std::filesystem::path& root)
+        Mounted& mount(const std::filesystem::path& root)
         {
-            auto [it, fresh] = g_mounted.try_emplace(rootKey(root));
-            if (fresh)
+            const std::wstring k = rootKey(root);
+            auto [it, fresh] = g_mounted.try_emplace(k);
+            if (!fresh)
             {
+                return it->second;
+            }
+            std::vector<Layer> layers;
+            if (const auto declared = g_layers.find(k); declared != g_layers.end())
+            {
+                layers = declared->second;
+            }
+            else
+            {
+                // no `vfs` in mod.lua: the folder's *.gpak files, in name order, at the root
                 std::error_code ec;
                 std::vector<std::filesystem::path> files;
                 for (std::filesystem::directory_iterator dir(root, ec), end; !ec && dir != end; dir.increment(ec))
@@ -236,14 +296,50 @@ namespace Gear::Vfs
                 std::sort(files.begin(), files.end());
                 for (const auto& f : files)
                 {
-                    std::string error;
-                    if (auto pack = Pack::open(f, error))
-                    {
-                        it->second.push_back(std::move(pack));
-                    }
+                    layers.push_back({f, "/"});
                 }
             }
-            return it->second;
+            Mounted& m = it->second;
+            for (const Layer& layer : layers)
+            {
+                std::string error;
+                std::unique_ptr<Pack> pack = Pack::open(layer.file, error);
+                if (!pack)
+                {
+                    continue;
+                }
+                const std::string prefix = mountPrefix(layer.mount);
+                for (const auto& [name, entry] : pack->entries())
+                {
+                    m.index[prefix + name] = Hit{pack.get(), entry};       // a later layer replaces an earlier one
+                }
+                m.packs.push_back(std::move(pack));
+            }
+            return m;
+        }
+    }
+
+    void configure(const std::filesystem::path& root, std::vector<Layer> layers)
+    {
+        std::scoped_lock lock(g_lock);
+        const std::wstring k = rootKey(root);
+        g_mounted.erase(k);
+        g_layers[k] = std::move(layers);
+    }
+
+    void unmount(const std::filesystem::path& root)
+    {
+        std::scoped_lock lock(g_lock);
+        if (root.empty())
+        {
+            g_mounted.clear();
+            g_layers.clear();
+        }
+        else
+        {
+            const std::wstring k = rootKey(root);
+            g_mounted.erase(k);
+            g_layers.erase(k);
         }
     }
 
@@ -255,14 +351,9 @@ namespace Gear::Vfs
             return false;
         }
         std::scoped_lock lock(g_lock);
-        for (const auto& pack : mount(root))
-        {
-            if (pack->read(rel, out))
-            {
-                return true;
-            }
-        }
-        return false;
+        const Mounted& m = mount(root);
+        const auto it = m.index.find(rel);
+        return it != m.index.end() && it->second.pack->read(it->second.entry, out);
     }
 
     bool contains(const std::filesystem::path& root, const std::filesystem::path& file)
@@ -273,26 +364,27 @@ namespace Gear::Vfs
             return false;
         }
         std::scoped_lock lock(g_lock);
-        for (const auto& pack : mount(root))
-        {
-            if (pack->contains(rel))
-            {
-                return true;
-            }
-        }
-        return false;
+        return mount(root).index.count(rel) != 0;
     }
 
-    void unmount(const std::filesystem::path& root)
+    std::vector<std::string> list(const std::filesystem::path& root, const std::string& dir)
     {
+        std::string prefix = key(dir);
+        while (!prefix.empty() && prefix.back() == '/')
+        {
+            prefix.pop_back();
+        }
+        if (!prefix.empty())
+        {
+            prefix += '/';
+        }
+        std::vector<std::string> out;
         std::scoped_lock lock(g_lock);
-        if (root.empty())
+        const Mounted& m = mount(root);
+        for (auto it = m.index.lower_bound(prefix); it != m.index.end() && it->first.compare(0, prefix.size(), prefix) == 0; ++it)
         {
-            g_mounted.clear();
+            out.push_back(it->first);
         }
-        else
-        {
-            g_mounted.erase(rootKey(root));
-        }
+        return out;
     }
 }

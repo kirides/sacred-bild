@@ -183,9 +183,19 @@ settings, a file, a savegame's data, a message to a server) follows these rules:
   resolves to nothing as it is, so it survives an update that adds the type. The reader accepts both forms for good.
 - **Protocols.** What a server understands stays what it understands: add the id next to the name instead of replacing it.
 
-### Packs (`*.gpak`)
+### Packs and layers (`vfs`)
 
-A mod with many files (a few thousand map tiles, say) can put them in one file: every `*.gpak` in the mod's folder is a ZIP archive (files stored or deflated, no encryption, no ZIP64) whose paths are relative to the mod's folder, so `ui/tiles/a.jpg` inside the pack is `mods\<mod>\ui\tiles\a.jpg`. A file that is not on disk is looked up in the packs (a file on disk wins, so a pack can be patched by dropping a file in). The pack is opened once and mapped into memory, so reading a file costs no file open, permission check or virus scan, and copying or downloading the mod is one file. Documents, style sheets, templates and images (PNG, TGA, JPG, DDS) of RmlUi read through packs; Lua files, fonts and `mod:` paths of the Lua API do not yet. Build one with any ZIP tool, e.g. `zipfile.ZipFile('x.gpak', 'w', zipfile.ZIP_STORED)` for files that are compressed already.
+A mod with many files (a few thousand map tiles, say) can keep them in a few pack files. A pack is a ZIP archive (files stored or deflated, no encryption, no ZIP64), by convention `*.pak` or `*.gpak`. `mod.lua` lists the packs as layers, in order:
+
+```lua
+vfs = {
+    {file = 'resources/data01.pak', mount = '/'},      -- the pack's ui/a.jpg is the mod's ui/a.jpg
+    {file = 'resources/patch.pak'},                      -- mount defaults to '/'; a later layer wins over an earlier one
+    {file = 'resources/maps.pak', mount = 'ui/maps'},    -- the pack's x.jpg is the mod's ui/maps/x.jpg
+},
+```
+
+All layers are merged when the mod loads into one ordered index (path, case-insensitive, to the pack and entry that win), so a lookup is one search and `gear.vfs.list` is a range of the index. A file in the mod's folder on disk wins over every layer, so a pack can be patched by dropping a file in. Without `vfs`, every `*.gpak` in the mod's folder is mounted at `/` in name order. Each pack is opened once and only its directory is read; a file is a positioned read at its offset (and an inflate when deflated), with no file open, permission check or virus scan per file and nothing of the pack held in the 32-bit address space, and copying or downloading the mod is a few files. Documents, style sheets, templates and images (PNG, TGA, JPG, DDS) of RmlUi read through the layers, and so does `gear.vfs.read(path)` / `exists(path)` / `list(prefix)`; Lua files, fonts and `mod:` paths of the Lua API do not yet. Build a pack with any ZIP tool, e.g. `zipfile.ZipFile('x.pak', 'w', zipfile.ZIP_STORED)` for files that are compressed already.
 
 ## Replacing game files (file overlay)
 
