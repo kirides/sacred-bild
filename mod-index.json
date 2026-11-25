@@ -22,6 +22,7 @@
         "multiplayer"
       ],
       "thumbnail": "https://raw.githubusercontent.com/kirides/sacred-bild/main/docs/images/mod-index-sacred-bild.png",
+      "changelog": "https://raw.githubusercontent.com/kirides/sacred-bild/main/changelog/bild/history.md",
       "install": {
         "files": [
           "ddraw.dll"
@@ -48,6 +49,7 @@
         "tools"
       ],
       "thumbnail": "https://raw.githubusercontent.com/kirides/sacred-bild/main/docs/images/mod-index-sacred-gear.png",
+      "changelog": "https://raw.githubusercontent.com/kirides/sacred-bild/main/changelog/gear/history.md",
       "install": {
         "files": [
           "SacredGear.dll"
