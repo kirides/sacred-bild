@@ -86,6 +86,7 @@ if A then
         -- the text keyboard
         open_name(); gear.wait(0.4)
         check('the keyboard opens', osk:is_open() and kdoc() ~= nil)
+        click_in(kdoc(), '#kit-osk-text')      -- (the first click after the mode change only moves the cursor onto the new window)
         type_keys('q', 'u')
         check('letters type', name == 'qu', name)
         act('shift'); type_keys('I')

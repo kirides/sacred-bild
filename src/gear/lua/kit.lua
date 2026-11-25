@@ -266,7 +266,21 @@ function K.osk(cfg)
         actions['kit-osk-' .. id] = fn
         return '<button id="kit-osk-' .. id .. '" class="' .. classes('osk-key', class) .. '"' .. (padkey and '' or ' data-no-padkey=""') .. '>' .. label .. '</button>'
     end
-    local function row(cells) return '<div class="osk-row">' .. table.concat(cells) .. '</div>' end
+    -- The window is as wide as its widest row (the keys' widths in the two stylesheets, `button.osk-key` and its `wide`, `space`, `pad`, `half`, plus a 6 unit
+    -- gap each), and the rows are centred in it: nothing is cut off whatever the layout, and a layout with a longer row grows the window.
+    local KEY_W = {wide = 62, space = 182, pad = 64, half = 100}
+    local widest = 0
+    local function row(cells)
+        local w = 0
+        for _, c in ipairs(cells) do
+            local class = c:match('class="osk%-key ?([^"]*)"') or ''
+            local kw = 42
+            for word in class:gmatch('%a+') do if KEY_W[word] then kw = KEY_W[word] end end
+            w = w + kw + 6
+        end
+        if w > widest then widest = w end
+        return '<div class="osk-row">' .. table.concat(cells) .. '</div>'
+    end
 
     local function body()
         actions, keys, n = {}, {}, 0
@@ -298,13 +312,15 @@ function K.osk(cfg)
                 action('done', 'wide done', 'Done', done, true),
             }
         end
+        st.width = widest + 70      -- (plus the window's own padding and frame)
         return '<div class="osk-line"><span id="kit-osk-text" class="osk-text"></span><span class="osk-caret">_</span><span id="kit-osk-count" class="osk-count"></span></div>'
             .. table.concat(rows)
     end
 
     local function build()
-        local markup = K.page(K.window{id = 'kit-osk', title = st.title or cfg.title or 'Keyboard', width = cfg.width or (st.digits and 250 or 560),
-            class = 'kit-osk', x = 0, y = 0, close = 'kit-osk-close', body = body()})
+        local content = body()
+        local markup = K.page(K.window{id = 'kit-osk', title = st.title or cfg.title or 'Keyboard', width = cfg.width or st.width,
+            class = 'kit-osk', x = 0, y = 0, close = 'kit-osk-close', body = content})
         doc = ui.rml.load_string(markup, {})
         if not doc then drop('closed') return end
         actions['kit-osk-close'] = function() drop('close') end
