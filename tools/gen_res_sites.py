@@ -185,7 +185,8 @@ for kind, a, exp, note in out:
     where = ', '.join(f'{x:08X}' for x in [a] + found)
     lines.append(f'    {{Kind::{kind}, "{sigs.fmt(sig)}", {off}, 0x{value:08X}}}, // {where}: {note}')
 lines.append("};")
-with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src', 'game', 'resolution_sites.inc'), 'w', newline='\n') as f:
+import paths
+with open(paths.RESOLUTION_SITES, 'w', newline='\n') as f:
     f.write('\n'.join(lines) + '\n')
 print(f"{len(out) - failed}/{len(out)} sites")
 sys.exit(1 if failed else 0)

@@ -6,6 +6,8 @@ sys.path.insert(0, 'tools')
 from eng import *
 from funcs import _A
 import sigs
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths
 from gen_sigs import SACRED_DE
 
 # address: (name, stack argument count excluding `this`[, end of the function where the function table has no next
@@ -111,7 +113,7 @@ HOOKS = {
 # in the comment on their line or the line above): their stack arguments come from the signature, so every one is
 # checked whether or not the table above lists it, and a table entry that disagrees with it is an error.
 def declared():
-    path = os.path.join(os.path.dirname(__file__), '..', 'src', 'game', 'sacred_addr.h')
+    path = paths.SACRED_ADDR
     with open(path, encoding='utf-8') as f:
         text = f.read()
     out = {}

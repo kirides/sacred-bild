@@ -15,7 +15,9 @@ from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACK = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('INPUT_PROMPTS', r'B:\A\Downloads\input-prompts-2.0.0')
-OUT = os.path.join(ROOT, 'src', 'overlay', 'prompts.png')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths  # noqa: E402
+OUT = paths.PROMPTS_PNG
 
 CELL, ICON, COLUMNS = 64, 60, 8
 

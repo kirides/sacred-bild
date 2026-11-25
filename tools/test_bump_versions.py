@@ -145,6 +145,16 @@ class Tests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.r.run('--write', '--ref', first)
 
+    def test_moving_the_version_file_is_not_a_bump(self):
+        self.r.touch('src/x.cpp', 'fix: something')
+        self.r.git('mv', BILD, 'src/bild_version_moved.txt')
+        self.r.git('commit', '-q', '-m', 'move the version file')
+        base = bv.last_bump(self.r.dir, 'HEAD', 'src/bild_version_moved.txt')
+        start = self.r.git('rev-list', '--max-parents=0', 'HEAD').strip()
+        self.assertEqual(base, start)
+        self.r.commit('move and change', {'src/bild_version_moved.txt': '1.2.4\n'})
+        self.assertEqual(bv.last_bump(self.r.dir, 'HEAD', 'src/bild_version_moved.txt'), self.r.git('rev-parse', 'HEAD').strip())
+
     def test_a_missing_version_file_is_skipped(self):
         self.r.git('rm', '-q', GEAR)
         self.r.git('commit', '-q', '-m', 'drop')

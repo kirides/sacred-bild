@@ -94,9 +94,19 @@ def read_version(text):
 
 
 def last_bump(repo, ref, rel):
-    """The newest commit that changed the version file (its creation counts), or None."""
-    shas = git(repo, 'log', '--format=%H', '-n', '1', ref, '--', rel).split()
-    return shas[0] if shas else None
+    """The newest commit that changed the version file (its creation counts), or None. The file's history is followed through
+    renames, and a commit that only moved it (a rename with the same content) is not a bump: moving the version file with its code
+    must not drop the changes made since the last real bump."""
+    raw = git(repo, 'log', '--follow', '--name-status', '--format=%x01%H', ref, '--', rel)
+    for block in raw.split('\x01')[1:]:
+        lines = [l for l in block.splitlines() if l.strip()]
+        if not lines:
+            continue
+        sha, statuses = lines[0].strip(), [l.split('\t', 1)[0] for l in lines[1:]]
+        if statuses and all(s == 'R100' for s in statuses):
+            continue
+        return sha
+    return None
 
 
 def message_levels(message, comp):

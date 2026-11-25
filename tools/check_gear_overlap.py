@@ -12,6 +12,7 @@
 import glob, os, re, sys
 sys.path.insert(0, os.path.dirname(__file__))
 import gear_sites
+import paths
 import gen_sigs
 import sigs
 
@@ -61,11 +62,12 @@ def base(name):
 
 def main():
     ref = sigs.Image(gen_sigs.SACRED_ENG)
-    gear = windows(os.path.join(ROOT, 'gear', 'game', 'gear_sigs.inc'), ref)
-    bild_sigs = windows(os.path.join(ROOT, 'src', 'game', 'sacred_sigs.inc'), ref)
-    bild_sites = windows(os.path.join(ROOT, 'src', 'game', 'resolution_sites.inc'), ref)
-    bild_patched = patched_names(glob.glob(os.path.join(ROOT, 'src', '**', '*.cpp'), recursive=True))
-    gear_patched = patched_names(glob.glob(os.path.join(ROOT, 'gear', '**', '*.cpp'), recursive=True))
+    gear = windows(paths.GEAR_SIGS, ref)
+    bild_sigs = windows(paths.SACRED_SIGS, ref)
+    bild_sites = windows(paths.RESOLUTION_SITES, ref)
+    bild_patched = patched_names(sorted(set(glob.glob(os.path.join(paths.BILD, '**', '*.cpp'), recursive=True))
+                                        | set(glob.glob(os.path.join(paths.CORE, '**', '*.cpp'), recursive=True))))
+    gear_patched = patched_names(glob.glob(os.path.join(paths.GEAR, '**', '*.cpp'), recursive=True))
 
     bild_all = bild_sigs + bild_sites
     bild_patch_windows = [b for b in bild_sigs if base(b[0]) in bild_patched] + bild_sites

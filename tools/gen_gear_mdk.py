@@ -21,9 +21,11 @@ sys.path.insert(0, HERE)
 import gear_meta  # noqa: E402
 import gen_gear_api_docs  # noqa: E402
 
-ROOT = os.path.dirname(HERE)
-META = os.path.join(ROOT, 'gear', 'meta')
-MDK_SRC = os.path.join(ROOT, 'gear', 'mdk')
+import paths  # noqa: E402
+
+ROOT = paths.ROOT
+META = paths.GEAR_META
+MDK_SRC = paths.GEAR_MDK_SRC
 EXAMPLES = ['hello', 'uidemo', 'saveinfo', 'hooks']
 NAME = 'sacred-gear-mdk'
 
@@ -58,12 +60,12 @@ def build(out_dir):
     shutil.copyfile(os.path.join(MDK_SRC, 'vscode', 'extensions.json'), os.path.join(out_dir, '.vscode', 'extensions.json'))
 
     write(os.path.join(out_dir, 'docs', 'GearApi.md'), gen_gear_api_docs.generate())
-    shutil.copyfile(os.path.join(ROOT, 'docs', 'Gear.md'), os.path.join(out_dir, 'docs', 'Gear.md'))
+    shutil.copyfile(paths.GEAR_MD, os.path.join(out_dir, 'docs', 'Gear.md'))
 
     copy_tree(os.path.join(MDK_SRC, 'example-mod'), os.path.join(out_dir, 'example-mod'))
     copy_tree(os.path.join(MDK_SRC, 'tools'), os.path.join(out_dir, 'tools'))
     for ex in EXAMPLES:
-        copy_tree(os.path.join(ROOT, 'gear', 'examples', ex), os.path.join(out_dir, 'examples', ex))
+        copy_tree(os.path.join(paths.GEAR_EXAMPLES, ex), os.path.join(out_dir, 'examples', ex))
     os.makedirs(os.path.join(out_dir, 'src'))
     write(os.path.join(out_dir, 'src', '.gitkeep'), '')
 
@@ -97,7 +99,7 @@ def snapshot(d):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--out', default=os.path.join(ROOT, 'gear', 'dist', 'mdk'))
+    ap.add_argument('--out', default=paths.GEAR_MDK_OUT)
     ap.add_argument('--check', action='store_true')
     ap.add_argument('--zip', action='store_true')
     ap.add_argument('--zip-path', default=os.path.join(ROOT, 'out', 'mdk', NAME + '.zip'))

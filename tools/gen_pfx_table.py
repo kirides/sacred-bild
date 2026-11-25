@@ -6,6 +6,7 @@
 import os, re, struct, sys
 sys.path.insert(0, os.path.dirname(__file__))
 import eng
+import paths
 
 BYTE_TABLE = 0x5A3570
 JUMP_TABLE = 0x5A3294
@@ -43,7 +44,7 @@ def write_doc(rows):
     out += ['', '## Textures', '',
             'The names `textures` of a variant can use (the game own list; the effect classes load them by these names).', '']
     out += ['- `' + n + '`' for n in names]
-    path = os.path.join(os.path.dirname(__file__), '..', 'docs', 'GearPfxTypes.md')
+    path = paths.GEAR_PFX_TYPES_MD
     with open(path, 'w', newline=chr(10)) as f:
         f.write(chr(10).join(out) + chr(10))
 
@@ -67,7 +68,7 @@ def main():
     for fx, case, size in rows:
         out.append(f'    {{{case}, {size}}}, // 0x{fx:X}')
     out.append('};')
-    path = os.path.join(os.path.dirname(__file__), '..', 'gear', 'game', 'gear_pfx.inc')
+    path = paths.GEAR_PFX
     with open(path, 'w', newline='\n') as f:
         f.write('\n'.join(out) + '\n')
     write_doc(rows)

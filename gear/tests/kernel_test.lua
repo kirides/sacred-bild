@@ -2178,11 +2178,14 @@ do
     native.rml_rects = function() return {{x = 10, y = 10, w = 100, h = 50, panel = 'main', title = 'Main'}} end
     native.rml_move = function() return true end
     native.rml_nav = function() return {{x = 20, y = 20, w = 40, h = 16}, {x = 20, y = 40, w = 40, h = 16}} end
+    native.rml_scrolls = function() return {} end
+    native.rml_scrollbars = function() return {} end
+    native.rml_class = function() return true end
     native.rml_wants_text = function() return false end
     native.rml_listen = function(id, sel, ev) listened[#listened + 1] = sel .. '/' .. ev; return #listened, 1 end
     native.rml_update = function(id, mx, my, hover)
         log_rml[#log_rml + 1] = 'update ' .. tostring(hover)
-        return {{listener = 1, type = 'click', target = 'ok', current = 'ok', params = {}}, {listener = 99, type = 'x', target = '', current = '', params = {}}}
+        return {{listener = #listened, type = 'click', target = 'ok', current = 'ok', params = {}}, {listener = 99, type = 'x', target = '', current = '', params = {}}}
     end
     native.rml_draw = function(id, layer, slot) log_rml[#log_rml + 1] = 'draw ' .. layer .. ' ' .. slot; return 3 end
     native.rml_html = function(id, sel, v) log_rml[#log_rml + 1] = 'html ' .. sel .. ' ' .. tostring(v); return 'x' end

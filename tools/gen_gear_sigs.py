@@ -7,6 +7,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 import gen_sigs
 import gear_sites
+import paths
 import sigs
 from funcs import _A
 
@@ -362,7 +363,7 @@ GEAR += [(name, va, 'func') for name, va in gear_sites.functions().items()]
 def main():
     ref = sigs.Image(gen_sigs.SACRED_ENG, _A)
     others = gen_sigs.other_builds(gen_sigs.SACRED_DE)
-    path = os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sigs.inc')
+    path = paths.GEAR_SIGS
     _, failed = gen_sigs.emit(path, '', 'Gear::Addr', GEAR, ref, others, 'kGearSigs')
     with open(path, newline='\n') as f:
         text = f.read().replace('tools/gen_sigs.py', 'tools/gen_gear_sigs.py', 1)
@@ -423,9 +424,9 @@ def main():
     lines.append(f'static const uint32_t kKeySite = 0x{gear_sites.KEY_SITE - fn:X}, kKeyEnd = 0x{gear_sites.KEY_END - fn:X};')
     lines.append('static const uint32_t kKeyFull[5] = {' + ', '.join(f'0x{a - fn:X}' for a in gear_sites.KEY_FULL) + '};')
     lines.append('static const uint32_t kKeySelect[5] = {' + ', '.join(f'0x{a - fn:X}' for a in gear_sites.KEY_SELECT) + '};')
-    with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_sites.inc'), 'w', newline='\n') as f:
+    with open(paths.GEAR_SITES, 'w', newline='\n') as f:
         f.write('\n'.join(lines) + '\n')
-    with open(os.path.join(gen_sigs.ROOT, 'gear', 'game', 'gear_drops.inc'), 'w', newline='\n') as f:
+    with open(paths.GEAR_DROPS, 'w', newline='\n') as f:
         f.write('\n'.join(dl) + '\n')
     if failed:
         sys.exit(f'{len(failed)} entries without a signature')

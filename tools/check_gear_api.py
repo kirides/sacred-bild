@@ -20,11 +20,10 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import gear_meta  # noqa: E402
+import paths  # noqa: E402
 
-ROOT = os.path.dirname(HERE)
-KERNEL = os.path.join(ROOT, 'gear', 'lua', 'kernel.lua')
-HOST = os.path.join(ROOT, 'gear', 'lua_host.cpp')
-META = os.path.join(ROOT, 'gear', 'meta')
+ROOT = paths.ROOT
+META = paths.GEAR_META
 
 problems = []
 
@@ -69,8 +68,8 @@ def cpp_keys(src, start, what):
 
 def main():
     model = gear_meta.parse(META)
-    kernel = read(KERNEL)
-    host = read(HOST)
+    kernel = '\n'.join(read(p) for p in paths.kernel_sources())
+    host = '\n'.join(read(p) for p in paths.host_sources())
 
     def members(cls):
         return model.class_members(cls)

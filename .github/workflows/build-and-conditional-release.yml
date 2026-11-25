@@ -176,6 +176,27 @@ jobs:
       - name: Check sacred-dsoal.json
         run: python3 tools/make_dsoal_index.py --check
 
+  # Checks that need neither Windows nor the game: the kernel's tests (native side mocked), the Lua API annotations against the code and
+  # docs/GearApi.md, the changelog histories.
+  text-checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install LuaJIT
+        run: sudo apt-get update && sudo apt-get install -y luajit
+
+      - name: Kernel tests
+        run: luajit gear/tests/kernel_test.lua
+
+      - name: Check the Lua API annotations
+        run: python3 tools/check_gear_api.py
+
+      - name: Check the changelog histories
+        run: python3 tools/make_changelog.py --check
+
   create-release:
     if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_type == 'tag')
     needs: [build]

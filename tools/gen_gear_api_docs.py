@@ -11,10 +11,12 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gear_meta  # noqa: E402
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-META = os.path.join(ROOT, 'gear', 'meta')
-OUT = os.path.join(ROOT, 'docs', 'GearApi.md')
-HEAD = os.path.join(ROOT, 'docs', 'GearApi.head.md')   # the hand-written part in front of the generated reference
+import paths  # noqa: E402
+
+ROOT = paths.ROOT
+META = paths.GEAR_META
+OUT = paths.GEAR_API_MD
+HEAD = paths.GEAR_API_HEAD   # the hand-written part in front of the generated reference
 
 NAMESPACE_PREFIXES = ('gear', 'os')
 
