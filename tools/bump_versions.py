@@ -44,10 +44,10 @@ COMPONENTS = [
     Component('SacredBild', 'sacred-bild', 'src/SacredBild_version.txt',
               ['src/', 'CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'ports/', 'triplets/', 'dist/SacredBild.ini'],
               [], ['bild', 'sacredbild', 'ddraw', 'sacred-bild']),
-    # SacredGear.dll: gear/ plus the sources it shares with SacredBild (sacred_core). The examples, the MDK, its generated copy and the
+    # SacredGear.dll: gear/ plus the sources it shares with SacredBild (sacred_core, src/core/: its code and the game's classes). The examples, the MDK, its generated copy and the
     # API annotations are documentation, not part of the DLL.
     Component('SacredGear', 'sacred-gear', 'gear/SacredGear_version.txt',
-              ['gear/', 'src/fmt.', 'src/instance.', 'src/log.', 'src/patch.', 'src/sig.', 'src/mem.h'],
+              ['gear/', 'src/core/'],
               ['gear/examples/', 'gear/dist/', 'gear/mdk/', 'gear/meta/'], ['gear', 'sacredgear', 'sacred-gear']),
 ]
 

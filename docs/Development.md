@@ -6,10 +6,10 @@ exe's entry point, after the window (`src/settings_window.*`). Then it loads the
 will get (`src/proxy.*`), finds the game's code by byte signature (`Sacred::resolveAddresses`) and installs the
 patches (`Sacred::installHooks` in `src/game/build.cpp`, which lists every module in order). Each module patches
 the game in its `install()` with [Detours](https://github.com/microsoft/Detours) hooks or checked byte patches
-(`src/patch.*`: a write happens only if the bytes there are the expected ones).
+(`src/core/patch.*`: a write happens only if the bytes there are the expected ones).
 
 What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md), in the comments of
-`src/game/sacred_addr.h` and in the game's classes in `src/sacred/`; the addresses refer to the English GOG build
+`src/game/sacred_addr.h` and in the game's classes in `src/core/sacred/`; the addresses refer to the English GOG build
 (Ghidra program `/Sacred.exe (GOG)`).
 
 ## Source files
@@ -22,16 +22,16 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 | `src/config.*`, `src/config/` | `SacredBild.ini`: loading it, and the settings in a header per ini section (`Config::render`, `Config::net`, ...) |
 | `src/settings_window.*` | The settings window before the game starts (`[Launcher] HideSettingsWindow`): what it shows, declared control by control |
 | `src/ui/form.*` | `Ui::Form`: settings windows declared in code (pages, groups, rows of controls bound to ini keys), laid out and run as dialogs |
-| `src/log.*`, `src/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
-| `src/patch.*`, `src/sig.*` | Code patches and hooks; byte signature search |
-| `sacred_core` (CMake) | `src/fmt.*`, `log.*`, `patch.*`, `sig.*` as a static library, linked by SacredBild and by Sacred Gear (`gear/`, see [Sacred Gear](Gear.md)) |
+| `src/core/log.*`, `src/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
+| `src/core/patch.*`, `src/core/sig.*` | Code patches and hooks; byte signature search |
+| `sacred_core` (CMake) | `src/core/fmt.*`, `log.*`, `patch.*`, `sig.*` as a static library, linked by SacredBild and by Sacred Gear (`gear/`, see [Sacred Gear](Gear.md)) |
 | `src/spin_lock.h` | Locks for the render thread's hot paths |
 | `src/mem.h` | Fields of granny.dll's objects by byte offset (`Mem::field`) |
 | `src/profiler.*` | `[Debug] Profiler` |
 | `src/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `smaa.*` (SMAA antialiasing, `smaa.hlsl` over the reference shader and lookup textures in `smaa/`), `sharp.hlsl` (the pixel shader of `[Render] TextureFilter=Sharp`, bound by `Device::updateSharp` for draws whose stage 0/1 combiner it reproduces), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
 | `src/game/build.*` | Which exe this is, address lookup, the list of game modules |
 | `src/game/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses SacredBild uses, functions with their signatures (`Sacred::Thiscall`, `Cdecl`; `tools/check_hooks.py` checks them) and globals with their types (`Sacred::Global`); their signatures (generated) |
-| `src/sacred/` | The game's classes as structs (the Sacred Gold API): fields at their offsets and vtables as structs of function pointers, both checked by `static_assert`, member functions calling the game's code. `engine.h` (cEngine, orders), `object.h` (cObject / cCreature, cObjectManager), `world.h` (cWorldView, sectors, tiles, map data), `render.h` (dxDriver7, textures, cQuadBatcher), `ui.h` (cUI_Control2 / cUI_Window2 and their subclasses, cUI_Manager, events, fonts), `mouse.h`, `text.h`, `net.h` (cGCclass; gameserver.exe's cApp / cNetServer); `address.h` the typed addresses, `vector.h` the exe's std::vector |
+| `src/core/sacred/` | The game's classes as structs (the Sacred Gold API): fields at their offsets and vtables as structs of function pointers, both checked by `static_assert`, member functions calling the game's code. `engine.h` (cEngine, orders), `object.h` (cObject / cCreature, cObjectManager), `world.h` (cWorldView, sectors, tiles, map data), `render.h` (dxDriver7, textures, cQuadBatcher), `ui.h` (cUI_Control2 / cUI_Window2 and their subclasses, cUI_Manager, events, fonts), `mouse.h`, `text.h`, `net.h` (cGCclass; gameserver.exe's cApp / cNetServer); `address.h` the typed addresses, `vector.h` the exe's std::vector |
 | `src/game/gameserver*` | The same for gameserver.exe, and its patches |
 | `src/game/resolution.*`, `resolution_sites.inc` | Any resolution: window, back buffer, world view; the 1024x768 constants patched (generated) |
 | `src/game/ui_state.*` | What the UI manager shows and who gets the input, by its own rules (mode, windows drawn alone, HUD, message box, focus); see `docs/UI_SYSTEM.md` |

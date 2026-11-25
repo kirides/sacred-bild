@@ -11,7 +11,7 @@ ROOT = os.path.dirname(TOOLS)
 DATA = os.path.join(TOOLS, 'data')
 
 # The three code roots: the code both DLLs link (sacred_core), ddraw.dll, SacredGear.dll.
-CORE = os.path.join(ROOT, 'src')
+CORE = os.path.join(ROOT, 'src', 'core')
 BILD = os.path.join(ROOT, 'src')
 GEAR = os.path.join(ROOT, 'gear')
 

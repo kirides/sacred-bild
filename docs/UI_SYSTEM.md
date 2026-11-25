@@ -2,7 +2,7 @@
 
 How `Sacred.exe` builds its UI, draws it and routes input to it: the UI manager, the window table, the named UI
 events that open and close windows, the event and draw order, focus and popups. Addresses are the English GOG build's
-(image base 0x400000); names are those of `src/sacred/ui.h` and [RE_NOTES.md](RE_NOTES.md) where they exist, else the
+(image base 0x400000); names are those of `src/core/sacred/ui.h` and [RE_NOTES.md](RE_NOTES.md) where they exist, else the
 RTTI class names, else Ghidra's `FUN_<va>`. Confidence: **[V]** read in the decompile, **[I]** inferred from several
 call sites, **[?]** not verified (listed in section 13).
 

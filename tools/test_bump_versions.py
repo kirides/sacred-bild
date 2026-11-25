@@ -79,7 +79,7 @@ class Tests(unittest.TestCase):
         self.assertIn('patch  SacredGear   0.9 -> 0.9.1', self.plan())
 
     def test_the_shared_core_belongs_to_both(self):
-        self.r.touch('src/log.cpp', 'shared')
+        self.r.touch('src/core/log.cpp', 'shared')
         out = self.plan()
         self.assertEqual(out.count('patch'), 2)
 
@@ -97,7 +97,7 @@ class Tests(unittest.TestCase):
         self.assertIn('1.2.3 -> 2.0.0', self.plan())
 
     def test_scope_list(self):
-        self.r.touch('src/log.cpp', 'feat(gear, bild): both')
+        self.r.touch('src/core/log.cpp', 'feat(gear, bild): both')
         self.assertEqual(self.plan().count('minor'), 2)
 
     def test_unscoped_feat_counts_for_the_components_the_commit_changed(self):

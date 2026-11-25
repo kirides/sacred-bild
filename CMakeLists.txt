@@ -36,13 +36,13 @@ set(COMMON_OPTIONS /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
 # What SacredBild and Sacred Gear share: the log, formatting, code patches and hooks, signature search. Each DLL links
 # its own copy (its own log file, its own Detours transactions).
 add_library(sacred_core STATIC
-  src/fmt.cpp
-  src/instance.cpp
-  src/log.cpp
-  src/patch.cpp
-  src/sig.cpp
+  src/core/fmt.cpp
+  src/core/instance.cpp
+  src/core/log.cpp
+  src/core/patch.cpp
+  src/core/sig.cpp
 )
-target_include_directories(sacred_core PUBLIC src PRIVATE ${DETOURS_INCLUDE_DIRS})
+target_include_directories(sacred_core PUBLIC src/core PRIVATE ${DETOURS_INCLUDE_DIRS})
 target_link_libraries(sacred_core PUBLIC ${DETOURS_LIBRARY})
 target_compile_definitions(sacred_core PUBLIC ${COMMON_DEFINITIONS})
 target_compile_options(sacred_core PRIVATE ${COMMON_OPTIONS})
@@ -249,8 +249,8 @@ if(SACREDBILD_NETTEST)
   add_executable(nettest
     tools/nettest/nettest.cpp
     src/config.cpp
-    src/fmt.cpp
-    src/log.cpp
+    src/core/fmt.cpp
+    src/core/log.cpp
     src/net/address.cpp
     src/net/adapters.cpp
     src/net/lan_protocol.cpp
@@ -259,7 +259,7 @@ if(SACREDBILD_NETTEST)
     src/net/udp_protocol.cpp
     src/net/udp_transport.cpp
   )
-  target_include_directories(nettest PRIVATE src)
+  target_include_directories(nettest PRIVATE src src/core)
   target_link_libraries(nettest PRIVATE kcp::kcp ws2_32 iphlpapi winmm)
   target_compile_definitions(nettest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
   target_compile_options(nettest PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
