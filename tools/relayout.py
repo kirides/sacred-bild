@@ -133,6 +133,7 @@ STAGES = {
             ('gear/dds.*', 'src/gear/ui/'),
             ('gear/bcdec.h', 'src/gear/ui/'),
             ('gear/icons_css.inc', 'src/gear/ui/'),
+            ('gear/shop.*', 'src/gear/items/'),
             ('gear/', 'src/gear/'),                  # everything else keeps its place below the Gear root
         ],
         'old_roots': {'bild': ['src/bild', 'src/core'], 'gear': ['gear', 'src/core']},
@@ -245,7 +246,9 @@ def reference_map(moves, old_files):
     for k, v in dirs.items():
         moved_all = all(f in moves for f in old_files if f.startswith(k))
         if len(v) == 1 and None not in v and moved_all:
-            out.setdefault(k, next(iter(v)))
+            new = next(iter(v))
+            out.setdefault(k, new)
+            out.setdefault(k[:-1], new[:-1])         # the folder named without its slash: `gear/meta`, "gear/examples/hello"
     return out
 
 

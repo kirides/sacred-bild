@@ -1,7 +1,7 @@
 # Sacred Gear's site hooks: places inside a function of sacred.exe where Gear replaces a block of instructions by a jump to a
-# stub that asks Lua (gear/sitehook.cpp). A site is found as a function (a signature, gear_sigs.inc) plus a fixed
+# stub that asks Lua (src/gear/sitehook.cpp). A site is found as a function (a signature, gear_sigs.inc) plus a fixed
 # offset, and the block's bytes are verified before anything is written. This file is the one list: gen_gear_sigs.py makes the
-# function signatures and gear/game/gear_sites.inc from it, and check_gear_overlap.py checks the sites against SacredBild.
+# function signatures and src/gear/engine/gear_sites.inc from it, and check_gear_overlap.py checks the sites against SacredBild.
 #
 # (hook, function name, function address in the English GOG build, site address, block length, prefix length)
 # hook 'level.factor': `[fild level;] fld st(0); fmul; fadd; fxch; fmul; fadd; fdivp; call __ftol`, the level to a factor.
@@ -166,7 +166,7 @@ KEY_SELECT = [0x006E21DC, 0x006E220E, 0x006E223C, 0x006E226A, 0x006E2298]
 KEY_END = 0x006E2819
 
 
-# Drop sites (gear/drops.cpp). The engine's creature loot function (ENG 00559BF0, thiscall (creature, forced type, rarity bonus, survival float,
+# Drop sites (src/gear/items/drops.cpp). The engine's creature loot function (ENG 00559BF0, thiscall (creature, forced type, rarity bonus, survival float,
 # killer id), ret 0x10) draws the chance of every drop attempt, the category of the item and its rarity with the CRT `rand` (ENG 00849B40, a 15 bit
 # LCG: `% 1000`, `% 10000` ...). Its calls of `rand` (offsets from the function start) are redirected so that a mod may swap the generator.
 LOOT_FUNCTION = ('lootRollFn', 0x00559BF0, 10709)

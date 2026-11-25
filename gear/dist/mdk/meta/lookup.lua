@@ -7,7 +7,7 @@
 --: any order, no matter the case or the accents (`flugel` finds Flügel), one typo is forgiven (`scwert` finds Schwert), a
 --: word may be a beginning, and the best matches come first. `search` returns the things; `open` shows a small window
 --: where the player types and picks, and a callback gets the thing that was chosen and answers what the lookup returns
---: (`pick` waits for that inside a task). The library is shipped in the DLL (`gear/lua/lookup.lua`) and runs once per mod.
+--: (`pick` waits for that inside a task). The library is shipped in the DLL (`src/gear/lua/lookup.lua`) and runs once per mod.
 
 --- A thing of the built-in kind `'item'`: an equipment item type.
 ---@class GearLookupItem

@@ -508,7 +508,7 @@ bool UiAnchor::frame(cUI_Window2* window, UiCanvas::Frame& out)
     return window && frameOf(UiWindows::identify(window), out);
 }
 
-// For Sacred Gear (gear/ui.cpp), which looks these up with GetProcAddress and works without them: mod overlays drawn
+// For Sacred Gear (src/gear/ui/ui.cpp), which looks these up with GetProcAddress and works without them: mod overlays drawn
 // in a window's frame move with the window. Push enters `window`'s frame (a UI manager window; nullptr or a window
 // that is not anchored: the canvas) on the calling thread, unconfined unless `confine`; returns 0 and pushes nothing
 // while SacredBild's UI canvas is off. Pop leaves the innermost pushed frame. Bounds: the screen in the current

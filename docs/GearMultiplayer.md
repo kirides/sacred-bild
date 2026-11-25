@@ -94,7 +94,7 @@ carrier too. `server_only` channels are not relayed between players.
    have the chat path; messages to `'server'` need a server that queried.
 
 **Custom message types.** Default 0x1E0 (control) and 0x1E1 (data). The client's dispatcher sends every type above
-0x1D5 to "next message" (`cmp ecx, 0x1D4 / ja`); `NetMsg` (`gear/netmsg.*`) redirects that `ja` to a stub that queues
+0x1D5 to "next message" (`cmp ecx, 0x1D4 / ja`); `NetMsg` (`src/gear/netmsg.*`) redirects that `ja` to a stub that queues
 frames of the two configured types. Sending is `cNet_sendMessage` with the type. The original `GameServer.exe` accepts
 and silently drops both (a 4032-byte message too); the connection, the hero and the chat carrier are unaffected.
 Other ids: server `NETOPS_CONTROL` / `NETOPS_DATA` (cfg, command line, environment); client `gear.net.configure` before
@@ -106,9 +106,9 @@ connecting or `GEAR_NETOPS="0x1E0,0x1E1"` (the data id is also taken from HELLO_
 `gear.net.transport(to)` / `channel:transport(to)` say which way a message would go (`'custom'`, `'chat'`, `'mixed'`,
 nil).
 
-**Self test:** `gear/examples/netopstest` (`expect = 'stock'` or `'remake'`; the remake run needs `tools/gs-launcher`
+**Self test:** `src/gear/examples/netopstest` (`expect = 'stock'` or `'remake'`; the remake run needs `tools/gs-launcher`
 and the server's `scripts-examples/net_echo.lua`; `chat_only = true` makes the client decline the offered numbers);
-kernel tests in `gear/tests/kernel_test.lua`.
+kernel tests in `src/gear/tests/kernel_test.lua`.
 
 ## Hooks between mods (gear.events)
 
@@ -122,7 +122,7 @@ Mods publish hooks (`bounty.completed`, `worldevent.started`) with `gear.emit` a
 - **Game server:** its Lua host offers the same `gear.emit`, `gear.on` and `gear.events.declare` / `list`, with the same
   name rules and payload shapes, so a server-side mod and a client mod publish identical events. Server events carry an
   extra `player` field (the slot's hero name), because the server sees every player. The kernel's code for this (`EV` in
-  `gear/lua/kernel.lua`, about 50 lines of plain Lua) ports unchanged.
+  `src/gear/lua/kernel.lua`, about 50 lines of plain Lua) ports unchanged.
 
 ## What a server can know about a hero
 

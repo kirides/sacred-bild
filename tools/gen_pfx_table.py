@@ -1,4 +1,4 @@
-# Emits gear/game/gear_pfx.inc: for every effect type 0x300..0x49D, the size of the particle system object cObjectFX's setup
+# Emits src/gear/engine/gear_pfx.inc: for every effect type 0x300..0x49D, the size of the particle system object cObjectFX's setup
 # (ENG 0x5A0C50) allocates for it (0: the type makes no particle system), and the case (system class) number.
 # The setup indexes a byte table (0x5A3570) by type - 0x300 and jumps through a table (0x5A3294); a case's code pushes the object size and
 # calls operator new (0x849842). Gear scans a system object for texture handles only inside this size.

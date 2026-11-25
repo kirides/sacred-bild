@@ -7,7 +7,7 @@
 --: (**sacred-theme**) style the same classes. A screen made of the kit therefore runs and reads well with no theme, and looks like the game
 --: with one; every button, link and input is a stop for the controller. The functions return strings of RML to join and give to
 --: `gear.ui.rml.load_string` (see `page`); text arguments are escaped, `body` and `control` are markup. The library is shipped in the
---: DLL (`gear/lua/kit.lua`) and runs once per mod, the first time the mod uses `gear.kit`.
+--: DLL (`src/gear/lua/kit.lua`) and runs once per mod, the first time the mod uses `gear.kit`.
 
 --- The options of `window`.
 ---@class GearKitWindow
@@ -97,7 +97,7 @@ function GearKit.button(id, label, o) end
 ---@return string markup
 function GearKit.dropdown(id, label, o) end
 
---- An icon of Gear's icon font (a subset of Material Symbols Sharp, 85 icons: `refresh`, `arrow-back`, `arrow-forward`, `chevron-left`, `delete`, `close`, `check`, `settings`, `search` ...; the list is in `gear/icons_css.inc`). In markup of your own: `<span class="icon icon-refresh"></span>`; it takes the text colour and sizes with the text (`font-size` on the span).
+--- An icon of Gear's icon font (a subset of Material Symbols Sharp, 85 icons: `refresh`, `arrow-back`, `arrow-forward`, `chevron-left`, `delete`, `close`, `check`, `settings`, `search` ...; the list is in `src/gear/ui/icons_css.inc`). In markup of your own: `<span class="icon icon-refresh"></span>`; it takes the text colour and sizes with the text (`font-size` on the span).
 ---@param name string
 ---@param o? {class?: string}
 ---@return string markup

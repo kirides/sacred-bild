@@ -4,7 +4,7 @@
 -- ## Formatting (gear.fmt)
 --: Small helpers that many mods need for their panels: a number with thousands separators, seconds as a clock or in words, a
 --: text from outside cut to a length (by characters or by its width on screen), the game's colour and image markup taken out
---: of a line. The library is shipped in the DLL (`gear/lua/fmt.lua`) and runs once per mod, the first time the mod uses
+--: of a line. The library is shipped in the DLL (`src/gear/lua/fmt.lua`) and runs once per mod, the first time the mod uses
 --: `gear.fmt`.
 
 -- path gear.fmt

@@ -8,7 +8,7 @@ import make_mod_index as mi
 ENV = dict(os.environ, GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@t', GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@t',
            GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull)
 os.environ.update({k: v for k, v in ENV.items() if k.startswith('GIT_')})  # bump_versions.py commits with the process environment
-BILD, GEAR = 'src/bild/SacredBild_version.txt', 'gear/SacredGear_version.txt'
+BILD, GEAR = 'src/bild/SacredBild_version.txt', 'src/gear/SacredGear_version.txt'
 
 
 class Repo:
@@ -54,7 +54,7 @@ class Tests(unittest.TestCase):
     def setUp(self):
         self.r = Repo()
         self.addCleanup(self.r.tmp.cleanup)
-        self.r.commit('start', {BILD: '1.2.3\n', GEAR: '0.9\n', 'src/bild/main.cpp': '//\n', 'gear/main.cpp': '//\n'})
+        self.r.commit('start', {BILD: '1.2.3\n', GEAR: '0.9\n', 'src/bild/main.cpp': '//\n', 'src/gear/main.cpp': '//\n'})
 
     def plan(self, *args):
         return self.r.run(*args)[1]
@@ -65,8 +65,8 @@ class Tests(unittest.TestCase):
         self.assertIn('nothing to bump', out)
 
     def test_test_and_doc_files_do_not_bump(self):
-        for rel in ('src/bild/net/udp_test.cpp', 'src/bild/tests/a.cpp', 'gear/tests/a.lua', 'gear/examples/hello/main.lua', 'gear/mdk/README.md',
-                    'gear/dist/mdk/x.lua', 'gear/meta/ui.lua', 'docs/Gear.md', 'tools/x.py', 'matchmaker/main.go'):
+        for rel in ('src/bild/net/udp_test.cpp', 'src/bild/tests/a.cpp', 'src/gear/tests/a.lua', 'src/gear/examples/hello/main.lua', 'src/gear/mdk/README.md',
+                    'gear/dist/mdk/x.lua', 'src/gear/meta/ui.lua', 'docs/Gear.md', 'tools/x.py', 'matchmaker/main.go'):
             self.r.touch(rel, 'not code of a DLL')
         self.assertIn('nothing to bump', self.plan())
 
@@ -75,7 +75,7 @@ class Tests(unittest.TestCase):
         out = self.plan()
         self.assertIn('patch  SacredBild   1.2.3 -> 1.2.4', out)
         self.assertIn('same   SacredGear', out)
-        self.r.touch('gear/lua/kernel.lua', 'fix gear')
+        self.r.touch('src/gear/lua/kernel.lua', 'fix gear')
         self.assertIn('patch  SacredGear   0.9 -> 0.9.1', self.plan())
 
     def test_the_shared_core_belongs_to_both(self):
@@ -84,7 +84,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(out.count('patch'), 2)
 
     def test_feat_in_the_message_is_minor_trimmed_and_case_insensitive(self):
-        self.r.touch('gear/x.cpp', 'Feat(  Sacred_Gear ): shiny')
+        self.r.touch('src/gear/x.cpp', 'Feat(  Sacred_Gear ): shiny')
         self.assertIn('0.9 -> 0.10.0', self.plan())
 
     def test_break_is_major_and_wins_over_feat(self):

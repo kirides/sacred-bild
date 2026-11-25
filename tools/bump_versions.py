@@ -4,7 +4,7 @@
 Every component has one flat text file with its version, a few lines like `1.2.3` and a newline:
 
     src/bild/SacredBild_version.txt      ddraw.dll
-    gear/SacredGear_version.txt     SacredGear.dll
+    src/gear/SacredGear_version.txt     SacredGear.dll
 
 For each component the history since the last commit that changed its version file (a new file counts as that commit) is read:
   * any change to a file of the component that is not a test file     -> patch   (1.2.3 -> 1.2.4)
@@ -46,9 +46,9 @@ COMPONENTS = [
               [], ['bild', 'sacredbild', 'ddraw', 'sacred-bild']),
     # SacredGear.dll: gear/ plus the sources it shares with SacredBild (sacred_core, src/core/: its code and the game's classes). The examples, the MDK, its generated copy and the
     # API annotations are documentation, not part of the DLL.
-    Component('SacredGear', 'sacred-gear', 'gear/SacredGear_version.txt',
-              ['gear/', 'src/core/'],
-              ['gear/examples/', 'gear/dist/', 'gear/mdk/', 'gear/meta/'], ['gear', 'sacredgear', 'sacred-gear']),
+    Component('SacredGear', 'sacred-gear', 'src/gear/SacredGear_version.txt',
+              ['src/gear/', 'src/core/'],
+              ['src/gear/examples/', 'src/gear/mdk/', 'src/gear/meta/'], ['gear', 'sacredgear', 'sacred-gear']),
 ]
 
 

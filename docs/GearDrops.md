@@ -5,7 +5,7 @@ using any of it the game's own code runs unchanged. The Lua API is `gear.drops` 
 this page says what the engine does, what each setting touches, and what was tested. An example mod is
 `drop-tuning` in the [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods) repository.
 
-Addresses are the English GOG `Sacred.exe` (the signatures in `gear/game/gear_sigs.inc` find the same code in other
+Addresses are the English GOG `Sacred.exe` (the signatures in `src/gear/engine/gear_sigs.inc` find the same code in other
 builds). They were read from the decompile (`B:\DevDrive\sources\decomp-sacred`) and checked against
 [SacredEngineRemake](https://github.com/Aytackydln/SacredEngineRemake), whose "Gold" addresses are the same as ours; its
 `Sacred.Core/Loot` classes are a faithful description of the same code.
@@ -53,7 +53,7 @@ Its callers are the death handler (`0x5340xx`..`0x5346xx`: one call per entry of
 
 ## What Gear changes
 
-`gear/drops.cpp`: the loot function and the type picker are detoured (always, with a flag check: the detour is a call-through when no mod
+`src/gear/items/drops.cpp`: the loot function and the type picker are detoured (always, with a flag check: the detour is a call-through when no mod
 handles the events); the loot function's `rand` calls and the five rarity draws are redirected to wrappers
 (`Drops: 57 of 57 call sites redirected` in `SacredGear.log`); the loot function's `* 0.01` constants at `0x559F08` (the chance scale) and
 `0x55A149` / `0x55A248` (the rarity bonus scale) go through the existing `scale.559BF0` constant sites (`SiteHook`), which now multiply by
@@ -83,9 +83,9 @@ source that dropped a rune or jewellery). Container loot (`0x5D57C0`) shares the
 
 ## Tests
 
-* `luajit gear/tests/kernel_test.lua` (kernel side with a mocked native side): the merge, the clearing on unload, the generator choice, the events, the numbers.
+* `luajit src/gear/tests/kernel_test.lua` (kernel side with a mocked native side): the merge, the clearing on unload, the generator choice, the events, the numbers.
 * `python tools/check_gear_api.py` (annotations vs code) and `tools/check_gear_overlap.py` (no overlap with SacredBild's patches).
-* `gear/examples/droptest`, an automation test in the real game (`Sacred.exe -gear-auto -gear-load=1 -gear-mods=droptest -gear-instance=NAME`, in a
+* `src/gear/examples/droptest`, an automation test in the real game (`Sacred.exe -gear-auto -gear-load=1 -gear-mods=droptest -gear-instance=NAME`, in a
   copy of the game folder: the items it rolls stay in the world). It finds a creature that drops equipment, has the engine run its loot function
   600 times per phase (`gear.drops.simulate`, outside Lua so that the events work) and checks:
   the vanilla counters (no generator calls, nothing vetoed or replaced, the rarity table as loaded, the rarity draws running through the

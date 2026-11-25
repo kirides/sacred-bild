@@ -5,7 +5,7 @@
 --: A mod keeps its own data (a log, totals, saved lists) in JSON files of its folder (`gear.read` / `gear.save`). `load` and
 --: `save` do the reading, decoding, encoding and writing with defaults and one log line per broken file; `file` loads a table
 --: once and saves it when it changed, every few seconds and when the mod unloads. The library is shipped in the DLL
---: (`gear/lua/store.lua`) and runs once per mod, the first time the mod uses `gear.store`.
+--: (`src/gear/lua/store.lua`) and runs once per mod, the first time the mod uses `gear.store`.
 --:
 --: What belongs to one character or savegame (progress, lifetime totals, a log) goes in `gear.store.game` instead of `file`: it
 --: is kept per savegame (see `gear.savegame`), so it does not leak from one savegame or character into another. Settings, window

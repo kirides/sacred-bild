@@ -13,7 +13,7 @@ DATA = os.path.join(TOOLS, 'data')
 # The three code roots: the code both DLLs link (sacred_core), ddraw.dll, SacredGear.dll.
 CORE = os.path.join(ROOT, 'src', 'core')
 BILD = os.path.join(ROOT, 'src', 'bild')
-GEAR = os.path.join(ROOT, 'gear')
+GEAR = os.path.join(ROOT, 'src', 'gear')
 
 # SacredBild
 BILD_ENGINE = os.path.join(BILD, 'engine')          # sacred_addr.h, sacred_sigs.inc, gameserver_sigs.inc
@@ -25,7 +25,7 @@ DDRAW9 = os.path.join(BILD, 'ddraw9')                # the shaders and their com
 PROMPTS_PNG = os.path.join(BILD, 'controller', 'prompts.png')
 
 # Sacred Gear
-GEAR_ENGINE = os.path.join(GEAR, 'game')            # gear_addr.h and the generated .inc files
+GEAR_ENGINE = os.path.join(GEAR, 'engine')          # gear_addr.h and the generated .inc files
 GEAR_ADDR = os.path.join(GEAR_ENGINE, 'gear_addr.h')
 GEAR_SIGS = os.path.join(GEAR_ENGINE, 'gear_sigs.inc')
 GEAR_SITES = os.path.join(GEAR_ENGINE, 'gear_sites.inc')
@@ -37,7 +37,7 @@ LUA_HOST = os.path.join(GEAR, 'lua_host.cpp')
 GEAR_META = os.path.join(GEAR, 'meta')
 GEAR_MDK_SRC = os.path.join(GEAR, 'mdk')
 GEAR_EXAMPLES = os.path.join(GEAR, 'examples')
-GEAR_MDK_OUT = os.path.join(GEAR, 'dist', 'mdk')
+GEAR_MDK_OUT = os.path.join(ROOT, 'gear', 'dist', 'mdk')
 
 # Documentation
 DOCS = os.path.join(ROOT, 'docs')

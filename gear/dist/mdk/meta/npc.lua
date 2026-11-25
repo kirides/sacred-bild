@@ -7,7 +7,7 @@
 --: own name text (`gear.text.key`, a text id taken from the kind's id: the same in every session, saved with the savegame, which
 --: is also how a kind is recognised again after a load), so the game's overhead labels show it. The creatures a mod made are listed
 --: in the mod's per-savegame data (`npc.json`, `gear.store.game`). Single player. The library is shipped in the DLL
---: (`gear/lua/npc.lua`) and runs once per mod, the first time the mod uses `gear.npc`.
+--: (`src/gear/lua/npc.lua`) and runs once per mod, the first time the mod uses `gear.npc`.
 --:
 --: Clicking an NPC that has a dialog walks the hero up to it (`talk_range`) and opens the dialog window: a portrait, the page's text
 --: and a button for each option of the page. A mod reacts to a button with the option's `on`, the kind's `on_talk` or an

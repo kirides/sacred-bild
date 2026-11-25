@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Fails when Sacred Gear's LuaLS annotations (gear/meta/*.lua) and the code behind the Lua API have drifted apart.
+"""Fails when Sacred Gear's LuaLS annotations (src/gear/meta/*.lua) and the code behind the Lua API have drifted apart.
 
     python tools/check_gear_api.py
 
-It reads gear/lua/kernel.lua (the Lua side of the API) and gear/lua_host.cpp (the fields of the tables the native side
+It reads src/gear/lua/kernel.lua (the Lua side of the API) and src/gear/lua_host.cpp (the fields of the tables the native side
 builds) as text and compares the names they define with the names the annotations declare, both ways:
 
   * in the code but not annotated  -> a new function, field, event, option or manifest key nobody documented;
@@ -256,7 +256,7 @@ def main():
         print('Sacred Gear API drift:')
         for p in problems:
             print('  ' + p)
-        print('Fix gear/meta/*.lua (and run python tools/gen_gear_api_docs.py), or update this check if the code changed shape.')
+        print('Fix src/gear/meta/*.lua (and run python tools/gen_gear_api_docs.py), or update this check if the code changed shape.')
         return 1
     print('Sacred Gear API annotations match the code.')
     return 0

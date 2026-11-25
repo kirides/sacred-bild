@@ -129,7 +129,7 @@ SacredBild's `ddraw.dll` and creates `SacredBild.ini` if there is none. `uninsta
 | [Multiplayer](docs/Multiplayer.md) | LAN games over VPNs, the UDP connection, online games through the matchmaker |
 | [Languages](docs/Languages.md) | Text and speech of other languages, `import-language.ps1` |
 | [Sacred Gear](docs/Gear.md) | The mod kit: install, writing a mod, the file overlay, the mod manager, automation |
-| [Gear API reference](docs/GearApi.md) | Every function, option and event a mod can use (generated from `gear/meta`) |
+| [Gear API reference](docs/GearApi.md) | Every function, option and event a mod can use (generated from `src/gear/meta`) |
 | [Gear drops](docs/GearDrops.md) | `gear.drops`: how the engine rolls drops and what each setting changes |
 | [Custom classes](docs/CustomClasses.md) | `gear.classes`, `gear.models`, ability copies: what the engine binds to a hero class, and which arts work on which body |
 | [Skill effects](docs/GearPfx.md) | `gear.pfx`: variants of the engine's art and spell effects (colour, sprites, speed) chosen per cast and level; effect types and texture names |

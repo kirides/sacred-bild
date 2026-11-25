@@ -14,8 +14,8 @@
     }
   },
   "workspace": {
-    "library": ["gear/meta"],
-    "ignoreDir": ["gear/lua", "gear/tests", "out", "vcpkg_installed", "cmake-build-debug", "dist", "ports"],
+    "library": ["src/gear/meta"],
+    "ignoreDir": ["src/gear/lua", "src/gear/tests", "out", "vcpkg_installed", "cmake-build-debug", "dist", "ports"],
     "checkThirdParty": false
   }
 }

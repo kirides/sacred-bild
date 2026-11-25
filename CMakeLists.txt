@@ -16,7 +16,7 @@ string(REPLACE "/INCREMENTAL" "/INCREMENTAL:NO /OPT:REF /OPT:ICF" CMAKE_SHARED_L
 find_package(imgui CONFIG REQUIRED)
 find_package(kcp CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
-# RmlUi (Sacred Gear's HTML/CSS-style mod UI, gear/rml.cpp) and stb_image (the images its documents name).
+# RmlUi (Sacred Gear's HTML/CSS-style mod UI, src/gear/ui/rml.cpp) and stb_image (the images its documents name).
 find_package(RmlUi CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 find_path(STB_INCLUDE_DIRS "stb_image.h" REQUIRED)
@@ -185,51 +185,51 @@ endif()
 option(SACREDGEAR "Build Sacred Gear (SacredGear.dll)" ON)
 if(SACREDGEAR)
   add_library(SacredGear SHARED
-    gear/main.cpp
-    gear/hooks.cpp
-    gear/lua_host.cpp
-    gear/classes.cpp
-    gear/classes_alias.cpp
-    gear/itemuse.cpp
-    gear/master.cpp
-    gear/killstat.cpp
-    gear/party.cpp
-    gear/potionpick.cpp
-    gear/shop.cpp
-    gear/buffs.cpp
-    gear/pfx.cpp
-    gear/tables.cpp
-    gear/overlay.cpp
-    gear/sitehook.cpp
-    gear/world.cpp
-    gear/pipe.cpp
-    gear/automation.cpp
-    gear/ui.cpp
-    gear/padnav.cpp
-    gear/text.cpp
-    gear/pickup.cpp
-    gear/drops.cpp
-    gear/netmsg.cpp
-    gear/chat.cpp
-    gear/inventory.cpp
-    gear/itemtip.cpp
-    gear/save.cpp
-    gear/savegames.cpp
-    gear/replace.cpp
-    gear/gamecfg.cpp
-    gear/keyblock.cpp
-    gear/input.cpp
-    gear/itemicon.cpp
-    gear/realm.cpp
-    gear/rml.cpp
-    gear/dds.cpp
-    gear/vfs.cpp
-    gear/css_compat.cpp
-    gear/gear.rc
+    src/gear/main.cpp
+    src/gear/hooks.cpp
+    src/gear/lua_host.cpp
+    src/gear/world/classes.cpp
+    src/gear/world/classes_alias.cpp
+    src/gear/items/itemuse.cpp
+    src/gear/items/master.cpp
+    src/gear/world/killstat.cpp
+    src/gear/world/party.cpp
+    src/gear/items/potionpick.cpp
+    src/gear/items/shop.cpp
+    src/gear/world/buffs.cpp
+    src/gear/world/pfx.cpp
+    src/gear/tables.cpp
+    src/gear/overlay.cpp
+    src/gear/sitehook.cpp
+    src/gear/world/world.cpp
+    src/gear/pipe.cpp
+    src/gear/automation.cpp
+    src/gear/ui/ui.cpp
+    src/gear/ui/padnav.cpp
+    src/gear/ui/text.cpp
+    src/gear/items/pickup.cpp
+    src/gear/items/drops.cpp
+    src/gear/netmsg.cpp
+    src/gear/chat.cpp
+    src/gear/items/inventory.cpp
+    src/gear/items/itemtip.cpp
+    src/gear/save.cpp
+    src/gear/savegames.cpp
+    src/gear/ui/replace.cpp
+    src/gear/gamecfg.cpp
+    src/gear/ui/keyblock.cpp
+    src/gear/ui/input.cpp
+    src/gear/items/itemicon.cpp
+    src/gear/realm.cpp
+    src/gear/ui/rml.cpp
+    src/gear/ui/dds.cpp
+    src/gear/vfs.cpp
+    src/gear/ui/css_compat.cpp
+    src/gear/gear.rc
   )
   add_dependencies(SacredGear version_info)
-  target_include_directories(SacredGear PRIVATE ${VERSION_INFO_DIR} gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS} ${STB_INCLUDE_DIRS})
-  set_source_files_properties(gear/gear.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kernel.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/lookup.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/fmt.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/toast.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/store.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kit.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/npc.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/res/GearIcons.ttf;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.rml;${VERSION_INFO_DIR}/version_info.h")
+  target_include_directories(SacredGear PRIVATE ${VERSION_INFO_DIR} src/gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS} ${STB_INCLUDE_DIRS})
+  set_source_files_properties(src/gear/gear.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/kernel.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/modmanager.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/lookup.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/fmt.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/toast.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/store.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/kit.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/npc.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/res/GearIcons.ttf;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/modmanager.rml;${VERSION_INFO_DIR}/version_info.h")
   target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32)
   target_compile_definitions(SacredGear PRIVATE RMLUI_STATIC_LIB)
   target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})

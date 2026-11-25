@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Builds the Sacred Gear MDK (mod development kit) from the sources in this repository.
 
-    python tools/gen_gear_mdk.py            regenerates gear/dist/mdk (committed; run after changing gear/meta, docs/Gear.md,
-                                            gear/mdk or the examples)
+    python tools/gen_gear_mdk.py            regenerates gear/dist/mdk (committed; run after changing src/gear/meta, docs/Gear.md,
+                                            src/gear/mdk or the examples)
     python tools/gen_gear_mdk.py --check    fail if gear/dist/mdk is not what the sources produce
     python tools/gen_gear_mdk.py --zip      ... and write out/mdk/sacred-gear-mdk.zip from gear/dist/mdk
 
-Nothing in the kit is a hand-kept copy: meta/ is every gear/meta/*.lua (so new definition files are picked up),
+Nothing in the kit is a hand-kept copy: meta/ is every src/gear/meta/*.lua (so new definition files are picked up),
 docs/GearApi.md is generated from them the same way gen_gear_api_docs.py does, the examples are copied from
-gear/examples, and the rest (README, template, tools) lives in gear/mdk/.
+src/gear/examples, and the rest (README, template, tools) lives in src/gear/mdk/.
 """
 import argparse
 import os
@@ -49,7 +49,7 @@ def build(out_dir):
     metas = sorted(f for f in os.listdir(META) if f.endswith('.lua'))
     unlisted = [f for f in metas if f not in gear_meta.FILES]
     if unlisted:
-        sys.exit('gear/meta files missing from FILES in tools/gear_meta.py (they would be left out of the API '
+        sys.exit('src/gear/meta files missing from FILES in tools/gear_meta.py (they would be left out of the API '
                  'reference): ' + ', '.join(unlisted))
     os.makedirs(os.path.join(out_dir, 'meta'))
     for f in metas:

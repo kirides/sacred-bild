@@ -5,7 +5,7 @@ Sacred-Bild and Sacred Gear are two DLLs with two versions (`major.minor.patch`)
 | Component | DLL | Version file | Code that counts |
 |---|---|---|---|
 | Sacred-Bild | `ddraw.dll` | `src/bild/SacredBild_version.txt` | `src/bild/` (with `settings/SacredBild.ini`), `src/core/`, `CMakeLists.txt`, `CMakePresets.json`, `vcpkg.json`, `ports/`, `triplets/` |
-| Sacred Gear | `SacredGear.dll` | `gear/SacredGear_version.txt` | `gear/` (not `examples`, `mdk`, `dist`, `meta`) and the shared core `src/core/` |
+| Sacred Gear | `SacredGear.dll` | `src/gear/SacredGear_version.txt` | `gear/` (not `examples`, `mdk`, `dist`, `meta`) and the shared core `src/core/` |
 
 Test files (folders `test`, `tests`, `tools`, anything ending in `test`/`tests`, `test_*`) never count. The release workflow copies the
 version file into the zip next to the DLL and names the zips `SacredBild-v<version>.zip` and `SacredGear-v<version>.zip`.

@@ -5,7 +5,7 @@
 --: A toast is a short message (a title and a few lines) that shows at the top of the screen, stacks under the ones before it and
 --: fades after a few seconds: an unlocked achievement, a finished bounty. The stack is a bare panel of the mod (`'toasts'`, layout
 --: key `<mod id>:toasts`): the layout editor moves it, and shows a sample while it is on; the mouse and the controller go on to
---: the game. A toast's age counts in-game frames. The library is shipped in the DLL (`gear/lua/toast.lua`) and runs once per mod,
+--: the game. A toast's age counts in-game frames. The library is shipped in the DLL (`src/gear/lua/toast.lua`) and runs once per mod,
 --: the first time the mod uses `gear.toast`.
 
 --- A toast given as a table to `show`.

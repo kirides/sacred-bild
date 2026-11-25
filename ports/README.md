@@ -8,4 +8,4 @@ a battery strength on the device controls page, which sorted first and shifted e
 usage page first, ignores non-axis pages for XInput-capable pads, and reads split triggers from Z and Rz scaled by their
 logical range.
 
-`rmlui`: vcpkg's port (RmlUi 6.3) with `caret-style-underscore.patch`: a `caret-style: underscore` property (registered by Sacred Gear, `gear/rml.cpp`) draws the text caret of an `<input>` as a bar at the foot of the line, as wide as a `_`, instead of the thin vertical bar (the game's own text fields show a blinking underscore). The default is `block`, RmlUi's own caret. Keep the port in step with vcpkg's when the baseline moves.
+`rmlui`: vcpkg's port (RmlUi 6.3) with `caret-style-underscore.patch`: a `caret-style: underscore` property (registered by Sacred Gear, `src/gear/ui/rml.cpp`) draws the text caret of an `<input>` as a bar at the foot of the line, as wide as a `_`, instead of the thin vertical bar (the game's own text fields show a blinking underscore). The default is `block`, RmlUi's own caret. Keep the port in step with vcpkg's when the baseline moves.

@@ -1,4 +1,4 @@
-"""Reads Sacred Gear's LuaLS definition files (gear/meta/*.lua) into a small model.
+"""Reads Sacred Gear's LuaLS definition files (src/gear/meta/*.lua) into a small model.
 
 Used by gen_gear_api_docs.py (writes docs/GearApi.md) and check_gear_api.py (compares the model with the kernel).
 Only the annotation idioms those files use are understood; see docs/GearApi.md, "Maintaining the annotations".

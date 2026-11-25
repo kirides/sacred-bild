@@ -1,7 +1,7 @@
 ---@meta _
 -- Sacred Gear: the `gear` global every mod gets, its events and the mod manifest.
 -- LuaLS definitions, generated into docs/GearApi.md by tools/gen_gear_api_docs.py and checked against
--- gear/lua/kernel.lua by tools/check_gear_api.py. Format: docs/GearApi.md, "Maintaining the annotations".
+-- src/gear/lua/kernel.lua by tools/check_gear_api.py. Format: docs/GearApi.md, "Maintaining the annotations".
 
 -- ## The gear global
 

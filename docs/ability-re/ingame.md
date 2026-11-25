@@ -22,7 +22,7 @@ the plain weapon damage (25..27) for all four arts: the factor only works in the
 Finding: the first Gear version of the link (hook on FUN_004D1E10, ENG 4D1E10) did NOT work. The handler (FUN_00506770 case 0x41C) does
 not ask the art record for its spell: it pushes the constant 0x0C and calls the spell lookup FUN_004D2310 (call at 0x50994E; the same for
 spells 8, 6, 45, 46, 48 at the other call sites). 4D1E10 is only used by the tooltip. Measured: copy with doubled spell values hit exactly
-like the original (85 per tick). Fix (gear/classes_alias.cpp): the spell lookup hook (naked thunk, passes ESI = hero and the return address)
+like the original (85 per tick). Fix (src/gear/world/classes_alias.cpp): the spell lookup hook (naked thunk, passes ESI = hero and the return address)
 answers with the spell alias when the call comes from the hero handler code (0x4FF0B0..0x520000), the hero has an art alias in flight
 (hero+0x120) that is linked, and the id asked is the spell its base art takes. Also `linked_spell(alias)` now answers for copies.
 Results (wood elf leader, level 5 abilities, routed to the Dark Elf class, foe teleported back into the cloud every 0.5 s,
@@ -55,6 +55,6 @@ Gear's order_ability does not enforce the cooldown, or the regen only runs for t
 target_mode of a copy: not tested.
 
 ## Kernel tests
-luajit vcpkg_installed\x86-windows-static\tools\luajit\luajit.exe gear/tests/kernel_test.lua: 447 passed, 1 failed ("the conflict is
+luajit vcpkg_installed\x86-windows-static\tools\luajit\luajit.exe src/gear/tests/kernel_test.lua: 447 passed, 1 failed ("the conflict is
 marked", fails the same on the HEAD kernel; it is a mod-manager text test, unrelated). The test mock lacked scope_of / hero_scope_of
 (the run crashed at HEAD already); added. New checks: new field names and the old unk_/value0 names address the right table.
