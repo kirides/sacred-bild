@@ -2309,6 +2309,55 @@ namespace
         return e->GetAbsoluteOffset(area) + g_origin;
     }
 
+    // An element's border box where it is drawn, in the context's pixels: a CSS transform (a scaled grid of buttons) moves and sizes what is drawn, while
+    // GetAbsoluteOffset and the box stay those of the layout. The box's four corners go through the inverse of Project (window -> the element's own plane,
+    // taken as an affine map), the bounds of the result are the rect. No transform (or a singular one): the layout box.
+    struct DrawnBox
+    {
+        float x, y, w, h;
+    };
+
+    DrawnBox drawnBox(Rml::Element* e)
+    {
+        const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
+        const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
+        const DrawnBox plain{o.x, o.y, s.x, s.y};
+        const Rml::TransformState* ts = e->GetTransformState();
+        if (!ts)
+        {
+            return plain;
+        }
+        // local = A * window + t, from three probes
+        Rml::Vector2f p0(0.0f, 0.0f), px(1.0f, 0.0f), py(0.0f, 1.0f);
+        if (!e->Project(p0) || !e->Project(px) || !e->Project(py))
+        {
+            return plain;
+        }
+        const float a = px.x - p0.x, c = px.y - p0.y, b = py.x - p0.x, d = py.y - p0.y;       // columns (a, c) and (b, d)
+        const float det = a * d - b * c;
+        if (std::fabs(det) < 1e-6f)
+        {
+            return plain;
+        }
+        if (std::fabs(a - 1.0f) < 1e-4f && std::fabs(d - 1.0f) < 1e-4f && std::fabs(b) < 1e-4f && std::fabs(c) < 1e-4f
+            && std::fabs(p0.x) < 1e-3f && std::fabs(p0.y) < 1e-3f)
+        {
+            return plain;
+        }
+        float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
+        const Rml::Vector2f corners[4] = {o, {o.x + s.x, o.y}, {o.x, o.y + s.y}, {o.x + s.x, o.y + s.y}};
+        for (const Rml::Vector2f& l : corners)
+        {
+            const float rx = l.x - p0.x, ry = l.y - p0.y;
+            const float wx = (d * rx - b * ry) / det, wy = (-c * rx + a * ry) / det;
+            minX = std::min(minX, wx);
+            maxX = std::max(maxX, wx);
+            minY = std::min(minY, wy);
+            maxY = std::max(maxY, wy);
+        }
+        return {minX, minY, maxX - minX, maxY - minY};
+    }
+
     Doc& docArg(lua_State* L, int arg = 1)
     {
         Doc* d = findDoc(static_cast<int>(luaL_checknumber(L, arg)));
@@ -3045,8 +3094,15 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     // caller that hands the same table in every frame allocates nothing).
     void pushRect(lua_State* L, Rml::Element* e, float unit, int index, bool panel = false)
     {
-        const Rml::Vector2f o = absOffset(e, Rml::BoxArea::Border);
-        const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
+        // where it is drawn (a window keeps its layout box: the layout editor and the drag move that)
+        Rml::Vector2f o = absOffset(e, Rml::BoxArea::Border);
+        Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
+        if (!panel)
+        {
+            const DrawnBox b = drawnBox(e);
+            o = Rml::Vector2f(b.x, b.y) + g_origin;
+            s = Rml::Vector2f(b.w, b.h);
+        }
         lua_rawgeti(L, -1, index);
         if (!lua_istable(L, -1))
         {
@@ -3509,9 +3565,9 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             return 0;
         }
         Rml::Element* e = list[index - 1];
-        const Rml::Vector2f o = e->GetAbsoluteOffset(Rml::BoxArea::Border);
-        const Rml::Vector2f s = e->GetBox().GetSize(Rml::BoxArea::Border);
-        d.context->ProcessMouseMove(static_cast<int>(o.x + s.x * 0.5f), static_cast<int>(o.y + s.y * 0.5f), 0);
+        // the centre of where it is drawn (a button inside a scaled grid is not where the layout has it)
+        const DrawnBox b = drawnBox(e);
+        d.context->ProcessMouseMove(static_cast<int>(b.x + b.w * 0.5f), static_cast<int>(b.y + b.h * 0.5f), 0);
         d.context->ProcessMouseButtonDown(0, 0);
         d.context->ProcessMouseButtonUp(0, 0);
         return 0;
