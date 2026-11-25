@@ -2,7 +2,7 @@
 
 ## Versions (ddraw.dll and SacredGear.dll)
 
-Both DLLs have a version in a flat text file: `src/SacredBild_version.txt` and `gear/SacredGear_version.txt`. Never edit them by hand.
+Both DLLs have a version in a flat text file: `src/bild/SacredBild_version.txt` and `src/gear/SacredGear_version.txt`. Never edit them by hand.
 `tools/bump_versions.py` raises them from the git history (patch for any non-test change, `feat(<scope>)`/`feat:` in a commit message
 means minor, `break(<scope>)`/`feat!:` major; scopes `gear`, `bild`) and refreshes `mod-index.json`. See docs/Versioning.md.
 

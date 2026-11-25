@@ -16,7 +16,7 @@ string(REPLACE "/INCREMENTAL" "/INCREMENTAL:NO /OPT:REF /OPT:ICF" CMAKE_SHARED_L
 find_package(imgui CONFIG REQUIRED)
 find_package(kcp CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
-# RmlUi (Sacred Gear's HTML/CSS-style mod UI, gear/rml.cpp) and stb_image (the images its documents name).
+# RmlUi (Sacred Gear's HTML/CSS-style mod UI, src/gear/ui/rml.cpp) and stb_image (the images its documents name).
 find_package(RmlUi CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 find_path(STB_INCLUDE_DIRS "stb_image.h" REQUIRED)
@@ -36,13 +36,13 @@ set(COMMON_OPTIONS /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
 # What SacredBild and Sacred Gear share: the log, formatting, code patches and hooks, signature search. Each DLL links
 # its own copy (its own log file, its own Detours transactions).
 add_library(sacred_core STATIC
-  src/fmt.cpp
-  src/instance.cpp
-  src/log.cpp
-  src/patch.cpp
-  src/sig.cpp
+  src/core/fmt.cpp
+  src/core/instance.cpp
+  src/core/log.cpp
+  src/core/patch.cpp
+  src/core/sig.cpp
 )
-target_include_directories(sacred_core PUBLIC src PRIVATE ${DETOURS_INCLUDE_DIRS})
+target_include_directories(sacred_core PUBLIC src/core PRIVATE ${DETOURS_INCLUDE_DIRS})
 target_link_libraries(sacred_core PUBLIC ${DETOURS_LIBRARY})
 target_compile_definitions(sacred_core PUBLIC ${COMMON_DEFINITIONS})
 target_compile_options(sacred_core PRIVATE ${COMMON_OPTIONS})
@@ -66,84 +66,84 @@ function(sort_sources_by_size_desc var)
 endfunction()
 
 set(DDRAW_SOURCES
-  src/main.cpp
-  src/proxy.cpp
-  src/config.cpp
-  src/crash_dump.cpp
-  src/profiler.cpp
-  src/settings_window.cpp
-  src/system_ddraw.cpp
-  src/game/build.cpp
-  src/game/focus.cpp
-  src/game/window_fit.cpp
-  src/game/frame_hooks.cpp
-  src/game/gameserver.cpp
-  src/game/granny_async.cpp
-  src/game/granny_parallel.cpp
-  src/game/language.cpp
-  src/game/map_cache.cpp
-  src/game/sound_lock.cpp
-  src/game/fast_math.cpp
-  src/game/file_io_stats.cpp
-  src/game/file_cache.cpp
-  src/game/ground_quads.cpp
-  src/game/sprite_quads.cpp
-  src/game/ground_mesh.cpp
-  src/game/layout_check.cpp
-  src/game/skin_check.cpp
-  src/game/granny_mesh.cpp
-  src/game/gpu_skin.cpp
-  src/game/world_passes.cpp
-  src/game/aim_assist.cpp
-  src/game/pets.cpp
-  src/game/controller.cpp
-  src/game/hero_move.cpp
-  src/game/click_walk.cpp
-  src/game/zoom.cpp
-  src/game/options_screen.cpp
-  src/game/ui_nav.cpp
-  src/game/gear_nav.cpp
-  src/game/ui_state.cpp
-  src/game/ui_windows.cpp
-  src/game/movie.cpp
-  src/game/d3d_stats.cpp
-  src/game/device_proxy.cpp
-  src/game/resolution.cpp
-  src/game/screenshot.cpp
-  src/game/ui_anchor.cpp
-  src/game/ui_canvas.cpp
-  src/input/bindings.cpp
-  src/input/gamepad.cpp
-  src/input/inject.cpp
-  src/input/input_mode.cpp
-  src/overlay/overlay.cpp
-  src/overlay/prompts.cpp
-  src/ddraw9/device.cpp
-  src/ddraw9/device_skin.cpp
-  src/ddraw9/device_ground.cpp
-  src/ddraw9/smaa.cpp
-  src/ddraw9/directdraw.cpp
-  src/ddraw9/format.cpp
-  src/ddraw9/gpu.cpp
-  src/ddraw9/surface.cpp
-  src/ddraw9/vertex_buffer.cpp
-  src/render/atlas.cpp
-  src/render/batcher.cpp
-  src/ui/form.cpp
-  src/ui/form.rc
-  src/net/address.cpp
-  src/net/adapters.cpp
-  src/net/connection.cpp
-  src/net/lan_client.cpp
-  src/net/lan_protocol.cpp
-  src/net/lan_server.cpp
-  src/net/matchmaker.cpp
-  src/net/tincat_shim.cpp
-  src/net/udp_endpoint.cpp
-  src/net/udp_protocol.cpp
-  src/net/udp_transport.cpp
-  src/exports.def
-  src/version.rc
+  src/bild/main.cpp
+  src/bild/proxy.cpp
+  src/bild/settings/config.cpp
+  src/bild/crash_dump.cpp
+  src/bild/diag/profiler.cpp
+  src/bild/settings/settings_window.cpp
+  src/bild/system_ddraw.cpp
+  src/bild/engine/build.cpp
+  src/bild/display/focus.cpp
+  src/bild/display/window_fit.cpp
+  src/bild/render/frame_hooks.cpp
+  src/bild/net/gameserver.cpp
+  src/bild/render/granny_async.cpp
+  src/bild/render/granny_parallel.cpp
+  src/bild/game/language.cpp
+  src/bild/perf/map_cache.cpp
+  src/bild/perf/sound_lock.cpp
+  src/bild/perf/fast_math.cpp
+  src/bild/diag/file_io_stats.cpp
+  src/bild/perf/file_cache.cpp
+  src/bild/render/ground_quads.cpp
+  src/bild/render/sprite_quads.cpp
+  src/bild/render/ground_mesh.cpp
+  src/bild/diag/layout_check.cpp
+  src/bild/diag/skin_check.cpp
+  src/bild/render/granny_mesh.cpp
+  src/bild/render/gpu_skin.cpp
+  src/bild/diag/world_passes.cpp
+  src/bild/controller/aim_assist.cpp
+  src/bild/game/pets.cpp
+  src/bild/controller/controller.cpp
+  src/bild/controller/hero_move.cpp
+  src/bild/controller/click_walk.cpp
+  src/bild/display/zoom.cpp
+  src/bild/controller/options_screen.cpp
+  src/bild/controller/ui_nav.cpp
+  src/bild/controller/gear_nav.cpp
+  src/bild/ui/ui_state.cpp
+  src/bild/ui/ui_windows.cpp
+  src/bild/game/movie.cpp
+  src/bild/diag/d3d_stats.cpp
+  src/bild/render/device_proxy.cpp
+  src/bild/display/resolution.cpp
+  src/bild/game/screenshot.cpp
+  src/bild/ui/ui_anchor.cpp
+  src/bild/ui/ui_canvas.cpp
+  src/bild/controller/bindings.cpp
+  src/bild/controller/gamepad.cpp
+  src/bild/controller/inject.cpp
+  src/bild/controller/input_mode.cpp
+  src/bild/overlay/overlay.cpp
+  src/bild/controller/prompts.cpp
+  src/bild/ddraw9/device.cpp
+  src/bild/ddraw9/device_skin.cpp
+  src/bild/ddraw9/device_ground.cpp
+  src/bild/ddraw9/smaa.cpp
+  src/bild/ddraw9/directdraw.cpp
+  src/bild/ddraw9/format.cpp
+  src/bild/ddraw9/gpu.cpp
+  src/bild/ddraw9/surface.cpp
+  src/bild/ddraw9/vertex_buffer.cpp
+  src/bild/render/atlas.cpp
+  src/bild/render/batcher.cpp
+  src/bild/settings/form.cpp
+  src/bild/settings/form.rc
+  src/bild/net/address.cpp
+  src/bild/net/adapters.cpp
+  src/bild/net/connection.cpp
+  src/bild/net/lan_client.cpp
+  src/bild/net/lan_protocol.cpp
+  src/bild/net/lan_server.cpp
+  src/bild/net/matchmaker.cpp
+  src/bild/net/tincat_shim.cpp
+  src/bild/net/udp_endpoint.cpp
+  src/bild/net/udp_protocol.cpp
+  src/bild/net/udp_transport.cpp
+  src/bild/exports.def
+  src/bild/version.rc
 )
 sort_sources_by_size_desc(DDRAW_SOURCES)
 # Version resources: version_info.h comes from the version files plus the git short sha (and -dirty), regenerated on every
@@ -158,14 +158,14 @@ add_custom_target(version_info ALL
 add_library(ddraw SHARED ${DDRAW_SOURCES})
 add_dependencies(ddraw version_info)
 target_include_directories(ddraw PRIVATE ${VERSION_INFO_DIR})
-target_include_directories(ddraw PRIVATE src ${DETOURS_INCLUDE_DIRS})
-# The resource script embeds the button prompts' atlas (tools/gen_prompts.py).
-set_source_files_properties(src/version.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/overlay/prompts.png;${VERSION_INFO_DIR}/version_info.h")
+target_include_directories(ddraw PRIVATE src/bild ${DETOURS_INCLUDE_DIRS})
+# The resource script embeds the button prompts' atlas (tools/re/gen_prompts.py).
+set_source_files_properties(src/bild/version.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/bild/controller/prompts.png;${VERSION_INFO_DIR}/version_info.h")
 target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
 target_compile_options(ddraw PRIVATE ${COMMON_OPTIONS})
-target_precompile_headers(ddraw PRIVATE src/pch.h)
+target_precompile_headers(ddraw PRIVATE src/bild/pch.h)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.
-# The map file lets tools/profile_report.py name functions in SacredBild's own samples.
+# The map file lets tools/re/profile_report.py name functions in SacredBild's own samples.
 target_link_options(ddraw PRIVATE /SAFESEH:NO /MAP)
 # Winsock and the IP helper load on first use (LAN relay), Media Foundation with the first movie, Common Controls
 # in the settings window (version 6 there, from its activation context).
@@ -185,53 +185,75 @@ endif()
 option(SACREDGEAR "Build Sacred Gear (SacredGear.dll)" ON)
 if(SACREDGEAR)
   add_library(SacredGear SHARED
-    gear/main.cpp
-    gear/hooks.cpp
-    gear/lua_host.cpp
-    gear/classes.cpp
-    gear/classes_alias.cpp
-    gear/itemuse.cpp
-    gear/master.cpp
-    gear/killstat.cpp
-    gear/party.cpp
-    gear/potionpick.cpp
-    gear/shop.cpp
-    gear/buffs.cpp
-    gear/pfx.cpp
-    gear/tables.cpp
-    gear/overlay.cpp
-    gear/sitehook.cpp
-    gear/world.cpp
-    gear/pipe.cpp
-    gear/automation.cpp
-    gear/ui.cpp
-    gear/padnav.cpp
-    gear/text.cpp
-    gear/pickup.cpp
-    gear/drops.cpp
-    gear/netmsg.cpp
-    gear/chat.cpp
-    gear/inventory.cpp
-    gear/itemtip.cpp
-    gear/save.cpp
-    gear/savegames.cpp
-    gear/replace.cpp
-    gear/gamecfg.cpp
-    gear/keyblock.cpp
-    gear/input.cpp
-    gear/itemicon.cpp
-    gear/realm.cpp
-    gear/rml.cpp
-    gear/dds.cpp
-    gear/vfs.cpp
-    gear/css_compat.cpp
-    gear/gear.rc
+    src/gear/main.cpp
+    src/gear/hooks.cpp
+    src/gear/lua_host.cpp
+    src/gear/tables_lua.cpp
+    src/gear/save_lua.cpp
+    src/gear/net_lua.cpp
+    src/gear/files_lua.cpp
+    src/gear/automation_lua.cpp
+    src/gear/world/world_lua.cpp
+    src/gear/world/party_lua.cpp
+    src/gear/items/items_lua.cpp
+    src/gear/ui/ui_lua.cpp
+    src/gear/world/classes.cpp
+    src/gear/world/classes_alias.cpp
+    src/gear/items/itemuse.cpp
+    src/gear/items/master.cpp
+    src/gear/world/killstat.cpp
+    src/gear/world/party.cpp
+    src/gear/items/potionpick.cpp
+    src/gear/items/shop.cpp
+    src/gear/world/buffs.cpp
+    src/gear/world/pfx.cpp
+    src/gear/tables.cpp
+    src/gear/overlay.cpp
+    src/gear/sitehook.cpp
+    src/gear/world/world.cpp
+    src/gear/pipe.cpp
+    src/gear/automation.cpp
+    src/gear/ui/ui.cpp
+    src/gear/ui/padnav.cpp
+    src/gear/ui/text.cpp
+    src/gear/items/pickup.cpp
+    src/gear/items/drops.cpp
+    src/gear/netmsg.cpp
+    src/gear/chat.cpp
+    src/gear/items/inventory.cpp
+    src/gear/items/itemtip.cpp
+    src/gear/save.cpp
+    src/gear/savegames.cpp
+    src/gear/ui/replace.cpp
+    src/gear/gamecfg.cpp
+    src/gear/ui/keyblock.cpp
+    src/gear/ui/input.cpp
+    src/gear/items/itemicon.cpp
+    src/gear/realm.cpp
+    src/gear/ui/rml.cpp
+    src/gear/ui/dds.cpp
+    src/gear/vfs.cpp
+    src/gear/ui/css_compat.cpp
+    src/gear/gear.rc
   )
   add_dependencies(SacredGear version_info)
-  target_include_directories(SacredGear PRIVATE ${VERSION_INFO_DIR} gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS} ${STB_INCLUDE_DIRS})
-  set_source_files_properties(gear/gear.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kernel.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/lookup.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/fmt.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/toast.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/store.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/kit.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/npc.lua;${CMAKE_CURRENT_SOURCE_DIR}/gear/res/GearIcons.ttf;${CMAKE_CURRENT_SOURCE_DIR}/gear/lua/modmanager.rml;${VERSION_INFO_DIR}/version_info.h")
+  target_include_directories(SacredGear PRIVATE ${VERSION_INFO_DIR} src/gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS} ${STB_INCLUDE_DIRS})
+  # The kernel: its parts (src/gear/lua/kernel.parts) joined into the one chunk gear.rc embeds. gear.rc depends on every file in
+  # lua/ and res/, so a new embedded file needs only its line in gear.rc.
+  file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/kernel.parts GEAR_KERNEL_PARTS REGEX "^[^#].*")
+  list(TRANSFORM GEAR_KERNEL_PARTS PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/)
+  add_custom_command(OUTPUT ${VERSION_INFO_DIR}/gear_kernel.lua
+    COMMAND ${CMAKE_COMMAND} -DLUA_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua -DOUT=${VERSION_INFO_DIR}/gear_kernel.lua -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/JoinKernel.cmake
+    DEPENDS ${GEAR_KERNEL_PARTS} ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/kernel.parts ${CMAKE_CURRENT_SOURCE_DIR}/cmake/JoinKernel.cmake
+    COMMENT "Joining the Sacred Gear kernel"
+    VERBATIM)
+  add_custom_target(gear_kernel DEPENDS ${VERSION_INFO_DIR}/gear_kernel.lua)
+  add_dependencies(SacredGear gear_kernel)
+  file(GLOB GEAR_EMBEDDED CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/* ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/res/*)
+  list(APPEND GEAR_EMBEDDED ${VERSION_INFO_DIR}/gear_kernel.lua ${VERSION_INFO_DIR}/version_info.h)
+  set_source_files_properties(src/gear/gear.rc PROPERTIES OBJECT_DEPENDS "${GEAR_EMBEDDED}")
   target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32)
-  target_compile_definitions(SacredGear PRIVATE RMLUI_STATIC_LIB)
+  target_compile_definitions(SacredGear PRIVATE RMLUI_STATIC_LIB SACREDGEAR_BUILD)
   target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})
   # SAFESEH off as for ddraw (Detours trampolines); /MAP for profiles.
   target_link_options(SacredGear PRIVATE /SAFESEH:NO /MAP)
@@ -243,25 +265,26 @@ if(SACREDGEAR)
   endif()
 endif()
 
-# Test bench for the UDP transport and the matchmaker client outside the game (tools/nettest/nettest.cpp).
-option(SACREDBILD_NETTEST "Build tools/nettest" OFF)
+# Test bench for the UDP transport and the matchmaker client outside the game (tools/test/nettest/nettest.cpp).
+option(SACREDBILD_NETTEST "Build tools/test/nettest" OFF)
 if(SACREDBILD_NETTEST)
   add_executable(nettest
-    tools/nettest/nettest.cpp
-    src/config.cpp
-    src/fmt.cpp
-    src/log.cpp
-    src/net/address.cpp
-    src/net/adapters.cpp
-    src/net/lan_protocol.cpp
-    src/net/matchmaker.cpp
-    src/net/udp_endpoint.cpp
-    src/net/udp_protocol.cpp
-    src/net/udp_transport.cpp
+    tools/test/nettest/nettest.cpp
+    src/bild/settings/config.cpp
+    src/core/fmt.cpp
+    src/core/instance.cpp
+    src/core/log.cpp
+    src/bild/net/address.cpp
+    src/bild/net/adapters.cpp
+    src/bild/net/lan_protocol.cpp
+    src/bild/net/matchmaker.cpp
+    src/bild/net/udp_endpoint.cpp
+    src/bild/net/udp_protocol.cpp
+    src/bild/net/udp_transport.cpp
   )
-  target_include_directories(nettest PRIVATE src)
+  target_include_directories(nettest PRIVATE src/bild src/core)
   target_link_libraries(nettest PRIVATE kcp::kcp ws2_32 iphlpapi winmm)
   target_compile_definitions(nettest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
   target_compile_options(nettest PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
-  target_precompile_headers(nettest PRIVATE src/pch.h)
+  target_precompile_headers(nettest PRIVATE src/bild/pch.h)
 endif()

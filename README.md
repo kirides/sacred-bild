@@ -129,7 +129,7 @@ SacredBild's `ddraw.dll` and creates `SacredBild.ini` if there is none. `uninsta
 | [Multiplayer](docs/Multiplayer.md) | LAN games over VPNs, the UDP connection, online games through the matchmaker |
 | [Languages](docs/Languages.md) | Text and speech of other languages, `import-language.ps1` |
 | [Sacred Gear](docs/Gear.md) | The mod kit: install, writing a mod, the file overlay, the mod manager, automation |
-| [Gear API reference](docs/GearApi.md) | Every function, option and event a mod can use (generated from `gear/meta`) |
+| [Gear API reference](docs/GearApi.md) | Every function, option and event a mod can use (generated from `src/gear/meta`) |
 | [Gear drops](docs/GearDrops.md) | `gear.drops`: how the engine rolls drops and what each setting changes |
 | [Custom classes](docs/CustomClasses.md) | `gear.classes`, `gear.models`, ability copies: what the engine binds to a hero class, and which arts work on which body |
 | [Skill effects](docs/GearPfx.md) | `gear.pfx`: variants of the engine's art and spell effects (colour, sprites, speed) chosen per cast and level; effect types and texture names |
@@ -148,7 +148,7 @@ SacredBild builds on:
   [Dear ImGui](https://github.com/ocornut/imgui) (SacredBild's own screens), [SDL3](https://www.libsdl.org)
   (controllers), [KCP](https://github.com/skywind3000/kcp) (the UDP connection) and [LuaJIT](https://luajit.org)
   (Sacred Gear), linked in;
-- [SMAA](https://github.com/iryoku/smaa) by Jorge Jimenez et al. (MIT, `src/ddraw9/smaa/`): the antialiasing;
+- [SMAA](https://github.com/iryoku/smaa) by Jorge Jimenez et al. (MIT, `src/bild/ddraw9/smaa/`): the antialiasing;
 - [Input Prompts](https://github.com/meritite-union/input-prompts) by the Meritite Union (CC0): the controller
   button images of the button prompts;
 - [DDrawCompat](https://github.com/narzoul/DDrawCompat) and [DXVK](https://github.com/doitsujin/dxvk), which it can

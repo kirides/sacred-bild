@@ -1,0 +1,1540 @@
+#include "ui_nav.h"
+#include "ui/ui_anchor.h"
+#include "gear_nav.h"
+#include "ui/ui_canvas.h"
+#include "ui/ui_state.h"
+#include "patch.h"
+#include "sacred/net.h"
+#include "sacred/text.h"
+#include "sacred/ui.h"
+
+#include <windows.h>
+#include <algorithm>
+#include <atomic>
+#include <initializer_list>
+#include <iterator>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+namespace
+{
+    using namespace Sacred;
+
+    enum Kind : uint8_t
+    {
+        Other,
+        Window,    // has children
+        Control,    // something to point the cursor at
+        Button,     // ... a button
+        GameMenu,   // the game menu: its entries are in a vector of their own (cUI_EscMenu)
+        MainMenu,   // the start menu: a vector per screen (cUI_MainMenu)
+        Savegames,  // the savegame window: a window whose list rows are hit rects (cUI_Savegame)
+        Network,    // the network menu: it shows one of its screens, not a child (cUI_Network)
+        PlayerList, // the player list of a network game: its cells are hit rects (cUI_NetworkInfo)
+        Characters, // the character screens: heroes on slots, controls as pointer members (cUI_Character)
+        NetLan,     // the LAN screen: its game list's rows that show a game (cUI_NetLan)
+    };
+
+    struct Info
+    {
+        Kind kind = Other;
+        bool needsEnabled = true;   // clicks count only while it is enabled
+        bool edit = false;          // a text field (cUI_EditControl): read-only ones take no clicks
+        uint32_t size = 0;          // a window whose controls are (also) members: its size, to look for them
+    };
+
+    // RTTI class names (MSVC decorated) of the controls D-pad navigation stops at; their subclasses count too.
+    constexpr const char* kButtons[] = {".?AVcUI_Button2@@", ".?AVcUI_RadioButton2@@"};
+    constexpr const char* kControls[] = {
+        ".?AVcUI_StaticText64FX@@", ".?AVcUI_Combobox@@", ".?AVcUI_EditControl@@", ".?AVcUI_DigitEdit@@",
+        ".?AVcUI_Listbox@@", ".?AVcUI_Listbox2@@",
+    };
+    // The controls that take clicks whether they are enabled or not.
+    constexpr const char* kAlwaysEnabled[] = {".?AVcUI_Combobox@@", ".?AVcUI_Listbox2@@"};
+    // The windows whose controls are members (drawn and fed events by the window itself), with their sizes.
+    struct Owner
+    {
+        const char* name;
+        uint32_t size;
+    };
+    constexpr Owner kOwners[] = {
+        {".?AVcUI_BusyDlg@@", sizeof(cUI_BusyDlg)},
+        {".?AVcUI_NetLogin@@", sizeof(cUI_NetLogin)},
+        {".?AVcUI_NetAccount@@", sizeof(cUI_NetAccount)},
+        {".?AVcUI_NetLobby@@", sizeof(cUI_NetLobby)},
+        {".?AVcUI_NetPassword@@", sizeof(cUI_NetPassword)},
+        {".?AVcUI_NetLan@@", sizeof(cUI_NetLan)},
+        {".?AVcUI_NetTest@@", sizeof(cUI_NetTest)},
+        {".?AVcUI_Character@@", sizeof(cUI_Character)},
+    };
+    constexpr const char* kWindow = ".?AVcUI_Window2@@";
+    // Classes by themselves (not their subclasses).
+    constexpr std::pair<const char*, Kind> kClasses[] = {
+        {".?AVcUI_EscMenu@@", GameMenu},
+        {".?AVcUI_MainMenu@@", MainMenu},
+        {".?AVcUI_Savegame@@", Savegames},
+        {".?AVcUI_Network@@", Network},
+        {".?AVcUI_NetworkInfo@@", PlayerList},
+        {".?AVcUI_Character@@", Characters},
+        {".?AVcUI_NetLan@@", NetLan},
+    };
+    constexpr size_t kMaxControls = 512;
+
+    // By vtable; only the presenting thread asks.
+    std::unordered_map<const void*, Info> g_infos;
+    uintptr_t g_imageBegin = 0, g_imageEnd = 0;
+
+    bool inImage(uintptr_t address)
+    {
+        if (!g_imageBegin)
+        {
+            const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+            const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + reinterpret_cast<const IMAGE_DOS_HEADER*>(base)->e_lfanew);
+            g_imageBegin = base;
+            g_imageEnd = base + nt->OptionalHeader.SizeOfImage;
+        }
+        // Without overflow (the member scan hands it any value, -1 too); the vtable's locator lies 4 bytes before.
+        return address >= g_imageBegin + 4 && address < g_imageEnd && g_imageEnd - address >= 16;
+    }
+
+    uintptr_t read(uintptr_t address)
+    {
+        return *reinterpret_cast<const uintptr_t*>(address);
+    }
+
+    template <size_t N>
+    bool among(const char* name, const char* const (&names)[N])
+    {
+        return std::any_of(std::begin(names), std::end(names), [&](const char* n) { return std::strcmp(name, n) == 0; });
+    }
+
+    // The object's class from its vtable's RTTI: complete object locator at vtable[-1] (+0x10 class hierarchy
+    // descriptor: +8 number of base classes, +0xC base class array, each entry's +0 a type descriptor with the
+    // decorated name at +8; the class itself comes first). The class itself decides first, then a button, a control
+    // and a window base.
+    Info infoOf(const void* object)
+    {
+        const auto vtable = read(reinterpret_cast<uintptr_t>(object));
+        if (!inImage(vtable))
+        {
+            return {};
+        }
+        const auto cached = g_infos.find(reinterpret_cast<const void*>(vtable));
+        if (cached != g_infos.end())
+        {
+            return cached->second;
+        }
+        Info info;
+        bool button = false, control = false, window = false;
+        const uintptr_t locator = read(vtable - 4);
+        // A complete object locator starts with signature 0 (x86).
+        const uintptr_t hierarchy = inImage(locator) && read(locator) == 0 ? read(locator + 0x10) : 0;
+        const uintptr_t bases = inImage(hierarchy) ? read(hierarchy + 0x0C) : 0;
+        if (inImage(bases))
+        {
+            const uint32_t count = std::min<uint32_t>(*reinterpret_cast<const uint32_t*>(hierarchy + 8), 64);
+            for (uint32_t i = 0; i < count && inImage(bases + i * 4); ++i)
+            {
+                const uintptr_t base = read(bases + i * 4);
+                const uintptr_t type = inImage(base) ? read(base) : 0;
+                if (!inImage(type))
+                {
+                    continue;
+                }
+                const char* name = reinterpret_cast<const char*>(type + 8);
+                if (std::strncmp(name, ".?A", 3) != 0)
+                {
+                    continue;   // not a type descriptor
+                }
+                if (i == 0)
+                {
+                    for (const auto& [className, kind] : kClasses)
+                    {
+                        if (std::strcmp(name, className) == 0)
+                        {
+                            info.kind = kind;
+                        }
+                    }
+                    for (const Owner& owner : kOwners)
+                    {
+                        if (std::strcmp(name, owner.name) == 0)
+                        {
+                            info.size = owner.size;
+                        }
+                    }
+                }
+                button = button || among(name, kButtons);
+                control = control || among(name, kControls);
+                window = window || std::strcmp(name, kWindow) == 0;
+                info.needsEnabled = info.needsEnabled && !among(name, kAlwaysEnabled);
+                info.edit = info.edit || std::strcmp(name, ".?AVcUI_EditControl@@") == 0;
+            }
+        }
+        if (info.kind == Other)
+        {
+            info.kind = button ? Button : control ? Control : window ? Window : Other;
+        }
+        g_infos.emplace(reinterpret_cast<const void*>(vtable), info);
+        return info;
+    }
+
+    Kind kindOf(const void* object)
+    {
+        return infoOf(object).kind;
+    }
+
+    // Something D-pad navigation may stop at: shown, and enabled if it has to be to take a click.
+    bool usable(cUI_Control2* control)
+    {
+        if (!control || !control->visible())
+        {
+            return false;
+        }
+        const Info info = infoOf(control);
+        return (control->enabled() || !info.needsEnabled) && !(info.edit && (control->flags & cUI_EditControl::readOnly));
+    }
+
+    bool visible(const cUI_Control2* control)
+    {
+        return control && control->visible();
+    }
+
+    struct Point
+    {
+        float x, y;
+        bool button;
+        UiNav::Rect rect;   // the control's, screen pixels
+        cUI_Control2* control = nullptr;
+        UiCanvas::Frame frame{};
+    };
+
+    float physicalX(float x, const UiCanvas::Frame& frame)
+    {
+        return static_cast<float>(UiCanvas::toPhysicalX(static_cast<int>(std::lround(x + frame.x))));
+    }
+
+    float physicalY(float y, const UiCanvas::Frame& frame)
+    {
+        return static_cast<float>(UiCanvas::toPhysicalY(static_cast<int>(std::lround(y + frame.y))));
+    }
+
+    // A point of the 1024x768 layout of a window shifted by `frame`, in screen pixels.
+    Point screen(float x, float y, const UiCanvas::Frame& frame, bool button = false)
+    {
+        const float px = physicalX(x, frame), py = physicalY(y, frame);
+        return {px, py, button, {px, py, px, py}};
+    }
+
+    // A control's rect in the 1024x768 layout (its parents' positions added, as the game hit-tests it), false if it
+    // has no sensible size.
+    bool layoutRect(cUI_Control2* control, float& left, float& top, float& width, float& height)
+    {
+        const UiRect r = control->absoluteRect();
+        if (r.width <= 0 || r.height <= 0 || r.width > 1024 || r.height > 768)
+        {
+            return false;
+        }
+        left = static_cast<float>(r.x);
+        top = static_cast<float>(r.y);
+        width = static_cast<float>(r.width);
+        height = static_cast<float>(r.height);
+        return true;
+    }
+
+    bool center(cUI_Control2* control, float& x, float& y)
+    {
+        float left, top, w, h;
+        if (!layoutRect(control, left, top, w, h))
+        {
+            return false;
+        }
+        x = left + w * 0.5f;
+        y = top + h * 0.5f;
+        return true;
+    }
+
+    // A layout rect in screen pixels.
+    UiNav::Rect screenRect(float left, float top, float w, float h, const UiCanvas::Frame& frame)
+    {
+        return {physicalX(left, frame), physicalY(top, frame), physicalX(left + w, frame), physicalY(top + h, frame)};
+    }
+
+    // Once each (a member may be a child too).
+    void addControl(cUI_Control2* control, bool button, const UiCanvas::Frame& frame, std::vector<Point>& out)
+    {
+        float left, top, w, h;
+        const bool added = std::any_of(out.begin(), out.end(), [&](const Point& p) { return p.control == control; });
+        if (!added && out.size() < kMaxControls && layoutRect(control, left, top, w, h))
+        {
+            Point p = screen(left + w * 0.5f, top + h * 0.5f, frame, button);
+            p.rect = screenRect(left, top, w, h, frame);
+            p.control = control;
+            p.frame = frame;
+            out.push_back(p);
+        }
+    }
+
+    // A menu's entries (not its children), at most 16.
+    template <class T>
+    void addEntries(const Vector<T*>& entries, const UiCanvas::Frame& frame, std::vector<Point>& out)
+    {
+        if (entries.size() > 16)
+        {
+            return;
+        }
+        for (T* entry : entries)
+        {
+            if (usable(entry))
+            {
+                addControl(entry, false, frame, out);
+            }
+        }
+    }
+
+    // ---- The savegame window's list (cUI_Savegame) ----
+
+    // Saving or loading, also while a message box asks about it; 0 if neither.
+    uint32_t listMode(const cUI_Savegame* window)
+    {
+        uint32_t mode = window->mode;
+        if (mode > cUI_Savegame::loading)
+        {
+            mode = window->askedMode;
+        }
+        return mode == cUI_Savegame::saving || mode == cUI_Savegame::loading ? mode : 0;
+    }
+
+    uint32_t listed(const cUI_Savegame* window)
+    {
+        return static_cast<uint32_t>(window->entries.size());
+    }
+
+    // The first listed savegame, row 1's, as the window works it out (ENG 0071C2B0).
+    uint32_t firstListed(cUI_Savegame* window)
+    {
+        const uint32_t value = window->slider.value() & 0xFFFF;
+        const uint32_t last = window->slider.count - (listMode(window) == cUI_Savegame::saving ? 2 : 3);
+        return last <= value ? last : value;
+    }
+
+    // The row shows a savegame, or the new one (the row past the end) when saving.
+    bool rowShows(cUI_Savegame* window, int row)
+    {
+        if (row == 0)
+        {
+            return window->quicksave.name[0] != '\0';
+        }
+        const uint32_t index = firstListed(window) + row - 1;
+        return row > 0 && row < cUI_Savegame::rowCount &&
+            index < listed(window) + (listMode(window) == cUI_Savegame::saving ? 1 : 0);
+    }
+
+    // Sets the first listed savegame (the slider; the window renders the rows anew when it changes).
+    void scrollList(cUI_Savegame* window, uint32_t first)
+    {
+        window->slider.setValue(first);
+    }
+
+    UiNav::Rect rowRect(const cUI_Savegame* window, int row, const UiCanvas::Frame& frame)
+    {
+        const UiRect& r = window->rows[row];
+        return screenRect(static_cast<float>(r.x), static_cast<float>(r.y), r.width, r.height, frame);
+    }
+
+    // Whether a member of `window` shows: its parents up to the window do (none: it is placed on the screen).
+    bool shownIn(const cUI_Control2* control, const cUI_Control2* window)
+    {
+        const cUI_Control2* parent = control->parent;
+        for (int depth = 0; parent && parent != window; ++depth, parent = parent->parent)
+        {
+            if (depth >= 8 || !parent->visible())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // ---- What the windows drew ----
+
+    // A window whose controls are members picks by its state which of them it draws, and leaves the others' flags
+    // as they were (the LAN screen keeps its game list visible under the form that creates a game). The members'
+    // classes get their render slot wrapped, which notes when each control was drawn; a member counts only if it
+    // was drawn lately. The game reaches these renders through the vtable only (but for a subclass calling its base).
+    constexpr DWORD kDrawnWithin = 250;         // ms
+    using RenderFn = decltype(cUI_Control2::Vtable::render);
+    struct RenderSlot
+    {
+        const cUI_Control2::Vtable* table;
+        RenderFn original;
+        DWORD since;                            // wrapped at: until kDrawnWithin later, every member counts
+    };
+    RenderSlot g_renderSlots[64];
+    std::atomic<size_t> g_renderSlotCount{0};   // written by the presenting thread only
+    SRWLOCK g_drawnLock = SRWLOCK_INIT;
+    std::unordered_map<const cUI_Control2*, DWORD> g_drawn;
+
+    const RenderSlot* renderSlot(const cUI_Control2::Vtable* table)
+    {
+        const size_t n = g_renderSlotCount.load(std::memory_order_acquire);
+        for (size_t i = 0; i < n; ++i)
+        {
+            if (g_renderSlots[i].table == table)
+            {
+                return &g_renderSlots[i];
+            }
+        }
+        return nullptr;
+    }
+
+    uint32_t __fastcall thunkRender(cUI_Control2* self, void* edx, IDirect3DDevice7* device)
+    {
+        const RenderSlot* slot = renderSlot(self->vtable);    // only patched vtables lead here
+        AcquireSRWLockExclusive(&g_drawnLock);
+        g_drawn[self] = GetTickCount();
+        ReleaseSRWLockExclusive(&g_drawnLock);
+        return slot->original(self, edx, device);
+    }
+
+    // Whether the control was drawn lately; starts watching its class (then counting it drawn for a while).
+    bool drawnLately(cUI_Control2* control)
+    {
+        const DWORD now = GetTickCount();
+        const RenderSlot* slot = renderSlot(control->vtable);
+        if (!slot)
+        {
+            const size_t n = g_renderSlotCount.load(std::memory_order_relaxed);
+            if (n == std::size(g_renderSlots))
+            {
+                return true;
+            }
+            auto* table = const_cast<cUI_Control2::Vtable*>(control->vtable);
+            g_renderSlots[n] = {table, table->render, now};
+            // Publish the original before the slot leads to the thunk.
+            g_renderSlotCount.store(n + 1, std::memory_order_release);
+            Patch::value(reinterpret_cast<uintptr_t>(&table->render), &thunkRender);
+            return true;
+        }
+        if (now - slot->since < kDrawnWithin)
+        {
+            return true;
+        }
+        AcquireSRWLockShared(&g_drawnLock);
+        const auto it = g_drawn.find(control);
+        const bool drawn = it != g_drawn.end() && now - it->second < kDrawnWithin;
+        ReleaseSRWLockShared(&g_drawnLock);
+        return drawn;
+    }
+
+    // Forgets the controls not drawn for a while (freed ones among them).
+    void pruneDrawn()
+    {
+        static DWORD last = 0;
+        const DWORD now = GetTickCount();
+        if (now - last < 5000)
+        {
+            return;
+        }
+        last = now;
+        AcquireSRWLockExclusive(&g_drawnLock);
+        std::erase_if(g_drawn, [&](const auto& entry) { return now - entry.second > 5000; });
+        ReleaseSRWLockExclusive(&g_drawnLock);
+    }
+
+    // The controls that are members of a window of `size` bytes (it draws them and feeds them events itself), as the
+    // game shows them: the window sets their visible and enabled flags with its state, and draws those its state
+    // shows.
+    void collectMembers(cUI_Window2* window, uint32_t size, const UiCanvas::Frame& frame, std::vector<Point>& out)
+    {
+        pruneDrawn();
+        auto* object = reinterpret_cast<uint8_t*>(window);
+        for (uint32_t offset = sizeof(cUI_Window2); offset + sizeof(cUI_Control2) <= size; offset += 4)
+        {
+            auto* member = reinterpret_cast<cUI_Control2*>(object + offset);
+            const Kind kind = kindOf(member);
+            if ((kind == Control || kind == Button) && usable(member) && shownIn(member, window) &&
+                drawnLately(member))
+            {
+                addControl(member, kind == Button, frame, out);
+            }
+        }
+    }
+
+    // The opened player list's cells, for the players there are.
+    void addPlayerCells(cUI_NetworkInfo* list, const UiCanvas::Frame& frame, std::vector<Point>& out)
+    {
+        cNetPlayers* players = cNetPlayers::instance();
+        if (!list->opened || !list->enabled() || !players)
+        {
+            return;
+        }
+        const int rows = static_cast<int>(std::min<uint32_t>(players->count(), 16));
+        for (int row = 0; row < rows; ++row)
+        {
+            for (int column = 0; column < cUI_NetworkInfo::columns; ++column)
+            {
+                const UiRect r = list->cellRect(row, column);
+                const float x = static_cast<float>(r.x), y = static_cast<float>(r.y);
+                Point p = screen(x + r.width * 0.5f, y + r.height * 0.5f, frame);
+                p.rect = screenRect(x, y, r.width, r.height, frame);
+                out.push_back(p);
+            }
+        }
+    }
+
+    // The character screen's slots that hold a hero (or class) and can be chosen.
+    template <class F>
+    void forEachSlot(cUI_Character* screen, F&& f)
+    {
+        for (int slot = 0; slot < cUI_Character::slotCount; ++slot)
+        {
+            cUI_NetGranny* hero = screen->slots[slot];
+            float left, top, w, h;
+            if (hero && hero->visible() && hero->hero && !cUI_Character::slotLocked(slot) &&
+                layoutRect(hero, left, top, w, h))
+            {
+                f(hero, left, top, w, h);
+            }
+        }
+    }
+
+    void collect(cUI_Control2* control, const UiCanvas::Frame& frame, std::vector<Point>& out, int depth);
+
+    // The game list's rows that show a game, in place of the list (its other rows select nothing).
+    void addGames(cUI_NetLan* lan, const UiCanvas::Frame& frame, std::vector<Point>& out)
+    {
+        cUI_Listbox2& list = lan->games;
+        if (lan->state != cUI_NetLan::gameList)
+        {
+            return;
+        }
+        std::erase_if(out, [&](const Point& p) { return p.control == &list; });
+        float left, top, w, h;
+        const float line = list.lineHeight;
+        if (!usable(&list) || line <= 0.0f || !layoutRect(&list, left, top, w, h))
+        {
+            return;
+        }
+        const size_t shown = std::min<size_t>(static_cast<size_t>(h / line), 64);
+        for (size_t row = 0; row < shown && list.firstLine + row < list.lines.size(); ++row)
+        {
+            const float y = top + static_cast<float>(row) * line;
+            Point p = screen(left + w * 0.5f, y + line * 0.5f, frame);
+            p.rect = screenRect(left, y, w, line, frame);
+            out.push_back(p);
+        }
+    }
+
+    // Its heroes, then its controls (members it hit-tests and draws itself, children or not).
+    void addCharacters(cUI_Character* screen, const UiCanvas::Frame& frame, std::vector<Point>& out, int depth)
+    {
+        forEachSlot(screen, [&](cUI_NetGranny* hero, float, float, float, float) {
+            addControl(hero, false, frame, out);
+        });
+        for (cUI_Control2* control : {screen->next, screen->back, screen->newCharacter, screen->erase, screen->name,
+                 screen->name2, screen->lock, screen->choiceControl, screen->networkControl})
+        {
+            if (control)
+            {
+                collect(control, frame, out, depth + 1);
+            }
+        }
+    }
+
+    // The usable controls under `control` (in the 1024x768 layout of a window shifted by `frame`), as screen points.
+    void collect(cUI_Control2* control, const UiCanvas::Frame& frame, std::vector<Point>& out, int depth)
+    {
+        if (depth > 8 || out.size() >= kMaxControls || !visible(control))
+        {
+            return;
+        }
+        const Info info = infoOf(control);
+        const Kind kind = info.kind;
+        if (kind == Control || kind == Button)
+        {
+            if (usable(control))
+            {
+                addControl(control, kind == Button, frame, out);
+            }
+            return;
+        }
+        if (kind == Savegames && listMode(static_cast<cUI_Savegame*>(control)))
+        {
+            auto* window = static_cast<cUI_Savegame*>(control);
+            for (int row = 0; row < cUI_Savegame::rowCount; ++row)
+            {
+                if (rowShows(window, row))
+                {
+                    const UiNav::Rect r = rowRect(window, row, frame);
+                    out.push_back({(r.left + r.right) * 0.5f, (r.top + r.bottom) * 0.5f, false, r});
+                }
+            }
+            for (cUI_Button2& button : window->buttons)
+            {
+                if (usable(&button) && kindOf(&button) == Button)
+                {
+                    addControl(&button, true, frame, out);
+                }
+            }
+        }
+        if (kind == GameMenu)
+        {
+            addEntries(static_cast<cUI_EscMenu*>(control)->entries, frame, out);
+            return;
+        }
+        if (kind == MainMenu)
+        {
+            auto* menu = static_cast<cUI_MainMenu*>(control);
+            if (menu->screen < cUI_MainMenu::screensWithEntries)
+            {
+                addEntries(menu->entries[menu->screen], frame, out);
+            }
+            return;
+        }
+        if (kind == Window || kind == Savegames || kind == Network || kind == PlayerList || kind == Characters ||
+            kind == NetLan)
+        {
+            auto* window = static_cast<cUI_Window2*>(control);
+            const Vector<cUI_Control2*>& children = window->children;
+            if (children.size() <= kMaxControls)
+            {
+                for (cUI_Control2* child : children)
+                {
+                    collect(child, frame, out, depth + 1);
+                }
+            }
+            if (info.size)
+            {
+                collectMembers(window, info.size, frame, out);
+            }
+            if (kind == Network)
+            {
+                if (cUI_Window2* screen = static_cast<cUI_Network*>(window)->current())
+                {
+                    collect(screen, frame, out, depth + 1);
+                }
+            }
+            if (kind == PlayerList)
+            {
+                addPlayerCells(static_cast<cUI_NetworkInfo*>(window), frame, out);
+            }
+            if (kind == Characters)
+            {
+                addCharacters(static_cast<cUI_Character*>(window), frame, out, depth);
+            }
+            if (kind == NetLan)
+            {
+                addGames(static_cast<cUI_NetLan*>(window), frame, out);
+            }
+        }
+    }
+
+    // What the UI manager shows: the menu screens, or in game the open windows (a full-screen one alone, as the
+    // game draws it), and the dialog over either.
+    cUI_Manager* manager()
+    {
+        return cUI_Manager::instance();
+    }
+
+    UiCanvas::Frame frameOf(cUI_Window2* window)
+    {
+        UiCanvas::Frame frame;
+        if (!UiAnchor::frame(window, frame))
+        {
+            frame = {};
+        }
+        return frame;
+    }
+
+    cFont* fontById(uint16_t id)
+    {
+        cFontManager* fonts = cFontManager::instance();
+        return fonts && id < fonts->fonts.size() ? fonts->fonts[id] : nullptr;
+    }
+
+    // A text's width in the 1024x768 layout, as `font` measures it: the text `id`, else begin .. end; 0 if there is
+    // none or the font does not measure.
+    float textWidth(cFont* font, uint32_t id, const wchar_t* begin = nullptr, const wchar_t* end = nullptr)
+    {
+        if (id)
+        {
+            begin = end = nullptr;
+            cTextResources* texts = cTextResources::instance();
+            if (const wchar_t* const* text = texts ? texts->text(id) : nullptr)
+            {
+                begin = text[0];
+                end = text[1];
+            }
+        }
+        if (!font || !begin || end <= begin || end - begin > 256)
+        {
+            return 0.0f;
+        }
+        const std::wstring text(begin, end);
+        return font->textWidth(text.c_str());
+    }
+
+    // The portal box's portals that can be picked (the dark ones can't), as stops at the middle of their text.
+    void addPortals(cUI_BusyDlg* box, const UiCanvas::Frame& frame, std::vector<Point>& out)
+    {
+        const bool underworld = box->mode == cUI_BusyDlg::underworldPortals;
+        cFont* font = fontById(cUI_BusyDlg::portalFont);
+        if ((!underworld && box->mode != cUI_BusyDlg::surfacePortals) || !font)
+        {
+            return;
+        }
+        const float h = font->lineHeight(L'A');
+        const UiRect& r = box->textRect;
+        if (h <= 0.0f || r.width <= 0)
+        {
+            return;
+        }
+        const int rows = cUI_BusyDlg::portalCount - (*Addr::g_hasAddon ? 0 : 1);
+        for (int row = 0; row < rows; ++row)
+        {
+            const int portal = underworld ? cUI_BusyDlg::portalCount + row : row;
+            if (!(box->portals & (1u << portal)) || (underworld && row >= 7 && row <= 12))
+            {
+                continue;   // dark, or a row the underworld list leaves empty
+            }
+            // Centered in the row; the text ids are there once the box has drawn.
+            const float top = static_cast<float>(r.y - 4) + (row + 1) * (h + 4.0f);
+            float left = static_cast<float>(r.x), width = r.width;
+            if (const float text = textWidth(font, Addr::g_portalTexts.get()[portal]); text > 0.0f && text < width)
+            {
+                left += (width - text) * 0.5f;
+                width = text;
+            }
+            Point p = screen(left + width * 0.5f, top + h * 0.5f, frame);
+            p.rect = screenRect(left, top, width, h, frame);
+            out.push_back(p);
+        }
+    }
+
+    cUI_Window2* messageBox()
+    {
+        return UiState::messageBox();
+    }
+
+    void collectWindow(cUI_Window2* window, std::vector<Point>& out)
+    {
+        const UiCanvas::Frame frame = frameOf(window);
+        collect(window, frame, out, 0);
+        if (window == messageBox())
+        {
+            addPortals(static_cast<cUI_BusyDlg*>(window), frame, out);   // its buttons are members (kOwners)
+        }
+    }
+
+    // The shown menu screen's button that Start (Accept), B (Back) or X (Secondary) clicks while it takes a click,
+    // and the menu it is drawn in; nullptr if there is none or a message box is open.
+    cUI_Control2* screenButtonControl(UiNav::ScreenButton which, cUI_Window2*& menuOut)
+    {
+        using UiNav::ScreenButton;
+        cUI_Manager* manager = ::manager();
+        if (!manager || !(manager->flags & cUI_Manager::inMenus) || UiNav::modal())
+        {
+            return nullptr;
+        }
+        for (cUI_Window2* menu : manager->menus)
+        {
+            if (!visible(menu))
+            {
+                continue;
+            }
+            cUI_Window2* window = menu;
+            if (kindOf(menu) == Network)
+            {
+                window = static_cast<cUI_Network*>(menu)->current();
+            }
+            if (!visible(window))
+            {
+                continue;
+            }
+            cUI_Control2* button = nullptr;
+            if (kindOf(window) == Characters)
+            {
+                auto* screen = static_cast<cUI_Character*>(window);
+                button = which == ScreenButton::Accept ? screen->next
+                    : which == ScreenButton::Back ? screen->back : nullptr;
+            }
+            else if (kindOf(window) == NetLan && static_cast<cUI_NetLan*>(window)->state == cUI_NetLan::gameList)
+            {
+                auto* screen = static_cast<cUI_NetLan*>(window);
+                button = which == ScreenButton::Accept ? &screen->join
+                    : which == ScreenButton::Back ? &screen->back : &screen->create;
+            }
+            else
+            {
+                continue;
+            }
+            menuOut = menu;
+            return usable(button) ? button : nullptr;
+        }
+        return nullptr;
+    }
+
+    // Sacred Gear's widgets (GearNav): stops of their own, drawn over everything the game shows.
+    void addGear(std::vector<Point>& out)
+    {
+        for (const GearNav::Stop& s : GearNav::stops())
+        {
+            Point p{s.x, s.y, true, {s.left, s.top, s.right, s.bottom}};
+            out.push_back(p);
+        }
+    }
+
+    std::vector<Point> controls()
+    {
+        std::vector<Point> out;
+        cUI_Manager* manager = ::manager();
+        if (!manager)
+        {
+            return out;
+        }
+        if (GearNav::modal())
+        {
+            addGear(out);   // a mod screen takes the pad alone
+            return out;
+        }
+        if (cUI_Window2* window = UiNav::modal())
+        {
+            collectWindow(window, out);
+            addGear(out);
+            return out;
+        }
+        const auto add = [&](cUI_Window2* window) {
+            if (visible(window))
+            {
+                collectWindow(window, out);
+            }
+        };
+        const uint32_t flags = manager->flags;
+        if (flags & cUI_Manager::inMenus)
+        {
+            for (cUI_Window2* menu : manager->menus)
+            {
+                add(menu);
+            }
+            // Buttons with a button of their own (Start, B, X) are no D-pad stops.
+            for (const auto which : {UiNav::ScreenButton::Accept, UiNav::ScreenButton::Back,
+                     UiNav::ScreenButton::Secondary})
+            {
+                cUI_Window2* menu = nullptr;
+                if (cUI_Control2* button = screenButtonControl(which, menu))
+                {
+                    std::erase_if(out, [&](const Point& p) { return p.control == button; });
+                }
+            }
+        }
+        else if (flags & cUI_Manager::inGame)
+        {
+            // What the manager draws: a window alone, or the HUD and the windows over it.
+            using W = cUI_Manager::Window;
+            for (int i = 0; i < static_cast<int>(W::count); ++i)
+            {
+                const auto w = static_cast<W>(i);
+                if (w != W::overviewMap && w != W::console && UiState::shown(w))
+                {
+                    add(UiState::window(w));
+                }
+            }
+        }
+        addGear(out);
+        return out;
+    }
+}
+
+std::string UiNav::className(const void* object)
+{
+    const uintptr_t vtable = object ? read(reinterpret_cast<uintptr_t>(object)) : 0;
+    const uintptr_t locator = inImage(vtable) ? read(vtable - 4) : 0;
+    const uintptr_t type = inImage(locator) ? read(locator + 0x0C) : 0;
+    if (!inImage(type))
+    {
+        return "?";
+    }
+    std::string name(reinterpret_cast<const char*>(type + 8));   // ".?AVname@@"
+    if (name.rfind(".?AV", 0) == 0 && name.size() > 6)
+    {
+        name = name.substr(4, name.size() - 6);
+    }
+    return name;
+}
+
+std::string UiNav::contents(cUI_Window2* window)
+{
+    std::string out;
+    const auto walk = [&](auto&& self, cUI_Control2* control, int depth) -> void {
+        if (depth > 3 || out.size() > 300 || (kindOf(control) != Window && kindOf(control) != Savegames))
+        {
+            return;
+        }
+        const Vector<cUI_Control2*>& children = static_cast<cUI_Window2*>(control)->children;
+        if (children.size() > 64)
+        {
+            return;
+        }
+        for (cUI_Control2* child : children)
+        {
+            if (visible(child))
+            {
+                out += className(child) + " ";
+                self(self, child, depth + 1);
+            }
+        }
+    };
+    walk(walk, window, 0);
+    return out;
+}
+
+bool UiNav::defaultButton(cUI_Window2* window, float& outX, float& outY)
+{
+    std::vector<Point> controls;
+    collectWindow(window, controls);
+    bool found = false;
+    for (const Point& p : controls)
+    {
+        if (p.button && (!found || p.y > outY + 4.0f || (std::fabs(p.y - outY) <= 4.0f && p.x < outX)))
+        {
+            outX = p.x;
+            outY = p.y;
+            found = true;
+        }
+    }
+    return found;
+}
+
+bool UiNav::cancelButton(float& outX, float& outY)
+{
+    cUI_Window2* box = messageBox();
+    if (!box)
+    {
+        return false;
+    }
+    std::vector<Point> controls;
+    collectWindow(box, controls);
+    bool found = false;
+    for (const Point& p : controls)
+    {
+        if (p.button && (!found || p.y > outY + 4.0f || (std::fabs(p.y - outY) <= 4.0f && p.x > outX)))
+        {
+            outX = p.x;
+            outY = p.y;
+            found = true;
+        }
+    }
+    return found;
+}
+
+namespace
+{
+    // A menu entry whose text is drawn centered in its rect (cUI_StaticText64, cUI_StaticText64FX): the text's width
+    // in the 1024x768 layout, as its font measures it; 0 for other controls or a font that does not measure.
+    float centeredTextWidth(cUI_Control2* control)
+    {
+        const std::string name = UiNav::className(control);
+        const bool fx = name == "cUI_StaticText64FX";
+        if ((!fx && name != "cUI_StaticText64") || !(control->flags & cUI_StaticText64::centered))
+        {
+            return 0.0f;
+        }
+        const wchar_t* begin = nullptr;
+        const wchar_t* end = nullptr;
+        uint32_t id;
+        uint16_t fontId;
+        if (fx)
+        {
+            const auto* text = static_cast<const cUI_StaticText64FX*>(control);
+            id = text->textId;
+            fontId = text->font;
+        }
+        else
+        {
+            const auto* text = static_cast<const cUI_StaticText64*>(control);
+            id = text->textId;
+            fontId = text->font;
+            begin = text->text;
+            end = text->textEnd;
+        }
+        return textWidth(fontById(fontId), id, begin, end);
+    }
+}
+
+bool UiNav::controlAt(float x, float y, Rect& out)
+{
+    const Point* best = nullptr;
+    float area = 0.0f;
+    const std::vector<Point>& points = controls();
+    for (const Point& p : points)
+    {
+        const Rect& r = p.rect;
+        const float a = (r.right - r.left) * (r.bottom - r.top);
+        if (x >= r.left && x < r.right && y >= r.top && y < r.bottom && (!best || a < area))
+        {
+            best = &p;
+            area = a;
+        }
+    }
+    if (!best)
+    {
+        return false;
+    }
+    out = best->rect;
+    // A centered menu text: its own extent, which may be much narrower than its rect (or wider).
+    float left, top, w, h;
+    if (const float width = best->control ? centeredTextWidth(best->control) : 0.0f;
+        width > 0.0f && layoutRect(best->control, left, top, w, h))
+    {
+        const float center = left + w * 0.5f;
+        out.left = physicalX(center - width * 0.5f, best->frame);
+        out.right = physicalX(center + width * 0.5f, best->frame);
+    }
+    return true;
+}
+
+bool UiNav::controlRect(cUI_Control2* control, cUI_Window2* window, Rect& out)
+{
+    float left, top, w, h;
+    if (!visible(control) || !layoutRect(control, left, top, w, h))
+    {
+        return false;
+    }
+    out = screenRect(left, top, w, h, frameOf(window));
+    return true;
+}
+
+int UiNav::buttonCount(cUI_Window2* window)
+{
+    std::vector<Point> controls;
+    collectWindow(window, controls);
+    return static_cast<int>(std::count_if(controls.begin(), controls.end(), [](const Point& p) { return p.button; }));
+}
+
+cUI_Window2* UiNav::modal()
+{
+    cUI_Manager* manager = ::manager();
+    if (!manager)
+    {
+        return nullptr;
+    }
+    if (cUI_Window2* box = messageBox())
+    {
+        return box;
+    }
+    return UiState::escapeMenu();
+}
+
+bool UiNav::home(cUI_Window2* window, float& outX, float& outY)
+{
+    cUI_Manager* manager = ::manager();
+    if (manager && window == manager->dialog)
+    {
+        // The portal box: its first portal that can be picked.
+        std::vector<Point> portals;
+        addPortals(manager->dialog, frameOf(window), portals);
+        if (!portals.empty())
+        {
+            outX = portals.front().x;
+            outY = portals.front().y;
+            return true;
+        }
+        return defaultButton(window, outX, outY);
+    }
+    std::vector<Point> controls;
+    collectWindow(window, controls);
+    bool found = false;
+    for (const Point& p : controls)
+    {
+        if (!found || p.y < outY - 4.0f || (std::fabs(p.y - outY) <= 4.0f && p.x < outX))
+        {
+            outX = p.x;
+            outY = p.y;
+            found = true;
+        }
+    }
+    return found;
+}
+
+namespace
+{
+    // The visible popup with answers (an NPC dialog), nullptr if there is none.
+    cUI_Popup* npcDialog()
+    {
+        cUI_Manager* manager = ::manager();
+        if (!manager || manager->popups.size() >= 256)
+        {
+            return nullptr;
+        }
+        for (cUI_Popup* popup : manager->popups)
+        {
+            if (!visible(popup) || UiNav::className(popup) != "cUI_Tooltip")
+            {
+                continue;
+            }
+            for (const cUI_Popup::Answer& answer : popup->answers)
+            {
+                if (answer.text)
+                {
+                    return popup;
+                }
+            }
+        }
+        return nullptr;
+    }
+}
+
+bool UiNav::npcDialogOpen()
+{
+    return npcDialog() != nullptr;
+}
+
+bool UiNav::npcAnswer(int index, float& outX, float& outY)
+{
+    Rect r;
+    if (!npcAnswerRect(index, r))
+    {
+        return false;
+    }
+    outX = std::round((r.left + r.right) * 0.5f);
+    outY = std::round((r.top + r.bottom) * 0.5f);
+    return true;
+}
+
+bool UiNav::npcAnswerRect(int index, Rect& out)
+{
+    cUI_Popup* popup = npcDialog();
+    if (!popup || index < 0 || index >= cUI_Popup::answerCount)
+    {
+        return false;
+    }
+    const cUI_Popup::Answer& answer = popup->answers[index];
+    if (!answer.text || answer.width <= 0 || answer.height <= 0)
+    {
+        return false;
+    }
+    // The layout places the answers relative to the popup.
+    const UiRect rect = popup->absoluteRect();
+    UiCanvas::Frame frame;
+    if (!UiAnchor::frame(popup, frame))
+    {
+        frame = {};
+    }
+    out = screenRect(static_cast<float>(rect.x + answer.x), static_cast<float>(rect.y + answer.y), answer.width,
+        answer.height, frame);
+    return true;
+}
+
+namespace
+{
+    // The open log book's book (the selected top tab's), nullptr if the book is closed.
+    cUI_Book* currentBook(cUI_Diary*& diary)
+    {
+        diary = UiNav::logBook();
+        if (!diary)
+        {
+            return nullptr;
+        }
+        const uint16_t tab = diary->currentTab;
+        const Vector<cUI_Book*>& books = diary->books;
+        return tab < books.size() && books.size() <= cUI_Diary::tabCount ? books[tab] : nullptr;
+    }
+
+    // The center of the visible control in `controls` `step` places from `current` (skipping hidden ones), as a
+    // screen point in `window`'s frame.
+    template <class T>
+    bool stepTo(cUI_Window2* window, T* controls, int count, int current, int step, float& outX, float& outY)
+    {
+        for (int i = current + step; i >= 0 && i < count; i += step)
+        {
+            T* control = &controls[i];
+            float x, y;
+            if (visible(control) && center(control, x, y))
+            {
+                const Point p = screen(x, y, frameOf(window));
+                outX = p.x;
+                outY = p.y;
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+cUI_Diary* UiNav::logBook()
+{
+    cUI_Manager* manager = ::manager();
+    if (!manager)
+    {
+        return nullptr;
+    }
+    return UiState::shown(cUI_Manager::Window::questbook) ? manager->questbook() : nullptr;
+}
+
+bool UiNav::bookTab(int step, float& outX, float& outY)
+{
+    cUI_Diary* diary = logBook();
+    if (!diary)
+    {
+        return false;
+    }
+    int current = diary->currentTab;
+    if (current >= cUI_Diary::tabCount)
+    {
+        current = step > 0 ? -1 : cUI_Diary::tabCount;
+    }
+    return stepTo(diary, diary->tabs, cUI_Diary::tabCount, current, step, outX, outY);
+}
+
+bool UiNav::bookSection(int step, float& outX, float& outY)
+{
+    cUI_Diary* diary;
+    cUI_Book* book = currentBook(diary);
+    if (!book)
+    {
+        return false;
+    }
+    return stepTo(diary, book->tabs, cUI_Book::tabCount, book->selectedTab, step, outX, outY);
+}
+
+bool UiNav::bookPage(bool right, int step, float& outX, float& outY)
+{
+    cUI_Diary* diary;
+    cUI_Book* book = currentBook(diary);
+    if (!book)
+    {
+        return false;
+    }
+    cUI_Button2& button = right ? (step > 0 ? book->rightNext : book->rightPrevious)
+                                : (step > 0 ? book->leftNext : book->leftPrevious);
+    float x, y;
+    if (!visible(&button) || !center(&button, x, y))
+    {
+        return false;   // the page buttons hide at the first and last page
+    }
+    const Point p = screen(x, y, frameOf(diary));
+    outX = p.x;
+    outY = p.y;
+    return true;
+}
+
+bool UiNav::bookEntry(int step, float& outX, float& outY)
+{
+    cUI_Diary* diary;
+    cUI_Book* book = currentBook(diary);
+    if (!book)
+    {
+        return false;
+    }
+    // The selected entry of the list's page.
+    const uint16_t tab = book->selectedTab;
+    if (tab >= cUI_Book::tabCount)
+    {
+        return false;
+    }
+    const Vector<cUI_Book::Page>& pages = book->pages[tab];
+    const uint16_t page = book->leftPage;
+    if (page >= pages.size())
+    {
+        return false;
+    }
+    const int selected = pages[page].selected;
+    // Where the entries are: the game's own hit test down the left page, at a few points across it.
+    const UiRect rect = book->absoluteRect();
+    const int left = rect.x + cUI_Book::listX, top = rect.y + cUI_Book::listY;
+    struct Entry
+    {
+        int index, top, bottom;
+    };
+    std::vector<Entry> entries;
+    int column = 0;
+    for (int x : {left + 0x20, left + cUI_Book::listWidth / 2, left + cUI_Book::listWidth - 0x20})
+    {
+        for (int y = top; y < top + cUI_Book::listHeight; y += 3)
+        {
+            uint16_t index = 0;
+            if (!book->lineAt(x, y, index))
+            {
+                continue;
+            }
+            if (!entries.empty() && entries.back().index == index)
+            {
+                entries.back().bottom = y;
+            }
+            else
+            {
+                entries.push_back({index, y, y});
+            }
+        }
+        if (!entries.empty())
+        {
+            column = x;
+            break;
+        }
+    }
+    // The next one that way.
+    const Entry* best = nullptr;
+    for (const Entry& e : entries)
+    {
+        if (step > 0 ? e.index > selected && (!best || e.index < best->index)
+                     : e.index < selected && (!best || e.index > best->index))
+        {
+            best = &e;
+        }
+    }
+    if (!best)
+    {
+        return false;
+    }
+    const Point p = screen(static_cast<float>(column), (best->top + best->bottom) * 0.5f, frameOf(diary));
+    outX = p.x;
+    outY = p.y;
+    return true;
+}
+
+bool UiNav::inventoryTab(int step, float& outX, float& outY)
+{
+    cUI_Manager* manager = ::manager();
+    cUI_Inventory3* inventory = manager && UiState::shown(cUI_Manager::Window::inventory) ? manager->inventory() : nullptr;
+    cUI_Inventory3::Tabs* tabs = inventory ? inventory->tabs : nullptr;
+    cUI_TabControl* control = tabs ? tabs->tabControl : nullptr;
+    if (!control || className(control) != "cUI_TabControl")
+    {
+        return false;
+    }
+    const Vector<cUI_TabControl::Page>& pages = control->pages;
+    if (pages.size() > 16)
+    {
+        return false;
+    }
+    const int count = static_cast<int>(pages.size());
+    for (int i = control->activePage + step; i >= 0 && i < count; i += step)
+    {
+        cUI_Control2* button = pages[i].button;
+        float x, y;
+        if (button && visible(button) && center(button, x, y))
+        {
+            const Point p = screen(x, y + 2.0f, frameOf(inventory));   // the hit test starts 4 pixels lower
+            outX = p.x;
+            outY = p.y;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool UiNav::next(float x, float y, float dx, float dy, float& outX, float& outY)
+{
+    const float length = std::sqrt(dx * dx + dy * dy);
+    if (length < 1e-3f)
+    {
+        return false;
+    }
+    dx /= length;
+    dy /= length;
+    bool found = false;
+    float best = 0.0f;
+    for (const Point& p : controls())
+    {
+        const float vx = p.x - x, vy = p.y - y;
+        const float along = vx * dx + vy * dy;
+        if (along < 8.0f)
+        {
+            continue;
+        }
+        // Straight ahead first: sideways distance counts double.
+        const float score = along + 2.0f * std::fabs(vx * dy - vy * dx);
+        if (!found || score < best)
+        {
+            best = score;
+            outX = p.x;
+            outY = p.y;
+            found = true;
+        }
+    }
+    return found;
+}
+
+cUI_Savegame* UiNav::savegames()
+{
+    cUI_Manager* manager = ::manager();
+    if (!manager)
+    {
+        return nullptr;
+    }
+    const bool menus = manager->flags & cUI_Manager::inMenus;
+    cUI_Window2* window = menus ? manager->menus[cUI_Manager::savegameMenu]
+        : UiState::shown(cUI_Manager::Window::savegame) ? manager->savegame() : nullptr;
+    auto* savegame = static_cast<cUI_Savegame*>(window);
+    return visible(window) && kindOf(window) == Savegames && listMode(savegame) ? savegame : nullptr;
+}
+
+int UiNav::savegameRow(float x, float y)
+{
+    cUI_Savegame* window = savegames();
+    if (!window)
+    {
+        return -1;
+    }
+    const UiCanvas::Frame frame = frameOf(window);
+    for (int row = 0; row < cUI_Savegame::rowCount; ++row)
+    {
+        const Rect r = rowRect(window, row, frame);
+        if (rowShows(window, row) && x >= r.left && x < r.right && y >= r.top && y < r.bottom)
+        {
+            return row;
+        }
+    }
+    return -1;
+}
+
+bool UiNav::savegameRowPoint(int row, float& outX, float& outY)
+{
+    cUI_Savegame* window = savegames();
+    if (!window || row < 0 || row >= cUI_Savegame::rowCount)
+    {
+        return false;
+    }
+    const Rect r = rowRect(window, row, frameOf(window));
+    outX = std::round((r.left + r.right) * 0.5f);
+    outY = std::round((r.top + r.bottom) * 0.5f);
+    return true;
+}
+
+bool UiNav::savegameStep(float x, float y, int step, int& row, int& scrollTo)
+{
+    cUI_Savegame* window = savegames();
+    const int current = savegameRow(x, y);
+    if (!window || current < 0)
+    {
+        return false;
+    }
+    row = -1;
+    scrollTo = -1;
+    const int target = current + step;
+    const uint32_t first = firstListed(window);
+    if (target == cUI_Savegame::rowCount && rowShows(window, current))
+    {
+        // Below the last row: the list scrolls a line if there is more.
+        if (first + cUI_Savegame::rowCount - 1 < listed(window) + (listMode(window) == cUI_Savegame::saving ? 1 : 0))
+        {
+            row = current;
+            scrollTo = static_cast<int>(first + 1);
+        }
+    }
+    else if (target == 0 && first > 0)
+    {
+        row = current;  // above row 1: the list scrolls back before the quicksave row
+        scrollTo = static_cast<int>(first - 1);
+    }
+    else if (target >= 0 && target < cUI_Savegame::rowCount && rowShows(window, target))
+    {
+        row = target;
+    }
+    return true;
+}
+
+void UiNav::selectSavegame(int scrollTo, int row)
+{
+    cUI_Savegame* window = savegames();
+    if (!window)
+    {
+        return;
+    }
+    if (scrollTo >= 0)
+    {
+        scrollList(window, static_cast<uint32_t>(scrollTo));
+    }
+    if (rowShows(window, row))
+    {
+        window->selectRow(static_cast<uint16_t>(row));
+    }
+}
+
+namespace
+{
+    // When a savegame was saved, as FILETIME ticks in local time: its header's time, else its file's; 0 if the file
+    // can't be opened.
+    uint64_t savedAt(const char* name)
+    {
+        const std::string path = ".\\SAVE\\" + std::string(name, strnlen(name, 0x100));
+        HANDLE file = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+            OPEN_EXISTING, 0, nullptr);
+        if (file == INVALID_HANDLE_VALUE)
+        {
+            return 0;
+        }
+        int32_t header[cUI_Savegame::headerSize / 4] = {};
+        DWORD read = 0;
+        const bool complete = ReadFile(file, header, sizeof(header), &read, nullptr) && read == sizeof(header);
+        FILETIME written{};
+        GetFileTime(file, nullptr, nullptr, &written);
+        CloseHandle(file);
+        const int32_t* t = header + cUI_Savegame::headerYear / 4;   // year, month, day, day of week, hour, ...
+        const SYSTEMTIME saved = {static_cast<WORD>(t[0]), static_cast<WORD>(t[1]), static_cast<WORD>(t[3]),
+            static_cast<WORD>(t[2]), static_cast<WORD>(t[4]), static_cast<WORD>(t[5]), static_cast<WORD>(t[6]),
+            static_cast<WORD>(t[7])};
+        FILETIME time{};
+        if (!complete || t[0] <= 0 || !SystemTimeToFileTime(&saved, &time))
+        {
+            FileTimeToLocalFileTime(&written, &time);
+        }
+        return (static_cast<uint64_t>(time.dwHighDateTime) << 32) | time.dwLowDateTime;
+    }
+}
+
+int UiNav::selectNewestSavegame()
+{
+    cUI_Savegame* window = savegames();
+    if (!window || listMode(window) != cUI_Savegame::loading)
+    {
+        return -1;
+    }
+    // -1: the quicksave.
+    int64_t newest = -2;
+    uint64_t newestTime = 0;
+    if (const char* quicksave = window->quicksave.name; *quicksave)
+    {
+        newest = -1;
+        newestTime = savedAt(quicksave);
+    }
+    const uint32_t count = listed(window);
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const uint64_t time = savedAt(window->entries[i].name);
+        if (newest == -2 || time > newestTime)
+        {
+            newest = i;
+            newestTime = time;
+        }
+    }
+    if (newest == -2)
+    {
+        return -1;
+    }
+    if (const uint32_t first = firstListed(window); newest >= 0 && (newest < first || newest >= first + cUI_Savegame::rowCount - 1))
+    {
+        scrollList(window, static_cast<uint32_t>(newest));   // the window keeps the list's end at row 3
+    }
+    const int row = newest < 0 ? 0 : static_cast<int>(newest - firstListed(window) + 1);
+    selectSavegame(-1, row);
+    return row;
+}
+
+bool UiNav::screenButton(ScreenButton which, Rect& out)
+{
+    cUI_Window2* menu = nullptr;
+    cUI_Control2* button = screenButtonControl(which, menu);
+    float left, top, w, h;
+    if (!button || !layoutRect(button, left, top, w, h))
+    {
+        return false;
+    }
+    out = screenRect(left, top, w, h, frameOf(menu));
+    return true;
+}

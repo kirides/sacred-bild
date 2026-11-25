@@ -2,7 +2,7 @@
 
 A custom class is a profile on top of one of the 8 hero bodies (creature types 1..9): its skills, the arts it may learn and
 the motion clips it plays. Sacred Gear's part is the set of hooks the mod needs; this page records what the engine does and
-what was measured (English GOG `Sacred.exe`, test: `gear/examples/classspike`, a copy of the game folder).
+what was measured (English GOG `Sacred.exe`, test: `src/gear/examples/classspike`, a copy of the game folder).
 
 ## How the engine binds a class
 
@@ -62,7 +62,7 @@ Reference: [GearApi.md](GearApi.md) (`gear.classes`, `gear.models`, `creature:le
   table only changes texts that exist, so `gear.text.add` serves new texts (ids from 0x100000) from the text lookup (0x672C90).
 * `creature:learn` calls the engine's own append (0x580750); `forget` removes the entry from the abilities vector.
 
-Tested: `gear/examples/classtest` (26 checks, one run in a copy of the game folder): catalog with tiers and rune items, hero skills, a copy of
+Tested: `src/gear/examples/classtest` (26 checks, one run in a copy of the game folder): catalog with tiers and rune items, hero skills, a copy of
 Gladiator art 1059 with changed numbers learned and used by a recruited Gladiator, copy of a spell, text, forget.
 
 ## Notes from the mod's runs

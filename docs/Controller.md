@@ -92,7 +92,7 @@ way: its widgets are D-pad stops next to the game's controls, A clicks, the curs
 
 All prompts are drawn in one draw call from one small texture atlas. The images are the
 [Input Prompts](https://github.com/meritite-union/input-prompts) by the Meritite Union (CC0);
-`tools/gen_prompts.py` builds the atlas (`src/overlay/prompts.png`) from them.
+`tools/re/gen_prompts.py` builds the atlas (`src/bild/controller/prompts.png`) from them.
 
 ## Options screen
 

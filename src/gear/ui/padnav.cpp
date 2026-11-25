@@ -1,0 +1,147 @@
+#include "padnav.h"
+#include "bild_gear.h"
+
+#include <windows.h>
+#include <mutex>
+
+namespace
+{
+    using SetStopsFn = void(__cdecl*)(const PadNav::Stop* stops, int count, int flags);
+    using TakePadFn = int(__cdecl*)(int* nudge, int* back, int* menu);
+    SetStopsFn g_setStops = nullptr;
+    TakePadFn g_takePad = nullptr;
+    using PostPadFn = void(__cdecl*)(int nudge, int back, int menu);
+    using TakePageFn = int(__cdecl*)();
+    using PostPageFn = void(__cdecl*)(int pages);
+    TakePageFn g_takePage = nullptr;
+    TakePageFn g_takeSelect = nullptr;
+    PostPageFn g_postScroll = nullptr;
+    using SetNativeFn = void(__cdecl*)(const float* rects, int count);
+    SetNativeFn g_setNative = nullptr;
+    PostPageFn g_postPage = nullptr;
+    using NavStateFn = int(__cdecl*)(int* flags);
+    using PadInfoFn = int(__cdecl*)(int* style);
+    using PadGlyphFn = int(__cdecl*)(int style, unsigned button, unsigned* pixels);
+    PadInfoFn g_padInfo = nullptr;
+    PadGlyphFn g_padGlyph = nullptr;
+    PostPadFn g_postPad = nullptr;
+    NavStateFn g_navState = nullptr;
+    std::once_flag g_once;
+
+    void find()
+    {
+        std::call_once(g_once, [] {
+            if (HMODULE bild = GetModuleHandleW(L"ddraw.dll"))
+            {
+                g_setStops = reinterpret_cast<decltype(&SacredBild_UiSetNavStops)>(GetProcAddress(bild, "SacredBild_UiSetNavStops"));
+                g_takePad = reinterpret_cast<decltype(&SacredBild_UiTakePad)>(GetProcAddress(bild, "SacredBild_UiTakePad"));
+                g_postPad = reinterpret_cast<decltype(&SacredBild_UiPostPad)>(GetProcAddress(bild, "SacredBild_UiPostPad"));
+                g_takePage = reinterpret_cast<decltype(&SacredBild_UiTakePage)>(GetProcAddress(bild, "SacredBild_UiTakePage"));
+                g_postPage = reinterpret_cast<decltype(&SacredBild_UiPostPage)>(GetProcAddress(bild, "SacredBild_UiPostPage"));
+                g_takeSelect = reinterpret_cast<decltype(&SacredBild_UiTakeSelect)>(GetProcAddress(bild, "SacredBild_UiTakeSelect"));
+                g_postScroll = reinterpret_cast<decltype(&SacredBild_UiPostScroll)>(GetProcAddress(bild, "SacredBild_UiPostScroll"));
+                g_setNative = reinterpret_cast<decltype(&SacredBild_UiSetNativePrompts)>(GetProcAddress(bild, "SacredBild_UiSetNativePrompts"));
+                g_navState = reinterpret_cast<decltype(&SacredBild_UiNavState)>(GetProcAddress(bild, "SacredBild_UiNavState"));
+                g_padInfo = reinterpret_cast<decltype(&SacredBild_PadInfo)>(GetProcAddress(bild, "SacredBild_PadInfo"));
+                g_padGlyph = reinterpret_cast<decltype(&SacredBild_PadGlyph)>(GetProcAddress(bild, "SacredBild_PadGlyph"));
+            }
+        });
+    }
+}
+
+bool PadNav::setStops(const std::vector<Stop>& stops, int flags)
+{
+    find();
+    if (!g_setStops)
+    {
+        return false;
+    }
+    g_setStops(stops.data(), static_cast<int>(stops.size()), flags);
+    return true;
+}
+
+PadNav::Events PadNav::take()
+{
+    find();
+    Events e;
+    if (g_takePad)
+    {
+        g_takePad(&e.nudge, &e.back, &e.menu);
+    }
+    return e;
+}
+
+void PadNav::post(int nudge, int back, int menu)
+{
+    find();
+    if (g_postPad)
+    {
+        g_postPad(nudge, back, menu);
+    }
+}
+
+int PadNav::takePage()
+{
+    find();
+    return g_takePage ? g_takePage() : 0;
+}
+
+void PadNav::setNativePrompts(const std::vector<float>& rects)
+{
+    find();
+    if (g_setNative)
+    {
+        g_setNative(rects.data(), static_cast<int>(rects.size() / 4));
+    }
+}
+
+void PadNav::postScroll(int steps)
+{
+    find();
+    if (g_postScroll)
+    {
+        g_postScroll(steps);
+    }
+}
+
+int PadNav::takeSelect()
+{
+    find();
+    return g_takeSelect ? g_takeSelect() : 0;
+}
+
+void PadNav::postPage(int pages)
+{
+    find();
+    if (g_postPage)
+    {
+        g_postPage(pages);
+    }
+}
+
+int PadNav::navState(int& flags)
+{
+    find();
+    flags = 0;
+    return g_navState ? g_navState(&flags) : -2;
+}
+
+bool PadNav::padInfo(int& style)
+{
+    find();
+    style = 0;
+    return g_padInfo && g_padInfo(&style) != 0;
+}
+
+bool PadNav::glyph(unsigned button, std::vector<unsigned>& pixels)
+{
+    find();
+    int style = 0;
+    if (!g_padInfo || !g_padGlyph)
+    {
+        return false;
+    }
+    g_padInfo(&style);
+    pixels.assign(64 * 64, 0);
+    return g_padGlyph(style, button, pixels.data()) != 0;
+}

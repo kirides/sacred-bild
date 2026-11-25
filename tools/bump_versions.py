@@ -3,8 +3,8 @@
 
 Every component has one flat text file with its version, a few lines like `1.2.3` and a newline:
 
-    src/SacredBild_version.txt      ddraw.dll
-    gear/SacredGear_version.txt     SacredGear.dll
+    src/bild/SacredBild_version.txt      ddraw.dll
+    src/gear/SacredGear_version.txt     SacredGear.dll
 
 For each component the history since the last commit that changed its version file (a new file counts as that commit) is read:
   * any change to a file of the component that is not a test file     -> patch   (1.2.3 -> 1.2.4)
@@ -41,14 +41,14 @@ def norm(name):
 
 COMPONENTS = [
     # ddraw.dll: the SacredBild sources and what they are built with. gear/ is a separate DLL.
-    Component('SacredBild', 'sacred-bild', 'src/SacredBild_version.txt',
-              ['src/', 'CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'ports/', 'triplets/', 'dist/SacredBild.ini'],
+    Component('SacredBild', 'sacred-bild', 'src/bild/SacredBild_version.txt',
+              ['src/bild/', 'src/core/', 'CMakeLists.txt', 'CMakePresets.json', 'vcpkg.json', 'ports/', 'triplets/'],
               [], ['bild', 'sacredbild', 'ddraw', 'sacred-bild']),
-    # SacredGear.dll: gear/ plus the sources it shares with SacredBild (sacred_core). The examples, the MDK, its generated copy and the
+    # SacredGear.dll: gear/ plus the sources it shares with SacredBild (sacred_core, src/core/: its code and the game's classes). The examples, the MDK, its generated copy and the
     # API annotations are documentation, not part of the DLL.
-    Component('SacredGear', 'sacred-gear', 'gear/SacredGear_version.txt',
-              ['gear/', 'src/fmt.', 'src/instance.', 'src/log.', 'src/patch.', 'src/sig.', 'src/mem.h'],
-              ['gear/examples/', 'gear/dist/', 'gear/mdk/', 'gear/meta/'], ['gear', 'sacredgear', 'sacred-gear']),
+    Component('SacredGear', 'sacred-gear', 'src/gear/SacredGear_version.txt',
+              ['src/gear/', 'src/core/'],
+              ['src/gear/examples/', 'src/gear/mdk/', 'src/gear/meta/'], ['gear', 'sacredgear', 'sacred-gear']),
 ]
 
 
@@ -94,9 +94,19 @@ def read_version(text):
 
 
 def last_bump(repo, ref, rel):
-    """The newest commit that changed the version file (its creation counts), or None."""
-    shas = git(repo, 'log', '--format=%H', '-n', '1', ref, '--', rel).split()
-    return shas[0] if shas else None
+    """The newest commit that changed the version file (its creation counts), or None. The file's history is followed through
+    renames, and a commit that only moved it (a rename with the same content) is not a bump: moving the version file with its code
+    must not drop the changes made since the last real bump."""
+    raw = git(repo, 'log', '--follow', '--name-status', '--format=%x01%H', ref, '--', rel)
+    for block in raw.split('\x01')[1:]:
+        lines = [l for l in block.splitlines() if l.strip()]
+        if not lines:
+            continue
+        sha, statuses = lines[0].strip(), [l.split('\t', 1)[0] for l in lines[1:]]
+        if statuses and all(s == 'R100' for s in statuses):
+            continue
+        return sha
+    return None
 
 
 def message_levels(message, comp):

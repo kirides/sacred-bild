@@ -6,7 +6,7 @@ repository next to SacredBild but independent of it: it works with SacredBild, w
 
 - **This page**: installing, writing a mod, the file overlay, the mod manager, automation and the examples.
 - **[GearApi.md](GearApi.md)**: the reference of every function, option, field and event, generated from the LuaLS
-  annotations in `gear/meta/` (which also give editors completion and checks:
+  annotations in `src/gear/meta/` (which also give editors completion and checks:
   [Editor support](GearApi.md#editor-support-lua-language-server)).
 - **[The MDK](https://github.com/kirides/sacred-bild/blob/main/gear/mdk/README.md)** (`sacred-gear-mdk.zip` in every release): the annotations, both documents, a mod
   template and examples, ready to open in VS Code.
@@ -70,7 +70,7 @@ gear.on('frame', function(dt)
 end)
 ```
 
-`gear/examples/hello` is a complete example; the MDK's `tools/new-mod.ps1` makes a new mod from a template.
+`src/gear/examples/hello` is a complete example; the MDK's `tools/new-mod.ps1` makes a new mod from a template.
 
 ### mod.lua
 
@@ -146,7 +146,7 @@ Rules that hold across the API:
   with `doc:draw()`; `doc:on('#ok', 'click', fn)` calls Lua, `doc:text`, `doc:class`, `doc:style` and `doc:value` change the
   document. Every button, link and input is a pad stop, a focused text field takes the keyboard, the default font is Segoe UI, and the
   game's own UI images are available as `gear:image/<id>`, CSS `transform` works. No JavaScript, no filters or drop shadows yet. Web-style conveniences work: `@font-face` with `url()` (icon fonts: `.home::before { content: "\e88a" }`), templates and styles shared between mods as `@mod-id/path` (a mod lists what it shares as `exports` in `mod.lua`), `gear.kit` widgets that look the same in Gear's plain style and in the theme, and developer hot reload (an empty file `mods\.rml-hot`, or the environment variable `GEAR_RML_HOT`). See
-  [HTML/CSS documents](GearApi.md#htmlcss-documents-gearuirml) and `gear/examples/rmldemo`.
+  [HTML/CSS documents](GearApi.md#htmlcss-documents-gearuirml) and `src/gear/examples/rmldemo`.
 - **Merchants' stock:** `gear.shop` and the `shop.stock` event hook the game's own shop code. A merchant's wares sit on three pages
   (its tabs), each a stock grid; the game fills them when another merchant is opened and only swaps a few wares when the same one is
   opened again. `shop.stock` fires after the game did that (once per page, with the reason), and a handler adds wares with
@@ -260,8 +260,8 @@ and the gameserver to read the same `balance.bin`.
 
 ## Mod manager
 
-The **Mods** screen is built into Sacred Gear (`gear/lua/modmanager.lua`, loaded as the mod `gear-mods`; its look is the
-RmlUi document `gear/lua/modmanager.rml`, shipped inside the DLL). It lists every installed mod with its name, version,
+The **Mods** screen is built into Sacred Gear (`src/gear/lua/modmanager.lua`, loaded as the mod `gear-mods`; its look is the
+RmlUi document `src/gear/lua/modmanager.rml`, shipped inside the DLL). It lists every installed mod with its name, version,
 author, description, a check orb (On/Off) and its state (switched off after ten errors, off because a mod it requires
 is off, a key shared with another mod). Each mod has **Settings** (made from its declared settings), **Keys** and, if it
 registers a page of its own, **More** (tabs; LB / RB on the controller switch them, and page the list). The document
@@ -344,7 +344,7 @@ open. Pick a default that is free (the table above). The rest: [Settings, key bi
 manager](GearApi.md#settings-key-binds-and-the-mod-manager); remapping the game's own keys:
 [gear.input](GearApi.md#remapping-the-games-keys-gearinput).
 
-Self tests: `gear/examples/modmanagertest` clicks through the real screen in a game (it asks the screen where its elements are with `gear.emit('mods.query')`); `gear/tests/kernel_test.lua` covers
+Self tests: `src/gear/examples/modmanagertest` clicks through the real screen in a game (it asks the screen where its elements are with `gear.emit('mods.query')`); `src/gear/tests/kernel_test.lua` covers
 the kernel side (persistence, broken files, switching mods live, dependencies, key binds and conflicts).
 
 ### Paste button on the game's text boxes
@@ -356,10 +356,10 @@ built-in code draws a small **Paste** button inside it at its right end. A click
 been typed (line breaks and tabs become spaces; the box applies its own length limit, 63 characters for the character name). It needs the mouse
 (the controller has the game's own on-screen keyboard) and no mod. Under the hood: `native.ui_text_focus()` finds the focused `cUI_EditControl`
 (`cUI_Manager` +0x148, checked against its RTTI name and against its parents being shown: the game leaves the focus flag on the control of a closed
-window) and gives its rect in the 1024x768 layout, `native.ui_type_text()` posts the characters as `WM_CHAR` to the game window; both are in `gear/ui.cpp`,
-the button is the end of `gear/lua/modmanager.lua`.
+window) and gives its rect in the 1024x768 layout, `native.ui_type_text()` posts the characters as `WM_CHAR` to the game window; both are in `src/gear/ui/ui.cpp`,
+the button is the end of `src/gear/lua/modmanager.lua`.
 
-The button shows only for a box that takes typing and whose window is open: not on the savegame screen's quicksave box, not while the screen is loading (no box takes typing there), and not on the box a closed window left focused. Test: `gear/examples/pastebuttontest`.
+The button shows only for a box that takes typing and whose window is open: not on the savegame screen's quicksave box, not while the screen is loading (no box takes typing there), and not on the box a closed window left focused. Test: `src/gear/examples/pastebuttontest`.
 
 **Ctrl+V** does the same as the button (the text is typed once Ctrl is released; not with AltGr).
 
@@ -374,7 +374,7 @@ Every `<input type="text">` / `<textarea>` of a mod's document (the shared sacre
 | mouse | click puts the caret, Shift+click extends, click-drag selects, double click selects the word |
 
 The controller keeps its flow: with the pad the last used input, A on a field still clicks its centre and the on-screen keyboard types. Mods style the
-highlight with the `selection` pseudo-element (`input.field selection { background-color: ...; color: ... }`). Test: `gear/examples/clipboardtest`.
+highlight with the `selection` pseudo-element (`input.field selection { background-color: ...; color: ... }`). Test: `src/gear/examples/clipboardtest`.
 
 ## Online play: game mode and realms
 
@@ -458,7 +458,7 @@ with a name.
 
 ## Examples
 
-`gear/examples` holds small feature examples and the automation tests; the mods players use are in
+`src/gear/examples` holds small feature examples and the automation tests; the mods players use are in
 [sacred-gear-mods](https://github.com/kirides/sacred-gear-mods). Tests that save or leave items in the world need a copy
 of the game folder.
 
@@ -500,7 +500,7 @@ of the game folder.
   only when it is on.
 - Sacred Gear never writes into the game's savegames. Mod data kept per savegame goes into the mod's own folder, so
   removing a mod never breaks a save.
-- SacredBild and Sacred Gear never patch the same bytes (`tools/check_gear_overlap.py`), so they work in either load
+- SacredBild and Sacred Gear never patch the same bytes (`tools/sigs/check_gear_overlap.py`), so they work in either load
   order.
 - In network games every player needs the same mods. Sacred Gear logs a hash of the loaded mods (ids and versions) as
   "mod set".

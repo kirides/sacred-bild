@@ -17,8 +17,8 @@ function(read_version file prefix out)
   set(${prefix}_STR "${line}" PARENT_SCOPE)
 endfunction()
 
-read_version("${SRC_DIR}/src/SacredBild_version.txt" SB sb_text)
-read_version("${SRC_DIR}/gear/SacredGear_version.txt" SG sg_text)
+read_version("${SRC_DIR}/src/bild/SacredBild_version.txt" SB sb_text)
+read_version("${SRC_DIR}/src/gear/SacredGear_version.txt" SG sg_text)
 
 set(suffix "")
 find_package(Git QUIET)

@@ -13,7 +13,7 @@ e.g. sacred-theme) or Gear's **plain base style**. Both style the same class nam
 ## gear.kit: the core widgets
 
 `gear.kit` returns the markup of a window, tabs, buttons, check boxes, sliders, rows, bars, lists and a modal confirm dialog, built only from that contract
-(see `gear/examples/rmlkit`). Join the strings, wrap them with `kit.page`, give them to `gear.ui.rml.load_string`, listen with `doc:on('#id', 'click', fn)`.
+(see `src/gear/examples/rmlkit`). Join the strings, wrap them with `kit.page`, give them to `gear.ui.rml.load_string`, listen with `doc:on('#id', 'click', fn)`.
 Every button, link and input is a stop for the controller with no extra work. Adding a widget means giving the kit its markup and the base style and the theme
 their classes.
 
@@ -22,20 +22,20 @@ their classes.
 Every document can use the icon font of Sacred Gear (a 10 KB subset of Google's Material Symbols Sharp, Apache License 2.0, bundled in the DLL): `<span class="icon icon-refresh"></span>`
 or `kit.icon('refresh')`. It takes the text colour and sizes with the text. 85 icons, among them `refresh`, `restart-alt`, `arrow-back`, `arrow-forward`,
 `chevron-left`, `chevron-right`, `first-page`, `last-page`, `delete`, `close`, `check`, `add`, `remove`, `settings`, `search`, `content-copy`, `content-paste`, `backspace`,
-`save`, `edit`, `undo`, `sort`, `keyboard`, `warning`, `info`; the whole list is `gear/icons_css.inc`, more can be added with `pyftsubset` (see `gear/res/README-icons.txt`).
+`save`, `edit`, `undo`, `sort`, `keyboard`, `warning`, `info`; the whole list is `src/gear/ui/icons_css.inc`, more can be added with `pyftsubset` (see `src/gear/res/README-icons.txt`).
 
 ## Sharing between mods
 
 A mod lists what it shares in `mod.lua`: `exports = {'templates/', 'styles/*.rcss', 'images/', 'fonts/'}` (a folder, `folder/*.ext`, a file, or `'*'`).
 While that mod runs, documents of other mods name the files as `@mod-id/path`: `<link type="text/template" href="@lib/templates/panel.rml"/>`,
 `<link type="text/rcss" href="@lib/styles/panel.rcss"/>`, `src="@lib/images/a.png"`, `rml.load_font('@lib/fonts/x.ttf')`. Nothing else of that mod is
-reachable and no path leaves its folder. Use `requires` in the user mod so the library runs first (`gear/examples/rmlshare-lib`, `rmlshare`).
+reachable and no path leaves its folder. Use `requires` in the user mod so the library runs first (`src/gear/examples/rmlshare-lib`, `rmlshare`).
 
 ## Web-style CSS
 
 `@font-face { font-family: "Icons"; src: url("icons.ttf") format("truetype"); }` works (the file is looked for next to the stylesheet, in its `fonts/`
 folder, in the mod's `fonts/` folder, or as `@mod-id/...`); `.home::before { content: "\e88a"; }` puts generated text in the element itself
-(`::after` is not supported). See `gear/examples/rmlcss`.
+(`::after` is not supported). See `src/gear/examples/rmlcss`.
 
 ## Hot reload (developers)
 

@@ -3,7 +3,7 @@
 What a mod can do with the particle effects of combat arts and spells: give an effect another colour, other sprites or another speed, and
 choose that per cast, for instance "from skill level 10 on, red instead of green". The calls are in [GearApi.md](GearApi.md), section
 "Skill effects"; the effect types and the texture names are in [GearPfxTypes.md](GearPfxTypes.md) (generated). Which effect types each combat art and
-spell makes in game is in [GearPfxArtEffects.json](GearPfxArtEffects.json) (from an automated cast run of `gear/examples/pfxtable`).
+spell makes in game is in [GearPfxArtEffects.json](GearPfxArtEffects.json) (from an automated cast run of `src/gear/examples/pfxtable`).
 
 ```lua
 -- The green effects of Poison Mist (spell 12) turn red from level 10 on.
@@ -64,12 +64,12 @@ The check is done only for the effect types a rule names (a rule without `fx` an
   The five types 0x380 to 0x384 are built by code of their own, their objects' size is unknown and `textures` does not apply to them.
 * An effect cannot be given a new shape, count or lifetime other than through `speed`: those numbers are in the classes' code.
 * Spawning an effect by itself is not offered: an effect object needs the cast event the arts and spells hand it, and without one it does not show.
-* The type, class and size tables are generated from the English GOG `Sacred.exe` (`tools/gen_pfx_table.py`); the functions are found by signature as
+* The type, class and size tables are generated from the English GOG `Sacred.exe` (`tools/gearapi/gen_pfx_table.py`); the functions are found by signature as
   the rest of Gear's, and the signatures matched the German build too, but the effects were tested only in the English one.
 
 ## Tests
 
-`gear/examples/pfxtest` (`Sacred.exe -gear-auto -gear-load=N -gear-mods=pfxtest`, a savegame with a Wood Elf, any level): the hero learns the spells 5 and
+`src/gear/examples/pfxtest` (`Sacred.exe -gear-auto -gear-load=N -gear-mods=pfxtest`, a savegame with a Wood Elf, any level): the hero learns the spells 5 and
 6 at level 5, casts them as the game does (the handler logs the effect types and owners), then with a colour rule, with a level rule that must and must not
 match, with a `select` function and with a texture swap, taking screenshots 0.6, 1.4 and 2.4 s after each cast; 8 checks.
 
