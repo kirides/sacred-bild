@@ -359,13 +359,21 @@ void CssContentSupport::apply(Rml::Context* context)
         applyElement(context->GetDocument(i));
 }
 
+// Text nodes are the only elements with the tag "#text" (Rml::Factory::InstanceElementText); a tag compare is much cheaper than
+// dynamic_cast, and this runs for every element of every document every frame.
+static bool isTextNode(const Rml::Element* element)
+{
+    return element->GetTagName() == "#text";
+}
+
 void CssContentSupport::applyElement(Rml::Element* element)
 {
-    if (!element || dynamic_cast<Rml::ElementText*>(element))
+    if (!element || isTextNode(element))
         return;
 
+    // Generated text is a text node: only those can carry the marker (an attribute lookup is a string-keyed map search).
     Rml::Element* first = element->GetFirstChild();
-    auto* generated = (first && first->HasAttribute(kGeneratedMarker)) ? static_cast<Rml::ElementText*>(first) : nullptr;
+    auto* generated = (first && isTextNode(first) && first->HasAttribute(kGeneratedMarker)) ? static_cast<Rml::ElementText*>(first) : nullptr;
 
     std::string text;
     bool want = false;
@@ -397,7 +405,7 @@ void CssContentSupport::applyElement(Rml::Element* element)
 
     for (int i = 0; i < element->GetNumChildren(); ++i) {
         Rml::Element* child = element->GetChild(i);
-        if (!child->HasAttribute(kGeneratedMarker))
+        if (!isTextNode(child))     // (a text node has no content of its own, and the generated one is a text node)
             applyElement(child);
     }
 }

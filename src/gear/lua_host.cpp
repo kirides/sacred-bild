@@ -402,13 +402,28 @@ namespace LuaNative
     // native.game_config() -> {KEY = "value", ...}: the game's Settings.cfg (read only)
     int nativeGameConfig(lua_State* L)
     {
+        // One table per reread of the file, shared by the callers (the kernel only reads it): mods ask every frame.
+        static int cachedRef = LUA_NOREF;
+        static uint64_t cachedGeneration = 0;
         const auto& values = GameCfg::all();
+        if (cachedRef != LUA_NOREF && cachedGeneration == GameCfg::generation())
+        {
+            lua_rawgeti(L, LUA_REGISTRYINDEX, cachedRef);
+            return 1;
+        }
         lua_createtable(L, 0, static_cast<int>(values.size()));
         for (const auto& [key, value] : values)
         {
             lua_pushlstring(L, value.data(), value.size());
             lua_setfield(L, -2, key.c_str());
         }
+        if (cachedRef != LUA_NOREF)
+        {
+            luaL_unref(L, LUA_REGISTRYINDEX, cachedRef);
+        }
+        lua_pushvalue(L, -1);
+        cachedRef = luaL_ref(L, LUA_REGISTRYINDEX);
+        cachedGeneration = GameCfg::generation();
         return 1;
     }
 

@@ -9,6 +9,8 @@ namespace
     std::map<std::string, std::string> g_values;
     uint64_t g_stamp = 0;
     bool g_read = false;
+    uint64_t g_generation = 0;
+    ULONGLONG g_checked = 0;        // GetTickCount64 of the last look at the file's write time
 
     std::string trim(const std::string& s)
     {
@@ -25,11 +27,27 @@ namespace
     }
 }
 
+uint64_t GameCfg::generation()
+{
+    return g_generation;
+}
+
 const std::map<std::string, std::string>& GameCfg::all()
 {
+    // Mods ask every frame (gear.game.config); the file is looked at four times a second at most, not once per call.
+    const ULONGLONG now = GetTickCount64();
+    if (g_read && now - g_checked < 250)
+    {
+        return g_values;
+    }
+    g_checked = now;
     WIN32_FILE_ATTRIBUTE_DATA data{};
     if (!GetFileAttributesExW(L"Settings.cfg", GetFileExInfoStandard, &data))
     {
+        if (!g_values.empty())
+        {
+            ++g_generation;
+        }
         g_values.clear();
         g_read = false;
         return g_values;
@@ -41,6 +59,7 @@ const std::map<std::string, std::string>& GameCfg::all()
         return g_values;
     }
     g_values.clear();
+    ++g_generation;
     g_stamp = stamp;
     g_read = true;
     HANDLE file = CreateFileW(L"Settings.cfg", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
