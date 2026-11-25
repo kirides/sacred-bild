@@ -156,11 +156,15 @@ gear.task(function()
         gear.wait(0.5)
     end
     check('slider changes the setting', S.get('level') >= 7 and S.get('level') <= 9, S.get('level'))
-    click_id(setting('mode').next_id, 0.5)                           -- the right arrow: the second choice
-    check('choice arrow changes the setting', S.get('mode') == 'second', S.get('mode'))
+    -- a choice is a drop-down: open it, pick an entry of its list
+    local function pick(n)
+        click_id(setting('mode').dd_id, 0.5)                         -- opens the list
+        local opt = setting('mode').opts[n]
+        return opt and click_id(opt.id, 0.5)
+    end
+    check('the choice list opens and takes a pick', pick(2) and S.get('mode') == 'second', S.get('mode'))
     A.screenshot('mm-5-choice')
-    click_id(setting('mode').prev_id, 0.5)
-    check('and the left arrow goes back', S.get('mode') == 'first', S.get('mode'))
+    check('and picks the first again', pick(1) and S.get('mode') == 'first', S.get('mode'))
     do
         local r = q().reveal('#' .. setting('tint').r_id)
         hclick(r.x + 37 + (r.w - 77) * 0.9, r.y + r.h / 2)          -- the red channel at 90 % of its (short) groove
@@ -168,7 +172,7 @@ gear.task(function()
     end
     check('color slider changes the color', S.get('tint') ~= 0xFF3080C0, string.format('%08X', S.get('tint')))
     click_id(setting('name').id, 0.4)                                -- the text field
-    for _, k in ipairs({'x', 'y', 'z'}) do A.press(k) end
+    A.type('xyz')                                                    -- characters, as the keyboard layout would make them
     gear.wait(0.5)
     check('typing changes the text', S.get('name') == 'abcxyz', S.get('name'))
     A.screenshot('mm-6-settings-changed')
