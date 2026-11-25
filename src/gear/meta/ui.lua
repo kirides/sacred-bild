@@ -379,7 +379,9 @@ function GearUiNative.insets(style) end
 -- path gear.ui.rml
 --- UI written as documents (RmlUi's HTML and CSS dialect: `.rml` and `.rcss` files with `div`, `button`, `input`, flexbox,
 --- `:hover` and animations) in the mod's own folder. A document is loaded once and drawn every frame from a `draw` handler with
---- `doc:draw()`; its buttons, links and inputs take the mouse and the controller (every one is a pad stop), a focused
+--- `doc:draw()` (a frame in which nothing changed it costs next to nothing: it is laid out, walked and drawn again only after
+--- an input, a change from Lua or while an animation runs, and a value, text, class or style set to what it already is counts
+--- as no change, see [RmlRetained.md](RmlRetained.md)); its buttons, links and inputs take the mouse and the controller (every one is a pad stop), a focused
 --- text field takes the keyboard, and events (`click`, `change` ...) call Lua functions registered with `doc:on`. The default
 --- font is Segoe UI, as for `gear.ui` text; `rml.load_font` adds the mod's own. Images: a file of the mod's folder (PNG, TGA, JPG, or DDS: BC1 to BC3 are uploaded as they are, BC4 to BC7 and uncompressed formats are decoded once; the top mip only), or
 --- the game's own UI images as `gear:image/<id>` (`gear.ui.images`, or a picture id of Gear's own such as `gear.game.save_picture`'s: a savegame's thumbnail, drawn as it is, kept by the mod, not released with the document) `gear:texture/<NAME.TGA>` (Texture.pak) and an item's own model, as the game's inventory windows show it, as `gear:item/<item type id>` (a temporary item of that type, single player only) or `gear:item/id/<item object id>` (a live item; no tint or CSS transform, drawn as large as fits the box of the element, only while the whole box lies inside its clip, so a scrolled list hides the icons it cuts), with `?flip=h`, `?flip=v`

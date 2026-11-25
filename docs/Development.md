@@ -174,7 +174,7 @@ from the `sacred_core` library. Building: part of the normal build (`out/build/m
 | `src/gear/ui/ui.*`, `itemicon.*`, `replace.*` | Mod drawing (draw commands, the hooks in the UI pass, Direct3D 7 quads with the game's states saved and restored, fonts and UI images, window and UI state queries); item icons; replaced windows |
 | `src/gear/items/pickup.*`, `drops.*` | Pickup rules; drop hooks ([Gear drops](GearDrops.md)) |
 | `src/gear/overlay.*` | The file overlay and delta patches |
-| `src/gear/ui/rml.*` | RmlUi for `gear.ui.rml`: its system, file and render interfaces (meshes recorded as draw commands, `Kind::Mesh` in `ui.cpp`), a context per document, element access and the event queue for Lua. Documents read only the mod's own folder |
+| `src/gear/ui/rml.*` | RmlUi for `gear.ui.rml`: its system, file and render interfaces (meshes recorded as draw commands, `Kind::Mesh` in `ui.cpp`), a context per document, element access and the event queue for Lua. Documents read only the mod's own folder. Clean documents are not updated or rendered again and are drawn from retained vertex buffers (`Kind::Retained`, [RmlRetained.md](RmlRetained.md)) |
 | `src/gear/netmsg.*`, `src/gear/realm.*` | Custom net messages; the lobby host and port of the network menu |
 | `src/gear/chat.*`, `input.*`, `padnav.*`, `itemtip.*`, `text.*`, `gamecfg.*`, `sitehook.*` | Chat lines; remapping the game's keys; the controller on mod UI; item tooltips; game text; `Settings.cfg`; engine hook sites (`gear.hooks`) |
 | `src/gear/save.*`, `savegames.*` | Saving and loading; the savegame list and per-savegame mod data |

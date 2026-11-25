@@ -89,17 +89,19 @@ its scissor, converted to the colour format of the game's TL vertices, and then 
 `rml_draw` of a clean document adds this one command instead of hundreds. On the render thread the list keeps what it built:
 
 - the commands split into runs: consecutive meshes with the same picture, sampling and blending form one run; an item icon is a run of its own;
-- for each mesh run the finished vertices in screen pixels (the layout vertices times SacredBild's placement, exactly what the proxy's
-  `mapToCanvas` would do) in a `IDirect3DVertexBuffer7` made with the device's own `IDirect3D7::CreateVertexBuffer`. Through SacredBild that is a
-  Direct3D 9 buffer; the proxy passes vertex-buffer draws through unmapped, which is why the vertices are mapped already. Without SacredBild the
-  placement is the identity and the buffer is the game's own Direct3D 7 one;
+- the finished vertices of all mesh runs in screen pixels (the layout vertices times SacredBild's placement, exactly what the proxy's
+  `mapToCanvas` would do) in one `IDirect3DVertexBuffer7` made with the device's own `IDirect3D7::CreateVertexBuffer`, each run a range of it. Through
+  SacredBild that is a Direct3D 9 buffer; the proxy passes vertex-buffer draws through unmapped (and, for pretransformed vertices, without the 3D
+  overlay's viewport and projection), which is why the vertices are mapped already. Without SacredBild the placement is the identity and the buffer
+  is the game's own Direct3D 7 one (a list of more than 65535 vertices is drawn from memory there);
 - the key it was built for: the placement (scale, origin) and, per run, the texture's atlas rectangle. When the key differs the list is built again;
-  when a buffer cannot be made or a draw fails, the run is drawn from its layout-unit vertices with `DrawPrimitive` as before.
+  when a buffer cannot be made or a draw fails, the run is drawn from its layout-unit vertices with `DrawPrimitive` as before
+  (`GEAR_UI_NOVB=1` in the environment does that always).
 
 Per frame a clean document then costs one `SetTexture` and one `DrawPrimitiveVB` per run. A document that changes every frame (an animation, the
 minimap while the hero walks) is replayed the old way, command by command, and builds nothing; it is retained from the first clean frame on.
 
-Buffers are released only on the render thread: a list that is freed on the Lua thread hands its buffers to a queue that the next `drawLayer` empties,
+Buffers are released only on the render thread: a list that is freed on the Lua thread hands its buffer to a queue that the next `drawLayer` empties,
 after the frames in flight (`Ui::setFramesInFlight`) have passed, as with pictures.
 
 Only canvas draws (`slot == -1`) are retained; a document drawn into a game window's frame keeps the command path (the frame is pushed per command
@@ -122,12 +124,24 @@ pattern as the minimap's.
 
 ## Correctness checks
 
-- `padnavtest` (pad stops, modal, back, slider nudge), `rmltest` (theme, layout, modal, DOM natives), `rmltest-windrag` (title-bar drag) and the
-  kernel tests (`tests`) give the same results as before.
-- Hover, scrolling (wheel and scroll bar drag), slider drag, text field caret and typing, the layout editor, `kit.osk` checked in game.
-- Screenshots of the HUD with all mods match the uncached build.
-- `GEAR_RML_NOCACHE=1` in the environment turns all of it off (every document dirty every frame), for comparing and for finding a missed source of
-  change.
+Automation runs on main and on this branch in the same test copy (1600 x 900 unless noted), the test mods of `src/gear/examples` and the self tests
+of sacred-gear-mods:
+
+| Test | main | retained |
+|---|---|---|
+| `rmltest-windrag` (title-bar drag), `rmltest-transform`, `rmltest-sliders`, `rmltest-checks`, `rmltest-itemscroll`, `rmltest-rings`, `rmltest-drag` | | all pass |
+| `rmlosk` (`kit.osk`: every kind of key) | | 22 pass |
+| layout mod self test (the layout editor) | | 28 pass |
+| minimap self test | | 2 pass |
+| key-bindings self test | 43 pass | 43 pass (one earlier run: 2 fails in the log book key step, not seen again) |
+| `rmltest` | 27 pass, 1 fail | the same (`dom: query finds the appended element`) |
+| better-saveload self test | 34 pass, 11 fail | the same (its load screen does not open in this copy) |
+| art-bars self test | 4 pass, 1 fail | the same, plus its slot check is timing dependent |
+| `padnavtest` (also at 1024 x 768) | 5 pass, 2 fail, then a script error at the slider stage | the same |
+
+Screenshots the tests take (hover and pressed states of the theme's buttons and links, modal, layout editor, art bars, cool-downs) match main's
+apart from the animated world. `GEAR_RML_NOCACHE=1` in the environment turns retained mode off (every document dirty every frame), for comparing
+and for finding a missed source of change.
 
 ## Stages
 
@@ -137,4 +151,35 @@ pattern as the minimap's.
 
 ## Results
 
-(filled in after measuring; 1600 x 900, UI scale fit, `FpsLimit=0`, `VSync=0`, all 38 mods of sacred-gear-mods main, savegame slot 10)
+1600 x 900 window, UI scale fit, `FpsLimit=0`, `VSync=0`, SMAA High, all 38 non-test mods of sacred-gear-mods main, savegame slot 10, a throwaway
+copy of the game. The hero stands still for 40 s ("idle"), then walks for 38 s ("walk"); frame time = wall time / frames. Ryzen 7 5700X3D, RX 7900 XTX.
+
+| Build | idle ms/frame | walk ms/frame |
+|---|---|---|
+| main (fce599b), 5 runs | 3.15 - 3.21 | 3.36 - 3.47 |
+| stage 1 (dirty tracking), 2 runs | 2.95 - 2.96 | 3.14 - 3.22 |
+| stage 2 (retained vertex buffers), 1 run | 2.77 | 2.99 |
+| stage 3 (unchanged setters), 3 runs | **2.09 - 2.18** | **2.27 - 2.28** |
+| + one buffer per list, no overlay mapping for it, 1 run | 2.04 | 2.26 |
+| no mods, main / final | 1.20 / 1.11 | 1.26 / 1.21 |
+
+What the mods cost per frame standing still went from about 2.0 ms to about 1.0 ms. Instrumented (`SACREDGEAR_PROF=1`, idle, microseconds per frame):
+
+| | main | final |
+|---|---|---|
+| RmlUi natives (`rml_update`, `rml_draw`, `rml_nav`, `rml_scrolls`, `rml_scrollbars`, `rml_rects`) | 760 | 28 |
+| replay of the HUD layer (`draw.hud`) | 735 | 419 |
+| commands replayed per frame | 601 | 56 |
+| Lua tick (`LuaHost::frame`) | 1546 | 818 |
+| minimap `draw` | 514 | 42 |
+
+Per document (the `RMLDOC` lines, 5 s idle, about 1950 frames): beastmaster, sacred-theme, both bounty boards, companions, custom-classes and the
+minimap are updated and rendered 0 times; sessiontracker 14 times (its own changes and the mouse), art-bars about 90 times (updates RmlUi asked for
+through `GetNextUpdateDelay`; not looked into further), world-events every frame (its ring and timer values change every frame, the mod already writes only what
+changed). The HUD screenshot of the idle phase is the same as main's apart from the animated world and the randomly rolled bounties.
+
+The vertex buffers themselves are not where the time went: drawing the same kept vertices from memory (`GEAR_UI_NOVB=1`) measured 2.03 and 2.20 ms
+in two runs, inside the run-to-run spread. The gain of stage 2 is that the vertices are no longer made (and copied and mapped) every frame.
+
+What is left is mostly the mods' own Lua (bounty 107 us, art-bars 107, custom-classes 80, sessiontracker 45, companions 34 per frame): they build
+their model tables every frame; caching them (the minimap's pattern) is mod work in sacred-gear-mods.

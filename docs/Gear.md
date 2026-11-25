@@ -144,7 +144,9 @@ Rules that hold across the API:
 - **HTML/CSS documents (prototype):** `gear.ui.rml` loads a `.rml` document and its `.rcss` styles from the mod's folder
   ([RmlUi](https://mikke89.github.io/RmlUiDoc/): `div`, `button`, `input`, flexbox, `:hover`, animations) and draws it every frame
   with `doc:draw()`; `doc:on('#ok', 'click', fn)` calls Lua, `doc:text`, `doc:class`, `doc:style` and `doc:value` change the
-  document. Every button, link and input is a pad stop, a focused text field takes the keyboard, the default font is Segoe UI, and the
+  document. A document that nothing changed costs almost nothing per frame: it is laid out, walked and drawn again only when an input,
+  a change from Lua or an animation calls for it, and its vertices stay on the GPU ([RmlRetained.md](RmlRetained.md)); setting the same
+  value, text or class again every frame does not count as a change. Every button, link and input is a pad stop, a focused text field takes the keyboard, the default font is Segoe UI, and the
   game's own UI images are available as `gear:image/<id>`, CSS `transform` works. No JavaScript, no filters or drop shadows yet. Web-style conveniences work: `@font-face` with `url()` (icon fonts: `.home::before { content: "\e88a" }`), templates and styles shared between mods as `@mod-id/path` (a mod lists what it shares as `exports` in `mod.lua`), `gear.kit` widgets that look the same in Gear's plain style and in the theme, and developer hot reload (an empty file `mods\.rml-hot`, or the environment variable `GEAR_RML_HOT`). See
   [HTML/CSS documents](GearApi.md#htmlcss-documents-gearuirml) and `src/gear/examples/rmldemo`.
 - **Merchants' stock:** `gear.shop` and the `shop.stock` event hook the game's own shop code. A merchant's wares sit on three pages
