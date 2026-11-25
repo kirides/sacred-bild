@@ -6,11 +6,12 @@ local name, amount = 'Ranger', '250'
 local osk = kit.osk{layout = 'qwertz'}
 local closed_how
 
+local FLEX = '<div style="display: flex; flex-direction: row; align-items: center;">'   -- the field and its keyboard button on one centre line
 local function markup()
     return kit.page(kit.window{id = 'win', title = 'On-screen keyboard', panel = 'main', x = 200, y = 120, width = 460,
         body = kit.heading('Hero')
-            .. kit.row('Name', '<input type="text" id="name" class="field" value="' .. kit.esc(name) .. '" maxlength="24"/>' .. kit.ibtn('kbd-name', 'keyboard', {tip = 'On-screen keyboard'}))
-            .. kit.row('Gold', '<input type="text" id="gold" class="field" value="' .. kit.esc(amount) .. '" maxlength="8"/>' .. kit.ibtn('kbd-gold', 'keyboard', {tip = 'On-screen number pad'}))
+            .. kit.row('Name', FLEX .. '<input type="text" id="name" class="field" value="' .. kit.esc(name) .. '" maxlength="24"/>' .. kit.ibtn('kbd-name', 'keyboard', {tip = 'On-screen keyboard'}) .. '</div>')
+            .. kit.row('Gold', FLEX .. '<input type="text" id="gold" class="field" value="' .. kit.esc(amount) .. '" maxlength="8"/>' .. kit.ibtn('kbd-gold', 'keyboard', {tip = 'On-screen number pad'}) .. '</div>')
             .. kit.text('The keyboard is a small window of its own: it works with the mouse, the D-pad and A; B or Done close it.', {class = 'muted'})})
 end
 
