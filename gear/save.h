@@ -19,6 +19,11 @@ namespace Save
     // engine completed.
     void frame(void* engine);
 
+    // The render thread, once per frame after the world view is drawn and before the interface goes over it: takes the
+    // picture of a savegame window's save that waits for one (request with fromWindow), so the picture shows the
+    // world and not what the back buffer held when the window opened.
+    void renderCapture();
+
     // Whether the addresses were found and a frame has run (the engine is known).
     bool available();
 
@@ -33,8 +38,9 @@ namespace Save
     // UTF-8, kept as Windows-1252 like the game's own names; other characters become ?). `thumbnail`: let the engine capture the savegame's picture first (the savegame window captures it
     // before it opens). False with `error` set if the request is not possible or the engine refused it.
     // `fromWindow`: as the savegame window's own Save button (a mod's replacement of it saves): only while that window
-    // is open in game; the picture is the one the game took when the window opened, the window closes once the
-    // engine took the request.
+    // is open in game; the picture is taken of the world in the next frame (renderCapture), the request follows it and
+    // the window closes once the engine took the request. Such a save that the engine then refuses is reported as
+    // game.save_failed, not by this call.
     bool request(uint32_t slot, const std::string& name, bool thumbnail, const char*& error, bool fromWindow = false);
 
     // The file Save\GAME<slot>.PAK.

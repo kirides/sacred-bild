@@ -7779,13 +7779,13 @@ local function make_env(mod)
             return true
         end,
         -- save(slot, name?, opts?) -> true | nil, message: asks the engine to save into Save\GAME<slot>.PAK. The
-        -- result comes as 'game.saved' / 'game.save_failed'. opts: {thumbnail = bool, window = bool}; window: as the
+        -- result comes as 'game.saved' / 'game.save_failed'. opts: {thumbnail = bool (default true), window = bool}; window: as the
         -- open savegame window's Save button (a replacement of the window saves; it closes).
         save = function(slot, name, opts)
             assert(type(slot) == 'number', 'slot must be a number')
             assert(name == nil or type(name) == 'string', 'name must be a string')
             assert(opts == nil or type(opts) == 'table', 'opts must be a table')
-            return native.save_request(slot, name or '', opts ~= nil and opts.thumbnail == true,
+            return native.save_request(slot, name or '', opts == nil or opts.thumbnail ~= false,
                 opts ~= nil and opts.window == true)
         end,
         -- saves() -> the savegames (Save\GAME*.PAK) by file name, each {slot, file, name, hero, class, class_id,

@@ -219,6 +219,9 @@ namespace Gear::Addr
     // deletes the selected savegame's file and refreshes the list (10), 0xC is its Back button (hides the window; in
     // the menus it brings the start menu back).
     inline Sacred::Thiscall<void(void* window, uint32_t command)> cUI_Savegame_command{};
+    // ENG 00613670: cEngine::captureInternal (thiscall (engine, bool capture), ret 4): reads the back buffer into the
+    // engine's 128 x 96 savegame picture (engine +0x1A4); SacredBild hands it the centered 1024x768 of a larger screen.
+    inline Sacred::Thiscall<void(void* engine, uint32_t capture)> cEngine_captureInternal{};
     // The ability tables (gear/tables.cpp), static arrays in .data: T1 (ENG 0094FE28..00952A38, 0x78-byte records, ids from
     // 1000, scanned by 004D1AF0) and T2 (ENG 00952ACC..00955344, 0x94-byte records, ids from 1, scanned by 004D2310). Each
     // is the address of the first record / one past the last (found in the lookups' own code).

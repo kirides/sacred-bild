@@ -183,6 +183,10 @@ GEAR = [
     # savegame and refreshes the list, 10 refreshes the list, 0xC is its Back (closes it; in the menus the start
     # menu comes back).
     ('cUI_Savegame_command', 0x0071CC90, 'func'),
+    # cEngine::captureInternal (thiscall (engine, bool capture), ret 4): reads the back buffer into the engine's 128 x 96
+    # savegame picture (engine +0x1A4; 0 frees it). Only the engine's quicksave / autosave events and the savegame
+    # request's thumbnail flag call it, so Save::request takes the picture itself between the world and the UI.
+    ('cEngine_captureInternal', 0x00613670, 'func'),
     # The ability tables (gear/tables.cpp): T1 (ids from 1000, 0x78-byte records) and T2 (ids from 1, 0x94-byte
     # records) are static arrays that 0x4D1AF0 / 0x4D2310 scan by id; the lookups load the first record and compare
     # against the end (0x952A38 and 0x955344 are the end of T1 and of T2). The text lookup (the text table's instance

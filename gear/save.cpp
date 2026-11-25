@@ -1,4 +1,5 @@
 #include "save.h"
+#include "log.h"
 #include "replace.h"
 #include "ui.h"
 #include "world.h"
@@ -7,6 +8,7 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <atomic>
 #include <deque>
 #include <string_view>
 
@@ -44,6 +46,19 @@ namespace
         ULONGLONG started = 0;
     };
     Job g_job;
+    // A savegame window's save waiting for its picture: the world is drawn first, then (before the interface goes on
+    // top of it, Save::renderCapture) the engine takes the picture, and the next frame sends the request.
+    struct Waiting
+    {
+        std::atomic<bool> active{false};
+        std::atomic<bool> captured{false};
+        uint32_t slot = 0;
+        std::string name;
+        uintptr_t window = 0;
+        ULONGLONG since = 0;
+    };
+    Waiting g_waiting;
+    constexpr ULONGLONG kCaptureWaitMs = 1000;     // then the save goes on with the picture the engine has
     // A save the engine runs that no mod asked for: its slot (engine+0x68), seen when its bits (0xC0) went up.
     bool g_foreign = false;
     uint32_t g_foreignSlot = 0;
@@ -99,6 +114,20 @@ namespace
             using ReceiveEvent = uint32_t(__thiscall*)(void*, void*);
             const auto vtable = *reinterpret_cast<ReceiveEvent* const* const>(engine);
             vtable[0](engine, event);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    // The engine's own capture of the back buffer into its savegame picture; no C++ objects here (__try).
+    bool captureNow(void* engine)
+    {
+        __try
+        {
+            A::cEngine_captureInternal(engine, 1);
             return true;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -228,6 +257,63 @@ Save::FileInfo Save::fileInfo(uint32_t slot)
     return info;
 }
 
+namespace
+{
+    // Builds the engine's save event and sends it; true when the engine took it (its flags show a save).
+    bool submit(uint32_t slot, const std::string& name, bool thumbnail, bool fromWindow, uintptr_t window,
+                const char*& error)
+    {
+        // The engine copies the name while it handles the event, so a buffer of ours is enough.
+        // UTF-8 in, the game's single-byte text out (Windows-1252, as its own savegame window writes: umlauts and the
+        // like stay, anything else becomes '?').
+        char text[kNameMax + 1] = {};
+        {
+            std::wstring wide(name.size(), wchar_t{});
+            const int n = MultiByteToWideChar(CP_UTF8, 0, name.data(), static_cast<int>(name.size()), wide.data(),
+                                              static_cast<int>(wide.size()));
+            wide.resize(n > 0 ? n : 0);
+            for (wchar_t& c : wide)
+            {
+                if (c < 0x20)
+                {
+                    c = L'?';
+                }
+            }
+            BOOL lossy = FALSE;
+            const int bytes = WideCharToMultiByte(1252, 0, wide.data(), static_cast<int>(wide.size()), text, kNameMax,
+                                                  "?", &lossy);
+            text[bytes > 0 ? bytes : 0] = 0;
+        }
+        SaveEvent event{};
+        event.vtable = A::cSaveEvent_vtable.get();
+        event.code = 0xF;
+        event.sub = 2;
+        event.slot = slot;
+        event.thumbnail = thumbnail ? 1 : 0;
+        event.checkWindows = fromWindow ? 0 : 1;   // the window's own request (0071CC90 command 2) does not check
+        event.name = text;
+
+        const Save::FileInfo before = Save::fileInfo(slot);
+        if (!sendEvent(g_engine, &event))
+        {
+            error = "the engine faulted on the save request";
+            return false;
+        }
+        uint32_t flags = 0;
+        if (!engineFlags(flags) || !(flags & kSaveBits))
+        {
+            error = "the engine refused the save (a trade, chest or other window is open)";
+            return false;
+        }
+        g_job = Job{true, slot, before, GetTickCount64()};
+        if (window && A::cUI_Control_clearFlags)
+        {
+            hideWindow(window);     // as the window does after its request
+        }
+        return true;
+    }
+}
+
 bool Save::request(uint32_t slot, const std::string& name, bool thumbnail, const char*& error, bool fromWindow)
 {
     if (slot > kMaxSlot)
@@ -253,67 +339,68 @@ bool Save::request(uint32_t slot, const std::string& name, bool thumbnail, const
             error = "a message box is open";
             return false;
         }
-        thumbnail = false;      // the window's picture, taken when it opened
+        thumbnail = false;      // the picture comes from renderCapture instead, below
+        if (g_waiting.active)
+        {
+            error = "a save is already waiting for its picture";
+            return false;
+        }
+        if (A::cEngine_captureInternal && g_engine)
+        {
+            // The engine takes the picture of the back buffer when something asks for it (the quicksave key, its
+            // Auto-Save, a request's thumbnail flag); the window leaves it to the moment it opened, which is the
+            // last picture taken, whatever that showed (the start menu's screen, when no world frame was taken since).
+            // The back buffer holds the world only until the interface is drawn over it: take the picture there, in
+            // the next frame's render, and send the request after it.
+            g_waiting.active = true;
+            g_waiting.captured = false;
+            g_waiting.slot = slot;
+            g_waiting.name = name;
+            g_waiting.window = window;
+            g_waiting.since = GetTickCount64();
+            g_job = Job{true, slot, fileInfo(slot), g_waiting.since};
+            return true;
+        }
     }
     else if (const char* why = blocked())
     {
         error = why;
         return false;
     }
-    // The engine copies the name while it handles the event, so a buffer of ours is enough.
-    // UTF-8 in, the game's single-byte text out (Windows-1252, as its own savegame window writes: umlauts and the
-    // like stay, anything else becomes '?').
-    char text[kNameMax + 1] = {};
-    {
-        std::wstring wide(name.size(), wchar_t{});
-        const int n = MultiByteToWideChar(CP_UTF8, 0, name.data(), static_cast<int>(name.size()), wide.data(),
-                                          static_cast<int>(wide.size()));
-        wide.resize(n > 0 ? n : 0);
-        for (wchar_t& c : wide)
-        {
-            if (c < 0x20)
-            {
-                c = L'?';
-            }
-        }
-        BOOL lossy = FALSE;
-        const int bytes = WideCharToMultiByte(1252, 0, wide.data(), static_cast<int>(wide.size()), text, kNameMax, "?",
-                                              &lossy);
-        text[bytes > 0 ? bytes : 0] = 0;
-    }
-    SaveEvent event{};
-    event.vtable = A::cSaveEvent_vtable.get();
-    event.code = 0xF;
-    event.sub = 2;
-    event.slot = slot;
-    event.thumbnail = thumbnail ? 1 : 0;
-    event.checkWindows = fromWindow ? 0 : 1;   // the window's own request (0071CC90 command 2) does not check
-    event.name = text;
+    return submit(slot, name, thumbnail, fromWindow, window, error);
+}
 
-    const FileInfo before = fileInfo(slot);
-    if (!sendEvent(g_engine, &event))
+void Save::renderCapture()
+{
+    // The render thread, once per frame between the world view and the interface.
+    if (!g_waiting.active || g_waiting.captured || !g_engine || !A::cEngine_captureInternal)
     {
-        error = "the engine faulted on the save request";
-        return false;
+        return;
     }
-    uint32_t flags = 0;
-    if (!engineFlags(flags) || !(flags & kSaveBits))
-    {
-        error = "the engine refused the save (a trade, chest or other window is open)";
-        return false;
-    }
-    g_job = Job{true, slot, before, GetTickCount64()};
-    if (window && A::cUI_Control_clearFlags)
-    {
-        hideWindow(window);     // as the window does after its request
-    }
-    return true;
+    LOG("Save: the picture of the savegame is taken between the world and the interface");
+    captureNow(g_engine);
+    g_waiting.captured = true;
 }
 
 void Save::frame(void* engine)
 {
     g_engine = engine;
     uint32_t flags = 0;
+    if (g_waiting.active)
+    {
+        // The picture was taken in a render since the request (or it never came: the save goes on without).
+        if (!g_waiting.captured && GetTickCount64() - g_waiting.since < kCaptureWaitMs)
+        {
+            return;
+        }
+        g_waiting.active = false;
+        const char* error = "";
+        if (!submit(g_waiting.slot, g_waiting.name, false, true, g_waiting.window, error))
+        {
+            finish(false, error);
+        }
+        return;
+    }
     if (!g_job.active)
     {
         // Somebody else's save: the quicksave key, the savegame window, the game's own Auto-Save.
