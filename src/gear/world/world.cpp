@@ -674,6 +674,43 @@ bool World::setHealth(uint32_t id, int32_t health, const char*& error)
     return true;
 }
 
+bool World::allegiance(uint32_t id, uint32_t& faction, uint32_t& behavior)
+{
+    void* m = available() ? manager() : nullptr;
+    const uintptr_t o = m ? live(m, id) : 0;
+    return o && callIsCreature(o) && readAt(o, kFaction, faction) && readAt(o, kBehavior, behavior) && ((behavior &= 0xFFFFu), true);
+}
+
+bool World::setAllegiance(uint32_t id, uint32_t faction, uint32_t behavior, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    uint32_t own = 0;
+    if (!o || !callIsCreature(o) || !readAt(o, kBehavior, own))
+    {
+        error = "no such creature, or world changes are not possible now";
+        return false;
+    }
+    if (id >= 1 && id <= kHeroIds)
+    {
+        error = "heroes are not changed here";
+        return false;
+    }
+    if (faction > 15)
+    {
+        error = "the faction is 0 to 15";
+        return false;
+    }
+    own = (own & 0xFFFF0000u) | (behavior & 0xFFFFu);
+    if (!safeStore(reinterpret_cast<void*>(o + kFaction), &faction, sizeof(faction)) ||
+        !safeStore(reinterpret_cast<void*>(o + kBehavior), &own, sizeof(own)))
+    {
+        error = "cannot write the creature";
+        return false;
+    }
+    return true;
+}
+
 bool World::copyAllegiance(uint32_t id, uint32_t from, const char*& error)
 {
     void* m = manager();
@@ -1167,6 +1204,35 @@ bool World::carried(uint32_t id, uint32_t (&slots)[19])
 {
     const uintptr_t o = objectAddress(id);
     return o && callIsCreature(o) && readAt(o, 0x1A4, slots);
+}
+
+bool World::carry(uint32_t id, uint32_t slot, uint32_t item, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    const uintptr_t it = o ? live(m, item) : 0;
+    uint32_t flags = 0;
+    if (!o || !it || !callIsCreature(o) || callIsCreature(it) || slot > 18 || !readAt(it, kFlags, flags))
+    {
+        error = "no such creature or item, or world changes are not possible now";
+        return false;
+    }
+    if (id >= 1 && id <= kHeroIds)
+    {
+        error = "heroes put on items through their inventory";
+        return false;
+    }
+    if (!(flags & 2) && (!Addr::cObjectManager_unlink || callUnlink(m, item) < 0))
+    {
+        error = "the game's object functions were not found";
+        return false;
+    }
+    if (!safeStore(reinterpret_cast<void*>(o + 0x1A4 + slot * 4), &item, sizeof(item)))
+    {
+        error = "cannot write the creature";
+        return false;
+    }
+    return true;
 }
 
 bool World::installCreateHook()

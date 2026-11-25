@@ -303,6 +303,25 @@ function Creature:set_tint(spec) end
 ---@return string? error
 function Creature:set_texture(spec) end
 
+--- Puts an item object (made with `gear.world.spawn`, lying in the world) into equipment slot 0 to 18 of a creature that is no hero: the item leaves the world and
+--- the creature carries it there, as the creatures the game places do. A weapon in slot 12 is wielded (the model shows it), a shield in 13. Single player.
+---@param slot integer
+---@param item GearItem|integer
+---@return boolean? ok
+---@return string? error
+function Creature:carry(slot, item) end
+
+--- The creature's faction (0 to 15, the class the game's hostility table is indexed by) and whether its behavior flags say aggressive.
+---@return integer? faction
+---@return boolean? aggressive
+function Creature:allegiance() end
+
+--- Sets the faction and/or the aggression of a creature (a field left out stays). Not for heroes. Single player.
+---@param spec {faction: integer?, aggressive: boolean?}
+---@return boolean? ok
+---@return string? error
+function Creature:set_allegiance(spec) end
+
 --- The `gear.text.key` key of the creature's own name text, if a mod registered it this session.
 ---@return string?
 function Creature:name_key() end

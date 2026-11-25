@@ -993,6 +993,42 @@ namespace LuaNative
         return 0;
     }
 
+    // native.allegiance(id) -> faction, behavior | nil; native.set_allegiance(id, faction, behavior) -> true | nil, message
+    int nativeAllegiance(lua_State* L)
+    {
+        uint32_t faction = 0, behavior = 0;
+        if (!World::allegiance(checkId(L, 1), faction, behavior))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, faction);
+        lua_pushnumber(L, behavior);
+        return 2;
+    }
+    int nativeSetAllegiance(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::setAllegiance(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), static_cast<uint32_t>(luaL_checknumber(L, 3)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.carry(id, slot, item) -> true | nil, message
+    int nativeCarry(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::carry(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), checkId(L, 3), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.gait(id, value?) -> gait | nil, message: a creature's gait (1 walk, 2 run); with a value it is set first.
     int nativeGait(lua_State* L)
     {
@@ -1121,6 +1157,9 @@ namespace LuaNative
             {"set_max_health", nativeSetMaxHealth},
             {"set_gold", nativeSetGold},
             {"gait", nativeGait},
+            {"allegiance", nativeAllegiance},
+            {"carry", nativeCarry},
+            {"set_allegiance", nativeSetAllegiance},
             {nullptr, nullptr},
         };
         setFunctions(L, kNatives);
