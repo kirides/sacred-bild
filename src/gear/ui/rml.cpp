@@ -2180,7 +2180,8 @@ namespace
     // A box the pad's up / down walks card by card: one that scrolls (overflow-y auto or scroll, with more content than room), or any marked data-nav-scroll.
     bool isNavScrollArea(Rml::Element* p)
     {
-        if (p->HasAttribute("data-nav-scroll"))
+        static const std::string kScrollAttribute = "data-nav-scroll";    // (not a temporary string per element and frame)
+        if (p->GetNumAttributes() > 0 && p->HasAttribute(kScrollAttribute))
         {
             return true;
         }
@@ -2213,6 +2214,24 @@ namespace
         }
     }
 
+    // What kNavSelector matches below `e`, in document order: a walk comparing tag names, instead of QuerySelectorAll, which parses the
+    // selector text and matches six selectors against every element on each call (every document, every frame).
+    void collectNavCandidates(Rml::Element* e, std::vector<Rml::Element*>& out)
+    {
+        static const std::string kNavAttribute = "data-nav";
+        for (int i = 0; i < e->GetNumChildren(); ++i)
+        {
+            Rml::Element* c = e->GetChild(i);
+            const std::string& tag = c->GetTagName();
+            if (tag == "button" || tag == "a" || tag == "input" || tag == "select" || tag == "textarea" ||
+                (c->GetNumAttributes() > 0 && c->HasAttribute(kNavAttribute)))
+            {
+                out.push_back(c);
+            }
+            collectNavCandidates(c, out);
+        }
+    }
+
     std::vector<Rml::Element*> navElements(Doc& d)
     {
         std::vector<Rml::Element*> list;
@@ -2220,8 +2239,8 @@ namespace
         {
             return list;
         }
-        Rml::ElementList all;
-        d.document->QuerySelectorAll(all, kNavSelector);
+        std::vector<Rml::Element*> all;
+        collectNavCandidates(d.document, all);
         for (Rml::Element* e : all)
         {
             if (!e->IsVisible(true) || e->GetAttribute("disabled") != nullptr || scrolledOut(e))
@@ -2237,6 +2256,7 @@ namespace
         }
         // Stacking order: the regions Lua registers for the stops are won by the last one at a point, so what is in front (a z-index, as a drop-down list
         // has over the rows under it) comes after what is behind; the document's order otherwise.
+        // (each element's rank worked out once, not at every comparison of the sort: it walks the element's ancestors)
         const auto rank = [](Rml::Element* e) {
             float z = 0.0f;
             for (Rml::Element* p = e; p; p = p->GetParentNode())
@@ -2249,7 +2269,17 @@ namespace
             }
             return z;
         };
-        std::stable_sort(list.begin(), list.end(), [&](Rml::Element* a, Rml::Element* b) { return rank(a) < rank(b); });
+        std::vector<std::pair<float, Rml::Element*>> ranked;
+        ranked.reserve(list.size());
+        for (Rml::Element* e : list)
+        {
+            ranked.emplace_back(rank(e), e);
+        }
+        std::stable_sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        for (size_t i = 0; i < ranked.size(); ++i)
+        {
+            list[i] = ranked[i].second;
+        }
         return list;
     }
 
