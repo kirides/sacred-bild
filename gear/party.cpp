@@ -40,6 +40,11 @@ namespace
     constexpr uint32_t kFlagGone = 0x10;
     constexpr uintptr_t kEngineControlled = 0x13C; // the creature the world mouse handler commands
     constexpr uintptr_t kPlayersLocal = 0x14;
+    // Creature flags (+0x200): 0x40 keeps the game's own reactions (0x599910: fight back or step away when an enemy comes
+    // near, 0x548F60) off. The hero the player starts with has it; a companion has not, so one the player played acted
+    // and fled on its own. It goes with control.
+    constexpr uintptr_t kCreatureFlags = 0x200;
+    constexpr uint32_t kFlagPlayerControlled = 0x40;
 
     // Creature event types (the 0x44-byte orders a creature's vtable +0x18 takes).
     constexpr uintptr_t kNameText = 0x3C;    // a hero's name: the text id 0x26FF + its id
@@ -524,6 +529,20 @@ void Party::frame()
         nextTab = GetTickCount64() + 2000;
         retargetInventory(localNow);
         retargetTaskbar(localNow);
+        // only the hero the player plays keeps the game's own reactions off (a savegame of a played companion, or a load)
+        for (uint32_t h = 1; h <= kLastHeroId; ++h)
+        {
+            const uintptr_t o = heroObject(h);
+            uint32_t flags = 0;
+            if (o && sameOwnerAsLocal(o) && readAt(o, kCreatureFlags, flags))
+            {
+                const uint32_t want = h == localNow ? (flags | kFlagPlayerControlled) : (flags & ~kFlagPlayerControlled);
+                if (want != flags)
+                {
+                    writeAt(o, kCreatureFlags, want);
+                }
+            }
+        }
     }
     const uintptr_t e = engine();
     const uint32_t local = World::localId();
@@ -959,6 +978,12 @@ bool Party::control(uint32_t id, const char*& error)
     if (readAt(e, kEngineControlled, controlled) && (controlled == old || controlled <= kLastHeroId))
     {
         writeAt(e, kEngineControlled, id);
+    }
+    uint32_t fromFlags = 0, toFlags = 0;
+    if (readAt(from, kCreatureFlags, fromFlags) && readAt(to, kCreatureFlags, toFlags))
+    {
+        writeAt(from, kCreatureFlags, fromFlags & ~kFlagPlayerControlled);
+        writeAt(to, kCreatureFlags, toFlags | kFlagPlayerControlled);
     }
     moveFollowers(from, to, id);
     if (!retargetInventory(id))
