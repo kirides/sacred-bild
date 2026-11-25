@@ -105,6 +105,10 @@ function GearKitOsk:set_text(text) end
 --- Closes it when open and returns true: call it first in the mod's own handling of B or Escape, so that one press closes the keyboard only (with `back = false`).
 ---@return boolean
 function GearKitOsk:back() end
+--- The keyboard of a text field, for the pad: `button` (an `ibtn kit-kbd`, shown by both looks only while the controller is the player's input) opens it, and so does a click (A) on `field` while that button is shown. With the mouse and keys the field is a plain field. `open` calls `toggle` for the field.
+---@param doc GearRmlDoc
+---@param o {field: string, button: string, open: fun()}
+function GearKitOsk:attach(doc, o) end
 --- Draws it; call it every frame from the mod's draw handler (nothing happens while it is closed).
 function GearKitOsk:draw() end
 
@@ -229,3 +233,25 @@ function GearKit.osk(o) end
 ---@param digits? boolean
 ---@return string
 function GearKit.osk_clean(text, digits) end
+
+--- The options of `field`.
+---@class GearKitField
+---@field id string The input's id; its keyboard button is `<id>-kbd`.
+---@field value? string
+---@field max? integer
+---@field digits? boolean A number pad instead of the letters.
+---@field placeholder? string
+---@field tip? string
+---@field class? string
+
+--- A text field with its keyboard button (an icon next to it, shown only while the controller is in use). Join `field_attach` to it once the document is loaded.
+---@param o GearKitField
+---@return string markup
+function GearKit.field(o) end
+
+--- Wires a `field` to a keyboard: the button, and a click on the field while the button shows, open `kb` for the field's own text; every key writes it back and calls `on_change(text)`. Returns the function that opens it by hand.
+---@param kb GearKitOsk
+---@param doc GearRmlDoc
+---@param o {id: string, title?: string, max?: integer, digits?: boolean, on_change?: fun(text: string), on_close?: fun(text: string, how: string)}
+---@return fun() open
+function GearKit.field_attach(kb, doc, o) end

@@ -341,6 +341,19 @@ function K.osk(cfg)
         if st then drop('close') else kb:open(o) end
     end
 
+    -- kb:attach(doc, {field = '#id', button = '#kbd-id', open = fn}): the keyboard of a text field, for the pad. The keyboard button (class `kit-kbd`, which both
+    -- looks show only while the controller is the player's input) opens it, and so does a click (A) on the field itself while that button is shown; with the
+    -- mouse and keys the field stays a plain field. `open()` calls `kb:toggle{...}` for the field (see kit.field for one made from the element's own value).
+    function kb:attach(d, o)
+        local function shown()
+            local b = d:query(o.button)
+            local r = b and b:rect()
+            return r ~= nil and r.w > 0 and r.h > 0
+        end
+        d:on(o.button, 'click', function() o.open() end)
+        d:on(o.field, 'click', function() if not st and shown() then o.open() end end)
+    end
+
     function kb:draw()
         if not st then return end
         if cfg.back ~= false and (ui.back_pressed() or ui.key_pressed('escape')) then drop('back') return end
@@ -360,6 +373,32 @@ function K.osk(cfg)
         doc:draw({layer = 'top', modal = cfg.modal ~= false})
     end
     return kb
+end
+
+-- kit.field{id, value, max, digits, placeholder, tip, class} -> markup: a text field with its keyboard button (id `<id>-kbd`, a keyboard icon next to it, shown only
+-- while the controller is in use). Give the document to `kit.field_attach(kb, doc, {id, title, max, digits, on_change})` once it is loaded: the button, and
+-- a click on the field while the button shows, open `kb` (the function returned opens it by hand) (the function returned opens it by hand) for the field's own text, and every key writes it back (and calls `on_change(text)`).
+function K.field(o)
+    local id = o.id
+    return '<div class="kit-field"><input' .. attrs({{'type', 'text'}, {'id', id}, {'class', classes('field grow', o.class)}, {'value', o.value}, {'maxlength', o.max},
+        {'placeholder', o.placeholder}, {'title', o.tip}}) .. '/>'
+        .. '<button' .. attrs({{'id', id .. '-kbd'}, {'class', 'ibtn kit-kbd'}, {'title', o.digits and 'On-screen number pad' or 'On-screen keyboard'}}) .. '><span class="padkey a"></span>' .. K.icon('keyboard') .. '</button></div>'
+end
+
+function K.field_attach(kb, d, o)
+    local function open()
+        local el = d:query('#' .. o.id)
+        if not el then return end
+        kb:toggle{title = o.title, digits = o.digits, max = o.max, text = el:value() or '', on_close = o.on_close,
+            get = function() local e = d:query('#' .. o.id) return e and e:value() end,
+            on_change = function(t)
+                local e = d:query('#' .. o.id)
+                if e then e:value(t) end
+                if o.on_change then o.on_change(t) end
+            end}
+    end
+    kb:attach(d, {field = '#' .. o.id, button = '#' .. o.id .. '-kbd', open = open})
+    return open
 end
 
 -- kit.confirm{title, text, yes = 'OK', no = 'Cancel', danger, on_result} -> dialog: a modal question in the middle of the screen. Call `dialog:draw()` from the

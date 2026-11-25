@@ -2405,6 +2405,10 @@ button.osk-key.txt { font-size: 14px; }
 button.osk-key.half { width: 100px; font-size: 14px; }
 button.osk-key.on { color: #ffd54a; border-color: #ffd54a; }
 button.osk-key.done { border-color: #c8aa5a; color: #ffd780; }
+/* the keyboard button of a text field: only while the controller is the input */
+button.ibtn.kit-kbd { display: none; }
+body.pad button.ibtn.kit-kbd { display: inline-block; }
+.kit-field { display: flex; flex-direction: row; align-items: center; }
 .dd { position: relative; display: inline-block; flex: none; z-index: 10; }
 .dd.open { z-index: 100; }
 .dd-list { position: absolute; left: 0; top: 100%; min-width: 150px; max-height: 300px; overflow-y: auto; z-index: 200; background-color: #0c0c14; border: 1px #ffd780; padding: 2px; }

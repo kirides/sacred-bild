@@ -5,13 +5,13 @@ local doc
 local name, amount = 'Ranger', '250'
 local osk = kit.osk{layout = 'qwertz'}
 local closed_how
+local open_name, open_gold   -- what the keyboard buttons and a click on the field do (the test calls them: a mouse click would end the pad mode)
 
-local FLEX = '<div style="display: flex; flex-direction: row; align-items: center;">'   -- the field and its keyboard button on one centre line
 local function markup()
     return kit.page(kit.window{id = 'win', title = 'On-screen keyboard', panel = 'main', x = 200, y = 120, width = 460,
         body = kit.heading('Hero')
-            .. kit.row('Name', FLEX .. '<input type="text" id="name" class="field" value="' .. kit.esc(name) .. '" maxlength="24"/>' .. kit.ibtn('kbd-name', 'keyboard', {tip = 'On-screen keyboard'}) .. '</div>')
-            .. kit.row('Gold', FLEX .. '<input type="text" id="gold" class="field" value="' .. kit.esc(amount) .. '" maxlength="8"/>' .. kit.ibtn('kbd-gold', 'keyboard', {tip = 'On-screen number pad'}) .. '</div>')
+            .. kit.row('Name', kit.field{id = 'name', value = name, max = 24})
+            .. kit.row('Gold', kit.field{id = 'gold', value = amount, max = 8, digits = true})
             .. kit.text('The keyboard is a small window of its own: it works with the mouse, the D-pad and A; B or Done close it.', {class = 'muted'})})
 end
 
@@ -26,14 +26,8 @@ local function show()
     if not doc then return end
     doc:on('#name', 'change', function(e) name = e.params.value or name end)
     doc:on('#gold', 'change', function(e) amount = e.params.value or amount end)
-    doc:on('#kbd-name', 'click', function()
-        osk:toggle{title = 'Name', text = name, max = 24, on_change = function(t) name = t; set_field('name', t) end,
-            get = function() return name end, on_close = function(_, how) closed_how = how end}
-    end)
-    doc:on('#kbd-gold', 'click', function()
-        osk:toggle{title = 'Gold', digits = true, text = amount, max = 8, on_change = function(t) amount = t; set_field('gold', t) end,
-            get = function() return amount end, on_close = function(_, how) closed_how = how end}
-    end)
+    open_name = kit.field_attach(osk, doc, {id = 'name', title = 'Name', max = 24, on_change = function(t) name = t end, on_close = function(_, how) closed_how = how end})
+    open_gold = kit.field_attach(osk, doc, {id = 'gold', title = 'Gold', max = 8, digits = true, on_change = function(t) amount = t end, on_close = function(_, how) closed_how = how end})
 end
 
 gear.on('draw', function(state)
@@ -79,8 +73,18 @@ if A then
         A.screenshot('osk-0-window')
         name = ''; show(); gear.wait(0.5)
 
+        -- with the mouse the keyboard button is hidden and a click on the field is only a click
+        local btn = doc:query('#name-kbd'):rect()
+        check('no keyboard button while the mouse is the input', not btn or btn.w == 0, btn and btn.w)
+        click_in(doc, '#name'); gear.wait(0.3)
+        check('and a click on the field opens nothing', not osk:is_open())
+        A.pad(1); gear.wait(0.5)          -- the controller is the input now
+        btn = doc:query('#name-kbd'):rect()
+        check('the pad shows the keyboard button', btn and btn.w > 0, btn and btn.w)
+        A.screenshot('osk-0b-pad')
+
         -- the text keyboard
-        click_in(doc, '#kbd-name'); gear.wait(0.4)
+        open_name(); gear.wait(0.4)
         check('the keyboard opens', osk:is_open() and kdoc() ~= nil)
         type_keys('q', 'u')
         check('letters type', name == 'qu', name)
@@ -108,7 +112,7 @@ if A then
         check('Done closes it and reports done', not osk:is_open() and closed_how == 'done', closed_how)
 
         -- the number pad
-        click_in(doc, '#kbd-gold'); gear.wait(0.4)
+        open_gold(); gear.wait(0.4)
         check('the number pad opens', osk:is_open() and kdoc() ~= nil)
         act('clear'); type_keys('4', '2', '0')
         check('digits type', amount == '420', amount)
@@ -123,8 +127,8 @@ if A then
 
         -- the player types into the field: the keyboard follows (get)
         act('done')
-        click_in(doc, '#kbd-name'); gear.wait(0.4)
-        name = 'typed by hand'
+        open_name(); gear.wait(0.4)
+        doc:query('#name'):value('typed by hand')
         gear.wait(0.3)
         check('the keyboard follows the field of the mod', osk:text() == 'typed by hand', tostring(osk:is_open()) .. ' ' .. tostring(osk:text()))
 

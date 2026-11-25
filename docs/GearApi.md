@@ -4808,6 +4808,13 @@ Closes it when open and returns true: call it first in the mod's own handling of
 
 - returns `boolean`
 
+#### `GearKitOsk:attach(doc, o)`
+
+The keyboard of a text field, for the pad: `button` (an `ibtn kit-kbd`, shown by both looks only while the controller is the player's input) opens it, and so does a click (A) on `field` while that button is shown. With the mouse and keys the field is a plain field. `open` calls `toggle` for the field.
+
+- `doc`: `GearRmlDoc`
+- `o`: `{field: string, button: string, open: fun()}`
+
 #### `GearKitOsk:draw()`
 
 Draws it; call it every frame from the mod's draw handler (nothing happens while it is closed).
@@ -4970,6 +4977,36 @@ What the clipboard may put into a field: line breaks and tabs become one blank, 
 - `text`: `string`
 - `digits`: `boolean` (optional)
 - returns `string`
+
+### GearKitField
+
+The options of `field`.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | The input's id; its keyboard button is `<id>-kbd`. |
+| `value` | `string` |  (optional) |
+| `max` | `integer` |  (optional) |
+| `digits` | `boolean` | A number pad instead of the letters. (optional) |
+| `placeholder` | `string` |  (optional) |
+| `tip` | `string` |  (optional) |
+| `class` | `string` |  (optional) |
+
+#### `gear.kit.field(o) -> string`
+
+A text field with its keyboard button (an icon next to it, shown only while the controller is in use). Join `field_attach` to it once the document is loaded.
+
+- `o`: `GearKitField`
+- returns `markup` `string`
+
+#### `gear.kit.field_attach(kb, doc, o) -> fun()`
+
+Wires a `field` to a keyboard: the button, and a click on the field while the button shows, open `kb` for the field's own text; every key writes it back and calls `on_change(text)`. Returns the function that opens it by hand.
+
+- `kb`: `GearKitOsk`
+- `doc`: `GearRmlDoc`
+- `o`: `{id: string, title?: string, max?: integer, digits?: boolean, on_change?: fun(text: string), on_close?: fun(text: string, how: string)}`
+- returns `open` `fun()`
 
 ## Stored data (gear.store)
 

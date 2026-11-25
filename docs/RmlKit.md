@@ -44,6 +44,8 @@ kb:toggle{title = 'Gold', digits = true, text = gold, max = 8, on_change = set_g
 ```
 
 The button that opens it is `kit.ibtn('kbd', 'keyboard', {tip = 'On-screen keyboard'})` (or, in an `.rml` file, `<button class="ibtn" id="kbd"><span class="padkey a"></span><span class="icon icon-keyboard"></span></button>`).
+**Text fields for a pad:** `kit.field{id = 'name', value = name, max = 24}` is an input with its keyboard button, which both looks show only while the controller is in use; `kit.field_attach(kb, doc, {id = 'name', title = 'Name', on_change = ...})` wires it, and then A on the field opens the keyboard too. A mod with its own `.rml` gives its keyboard button the classes `ibtn kit-kbd` and calls `kb:attach(doc, {field = '#search', button = '#kbd', open = fn})`. With the mouse and keys a field stays a plain field.
+
 Every key is a stop for the D-pad (A types); the keyboard is modal, so the pad stays on it. B and Escape close it (`kb:back()` for a mod that handles B itself, with `back = false`).
 Paste takes the clipboard without line breaks and other control characters, digits only on a number pad, cut to `max`. Demo and self test: `gear/examples/rmlosk`.
 
