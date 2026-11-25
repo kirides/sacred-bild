@@ -8,7 +8,7 @@ import os
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(TOOLS)
-DATA = os.path.join(TOOLS, 'data')
+DATA = os.path.join(TOOLS, 'sigs', 'data')
 
 # The three code roots: the code both DLLs link (sacred_core), ddraw.dll, SacredGear.dll.
 CORE = os.path.join(ROOT, 'src', 'core')

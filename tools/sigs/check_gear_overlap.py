@@ -8,9 +8,9 @@
 # Which addresses a module patches: the Addr names inside the argument list of its Patch::hook / write / value /
 # imm32 / redirectCall calls, and, to be safe, any Addr name assigned on the five lines before such a call (an
 # address put in a variable first). resolution_sites.inc lists patched sites only.
-# Usage: python tools/check_gear_overlap.py   (SACRED_ENG as for gen_sigs.py)
+# Usage: python tools/sigs/check_gear_overlap.py   (SACRED_ENG as for gen_sigs.py)
 import glob, os, re, sys
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path[:0] = [os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *p)) for p in [(), ('..',), ('..', 'sigs'), ('..', 'gearapi')]]  # tools/, tools/sigs, tools/gearapi
 import gear_sites
 import paths
 import gen_sigs
@@ -77,7 +77,7 @@ def main():
         for b in against:
             if g[1] < b[2] and b[1] < g[2]:
                 clashes.append((g, b))
-    # Gear's site hooks (tools/gear_sites.py) write into the middle of functions: no SacredBild window may touch them
+    # Gear's site hooks (tools/sigs/gear_sites.py) write into the middle of functions: no SacredBild window may touch them
     for hook, name, fn, site, length, prefix in gear_sites.SITES:
         for b in bild_all:
             if site < b[2] and b[1] < site + length:

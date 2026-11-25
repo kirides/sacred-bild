@@ -1,6 +1,6 @@
 # Lists where SacredReborn.exe's code differs from the German sacred.exe it is made from (same layout, same addresses),
 # sorted into the kinds of change that matter for SacredBild's patches. Usage:
-#   python tools/reborn_diff.py <sacred.exe (German)> <SacredReborn.exe> [function address ...]
+#   python tools/re/reborn_diff.py <sacred.exe (German)> <SacredReborn.exe> [function address ...]
 # With addresses (hex), only runs within 0x800 bytes after them are listed (a hooked function's body).
 import sys
 import pefile

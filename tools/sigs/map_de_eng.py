@@ -2,19 +2,20 @@
 # operands of matched instructions. General knowledge about the two builds (not ReBorn specific): a patch written
 # against German code (ReBorn's) is translated to the English exe through it.
 #
-#   python tools/map_de_eng.py [--de sacred.exe] [--eng Sacred.exe] [--out tools/data/map_de_eng.json]
+#   python tools/sigs/map_de_eng.py [--de sacred.exe] [--eng Sacred.exe] [--out tools/sigs/data/map_de_eng.json]
 #
-# Output (tools/data/map_de_eng.json):
+# Output (tools/sigs/data/map_de_eng.json):
 #   functions: [[de, eng, length, score]]   score = share of equal masked bytes (1.0 = identical apart from addresses)
 #   globals:   {"de": [eng, votes]}         data addresses and call targets paired from matched instructions
 #   stats:     counts
 import argparse, bisect, json, os, sys
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path[:0] = [os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *p)) for p in [(), ('..',), ('..', 'sigs'), ('..', 'gearapi')]]  # tools/, tools/sigs, tools/gearapi
 import capstone
 import sigs
+import paths
 from funcs import _A
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = paths.ROOT
 ENG = os.environ.get('SACRED_ENG', r'B:\Spiele\GOG Games\sacred gold GOG\Sacred.exe')
 DE = os.environ.get('SACRED_DE', r'B:\Spiele\GOG Games\Sacred Gold\sacred.exe')
 
@@ -82,7 +83,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--de', default=DE)
     ap.add_argument('--eng', default=ENG)
-    ap.add_argument('--out', default=os.path.join(ROOT, 'tools', 'data', 'map_de_eng.json'))
+    ap.add_argument('--out', default=os.path.join(paths.DATA, 'map_de_eng.json'))
     ap.add_argument('--min-score', type=float, default=0.9)
     args = ap.parse_args()
     eng = sigs.Image(args.eng, _A)

@@ -12,7 +12,7 @@
 
 namespace
 {
-    // The atlas (tools/gen_prompts.py): 64x64 cells, 8 per row, 18 per style, then the "+"; premultiplied alpha.
+    // The atlas (tools/re/gen_prompts.py): 64x64 cells, 8 per row, 18 per style, then the "+"; premultiplied alpha.
     constexpr int kAtlasResource = 201;     // RCDATA in version.rc
     constexpr int kAtlasWidth = 512, kAtlasHeight = 512;
     constexpr int kCell = 64;

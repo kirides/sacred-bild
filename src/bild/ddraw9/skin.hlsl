@@ -1,6 +1,6 @@
 // Characters skinned on the GPU (Device::drawSkinned) and lit as Direct3D 7's fixed-function pipeline lights them:
 // up to 8 directional, point and spot lights in camera space, material or vertex colors, global ambient, specular
-// with a local or distant viewer. Compiled to vs_2_0 by tools/gen_shaders.py (src/bild/ddraw9/skin_shaders.inc); DIFFUSE
+// with a local or distant viewer. Compiled to vs_2_0 by tools/re/gen_shaders.py (src/bild/ddraw9/skin_shaders.inc); DIFFUSE
 // selects the variant with a per-vertex diffuse color stream (FVF 0x152).
 //
 // Matrices are passed as the vectors the products need, so no packing convention is involved:

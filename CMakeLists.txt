@@ -159,13 +159,13 @@ add_library(ddraw SHARED ${DDRAW_SOURCES})
 add_dependencies(ddraw version_info)
 target_include_directories(ddraw PRIVATE ${VERSION_INFO_DIR})
 target_include_directories(ddraw PRIVATE src/bild ${DETOURS_INCLUDE_DIRS})
-# The resource script embeds the button prompts' atlas (tools/gen_prompts.py).
+# The resource script embeds the button prompts' atlas (tools/re/gen_prompts.py).
 set_source_files_properties(src/bild/version.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/bild/controller/prompts.png;${VERSION_INFO_DIR}/version_info.h")
 target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
 target_compile_options(ddraw PRIVATE ${COMMON_OPTIONS})
 target_precompile_headers(ddraw PRIVATE src/bild/pch.h)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.
-# The map file lets tools/profile_report.py name functions in SacredBild's own samples.
+# The map file lets tools/re/profile_report.py name functions in SacredBild's own samples.
 target_link_options(ddraw PRIVATE /SAFESEH:NO /MAP)
 # Winsock and the IP helper load on first use (LAN relay), Media Foundation with the first movie, Common Controls
 # in the settings window (version 6 there, from its activation context).
@@ -265,11 +265,11 @@ if(SACREDGEAR)
   endif()
 endif()
 
-# Test bench for the UDP transport and the matchmaker client outside the game (tools/nettest/nettest.cpp).
-option(SACREDBILD_NETTEST "Build tools/nettest" OFF)
+# Test bench for the UDP transport and the matchmaker client outside the game (tools/test/nettest/nettest.cpp).
+option(SACREDBILD_NETTEST "Build tools/test/nettest" OFF)
 if(SACREDBILD_NETTEST)
   add_executable(nettest
-    tools/nettest/nettest.cpp
+    tools/test/nettest/nettest.cpp
     src/bild/settings/config.cpp
     src/core/fmt.cpp
     src/core/log.cpp

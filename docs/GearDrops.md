@@ -84,7 +84,7 @@ source that dropped a rune or jewellery). Container loot (`0x5D57C0`) shares the
 ## Tests
 
 * `luajit src/gear/tests/kernel_test.lua` (kernel side with a mocked native side): the merge, the clearing on unload, the generator choice, the events, the numbers.
-* `python tools/check_gear_api.py` (annotations vs code) and `tools/check_gear_overlap.py` (no overlap with SacredBild's patches).
+* `python tools/gearapi/check_gear_api.py` (annotations vs code) and `tools/sigs/check_gear_overlap.py` (no overlap with SacredBild's patches).
 * `src/gear/examples/droptest`, an automation test in the real game (`Sacred.exe -gear-auto -gear-load=1 -gear-mods=droptest -gear-instance=NAME`, in a
   copy of the game folder: the items it rolls stay in the world). It finds a creature that drops equipment, has the engine run its loot function
   600 times per phase (`gear.drops.simulate`, outside Lua so that the events work) and checks:

@@ -1,5 +1,5 @@
 # Map addresses to the containing function of the English Sacred.exe (nearest preceding entry point).
-# Data: tools/data/functions_eng.tsv, exported from the Ghidra program "/Sacred.exe (GOG)".
+# Data: tools/sigs/data/functions_eng.tsv, exported from the Ghidra program "/Sacred.exe (GOG)".
 import bisect, os
 _A, _N = [], []
 with open(os.path.join(os.path.dirname(__file__), 'data', 'functions_eng.tsv')) as f:

@@ -1,8 +1,8 @@
 # Lists the instructions of the English Sacred.exe that use 1024x768-related constants (1024, 768, 512, 384, ...),
 # the candidates gen_res_sites.py's site list was picked from. Writes them to .res_hits.json.
-# Usage: python tools/scan_res.py
+# Usage: python tools/re/scan_res.py
 import sys, struct, collections, json
-sys.path.insert(0, 'tools')
+sys.path[:0] = [os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *p)) for p in [(), ('..',), ('..', 'sigs'), ('..', 'gearapi')]]  # tools/, tools/sigs, tools/gearapi
 from eng import *
 import capstone
 from capstone import x86

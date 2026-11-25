@@ -2,7 +2,7 @@
 // stages 0 and 1: texels stay crisp, and only the edge between two texels is blended, over about one screen pixel. The
 // coordinate moves toward the texel center by the part of the texel that is not within one pixel of its edge; the
 // sample is then bilinear. Magnified much, it is point sampling with antialiased edges; minified (a texel smaller than a
-// pixel) it is plain bilinear. Compiled to ps_2_a by tools/gen_shaders.py (src/bild/ddraw9/sharp_shaders.inc): the world's
+// pixel) it is plain bilinear. Compiled to ps_2_a by tools/re/gen_shaders.py (src/bild/ddraw9/sharp_shaders.inc): the world's
 // vertices go through the fixed-function pipeline or the skinning and ground vertex shaders (vs_2_0), which cannot be
 // paired with ps_3_0.
 //

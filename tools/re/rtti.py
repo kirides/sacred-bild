@@ -1,7 +1,9 @@
 # Lists the vtables of the English Sacred.exe by class name, from its MSVC RTTI (how the *_vtable addresses and the
 # class names in sacred_addr.h were found).
-# Usage: python tools/rtti.py [class name regex]
+# Usage: python tools/re/rtti.py [class name regex]
 import pefile, struct, re, sys
+import os
+sys.path[:0] = [os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *p)) for p in [(), ('..',), ('..', 'sigs'), ('..', 'gearapi')]]  # tools/, tools/sigs, tools/gearapi
 from gen_sigs import SACRED_ENG as EXE
 pe = pefile.PE(EXE, fast_load=True)
 base = pe.OPTIONAL_HEADER.ImageBase

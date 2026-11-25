@@ -30,7 +30,7 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 | `src/bild/diag/profiler.*` | `[Debug] Profiler` |
 | `src/bild/ddraw9/` | The Direct3D 9Ex backend: `directdraw.*` (IDirectDraw7, IDirect3D7, the exports), `surface.*` (IDirectDrawSurface7), `device.*` (IDirect3DDevice7), `vertex_buffer.*`, `device_skin.cpp` / `device_ground.cpp` (the skinning and ground shaders, `skin.hlsl`, `ground.hlsl`), `smaa.*` (SMAA antialiasing, `smaa.hlsl` over the reference shader and lookup textures in `smaa/`), `sharp.hlsl` (the pixel shader of `[Render] TextureFilter=Sharp`, bound by `Device::updateSharp` for draws whose stage 0/1 combiner it reproduces), `gpu.*` (the Direct3D 9 device, presentation), `format.*` (pixel formats); `d3d9_api.h` puts Direct3D 9 into namespace `d9`, its headers clash with Direct3D 7's |
 | `src/bild/engine/build.*` | Which exe this is, address lookup, the list of game modules |
-| `src/bild/engine/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses SacredBild uses, functions with their signatures (`Sacred::Thiscall`, `Cdecl`; `tools/check_hooks.py` checks them) and globals with their types (`Sacred::Global`); their signatures (generated) |
+| `src/bild/engine/sacred_addr.h`, `sacred_sigs.inc` | The sacred.exe addresses SacredBild uses, functions with their signatures (`Sacred::Thiscall`, `Cdecl`; `tools/sigs/check_hooks.py` checks them) and globals with their types (`Sacred::Global`); their signatures (generated) |
 | `src/bild/sacred/` | The game's classes as structs (the Sacred Gold API): fields at their offsets and vtables as structs of function pointers, both checked by `static_assert`, member functions calling the game's code. `engine.h` (cEngine, orders), `object.h` (cObject / cCreature, cObjectManager), `world.h` (cWorldView, sectors, tiles, map data), `render.h` (dxDriver7, textures, cQuadBatcher), `ui.h` (cUI_Control2 / cUI_Window2 and their subclasses, cUI_Manager, events, fonts), `mouse.h`, `text.h`, `net.h` (cGCclass; gameserver.exe's cApp / cNetServer); `address.h` the typed addresses, `vector.h` the exe's std::vector |
 | `src/bild/net/gameserver.*`, `src/bild/engine/gameserver_*` | The same for gameserver.exe, and its patches |
 | `src/bild/display/resolution.*`, `resolution_sites.inc` | Any resolution: window, back buffer, world view; the 1024x768 constants patched (generated) |
@@ -72,14 +72,14 @@ What the game's code at those addresses does is in [`RE_NOTES.md`](RE_NOTES.md),
 | `src/bild/net/udp_*`, `tincat_shim.*`, `address.*` | `[Net] Udp`: `udp_endpoint.*` (the IPv4 and IPv6 sockets and their I/O thread), `address.*` (either family), `udp_transport.*` (KCP sessions), `tincat_shim.*` (TinCat's sockets on those sessions), `udp_protocol.*` (wire formats) |
 | `src/bild/net/matchmaker.*` | `[Net] Matchmaker` client: publishing (gameserver), listing and joining (sacred.exe) |
 | `matchmaker/` | The matchmaking server (Go) |
-| `tools/nettest/` | Test bench for the UDP connection and the matchmaker without the game: loss, delay, outages, address changes (`-DSACREDBILD_NETTEST=ON`) |
+| `tools/test/nettest/` | Test bench for the UDP connection and the matchmaker without the game: loss, delay, outages, address changes (`-DSACREDBILD_NETTEST=ON`) |
 
 Every header starts with what its module does and why.
 
 ## Tools
 
 Python 3 with `pefile` and `capstone`. They work on the English GOG exes, set with the environment variables
-`SACRED_ENG` and `GAMESERVER_ENG` (defaults in `tools/gen_sigs.py`). With `SACRED_DE` and `GAMESERVER_DE` pointing
+`SACRED_ENG` and `GAMESERVER_ENG` (defaults in `tools/sigs/gen_sigs.py`). With `SACRED_DE` and `GAMESERVER_DE` pointing
 at the German ones, the generators and `check_hooks.py` check those as well; without them they skip them with a
 warning, and the generated files name only the builds they were checked against.
 
@@ -87,23 +87,23 @@ Generated files in the repository, and the checks:
 
 | Tool | Does |
 |---|---|
-| `tools/gen_sigs.py` | Writes `src/bild/engine/sacred_sigs.inc`, `gameserver_sigs.inc` and `tools/data/addresses.json`: a signature for every address, taken from the English build and accepted only if it matches exactly once in it and in the German one |
-| `tools/gen_res_sites.py` | Writes `src/bild/display/resolution_sites.inc`: the 1024x768 constants to patch, each verified and with a signature |
-| `tools/check_hooks.py` | Checks that every hook and typed function (SacredBild's `sacred_addr.h` and Sacred Gear's `gear_addr.h`) declares as many stack arguments as the function pops |
-| `tools/gen_prompts.py` | Writes `src/bild/controller/prompts.png`: the button prompt atlas, from the [Input Prompts](https://github.com/meritite-union/input-prompts) images (needs Pillow; see the script's header) |
-| `tools/gen_shaders.py` | Writes `src/bild/ddraw9/skin_shaders.inc`, `ground_shaders.inc` and `smaa_shaders.inc`: `skin.hlsl` and `ground.hlsl` compiled to vs_2_0, `smaa.hlsl` to vs_3_0 / ps_3_0 per preset, with `fxc` from the Windows SDK |
-| `tools/sigs.py`, `funcs.py`, `eng.py` | Shared code: signature search, function boundaries and names (`tools/data/functions_eng.tsv`, exported from Ghidra), the English exe |
+| `tools/sigs/gen_sigs.py` | Writes `src/bild/engine/sacred_sigs.inc`, `gameserver_sigs.inc` and `tools/sigs/data/addresses.json`: a signature for every address, taken from the English build and accepted only if it matches exactly once in it and in the German one |
+| `tools/sigs/gen_res_sites.py` | Writes `src/bild/display/resolution_sites.inc`: the 1024x768 constants to patch, each verified and with a signature |
+| `tools/sigs/check_hooks.py` | Checks that every hook and typed function (SacredBild's `sacred_addr.h` and Sacred Gear's `gear_addr.h`) declares as many stack arguments as the function pops |
+| `tools/re/gen_prompts.py` | Writes `src/bild/controller/prompts.png`: the button prompt atlas, from the [Input Prompts](https://github.com/meritite-union/input-prompts) images (needs Pillow; see the script's header) |
+| `tools/re/gen_shaders.py` | Writes `src/bild/ddraw9/skin_shaders.inc`, `ground_shaders.inc` and `smaa_shaders.inc`: `skin.hlsl` and `ground.hlsl` compiled to vs_2_0, `smaa.hlsl` to vs_3_0 / ps_3_0 per preset, with `fxc` from the Windows SDK |
+| `tools/sigs/sigs.py`, `funcs.py`, `eng.py` | Shared code: signature search, function boundaries and names (`tools/sigs/data/functions_eng.tsv`, exported from Ghidra), the English exe |
 
 Reverse engineering helpers (how addresses and offsets were found):
 
 | Tool | Does |
 |---|---|
-| `tools/eng.py <address> [count]` | Disassembles the English exe |
-| `tools/rtti.py [regex]` | Class names -> vtables, from the RTTI |
-| `tools/vt.py <vtable>...` | Vtable slots |
-| `tools/scan_res.py` | Every instruction that uses a 1024x768-related constant |
-| `tools/check_rets.py <address>...` | `ret` sizes, i.e. stack argument counts |
-| `tools/profile_report.py <SacredBild-profile.txt>` | Names the hot spots of a `[Debug] Profiler` profile |
+| `tools/sigs/eng.py <address> [count]` | Disassembles the English exe |
+| `tools/re/rtti.py [regex]` | Class names -> vtables, from the RTTI |
+| `tools/re/vt.py <vtable>...` | Vtable slots |
+| `tools/re/scan_res.py` | Every instruction that uses a 1024x768-related constant |
+| `tools/sigs/check_rets.py <address>...` | `ret` sizes, i.e. stack argument counts |
+| `tools/re/profile_report.py <SacredBild-profile.txt>` | Names the hot spots of a `[Debug] Profiler` profile |
 
 ## Game-launch lock
 
@@ -132,7 +132,7 @@ Requires Visual Studio 2026 (MSVC, Win32 toolset), CMake 3.25+ and vcpkg with `V
 ```sh
 cmake --preset msvc-x86
 cmake --build --preset release      # -> out/build/msvc-x86/RelWithDebInfo/ddraw.dll
-python tools/check_hooks.py         # checks the hooks against the exe (English, and German if set)
+python tools/sigs/check_hooks.py         # checks the hooks against the exe (English, and German if set)
 ```
 
 The DLL is statically linked against the CRT and imports only Windows system DLLs (`d3d9.dll` is loaded at run time).
@@ -167,9 +167,9 @@ from the `sacred_core` library. Building: part of the normal build (`out/build/m
 | `src/gear/ui/keyblock.*`, `src/gear/pipe.*` | The keyboard kept from the game while a screen captures it; named pipe clients |
 | `src/gear/automation.*` | Automation: options, input isolation, UI state, savegame loading, screenshots |
 | `src/gear/tables.*` | The engine's data tables, read in place with bounds and fault checks |
-| `src/gear/engine/gear_addr.h`, `gear_sigs.inc` | The sacred.exe addresses Sacred Gear uses; their signatures (generated by `tools/gen_gear_sigs.py`) |
+| `src/gear/engine/gear_addr.h`, `gear_sigs.inc` | The sacred.exe addresses Sacred Gear uses; their signatures (generated by `tools/sigs/gen_gear_sigs.py`) |
 | `src/gear/meta/*.lua` | The LuaLS annotations of the API: the source of `docs/GearApi.md` and of the MDK |
-| `src/gear/mdk/` | The MDK's own files (README, template, tools); the kit itself is generated (`tools/gen_gear_mdk.py`) and published by CI, not committed |
+| `src/gear/mdk/` | The MDK's own files (README, template, tools); the kit itself is generated (`tools/gearapi/gen_gear_mdk.py`) and published by CI, not committed |
 | `src/gear/examples/`, `src/gear/tests/kernel_test.lua` | Example mods and automation tests; the kernel's tests with the native side mocked (`luajit src/gear/tests/kernel_test.lua`) |
 
 **With SacredBild.** `ddraw.dll` exports `SacredBild_UiPushFrame(window, confine)`, `SacredBild_UiPopFrame()`,
@@ -193,8 +193,8 @@ they say so.
 2. Change the matching annotation: a new function gets a description, `---@param` and `---@return` lines; a new
    field a `---@field`; a new option goes into the options class of the function; a new event gets a `gear.on`
    overload and a `GearEventName` entry.
-3. Run `python tools/gen_gear_api_docs.py` (rewrites `docs/GearApi.md`; never edit that file) and `python
-   tools/check_gear_api.py`. The MDK is built from the same sources by CI (`python tools/gen_gear_mdk.py` builds it locally
+3. Run `python tools/gearapi/gen_gear_api_docs.py` (rewrites `docs/GearApi.md`; never edit that file) and `python
+   tools/gearapi/check_gear_api.py`. The MDK is built from the same sources by CI (`python tools/gearapi/gen_gear_mdk.py` builds it locally
    in `out/mdk`).
 
 `check_gear_api.py` reads `kernel.lua` and `lua_host.cpp` as text and compares names both ways (functions, fields,
@@ -204,7 +204,7 @@ rather than silence it. CI runs it, with the kernel tests, in its text-checks jo
 
 The format:
 
-- One file per area; the list is `FILES` in `tools/gear_meta.py`. Every file starts with `---@meta _`.
+- One file per area; the list is `FILES` in `tools/gearapi/gear_meta.py`. Every file starts with `---@meta _`.
 - `-- ## Title` starts a section of the reference; `--: text` lines right under it are the section's introduction (plain
   comments to LuaLS). Concepts that hold for a whole area go there, not into `docs/Gear.md`.
 - A namespace or object type is a `---@class` followed by a local table (`local GearWorld = {}`); its functions are
@@ -226,9 +226,9 @@ Python 3 with `pefile` and `capstone`, `SACRED_ENG` as for SacredBild's tools:
 
 | Tool | Does |
 |---|---|
-| `tools/gen_gear_sigs.py` | Writes `src/gear/engine/gear_sigs.inc` from the entries listed in it |
-| `tools/check_gear_overlap.py` | Fails if a Sacred Gear signature window overlaps one SacredBild patches, or the other way round |
-| `tools/check_gear_api.py` | Fails if the annotations and the Lua API disagree, or `docs/GearApi.md` is out of date |
-| `tools/gen_gear_api_docs.py` | Writes `docs/GearApi.md` from `src/gear/meta/*.lua` and `docs/GearApi.head.md` |
-| `tools/gen_gear_mdk.py` | Writes the MDK to `out/mdk/sacred-gear-mdk` (`--zip`: also the zip); CI runs it and publishes the kit |
+| `tools/sigs/gen_gear_sigs.py` | Writes `src/gear/engine/gear_sigs.inc` from the entries listed in it |
+| `tools/sigs/check_gear_overlap.py` | Fails if a Sacred Gear signature window overlaps one SacredBild patches, or the other way round |
+| `tools/gearapi/check_gear_api.py` | Fails if the annotations and the Lua API disagree, or `docs/GearApi.md` is out of date |
+| `tools/gearapi/gen_gear_api_docs.py` | Writes `docs/GearApi.md` from `src/gear/meta/*.lua` and `docs/GearApi.head.md` |
+| `tools/gearapi/gen_gear_mdk.py` | Writes the MDK to `out/mdk/sacred-gear-mdk` (`--zip`: also the zip); CI runs it and publishes the kit |
 

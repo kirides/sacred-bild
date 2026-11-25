@@ -8,7 +8,7 @@
 #>
 param([Parameter(Mandatory = $true)][string]$GameDir)
 $ErrorActionPreference = 'Stop'
-$lock = Join-Path $PSScriptRoot 'game-lock.ps1'
+$lock = Join-Path $PSScriptRoot '..\game-lock.ps1'
 $mod = Join-Path $GameDir 'mods\ovltest'
 New-Item -ItemType Directory -Force "$mod\data" | Out-Null
 "return {id='ovltest', name='ovltest', version='0.0.1', author='test', description='overlay enable test', automation=true}" | Set-Content "$mod\mod.lua"

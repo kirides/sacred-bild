@@ -13,7 +13,7 @@ chosen by exe hash, and a patch whose code is not what it expects is skipped and
 | Gear's site hooks | Each checks the expected instruction (`Site hook ...: the code is not the expected ...: not installed`). |
 | Fixed offsets into the game's objects | `Sacred::Layout::check()` (`src/bild/diag/layout_check.cpp`): every `cWorldView` field SacredBild reads or writes at a fixed offset must appear as a displacement in a game function that uses it; else the features that need it stay off (ground rows: row walk, water list, ground mesh; pick list: aim assist; zoom). The water tile array is read from `drawWaterTiles` itself. |
 
-## What ReBorn changes (tools/reborn_diff.py, against the German exe)
+## What ReBorn changes (tools/re/reborn_diff.py, against the German exe)
 
 - Globals moved: the float constants the resolution code loads (0x88e6f4 ... -> 0xa1efe0 ...), a table at 0xad2468
   -> 0x1ac7758. Sites that load them differ from the signatures, so Resolution leaves them alone (28 of 142).

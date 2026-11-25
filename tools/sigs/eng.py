@@ -1,5 +1,7 @@
 # Helpers over the English Sacred.exe (SACRED_ENG, see gen_sigs.py), shared by the other tools.
-# Run alone: python tools/eng.py <address> [count] disassembles from there.
+# Run alone: python tools/sigs/eng.py <address> [count] disassembles from there.
+import os, sys
+sys.path[:0] = [os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *p)) for p in [(), ('..',), ('..', 'sigs'), ('..', 'gearapi')]]  # tools/, tools/sigs, tools/gearapi
 import pefile, struct, re, capstone
 from gen_sigs import SACRED_ENG as EXE
 pe = pefile.PE(EXE, fast_load=True)

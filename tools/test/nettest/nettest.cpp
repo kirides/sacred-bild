@@ -476,6 +476,6 @@ int main(int argc, char** argv)
     {
         return client(static_cast<uint16_t>(std::atoi(argv[2])), std::atoi(argv[3]), argc >= 5 ? argv[4] : nullptr);
     }
-    std::printf("usage: see the comment at the top of tools/nettest/nettest.cpp\n");
+    std::printf("usage: see the comment at the top of tools/test/nettest/nettest.cpp\n");
     return 2;
 }

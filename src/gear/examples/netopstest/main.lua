@@ -1,6 +1,6 @@
 -- Custom net messages (gear.net) against a real game server in a LAN game this client hosts.
 --   Sacred.exe -gear-auto -gear-mods=netopstest -gear-instance=NAME      (config expect = 'stock' or 'remake')
--- 'remake': GameServer.exe is the SacredEngineRemake server (tools/gs-launcher) with scripts\net_echo.lua in the game folder.
+-- 'remake': GameServer.exe is the SacredEngineRemake server (tools/test/gs-launcher) with scripts\net_echo.lua in the game folder.
 local mp, net = gear.mp, gear.net
 if not gear.auto then return end
 -- chat_only: decline the server's custom message types (restrict them to numbers it will not offer): channels stay on chat

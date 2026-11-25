@@ -28,7 +28,7 @@ namespace LuaHost
     // own value; this is also how a hook that Lua itself triggers stays out of a loop).
     enum class Answer { None, Value, Busy };
 
-    // event `level.factor`: the factor for `level` from the mods; `site` is the hook site's index (tools/gear_sites.py).
+    // event `level.factor`: the factor for `level` from the mods; `site` is the hook site's index (tools/sigs/gear_sites.py).
     Answer levelFactor(double level, int site, int& out);
 
     // event `combat.constant`: the value for the engine's constant `name` (`index` among its sites) from the mods.

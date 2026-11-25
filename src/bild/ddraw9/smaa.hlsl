@@ -1,6 +1,6 @@
 // SMAA 1x (Jimenez et al., src/bild/ddraw9/smaa/SMAA.hlsl, MIT) for the Direct3D 9 backend (Smaa::apply): luma edge
 // detection, blending weights, neighborhood blending, each a full-screen quad. Compiled per preset to vs_3_0 /
-// ps_3_0 by tools/gen_shaders.py (src/bild/ddraw9/smaa_shaders.inc); SMAA_PRESET_* comes from the command line.
+// ps_3_0 by tools/re/gen_shaders.py (src/bild/ddraw9/smaa_shaders.inc); SMAA_PRESET_* comes from the command line.
 //
 // c0: (1 / width, 1 / height, width, height) of the frame, in both the vertex and the pixel shaders.
 // Samplers: s0 color (edges, blending) / edges (weights), s1 area / blend, s2 search; their states are set by the

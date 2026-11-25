@@ -282,7 +282,7 @@ namespace
     {
         FILE* f = _wfopen(g_reportPath.c_str(), L"w");
         if (!f) return;
-        std::fprintf(f, "# SacredBild profile, interval %d us. Map addresses with tools/profile_report.py\n",
+        std::fprintf(f, "# SacredBild profile, interval %d us. Map addresses with tools/re/profile_report.py\n",
             Config::debug.profilerIntervalUs);
         for (auto& [tid, p] : g_profiles)
         {

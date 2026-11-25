@@ -1,14 +1,15 @@
 # Summarizes SacredBild-profile.txt: maps sampled addresses to function names of the
-# English exe (tools/data/functions_eng.tsv; samples from another build get wrong names) and
+# English exe (tools/sigs/data/functions_eng.tsv; samples from another build get wrong names) and
 # SacredBild's own samples to its functions (from the linker map of the build that ran).
-# usage: python tools/profile_report.py [path-to-SacredBild-profile.txt] [top-N] [path-to-ddraw.map]
+# usage: python tools/re/profile_report.py [path-to-SacredBild-profile.txt] [top-N] [path-to-ddraw.map]
 import sys, os, re, bisect, collections
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path[:0] = [os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *p)) for p in [(), ('..',), ('..', 'sigs'), ('..', 'gearapi')]]  # tools/, tools/sigs, tools/gearapi
 from funcs import func_of
+import paths
 
 path = sys.argv[1] if len(sys.argv) > 1 else r"B:\Spiele\GOG Games\Sacred Gold\SacredBild-profile.txt"
 top = int(sys.argv[2]) if len(sys.argv) > 2 else 30
-map_path = sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.path.dirname(__file__), '..', 'out', 'build',
+map_path = sys.argv[3] if len(sys.argv) > 3 else os.path.join(paths.ROOT, 'out', 'build',
                                                                'msvc-x86', 'RelWithDebInfo', 'ddraw.map')
 
 def demangle(sym):

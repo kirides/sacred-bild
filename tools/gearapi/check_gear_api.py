@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fails when Sacred Gear's LuaLS annotations (src/gear/meta/*.lua) and the code behind the Lua API have drifted apart.
 
-    python tools/check_gear_api.py
+    python tools/gearapi/check_gear_api.py
 
 It reads src/gear/lua/kernel.lua (the Lua side of the API) and src/gear/lua_host.cpp (the fields of the tables the native side
 builds) as text and compares the names they define with the names the annotations declare, both ways:
@@ -9,7 +9,7 @@ builds) as text and compares the names they define with the names the annotation
   * in the code but not annotated  -> a new function, field, event, option or manifest key nobody documented;
   * annotated but not in the code  -> a stale annotation.
 
-It also runs tools/gen_gear_api_docs.py --check (docs/GearApi.md is generated from the annotations).
+It also runs tools/gearapi/gen_gear_api_docs.py --check (docs/GearApi.md is generated from the annotations).
 Names are matched, not types and signatures: keep those right by hand. See docs/GearApi.md.
 """
 import os
@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+sys.path[:0] = [os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *p)) for p in [(), ('..',), ('..', 'sigs'), ('..', 'gearapi')]]  # tools/, tools/sigs, tools/gearapi
 import gear_meta  # noqa: E402
 import paths  # noqa: E402
 
@@ -37,7 +37,7 @@ def between(text, start, end, what):
     """The text from the line matching `start` up to (not including) the next match of `end`."""
     m = re.search(start, text, re.M)
     if not m:
-        problems.append(f'cannot find {what} in the sources (pattern {start!r}): update tools/check_gear_api.py')
+        problems.append(f'cannot find {what} in the sources (pattern {start!r}): update tools/gearapi/check_gear_api.py')
         return ''
     e = re.search(end, text[m.end():], re.M)
     return text[m.start(): m.end() + (e.start() if e else len(text))]
@@ -256,7 +256,7 @@ def main():
         print('Sacred Gear API drift:')
         for p in problems:
             print('  ' + p)
-        print('Fix src/gear/meta/*.lua (and run python tools/gen_gear_api_docs.py), or update this check if the code changed shape.')
+        print('Fix src/gear/meta/*.lua (and run python tools/gearapi/gen_gear_api_docs.py), or update this check if the code changed shape.')
         return 1
     print('Sacred Gear API annotations match the code.')
     return 0

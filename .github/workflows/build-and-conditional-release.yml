@@ -149,7 +149,7 @@ jobs:
       # from here (it is not committed). The artifact keeps one name, so the release asset is always sacred-gear-mdk.zip.
       - name: Build the Sacred Gear MDK
         shell: pwsh
-        run: python tools/gen_gear_mdk.py
+        run: python tools/gearapi/gen_gear_mdk.py
 
       - name: Upload Sacred Gear MDK artifact
         id: artifact-upload-mdk
@@ -192,7 +192,7 @@ jobs:
         run: luajit src/gear/tests/kernel_test.lua
 
       - name: Check the Lua API annotations
-        run: python3 tools/check_gear_api.py
+        run: python3 tools/gearapi/check_gear_api.py
 
       - name: Check the changelog histories
         run: python3 tools/make_changelog.py --check

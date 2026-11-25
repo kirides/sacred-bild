@@ -10,7 +10,7 @@ namespace d9
 }
 
 // Controller button prompts drawn over the game: icons of the pad's buttons (in the labels of its maker, from the
-// atlas tools/gen_prompts.py builds into src/bild/controller/prompts.png) at screen positions, all in one draw call right
+// atlas tools/re/gen_prompts.py builds into src/bild/controller/prompts.png) at screen positions, all in one draw call right
 // before the frame is presented (Direct3D 9 backend only). The presenting thread collects a frame's prompts after
 // presenting it (Controller), the next present draws them.
 namespace Prompts

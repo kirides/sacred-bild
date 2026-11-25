@@ -51,7 +51,7 @@ namespace
     struct Site
     {
         Kind kind;
-        const char* pattern;    // signature of the instruction (tools/gen_res_sites.py)
+        const char* pattern;    // signature of the instruction (tools/sigs/gen_res_sites.py)
         uint16_t offset;        // of the patched operand in the match
         // What the operand holds before patching: immediates the value; memory operands the float bits of the
         // constant they point to (a double for Proj*); MemUnzX/Y the offset into g_unzoomedProjection.

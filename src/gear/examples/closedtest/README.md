@@ -9,7 +9,7 @@ Setup (everything loopback, test ports, a COPY of the game folder, never the pla
 1. Lobby: build sacred-lobby (`go build ./cmd/sacred-lobby`), a folder with `lobby.yaml` (`listen: 127.0.0.1:17066`, `lobby.closed_net: true`,
    channel 1 with flag `closednet`, `hero_templates: templates`) and the game's `Templates\Hero00..07.ptx` copied to `data\templates`.
    `sacred-lobby -config lobby.yaml adduser NAME PASSWORD` makes an account (no Register dialog needed).
-2. Game copy: copy the game folder; rename its `GameServer.exe` to `GameServer.orig.exe`; put the stand-in launcher (`tools/gs-launcher`) and the
+2. Game copy: copy the game folder; rename its `GameServer.exe` to `GameServer.orig.exe`; put the stand-in launcher (`tools/test/gs-launcher`) and the
    remake server build (`SacredGameServer.*`) there; `launcher.args` (one argument per line, `{dir}` is the folder) holds the server options:
    `--game-dir={dir} --bind=127.0.0.1 --network-port-tcp=26806 --network-port-listen=26805 --udp-port=26905 --lan-announce=0 --webui-port=18806
    --network-lobby=127.0.0.1 --network-lobbyport=17066 --lobby-channel=1 --closed-net=1 --authoritative --auth-strict-items=log

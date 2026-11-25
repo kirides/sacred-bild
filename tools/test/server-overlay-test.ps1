@@ -2,15 +2,15 @@
 .SYNOPSIS
   Pinpoint test: the gameserver the game starts opens the mods' overlaid files, and only those of switched-on mods.
 .DESCRIPTION
-  Run in a COPY of the game folder (never the player's). Installs gear\examples\servertest as mods\servertest (the game's
+  Run in a COPY of the game folder (never the player's). Installs src\gear\examples\servertest as mods\servertest (the game's
   own bin\Balance.bin as its overlay file, so the server runs unchanged), then two -gear-auto runs with their own
   gear_mods.json: servertest on (SacredGear-server.log must show the gameserver opening bin\balance.bin from the mod) and
   off (no SacredGear-server.log entry). Takes the game lock. Exit code 0 = pass.
 #>
 param([Parameter(Mandatory = $true)][string]$GameDir)
 $ErrorActionPreference = 'Stop'
-$lock = Join-Path $PSScriptRoot 'game-lock.ps1'
-$src = Join-Path $PSScriptRoot '..\gear\examples\servertest'
+$lock = Join-Path $PSScriptRoot '..\game-lock.ps1'
+$src = Join-Path $PSScriptRoot '..\..\src\gear\examples\servertest'
 $mod = Join-Path $GameDir 'mods\servertest'
 New-Item -ItemType Directory -Force "$mod\data" | Out-Null
 Copy-Item "$src\mod.lua", "$src\main.lua", "$src\overlay.txt" $mod -Force

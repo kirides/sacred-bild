@@ -27,7 +27,7 @@
 // pretransformed (XYZRHW) quads in its 1024x768 layout on the Direct3D 7 device it gets as its argument; the overlay
 // draws the same way from three points inside it, so it layers with the game's windows and SacredBild maps it with
 // the rest of the UI. SacredBild hooks the render function itself; the overlay uses other bytes
-// (tools/check_gear_overlap.py).
+// (tools/sigs/check_gear_overlap.py).
 
 namespace
 {

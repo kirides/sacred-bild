@@ -28,5 +28,5 @@ BEGIN
     END
 END
 
-// Controller button prompts (tools/gen_prompts.py; overlay/prompts.cpp loads it by this id).
+// Controller button prompts (tools/re/gen_prompts.py; overlay/prompts.cpp loads it by this id).
 201 RCDATA "controller/prompts.png"

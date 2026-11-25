@@ -1,7 +1,7 @@
 // The ground's tiles from static vertex buffers (Device::drawGround): positions in a sector's own isometric space,
 // moved and scaled onto the screen as the game's pretransformed quads would have been, colors and texture coordinates
 // as they are. The fixed-function pixel pipeline does the rest with the texture stages the game set. Compiled to
-// vs_2_0 by tools/gen_shaders.py (src/bild/ddraw9/ground_shaders.inc).
+// vs_2_0 by tools/re/gen_shaders.py (src/bild/ddraw9/ground_shaders.inc).
 //
 // Registers c250-c251 lie above the skinning shader's constants, so neither invalidates the other's.
 

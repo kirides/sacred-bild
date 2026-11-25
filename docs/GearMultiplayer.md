@@ -106,7 +106,7 @@ connecting or `GEAR_NETOPS="0x1E0,0x1E1"` (the data id is also taken from HELLO_
 `gear.net.transport(to)` / `channel:transport(to)` say which way a message would go (`'custom'`, `'chat'`, `'mixed'`,
 nil).
 
-**Self test:** `src/gear/examples/netopstest` (`expect = 'stock'` or `'remake'`; the remake run needs `tools/gs-launcher`
+**Self test:** `src/gear/examples/netopstest` (`expect = 'stock'` or `'remake'`; the remake run needs `tools/test/gs-launcher`
 and the server's `scripts-examples/net_echo.lua`; `chat_only = true` makes the client decline the offered numbers);
 kernel tests in `src/gear/tests/kernel_test.lua`.
 

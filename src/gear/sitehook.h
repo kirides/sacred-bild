@@ -7,7 +7,7 @@
 // Lua can supply a value the engine computes inline (no function to detour). The stub runs the block's first instruction
 // if the block loads its input itself, passes the input and the site to a handler, and either continues after the block
 // with the handler's result or, when no mod answers, runs the displaced instructions unchanged and continues the same
-// way. Sites are listed in tools/gear_sites.py (a function found by signature + a fixed offset); a site whose bytes are
+// way. Sites are listed in tools/sigs/gear_sites.py (a function found by signature + a fixed offset); a site whose bytes are
 // not exactly the expected block is left alone and logged.
 //
 // level.factor: the engine turns a level into a factor with (34 L + 8) / (c1 L + c2) truncated to an integer, in

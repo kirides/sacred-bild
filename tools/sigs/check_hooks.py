@@ -1,12 +1,11 @@
 # Verifies that every Detours hook declares as many stack arguments as the target pops (ret N), in the English build
-# and, for targets with a signature (tools/data/addresses.json), in the German one if it is there (SACRED_DE).
+# and, for targets with a signature (tools/sigs/data/addresses.json), in the German one if it is there (SACRED_DE).
 # A mismatch corrupts the stack on the first call. Keep this table in sync with the hooks in src/bild.
 import sys, bisect, json, os, re
-sys.path.insert(0, 'tools')
+sys.path[:0] = [os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *p)) for p in [(), ('..',), ('..', 'sigs'), ('..', 'gearapi')]]  # tools/, tools/sigs, tools/gearapi
 from eng import *
 from funcs import _A
 import sigs
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import paths
 from gen_sigs import SACRED_DE
 

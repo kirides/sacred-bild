@@ -64,7 +64,7 @@ The check is done only for the effect types a rule names (a rule without `fx` an
   The five types 0x380 to 0x384 are built by code of their own, their objects' size is unknown and `textures` does not apply to them.
 * An effect cannot be given a new shape, count or lifetime other than through `speed`: those numbers are in the classes' code.
 * Spawning an effect by itself is not offered: an effect object needs the cast event the arts and spells hand it, and without one it does not show.
-* The type, class and size tables are generated from the English GOG `Sacred.exe` (`tools/gen_pfx_table.py`); the functions are found by signature as
+* The type, class and size tables are generated from the English GOG `Sacred.exe` (`tools/gearapi/gen_pfx_table.py`); the functions are found by signature as
   the rest of Gear's, and the signatures matched the German build too, but the effects were tested only in the English one.
 
 ## Tests

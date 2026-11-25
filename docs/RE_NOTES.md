@@ -2,9 +2,9 @@
 
 Target: the English GOG `Sacred.exe`, PE timestamp `0x452F85C7`, image base `0x400000`; Ghidra program
 `/Sacred.exe (GOG)`. All addresses below are this build's; function names are the ones in
-`tools/data/functions_eng.tsv`. The German `sacred.exe` 2.0 (timestamp `0x451BBE74`) has the same code at other
+`tools/sigs/data/functions_eng.tsv`. The German `sacred.exe` 2.0 (timestamp `0x451BBE74`) has the same code at other
 addresses: around the renderer DE = ENG + `0x130`, elsewhere the offset differs. SacredBild supports both through
-byte signatures (`tools/gen_sigs.py`; `tools/data/addresses.json` lists every patched address in both builds).
+byte signatures (`tools/sigs/gen_sigs.py`; `tools/sigs/data/addresses.json` lists every patched address in both builds).
 
 Contents: [Big picture](#big-picture), [dxDriver7](#dxdriver7-global-g_pdxdriver--0xcdca1c), [What the game needs from DirectDraw](#what-the-game-needs-from-directdraw-sacredbilds-direct3d-9-backend-srcddraw9), [World view](#world-view-cworldview-vtables-0x89209c-cworldview0-0x8920f8), [Draw calls and batching](#draw-calls-and-batching), [Character skinning](#character-skinning-grannydll-granny-1x), [UI](#ui-cui_control2--cui_window2--cui_manager), [Things that read the back buffer](#things-that-read-the-back-buffer), [Hard-coded 1024x768 elsewhere](#hard-coded-1024x768-elsewhere), [Networking: LAN games](#networking-lan-games), [Networking: game connection and the "data flow"](#networking-game-connection-and-the-data-flow-isdn--lan-setting), [Input, the world pick and the options window](#input-the-world-pick-and-the-options-window-controller), [Objects, items, saving and the UI pass](#objects-items-saving-and-the-ui-pass-sacred-gear), [Language files](#language-files).
 

@@ -9,14 +9,14 @@
 # required). Download release 2.0.0 (https://github.com/meritite-union/input-prompts/releases), extract it, and pass
 # the extracted folder (the one containing png_256/). The tool reads only png_256/<xbox|ps|ns>/dark/.
 # Needs Pillow (pip install pillow).
-# Usage: python tools/gen_prompts.py [path to input-prompts-2.0.0]   (or set INPUT_PROMPTS)
+# Usage: python tools/re/gen_prompts.py [path to input-prompts-2.0.0]   (or set INPUT_PROMPTS)
 import os, sys
 from PIL import Image, ImageDraw
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACK = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('INPUT_PROMPTS', r'B:\A\Downloads\input-prompts-2.0.0')
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path[:0] = [os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *p)) for p in [(), ('..',), ('..', 'sigs'), ('..', 'gearapi')]]  # tools/, tools/sigs, tools/gearapi
 import paths  # noqa: E402
+ROOT = paths.ROOT
 OUT = paths.PROMPTS_PNG
 
 CELL, ICON, COLUMNS = 64, 60, 8

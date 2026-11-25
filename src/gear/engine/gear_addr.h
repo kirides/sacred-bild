@@ -4,8 +4,8 @@
 #include <cstdint>
 
 // The sacred.exe addresses Sacred Gear uses (English GOG build in the comments). Found at startup by signature
-// (gear_sigs.inc, written by tools/gen_gear_sigs.py), never fixed: an address whose signature does not match stays 0
-// and the feature that needs it stays off. tools/check_gear_overlap.py checks that none of them shares bytes with
+// (gear_sigs.inc, written by tools/sigs/gen_gear_sigs.py), never fixed: an address whose signature does not match stays 0
+// and the feature that needs it stays off. tools/sigs/check_gear_overlap.py checks that none of them shares bytes with
 // SacredBild's, so the two work in either load order.
 namespace Gear::Addr
 {
@@ -225,7 +225,7 @@ namespace Gear::Addr
     // The ability tables (src/gear/tables.cpp), static arrays in .data: T1 (ENG 0094FE28..00952A38, 0x78-byte records, ids from
     // 1000, scanned by 004D1AF0) and T2 (ENG 00952ACC..00955344, 0x94-byte records, ids from 1, scanned by 004D2310). Each
     // is the address of the first record / one past the last (found in the lookups' own code).
-    // Site hooks (src/gear/sitehook.cpp, tools/gear_sites.py): the functions that hold a site, found by signature. The level to
+    // Site hooks (src/gear/sitehook.cpp, tools/sigs/gear_sites.py): the functions that hold a site, found by signature. The level to
     // factor expression of ENG 0051CC30 (the whole function) and its inlined copies in 0050E6C0 and 005893B0.
     inline uintptr_t levelFn51CC30{};
     inline uintptr_t levelFn50E6C0{};
@@ -338,7 +338,7 @@ namespace Gear::Addr
     // stdcall (type), ret 4. ENG 0089095C: the vtable of the 0x44-byte creature events (orders) a creature's vtable
     // +0x18 takes. ENG 0182EE5C / 0182EE60: the two anti-cheat shadow pages of the local hero (see party.cpp).
     inline Sacred::Thiscall<void(void* stats, uint32_t amount)> cStats_addExperience{};
-    // ENG 00564D60: sets a creature's level and recalculates its stats (see tools/gen_gear_sigs.py), thiscall, ret 0xC.
+    // ENG 00564D60: sets a creature's level and recalculates its stats (see tools/sigs/gen_gear_sigs.py), thiscall, ret 0xC.
     inline Sacred::Thiscall<void(void* stats, uint32_t level, uint32_t noWorldLevel, uint32_t noSectorCap)> cStats_setLevel{};
     // ENG 0057F8D0: the level an amount of experience gives, thiscall (stats, experience) -> level, ret 4.
     inline Sacred::Thiscall<uint32_t(void* stats, uint32_t experience)> cStats_levelOnExp{};
@@ -403,7 +403,7 @@ namespace Gear::Addr
     inline Sacred::Thiscall<void(void* creature, void* message)> cCreature_receiveEvent{};
     inline Sacred::Global<uint16_t> g_portalListFlag{};
     // The combo master's rune exchange tab (src/gear/items/master.cpp). ENG 006D49A0: the tab's render (thiscall (tab, device), ret 4 -- the vtable's slot 5);
-    // 006D3FD0 holds the selector update and 006D49A0 the exchange button's check (site hooks, tools/gear_sites.py). 006D5B80: lays out the tab's controls
+    // 006D3FD0 holds the selector update and 006D49A0 the exchange button's check (site hooks, tools/sigs/gear_sites.py). 006D5B80: lays out the tab's controls
     // (fastcall (tab)); 006D4520: the exchange (fastcall (tab)): takes the runes out of the slots and puts the chosen rune into the result box.
     // 00AD4B2C: dword[5], the gold the exchange costs by the number of runes in the slots (the engine reads it in ten places).
     inline uintptr_t masterSelectFn{};

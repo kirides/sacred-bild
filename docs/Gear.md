@@ -499,7 +499,7 @@ of the game folder.
   only when it is on.
 - Sacred Gear never writes into the game's savegames. Mod data kept per savegame goes into the mod's own folder, so
   removing a mod never breaks a save.
-- SacredBild and Sacred Gear never patch the same bytes (`tools/check_gear_overlap.py`), so they work in either load
+- SacredBild and Sacred Gear never patch the same bytes (`tools/sigs/check_gear_overlap.py`), so they work in either load
   order.
 - In network games every player needs the same mods. Sacred Gear logs a hash of the loaded mods (ids and versions) as
   "mod set".

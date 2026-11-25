@@ -39,7 +39,7 @@ namespace
 
     // Sacred Gear (the mod kit, its own DLL) if it is in the game folder. It works without SacredBild too, through any
     // DLL loader; with SacredBild its players need none. The two never patch the same bytes
-    // (tools/check_gear_overlap.py), so either can load first. This may run under the loader lock (startGame from
+    // (tools/sigs/check_gear_overlap.py), so either can load first. This may run under the loader lock (startGame from
     // DllMain): Sacred Gear's DllMain only scans and hooks, it loads nothing. If an ASI loader already put a Sacred
     // Gear in, that one stays the only active one (the first claims the process).
     void loadSacredGear(const std::wstring& gameDir)

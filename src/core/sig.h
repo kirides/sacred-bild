@@ -5,7 +5,7 @@
 #include <span>
 
 // Byte signatures: code is located by its bytes instead of fixed addresses, so one table serves every build with
-// the same code. tools/gen_sigs.py makes them from the English GOG build and checks them against the German one.
+// the same code. tools/sigs/gen_sigs.py makes them from the English GOG build and checks them against the German one.
 namespace Sig
 {
     enum class Take : uint8_t

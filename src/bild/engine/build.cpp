@@ -49,7 +49,7 @@ namespace
 {
 #include "sacred_sigs.inc"
 
-    // Builds the signatures were checked against (tools/gen_sigs.py); others work if their code is the same.
+    // Builds the signatures were checked against (tools/sigs/gen_sigs.py); others work if their code is the same.
     struct KnownBuild
     {
         uint32_t timestamp;
