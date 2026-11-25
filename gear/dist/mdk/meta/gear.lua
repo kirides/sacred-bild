@@ -174,6 +174,7 @@ function GearVfs.list(prefix) end
 ---@field lookup GearLookup Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window.
 ---@field fmt GearFmt Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed).
 ---@field kit GearKit The core widgets of RmlUi screens as markup (window, tabs, buttons, check boxes, sliders, rows, bars, lists, a confirm dialog); the same classes work in Gear's plain look and in the theme mods.
+---@field npc GearNpc Custom NPCs made of the game's own models: a name, dialog pages whose buttons mods react to, a daily routine.
 ---@field toast GearToast Short messages that stack up on the screen and fade; the layout editor moves them.
 ---@field events GearEvents Hooks between mods: declare the custom events the mod emits, list what is declared.
 ---@field savegame GearSavegame The savegame being played: its scope, and the mod's files that belong to it.

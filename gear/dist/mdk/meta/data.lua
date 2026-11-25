@@ -303,6 +303,22 @@ function GearText.set(id, text) end
 ---@return string? error
 function GearText.add(text) end
 
+--- A text of Gear's own whose id comes from `key` (a string that is yours alone, `'mymod.smith'`): the same id in every
+--- session, so an id a savegame keeps (a creature's name text, `creature:set_name_text`) means the same text once the mod
+--- registered the key again when it starts. Calling it again with the key changes the text. Two keys whose ids collide
+--- (about one in 65000 pairs) are refused: choose another key.
+---@param key string
+---@param text string|table<string, string>
+---@return integer? id
+---@return string? error
+function GearText.key(key, text) end
+
+--- The key a text id was registered with this session (`gear.text.key`), nil if none.
+---@param id integer
+---@return string?
+function GearText.key_of(id) end
+
+
 -- ## Files (gear.files)
 
 -- path gear.files

@@ -429,6 +429,10 @@ namespace Gear::Addr
     // an address holder: the function is not cdecl).
     inline Sacred::Cdecl<uint32_t(int32_t mode, int32_t flag, int32_t tier)> potionPick{};
 
+    // The game's calendar singleton (ENG 00417560, cdecl () -> object): +0x20 the hour, +0x22 the minute (u16 each), the clock the day and night
+    // cycle runs on (gear/world.cpp clockMinutes).
+    inline Sacred::Cdecl<void*()> gameClock{};
+
     // The merchant window's stock (gear/shop.cpp). ENG 006DAD90: the window's event handler, thiscall (window, event), ret 4. ENG 006D9B90: clears
     // the grid (all = 1) or removes a random handful of items (0), thiscall (window, all), ret 4. ENG 006DA320: the random stock, thiscall (window,
     // count), ret 4. ENG 006D9DE0: stocks one item of a type (finds room in the grid at window +0x154, makes the object, rolls its properties),

@@ -890,7 +890,29 @@ function creature_mt:info() return info(self) end
 function creature_mt:is_creature() local o = info(self); return o ~= nil and o.creature end
 function creature_mt:type() local o = info(self); return o and o.type end
 function creature_mt:type_name() local o = info(self); return o and data.object_types:name(o.type) end
-function creature_mt:display_name() local o = info(self); return o and data.object_types:label(o.type) end
+-- display_name(): the name the game shows: the creature's own name text (creature:set_name_text, a hero's name) or its type's name.
+function creature_mt:display_name()
+    local o = info(self)
+    if not o then return nil end
+    local text = native.name_text(self.id)
+    if text and text ~= 0 then
+        local own = native.text_get(text)
+        if own and own ~= '' then return own end
+    end
+    return data.object_types:label(o.type)
+end
+-- name_text() -> the text id of the creature's own name (+0x3C), 0 if it shows its type's name, nil if there is no such creature.
+function creature_mt:name_text() return native.name_text(self.id) end
+-- set_name_text(id): the name the game shows over the creature (0: its type's name again); `id` is a text id (gear.text.key, gear.text.add).
+function creature_mt:set_name_text(id)
+    assert(type(id) == 'number', 'id must be a text id')
+    return native.set_name_text(self.id, id)
+end
+-- name_key() -> the gear.text.key key of the creature's own name text, if a mod registered it this session.
+function creature_mt:name_key()
+    local text = native.name_text(self.id)
+    return text and text ~= 0 and native.text_key_of(text) or nil
+end
 function creature_mt:position() local o = info(self); if o then return o.x, o.y, o.layer end end
 function creature_mt:sector() local o = info(self); return o and o.sector end
 function creature_mt:hp() local o = info(self); return o and o.hp end
@@ -3013,6 +3035,13 @@ function world.around(x, y, min, max)
     local a = math.random() * 2 * math.pi
     local r = min + math.random() * (max - min)
     return math.floor(x + math.cos(a) * r + 0.5), math.floor(y + math.sin(a) * r + 0.5)
+end
+
+-- world.clock() -> minutes since midnight (0..1439) of the game's day and night clock, hour, minute | nil.
+function world.clock()
+    local m = native.clock()
+    if not m then return nil end
+    return m, math.floor(m / 60), m % 60
 end
 
 -- spawn(type, x, y, opts) -> creature | nil, message. `type` is a type id or an object type name;
@@ -7521,6 +7550,15 @@ local function make_env(mod)
             -- add(text) -> id | nil, reason: a new text of Gear's own (id from 0x100000) that the game's text lookup serves, for the
             -- names and descriptions of ability copies (`copy.name_text = gear.text.add('Venom')`); same text forms as set.
             add = function(text) return native.text_add(kernel.pick_text(text)) end,
+            -- key(key, text) -> id | nil, reason: a text of Gear's own whose id comes from `key` (a string that is yours alone: 'mymod.smith'),
+            -- so it is the same in every session; call it again with the same key to change the text. For what a savegame keeps by id
+            -- (a creature's name text, creature:set_name_text): register the key when the mod starts, before a savegame loads.
+            key = function(key, text)
+                assert(type(key) == 'string' and key ~= '', 'key must be a string')
+                return native.text_key(key, kernel.pick_text(text))
+            end,
+            -- key_of(id) -> the key, if it was registered this session.
+            key_of = function(id) return native.text_key_of(id) end,
         },
         -- The mod's file overlay (mods/<id>/overlay.txt, applied when Sacred Gear starts).
         files = {
@@ -8005,7 +8043,7 @@ local function make_env(mod)
     env.gear = gear
     -- The libraries shipped in the DLL (lua/<name>.lua): each is run in this mod's environment the first time the mod
     -- touches gear.<name>, so a mod that never uses one pays nothing for it.
-    local LIBRARIES = {lookup = true, fmt = true, toast = true, store = true, kit = true}
+    local LIBRARIES = {lookup = true, fmt = true, toast = true, store = true, kit = true, npc = true}
     local library_failed = {}
     setmetatable(gear, {__index = function(t, name)
         if not LIBRARIES[name] or library_failed[name] then return nil end

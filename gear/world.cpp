@@ -897,6 +897,58 @@ bool World::setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_
     return true;
 }
 
+bool World::nameText(uint32_t id, uint32_t& text)
+{
+    void* m = available() ? manager() : nullptr;
+    const uintptr_t o = m ? live(m, id) : 0;
+    return o && callIsCreature(o) && readAt(o, 0x3C, text);
+}
+
+bool World::setNameText(uint32_t id, uint32_t text, const char*& error)
+{
+    void* m = available() ? manager() : nullptr;
+    const uintptr_t o = m && changesAllowed() ? live(m, id) : 0;
+    if (!o || !callIsCreature(o))
+    {
+        error = "no such creature, or world changes are not possible now";
+        return false;
+    }
+    if (id >= 1 && id <= kHeroIds)
+    {
+        error = "a hero's name is set with creature:set_name";
+        return false;
+    }
+    if (!safeStore(reinterpret_cast<void*>(o + 0x3C), &text, sizeof(text)))
+    {
+        error = "cannot write the creature";
+        return false;
+    }
+    return true;
+}
+
+bool World::clockMinutes(uint32_t& minutes)
+{
+    if (!Addr::gameClock)
+    {
+        return false;
+    }
+    __try
+    {
+        const uintptr_t clock = reinterpret_cast<uintptr_t>(Addr::gameClock());
+        uint16_t hour = 0, minute = 0;
+        if (!clock || !readAt(clock, 0x20, hour) || !readAt(clock, 0x22, minute) || hour > 23 || minute > 59)
+        {
+            return false;
+        }
+        minutes = hour * 60u + minute;
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
 bool World::setGold(uint32_t id, uint32_t gold, const char*& error)
 {
     // Only the local hero, also in network games: the engine's setter (ENG 0x580110, what merchants and quests use)

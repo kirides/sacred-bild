@@ -93,6 +93,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [Remapping the game's keys (gear.input)](#remapping-the-games-keys-gearinput)
 - [Inventories (gear.inv)](#inventories-gearinv)
 - [Shops (gear.shop)](#shops-gearshop)
+- [Custom NPCs (gear.npc)](#custom-npcs-gearnpc)
 - [Lookups (gear.lookup)](#lookups-gearlookup)
 - [Formatting (gear.fmt)](#formatting-gearfmt)
 - [Toasts (gear.toast)](#toasts-geartoast)
@@ -328,6 +329,7 @@ The files below a folder that the layers provide (not the loose files on disk), 
 | `lookup` | `GearLookup` | Finding things of the game (items, creatures, abilities, a mod's own kinds) by a few letters, with a picker window. |
 | `fmt` | `GearFmt` | Numbers, times and texts made ready to show (thousands, clocks, cut to a length, markup removed). |
 | `kit` | `GearKit` | The core widgets of RmlUi screens as markup (window, tabs, buttons, check boxes, sliders, rows, bars, lists, a confirm dialog); the same classes work in Gear's plain look and in the theme mods. |
+| `npc` | `GearNpc` | Custom NPCs made of the game's own models: a name, dialog pages whose buttons mods react to, a daily routine. |
 | `toast` | `GearToast` | Short messages that stack up on the screen and fade; the layout editor moves them. |
 | `events` | `GearEvents` | Hooks between mods: declare the custom events the mod emits, list what is declared. |
 | `savegame` | `GearSavegame` | The savegame being played: its scope, and the mod's files that belong to it. |
@@ -952,6 +954,22 @@ Makes a new text of Gear's own and returns its id (from 0x100000), which the gam
 - returns `id` `integer?`
 - returns `error` `string?`
 
+#### `gear.text.key(key, text) -> integer?, string?`
+
+A text of Gear's own whose id comes from `key` (a string that is yours alone, `'mymod.smith'`): the same id in every session, so an id a savegame keeps (a creature's name text, `creature:set_name_text`) means the same text once the mod registered the key again when it starts. Calling it again with the key changes the text. Two keys whose ids collide (about one in 65000 pairs) are refused: choose another key.
+
+- `key`: `string`
+- `text`: `string|table<string, string>`
+- returns `id` `integer?`
+- returns `error` `string?`
+
+#### `gear.text.key_of(id) -> string?`
+
+The key a text id was registered with this session (`gear.text.key`), nil if none.
+
+- `id`: `integer`
+- returns `string?`
+
 ## Files (gear.files)
 
 ### GearFiles
@@ -1200,6 +1218,14 @@ The object with `id` (as a creature handle), or nil if there is none.
 
 - `id`: `integer`
 - returns `Creature?`
+
+#### `gear.world.clock() -> integer?, integer?, integer?`
+
+The game's clock, the one the day and night cycle runs on: minutes since midnight (0 to 1439), the hour and the minute. nil if the game's clock was not found (no game running).
+
+- returns `minutes` `integer?`
+- returns `hour` `integer?`
+- returns `minute` `integer?`
 
 #### `gear.world.can_change() -> boolean`
 
@@ -1477,7 +1503,27 @@ The object type id.
 
 #### `creature:display_name() -> string?`
 
-The creature's name for the player: the localized name of its type (`gear.data.object_types:display_name`), the internal type name when the game has no text for it. Use it for anything the player reads; `type_name` stays the identifier to match on.
+The creature's name for the player: its own name text (`creature:set_name_text`) if it has one, else the localized name of its type (`gear.data.object_types:display_name`), the internal type name when the game has no text for it. Use it for anything the player reads; `type_name` stays the identifier to match on.
+
+- returns `string?`
+
+#### `creature:name_text() -> integer?`
+
+The text id of the creature's own name (the creature's `+0x3C`), 0 if it shows its type's name, nil if there is no such creature.
+
+- returns `integer?`
+
+#### `creature:set_name_text(id) -> boolean?, string?`
+
+Gives the creature (not a hero) a name of its own: the game shows this text over it, in its hover label and its lists, instead of its type's name; 0 gives the type's name back. The field is saved with the savegame, so use an id of `gear.text.key`, which is the same in every session. Single player.
+
+- `id`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:name_key() -> string?`
+
+The `gear.text.key` key of the creature's own name text, if a mod registered it this session.
 
 - returns `string?`
 
@@ -3983,6 +4029,226 @@ Stocks one ware into a page through the game's own code: the item is made, gets 
 Takes a ware out of its page and destroys it.
 
 - `item_id`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+## Custom NPCs (gear.npc)
+
+An NPC kind names an object type of the game (its model and animations are used as they are), a name of its own, dialog pages, a daily routine and a look. `npc.spawn` makes a creature of a kind in the world. The creature carries the kind's name as its own name text (`gear.text.key`, a text id taken from the kind's id: the same in every session, saved with the savegame, which is also how a kind is recognised again after a load), so the game's overhead labels show it. The creatures a mod made are listed in the mod's per-savegame data (`npc.json`, `gear.store.game`). Single player. The library is shipped in the DLL (`gear/lua/npc.lua`) and runs once per mod, the first time the mod uses `gear.npc`.
+
+Clicking an NPC that has a dialog walks the hero up to it (`talk_range`) and opens the dialog window: a portrait, the page's text and a button for each option of the page. A mod reacts to a button with the option's `on`, the kind's `on_talk` or an `npc.on('button')` handler; the handler may open its own window (`e.close()` closes the dialog, `e.go(page)` shows another page).
+
+A routine puts the NPC at a point from a time of the game's clock on. When the time of the next point has come: if the hero is within `walk_radius` of the NPC or the point, the NPC walks there (the game's own move order); when it makes no way for three seconds (blocked) or needs more than two minutes, it is put there; if the hero is far away it is put there at once.
+
+### GearNpcOption
+
+One option (button) of a dialog page.
+
+| Field | Type | |
+|---|---|---|
+| `id` | `string` | What `e.option` holds for a handler (default: the option's number). (optional) |
+| `label` | `string\|fun(e: GearNpcEvent): string` | The button's text. |
+| `on` | `fun(e: GearNpcEvent)` | Called when it is pressed. (optional) |
+| `go` | `string` | The page to show afterwards. (optional) |
+| `close` | `boolean` | Close the dialog afterwards (when nothing else was chosen). (optional) |
+| `when` | `fun(e: GearNpcEvent): boolean` | Whether the option is shown (default: always). (optional) |
+| `enabled` | `fun(e: GearNpcEvent): boolean` | Whether it can be pressed (default: always). (optional) |
+
+### GearNpcPage
+
+A page of an NPC's dialog.
+
+| Field | Type | |
+|---|---|---|
+| `text` | `string\|fun(e: GearNpcEvent): string` | What the NPC says. |
+| `options` | `GearNpcOption[]` |  (optional) |
+
+### GearNpcDialog
+
+An NPC's dialog.
+
+| Field | Type | |
+|---|---|---|
+| `start` | `string` | The first page (default: any one). (optional) |
+| `pages` | `table<string, GearNpcPage>` |  |
+
+### GearNpcPoint
+
+A point of a routine.
+
+| Field | Type | |
+|---|---|---|
+| `time` | `integer\|string` | Minutes since midnight or `'HH:MM'`: from then on the NPC stands here. |
+| `x` | `number` |  |
+| `y` | `number` |  |
+| `layer` | `integer` |  (optional) |
+
+### GearNpcDef
+
+What `gear.npc.define` takes.
+
+| Field | Type | |
+|---|---|---|
+| `type` | `integer\|string` | The object type (id or name) whose model the NPC uses. |
+| `name` | `string\|table<string, string>` | The name shown (a string or `{en = ..., de = ...}`); default: the type's name. (optional) |
+| `level` | `integer` | The creature's level (`creature:set_level`). (optional) |
+| `like` | `Creature\|integer` | A creature whose faction, level and health the NPC takes (default: the hero's faction, so the NPC is friendly: its label is not red and a click does not attack it). (optional) |
+| `hostile` | `boolean` | Keep the faction of the type (an enemy NPC). (optional) |
+| `dialog` | `GearNpcDialog` |  (optional) |
+| `routine` | `GearNpcPoint[]` |  (optional) |
+| `talk_range` | `number` | How close the hero must be to talk (world units, default 140). (optional) |
+| `walk_radius` | `number` | The hero is this close (to the NPC or its goal) for the NPC to walk to the next point (default 900); otherwise it is put there. (optional) |
+| `tint` | `any` | The look (colour of the model), see `creature:set_tint`. (optional) |
+| `on_talk` | `fun(e: GearNpcEvent)` | Called when the dialog is opened. (optional) |
+
+### GearNpcEvent
+
+What a dialog or routine handler gets.
+
+| Field | Type | |
+|---|---|---|
+| `npc` | `string` | The kind's id. |
+| `creature` | `Creature` | The NPC. |
+| `hero` | `Creature` |  (optional) |
+| `page` | `string` | The page shown. (optional) |
+| `option` | `string\|integer` | The option's `id` (or number); `button` events. (optional) |
+| `label` | `string` |  (optional) |
+| `point` | `GearNpcPoint` | The point reached; `arrived` events. (optional) |
+| `close` | `fun()` | Closes the dialog (after the handlers). |
+| `go` | `fun(page: string)` | Shows another page (after the handlers). |
+| `say` | `fun(text: string)` | Replaces the page's text until the page changes. |
+
+### GearNpcInfo
+
+An NPC of the mod, as `list` gives it.
+
+| Field | Type | |
+|---|---|---|
+| `creature` | `Creature` |  |
+| `kind` | `string` |  |
+| `data` | `any` | What `spawn` was given as `opts.data`. |
+
+### GearNpcSpawnOpts
+
+What `spawn` takes.
+
+| Field | Type | |
+|---|---|---|
+| `layer` | `integer` | Default: the hero's. (optional) |
+| `like` | `Creature\|integer` |  (optional) |
+| `level` | `integer` |  (optional) |
+| `routine` | `GearNpcPoint[]` | This NPC's own routine (instead of the kind's). (optional) |
+| `data` | `any` | Kept with the NPC in the savegame data (JSON values). (optional) |
+
+### GearNpc
+
+Reached as `gear.npc`.
+
+Custom NPCs.
+
+#### `gear.npc.define(id, def) -> GearNpcDef`
+
+Defines (or redefines) an NPC kind. `id` is a string that is yours alone (`'mymod.smith'`): the name text id comes from it and the savegame keeps that id, so keep it stable.
+
+- `id`: `string`
+- `def`: `GearNpcDef`
+- returns `def` `GearNpcDef`
+
+#### `gear.npc.kind(id) -> GearNpcDef?`
+
+The definition of a kind, nil if there is none.
+
+- `id`: `string`
+- returns `GearNpcDef?`
+
+#### `gear.npc.kinds() -> string[]`
+
+The ids of the kinds this mod defined, in order.
+
+- returns `string[]`
+
+#### `gear.npc.of(creature) -> string?, GearNpcDef?`
+
+Which kind of this mod a creature is (by its name text): the id and the definition.
+
+- `creature`: `Creature|integer`
+- returns `id` `string?`
+- returns `def` `GearNpcDef?`
+
+#### `gear.npc.spawn(kind, x, y, opts) -> Creature?, string?`
+
+Makes an NPC of a kind at (x, y).
+
+- `kind`: `string`
+- `x`: `number`
+- `y`: `number`
+- `opts`: `GearNpcSpawnOpts` (optional)
+- returns `creature` `Creature?`
+- returns `error` `string?`
+
+#### `gear.npc.list(kind) -> GearNpcInfo[]`
+
+The live NPCs of this mod (of one kind).
+
+- `kind`: `string` (optional)
+- returns `GearNpcInfo[]`
+
+#### `gear.npc.remove(creature) -> boolean?, string?`
+
+Removes an NPC from the world and from the mod's list.
+
+- `creature`: `Creature|integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.npc.on(name, fn) -> table`
+
+Handlers: `'talk'` (a dialog opened), `'button'` (an option pressed), `'close'` (the dialog ended), `'arrived'` (an NPC reached a routine point); the argument is a `GearNpcEvent`.
+
+- `name`: `'talk'|'button'|'close'|'arrived'`
+- `fn`: `fun(e: GearNpcEvent)`
+- returns `handle` `table`
+
+#### `gear.npc.off(handle)`
+
+Removes a handler of `on`.
+
+- `handle`: `table`
+
+#### `gear.npc.talk(creature, page) -> boolean?, string?`
+
+Opens an NPC's dialog (at `page`, default the start page).
+
+- `creature`: `Creature|integer`
+- `page`: `string` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `gear.npc.close()`
+
+Closes the dialog that is open.
+
+#### `gear.npc.dialog_state() -> {npc: string, creature: Creature, page: string}?`
+
+The dialog that is open: the kind, the NPC and the page; nil if none.
+
+- returns `{npc: string, creature: Creature, page: string}?`
+
+#### `gear.npc.where(creature) -> number?, number?, integer?`
+
+The routine point an NPC should be at now (by the game's clock): x, y, layer.
+
+- `creature`: `Creature|integer`
+- returns `x` `number?`
+- returns `y` `number?`
+- returns `layer` `integer?`
+
+#### `gear.npc.routine(creature, points) -> boolean?, string?`
+
+Gives one NPC its own routine (nil: the kind's again).
+
+- `creature`: `Creature|integer`
+- `points`: `GearNpcPoint[]` (optional)
 - returns `ok` `boolean?`
 - returns `error` `string?`
 

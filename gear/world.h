@@ -183,6 +183,15 @@ namespace World
     // control), 0 if there is none. Objects tick only on the computer whose id is their owner byte (+0x39).
     uint32_t localId();
 
+    // The text id of a creature's own name (+0x3C; 0: it shows its type's name) and setting it (not for heroes: their name is
+    // 0x26FF + id, see Party::setName). The name shown over the creature, in its hover label and the game's lists comes from this
+    // text. The field is part of the savegame, so a text id of Gear's own (Classes::keyText) comes back after a load.
+    bool nameText(uint32_t id, uint32_t& text);
+    bool setNameText(uint32_t id, uint32_t text, const char*& error);
+
+    // The game's clock: minutes since midnight (0..1439) of the calendar that runs the day and night; false if not found.
+    bool clockMinutes(uint32_t& minutes);
+
     // Destroys an object through the engine (heroes too: the caller checked that it may). False if there was none.
     bool destroyObject(uint32_t id);
 }

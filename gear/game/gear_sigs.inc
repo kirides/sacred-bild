@@ -150,6 +150,7 @@ static const Sig::Entry kGearSigs[] = {
     {"cUI_Control_getRect", "83 EC 30 66 8B 41 2C 66 8B 51 2E 53", 0, Sig::Take::Match, &Gear::Addr::cUI_Control_getRect}, // 00732350, 00731C70
     {"cKillStat_record", "83 EC 10 8B 44 24 18 53 55 8B E9 8B 5C 24 1C", 0, Sig::Take::Match, &Gear::Addr::cKillStat_record}, // 00424250, 00424120
     {"potionPick", "56 BE 05 00 00 00 E8 ?? ?? ?? ?? 99 B9 E8 03 00 00", 0, Sig::Take::Match, &Gear::Addr::potionPick}, // 0043B1A0, 0043B070
+    {"gameClock", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 57 33 FF 3B C7 75 75", 0, Sig::Take::Match, &Gear::Addr::gameClock}, // 00417560, 00417560
     {"merchantReceive", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC FC 00 00 00", 0, Sig::Take::Match, &Gear::Addr::merchantReceive}, // 006DAD90, 006DAB10
     {"merchantClear", "51 8A 44 24 08 53 55 56 33 F6 57 84 C0", 0, Sig::Take::Match, &Gear::Addr::merchantClear}, // 006D9B90, 006D9910
     {"merchantRestock", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 60 53", 0, Sig::Take::Match, &Gear::Addr::merchantRestock}, // 006DA320, 006DA0A0
