@@ -150,6 +150,11 @@ static const Sig::Entry kGearSigs[] = {
     {"cUI_Control_getRect", "83 EC 30 66 8B 41 2C 66 8B 51 2E 53", 0, Sig::Take::Match, &Gear::Addr::cUI_Control_getRect}, // 00732350, 00731C70
     {"cKillStat_record", "83 EC 10 8B 44 24 18 53 55 8B E9 8B 5C 24 1C", 0, Sig::Take::Match, &Gear::Addr::cKillStat_record}, // 00424250, 00424120
     {"potionPick", "56 BE 05 00 00 00 E8 ?? ?? ?? ?? 99 B9 E8 03 00 00", 0, Sig::Take::Match, &Gear::Addr::potionPick}, // 0043B1A0, 0043B070
+    {"merchantReceive", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 81 EC FC 00 00 00", 0, Sig::Take::Match, &Gear::Addr::merchantReceive}, // 006DAD90, 006DAB10
+    {"merchantClear", "51 8A 44 24 08 53 55 56 33 F6 57 84 C0", 0, Sig::Take::Match, &Gear::Addr::merchantClear}, // 006D9B90, 006D9910
+    {"merchantRestock", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 83 EC 60 53", 0, Sig::Take::Match, &Gear::Addr::merchantRestock}, // 006DA320, 006DA0A0
+    {"merchantAddItem", "83 EC 14 53 56 8B 74 24 20 57 85 F6", 0, Sig::Take::Match, &Gear::Addr::merchantAddItem}, // 006D9DE0, 006D9B60
+    {"itemGenerate", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 81 EC F8 00 00 00 D9 05 ?? ?? ?? ??", 0, Sig::Take::Match, &Gear::Addr::itemGenerate}, // 005D5080, 005D4FF0
     {"cObjectFX_setup", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 64 89 25 00 00 00 00 56 8B F1", 0, Sig::Take::Match, &Gear::Addr::cObjectFX_setup}, // 005A0C50, 005A0BC0
     {"particleMgr_add", "83 EC 0C 53 55 56 8B E9 57 89 6C 24 18", 0, Sig::Take::Match, &Gear::Addr::particleMgr_add}, // 007CB830, 007CB110
     {"particleMgr_update", "56 8B F1 E8 ?? ?? ?? ?? 8B 44 24 08 8B 4E 18 25 FF FF 00 00 8D 04 81 8B 08 85 C9 74 0A 8B 44 24 0C 8B 11 50 FF 52 08", 0, Sig::Take::Match, &Gear::Addr::particleMgr_update}, // 007CC080, 007CB960

@@ -242,6 +242,7 @@ namespace
     }
 
     int g_localDepth = 0;
+    uint32_t g_shopContainer = 0xFFFFFFFF;    // the merchant window's stock grid (Shop): local-only scopes may change it
     bool localScope() { return g_localDepth > 0; }
     // Whether the engine's calls should tell the peers: a network game and not a local-only scope.
     bool announcing() { return World::networkGame() && !localScope(); }
@@ -251,7 +252,7 @@ namespace
     bool containerAllowed(uint32_t index)
     {
         return !World::networkGame() || index == Inventory::kChest || index == World::hero() ||
-               (localScope() && index == Inventory::kScratch);
+               (localScope() && (index == Inventory::kScratch || index == g_shopContainer));
     }
 
     // Whether item object `o` is a weapon: its vtable's slot 8 is cWeapon3D's.
@@ -308,6 +309,8 @@ namespace
         return true;
     }
 }
+
+void Inventory::setShopContainer(uint32_t index) { g_shopContainer = index; }
 
 Inventory::LocalOnly::LocalOnly() { ++g_localDepth; }
 Inventory::LocalOnly::~LocalOnly() { --g_localDepth; }

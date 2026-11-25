@@ -17,6 +17,7 @@
 #include "netmsg.h"
 #include "pickup.h"
 #include "potionpick.h"
+#include "shop.h"
 #include "realm.h"
 #include "replace.h"
 #include "rml.h"
@@ -834,6 +835,97 @@ namespace
     {
         KillStat::setActive(lua_toboolean(L, 1) != 0);
         return 0;
+    }
+
+    // native.shop_active(bool): whether some mod handles `shop.stock`
+    int nativeShopActive(lua_State* L)
+    {
+        Shop::setActive(lua_toboolean(L, 1) != 0);
+        return 0;
+    }
+
+    // native.shop_info() -> {open, merchant, hero_level, pages = {{container, visible, categories = {{category, weight}, ...}}, ...}} | nil
+    int nativeShopInfo(lua_State* L)
+    {
+        Shop::Info info;
+        if (!Shop::info(info))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_createtable(L, 0, 4);
+        lua_pushboolean(L, info.open ? 1 : 0);
+        lua_setfield(L, -2, "open");
+        lua_pushnumber(L, info.merchant);
+        lua_setfield(L, -2, "merchant");
+        lua_pushnumber(L, info.heroLevel);
+        lua_setfield(L, -2, "hero_level");
+        lua_createtable(L, static_cast<int>(info.pages.size()), 0);
+        for (size_t p = 0; p < info.pages.size(); ++p)
+        {
+            const Shop::Page& page = info.pages[p];
+            lua_createtable(L, 0, 3);
+            lua_pushnumber(L, page.container);
+            lua_setfield(L, -2, "container");
+            lua_pushboolean(L, page.visible ? 1 : 0);
+            lua_setfield(L, -2, "visible");
+            lua_createtable(L, static_cast<int>(page.categories.size()), 0);
+            for (size_t i = 0; i < page.categories.size(); ++i)
+            {
+                lua_createtable(L, 0, 2);
+                lua_pushnumber(L, page.categories[i].type);
+                lua_setfield(L, -2, "category");
+                lua_pushnumber(L, page.categories[i].weight);
+                lua_setfield(L, -2, "weight");
+                lua_rawseti(L, -2, static_cast<int>(i + 1));
+            }
+            lua_setfield(L, -2, "categories");
+            lua_rawseti(L, -2, static_cast<int>(p + 1));
+        }
+        lua_setfield(L, -2, "pages");
+        return 1;
+    }
+
+    // native.shop_pick(category, level, quality, hero_pref) -> item type | nil
+    int nativeShopPick(lua_State* L)
+    {
+        const uint32_t type = Shop::pick(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<uint32_t>(luaL_checknumber(L, 2)),
+                                         static_cast<uint32_t>(luaL_optnumber(L, 3, 0)), static_cast<uint32_t>(luaL_optnumber(L, 4, 0)));
+        if (type)
+        {
+            lua_pushnumber(L, type);
+        }
+        else
+        {
+            lua_pushnil(L);
+        }
+        return 1;
+    }
+
+    // native.shop_add(container, type, quality, level) -> item id | nil, message
+    int nativeShopAdd(lua_State* L)
+    {
+        uint32_t id = 0;
+        const char* error = "bad arguments";
+        if (Shop::add(static_cast<uint32_t>(luaL_optnumber(L, 1, 0)), static_cast<uint32_t>(luaL_checknumber(L, 2)),
+                      static_cast<uint32_t>(luaL_optnumber(L, 3, 0)), static_cast<uint32_t>(luaL_optnumber(L, 4, 0)), id, error))
+        {
+            lua_pushnumber(L, id);
+            return 1;
+        }
+        return pushFailure(L, error);
+    }
+
+    // native.shop_remove(container, item id) -> true | nil, message
+    int nativeShopRemove(lua_State* L)
+    {
+        const char* error = "bad arguments";
+        if (Shop::remove(static_cast<uint32_t>(luaL_optnumber(L, 1, 0)), checkId(L, 2), error))
+        {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        return pushFailure(L, error);
     }
 
     // native.potion_pick_active(bool): whether some mod handles `potion.pick`
@@ -5007,6 +5099,11 @@ namespace
             {"portals", nativePortals},
             {"kill_recorded_active", nativeKillRecordedActive},
             {"potion_pick_active", nativePotionPickActive},
+            {"shop_active", nativeShopActive},
+            {"shop_info", nativeShopInfo},
+            {"shop_pick", nativeShopPick},
+            {"shop_add", nativeShopAdd},
+            {"shop_remove", nativeShopRemove},
             {"alias_create", nativeAliasCreate},
             {"alias_remove", nativeAliasRemove},
             {"alias_clear", nativeAliasClear},
@@ -5739,6 +5836,42 @@ void LuaHost::killRecorded(uint32_t id)
     {
         const char* msg = lua_tostring(L, -1);
         LOG("Lua: kernel.kill_recorded failed: {}", msg ? msg : "(no message)");
+        lua_pop(L, 1);
+    }
+}
+
+void LuaHost::shopStock(const char* reason, uint32_t merchant, uint32_t container, uint32_t heroLevel)
+{
+    if (t_inLua)
+    {
+        return;
+    }
+    std::unique_lock guard(g_running, std::try_to_lock);
+    if (!guard.owns_lock())
+    {
+        return;
+    }
+    if (!g_lua || !g_started)
+    {
+        return;
+    }
+    lua_State* L = g_lua;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_kernelRef);
+    lua_getfield(L, -1, "shop_stock");
+    lua_remove(L, -2);
+    lua_pushstring(L, reason);
+    lua_pushnumber(L, merchant);
+    lua_pushnumber(L, container);
+    lua_pushnumber(L, heroLevel);
+    setBudget(kFrameBudget);
+    t_inLua = true;
+    const int status = lua_pcall(L, 4, 0, 0);
+    t_inLua = false;
+    g_deadline = 0;
+    if (status != 0)
+    {
+        const char* msg = lua_tostring(L, -1);
+        LOG("Lua: kernel.shop_stock failed: {}", msg ? msg : "(no message)");
         lua_pop(L, 1);
     }
 }

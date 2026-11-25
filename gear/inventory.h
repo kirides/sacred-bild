@@ -44,6 +44,9 @@ namespace Inventory
         LocalOnly& operator=(const LocalOnly&) = delete;
     };
 
+    // The merchant window's stock grid (set by Shop before it edits it): local-only scopes may take items out of it.
+    void setShopContainer(uint32_t index);
+
     // False before a game ran, or if the addresses were not found.
     bool available();
 

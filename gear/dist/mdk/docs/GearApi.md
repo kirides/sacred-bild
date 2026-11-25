@@ -92,6 +92,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 - [Menus (gear.menu)](#menus-gearmenu)
 - [Remapping the game's keys (gear.input)](#remapping-the-games-keys-gearinput)
 - [Inventories (gear.inv)](#inventories-gearinv)
+- [Shops (gear.shop)](#shops-gearshop)
 - [Lookups (gear.lookup)](#lookups-gearlookup)
 - [Formatting (gear.fmt)](#formatting-gearfmt)
 - [Toasts (gear.toast)](#toasts-geartoast)
@@ -155,6 +156,7 @@ of `gear.config` (declare your own with `---@type {my_setting: number}` on a loc
 | `'master.describe'` | The rune exchange page is drawn: `(rune, ability, count)` for the shown rune's art or spell; return a level to have the page write the engine's own "name - Level n" for it at the left of the page, nil or false for no text. |
 | `'master.maximum'` | The rune exchange page is drawn: `(rune, ability, count)`; return true to have it write the red "Maximum Level Attained" under the result box. |
 | `'kill.recorded'` | The engine recorded a kill of the local hero or of a creature it owns (minion, summon): `(e)`, see `GearKillRecorded`. Fires for every such kill, also those that give no experience; runs inside the engine's death handling. |
+| `'shop.stock'` | The game stocked a page of the merchant window (another merchant, a refresh, or a swap of some wares): `(e)`, see `GearShopStock`; add and remove wares with `gear.shop`. Fires once per page and only when the game itself changed it, so what a mod adds stays until the game resets that page. |
 | `'potion.pick'` | The engine picks the item type of a random potion (a merchant's stock, a creature's drop): `(e)`, see `GearPotionPick`; return an item type to use that one, or nil for the engine's pick. |
 | `'rune.usable'` | A hero type is checked for the class mask of an ability (reading a rune): `(type, ability, vanilla)`; return true or false, or nil to leave it. |
 | `'pfx.select'` | An art or spell is making an effect (the engine sets up an effect object of type `fx`): `(ctx)`, see `GearPfxContext`; return the id of a `gear.pfx` variant to use, or nil for the engine's own look. Asked for every effect while a handler exists, so keep it short. |
@@ -313,6 +315,7 @@ The files below a folder that the layers provide (not the loose files on disk), 
 | `world` | `GearWorld` | The world: hero, creatures, items, spawning, pickup rules. |
 | `drops` | `GearDrops` | Item drops: chance, rarity weights, the generator, the roll and select events. |
 | `inv` | `GearInv` | Inventories: containers, items, export and import of items. |
+| `shop` | `GearShop` | Merchants' stock: the pages of the merchant window, `shop.stock`, adding and removing wares. |
 | `game` | `GearGame` | The game itself: difficulty and saving. |
 | `chat` | `GearChat` | The game's chat and message lines: who sent them, the session's history, the game's overlay. |
 | `clipboard` | `GearClipboard` | The Windows clipboard: copy text out of the game. |
@@ -388,6 +391,7 @@ Forms:
 - `fun(event: 'master.maximum', fn: fun(rune: integer, ability: integer, count: integer): boolean?): GearHandler`
 - `fun(event: 'kill.recorded', fn: fun(e: GearKillRecorded)): GearHandler`
 - `fun(event: 'potion.pick', fn: fun(e: GearPotionPick): integer?): GearHandler`
+- `fun(event: 'shop.stock', fn: fun(e: GearShopStock)): GearHandler`
 - `fun(event: 'rune.usable', fn: fun(type: integer, ability: integer, vanilla: boolean): boolean?): GearHandler`
 - `fun(event: 'pfx.select', fn: fun(ctx: GearPfxContext): integer?): GearHandler`
 - `fun(event: 'item.use', fn: fun(e: GearItemUse): ('consume'|'keep')?): GearHandler`
@@ -3846,6 +3850,115 @@ Hex text back to bytes, or nil if it is not hex.
 
 - `text`: `string`
 - returns `string?`
+
+## Shops (gear.shop)
+
+A merchant's wares live in the merchant window: three pages (its tabs, "Waffen", "Rüstungen", "Verschiedenes"), each a stock grid of its own, a container of `gear.inv` (numbers 20 to 22). The window shows the merchant it was opened for last. Opening another merchant empties the pages and stocks them anew; opening the same merchant again keeps the wares, and the game only swaps a few of them (often none) when it does. Nothing is rolled when you merely open the window again, and mods that follow the `shop.stock` event keep that: the event fires only after the game itself stocked a page, so what a mod adds then stays until the game resets that page. A mod that rolled its own chance on every opening would change the stock at will.
+
+`shop.stock` fires once per page, in the order of the containers, right after the game stocked or changed the page: `reason` is `'new'` (another merchant: the page was emptied and stocked anew), `'refresh'` (the window's refresh message did the same for the same merchant) or `'restock'` (the game swapped some wares of the same merchant: only when the page really changed). A handler adds wares with `gear.shop.add` (the game's own stocking code: room in the grid, the item, its random properties) and takes them out with `gear.shop.remove`. The added items are real items: the player buys and sells them like the game's own wares. Single player and network games alike (the shop is on this PC).
+
+### GearShop
+
+Reached as `gear.shop`.
+
+Merchants' stock pages.
+
+### GearShopPage
+
+One stock page of the merchant window.
+
+| Field | Type | |
+|---|---|---|
+| `container` | `integer` | The page's grid: its container number (`gear.inv.container`). |
+| `visible` | `boolean` | The page is showing. |
+| `categories` | `GearShopCategory[]` | What the game stocks the page with. |
+
+### GearShopCategory
+
+A kind of ware the game's stock generator draws for a page, with its weight.
+
+| Field | Type | |
+|---|---|---|
+| `category` | `integer` | The equipment category of the item picker: 5 weapon, 6 chest armour, 8 ring, 13 shield, 17 helmet, 18 boots, 19 belt, 20 amulet, 21 shoulders, 22 arms, 23 legs, 24 gloves, 25 wings, 29 horse equipment; 9 potions. |
+| `weight` | `integer` |  |
+
+### GearShopInfo
+
+What `gear.shop.info` returns.
+
+| Field | Type | |
+|---|---|---|
+| `open` | `boolean` | A page of the window is showing (the player is trading). |
+| `merchant` | `integer` | The merchant's object id. |
+| `hero_level` | `integer` | The local hero's level. |
+| `pages` | `GearShopPage[]` | The pages by container number. |
+
+### GearShopStock
+
+What the `shop.stock` event gets.
+
+| Field | Type | |
+|---|---|---|
+| `reason` | `'new'\|'refresh'\|'restock'` | Why the game stocked the page: another merchant (`'new'`), the window's refresh message (`'refresh'`), or a swap of some wares of the same merchant (`'restock'`, only when the page changed). |
+| `merchant` | `integer` | The merchant's object id. |
+| `container` | `integer` | The page that was stocked (its container number); the event fires once per page. |
+| `hero_level` | `integer` | The local hero's level. |
+
+### GearShopAddOpts
+
+Options of `gear.shop.add`.
+
+| Field | Type | |
+|---|---|---|
+| `container` | `integer` | The page (a `GearShopPage.container`, or the event's). Default: the first page that sells `category`, else the first page. (optional) |
+| `type` | `integer` | The item type to stock (an index into `gear.data.object_types`). (optional) |
+| `category` | `integer` | Without `type`: the equipment category the game's item picker draws the item from. (optional) |
+| `quality` | `integer` | The quality tier the item is made with, 0 (plain) to 14 (the rarest): 5 to 11 magic, 12 to 14 rare. Default 0. Also what the picker is given. (optional) |
+| `level` | `integer` | The item's level (default: the game's own, the hero's level with some spread). (optional) |
+| `hero_pref` | `integer` | Without `type`: the hero type the picker prefers (0 none). (optional) |
+
+#### `gear.shop.info() -> GearShopInfo?`
+
+The merchant window's pages, or nil before any merchant has been opened (nothing stocked yet).
+
+- returns `GearShopInfo?`
+
+#### `gear.shop.container(page) -> GearContainer?`
+
+A stock page's grid as an inventory container, to read the items with `container:items()` (the cells, sizes and `gear.world.item` fields).
+
+- `page`: `integer` - A `GearShopPage.container`.
+- returns `GearContainer?`
+
+#### `gear.shop.items(page) -> GearInvItem[]`
+
+The wares of one page, or of all pages: `gear.world.item` tables with `col`, `row`, `w`, `h` and `page` (the page's container number).
+
+- `page`: `integer` (optional) - A `GearShopPage.container`; nil for every page.
+- returns `GearInvItem[]`
+
+#### `gear.shop.pick(opts) -> integer?`
+
+The item type the game's own picker gives for an equipment category at a level and quality (what the shop's stock generator asks it), without stocking anything. nil if it has none.
+
+- `opts`: `{category: integer, level?: integer, quality?: integer, hero_pref?: integer}`
+- returns `type` `integer?`
+
+#### `gear.shop.add(opts) -> integer?, string?`
+
+Stocks one ware into a page through the game's own code: the item is made, gets its random properties for `level` and `quality`, and takes the first free place of the page's grid. Without `type` the picker chooses one of `category`.
+
+- `opts`: `GearShopAddOpts`
+- returns `item_id` `integer?`
+- returns `error` `string?` - E.g. when the page is full.
+
+#### `gear.shop.remove(item_id) -> boolean?, string?`
+
+Takes a ware out of its page and destroys it.
+
+- `item_id`: `integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
 
 ## Lookups (gear.lookup)
 

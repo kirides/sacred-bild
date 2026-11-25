@@ -2772,6 +2772,78 @@ function inv.can_change()
     return native.inv_can_change()
 end
 
+-- Merchants: gear.shop (native side gear/shop.cpp). A merchant's wares are spread over three pages (the window's tabs), each a stock grid of its own.
+kernel.shop_api = {}
+do
+    local S = kernel.shop_api
+
+    -- shop.info() -> {open, merchant, hero_level, pages = {{container, visible, categories = {{category, weight}, ...}}, ...}} | nil
+    function S.info() return native.shop_info() end
+
+    -- shop.container(page) -> a stock page's grid as a gear.inv container | nil (`page`: the container number from info().pages or the event)
+    function S.container(page)
+        return type(page) == 'number' and make_container(page) or nil
+    end
+
+    -- shop.items(page) -> the wares of one page (container:items()) or, without `page`, of all pages (each with `page` = its container number)
+    function S.items(page)
+        local out = {}
+        local info = native.shop_info()
+        if not info then return out end
+        for _, p in ipairs(info.pages) do
+            if not page or page == p.container then
+                local c = make_container(p.container)
+                for _, it in ipairs(c and c:items() or {}) do
+                    it.page = p.container
+                    out[#out + 1] = it
+                end
+            end
+        end
+        return out
+    end
+
+    -- shop.pick{category, level, quality, hero_pref} -> item type | nil: what the engine's picker gives for an equipment category.
+    function S.pick(opts)
+        assert(type(opts) == 'table' and type(opts.category) == 'number', 'shop.pick needs a table with a category')
+        local info = native.shop_info()
+        local level = opts.level or (info and info.hero_level) or 1
+        return native.shop_pick(opts.category, level, opts.quality or 0, opts.hero_pref or 0)
+    end
+
+    -- shop.add{container, type | category, quality, level} -> item id | nil, message: stocks one ware through the engine into a page (default: the
+    -- first page that sells `category`, else the first). Without `type` the engine's picker chooses one of `category` at `level` and `quality` (0..14).
+    function S.add(opts)
+        assert(type(opts) == 'table', 'shop.add needs a table')
+        local info = native.shop_info()
+        if not info then return nil, 'no merchant has stocked the window yet' end
+        local container = opts.container
+        if not container then
+            for _, p in ipairs(info.pages) do
+                for _, c in ipairs(p.categories) do
+                    if c.category == opts.category then container = container or p.container end
+                end
+            end
+            container = container or info.pages[1].container
+        end
+        local quality = opts.quality or 0
+        local item_type = opts.type
+        if not item_type then
+            assert(type(opts.category) == 'number', 'shop.add needs a type or a category')
+            item_type = native.shop_pick(opts.category, opts.level or info.hero_level, quality, opts.hero_pref or 0)
+            if not item_type then return nil, 'the picker found no item' end
+        end
+        return native.shop_add(container, item_type, quality, opts.level or 0)
+    end
+
+    -- shop.remove(item_id) -> true | nil, message: takes a ware out of its page and destroys it.
+    function S.remove(item_id)
+        for _, it in ipairs(S.items()) do
+            if it.id == item_id then return native.shop_remove(it.page, item_id) end
+        end
+        return nil, 'the item is not in a shop page'
+    end
+end
+
 -- inv.size(item_id) -> w, h | nil: the size in cells.
 function inv.size(item_id)
     return native.inv_size(item_id)
@@ -7827,6 +7899,7 @@ local function make_env(mod)
         end,
     }
     gear.inv = inv
+    gear.shop = kernel.shop_api
     gear.realm = realm_api
     gear.settings = make_settings_api(mod)
     gear.drops = D.make(mod)
@@ -7871,6 +7944,7 @@ local function make_env(mod)
         if event == 'item.use' then native.item_use_active(true) end
         if event == 'kill.recorded' then native.kill_recorded_active(true) end
         if event == 'potion.pick' then native.potion_pick_active(true) end
+        if event == 'shop.stock' then native.shop_active(true) end
         if event == 'motion.select' then native.motion_active(true) end
         if event == 'damage' or event == 'ability.hit' then native.damage_active(true) end
         if event == 'effect.add' then native.effect_active(true) end
@@ -7898,6 +7972,7 @@ local function make_env(mod)
         if h.event == 'item.use' and #list == 0 then native.item_use_active(false) end
         if h.event == 'kill.recorded' and #list == 0 then native.kill_recorded_active(false) end
         if h.event == 'potion.pick' and #list == 0 then native.potion_pick_active(false) end
+        if h.event == 'shop.stock' and #list == 0 then native.shop_active(false) end
         if h.event == 'motion.select' and #list == 0 then native.motion_active(false) end
         if (h.event == 'damage' or h.event == 'ability.hit') and #list == 0 then kernel.boss.sync() end
         if h.event == 'effect.add' and #list == 0 then native.effect_active(false) end
@@ -8799,6 +8874,12 @@ function kernel.potion_pick(mode, flag, tier, address, site)
         end
     end
     return nil
+end
+
+-- `shop.stock`: the engine stocked the merchant window (a new merchant, a restock of the same one, the window's refresh); see gear/shop.cpp. Called by
+-- the host right after the engine's handler returns; the mods add and remove wares through gear.shop.
+function kernel.shop_stock(reason, merchant, container, hero_level)
+    kernel.dispatch('shop.stock', {reason = reason, merchant = merchant, container = container, hero_level = hero_level})
 end
 
 -- `kill.recorded`: the engine's statistics record of a kill by the local hero or by a creature it owns (see gear/killstat.cpp). Called by the
