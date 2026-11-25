@@ -1,3 +1,7 @@
+## v0.3.2 (2026-11-25)
+
+- Fixed: after a Beastmaster animal was dismissed or fell, other creatures (NPCs, wolves) could get a shadow drawn too large and far from them. The pets module now forgets a dismissed animal's model handle before another object reuses it.
+
 ## v0.3.1 (2026-11-25)
 
 - Under the hood: no change to the game. The version only moves because the mod index was refreshed after 0.3.0.
