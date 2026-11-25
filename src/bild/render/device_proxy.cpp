@@ -1253,6 +1253,16 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fv
     return hr;
 }
 
+namespace
+{
+    bool pretransformedBuffer(LPDIRECT3DVERTEXBUFFER7 vb)
+    {
+        D3DVERTEXBUFFERDESC desc{};
+        desc.dwSize = sizeof(desc);
+        return vb && SUCCEEDED(vb->GetVertexBufferDesc(&desc)) && Fvf::pretransformed(desc.dwFVF);
+    }
+}
+
 HRESULT DeviceProxy::DrawPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVERTEXBUFFER7 vb, DWORD start, DWORD count, DWORD flags)
 {
     Scope p{TProxy};
@@ -1264,14 +1274,16 @@ HRESULT DeviceProxy::DrawPrimitiveVB(D3DPRIMITIVETYPE type, LPDIRECT3DVERTEXBUFF
     {
         m_batcher->sync(Batcher::Reason::Direct);
     }
-    if (m_ui)
+    // Pretransformed vertices in a vertex buffer (Sacred Gear's retained UI meshes) are in screen pixels already: no 3D overlay mapping.
+    const bool screen = pretransformedBuffer(vb);
+    if (m_ui && !screen)
     {
         noteUiDraw(_ReturnAddress(), "DrawPrimitiveVB (not mapped)");
     }
     D3DStats::count(CSubmit);
     Scope s{TDraw};
     Overlay3D restore;
-    const bool overlay = beginOverlay3D(restore);
+    const bool overlay = !screen && beginOverlay3D(restore);
     const HRESULT hr = m_real->DrawPrimitiveVB(type, vb, start, count, flags);
     if (overlay)
     {

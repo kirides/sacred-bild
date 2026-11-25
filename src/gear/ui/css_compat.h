@@ -56,12 +56,13 @@ public:
 
     // Registers the `content` property. Call after Rml::Initialise, before style sheets load.
     void registerProperty();
-    // Synchronises generated content for all documents of a context. Call every frame
-    // before Context::Update (new content is laid out by that update).
-    void apply(Rml::Context* context);
+    // Synchronises generated content for all documents of a context. Call before Context::Update
+    // (new content is laid out by that update), each time the context is updated. True if it
+    // added, changed or removed generated text.
+    bool apply(Rml::Context* context);
 
 private:
-    void applyElement(Rml::Element* element);
+    bool applyElement(Rml::Element* element);
 
     GlyphLookup lookup_;
     Rml::PropertyId property_id_ = Rml::PropertyId::Invalid;

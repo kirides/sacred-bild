@@ -32,7 +32,10 @@ namespace Ui
     // Mesh: a triangle mesh (meshCreate) drawn translated by (x, y), both in the mesh's own units; `w` is how many of them
     // make a layout unit (the RmlUi host's pixels per layout unit); `region` the mesh id; `image` its texture (0 none, a
     // game image id as for Image, or a picture id from pictureCreate32); `flip` as for images; the clip cuts the triangles.
-    enum class Kind : uint8_t { Rect, Text, Image, Region, ItemIcon, Mesh };
+    // Retained: the mesh and item icon commands of one recorded RmlUi draw (`retained`), drawn as one command; the render thread keeps their
+    // finished vertices in vertex buffers for as long as the list lives (docs/RmlRetained.md).
+    enum class Kind : uint8_t { Rect, Text, Image, Region, ItemIcon, Mesh, Retained };
+    struct RetainedList;
     enum class Fit : uint8_t { Stretch, Contain, Cover };
 
     struct Command
@@ -65,7 +68,15 @@ namespace Ui
         // Clip (setClip while it was recorded; canvas commands only): drawn only inside x, y, w, h.
         bool clipped = false;
         float clip[4] = {};
+        // Retained
+        std::shared_ptr<const RetainedList> retained;
     };
+
+    // A list of canvas commands (meshes and item icons, as the RmlUi host makes them) to be drawn as one Kind::Retained command, any number of frames.
+    // Any thread; the commands' meshes must live as long as the list is drawn.
+    std::shared_ptr<const RetainedList> retainedCreate(std::vector<Command> commands);
+    // Whether a clip (setClip) is on for the commands recorded now: a retained list is not cut by it.
+    bool clipOn();
 
     // Lua thread: the clip rectangle for the commands recorded from now on (canvas coordinates; regions are cut to
     // it, a region left empty is dropped); on = false: none. A scroll area sets it for its content.

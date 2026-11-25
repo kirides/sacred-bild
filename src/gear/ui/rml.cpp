@@ -3,6 +3,7 @@
 #include "padnav.h"
 #include "css_compat.h"
 #include "ui.h"
+#include "prof.h"
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/DataTypes.h>
@@ -574,8 +575,37 @@ namespace
         Rml::Vector2f origin{0.0f, 0.0f};   // where the context's (0, 0) lies in layout pixels (a document that starts at the screen's edge)
         int count = 0;
         std::shared_ptr<const std::array<float, 16>> matrix;    // the element's transform (SetTransform), null: none
+        // The document's record of this draw (retained mode): the commands as made, the textures and meshes they use. Null: none.
+        std::vector<Ui::Command>* capture = nullptr;
+        std::vector<uintptr_t>* textures = nullptr;
+        std::vector<uint32_t>* meshes = nullptr;
     };
     Target g_target;
+
+    // Adds a command of the current draw (and keeps a copy in the document's record).
+    void emit(Ui::Command&& c, uintptr_t texture)
+    {
+        if (g_target.capture)
+        {
+            g_target.capture->push_back(c);
+            if (texture)
+            {
+                g_target.textures->push_back(texture);
+            }
+            if (c.kind == Ui::Kind::Mesh)
+            {
+                g_target.meshes->push_back(c.region);
+            }
+        }
+        if (Ui::add(std::move(c)))
+        {
+            ++g_target.count;
+        }
+    }
+
+    // Retained mode: RmlUi let go of a texture or mesh (defined with the documents below).
+    void onTextureReleased(uintptr_t texture);
+    void onMeshReleased(uint32_t mesh);
 
     struct TextureInfo
     {
@@ -988,7 +1018,7 @@ namespace
                 const auto item = m_textures.find(texture);
                 if (item != m_textures.end() && item->second.item)
                 {
-                    renderItem(geometry, translation, item->second);
+                    renderItem(geometry, translation, item->second, static_cast<uintptr_t>(texture));
                     return;
                 }
             }
@@ -1021,16 +1051,14 @@ namespace
                 c.clipped = true;
                 std::copy(std::begin(g_target.clip), std::end(g_target.clip), std::begin(c.clip));
             }
-            if (Ui::add(std::move(c)))
-            {
-                ++g_target.count;
-            }
+            emit(std::move(c), static_cast<uintptr_t>(texture));
         }
 
         void ReleaseGeometry(Rml::CompiledGeometryHandle geometry) override
         {
             m_bounds.erase(static_cast<uint32_t>(geometry));
             Ui::meshRelease(static_cast<uint32_t>(geometry));
+            onMeshReleased(static_cast<uint32_t>(geometry));
         }
 
         // A picture whose size is in layout units (source "?dp") has its natural size in screen pixels: the size times the canvas scale.
@@ -1170,6 +1198,7 @@ namespace
                 Ui::pictureRelease(it->second.id);
             }
             m_textures.erase(it);
+            onTextureReleased(static_cast<uintptr_t>(texture));
             if (shared)
             {
                 const auto entry = g_shared.find(shared);
@@ -1231,7 +1260,7 @@ namespace
     private:
         // An item's model ("gear:item/..."): drawn by the game's model renderer into the box of the geometry (translated), as large as
         // fits; CSS transforms and tints do not apply to it. The clip of the element cuts it as for any item icon.
-        void renderItem(Rml::CompiledGeometryHandle geometry, Rml::Vector2f translation, const TextureInfo& info)
+        void renderItem(Rml::CompiledGeometryHandle geometry, Rml::Vector2f translation, const TextureInfo& info, uintptr_t texture)
         {
             const auto b = m_bounds.find(static_cast<uint32_t>(geometry));
             if (b == m_bounds.end())
@@ -1258,10 +1287,7 @@ namespace
                 c.clipped = true;
                 std::copy(std::begin(g_target.clip), std::end(g_target.clip), std::begin(c.clip));
             }
-            if (Ui::add(std::move(c)))
-            {
-                ++g_target.count;
-            }
+            emit(std::move(c), texture);
         }
 
         Rml::TextureHandle add(const TextureInfo& info)
@@ -1293,6 +1319,19 @@ namespace
             for (const std::string& source : idle)
             {
                 Rml::ReleaseTexture(source);
+            }
+        }
+
+        // A replayed draw (retained mode) still shows these textures: they are not idle.
+        void markDrawn(const std::vector<uintptr_t>& handles, uint64_t now)
+        {
+            for (const uintptr_t h : handles)
+            {
+                const auto it = m_textures.find(static_cast<Rml::TextureHandle>(h));
+                if (it != m_textures.end() && !it->second.source.empty())
+                {
+                    it->second.lastDraw = now;
+                }
             }
         }
 
@@ -1514,6 +1553,80 @@ namespace
         }
     }
 
+    // Whether two values are the same (rml_model_set of an unchanged value leaves the document clean).
+    bool sameNode(const Node& a, const Node& b)
+    {
+        if (a.type != b.type)
+        {
+            return false;
+        }
+        switch (a.type)
+        {
+        case Node::Type::Bool: return a.b == b.b;
+        case Node::Type::Num: return a.n == b.n || (a.n != a.n && b.n != b.n);
+        case Node::Type::Str: return a.s == b.s;
+        case Node::Type::Arr:
+            if (a.arr.size() != b.arr.size())
+            {
+                return false;
+            }
+            for (size_t i = 0; i < a.arr.size(); ++i)
+            {
+                if (!sameNode(a.arr[i], b.arr[i]))
+                {
+                    return false;
+                }
+            }
+            return true;
+        case Node::Type::Obj:
+            if (a.obj.size() != b.obj.size())
+            {
+                return false;
+            }
+            for (size_t i = 0; i < a.obj.size(); ++i)
+            {
+                if (a.obj[i].first != b.obj[i].first || !sameNode(a.obj[i].second, b.obj[i].second))
+                {
+                    return false;
+                }
+            }
+            return true;
+        default: return true;
+        }
+    }
+
+    // Whether `e`'s inline style already holds what `value` parses to for `property` (every longhand of a shorthand): setting it again would change
+    // nothing.
+    bool hasLocalProperty(Rml::Element* e, const std::string& property, const std::string& value)
+    {
+        Rml::PropertyDictionary parsed;
+        if (!Rml::StyleSheetSpecification::ParsePropertyDeclaration(parsed, property, value) || parsed.GetProperties().empty())
+        {
+            return false;
+        }
+        for (const auto& [id, prop] : parsed.GetProperties())
+        {
+            const Rml::Property* local = e->GetLocalProperty(id);
+            if (!local || !(*local == prop))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Whether `e`'s attribute `name` is there with the text `value` (has = false: whether it is missing).
+    bool attributeIs(Rml::Element* e, const std::string& name, bool has, const std::string& value = {})
+    {
+        const Rml::Variant* v = e->GetAttribute(name);
+        if (!has || !v)
+        {
+            return !has && !v;
+        }
+        Rml::String text;
+        return v->GetInto(text) && text == value;
+    }
+
     // Whether `e` matches a selector: simple ones ("#id", ".class", "tag", [data-gh="N"]) by plain comparison, others through RmlUi
     // (which parses the selector on every call).
     bool matchesSelector(Rml::Element* e, const std::string& selector)
@@ -1595,10 +1708,127 @@ namespace
         std::string hotError;                   // the last reload that failed (kept until a reload works)
         unsigned reloads = 0;
         std::vector<std::string> listenerEvents;    // the event name of each listener (the same index), to attach them to a reloaded document
+
+        // ---- Retained mode (docs/RmlRetained.md): what has to run again, and what can be given again ----
+        bool dirty = true;                      // Context::Update must run (an input or a native changed the document, the canvas changed)
+        bool renderDirty = true;                // the recorded draw below is out of date
+        unsigned gen = 1;                       // moves with every change and every Update that ran: the tree walks' results are valid for one gen
+        int trailing = 0;                       // updates still to run after one that had a reason (generated content, hover after a layout change)
+        double nextUpdate = 0.0;                // RmlUi's own next update (animations, transitions, smooth scrolling, caret blink), RmlUi's clock
+        bool mouseKnown = false;                // the context's mouse is at mouseX, mouseY (the last move this host sent)
+        int mouseX = 0, mouseY = 0;
+        float canvasScale = 0.0f;               // Ui::canvasScale() at the last fitContext
+        struct Walk
+        {
+            const void* table = nullptr;        // the rows table the walk filled (lua_topointer) ...
+            unsigned gen = 0;                   // ... at this gen
+        };
+        Walk rectsWalk, navWalk, scrollsWalk, barsWalk;
+        // The commands of the last Context::Render (as made, before Ui::add) and what they were made for.
+        std::vector<Ui::Command> drawn;
+        bool drawnValid = false;
+        uint8_t drawnLayer = 0;
+        int8_t drawnSlot = -1;
+        float drawnUnit = 0.0f;
+        Rml::Vector2f drawnOrigin{0.0f, 0.0f};
+        std::vector<uintptr_t> drawnTextures;   // RmlUi texture handles and mesh ids the draw used (sorted): their release makes it stale
+        std::vector<uint32_t> drawnMeshes;
+        uint64_t texturesRefreshed = 0;         // GetTickCount64 of the last lastDraw refresh of drawnTextures by a replay
+        std::shared_ptr<const Ui::RetainedList> retained;   // `drawn` as one command (made on the first frame it is given again)
+        // SACREDGEAR_PROF: how often the document was updated and rendered, and what touched it (a native's function, or a label).
+        struct Stats
+        {
+            unsigned updates = 0, renders = 0, replays = 0, timed = 0, trailing = 0;
+            std::vector<std::pair<const void*, unsigned>> touchers;
+        } stats;
     };
 
     std::map<int, std::unique_ptr<Doc>> g_docs;
     int g_nextDoc = 1;
+
+    // GEAR_RML_NOCACHE=1: every document is updated, walked and rendered every frame (as before retained mode), for comparing.
+    const bool g_noCache = [] {
+        const char* v = std::getenv("GEAR_RML_NOCACHE");
+        return v && v[0] && v[0] != '0';
+    }();
+
+    // Labels of the touches that are no native (SACREDGEAR_PROF statistics).
+    const char kByMouse[] = "mouse", kByCanvas[] = "canvas", kByRelease[] = "release", kByAll[] = "all", kByReload[] = "reload";
+
+    // Something may have changed the document: Update runs on its next rml_update, the walks and the draw are made again.
+    void touch(Doc& d, const void* who = nullptr)
+    {
+        d.dirty = true;
+        d.renderDirty = true;
+        ++d.gen;
+        if (GearProf::g_on && who)
+        {
+            auto& list = d.stats.touchers;
+            const auto it = std::find_if(list.begin(), list.end(), [who](const auto& e) { return e.first == who; });
+            if (it != list.end())
+            {
+                ++it->second;
+            }
+            else
+            {
+                list.emplace_back(who, 1u);
+            }
+        }
+    }
+
+    void touchAll()
+    {
+        for (auto& [id, d] : g_docs)
+        {
+            touch(*d, kByAll);
+        }
+    }
+
+    // Every 5 s with SACREDGEAR_PROF: per document, how many of the frames updated, rendered or replayed it, and what touched it.
+    void reportDocs()
+    {
+        static double last = 0.0;
+        const double t = GearProf::now();
+        if (t - last < 5.0)
+        {
+            return;
+        }
+        last = t;
+        const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(L"SacredGear.dll"));
+        for (auto& [id, d] : g_docs)
+        {
+            std::string who;
+            for (const auto& [p, n] : d->stats.touchers)
+            {
+                const bool label = p == kByMouse || p == kByCanvas || p == kByRelease || p == kByAll || p == kByReload;
+                who += label ? Fmt::format(" {}={}", static_cast<const char*>(p), n)
+                             : Fmt::format(" {:x}={}", reinterpret_cast<uintptr_t>(p) - base + 0x10000000u, n);
+            }
+            LOG("RMLDOC|{:.3f}|{}|{}|updates {} (timed {}, trailing {})|renders {}|replays {}|touched by{}", t, id, d->mod, d->stats.updates,
+                d->stats.timed, d->stats.trailing, d->stats.renders, d->stats.replays, who);
+            d->stats = Doc::Stats{};
+        }
+    }
+
+    Doc* g_active = nullptr;    // the document whose update or draw runs now (its own releases do not make its draw stale)
+
+    // RmlUi let go of a texture or a mesh: a document whose recorded draw used it has to be drawn again (and updated: RmlUi loads a released
+    // texture again while it renders).
+    template <typename T>
+    void releasedHandle(std::vector<T> Doc::* list, T handle)
+    {
+        for (auto& [id, d] : g_docs)
+        {
+            const std::vector<T>& used = d.get()->*list;
+            if (d.get() != g_active && d->drawnValid && std::binary_search(used.begin(), used.end(), handle))
+            {
+                touch(*d, kByRelease);
+            }
+        }
+    }
+
+    void onTextureReleased(uintptr_t texture) { releasedHandle(&Doc::drawnTextures, texture); }
+    void onMeshReleased(uint32_t mesh) { releasedHandle(&Doc::drawnMeshes, mesh); }
 
     void Listener::ProcessEvent(Rml::Event& event)
     {
@@ -2055,7 +2285,13 @@ namespace
     // (1dp = one layout unit), the others in layout units (1px = one layout unit).
     void fitContext(Doc& d)
     {
-        const float unit = d.dp ? std::max(0.5f, Ui::canvasScale()) : 1.0f;
+        const float scale = Ui::canvasScale();
+        if (scale != d.canvasScale)
+        {
+            d.canvasScale = scale;      // (the glyphs of layout-unit documents are rasterized for it)
+            touch(d, kByCanvas);
+        }
+        const float unit = d.dp ? std::max(0.5f, scale) : 1.0f;
         // As large as the screen where that is more than the 1024 x 768 layout (a game laid out in screen pixels, a wide
         // screen): a document's elements past the context's edge lose their text.
         float right = kLayoutWidth, bottom = kLayoutHeight;
@@ -2068,10 +2304,16 @@ namespace
         Ui::screenOrigin(left, top);
         const Rml::Vector2f origin(std::floor(left * unit), std::floor(top * unit));
         const Rml::Vector2i dims(static_cast<int>(std::lround(std::ceil(right) * unit - origin.x)), static_cast<int>(std::lround(std::ceil(bottom) * unit - origin.y)));
+        const Rml::Vector2f body = d.screenOrigin ? origin : Rml::Vector2f(0.0f, 0.0f);
+        if (origin != d.originPx || body != d.bodyPx)
+        {
+            touch(d, kByCanvas);
+        }
         d.originPx = origin;
-        d.bodyPx = d.screenOrigin ? origin : Rml::Vector2f(0.0f, 0.0f);
+        d.bodyPx = body;
         if (unit != d.unit || d.context->GetDimensions() != dims)
         {
+            touch(d, kByCanvas);
             d.unit = unit;
             d.context->SetDimensions(dims);
             d.context->SetDensityIndependentPixelRatio(d.dp ? unit : 1.0f);
@@ -2086,6 +2328,7 @@ namespace
             }
             d.shiftedDocument = d.document;
             d.shiftApplied = shift;
+            touch(d, kByCanvas);
         }
     }
 
@@ -2107,6 +2350,8 @@ namespace
 
     // The handle of an element: the number in its data-gh attribute, given on first use. Lua addresses the element with the selector
     // [data-gh="N"], so a handle to an element that was removed simply matches nothing.
+    bool g_handleAdded = false;     // a handleOf call gave an element its data-gh (an attribute change: the document is touched)
+
     int handleOf(Doc& d, Rml::Element* e)
     {
         int h = e->GetAttribute<int>("data-gh", 0);
@@ -2114,6 +2359,7 @@ namespace
         {
             h = ++d.nextHandle;
             e->SetAttribute("data-gh", h);
+            g_handleAdded = true;
         }
         return h;
     }
@@ -2312,6 +2558,46 @@ namespace
             failure = "unknown error";
         }
         return luaL_error(L, "rml: %s", failure.c_str());
+    }
+
+    // Natives that can change a document are registered as mutating<F> (docs/RmlRetained.md): the document of argument 1 is touched after the
+    // call (also when it failed half way), unless the native set g_unchanged (a getter call of a getter / setter, a value that already was so).
+    bool g_unchanged = false;
+
+    template <int (*F)(lua_State*)>
+    int touching(lua_State* L)
+    {
+        struct After
+        {
+            int id;
+            ~After()
+            {
+                if (!g_unchanged)
+                {
+                    if (Doc* d = findDoc(id))
+                    {
+                        touch(*d, reinterpret_cast<const void*>(F));
+                    }
+                }
+            }
+        } after{lua_isnumber(L, 1) ? static_cast<int>(lua_tonumber(L, 1)) : 0};
+        g_unchanged = false;
+        return F(L);
+    }
+
+    template <int (*F)(lua_State*)>
+    int mutating(lua_State* L)
+    {
+        return guarded<touching<F>>(L);
+    }
+
+    // A native that may change what every document shows (a font, the packs files are read from).
+    template <int (*F)(lua_State*)>
+    int touchingAll(lua_State* L)
+    {
+        const int n = F(L);
+        touchAll();
+        return n;
     }
 
     std::string str(lua_State* L, int arg)
@@ -2783,6 +3069,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         const std::string key = str(L, 2);
         if (!d.hasModel)
         {
+            g_unchanged = true;
             lua_pushboolean(L, 0);
             return 1;
         }
@@ -2790,8 +3077,17 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         {
             if (name == key)
             {
-                toNode(L, 3, value, 0);
-                d.modelHandle.DirtyVariable(key);
+                Node next;
+                toNode(L, 3, next, 0);
+                if (sameNode(next, value))
+                {
+                    g_unchanged = true;     // a mod that hands the same value in every frame leaves the document clean
+                }
+                else
+                {
+                    value = std::move(next);
+                    d.modelHandle.DirtyVariable(key);
+                }
                 lua_pushboolean(L, 1);
                 return 1;
             }
@@ -2853,8 +3149,9 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
 
     // Every button of the document that has no controller prompt gets the confirm one (<span class="padkey a">, shown while the pad is on the button): a
     // document does not have to carry it, and the buttons of an unstyled or older document show one like the rest.
-    void ensureButtonPrompts(Doc& d)
+    bool ensureButtonPrompts(Doc& d)
     {
+        bool added = false;
         Rml::ElementList buttons;
         d.document->QuerySelectorAll(buttons, "button");
         for (Rml::Element* b : buttons)
@@ -2871,7 +3168,9 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             Rml::ElementPtr span = d.document->CreateElement("span");
             span->SetClassNames("padkey a");
             b->InsertBefore(std::move(span), b->GetFirstChild());
+            added = true;
         }
+        return added;
     }
 
     // ---- Hot reload (a developer's tool: g_hotReload) ----
@@ -2965,6 +3264,8 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             }
         }
         ++d.reloads;
+        touch(d, kByReload);
+        d.drawnValid = false;
         LOG("RmlUi hot reload: {}", toUtf8(d.file));
     }
 
@@ -3026,20 +3327,51 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         fitContext(d);
         if (hover)
         {
-            d.context->ProcessMouseMove(static_cast<int>(mx * d.unit - d.originPx.x), static_cast<int>(my * d.unit - d.originPx.y), 0);
+            // A move only when the mouse moved (or the context's mouse was put elsewhere: rml_click, rml_mouse): RmlUi runs its hover
+            // chain for every move, and a still mouse is no reason to update the document.
+            const int x = static_cast<int>(mx * d.unit - d.originPx.x), y = static_cast<int>(my * d.unit - d.originPx.y);
+            if (!d.hovering || !d.mouseKnown || x != d.mouseX || y != d.mouseY || g_noCache)
+            {
+                d.context->ProcessMouseMove(x, y, 0);
+                d.mouseKnown = true;
+                d.mouseX = x;
+                d.mouseY = y;
+                touch(d, kByMouse);
+            }
             d.hovering = true;
         }
         else if (d.hovering)
         {
             d.context->ProcessMouseLeave();
             d.hovering = false;
+            d.mouseKnown = false;
+            touch(d, kByMouse);
         }
-        ensureButtonPrompts(d);
-        if (g_content)
+        // Retained mode (docs/RmlRetained.md): Update runs when something may have changed the document, when RmlUi asked for it (an
+        // animation, a transition, smooth scrolling, the caret's blink) and once more after any of those (generated content, button prompts and
+        // the hover of an element that moved under a still mouse settle one update later).
+        const double now = g_system->GetElapsedTime();
+        const bool reason = d.dirty || now >= d.nextUpdate || g_noCache;
+        if (reason || d.trailing > 0)
         {
-            g_content->apply(d.context);
+            ++d.stats.updates;
+            d.stats.timed += !d.dirty && now >= d.nextUpdate ? 1 : 0;
+            d.stats.trailing += reason ? 0 : 1;
+            d.dirty = false;
+            d.trailing = reason ? 1 : d.trailing - 1;
+            g_active = &d;
+            bool changed = ensureButtonPrompts(d);
+            if (g_content)
+            {
+                changed = g_content->apply(d.context) || changed;
+            }
+            d.context->Update();
+            g_active = nullptr;
+            ++d.gen;
+            d.renderDirty = true;
+            d.dirty = d.dirty || changed;
+            d.nextUpdate = now + d.context->GetNextUpdateDelay();
         }
-        d.context->Update();
         if (d.events.empty())
         {
             // The common case: nothing happened. One shared empty table, nothing allocated (callers only read it).
@@ -3105,17 +3437,88 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             lua_pushnumber(L, 0);
             return 1;
         }
+        if (g_render)
+        {
+            g_render->sweepFileTextures();
+        }
+        if (GearProf::g_on)
+        {
+            reportDocs();
+        }
+        // Retained mode: a document that did not change since its last draw, drawn to the same place, gives the same commands again.
+        if (!d.renderDirty && !g_noCache && d.drawnValid && d.drawnLayer == layer && d.drawnSlot == slot && d.drawnUnit == d.unit &&
+            d.drawnOrigin == d.originPx)
+        {
+            int count = 0;
+            ++d.stats.replays;
+            if (slot == -1 && !Ui::clipOn())
+            {
+                // One command for all of it: the render thread keeps its finished vertices (docs/RmlRetained.md, "Replay").
+                if (!d.retained && !d.drawn.empty())
+                {
+                    d.retained = Ui::retainedCreate(d.drawn);
+                }
+                Ui::Command c;
+                c.kind = Ui::Kind::Retained;
+                c.layer = static_cast<Ui::Layer>(layer);
+                c.window = -1;
+                c.retained = d.retained;
+                count = d.retained && Ui::add(std::move(c)) ? static_cast<int>(d.drawn.size()) : 0;
+            }
+            else
+            {
+                for (const Ui::Command& c : d.drawn)
+                {
+                    if (count >= kMaxMeshesPerDraw)
+                    {
+                        break;
+                    }
+                    Ui::Command copy = c;
+                    if (Ui::add(std::move(copy)))
+                    {
+                        ++count;
+                    }
+                }
+            }
+            const uint64_t now = GetTickCount64();
+            if (g_render && now - d.texturesRefreshed > 1000)
+            {
+                d.texturesRefreshed = now;
+                g_render->markDrawn(d.drawnTextures, now);
+            }
+            lua_pushnumber(L, count);
+            return 1;
+        }
         g_target = Target{};
         g_target.layer = static_cast<uint8_t>(layer);
         g_target.window = static_cast<int8_t>(slot);
         g_target.unit = d.unit;
         g_target.origin = d.originPx;
+        d.drawn.clear();
+        d.drawnTextures.clear();
+        d.drawnMeshes.clear();
+        d.retained.reset();
+        g_target.capture = &d.drawn;
+        g_target.textures = &d.drawnTextures;
+        g_target.meshes = &d.drawnMeshes;
         RootScope scope(d);
-        if (g_render)
-        {
-            g_render->sweepFileTextures();
-        }
+        ++d.stats.renders;
+        g_active = &d;
         d.context->Render();
+        g_active = nullptr;
+        g_target.capture = nullptr;
+        g_target.textures = nullptr;
+        g_target.meshes = nullptr;
+        std::sort(d.drawnTextures.begin(), d.drawnTextures.end());
+        d.drawnTextures.erase(std::unique(d.drawnTextures.begin(), d.drawnTextures.end()), d.drawnTextures.end());
+        std::sort(d.drawnMeshes.begin(), d.drawnMeshes.end());
+        d.drawnMeshes.erase(std::unique(d.drawnMeshes.begin(), d.drawnMeshes.end()), d.drawnMeshes.end());
+        d.drawnValid = true;
+        d.drawnLayer = static_cast<uint8_t>(layer);
+        d.drawnSlot = static_cast<int8_t>(slot);
+        d.drawnUnit = d.unit;
+        d.drawnOrigin = d.originPx;
+        d.renderDirty = false;
         lua_pushnumber(L, g_target.count);
         return 1;
     }
@@ -3214,6 +3617,25 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         }
     }
 
+    // Retained mode: the rows a walk filled last time are still right while the document's gen has not moved (and the caller hands in the
+    // same table): it is given back as it is, no walk, nothing written.
+    bool reuseRows(lua_State* L, const Doc& d, const Doc::Walk& w)
+    {
+        if (g_noCache || !lua_istable(L, 2) || w.gen != d.gen || w.table != lua_topointer(L, 2))
+        {
+            return false;
+        }
+        lua_pushvalue(L, 2);
+        return true;
+    }
+
+    // ... after a walk filled the table on top of the stack.
+    void keepRows(lua_State* L, const Doc& d, Doc::Walk& w)
+    {
+        w.gen = d.gen;
+        w.table = lua_topointer(L, -1);
+    }
+
     // A table to fill: argument `arg` if it is one (reused), else a new one. Leaves it on top of the stack.
     void rowsTable(lua_State* L, int arg)
     {
@@ -3233,6 +3655,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     int rmlRects(lua_State* L)
     {
         Doc& d = docArg(L);
+        if (reuseRows(L, d, d.rectsWalk))
+        {
+            return 1;
+        }
         rowsTable(L, 2);
         int index = 1;
         if (d.document->IsVisible())
@@ -3248,6 +3674,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             }
         }
         trimRows(L, index - 1);
+        keepRows(L, d, d.rectsWalk);
         return 1;
     }
 
@@ -3260,8 +3687,21 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         if (e)
         {
             const double x = luaL_checknumber(L, 3), y = luaL_checknumber(L, 4);
-            e->SetProperty("left", std::to_string(static_cast<int>(std::lround(x * d.unit - d.bodyPx.x))) + "px");
-            e->SetProperty("top", std::to_string(static_cast<int>(std::lround(y * d.unit - d.bodyPx.y))) + "px");
+            const std::string left = std::to_string(static_cast<int>(std::lround(x * d.unit - d.bodyPx.x))) + "px";
+            const std::string top = std::to_string(static_cast<int>(std::lround(y * d.unit - d.bodyPx.y))) + "px";
+            if (hasLocalProperty(e, "left", left) && hasLocalProperty(e, "top", top))
+            {
+                g_unchanged = true;     // already there (an element that stays where its own style puts it)
+            }
+            else
+            {
+                e->SetProperty("left", left);
+                e->SetProperty("top", top);
+            }
+        }
+        else
+        {
+            g_unchanged = true;
         }
         lua_pushboolean(L, e != nullptr);
         return 1;
@@ -3276,9 +3716,22 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         if (e)
         {
             const double w = luaL_checknumber(L, 3), h = luaL_checknumber(L, 4);
-            e->SetProperty("box-sizing", "border-box");
-            e->SetProperty("width", std::to_string(static_cast<int>(std::lround(w * d.unit))) + "px");
-            e->SetProperty("height", std::to_string(static_cast<int>(std::lround(h * d.unit))) + "px");
+            const std::string width = std::to_string(static_cast<int>(std::lround(w * d.unit))) + "px";
+            const std::string height = std::to_string(static_cast<int>(std::lround(h * d.unit))) + "px";
+            if (hasLocalProperty(e, "box-sizing", "border-box") && hasLocalProperty(e, "width", width) && hasLocalProperty(e, "height", height))
+            {
+                g_unchanged = true;
+            }
+            else
+            {
+                e->SetProperty("box-sizing", "border-box");
+                e->SetProperty("width", width);
+                e->SetProperty("height", height);
+            }
+        }
+        else
+        {
+            g_unchanged = true;
         }
         lua_pushboolean(L, e != nullptr);
         return 1;
@@ -3289,6 +3742,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     int rmlNav(lua_State* L)
     {
         Doc& d = docArg(L);
+        if (reuseRows(L, d, d.navWalk))
+        {
+            return 1;
+        }
         rowsTable(L, 2);
         int index = 1;
         for (Rml::Element* e : navElements(d))
@@ -3307,6 +3764,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             lua_pop(L, 1);
         }
         trimRows(L, index - 1);
+        keepRows(L, d, d.navWalk);
         return 1;
     }
 
@@ -3343,6 +3801,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     int rmlScrollbars(lua_State* L)
     {
         Doc& d = docArg(L);
+        if (reuseRows(L, d, d.barsWalk))
+        {
+            return 1;
+        }
         rowsTable(L, 2);
         std::vector<std::array<float, 4>> bars;
         if (d.document->IsVisible())
@@ -3372,6 +3834,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             ++index;
         }
         trimRows(L, index - 1);
+        keepRows(L, d, d.barsWalk);
         return 1;
     }
 
@@ -3380,6 +3843,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     int rmlScrolls(lua_State* L)
     {
         Doc& d = docArg(L);
+        if (reuseRows(L, d, d.scrollsWalk))
+        {
+            return 1;
+        }
         rowsTable(L, 2);
         int index = 1;
         if (d.document->IsVisible())
@@ -3406,6 +3873,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             }
         }
         trimRows(L, index - 1);
+        keepRows(L, d, d.scrollsWalk);
         return 1;
     }
 
@@ -3418,6 +3886,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         const float px = static_cast<float>(luaL_checknumber(L, 2)) * d.unit, py = static_cast<float>(luaL_checknumber(L, 3)) * d.unit;
         const int dir = luaL_checknumber(L, 4) > 0 ? 1 : -1;
         RootScope scope(d);
+        g_unchanged = true;     // until it scrolls
         if (!d.document->IsVisible())
         {
             lua_pushboolean(L, 0);
@@ -3474,6 +3943,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         }
         const float top = area->GetScrollTop();
         const float most = std::max(0.0f, area->GetScrollHeight() - area->GetClientHeight());
+        g_unchanged = false;
         area->SetScrollTop(std::max(0.0f, std::min(most, top + (centre(best) - here))));
         lua_pushboolean(L, 1);
         return 1;
@@ -3487,6 +3957,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         Doc& d = docArg(L);
         const float px = static_cast<float>(luaL_checknumber(L, 2)) * d.unit, py = static_cast<float>(luaL_checknumber(L, 3)) * d.unit;
         RootScope scope(d);
+        g_unchanged = true;     // until it scrolls
         lua_pushboolean(L, 0);
         if (!d.document->IsVisible())
         {
@@ -3524,6 +3995,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             }
             const float top = area->GetScrollTop();
             const float most = std::max(0.0f, area->GetScrollHeight() - area->GetClientHeight());
+            g_unchanged = false;
             area->SetScrollTop(std::max(0.0f, std::min(most, top + move)));
             lua_pop(L, 1);
             lua_pushboolean(L, 1);
@@ -3541,8 +4013,12 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         RootScope scope(d);
         if (lua_isnumber(L, 3) && lua_isnumber(L, 4))
         {
-            d.context->ProcessMouseMove(static_cast<int>(lua_tonumber(L, 3) * d.unit - d.originPx.x), static_cast<int>(lua_tonumber(L, 4) * d.unit - d.originPx.y), 0);
+            const int x = static_cast<int>(lua_tonumber(L, 3) * d.unit - d.originPx.x), y = static_cast<int>(lua_tonumber(L, 4) * d.unit - d.originPx.y);
+            d.context->ProcessMouseMove(x, y, 0);
             d.hovering = true;
+            d.mouseKnown = true;
+            d.mouseX = x;
+            d.mouseY = y;
         }
         const int mods = modifiersArg(L, 5);
         if (kind == "down")
@@ -3598,6 +4074,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         // the centre of where it is drawn (a button inside a scaled grid is not where the layout has it)
         const DrawnBox b = drawnBox(e);
         d.context->ProcessMouseMove(static_cast<int>(b.x + b.w * 0.5f), static_cast<int>(b.y + b.h * 0.5f), 0);
+        d.mouseKnown = false;       // (the next update puts it back where the real mouse is)
         d.context->ProcessMouseButtonDown(0, 0);
         d.context->ProcessMouseButtonUp(0, 0);
         return 0;
@@ -3610,15 +4087,30 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         Rml::Element* e = find(d, str(L, 2));
         if (!e)
         {
+            g_unchanged = true;
             lua_pushnil(L);
             return 1;
         }
+        Rml::String inner = e->GetInnerRML();
         if (lua_isstring(L, 3))
         {
-            RootScope scope(d);
-            e->SetInnerRML(str(L, 3));
+            std::string markup = str(L, 3);
+            if (markup == inner)
+            {
+                g_unchanged = true;     // the same text again (a label a mod sets every frame)
+            }
+            else
+            {
+                RootScope scope(d);
+                e->SetInnerRML(markup);
+                inner = e->GetInnerRML();
+            }
         }
-        push(L, e->GetInnerRML());
+        else
+        {
+            g_unchanged = true;
+        }
+        push(L, inner);
         return 1;
     }
 
@@ -3635,15 +4127,41 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         }
         if (lua_type(L, 4) == LUA_TBOOLEAN && !lua_toboolean(L, 4))
         {
-            e->RemoveAttribute(name);
+            if (attributeIs(e, name, false))
+            {
+                g_unchanged = true;
+            }
+            else
+            {
+                e->RemoveAttribute(name);
+            }
         }
         else if (lua_type(L, 4) == LUA_TBOOLEAN)
         {
-            e->SetAttribute(name, Rml::String());      // a flag attribute (checked, disabled)
+            if (attributeIs(e, name, true))
+            {
+                g_unchanged = true;
+            }
+            else
+            {
+                e->SetAttribute(name, Rml::String());      // a flag attribute (checked, disabled)
+            }
         }
         else if (lua_isstring(L, 4))
         {
-            e->SetAttribute(name, str(L, 4));
+            const std::string value = str(L, 4);
+            if (attributeIs(e, name, true, value))
+            {
+                g_unchanged = true;
+            }
+            else
+            {
+                e->SetAttribute(name, value);
+            }
+        }
+        else
+        {
+            g_unchanged = true;
         }
         const Rml::Variant* v = e->GetAttribute(name);
         Rml::String text;
@@ -3663,9 +4181,15 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     {
         Doc& d = docArg(L);
         Rml::Element* e = find(d, str(L, 2));
-        if (e)
+        const std::string name = str(L, 3);
+        const bool on = lua_toboolean(L, 4) != 0;
+        if (e && e->IsClassSet(name) != on)
         {
-            e->SetClass(str(L, 3), lua_toboolean(L, 4) != 0);
+            e->SetClass(name, on);
+        }
+        else
+        {
+            g_unchanged = true;
         }
         lua_pushboolean(L, e != nullptr);
         return 1;
@@ -3676,16 +4200,34 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     {
         Doc& d = docArg(L);
         Rml::Element* e = find(d, str(L, 2));
+        g_unchanged = e == nullptr;
         if (e)
         {
             const std::string property = str(L, 3);
             if (lua_type(L, 4) == LUA_TBOOLEAN || lua_isnil(L, 4))
             {
-                e->RemoveProperty(property);
+                // a longhand that is not set inline: nothing to take off (a shorthand is always taken off: its longhands are not looked at)
+                const Rml::PropertyId id = Rml::StyleSheetSpecification::GetPropertyId(property);
+                if (id != Rml::PropertyId::Invalid && !e->GetLocalProperty(id))
+                {
+                    g_unchanged = true;
+                }
+                else
+                {
+                    e->RemoveProperty(property);
+                }
             }
             else
             {
-                e->SetProperty(property, str(L, 4));
+                const std::string value = str(L, 4);
+                if (hasLocalProperty(e, property, value))
+                {
+                    g_unchanged = true;
+                }
+                else
+                {
+                    e->SetProperty(property, value);
+                }
             }
         }
         lua_pushboolean(L, e != nullptr);
@@ -3702,9 +4244,13 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             lua_pushnil(L);
             return 1;
         }
-        if (lua_isstring(L, 3))
+        if (lua_isstring(L, 3) && e->GetValue() != str(L, 3))
         {
             e->SetValue(str(L, 3));
+        }
+        else
+        {
+            g_unchanged = true;
         }
         push(L, e->GetValue());
         return 1;
@@ -3715,6 +4261,11 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     {
         Doc& d = docArg(L);
         const std::string selector = str(L, 2);
+        g_handleAdded = false;
+        struct Settle
+        {
+            ~Settle() { g_unchanged = !g_handleAdded; }
+        } settle;
         if (lua_toboolean(L, 3))
         {
             Rml::ElementList list;
@@ -3802,6 +4353,11 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         Doc& d = docArg(L);
         Rml::Element* e = find(d, str(L, 2));
         const std::string what = str(L, 3);
+        g_handleAdded = false;
+        struct Settle
+        {
+            ~Settle() { g_unchanged = !g_handleAdded; }
+        } settle;
         if (what == "parent")
         {
             Rml::Element* p = e ? e->GetParentNode() : nullptr;
@@ -3862,6 +4418,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         {
             e->SetScrollTop(static_cast<float>(lua_tonumber(L, 3)) * unit);
         }
+        else
+        {
+            g_unchanged = true;
+        }
         lua_createtable(L, 0, 3);
         lua_pushnumber(L, e->GetScrollTop() / unit);
         lua_setfield(L, -2, "top");
@@ -3880,7 +4440,13 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         Rml::Element* e = find(d, str(L, 2));
         if (e)
         {
-            if (lua_isnone(L, 3) || lua_toboolean(L, 3))
+            const bool focused = d.context->GetFocusElement() == e;
+            const bool want = lua_isnone(L, 3) || lua_toboolean(L, 3);
+            if (want == focused)
+            {
+                g_unchanged = true;
+            }
+            else if (want)
             {
                 e->Focus();
             }
@@ -3888,6 +4454,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             {
                 e->Blur();
             }
+        }
+        else
+        {
+            g_unchanged = true;
         }
         lua_pushboolean(L, e != nullptr);
         lua_pushboolean(L, e && e->GetOwnerDocument() && e->GetOwnerDocument()->GetContext() &&
@@ -3903,6 +4473,10 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         {
             RootScope scope(d);
             f->Blur();
+        }
+        else
+        {
+            g_unchanged = true;
         }
         return 0;
     }
@@ -4319,51 +4893,52 @@ void RmlHost::configure(const std::wstring& modsDir)
 
 void RmlHost::registerNatives(lua_State* L)
 {
+    // Retained mode (docs/RmlRetained.md): a native that can change a document is mutating<F>; guarded<F> ones only read.
     static const luaL_Reg kNatives[] = {
         {"rml_load", guarded<rmlLoad>},
         {"rml_load_string", guarded<rmlLoadString>},
-        {"rml_origin", guarded<rmlOrigin>},
+        {"rml_origin", mutating<rmlOrigin>},
         {"rml_close", guarded<rmlClose>},
-        {"rml_show", guarded<rmlShow>},
+        {"rml_show", mutating<rmlShow>},
         {"rml_update", guarded<rmlUpdate>},
         {"rml_hot", guarded<rmlHot>},
         {"rml_reloads", guarded<rmlReloads>},
         {"rml_draw", guarded<rmlDraw>},
         {"rml_rects", guarded<rmlRects>},
-        {"rml_move", guarded<rmlMove>},
-        {"rml_resize", guarded<rmlResize>},
-        {"rml_query", guarded<rmlQuery>},
-        {"rml_append", guarded<rmlAppend>},
-        {"rml_remove", guarded<rmlRemove>},
-        {"rml_relatives", guarded<rmlRelatives>},
+        {"rml_move", mutating<rmlMove>},
+        {"rml_resize", mutating<rmlResize>},
+        {"rml_query", mutating<rmlQuery>},
+        {"rml_append", mutating<rmlAppend>},
+        {"rml_remove", mutating<rmlRemove>},
+        {"rml_relatives", mutating<rmlRelatives>},
         {"rml_rect", guarded<rmlRect>},
         {"rml_tag", guarded<rmlTag>},
-        {"rml_focus", guarded<rmlFocus>},
-        {"rml_blur", guarded<rmlBlur>},
-        {"rml_scroll", guarded<rmlScroll>},
-        {"rml_model_set", guarded<rmlModelSet>},
+        {"rml_focus", mutating<rmlFocus>},
+        {"rml_blur", mutating<rmlBlur>},
+        {"rml_scroll", mutating<rmlScroll>},
+        {"rml_model_set", mutating<rmlModelSet>},
         {"rml_model_changed", guarded<rmlModelChanged>},
         {"rml_nav", guarded<rmlNav>},
         {"rml_scrolls", guarded<rmlScrolls>},
         {"rml_scrollbars", guarded<rmlScrollbars>},
-        {"rml_pad_scroll", guarded<rmlPadScroll>},
-        {"rml_pad_reveal", guarded<rmlPadReveal>},
-        {"rml_click", guarded<rmlClick>},
-        {"rml_mouse", guarded<rmlMouse>},
-        {"rml_nudge", guarded<rmlNudge>},
-        {"rml_html", guarded<rmlHtml>},
-        {"rml_attr", guarded<rmlAttr>},
-        {"rml_class", guarded<rmlClass>},
-        {"rml_style", guarded<rmlStyle>},
-        {"rml_value", guarded<rmlValue>},
+        {"rml_pad_scroll", mutating<rmlPadScroll>},
+        {"rml_pad_reveal", mutating<rmlPadReveal>},
+        {"rml_click", mutating<rmlClick>},
+        {"rml_mouse", mutating<rmlMouse>},
+        {"rml_nudge", mutating<rmlNudge>},
+        {"rml_html", mutating<rmlHtml>},
+        {"rml_attr", mutating<rmlAttr>},
+        {"rml_class", mutating<rmlClass>},
+        {"rml_style", mutating<rmlStyle>},
+        {"rml_value", mutating<rmlValue>},
         {"rml_listen", guarded<rmlListen>},
         {"rml_wants_text", guarded<rmlWantsText>},
-        {"rml_text", guarded<rmlText>},
-        {"rml_key", guarded<rmlKey>},
-        {"rml_wheel", guarded<rmlWheel>},
-        {"rml_font", guarded<rmlFont>},
-        {"vfs_configure", guarded<vfsConfigure>},
-        {"vfs_unmount", guarded<vfsUnmount>},
+        {"rml_text", mutating<rmlText>},
+        {"rml_key", mutating<rmlKey>},
+        {"rml_wheel", mutating<rmlWheel>},
+        {"rml_font", guarded<touchingAll<rmlFont>>},
+        {"vfs_configure", guarded<touchingAll<vfsConfigure>>},
+        {"vfs_unmount", guarded<touchingAll<vfsUnmount>>},
         {"vfs_read", guarded<vfsRead>},
         {"vfs_exists", guarded<vfsExists>},
         {"vfs_list", guarded<vfsList>},
