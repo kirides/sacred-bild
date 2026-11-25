@@ -81,6 +81,7 @@ end)
 | `description`, `author` | Shown in the Mods screen |
 | `priority` | Lower loads first (default 0); ties load by id. The player's load order (below) comes before it |
 | `requires` | Ids that must load first; the mod is skipped if one is missing (and off while one of them is off) |
+| `recommended` | Ids of mods that go well with this one (`id`, or `id>=version`). Gear ignores it; the external Mod Manager shows it and offers the missing ones on install |
 | `enabled` | `false`: off until the player switches it on in the Mods screen (a default, not a lock) |
 | `settings`, `keys` | Declared settings and key binds: the [Mod manager](#mod-manager) builds their pages |
 | `config` | Default values for `gear.config`; `config.lua` in the mod's folder (a table, values only) overrides them. For what has no screen (lists, self test switches). A declared setting with the same id takes its default from there. |
