@@ -1,3 +1,7 @@
+## v0.14.1 (2026-11-25)
+
+- Fixed: windows made with `gear.kit` that have no width of their own (the on-screen keyboard) shrank to nothing: a document's body is only as wide as its content, so an absolutely positioned window found a containing block 0 wide. `kit.page` now gives the body the full width, so such windows size themselves from their content.
+
 ## v0.14.0 (2026-11-25)
 
 - New: `gear.npc`, custom NPCs for mods. A kind (`npc.define`) takes the model of any object type of the game, a name of its own, dialog pages, a daily routine and a tint; `npc.spawn` makes a friendly creature of it. The creature shows its name over its head, and the game keeps the name with the savegame, so the NPC is found again after a load (`npc.list`, `npc.of`).
