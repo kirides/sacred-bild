@@ -2250,6 +2250,17 @@ void Ui::pictureRelease(uint32_t id)
     g_pictures.erase(it);
 }
 
+IDirectDrawSurface7* Ui::surfaceFor(IDirect3DDevice7* device, uint32_t id)
+{
+    ImageRecord r{};
+    IDirectDrawSurface7* surface = nullptr;
+    if (id >= kPictureBase)
+    {
+        return pictureTexture(device, id, r, surface) ? surface : nullptr;
+    }
+    return imageRecord(id, r) ? imageSurface(r.texture) : nullptr;
+}
+
 uint32_t Ui::pictureCreate32(int width, int height, std::vector<uint32_t> pixels, bool premultiplied)
 {
     if (width <= 0 || height <= 0 || width > 4096 || height > 4096 || pixels.size() < size_t(width) * height)

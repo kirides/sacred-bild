@@ -77,6 +77,8 @@ end
 --   routine   {{time = 'HH:MM', x =, y =, layer =}, ...}: where the NPC stands from that time on
 --   talk_range  how close the hero must be to talk (world units, default 140)
 --   walk_radius when the hero is this close (to the NPC or its goal) the NPC walks to the next routine point; else it is put there
+--   texture   another texture for the model: a file of the mod ('skin.png', both sides a power of two), {pak = 'NAME.TGA'} (a texture of the game's
+--             Texture.pak) or {all = t, parts = {[n] = t}} of those, for single meshes; the same texture layout as the model's own (creature:set_texture)
 --   tint      a colour (0xRRGGBB) or {all = colour, parts = {[n] = colour}}: creature:set_tint; set again after a load
 --   on_talk   fun(e): a dialog opened
 function N.define(id, def)
@@ -117,6 +119,49 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- spawning and the list of NPCs
 
+local textures = {}          -- file path -> its gear.ui.texture handle (kept: the creatures use the picture)
+
+-- An image id for creature:set_texture: a file of the mod (PNG, TGA, JPG, DDS, both sides a power of two), {pak = 'NAME.TGA'} (the game's
+-- Texture.pak) or an image id as it is.
+local function texture_id(v)
+    if type(v) == 'number' then return v end
+    if type(v) == 'table' and v.pak then return ui.texture_image(v.pak), 'no texture ' .. tostring(v.pak) .. ' in the game' end
+    if type(v) == 'string' then
+        local t = textures[v]
+        if not t then
+            local err
+            t, err = ui.texture.load(v)
+            if not t then return nil, err end
+            textures[v] = t
+        end
+        local function pow2(n) return n >= 1 and n == 2 ^ math.floor(math.log(n) / math.log(2) + 0.5) end
+        if not pow2(t.width) or not pow2(t.height) then return nil, v .. ': both sides must be a power of two' end
+        return t.picture, 'no picture'
+    end
+    return nil, 'a texture is a file name, {pak = name} or an image id'
+end
+
+local function texture_spec(spec)
+    if type(spec) == 'table' and not spec.pak then
+        local out = {parts = {}}
+        local id, why
+        if spec.all ~= nil then
+            id, why = texture_id(spec.all)
+            if not id then return nil, why end
+            out.all = id
+        end
+        for part, v in pairs(spec.parts or {}) do
+            id, why = texture_id(v)
+            if not id then return nil, why end
+            out.parts[part] = id
+        end
+        return out
+    end
+    local id, why = texture_id(spec)
+    if not id then return nil, why end
+    return {all = id}
+end
+
 local looked = {}            -- creature id -> true: its tint was set this session (the tints end with the savegame)
 
 local function apply_look(c, def, inst)
@@ -125,10 +170,17 @@ local function apply_look(c, def, inst)
         local ok, why = c:set_tint(tint)
         if not ok then gear.log(('npc %s: tint: %s'):format(def.id, tostring(why))) end
     end
+    local texture = (inst and inst.texture) or def.texture
+    if texture ~= nil then
+        local spec, why = texture_spec(texture)
+        local ok
+        if spec then ok, why = c:set_texture(spec) end
+        if not ok then gear.log(('npc %s: texture: %s'):format(def.id, tostring(why))) end
+    end
     looked[c.id] = true
 end
 
--- spawn(kind, x, y, opts) -> creature | nil, message. opts: layer, like, level, tint (replaces the kind's), routine (replaces the kind's),
+-- spawn(kind, x, y, opts) -> creature | nil, message. opts: layer, like, level, tint and texture (replace the kind's), routine (replaces the kind's),
 -- data (kept with the NPC: inst.data)
 function N.spawn(kind, x, y, opts)
     opts = opts or {}
@@ -149,7 +201,7 @@ function N.spawn(kind, x, y, opts)
     local level = opts.level or def.level
     if level then c:set_level(level) end
     local d, h = data()
-    local inst = {id = c.id, kind = kind, type = c:type(), routine = opts.routine and normalize_routine(opts.routine), data = opts.data, tint = opts.tint}
+    local inst = {id = c.id, kind = kind, type = c:type(), routine = opts.routine and normalize_routine(opts.routine), data = opts.data, tint = opts.tint, texture = opts.texture}
     apply_look(c, def, inst)
     d.list[#d.list + 1] = inst
     h:changed()
@@ -299,6 +351,12 @@ local function press(opt, index)
     local _ = def
 end
 
+-- The look of the game's own NPC dialog: a wide frame (the item tooltip's) near the top of the screen, the portrait at the left, the NPC's name
+-- in yellow over its text, and the buttons along the bottom, centred in equal shares of the width; a button's text is green and yellow
+-- under the cursor.
+local FONT = 'game3'
+local C_NAME, C_TEXT, C_BUTTON, C_HOVER = 0xFFFFFF7F, 0xFFFFFFFF, 0xFF1EE61E, 0xFFFFFF00
+
 local function draw_dialog()
     if not dialog then return end
     local c = dialog.creature
@@ -308,43 +366,13 @@ local function draw_dialog()
     local def = kinds[dialog.kind]
     local page = page_of(def, dialog.page)
     if not page then N.close(); return end
-    local title = c:display_name() or dialog.kind
-    local W = 420
     local text = dialog.say or page.text
     if type(text) == 'function' then
         local ok, res = pcall(text, event_for())
         text = ok and res or tostring(res)
     end
     text = tostring(text or '')
-    local portrait = c:portrait()
-    local _, text_h = ui.text_wrap(text, W - 16 - (portrait and 72 or 0), {})
-    local count = 0
-    for _, opt in ipairs(page.options or {}) do
-        local visible = true
-        if opt.when then
-            local ok, res = pcall(opt.when, event_for())
-            visible = ok and res ~= false
-        end
-        if visible then count = count + 1 end
-    end
-    local H = 70 + math.max(#(ui.text_wrap(text, W - 16 - (portrait and 72 or 0), {})) * 16, portrait and 72 or 0) + count * 28
-    local _ = text_h
-    local panel = ui.panel(PANEL, title, 300, 200, W, H, {layer = 'hud'})
-    if not panel.open then N.close(); return end
-    local x, y, w = panel.content_x + 8, panel.content_y + 6, panel.content_w - 16
-    local tx = x
-    if portrait then
-        ui.image(portrait, x, y, 64, 64, {fit = 'contain'})
-        tx = x + 72
-    end
-    local lines, th = ui.text_wrap(text, w - (tx - x), {})
-    local ly = y
-    for _, line in ipairs(lines) do
-        ui.text(line, tx, ly, {color = 0xFFE8D8B0})
-        ly = ly + 16
-    end
-    local by = math.max(ly, y + (portrait and 72 or 0)) + 12
-    local _ = th
+
     local shown = {}
     for i, opt in ipairs(page.options or {}) do
         local visible = true
@@ -354,19 +382,50 @@ local function draw_dialog()
         end
         if visible then shown[#shown + 1] = {opt = opt, index = i} end
     end
-    for _, s in ipairs(shown) do
+    if #shown == 0 then shown[1] = {opt = {label = 'OK', close = true}, index = 1} end
+
+    local l, t, r = ui.screen()
+    local W = math.min(r - l - 40, 980)
+    local x, y = l + (r - l - W) / 2, t + 28
+    local portrait = c:portrait()
+    local text_x = x + (portrait and 128 or 28)
+    local text_w = W - (text_x - x) - 28
+    local lines = ui.text_wrap(text, text_w, {font = FONT})
+    local _, line_h = ui.text_size('Mg', FONT)
+    line_h = (line_h or 18) + 2
+    local H = math.max(34 + (#lines + 1) * line_h + 50, portrait and 160 or 0)
+
+    ui.native.frame(x, y, W, H, {layer = 'hud'})
+    if portrait then ui.image(portrait, x + 12, y + 8, 108, 128, {fit = 'contain', layer = 'hud'}) end
+    ui.text(c:display_name() or dialog.kind, text_x, y + 14, {font = FONT, color = C_NAME, layer = 'hud'})
+    local ty = y + 14 + line_h + 2
+    for _, line in ipairs(lines) do
+        ui.text(line, text_x, ty, {font = FONT, color = C_TEXT, layer = 'hud'})
+        ty = ty + line_h
+    end
+    -- the buttons: the width divided by their number, each centred in its share
+    local n = #shown
+    local by = y + H - 44
+    for k, s in ipairs(shown) do
         local label = s.opt.label
         if type(label) == 'function' then label = label(event_for()) end
+        label = tostring(label or '')
         local on = true
         if s.opt.enabled then
             local ok, res = pcall(s.opt.enabled, event_for())
             on = ok and res ~= false
         end
-        if ui.button('opt' .. s.index, x, by, w, 24, tostring(label or ''), {enabled = on}) and on then
+        local tw, th = ui.text_size(label, FONT)
+        tw, th = tw or 40, th or 18
+        local cx = x + W * (k - 0.5) / n
+        local rx, ry, rw, rh = cx - tw / 2 - 8, by - 4, tw + 16, th + 8
+        local reg = ui.region('opt' .. s.index, rx, ry, rw, rh, {layer = 'hud'})
+        local color = not on and 0xFF707070 or (reg.hover and C_HOVER or C_BUTTON)
+        ui.text(label, cx - tw / 2, by, {font = FONT, color = color, layer = 'hud'})
+        if reg.clicked and on then
             press(s.opt, s.index)
             return
         end
-        by = by + 28
     end
 end
 
@@ -442,7 +501,7 @@ local function routine_tick()
     local t = gear.time()
     for _, inst in ipairs(data().list) do
         local def = kinds[inst.kind]
-        if def and not looked[inst.id] and (inst.tint ~= nil or def.tint ~= nil) then
+        if def and not looked[inst.id] and (inst.tint ~= nil or def.tint ~= nil or inst.texture ~= nil or def.texture ~= nil) then
             local c = gear.world.object(inst.id)
             if c and c:is_creature() then apply_look(c, def, inst) end
         end

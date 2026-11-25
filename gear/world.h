@@ -139,6 +139,9 @@ namespace World
     // one of its meshes (`part` 1..8, in the order the engine draws them). The object id is only valid until the game ends or another
     // savegame loads (clearPets).
     bool setTint(uint32_t id, uint32_t part, uint32_t argb, const char*& error);
+    // Draws one mesh (`part` 1..8) or the whole model (0) with another texture: `image` is a Texture.pak image (Ui::textureImage) or a picture
+    // (Ui::pictureCreate*; its sides must be powers of two so the model's texture coordinates fit), 0 takes it away. SacredBild.
+    bool setTexture(uint32_t id, uint32_t part, uint32_t image, const char*& error);
     // Sets a creature's maximum health (1 and up, not a hero); its current health becomes `health` when `setCurrent`, else keeps its
     // share of the maximum (at least 1). For the boss modifiers (gear.world, creature:set_modifiers).
     bool setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_t health, const char*& error);

@@ -1529,6 +1529,14 @@ Draws the creature's model with a colour multiplied over it. `spec`: a colour (0
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:set_texture(spec) -> boolean?, string?`
+
+Draws the creature's model with other textures. `spec`: an image id for the whole model, or `{all = id, parts = {[n] = id}}` for single meshes in the order the game draws them (as `set_tint`'s parts). An id is `gear.ui.texture_image(name)` (a texture of the game's Texture.pak) or the `picture` of a `gear.ui.texture.load(path)` handle (an image file of the mod: PNG, TGA, JPG or DDS, both sides a power of two; keep the handle as long as the creature uses it). The texture replaces the mesh's own one, so it needs the same texture layout (the skin of a model of the same family); opaque images only. nil clears it. Needs SacredBild; single player; the textures end with the savegame, so a mod sets them again after a load.
+
+- `spec`: `integer|{all: integer?, parts: table<integer, integer>?}` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:name_key() -> string?`
 
 The `gear.text.key` key of the creature's own name text, if a mod registered it this session.
@@ -4107,6 +4115,7 @@ What `gear.npc.define` takes.
 | `talk_range` | `number` | How close the hero must be to talk (world units, default 140). (optional) |
 | `walk_radius` | `number` | The hero is this close (to the NPC or its goal) for the NPC to walk to the next point (default 900); otherwise it is put there. (optional) |
 | `tint` | `integer\|{all: integer?, parts: table<integer, integer>?}` | The colour of the model (`creature:set_tint`: a colour for the whole model or per mesh, e.g. the cloth); set again after every savegame load. (optional) |
+| `texture` | `string\|{pak: string}\|{all: string\|{pak: string}?, parts: table<integer, string\|{pak: string}>?}` | Other textures for the model (`creature:set_texture`): a file of the mod (`'skin.png'`, PNG, TGA, JPG or DDS, both sides a power of two), `{pak = 'NAME.TGA'}` (a texture of the game's Texture.pak) or `{all = ..., parts = {[n] = ...}}` of those for single meshes. They replace the mesh's own textures, so they need the same texture layout; opaque images only. Set again after every savegame load. (optional) |
 | `on_talk` | `fun(e: GearNpcEvent)` | Called when the dialog is opened. (optional) |
 
 ### GearNpcEvent
@@ -4146,6 +4155,7 @@ What `spawn` takes.
 | `like` | `Creature\|integer` |  (optional) |
 | `level` | `integer` |  (optional) |
 | `tint` | `integer\|{all: integer?, parts: table<integer, integer>?}` | This NPC's own tint (instead of the kind's). (optional) |
+| `texture` | `any` | This NPC's own texture (instead of the kind's), as `GearNpcDef.texture`. (optional) |
 | `routine` | `GearNpcPoint[]` | This NPC's own routine (instead of the kind's). (optional) |
 | `data` | `any` | Kept with the NPC in the savegame data (JSON values). (optional) |
 
@@ -5697,6 +5707,7 @@ A loaded image file. Show it in a document with `<img data-attr-src="tex.src">` 
 | `width` | `integer` | In pixels. |
 | `height` | `integer` |  |
 | `released` | `boolean` | True after `release`. |
+| `picture` | `integer` | The picture id of the image (for `gear.ui.image` and `creature:set_texture`). (optional) |
 
 #### `GearUiTexture.load(path) -> GearTexture?, string?`
 

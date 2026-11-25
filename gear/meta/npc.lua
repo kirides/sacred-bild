@@ -56,6 +56,7 @@
 ---@field talk_range? number How close the hero must be to talk (world units, default 140).
 ---@field walk_radius? number The hero is this close (to the NPC or its goal) for the NPC to walk to the next point (default 900); otherwise it is put there.
 ---@field tint? integer|{all: integer?, parts: table<integer, integer>?} The colour of the model (`creature:set_tint`: a colour for the whole model or per mesh, e.g. the cloth); set again after every savegame load.
+---@field texture? string|{pak: string}|{all: string|{pak: string}?, parts: table<integer, string|{pak: string}>?} Other textures for the model (`creature:set_texture`): a file of the mod (`'skin.png'`, PNG, TGA, JPG or DDS, both sides a power of two), `{pak = 'NAME.TGA'}` (a texture of the game's Texture.pak) or `{all = ..., parts = {[n] = ...}}` of those for single meshes. They replace the mesh's own textures, so they need the same texture layout; opaque images only. Set again after every savegame load.
 ---@field on_talk? fun(e: GearNpcEvent) Called when the dialog is opened.
 
 --- What a dialog or routine handler gets.
@@ -83,6 +84,7 @@
 ---@field like? Creature|integer
 ---@field level? integer
 ---@field tint? integer|{all: integer?, parts: table<integer, integer>?} This NPC's own tint (instead of the kind's).
+---@field texture? any This NPC's own texture (instead of the kind's), as `GearNpcDef.texture`.
 ---@field routine? GearNpcPoint[] This NPC's own routine (instead of the kind's).
 ---@field data? any Kept with the NPC in the savegame data (JSON values).
 

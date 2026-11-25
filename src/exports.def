@@ -49,3 +49,5 @@ EXPORTS
     SacredBild_PetClear
     SacredBild_TintSet
     SacredBild_TintClear
+    SacredBild_TextureSet
+    SacredBild_TextureResolver

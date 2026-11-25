@@ -4,8 +4,11 @@
 #include "log.h"
 #include "netmsg.h"
 #include "patch.h"
+#include "ui.h"
 
 #include <windows.h>
+#include <ddraw.h>
+#include <d3d.h>
 
 #include <algorithm>
 #include <cmath>
@@ -823,6 +826,15 @@ namespace
     using PetSetFn = int(__cdecl*)(unsigned, float, int);
     using PetClearFn = void(__cdecl*)();
     using TintSetFn = int(__cdecl*)(unsigned, unsigned, unsigned);
+    using ResolverFn = IDirectDrawSurface7*(__cdecl*)(IDirect3DDevice7*, unsigned);
+    using TextureSetFn = int(__cdecl*)(unsigned, unsigned, unsigned);
+    using SetResolverFn = void(__cdecl*)(ResolverFn);
+    TextureSetFn g_textureSet = nullptr;
+
+    IDirectDrawSurface7* __cdecl resolveTexture(IDirect3DDevice7* device, unsigned image)
+    {
+        return Ui::surfaceFor(device, image);
+    }
     PetSetFn g_petSet = nullptr;
     PetClearFn g_petClear = nullptr;
     TintSetFn g_tintSet = nullptr;
@@ -840,6 +852,11 @@ namespace
                 g_petClear = reinterpret_cast<PetClearFn>(GetProcAddress(bild, "SacredBild_PetClear"));
                 g_tintSet = reinterpret_cast<TintSetFn>(GetProcAddress(bild, "SacredBild_TintSet"));
                 g_tintClear = reinterpret_cast<PetClearFn>(GetProcAddress(bild, "SacredBild_TintClear"));
+                g_textureSet = reinterpret_cast<TextureSetFn>(GetProcAddress(bild, "SacredBild_TextureSet"));
+                if (const auto setResolver = reinterpret_cast<SetResolverFn>(GetProcAddress(bild, "SacredBild_TextureResolver")))
+                {
+                    setResolver(&resolveTexture);
+                }
             }
         }
         return g_petSet && g_petClear;
@@ -874,6 +891,29 @@ void World::clearPets()
             g_tintClear();
         }
     }
+}
+
+bool World::setTexture(uint32_t id, uint32_t part, uint32_t image, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    if (!o || !callIsCreature(o))
+    {
+        error = "no such creature, or world changes are not possible now";
+        return false;
+    }
+    if (!petApi() || !g_textureSet)
+    {
+        error = "textures need a newer SacredBild";
+        return false;
+    }
+    if (part > 8)
+    {
+        error = "the part is 0 (the whole model) or 1 to 8";
+        return false;
+    }
+    g_textureSet(id, part, image);
+    return true;
 }
 
 bool World::setTint(uint32_t id, uint32_t part, uint32_t argb, const char*& error)

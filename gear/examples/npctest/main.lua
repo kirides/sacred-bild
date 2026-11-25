@@ -123,6 +123,29 @@ gear.task(function()
     A.screenshot('npctest-tint-part3')
     check('tint cleared', c:set_tint(nil) == true)
 
+    -- textures: a file of the mod on the whole model, on one mesh, and a texture of the game's own Texture.pak
+    local tex, terr = gear.ui.texture.load('skin_test.png')
+    check('the texture file loads', tex ~= nil and tex.picture ~= nil, tostring(terr))
+    if tex then
+        check('set_texture accepted', c:set_texture(tex.picture) == true)
+        gear.wait(0.8)
+        A.screenshot('npctest-tex-all')
+        c:set_texture(nil)
+        c:set_texture{parts = {[1] = tex.picture}}
+        gear.wait(0.8)
+        A.screenshot('npctest-tex-part1')
+        c:set_texture(nil)
+    end
+    local sheet = (gear.ui.images('') or {})[1]
+    local pak_id = sheet and gear.ui.texture_image(sheet.sheet or '')
+    gear.log('npctest: first sheet ' .. tostring(sheet and sheet.sheet) .. ' pak id ' .. tostring(pak_id))
+    if pak_id then
+        check('a Texture.pak texture is accepted', c:set_texture(pak_id) == true)
+        gear.wait(0.8)
+        A.screenshot('npctest-tex-pak')
+    end
+    check('texture cleared', c:set_texture(nil) == true)
+
 
     -- a dialog and a real click on its first button
     check('talk opens', N.talk(c) == true)

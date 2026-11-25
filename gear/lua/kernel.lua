@@ -988,6 +988,29 @@ function creature_mt:set_tint(spec)
     end
     return true
 end
+-- set_texture(spec): the model is drawn with other textures: spec is an image id (gear.ui.texture_image(name) for a Texture.pak texture, or the
+-- `picture` of a gear.ui.texture.load handle for an image file of the mod) for the whole model, or {all = id, parts = {[n] = id}} for single
+-- meshes (in the order the game draws them, as set_tint's). The texture takes the place of the mesh's own one, so it must fit its texture
+-- coordinates (the same layout; a file's sides must be powers of two). nil clears it. Needs SacredBild; single player; ends with the savegame.
+function creature_mt:set_texture(spec)
+    if spec == nil then
+        for part = 0, 8 do
+            local ok, err = native.set_texture(self.id, part, 0)
+            if not ok then return nil, err end
+        end
+        return true
+    end
+    if type(spec) == 'number' then spec = {all = spec} end
+    assert(type(spec) == 'table', 'the texture is an image id, a table or nil')
+    local parts = spec.parts or {}
+    local ok, err = native.set_texture(self.id, 0, spec.all or 0)
+    if not ok then return nil, err end
+    for part = 1, 8 do
+        ok, err = native.set_texture(self.id, part, parts[part] or 0)
+        if not ok then return nil, err end
+    end
+    return true
+end
 function creature_mt:set_gold(gold)
     assert(type(gold) == 'number', 'gold must be a number')
     return native.set_gold(self.id, math.min(math.max(0, math.floor(gold)), 2147483646))
@@ -4320,7 +4343,7 @@ local function make_ui(mod)
         if not native.texture_load then error('RmlUi is not available in this build', 2) end
         local id, w, h = native.texture_load(mod.dir, path)
         if not id then return nil, w end
-        local t = setmetatable({id = id, src = 'gear:tex/' .. id, width = w, height = h, released = false}, Texture)
+        local t = setmetatable({id = id, src = 'gear:tex/' .. id, width = w, height = h, released = false, picture = native.texture_picture(id)}, Texture)
         uis.textures[t] = mod
         return t
     end

@@ -4055,6 +4055,19 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 1;
     }
 
+    // native.texture_picture(id) -> the picture id (for gear.ui.image, Creature:set_texture) of a shared texture | nil
+    int texturePicture(lua_State* L)
+    {
+        const auto it = g_shared.find(static_cast<uint32_t>(luaL_checkinteger(L, 1)));
+        if (it == g_shared.end())
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushinteger(L, it->second.picture);
+        return 1;
+    }
+
     // native.texture_load(dir, path) -> id, width, height | nil, message: an image file of the mod (or "@mod/path") as a shared texture, one more reference.
     int textureLoad(lua_State* L)
     {
@@ -4223,6 +4236,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"vfs_read", guarded<vfsRead>},
         {"vfs_exists", guarded<vfsExists>},
         {"vfs_list", guarded<vfsList>},
+        {"texture_picture", guarded<texturePicture>},
         {"texture_load", guarded<textureLoad>},
         {"texture_release", guarded<textureRelease>},
         {"rml_exports", guarded<rmlExports>},

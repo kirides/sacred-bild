@@ -33,6 +33,8 @@ namespace
     {
         uint32_t all = 0;
         uint32_t part[kParts] = {};
+        uint32_t texAll = 0;                // tokens of other textures (Sacred Gear's resolver gives the surface)
+        uint32_t texPart[kParts] = {};
     };
     std::unordered_map<uint32_t, Tint> g_tints;
     std::atomic<int> g_tintCount{0};
@@ -234,8 +236,10 @@ bool Pets::tinting()
     return t_tint != nullptr;
 }
 
-bool Pets::tintNext(uint32_t& argb)
+bool Pets::tintNext(uint32_t& argb, uint32_t& texture)
 {
+    argb = 0;
+    texture = 0;
     if (!t_tint)
     {
         return false;
@@ -246,12 +250,25 @@ bool Pets::tintNext(uint32_t& argb)
     {
         c = t_tint->all;
     }
-    if (!c || c == 0xFFFFFFFFu)
+    if (c && c != 0xFFFFFFFFu)
     {
-        return false;
+        argb = c;
     }
-    argb = c;
-    return true;
+    uint32_t t = part >= 1 && part <= kParts ? t_tint->texPart[part - 1] : 0;
+    texture = t ? t : t_tint->texAll;
+    return argb != 0 || texture != 0;
+}
+
+namespace
+{
+    using Resolver = IDirectDrawSurface7*(__cdecl*)(IDirect3DDevice7*, unsigned);
+    std::atomic<Resolver> g_resolver{nullptr};
+}
+
+IDirectDrawSurface7* Pets::resolveTexture(IDirect3DDevice7* device, uint32_t token)
+{
+    const Resolver r = g_resolver.load();
+    return r && token ? r(device, token) : nullptr;
 }
 
 bool Pets::scaling()
@@ -330,10 +347,10 @@ extern "C" int __cdecl SacredBild_TintSet(unsigned id, unsigned part, unsigned a
             {
                 t.part[part - 1] = value;
             }
-            bool any = t.all != 0;
-            for (uint32_t p : t.part)
+            bool any = t.all != 0 || t.texAll != 0;
+            for (int k = 0; k < kParts; ++k)
             {
-                any = any || p != 0;
+                any = any || t.part[k] != 0 || t.texPart[k] != 0;
             }
             if (!any)
             {
@@ -354,4 +371,41 @@ extern "C" void __cdecl SacredBild_TintClear()
     g_tints.clear();
     g_tintCount.store(0);
     ReleaseSRWLockExclusive(&g_lock);
+}
+
+// Sacred Gear: Sacred Gear's function that gives the surface of a texture token (a Texture.pak image or a picture of its own).
+extern "C" void __cdecl SacredBild_TextureResolver(IDirectDrawSurface7* (__cdecl* resolver)(IDirect3DDevice7*, unsigned))
+{
+    g_resolver.store(resolver);
+}
+
+// Sacred Gear: draws an object's mesh (`part` 1..8, 0 the whole model) with another texture; `token` 0 takes it away.
+extern "C" int __cdecl SacredBild_TextureSet(unsigned id, unsigned part, unsigned token)
+{
+    AcquireSRWLockExclusive(&g_lock);
+    if (part <= static_cast<unsigned>(kParts) && (token || g_tints.count(id)))
+    {
+        Tint& t = g_tints[id];
+        if (part == 0)
+        {
+            t.texAll = token;
+        }
+        else
+        {
+            t.texPart[part - 1] = token;
+        }
+        bool any = t.all != 0 || t.texAll != 0;
+        for (int i = 0; i < kParts; ++i)
+        {
+            any = any || t.part[i] != 0 || t.texPart[i] != 0;
+        }
+        if (!any)
+        {
+            g_tints.erase(id);
+        }
+    }
+    g_tintCount.store(static_cast<int>(g_tints.size()));
+    const int n = g_tintCount.load();
+    ReleaseSRWLockExclusive(&g_lock);
+    return n;
 }

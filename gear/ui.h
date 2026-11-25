@@ -7,6 +7,9 @@
 #include <string>
 #include <vector>
 
+struct IDirectDrawSurface7;
+struct IDirect3DDevice7;
+
 // Mod drawing: rectangles, text in the game's fonts and the game's UI images, drawn by the game's own UI pass.
 //
 // Mods record draw commands while their handlers run (the Lua thread: the engine thread in game, the automation
@@ -126,6 +129,9 @@ namespace Ui
     // decoding, a quarter or an eighth of the memory. 0 if the size or the data do not fit.
     uint32_t pictureCreateBlocks(int width, int height, uint32_t fourcc, std::vector<uint8_t> blocks);
     void pictureRelease(uint32_t id);
+    // The Direct3D surface of an image or picture id (a UI image, a Texture.pak image from textureImage, a picture), made if it is a picture that
+    // has none yet; nullptr if there is none. Render thread (it may create the texture on `device`). Not AddRef'd.
+    IDirectDrawSurface7* surfaceFor(IDirect3DDevice7* device, uint32_t id);
     // How many frames a released picture's texture waits before it is freed (default 2): the frames queued before the release may still draw it.
     // A backend with fences or several swap chain images sets its number of frames in flight here.
     void setFramesInFlight(int frames);

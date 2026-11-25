@@ -30,7 +30,7 @@ gear.task(function()
     for _, c in ipairs(gear.world.creatures_near(hx, hy, 900, {limit = 30})) do
         if c.id ~= hero.id then model = c:type() break end
     end
-    N.define('npcsavetest.smith', {type = model, name = 'Smith Garran', tint = 0x40A0FF,
+    N.define('npcsavetest.smith', {type = model, name = 'Smith Garran', texture = 'skin_test.png',
         dialog = {pages = {hi = {text = 'Hello again.', options = {{label = 'Bye', close = true}}}}}})
     local c = N.spawn('npcsavetest.smith', hx + 100, hy, {layer = layer, data = {note = 'kept'}})
     check('spawn', c ~= nil)

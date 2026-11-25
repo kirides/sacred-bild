@@ -563,6 +563,7 @@ local GearUiTexture = {}
 ---@field width integer In pixels.
 ---@field height integer
 ---@field released boolean True after `release`.
+---@field picture? integer The picture id of the image (for `gear.ui.image` and `creature:set_texture`).
 local GearTexture = {}
 
 --- Loads an image file of the mod (a path in its folder, or `@mod-id/path` of a file another mod exports), or takes one more reference to it if it is loaded

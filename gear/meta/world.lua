@@ -292,6 +292,17 @@ function Creature:set_name_text(id) end
 ---@return string? error
 function Creature:set_tint(spec) end
 
+--- Draws the creature's model with other textures. `spec`: an image id for the whole model, or `{all = id, parts = {[n] = id}}` for single
+--- meshes in the order the game draws them (as `set_tint`'s parts). An id is `gear.ui.texture_image(name)` (a texture of the game's
+--- Texture.pak) or the `picture` of a `gear.ui.texture.load(path)` handle (an image file of the mod: PNG, TGA, JPG or DDS, both sides a
+--- power of two; keep the handle as long as the creature uses it). The texture replaces the mesh's own one, so it needs the same texture
+--- layout (the skin of a model of the same family); opaque images only. nil clears it. Needs SacredBild; single player; the textures end
+--- with the savegame, so a mod sets them again after a load.
+---@param spec integer|{all: integer?, parts: table<integer, integer>?}?
+---@return boolean? ok
+---@return string? error
+function Creature:set_texture(spec) end
+
 --- The `gear.text.key` key of the creature's own name text, if a mod registered it this session.
 ---@return string?
 function Creature:name_key() end
