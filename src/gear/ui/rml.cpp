@@ -1714,6 +1714,7 @@ namespace
         bool renderDirty = true;                // the recorded draw below is out of date
         unsigned gen = 1;                       // moves with every change and every Update that ran: the tree walks' results are valid for one gen
         int trailing = 0;                       // updates still to run after one that had a reason (generated content, hover after a layout change)
+        int settling = 0;                       // trailing updates added because the last one moved the hover (bounded: kMaxSettle)
         double nextUpdate = 0.0;                // RmlUi's own next update (animations, transitions, smooth scrolling, caret blink), RmlUi's clock
         bool mouseKnown = false;                // the context's mouse is at mouseX, mouseY (the last move this host sent)
         int mouseX = 0, mouseY = 0;
@@ -1744,6 +1745,7 @@ namespace
     };
 
     std::map<int, std::unique_ptr<Doc>> g_docs;
+    constexpr int kMaxSettle = 4;   // extra updates while the hover keeps moving under a still mouse (Doc::settling)
     int g_nextDoc = 1;
 
     // GEAR_RML_NOCACHE=1: every document is updated, walked and rendered every frame (as before retained mode), for comparing.
@@ -3311,6 +3313,30 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         return 0;
     }
 
+    // native.rml_stats(id) -> {updates, renders, replays, timed, trailing, dirty, render_dirty, next_update, gen}: the retained mode's counters
+    // (since the load, or the last SACREDGEAR_PROF report) and state, for tests (tools/sandbox).
+    int rmlStats(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        lua_createtable(L, 0, 9);
+        auto num = [&](const char* k, double v) {
+            lua_pushnumber(L, v);
+            lua_setfield(L, -2, k);
+        };
+        num("updates", d.stats.updates);
+        num("renders", d.stats.renders);
+        num("replays", d.stats.replays);
+        num("timed", d.stats.timed);
+        num("trailing", d.stats.trailing);
+        num("next_update", d.nextUpdate);
+        num("gen", d.gen);
+        lua_pushboolean(L, d.dirty);
+        lua_setfield(L, -2, "dirty");
+        lua_pushboolean(L, d.renderDirty);
+        lua_setfield(L, -2, "render_dirty");
+        return 1;
+    }
+
     int rmlReloads(lua_State* L)
     {
         Doc& d = docArg(L);
@@ -3380,8 +3406,21 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             {
                 changed = g_content->apply(d.context) || changed;
             }
+            Rml::Element* const hoverBefore = d.context->GetHoverElement();
             d.context->Update();
             g_active = nullptr;
+            // The hover moved in this update (an element's :hover changed its size or place, so the element under the still mouse is another
+            // one now): that can change the layout once more, so one more update follows, as long as the hover keeps moving (a few times at
+            // most: a document whose :hover rules push the element away from the mouse would flip forever, as it did before retained mode).
+            if (reason)
+            {
+                d.settling = 0;
+            }
+            if (d.context->GetHoverElement() != hoverBefore && d.settling < kMaxSettle)
+            {
+                ++d.settling;
+                d.trailing = std::max(d.trailing, 1);
+            }
             ++d.gen;
             d.renderDirty = true;
             d.dirty = d.dirty || changed;
@@ -4924,6 +4963,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_hot", guarded<rmlHot>},
         {"rml_reloads", guarded<rmlReloads>},
         {"rml_nocache", guarded<rmlNoCache>},
+        {"rml_stats", guarded<rmlStats>},
         {"rml_draw", guarded<rmlDraw>},
         {"rml_rects", guarded<rmlRects>},
         {"rml_move", mutating<rmlMove>},
