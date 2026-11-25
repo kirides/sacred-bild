@@ -2819,6 +2819,20 @@ namespace
         return 1;
     }
 
+    // native.copy_stats(id, from) -> true | nil, message
+    int nativeCopyStats(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        const uint32_t from = checkId(L, 2);
+        const char* error = "no such creature";
+        if (!id || !from || !World::copyStats(id, from, error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.set_max_health(id, max, hp?) -> true | nil, message: a creature's maximum health, and its current health (default: the
     // same share of the new maximum as before).
     int nativeSetMaxHealth(lua_State* L)
@@ -4985,6 +4999,7 @@ namespace
             {"remove", nativeRemove},
             {"set_health", nativeSetHealth},
             {"copy_allegiance", nativeCopyAllegiance},
+            {"copy_stats", nativeCopyStats},
             {"set_max_health", nativeSetMaxHealth},
             {"set_gold", nativeSetGold},
             {"party_available", nativePartyAvailable},

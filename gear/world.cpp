@@ -697,6 +697,103 @@ bool World::copyAllegiance(uint32_t id, uint32_t from, const char*& error)
     return true;
 }
 
+namespace
+{
+    constexpr uintptr_t kTableSize = 0x4F4, kTable = 0x4F8;    // a creature's table of 4-byte values (size in bytes, pointer)
+    constexpr uintptr_t kStats = 0x3A8;     // the stats block inside a creature (level at +0x56 = creature +0x3FE)
+
+    bool callSetLevel(uintptr_t creature, uint32_t level)
+    {
+        __try
+        {
+            Addr::cStats_setLevel(reinterpret_cast<void*>(creature + kStats), level, 1, 1);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+}
+
+bool World::copyStats(uint32_t id, uint32_t from, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    const uintptr_t s = o ? live(m, from) : 0;
+    uint16_t level = 0;
+    int32_t donorMax = 0, donorHealth = 0, max = 0;
+    if (!Addr::cStats_setLevel || id <= kHeroIds || !o || !s || !callIsCreature(o) || !callIsCreature(s) || !readAt(s, kLevel, level) ||
+        !readAt(s, kMaxHealth, donorMax) || !readAt(s, kHealth, donorHealth))
+    {
+        error = "no such creature, a hero, or world changes are not possible now";
+        return false;
+    }
+    if (level == 0 || level > 250)
+    {
+        error = "the source has no valid level";
+        return false;
+    }
+    if (!callSetLevel(o, level) || !readAt(o, kMaxHealth, max))
+    {
+        error = "the game faulted while setting the level";
+        return false;
+    }
+    // The table of 4-byte values (+0x4F8, its size in bytes at +0x4F4: 100 for the creatures the game places) that a plain create
+    // leaves empty: the engine allocates it (operator new) for the creatures it places and frees it (operator delete) with the object. Copy the donor's.
+    {
+        uint32_t donorSize = 0, ownSize = 0;
+        uintptr_t donorTable = 0, ownTable = 0;
+        if (readAt(s, kTableSize, donorSize) && readAt(s, kTable, donorTable) && readAt(o, kTableSize, ownSize) && readAt(o, kTable, ownTable) &&
+            donorTable && donorSize > 0 && donorSize <= 1024 && Addr::engine_new)
+        {
+            std::vector<uint8_t> bytes(donorSize);
+            if (safeCopy(bytes.data(), reinterpret_cast<const void*>(donorTable), bytes.size()))
+            {
+                if (!ownTable || ownSize < donorSize)
+                {
+                    // (an existing smaller table is left to the engine: it is freed with the object)
+                    if (!ownTable)
+                    {
+                        if (void* fresh = Addr::engine_new(donorSize))
+                        {
+                            std::memcpy(fresh, bytes.data(), bytes.size());
+                            const uintptr_t table = reinterpret_cast<uintptr_t>(fresh);
+                            safeStore(reinterpret_cast<void*>(o + kTable), &table, sizeof(table));
+                            safeStore(reinterpret_cast<void*>(o + kTableSize), &donorSize, sizeof(donorSize));
+                        }
+                    }
+                }
+                else
+                {
+                    safeStore(reinterpret_cast<void*>(ownTable), bytes.data(), bytes.size());
+                }
+            }
+        }
+    }
+    // The donor's own maximum health wins when the level does not give it: the game's strong variants (behavior flags 0x200 and 0x80000
+    // at +0x1F4: measured, level 12 goblins with 467 and 583 where the level alone gives 233) have more health than their level and type.
+    if (donorMax > 0 && max > 0 && donorMax != max)
+    {
+        max = donorMax;
+        if (!safeStore(reinterpret_cast<void*>(o + kMaxHealth - 4), &max, sizeof(max)) || !safeStore(reinterpret_cast<void*>(o + kMaxHealth), &max, sizeof(max)))
+        {
+            error = "cannot write the creature";
+            return false;
+        }
+    }
+    if (donorMax > 0 && max > 0)
+    {
+        const int32_t health = std::clamp<int32_t>(static_cast<int32_t>(static_cast<int64_t>(max) * std::max(donorHealth, 1) / donorMax + 0.5), 1, max);
+        if (!safeStore(reinterpret_cast<void*>(o + kHealth), &health, sizeof(health)))
+        {
+            error = "cannot write the creature";
+            return false;
+        }
+    }
+    return true;
+}
+
 bool World::setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_t health, const char*& error)
 {
     void* m = manager();

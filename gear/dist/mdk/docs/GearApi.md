@@ -1315,7 +1315,7 @@ The number of pickups refused so far.
 | Field | Type | |
 |---|---|---|
 | `layer` | `integer` | Default: the hero's layer. (optional) |
-| `like` | `Creature\|integer` | A creature whose allegiance the new one takes (`creature:copy_allegiance`); if that fails the new creature is removed and spawn fails. A plain create has the faction of its type, which can differ from a creature the game placed (a soldier hostile to the hero by its spawn, neutral by its type). (optional) |
+| `like` | `Creature\|integer` | A creature whose allegiance (`creature:copy_allegiance`) and level, stats and health share (`creature:copy_stats`) the new one takes; if that fails the new creature is removed and spawn fails. A plain create has the faction of its type, which can differ from a creature the game placed (a soldier hostile to the hero by its spawn, neutral by its type). (optional) |
 | `label` | `any` | Kept for the creature this session (`creature:label()`). (optional) |
 | `modifiers` | `GearModifiers` | Boss modifiers (`creature:set_modifiers`) set on the new creature; if they are refused the creature is removed again and spawn fails. (optional) |
 
@@ -1537,6 +1537,14 @@ A hero's name as the game shows it; nil for other creatures (and for a hero the 
 Sets the hit points (1..max: mods do not kill through it). Single player only.
 
 - `hp`: `number`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+#### `creature:copy_stats(source) -> boolean?, string?`
+
+Gives this creature the level of `source` through the game's own level function (the one its sector fill uses): the experience the level starts at, the derived stats and the maximum health come from the creature's type and that level; the current health keeps the donor's share of the maximum. A creature made by `gear.world.spawn` is level 1 with 100 health whatever its type. Single player; not for heroes.
+
+- `source`: `Creature|integer`
 - returns `ok` `boolean?`
 - returns `error` `string?`
 

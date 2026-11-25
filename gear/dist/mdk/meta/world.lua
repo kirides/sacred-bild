@@ -155,7 +155,7 @@ function GearWorld.pickup_refused() end
 
 ---@class GearSpawnOpts
 ---@field layer? integer Default: the hero's layer.
----@field like? Creature|integer A creature whose allegiance the new one takes (`creature:copy_allegiance`); if that fails the new creature is removed and spawn fails. A plain create has the faction of its type, which can differ from a creature the game placed (a soldier hostile to the hero by its spawn, neutral by its type).
+---@field like? Creature|integer A creature whose allegiance (`creature:copy_allegiance`) and level, stats and health share (`creature:copy_stats`) the new one takes; if that fails the new creature is removed and spawn fails. A plain create has the faction of its type, which can differ from a creature the game placed (a soldier hostile to the hero by its spawn, neutral by its type).
 ---@field label? any Kept for the creature this session (`creature:label()`).
 ---@field modifiers? GearModifiers Boss modifiers (`creature:set_modifiers`) set on the new creature; if they are refused the creature is removed again and spawn fails.
 
@@ -334,6 +334,15 @@ function Creature:name() end
 ---@return boolean? ok
 ---@return string? error
 function Creature:set_hp(hp) end
+
+--- Gives this creature the level of `source` through the game's own level function (the one its sector fill uses): the experience
+--- the level starts at, the derived stats and the maximum health come from the creature's type and that level; the current health
+--- keeps the donor's share of the maximum. A creature made by `gear.world.spawn` is level 1 with 100 health whatever its type.
+--- Single player; not for heroes.
+---@param source Creature|integer
+---@return boolean? ok
+---@return string? error
+function Creature:copy_stats(source) end
 
 --- Gives this creature the allegiance of `source`: its faction (the class the game's hostility table is indexed by) and the aggression
 --- flag. A creature made by `gear.world.spawn` has the faction of its type; one the game placed (a sector fill, a script) can have

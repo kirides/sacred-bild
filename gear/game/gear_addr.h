@@ -309,6 +309,7 @@ namespace Gear::Addr
     // free slot of a group (rings 8..0xB, amulets 6, 7, hands 0xC, 0xD), 0x13 when none is free or the creature cannot wear it.
     inline Sacred::Thiscall<uint32_t(void* creature, uint32_t itemType)> cCreature_equipSlot{};
     inline Sacred::Cdecl<void*(uint32_t bytes)> engine_alloc{};
+    inline Sacred::Cdecl<void*(uint32_t bytes)> engine_new{};
     inline Sacred::Thiscall<void(void* unused, void* ptr, uint32_t count)> engine_free{};
 
     // Drops (gear/drops.cpp). ENG 00849B40: the CRT rand (cdecl () -> 0 .. 0x7FFF, one LCG state per thread); ENG 00443B20: cdecl (lo, hi) ->
@@ -334,6 +335,8 @@ namespace Gear::Addr
     // stdcall (type), ret 4. ENG 0089095C: the vtable of the 0x44-byte creature events (orders) a creature's vtable
     // +0x18 takes. ENG 0182EE5C / 0182EE60: the two anti-cheat shadow pages of the local hero (see party.cpp).
     inline Sacred::Thiscall<void(void* stats, uint32_t amount)> cStats_addExperience{};
+    // ENG 00564D60: sets a creature's level and recalculates its stats (see tools/gen_gear_sigs.py), thiscall, ret 0xC.
+    inline Sacred::Thiscall<void(void* stats, uint32_t level, uint32_t noWorldLevel, uint32_t noSectorCap)> cStats_setLevel{};
     // ENG 0057F8D0: the level an amount of experience gives, thiscall (stats, experience) -> level, ret 4.
     inline Sacred::Thiscall<uint32_t(void* stats, uint32_t experience)> cStats_levelOnExp{};
     // ENG 00556A30 / 00555E00 / 005D9860 / 005D8730 / 00546F80 / 0054E6D0: what the taskbar's weapon slot keys do

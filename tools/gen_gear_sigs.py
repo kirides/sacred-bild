@@ -154,6 +154,9 @@ GEAR = [
     # equipment slot an item type goes to for this creature (the first free one of a group of rings, amulets or hands).
     ('cCreature_equipSlot', 0x0054ACC0, 'func'),
     ('engine_alloc', 0x008321A0, 'func'),
+    # The C++ operator new (cdecl (bytes), 0x849842): what the game's constructors allocate their members with, freed by its operator delete.
+    # (engine_alloc is another allocator: a small-block pool.)
+    ('engine_new', 0x00849842, 'func'),
     ('engine_free', 0x0041D3B0, 'func'),
     # An item's record set and announced to the peers (0x16C) in a network game.
     ('cItem_setRecord', 0x005C0810, 'func'),
@@ -224,6 +227,10 @@ GEAR = [
     # 0x44-byte events of this class through its vtable +0x18. The anti-cheat shadows (0x590730 checks them against
     # hero()) are two pages of XOR-keyed copies of experience, gold, level and the stats block.
     ('cStats_addExperience', 0x0057E160, 'func'),
+    # setLevel (thiscall (stats, level, noWorldLevel, noSectorCap), ret 0xC): sets the level of a creature's stats block (creature
+    # +0x3A8; level +0x3FE, the experience that level starts at) and recalculates the derived values, health included. The engine's
+    # sector fill calls it (0x47C610) with (level, 1, 0); noSectorCap 1 takes the level as it is.
+    ('cStats_setLevel', 0x00564D60, 'func'),
     # The level an amount of experience gives (thiscall (stats, experience) -> level, ret 4; "getLevelOnExp"): Gear finds
     # the experience a level starts at by searching it.
     ('cStats_levelOnExp', 0x0057F8D0, 'func'),
