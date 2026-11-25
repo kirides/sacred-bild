@@ -25,6 +25,8 @@ opts.verbose = opts.verbose == 1 or opts.verbose == '1'
 opts.stop = opts.stop == 1 or opts.stop == '1'
 opts.flicker = opts.flicker == 1 or opts.flicker == '1'
 local flickers = 0      -- differences where the twin itself flickered (not counted as failures without flicker=1)
+local lags = 0          -- differences A caught up with within 2 frames (not counted without strict=1)
+opts.strict = opts.strict == 1 or opts.strict == '1'
 
 local MOD = 'fuzz'
 local W, H = sbx.size()
@@ -486,8 +488,12 @@ local function play(markup, m, steps, prefix, pixel_every)
             failed_at = s
             kind, lag = t:settle()
             if kind == 'flicker' and generate then flickers = flickers + 1 end
-            if kind == 'flicker' and not opts.flicker and generate then
-                ok, failed_at = true, nil      -- not retained mode's doing (see settle); the rest of the case would only flicker on
+            if kind == 'lag' and lag <= 2 and generate then lags = lags + 1 end
+            if generate and ((kind == 'flicker' and not opts.flicker) or (kind == 'lag' and lag <= 2 and not opts.strict)) then
+                -- not retained mode's doing (flicker, see settle), or by design: the hover of an element that moved under the still mouse
+                -- settles one update later (docs/RmlRetained.md, principle 4); the twin, which moves the mouse before every update, a frame
+                -- earlier. The rest of the case would only differ on.
+                ok, failed_at = true, nil
                 break
             end
         end
@@ -531,6 +537,26 @@ local function shrink(markup, m, steps, want)
     return steps
 end
 
+-- A step list as Lua source (replay=<file> plays it again).
+local function serialize(markup, m, steps)
+    local out = {'return {markup = ' .. ('%q'):format(markup) .. ',', 'model = ' .. show(m) .. ',', 'steps = {'}
+    for _, st in ipairs(steps) do
+        local parts = {}
+        if st.native then
+            local a = {}
+            for i = 1, st.n do a[i] = show(st.args[i]) end
+            parts[#parts + 1] = ('native = %q, n = %d, args = {%s}'):format(st.native, st.n, table.concat(a, ', '))
+        elseif st.mouse then parts[#parts + 1] = ('mouse = {%d, %d, %s}'):format(st.mouse[1], st.mouse[2], tostring(st.mouse[3]))
+        elseif st.time then parts[#parts + 1] = 'time = ' .. st.time
+        elseif st.layer then parts[#parts + 1] = 'layer = ' .. st.layer
+        end
+        if st.clip then parts[#parts + 1] = ('clip = {%d, %d, %d, %d}'):format(st.clip[1], st.clip[2], st.clip[3], st.clip[4]) end
+        out[#out + 1] = '  {' .. table.concat(parts, ', ') .. '},'
+    end
+    out[#out + 1] = '}}'
+    return table.concat(out, string.char(10))
+end
+
 local function run_case(seed, case)
     math.randomseed(seed * 100003 + case)
     local markup, m = document(), model()
@@ -552,10 +578,20 @@ local function run_case(seed, case)
     if opts.out then
         local f = io.open(opts.out .. ('/seed%d_case%d.rml'):format(seed, case), 'w')
         if f then f:write(markup) f:close() end
+        f = io.open(opts.out .. ('/seed%d_case%d.repro.lua'):format(seed, case), 'w')
+        if f then f:write(serialize(markup, m, small)) f:close() end
         f = io.open(opts.out .. ('/seed%d_case%d.steps.txt'):format(seed, case), 'w')
         if f then f:write(why, '\n\nshrunk:\n', table.concat(lines, '\n'), '\n', tostring(why2), '\n') f:close() end
     end
     return false
+end
+
+if opts.replay then
+    -- replay=<file.repro.lua>: the shrunk steps of a failure, verbose (verbose=1 also lists A's updates and renders per frame)
+    local r = dofile(opts.replay)
+    local ok, why, _, at, kind, lag = play(r.markup, r.model, r.steps, opts.out and (opts.out .. '/replay') or nil, 1)
+    sbx.log(ok and 'replay: the twins agree' or ('replay: step %s (%s%s): %s'):format(tostring(at), tostring(kind), lag and (' ' .. lag) or '', why))
+    return ok and 0 or 1
 end
 
 local failures = 0
@@ -570,5 +606,5 @@ for case = first, last do
         sbx.log(('case %d ok'):format(case))
     end
 end
-sbx.log(('rml_fuzz seed %d: %d of %d cases failed (%d flicker differences not counted)'):format(opts.seed, failures, last - first + 1, flickers))
+sbx.log(('rml_fuzz seed %d: %d of %d cases failed (not counted: %d flicker, %d lag of 1-2 frames)'):format(opts.seed, failures, last - first + 1, flickers, lags))
 return failures

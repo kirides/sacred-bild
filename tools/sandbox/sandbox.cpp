@@ -5,6 +5,7 @@
 // RmlUi natives and command capture for differential tests (tools/sandbox/fuzz).
 #include "game_data.h"
 
+#include "automation.h"
 #include "clock.h"
 #include "log.h"
 #include "lua_host.h"
@@ -46,6 +47,8 @@ namespace
         std::vector<std::string> scriptArgs;
         std::wstring snapshot;              // without a script: save the last frame here
         std::wstring background;            // an image file drawn under the UI (a game screenshot)
+        std::wstring log;                   // default: SacredGearSandbox.log next to the exe
+        std::string enable;                 // mods switched on before the start: "all" or "a,b,c"
         int width = 1024, height = 768;
         int frames = 0;                     // without a script: stop after this many frames (0: run until the window closes)
         bool hidden = false;
@@ -783,6 +786,13 @@ namespace
         return 1;
     }
 
+    // sbx.key(vk, down): a key held or let go as mods see it (gear.input / key bindings ask Ui::keyDown, which counts automation's keys).
+    int sbxKey(lua_State* L)
+    {
+        Automation::key(static_cast<int>(luaL_checknumber(L, 1)), lua_toboolean(L, 2) != 0);
+        return 0;
+    }
+
     int sbxWheel(lua_State* L)
     {
         lua_pushboolean(L, Ui::hostWheel(static_cast<int>(luaL_checknumber(L, 1)), g_mouseX, g_mouseY));
@@ -856,7 +866,7 @@ namespace
         lua_State* L = luaL_newstate();
         luaL_openlibs(L);
         static constexpr luaL_Reg kSbx[] = {
-            {"frame", sbxFrame}, {"advance", sbxAdvance}, {"time", sbxTime}, {"mouse", sbxMouse}, {"button", sbxButton},
+            {"frame", sbxFrame}, {"advance", sbxAdvance}, {"key", sbxKey}, {"time", sbxTime}, {"mouse", sbxMouse}, {"button", sbxButton},
             {"wheel", sbxWheel}, {"snapshot", sbxSnapshot}, {"draw", sbxDraw}, {"commit", sbxCommit}, {"log", sbxLog},
             {"size", sbxSize}, {"image", sbxImage}, {"capture_begin", sbxCaptureBegin}, {"capture_end", sbxCaptureEnd},
             {"capture_info", sbxCaptureInfo}, {"capture_clear", sbxCaptureClear}, {"compare", sbxCompare},
@@ -898,6 +908,40 @@ namespace
         return code;
     }
 
+    // --enable: gear_mods.json with these mods on and every other one off (a fresh file: fine for a sandbox folder).
+    bool enableMods()
+    {
+        std::vector<std::string> on;
+        std::error_code ec;
+        const std::string list = "," + g_opt.enable + ",";
+        for (const auto& e : fs::directory_iterator(g_opt.modsDir, ec))
+        {
+            if (e.is_directory() && fs::exists(e.path() / L"mod.lua"))
+            {
+                const std::string id = narrow(e.path().filename().wstring());
+                if (g_opt.enable == "all" || list.find("," + id + ",") != std::string::npos)
+                {
+                    on.push_back(id);
+                }
+            }
+        }
+        std::string json = "{\"mods\":{";
+        for (size_t i = 0; i < on.size(); ++i)
+        {
+            json += (i ? ",\"" : "\"") + on[i] + "\":{\"enabled\":true}";
+        }
+        json += "},\"version\":1}";
+        FILE* f = _wfopen((fs::path(g_opt.modsDir) / L"gear_mods.json").c_str(), L"wb");
+        if (!f)
+        {
+            return false;
+        }
+        fwrite(json.data(), 1, json.size(), f);
+        fclose(f);
+        LOG("Sandbox: mods switched on: {}", on.size());
+        return true;
+    }
+
     void usage()
     {
         std::printf(
@@ -910,7 +954,9 @@ namespace
             "  --hidden             no visible window: render off-screen\n"
             "  --frames N           stop after N frames\n"
             "  --snapshot file.png  save the last frame\n"
-            "  --background file    an image drawn under the UI (PNG, JPG, BMP, TGA)\n"
+            "  --background file    an image drawn under the UI (PNG, JPG, TGA)\n"
+            "  --enable all|a,b,c   switch these mods on (gear_mods.json in the mods folder; all: every folder with a mod.lua)\n"
+            "  --log file           the log (default SacredGearSandbox.log next to the sandbox)\n"
             "  --sim [dt]           simulated clock, dt seconds per frame (default 1/60); scripts always run on it\n"
             "  --script file.lua [args...]  run a driver script (the rest of the command line is its arg table)\n");
     }
@@ -928,6 +974,8 @@ namespace
             else if (a == L"--frames") g_opt.frames = _wtoi(next().c_str());
             else if (a == L"--snapshot") g_opt.snapshot = next();
             else if (a == L"--background") g_opt.background = next();
+            else if (a == L"--log") g_opt.log = next();
+            else if (a == L"--enable") g_opt.enable = narrow(next());
             else if (a == L"--mode") g_opt.mode = narrow(next());
             else if (a == L"--size")
             {
@@ -980,7 +1028,11 @@ int wmain(int argc, wchar_t** argv)
     g_opt.modsDir = fs::absolute(g_opt.modsDir).wstring();
     std::error_code ec;
     fs::create_directories(g_opt.modsDir, ec);
-    Log::init((exeDir / L"SacredGearSandbox.log").c_str());
+    Log::init(g_opt.log.empty() ? (exeDir / L"SacredGearSandbox.log").c_str() : g_opt.log.c_str());
+    if (!g_opt.enable.empty() && !enableMods())
+    {
+        std::fprintf(stderr, "cannot write gear_mods.json in %s\n", narrow(g_opt.modsDir).c_str());
+    }
     LOG("Sandbox: game {}, mods {}, {}x{}{}", narrow(g_opt.gameDir), narrow(g_opt.modsDir), g_opt.width, g_opt.height,
         g_opt.hidden ? ", hidden" : "");
 
