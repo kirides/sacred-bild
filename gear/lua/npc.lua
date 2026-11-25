@@ -73,7 +73,7 @@ end
 --   routine   {{time = 'HH:MM', x =, y =, layer =}, ...}: where the NPC stands from that time on
 --   talk_range  how close the hero must be to talk (world units, default 140)
 --   walk_radius when the hero is this close (to the NPC or its goal) the NPC walks to the next routine point; else it is put there
---   tint      {color = 0xAARRGGBB}: see the docs
+--   tint      a colour (0xRRGGBB) or {all = colour, parts = {[n] = colour}}: creature:set_tint; set again after a load
 --   on_talk   fun(e): a dialog opened
 function N.define(id, def)
     assert(type(id) == 'string' and id ~= '' and #id <= 100, 'id must be a string')
@@ -122,11 +122,19 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- spawning and the list of NPCs
 
-local function apply_look(c, def)
-    if def.tint and c.set_tint then c:set_tint(def.tint) end
+local looked = {}            -- creature id -> true: its tint was set this session (the tints end with the savegame)
+
+local function apply_look(c, def, inst)
+    local tint = (inst and inst.tint) or def.tint
+    if tint ~= nil then
+        local ok, why = c:set_tint(tint)
+        if not ok then gear.log(('npc %s: tint: %s'):format(def.id, tostring(why))) end
+    end
+    looked[c.id] = true
 end
 
--- spawn(kind, x, y, opts) -> creature | nil, message. opts: layer, like, level, routine (replaces the kind's), data (kept with the NPC: inst.data)
+-- spawn(kind, x, y, opts) -> creature | nil, message. opts: layer, like, level, tint (replaces the kind's), routine (replaces the kind's),
+-- data (kept with the NPC: inst.data)
 function N.spawn(kind, x, y, opts)
     opts = opts or {}
     local def = kinds[kind]
@@ -144,9 +152,10 @@ function N.spawn(kind, x, y, opts)
     end
     local level = opts.level or def.level
     if level then c:set_level(level) end
-    apply_look(c, def)
     local d, h = data()
-    d.list[#d.list + 1] = {id = c.id, kind = kind, type = def.type, routine = opts.routine, data = opts.data}
+    local inst = {id = c.id, kind = kind, type = def.type, routine = opts.routine, data = opts.data, tint = opts.tint}
+    apply_look(c, def, inst)
+    d.list[#d.list + 1] = inst
     h:changed()
     return c
 end
@@ -377,7 +386,7 @@ local function npc_under_cursor(hero)
 end
 
 local function click_frame(state)
-    if state.mode ~= 'game' or state.escape_menu or state.message_box or dialog then return end
+    if state.mode ~= 'game' or state.escape_menu or state.message_box or state.exclusive or dialog then return end
     local hero = gear.world.hero()
     if not hero then return end
     if pending then
@@ -390,12 +399,13 @@ local function click_frame(state)
             N.talk(c)
         end
     end
-    if ui.over_ui() then return end
+    -- (ui.over_ui() would be true from the second frame on: it counts the region this very function declares. A panel above the
+    -- world layer takes the click before the region does.)
     local c, kind, def = npc_under_cursor(hero)
     if not c then return end
     local l, t, r, b = ui.screen()
     local reg = ui.region('click', l, t, r - l, b - t, {layer = 'world', nav = false})
-    if reg.clicked then
+    if reg.clicked and reg.hover then
         local d = hero:distance(c)
         if d and d <= def.talk_range then
             N.talk(c)
@@ -436,6 +446,10 @@ local function routine_tick()
     local t = gear.time()
     for _, inst in ipairs(data().list) do
         local def = kinds[inst.kind]
+        if def and not looked[inst.id] and (inst.tint ~= nil or def.tint ~= nil) then
+            local c = gear.world.object(inst.id)
+            if c and c:is_creature() then apply_look(c, def, inst) end
+        end
         local routine = inst.routine or (def and def.routine)
         local c = routine and gear.world.object(inst.id)
         if c and c:is_creature() and not c:is_dead() and not (dialog and dialog.creature and dialog.creature.id == inst.id) then
@@ -498,7 +512,7 @@ gear.every(1, function()
     local ok, err = pcall(routine_tick)
     if not ok then gear.log('npc routine: ' .. tostring(err)) end
 end)
-gear.on('savegame.changed', function() dialog, pending = nil, nil end)
+gear.on('savegame.changed', function() dialog, pending, looked = nil, nil, {} end)
 
 -- where(kind or creature) -> the routine point an NPC should be at now: x, y, layer.
 function N.where(creature)

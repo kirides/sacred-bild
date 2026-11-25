@@ -3078,6 +3078,18 @@ namespace
         return 1;
     }
 
+    // native.set_tint(id, part, argb) -> true | nil, message
+    int nativeSetTint(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::setTint(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), static_cast<uint32_t>(static_cast<int64_t>(luaL_checknumber(L, 3))), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.clear_pets()
     int nativeClearPets(lua_State*)
     {
@@ -5265,6 +5277,7 @@ namespace
             {"copy_allegiance", nativeCopyAllegiance},
             {"copy_stats", nativeCopyStats},
             {"set_pet", nativeSetPet},
+            {"set_tint", nativeSetTint},
             {"set_level", nativeSetLevel},
             {"clear_pets", nativeClearPets},
             {"set_max_health", nativeSetMaxHealth},

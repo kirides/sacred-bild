@@ -822,8 +822,11 @@ namespace
 {
     using PetSetFn = int(__cdecl*)(unsigned, float, int);
     using PetClearFn = void(__cdecl*)();
+    using TintSetFn = int(__cdecl*)(unsigned, unsigned, unsigned);
     PetSetFn g_petSet = nullptr;
     PetClearFn g_petClear = nullptr;
+    TintSetFn g_tintSet = nullptr;
+    PetClearFn g_tintClear = nullptr;
     bool g_petLooked = false;
 
     bool petApi()
@@ -835,6 +838,8 @@ namespace
             {
                 g_petSet = reinterpret_cast<PetSetFn>(GetProcAddress(bild, "SacredBild_PetSet"));
                 g_petClear = reinterpret_cast<PetClearFn>(GetProcAddress(bild, "SacredBild_PetClear"));
+                g_tintSet = reinterpret_cast<TintSetFn>(GetProcAddress(bild, "SacredBild_TintSet"));
+                g_tintClear = reinterpret_cast<PetClearFn>(GetProcAddress(bild, "SacredBild_TintClear"));
             }
         }
         return g_petSet && g_petClear;
@@ -864,7 +869,34 @@ void World::clearPets()
     if (petApi())
     {
         g_petClear();
+        if (g_tintClear)
+        {
+            g_tintClear();
+        }
     }
+}
+
+bool World::setTint(uint32_t id, uint32_t part, uint32_t argb, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    if (!o || !callIsCreature(o))
+    {
+        error = "no such creature, or world changes are not possible now";
+        return false;
+    }
+    if (!petApi() || !g_tintSet)
+    {
+        error = "tints need a newer SacredBild";
+        return false;
+    }
+    if (part > 8)
+    {
+        error = "the part is 0 (the whole model) or 1 to 8";
+        return false;
+    }
+    g_tintSet(id, part, argb);
+    return true;
 }
 
 bool World::setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_t health, const char*& error)

@@ -47,3 +47,5 @@ EXPORTS
     SacredBild_SubclassWindow
     SacredBild_PetSet
     SacredBild_PetClear
+    SacredBild_TintSet
+    SacredBild_TintClear

@@ -282,6 +282,16 @@ function Creature:name_text() end
 ---@return string? error
 function Creature:set_name_text(id) end
 
+--- Draws the creature's model with a colour multiplied over it. `spec`: a colour (0xAARRGGBB; a number below 0x1000000 is taken as
+--- 0xRRGGBB, opaque) for the whole model, or `{all = colour, parts = {[1] = colour, ...}}` for single meshes in the order the game
+--- draws them (a character is made of a few meshes, for example the body and the cloth); a part's colour wins over `all`. nil clears it.
+--- Textures are multiplied, so a light texture takes the colour best. Needs SacredBild; single player; the tints end with the savegame
+--- (ids then mean other creatures), so a mod sets them again after a load.
+---@param spec integer|{all: integer?, parts: table<integer, integer>?}?
+---@return boolean? ok
+---@return string? error
+function Creature:set_tint(spec) end
+
 --- The `gear.text.key` key of the creature's own name text, if a mod registered it this session.
 ---@return string?
 function Creature:name_key() end

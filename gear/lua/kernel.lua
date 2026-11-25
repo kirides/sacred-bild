@@ -960,6 +960,34 @@ function creature_mt:set_pet(opts)
     assert(type(scale) == 'number' and scale >= 0.1 and scale <= 4, 'scale must be a number from 0.1 to 4')
     return native.set_pet(self.id, scale, opts.untargetable == true)
 end
+-- set_tint(spec): the model is drawn with a colour multiplied over it. spec: a colour (0xAARRGGBB; a number below 0x1000000 is taken as
+-- 0xRRGGBB, opaque) for the whole model, or {all = colour, parts = {[1] = colour, ...}} (the meshes of the model in the order the game
+-- draws them: a character is a few meshes, e.g. body, cloth). nil clears it. Needs SacredBild; single player; ends with the savegame.
+function creature_mt:set_tint(spec)
+    local function argb(c)
+        if c == nil or c == false then return 0 end
+        assert(type(c) == 'number' and c >= 0 and c <= 0xFFFFFFFF, 'a colour is a number 0xAARRGGBB')
+        if c < 0x1000000 then c = c + 0xFF000000 end
+        return c
+    end
+    if spec == nil then
+        for part = 0, 8 do
+            local ok, err = native.set_tint(self.id, part, 0)
+            if not ok then return nil, err end
+        end
+        return true
+    end
+    if type(spec) == 'number' then spec = {all = spec} end
+    assert(type(spec) == 'table', 'the tint is a colour, a table or nil')
+    local parts = spec.parts or {}
+    local ok, err = native.set_tint(self.id, 0, argb(spec.all))
+    if not ok then return nil, err end
+    for part = 1, 8 do
+        ok, err = native.set_tint(self.id, part, argb(parts[part]))
+        if not ok then return nil, err end
+    end
+    return true
+end
 function creature_mt:set_gold(gold)
     assert(type(gold) == 'number', 'gold must be a number')
     return native.set_gold(self.id, math.min(math.max(0, math.floor(gold)), 2147483646))

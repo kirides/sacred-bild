@@ -134,7 +134,11 @@ namespace World
     // world pick (no click, hover cursor or controller aim reaches it). Scale 1 and not untargetable removes it. Needs SacredBild's
     // ddraw.dll; the object id is only valid until the game ends or another savegame loads (clearPets).
     bool setPet(uint32_t id, double scale, bool untargetable, const char*& error);
-    void clearPets();
+    void clearPets();     // also forgets every tint
+    // Tints an object's model (SacredBild): the colour (0xAARRGGBB; 0 or 0xFFFFFFFF: none) multiplied over the whole model (`part` 0) or over
+    // one of its meshes (`part` 1..8, in the order the engine draws them). The object id is only valid until the game ends or another
+    // savegame loads (clearPets).
+    bool setTint(uint32_t id, uint32_t part, uint32_t argb, const char*& error);
     // Sets a creature's maximum health (1 and up, not a hero); its current health becomes `health` when `setCurrent`, else keeps its
     // share of the maximum (at least 1). For the boss modifiers (gear.world, creature:set_modifiers).
     bool setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_t health, const char*& error);

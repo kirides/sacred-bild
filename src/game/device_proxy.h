@@ -167,6 +167,7 @@ private:
     LPDIRECTDRAWSURFACE7 m_texture0 = nullptr;
     DWORD m_texture0Width = 0, m_texture0Height = 0;    // 0: not looked up since the last SetTexture(0)
     std::unique_ptr<Batcher> m_batcher;
+    bool m_inTint = false;                  // DrawIndexedPrimitiveStrided is drawing a tinted mesh (Pets tints)
     bool m_recording = false;               // between BeginStateBlock and EndStateBlock
 
     RecursiveSpinLock m_mutex;

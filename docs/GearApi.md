@@ -1521,6 +1521,14 @@ Gives the creature (not a hero) a name of its own: the game shows this text over
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:set_tint(spec) -> boolean?, string?`
+
+Draws the creature's model with a colour multiplied over it. `spec`: a colour (0xAARRGGBB; a number below 0x1000000 is taken as 0xRRGGBB, opaque) for the whole model, or `{all = colour, parts = {[1] = colour, ...}}` for single meshes in the order the game draws them (a character is made of a few meshes, for example the body and the cloth); a part's colour wins over `all`. nil clears it. Textures are multiplied, so a light texture takes the colour best. Needs SacredBild; single player; the tints end with the savegame (ids then mean other creatures), so a mod sets them again after a load.
+
+- `spec`: `integer|{all: integer?, parts: table<integer, integer>?}` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:name_key() -> string?`
 
 The `gear.text.key` key of the creature's own name text, if a mod registered it this session.
@@ -4098,7 +4106,7 @@ What `gear.npc.define` takes.
 | `routine` | `GearNpcPoint[]` |  (optional) |
 | `talk_range` | `number` | How close the hero must be to talk (world units, default 140). (optional) |
 | `walk_radius` | `number` | The hero is this close (to the NPC or its goal) for the NPC to walk to the next point (default 900); otherwise it is put there. (optional) |
-| `tint` | `any` | The look (colour of the model), see `creature:set_tint`. (optional) |
+| `tint` | `integer\|{all: integer?, parts: table<integer, integer>?}` | The colour of the model (`creature:set_tint`: a colour for the whole model or per mesh, e.g. the cloth); set again after every savegame load. (optional) |
 | `on_talk` | `fun(e: GearNpcEvent)` | Called when the dialog is opened. (optional) |
 
 ### GearNpcEvent
@@ -4137,6 +4145,7 @@ What `spawn` takes.
 | `layer` | `integer` | Default: the hero's. (optional) |
 | `like` | `Creature\|integer` |  (optional) |
 | `level` | `integer` |  (optional) |
+| `tint` | `integer\|{all: integer?, parts: table<integer, integer>?}` | This NPC's own tint (instead of the kind's). (optional) |
 | `routine` | `GearNpcPoint[]` | This NPC's own routine (instead of the kind's). (optional) |
 | `data` | `any` | Kept with the NPC in the savegame data (JSON values). (optional) |
 

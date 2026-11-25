@@ -107,6 +107,23 @@ gear.task(function()
     check('it walked there (seen on the way)', walking)
     A.screenshot('npctest-4-point1')
 
+    -- tints (needs SacredBild): the whole model, then single meshes
+    local ok_t, why_t = c:set_tint(0xFF3030)
+    check('set_tint accepted', ok_t == true, tostring(why_t))
+    gear.wait(0.6)
+    A.screenshot('npctest-tint-all')
+    c:set_tint{parts = {[1] = 0x3060FF}}
+    gear.wait(0.6)
+    A.screenshot('npctest-tint-part1')
+    c:set_tint{parts = {[2] = 0x30FF30}}
+    gear.wait(0.6)
+    A.screenshot('npctest-tint-part2')
+    c:set_tint{parts = {[3] = 0xFFFF30}}
+    gear.wait(0.6)
+    A.screenshot('npctest-tint-part3')
+    check('tint cleared', c:set_tint(nil) == true)
+
+
     -- a dialog and a real click on its first button
     check('talk opens', N.talk(c) == true)
     gear.wait(1)
@@ -142,5 +159,38 @@ gear.task(function()
         check('put at its point at once', math.abs(fx - (hx - 300)) < 40 and math.abs(fy - (hy - 100)) < 40, ('%d,%d'):format(fx, fy))
         check('two kinds listed', #N.list() == 2)
     end
+
+    -- click-to-talk. The game's world pick does not see injected input in an isolated run (no object is ever under the injected cursor), so the
+    -- pick is faked here: gear.world.cursor says the clicker is under the cursor; the rest (the click region, the walk to the NPC, the dialog) is real.
+    N.define('npctest.clicker', {type = model, name = 'Click Keeper', talk_range = 120,
+        dialog = {start = 'hi', pages = {hi = {text = 'You clicked me.', options = {{id = 'ok', label = 'Fine', close = true}}}}}})
+    local k = N.spawn('npctest.clicker', hx + 60, hy + 40, {layer = layer})
+    check('spawn clicker', k ~= nil)
+    if k then
+        N.close()
+        local real_cursor = gear.world.cursor
+        local fake = true
+        gear.world.cursor = function(...)
+            if fake then return {object = k, x = 0, y = 0, layer = layer, pixel_x = 0, pixel_y = 0} end
+            return real_cursor(...)
+        end
+        gear.wait(1)
+        A.click(700, 500)
+        gear.wait(1)
+        local st = N.dialog_state()
+        check('a click on the NPC in range opens its dialog', st ~= nil and st.npc == 'npctest.clicker', tostring(st and st.npc))
+        A.screenshot('npctest-6-click')
+        N.close()
+        -- out of range: the hero walks up first, the dialog opens on arrival
+        k:teleport(hx + 230, hy)
+        gear.wait(1)
+        A.click(700, 500)
+        local opened = gear.wait_until(function() return N.dialog_state() ~= nil end, 25)
+        check('a click on a far NPC walks the hero there, then opens the dialog', opened, ('hero %.0f from the NPC'):format(hero:distance(k) or -1))
+        N.close()
+        fake = false
+        gear.world.cursor = real_cursor
+    end
+
     finish()
 end)
