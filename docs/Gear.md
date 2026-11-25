@@ -485,6 +485,8 @@ of the game folder.
 | `pfxtest` | `gear.pfx`: a Wood Elf casts spells as the game does and with a colour rule, a level rule, a `select` function and a texture swap; 8 checks and screenshots. See [Skill effects](https://github.com/kirides/sacred-bild/blob/main/docs/GearPfx.md). |
 | `bosstest` | Creature modifiers: health, damage dealt and taken, reflection, regeneration, spawn with modifiers, save and load with a boss (a savegame with a hostile creature 1266; 24 checks). |
 | `shoptest` | `gear.shop` and the `shop.stock` event: finds a merchant by teleporting to the world map's trader symbols, checks that a reopened merchant keeps its stock, adds wares by category and by type and removes them. |
+| `npctest` | `gear.npc`: NPCs of an existing model with a name of their own, a dialog and a real click on its button, a routine (walks when the hero is near, is put at the point when the hero is far), click to talk (the world pick is faked in an isolated run), tints. |
+| `npcsavetest` | An NPC across a save and a load (`-gear-load=N`; saves slot 90): the name text, the kind, the mod's list and the tint come back. |
 | `savegametest` | Per-savegame data (`gear.store.game`) across saves and loads. |
 | `mptest`, `netopstest` | The mod channel and `gear.net` (loopback, or a hosted LAN game; `netopstest` against the stock or the SacredEngineRemake server). |
 | `realmtest`, `closedtest` | `gear.realm` in the menus; Closed Internet end to end against a test lobby. |

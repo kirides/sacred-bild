@@ -34,6 +34,18 @@ local function minutes_of(t)
     error("time must be minutes since midnight or 'HH:MM'", 3)
 end
 
+-- A routine as the library keeps it: times in minutes, sorted.
+local function normalize_routine(points)
+    assert(type(points) == 'table' and #points > 0, 'a routine needs at least one point')
+    local r = {}
+    for i, p in ipairs(points) do
+        assert(type(p.x) == 'number' and type(p.y) == 'number', 'routine point needs x and y')
+        r[i] = {time = minutes_of(p.time), x = p.x, y = p.y, layer = p.layer}
+    end
+    table.sort(r, function(a, b) return a.time < b.time end)
+    return r
+end
+
 local function creature_id(c) return type(c) == 'table' and c.id or c end
 
 local function data()
@@ -51,20 +63,12 @@ local function fire(list, e)
     end
 end
 
-local function resolve_type(t)
-    if type(t) == 'string' then
-        local id = gear.data.object_types:find(t)
-        return id
-    end
-    return t
-end
-
 ---------------------------------------------------------------------------------------------------------------
 -- kinds
 
 -- define(id, def) -> def. `id` is a string that is yours alone ('mymod.smith'); it is stored in the savegame's text ids, so
 -- keep it stable. def:
---   type      the object type (id or name) whose model the NPC uses (required)
+--   type      the object type (id or name) whose model the NPC uses (required; looked up when an NPC is spawned)
 --   name      the name shown (a string or {en = ..., de = ...}); default: the type's name
 --   level     the creature's level (default 1: the engine's plain create)
 --   like      a creature whose faction, level and health the NPC takes (default: the hero's faction, so the NPC is friendly)
@@ -78,26 +82,17 @@ end
 function N.define(id, def)
     assert(type(id) == 'string' and id ~= '' and #id <= 100, 'id must be a string')
     assert(type(def) == 'table', 'def must be a table')
-    local t = resolve_type(def.type)
-    assert(type(t) == 'number', 'def.type must be an object type id or name that exists')
+    -- (the type is looked up when an NPC is spawned: the game's object types are not loaded yet when the mods start in the menu)
+    assert(type(def.type) == 'number' or type(def.type) == 'string', 'def.type must be an object type id or name')
     local d = {}
     for k, v in pairs(def) do d[k] = v end
-    d.id, d.type = id, t
+    d.id = id
     if d.name ~= nil then
         local text, err = gear.text.key(PREFIX .. id, d.name)
         assert(text, err)
         d.name_text = text
     end
-    if d.routine then
-        local r = {}
-        for i, p in ipairs(d.routine) do
-            assert(type(p.x) == 'number' and type(p.y) == 'number', 'routine point needs x and y')
-            r[i] = {time = minutes_of(p.time), x = p.x, y = p.y, layer = p.layer}
-        end
-        table.sort(r, function(a, b) return a.time < b.time end)
-        assert(#r > 0, 'routine needs at least one point')
-        d.routine = r
-    end
+    if d.routine then d.routine = normalize_routine(d.routine) end
     d.talk_range = d.talk_range or DEFAULT_TALK_RANGE
     if not kinds[id] then order[#order + 1] = id end
     kinds[id] = d
@@ -141,6 +136,7 @@ function N.spawn(kind, x, y, opts)
     if not def then return nil, 'no NPC kind ' .. tostring(kind) end
     local c, err = gear.world.spawn(def.type, x, y, {layer = opts.layer, like = opts.like or def.like})
     if not c then return nil, err end
+    def.type_id = c:type()
     if def.name_text then
         local ok, why = c:set_name_text(def.name_text)
         if not ok then c:remove(); return nil, why end
@@ -153,7 +149,7 @@ function N.spawn(kind, x, y, opts)
     local level = opts.level or def.level
     if level then c:set_level(level) end
     local d, h = data()
-    local inst = {id = c.id, kind = kind, type = def.type, routine = opts.routine, data = opts.data, tint = opts.tint}
+    local inst = {id = c.id, kind = kind, type = c:type(), routine = opts.routine and normalize_routine(opts.routine), data = opts.data, tint = opts.tint}
     apply_look(c, def, inst)
     d.list[#d.list + 1] = inst
     h:changed()
@@ -530,10 +526,7 @@ function N.routine(creature, points)
     local inst = inst_of(creature)
     if not inst then return nil, 'not an NPC of this mod' end
     if points then
-        local r = {}
-        for i, p in ipairs(points) do r[i] = {time = minutes_of(p.time), x = p.x, y = p.y, layer = p.layer} end
-        table.sort(r, function(a, b) return a.time < b.time end)
-        inst.routine = r
+        inst.routine = normalize_routine(points)
     else
         inst.routine = nil
     end

@@ -55,7 +55,7 @@
 ---@field routine? GearNpcPoint[]
 ---@field talk_range? number How close the hero must be to talk (world units, default 140).
 ---@field walk_radius? number The hero is this close (to the NPC or its goal) for the NPC to walk to the next point (default 900); otherwise it is put there.
----@field tint? any The look (colour of the model), see `creature:set_tint`.
+---@field tint? integer|{all: integer?, parts: table<integer, integer>?} The colour of the model (`creature:set_tint`: a colour for the whole model or per mesh, e.g. the cloth); set again after every savegame load.
 ---@field on_talk? fun(e: GearNpcEvent) Called when the dialog is opened.
 
 --- What a dialog or routine handler gets.
@@ -82,6 +82,7 @@
 ---@field layer? integer Default: the hero's.
 ---@field like? Creature|integer
 ---@field level? integer
+---@field tint? integer|{all: integer?, parts: table<integer, integer>?} This NPC's own tint (instead of the kind's).
 ---@field routine? GearNpcPoint[] This NPC's own routine (instead of the kind's).
 ---@field data? any Kept with the NPC in the savegame data (JSON values).
 

@@ -1,3 +1,7 @@
+## v0.3.2 (2026-11-25)
+
+- New: model tints for Sacred Gear mods (`SacredBild_TintSet`, `SacredBild_TintClear`): a creature's model is drawn with a colour multiplied over it, whole or per mesh, through one more texture stage; its shadow stays untinted.
+
 ## v0.3.1 (2026-11-25)
 
 - Under the hood: no change to the game. The version only moves because the mod index was refreshed after 0.3.0.

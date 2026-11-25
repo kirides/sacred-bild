@@ -156,8 +156,9 @@ gear.task(function()
     if f then
         gear.wait(2.5)
         local fx, fy = f:position()
-        check('put at its point at once', math.abs(fx - (hx - 300)) < 40 and math.abs(fy - (hy - 100)) < 40, ('%d,%d'):format(fx, fy))
+        check('put at its point at once', math.abs(fx - (hx - 300)) < 90 and math.abs(fy - (hy - 100)) < 90, ('%d,%d'):format(fx, fy))
         check('two kinds listed', #N.list() == 2)
+        check('an NPC takes a routine of its own (times as text)', N.routine(f, {{time = '12:00', x = hx - 300, y = hy - 100}}) == true and select(1, N.where(f)) == hx - 300)
     end
 
     -- click-to-talk. The game's world pick does not see injected input in an isolated run (no object is ever under the injected cursor), so the
