@@ -37,6 +37,7 @@ namespace
         float scale, ax, ay;
     };
     std::unordered_map<uint32_t, Shadow> g_shadows;
+    std::atomic<int> g_shadowCount{0};   // g_shadows.size(), readable without the lock
 
     // Reads the pet entry of the object `self` and returns whether it is one; the scale and the anchor go to the out parameters.
     bool petOf(const void* self, float& scale, float& ax, float& ay)
@@ -75,6 +76,19 @@ namespace
             const uint32_t handle = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x40);
             AcquireSRWLockExclusive(&g_lock);
             g_shadows[handle] = {scale, ax, ay};
+            g_shadowCount.store(static_cast<int>(g_shadows.size()), std::memory_order_relaxed);
+            ReleaseSRWLockExclusive(&g_lock);
+        }
+        else if (g_shadowCount.load(std::memory_order_relaxed) > 0 && self)
+        {
+            // A model handle outlives its pet: once the pet is dismissed or dies the engine hands the handle to another object. Forget
+            // it here, before that object's shadow pass, or an NPC's shadow would be drawn at the old pet's scale and anchor.
+            const uint32_t handle = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x40);
+            AcquireSRWLockExclusive(&g_lock);
+            if (g_shadows.erase(handle) != 0)
+            {
+                g_shadowCount.store(static_cast<int>(g_shadows.size()), std::memory_order_relaxed);
+            }
             ReleaseSRWLockExclusive(&g_lock);
         }
         const uint32_t r = g_origDrawModel(self, edx, device, model, instance, flagsLow, flagsHigh);
