@@ -452,7 +452,7 @@ namespace
     // fences or several swap chain images sets how many frames it has in flight: Ui::setFramesInFlight).
     struct DeadSurface
     {
-        IDirectDrawSurface7* surface;
+        IUnknown* surface;  // a picture's texture, or a retained list's vertex buffer
         uint64_t frame;     // the frame counter at the release
     };
     std::vector<DeadSurface> g_deadSurfaces;
@@ -653,7 +653,7 @@ namespace
 
     void releaseDeadPictures()
     {
-        std::vector<IDirectDrawSurface7*> dead;
+        std::vector<IUnknown*> dead;
         {
             std::scoped_lock lock(g_pictureLock);
             ++g_frame;
@@ -671,7 +671,7 @@ namespace
             }
             g_deadSurfaces.resize(keep);
         }
-        for (IDirectDrawSurface7* s : dead)
+        for (IUnknown* s : dead)
         {
             s->Release();
         }
@@ -1198,54 +1198,71 @@ namespace
         }
     }
 
-    void drawMesh(IDirect3DDevice7* device, StateGuard& state, const Command& c)
+    // The texture of a mesh command: its surface (null: none), how its colors blend and where the image lies in it.
+    struct MeshTexture
     {
-        // A different picture or sampling: what is batched goes out first (before this command resolves its texture).
-        if (t_batch.active && (t_batch.image != c.image || t_batch.point != c.point))
-        {
-            flushMeshBatch(device, state);
-        }
-        std::shared_ptr<const MeshData> mesh;
-        {
-            std::scoped_lock lock(g_meshLock);
-            const auto it = g_meshes.find(c.region);
-            if (it == g_meshes.end())
-            {
-                return;
-            }
-            mesh = it->second;
-        }
-        ImageRecord r{};
         IDirectDrawSurface7* surface = nullptr;
         bool premultiplied = true;      // the vertex colors: scaled by alpha (a game image's pixels are not)
+        float u0 = 0, v0 = 0, u1 = 1, v1 = 1;
+
+        bool operator==(const MeshTexture& o) const
+        {
+            return surface == o.surface && premultiplied == o.premultiplied && u0 == o.u0 && v0 == o.v0 && u1 == o.u1 && v1 == o.v1;
+        }
+    };
+
+    // False when the command's image cannot be drawn now (the mesh draws nothing then).
+    bool meshTexture(IDirect3DDevice7* device, const Command& c, MeshTexture& t)
+    {
+        ImageRecord r{};
+        t = MeshTexture{};
         if (c.image >= Ui::kPictureBase)
         {
-            if (!pictureTexture(device, c.image, r, surface, &premultiplied))
+            if (!pictureTexture(device, c.image, r, t.surface, &t.premultiplied))
             {
-                return;
+                return false;
             }
         }
         else if (c.image)
         {
-            if (!imageRecord(c.image, r) || !(surface = imageSurface(r.texture)))
+            if (!imageRecord(c.image, r) || !(t.surface = imageSurface(r.texture)))
             {
-                return;
+                return false;
             }
-            premultiplied = false;
+            t.premultiplied = false;
         }
-        const float inv = c.w > 0 ? 1.0f / c.w : 1.0f;
-        float mu0 = r.u0, mv0 = r.v0, mu1 = r.u1, mv1 = r.v1;
-        if (c.image < Ui::kPictureBase)
+        t.u0 = r.u0;
+        t.v0 = r.v0;
+        t.u1 = r.u1;
+        t.v1 = r.v1;
+        if (c.image && c.image < Ui::kPictureBase)
         {
-            insetTexels(r, mu0, mv0, mu1, mv1);
+            insetTexels(r, t.u0, t.v0, t.u1, t.v1);
         }
-        const float tu0 = mu0, tv0 = mv0, tdu = mu1 - mu0, tdv = mv1 - mv0;
+        return true;
+    }
+
+    std::shared_ptr<const MeshData> findMesh(uint32_t id)
+    {
+        std::scoped_lock lock(g_meshLock);
+        const auto it = g_meshes.find(id);
+        return it == g_meshes.end() ? nullptr : it->second;
+    }
+
+    // Appends the finished triangles of a mesh command (transformed, on the pixel grid of `place`, clipped, with the texture's coordinates and the
+    // blend's colors) to `out`, in layout units as the game's UI draws them.
+    void meshVertices(const Command& c, const MeshData& data, const MeshTexture& tex, const Text::Placement& place, std::vector<TLVertex>& out)
+    {
+        const MeshData* mesh = &data;
+        IDirectDrawSurface7* const surface = tex.surface;
+        const bool premultiplied = tex.premultiplied;
+        const float inv = c.w > 0 ? 1.0f / c.w : 1.0f;
+        const float tu0 = tex.u0, tv0 = tex.v0, tdu = tex.u1 - tex.u0, tdv = tex.v1 - tex.v0;
         const bool flipU = (c.flip & 1) != 0, flipV = (c.flip & 2) != 0;
         const std::vector<Ui::MeshVertex>& vs = mesh->vertices;
 
         // Untransformed meshes land on whole screen pixels, as gear.ui.image's quads do (Text::snap): a document's sprites and text come out as sharp as
         // the game's own at a UI scale that is not 1, and tiles drawn cell by cell meet without seams.
-        const Text::Placement place = placement();
         const bool snapToPixels = !c.matrix;
         const auto point = [&](int index) [[msvc::forceinline]] {
             const Ui::MeshVertex& v = vs[static_cast<size_t>(index)];
@@ -1293,8 +1310,6 @@ namespace
                             surface ? tu0 + (p.u - cellU) * tdu : 0.0f, surface ? tv0 + (p.v - cellV) * tdv : 0.0f};
         };
 
-        std::vector<TLVertex>& out = t_batch.vertices;
-        const size_t before = out.size();
         const size_t triangles = mesh->indices.size() / 3;
         // Each vertex is placed once: a quad's four vertices serve six triangle corners.
         thread_local std::vector<MeshPoint> placed;
@@ -1373,15 +1388,249 @@ namespace
                 out.push_back(toVertex(tri[2]));
             }
         }
+    }
+
+    void drawMesh(IDirect3DDevice7* device, StateGuard& state, const Command& c)
+    {
+        // A different picture or sampling: what is batched goes out first (before this command resolves its texture).
+        if (t_batch.active && (t_batch.image != c.image || t_batch.point != c.point))
+        {
+            flushMeshBatch(device, state);
+        }
+        const std::shared_ptr<const MeshData> mesh = findMesh(c.region);
+        MeshTexture tex;
+        if (!mesh || !meshTexture(device, c, tex))
+        {
+            return;
+        }
+        std::vector<TLVertex>& out = t_batch.vertices;
+        const size_t before = out.size();
+        meshVertices(c, *mesh, tex, placement(), out);
         if (out.size() == before)
         {
             return;
         }
         t_batch.active = true;
         t_batch.image = c.image;
-        t_batch.surface = surface;
-        t_batch.premultiplied = premultiplied;
+        t_batch.surface = tex.surface;
+        t_batch.premultiplied = tex.premultiplied;
         t_batch.point = c.point;
+    }
+
+    // ---- Retained lists (Kind::Retained, docs/RmlRetained.md): a recorded RmlUi draw whose vertices are made once ----
+
+    // Consecutive meshes with the same texture and sampling, or one item icon.
+    struct RetainedRun
+    {
+        bool item = false;                  // commands[index] is drawn as it is (an item icon)
+        size_t index = 0;                   // the run's first command
+        uint32_t image = 0;
+        bool point = false;
+        MeshTexture tex;                    // what the vertices were made for
+        std::vector<TLVertex> vertices;     // layout units, as DrawPrimitive takes them (SacredBild's proxy maps them)
+        IDirect3DVertexBuffer7* buffer = nullptr;   // the same mapped to the screen (vertex buffer draws are not mapped), null: none
+    };
+
+    struct RetainedBuild
+    {
+        IDirect3DDevice7* device = nullptr;
+        Text::Placement place;
+        std::vector<RetainedRun> runs;
+    };
+
+    bool g_buffersFailed = false;   // the device made no vertex buffer once: the runs are drawn from memory from then on
+    const bool g_noBuffers = [] {
+        const char* v = std::getenv("GEAR_UI_NOVB");
+        return v && v[0] && v[0] != '0';
+    }();
+
+    // The finished vertices in screen pixels in a vertex buffer of the device's own Direct3D (through SacredBild a Direct3D 9 one); null if none can be made.
+    IDirect3DVertexBuffer7* makeBuffer(IDirect3DDevice7* device, const std::vector<TLVertex>& v, const Text::Placement& p)
+    {
+        if (g_buffersFailed || g_noBuffers || v.empty())
+        {
+            return nullptr;
+        }
+        IDirect3D7* d3d = nullptr;
+        if (FAILED(device->GetDirect3D(&d3d)) || !d3d)
+        {
+            g_buffersFailed = true;
+            return nullptr;
+        }
+        D3DVERTEXBUFFERDESC desc{};
+        desc.dwSize = sizeof(desc);
+        desc.dwCaps = D3DVBCAPS_WRITEONLY;
+        desc.dwFVF = kFvf;
+        desc.dwNumVertices = static_cast<DWORD>(v.size());
+        IDirect3DVertexBuffer7* vb = nullptr;
+        const HRESULT hr = d3d->CreateVertexBuffer(&desc, &vb, 0);
+        d3d->Release();
+        if (FAILED(hr) || !vb)
+        {
+            LOG("UI: no vertex buffer for retained draws ({:08x}); they are drawn from memory", static_cast<uint32_t>(hr));
+            g_buffersFailed = true;
+            return nullptr;
+        }
+        void* data = nullptr;
+        DWORD size = 0;
+        if (FAILED(vb->Lock(DDLOCK_WAIT | DDLOCK_WRITEONLY | DDLOCK_DISCARDCONTENTS, &data, &size)) || !data ||
+            (size && size < v.size() * sizeof(TLVertex)))
+        {
+            vb->Release();
+            return nullptr;
+        }
+        auto* out = static_cast<TLVertex*>(data);
+        for (size_t i = 0; i < v.size(); ++i)
+        {
+            out[i] = v[i];
+            out[i].x = v[i].x * p.scale + p.originX;      // what SacredBild's proxy does to the vertices of a DrawPrimitive
+            out[i].y = v[i].y * p.scale + p.originY;
+        }
+        vb->Unlock();
+        return vb;
+    }
+
+    // The buffers go after the frames in flight, on the render thread (releaseDeadPictures).
+    void dropBuffers(RetainedBuild& b)
+    {
+        std::scoped_lock lock(g_pictureLock);
+        for (RetainedRun& r : b.runs)
+        {
+            if (r.buffer)
+            {
+                g_deadSurfaces.push_back({r.buffer, g_frame});
+                r.buffer = nullptr;
+            }
+        }
+    }
+}
+
+struct Ui::RetainedList
+{
+    std::vector<Command> commands;
+    mutable std::unique_ptr<RetainedBuild> build;      // made and used on the render thread only
+
+    ~RetainedList()
+    {
+        if (build)
+        {
+            dropBuffers(*build);
+        }
+    }
+};
+
+namespace
+{
+    bool drawGuarded(IDirect3DDevice7* device, StateGuard& state, const Command& c);
+
+    void buildRetained(IDirect3DDevice7* device, const Ui::RetainedList& list, RetainedBuild& b, const Text::Placement& place)
+    {
+        dropBuffers(b);
+        b.runs.clear();
+        b.device = device;
+        b.place = place;
+        for (size_t i = 0; i < list.commands.size(); ++i)
+        {
+            const Command& c = list.commands[i];
+            if (c.kind != Kind::Mesh)
+            {
+                RetainedRun r;
+                r.item = true;
+                r.index = i;
+                b.runs.push_back(std::move(r));
+                continue;
+            }
+            const std::shared_ptr<const MeshData> mesh = findMesh(c.region);
+            MeshTexture tex;
+            if (!mesh || !meshTexture(device, c, tex))
+            {
+                continue;
+            }
+            if (b.runs.empty() || b.runs.back().item || b.runs.back().image != c.image || b.runs.back().point != c.point || !(b.runs.back().tex == tex))
+            {
+                RetainedRun r;
+                r.index = i;
+                r.image = c.image;
+                r.point = c.point;
+                r.tex = tex;
+                b.runs.push_back(std::move(r));
+            }
+            meshVertices(c, *mesh, tex, place, b.runs.back().vertices);
+        }
+        for (RetainedRun& r : b.runs)
+        {
+            if (!r.item)
+            {
+                r.buffer = makeBuffer(device, r.vertices, place);
+            }
+        }
+    }
+
+    // Whether the textures of the runs are still the ones the vertices were made for (a picture's texture is made again after a device
+    // change, a game image's sheet may be loaded into another texture).
+    bool texturesCurrent(IDirect3DDevice7* device, const Ui::RetainedList& list, const RetainedBuild& b)
+    {
+        for (const RetainedRun& r : b.runs)
+        {
+            MeshTexture tex;
+            if (!r.item && (!meshTexture(device, list.commands[r.index], tex) || !(tex == r.tex)))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void drawRetained(IDirect3DDevice7* device, StateGuard& state, const Command& c)
+    {
+        if (!c.retained)
+        {
+            return;
+        }
+        const Ui::RetainedList& list = *c.retained;
+        if (!list.build)
+        {
+            list.build = std::make_unique<RetainedBuild>();
+        }
+        RetainedBuild& b = *list.build;
+        const Text::Placement place = placement();
+        if (b.device != device || b.place.scale != place.scale || b.place.originX != place.originX || b.place.originY != place.originY ||
+            !texturesCurrent(device, list, b))
+        {
+            buildRetained(device, list, b, place);
+        }
+        for (const RetainedRun& r : b.runs)
+        {
+            if (r.item)
+            {
+                drawGuarded(device, state, list.commands[r.index]);
+                continue;
+            }
+            state.enter();
+            state.texture(r.tex.surface);
+            device->SetRenderState(D3DRENDERSTATE_SRCBLEND, r.tex.premultiplied ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
+            if (r.point)
+            {
+                device->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_POINT);
+                device->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFN_POINT);
+            }
+            constexpr DWORD kChunk = 60000;     // vertices per call (a multiple of 3, below the device's limit)
+            const DWORD total = static_cast<DWORD>(r.vertices.size());
+            for (DWORD first = 0; first < total; first += kChunk)
+            {
+                const DWORD n = std::min(kChunk, total - first);
+                if (!r.buffer || FAILED(device->DrawPrimitiveVB(D3DPT_TRIANGLELIST, r.buffer, first, n, 0)))
+                {
+                    device->DrawPrimitive(D3DPT_TRIANGLELIST, kFvf, const_cast<TLVertex*>(r.vertices.data()) + first, n, 0);
+                }
+            }
+            if (r.point)
+            {
+                device->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_LINEAR);
+                device->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFN_LINEAR);
+            }
+            device->SetRenderState(D3DRENDERSTATE_SRCBLEND, D3DBLEND_SRCALPHA);
+        }
     }
 
     void drawText(IDirect3DDevice7* device, StateGuard& state, const Command& c)
@@ -1476,6 +1725,7 @@ namespace
             case Kind::Rect: drawRect(device, state, c); break;
             case Kind::Image: drawImage(device, state, c); break;
             case Kind::Mesh: drawMesh(device, state, c); break;
+            case Kind::Retained: drawRetained(device, state, c); break;
             case Kind::Text: c.vector ? drawVectorText(device, state, c) : drawText(device, state, c); break;
             case Kind::Region: break;
             case Kind::ItemIcon:
@@ -1834,6 +2084,19 @@ int Ui::takePadScroll()
 {
     findBild();
     return g_takeScroll ? g_takeScroll() : 0;
+}
+
+std::shared_ptr<const Ui::RetainedList> Ui::retainedCreate(std::vector<Command> commands)
+{
+    auto list = std::make_shared<RetainedList>();
+    list->commands = std::move(commands);
+    return list;
+}
+
+bool Ui::clipOn()
+{
+    std::scoped_lock lock(g_lock);
+    return g_clipOn;
 }
 
 bool Ui::add(Command&& command)

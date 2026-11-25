@@ -1660,6 +1660,7 @@ namespace
         std::vector<uintptr_t> drawnTextures;   // RmlUi texture handles and mesh ids the draw used (sorted): their release makes it stale
         std::vector<uint32_t> drawnMeshes;
         uint64_t texturesRefreshed = 0;         // GetTickCount64 of the last lastDraw refresh of drawnTextures by a replay
+        std::shared_ptr<const Ui::RetainedList> retained;   // `drawn` as one command (made on the first frame it is given again)
         // SACREDGEAR_PROF: how often the document was updated and rendered, and what touched it (a native's function, or a label).
         struct Stats
         {
@@ -3366,16 +3367,33 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         {
             int count = 0;
             ++d.stats.replays;
-            for (const Ui::Command& c : d.drawn)
+            if (slot == -1 && !Ui::clipOn())
             {
-                if (count >= kMaxMeshesPerDraw)
+                // One command for all of it: the render thread keeps its finished vertices (docs/RmlRetained.md, "Replay").
+                if (!d.retained && !d.drawn.empty())
                 {
-                    break;
+                    d.retained = Ui::retainedCreate(d.drawn);
                 }
-                Ui::Command copy = c;
-                if (Ui::add(std::move(copy)))
+                Ui::Command c;
+                c.kind = Ui::Kind::Retained;
+                c.layer = static_cast<Ui::Layer>(layer);
+                c.window = -1;
+                c.retained = d.retained;
+                count = d.retained && Ui::add(std::move(c)) ? static_cast<int>(d.drawn.size()) : 0;
+            }
+            else
+            {
+                for (const Ui::Command& c : d.drawn)
                 {
-                    ++count;
+                    if (count >= kMaxMeshesPerDraw)
+                    {
+                        break;
+                    }
+                    Ui::Command copy = c;
+                    if (Ui::add(std::move(copy)))
+                    {
+                        ++count;
+                    }
                 }
             }
             const uint64_t now = GetTickCount64();
@@ -3395,6 +3413,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         d.drawn.clear();
         d.drawnTextures.clear();
         d.drawnMeshes.clear();
+        d.retained.reset();
         g_target.capture = &d.drawn;
         g_target.textures = &d.drawnTextures;
         g_target.meshes = &d.drawnMeshes;
