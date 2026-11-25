@@ -1428,7 +1428,7 @@ namespace
         bool point = false;
         MeshTexture tex;                    // what the vertices were made for
         std::vector<TLVertex> vertices;     // layout units, as DrawPrimitive takes them (SacredBild's proxy maps them)
-        IDirect3DVertexBuffer7* buffer = nullptr;   // the same mapped to the screen (vertex buffer draws are not mapped), null: none
+        DWORD first = 0;                    // where they start in the list's vertex buffer
     };
 
     struct RetainedBuild
@@ -1436,6 +1436,7 @@ namespace
         IDirect3DDevice7* device = nullptr;
         Text::Placement place;
         std::vector<RetainedRun> runs;
+        IDirect3DVertexBuffer7* buffer = nullptr;   // all runs' vertices mapped to the screen (vertex buffer draws are not mapped), null: none
     };
 
     bool g_buffersFailed = false;   // the device made no vertex buffer once: the runs are drawn from memory from then on
@@ -1447,7 +1448,7 @@ namespace
     // The finished vertices in screen pixels in a vertex buffer of the device's own Direct3D (through SacredBild a Direct3D 9 one); null if none can be made.
     IDirect3DVertexBuffer7* makeBuffer(IDirect3DDevice7* device, const std::vector<TLVertex>& v, const Text::Placement& p)
     {
-        if (g_buffersFailed || g_noBuffers || v.empty())
+        if (g_buffersFailed || g_noBuffers || v.empty() || v.size() > 0xFFFF)     // (Direct3D 7's limit of vertices per buffer)
         {
             return nullptr;
         }
@@ -1490,17 +1491,14 @@ namespace
         return vb;
     }
 
-    // The buffers go after the frames in flight, on the render thread (releaseDeadPictures).
+    // The buffer goes after the frames in flight, on the render thread (releaseDeadPictures).
     void dropBuffers(RetainedBuild& b)
     {
-        std::scoped_lock lock(g_pictureLock);
-        for (RetainedRun& r : b.runs)
+        if (b.buffer)
         {
-            if (r.buffer)
-            {
-                g_deadSurfaces.push_back({r.buffer, g_frame});
-                r.buffer = nullptr;
-            }
+            std::scoped_lock lock(g_pictureLock);
+            g_deadSurfaces.push_back({b.buffer, g_frame});
+            b.buffer = nullptr;
         }
     }
 }
@@ -1557,13 +1555,14 @@ namespace
             }
             meshVertices(c, *mesh, tex, place, b.runs.back().vertices);
         }
+        // One buffer for the whole list: the runs are ranges of it.
+        std::vector<TLVertex> all;
         for (RetainedRun& r : b.runs)
         {
-            if (!r.item)
-            {
-                r.buffer = makeBuffer(device, r.vertices, place);
-            }
+            r.first = static_cast<DWORD>(all.size());
+            all.insert(all.end(), r.vertices.begin(), r.vertices.end());
         }
+        b.buffer = makeBuffer(device, all, place);
     }
 
     // Whether the textures of the runs are still the ones the vertices were made for (a picture's texture is made again after a device
@@ -1619,7 +1618,7 @@ namespace
             for (DWORD first = 0; first < total; first += kChunk)
             {
                 const DWORD n = std::min(kChunk, total - first);
-                if (!r.buffer || FAILED(device->DrawPrimitiveVB(D3DPT_TRIANGLELIST, r.buffer, first, n, 0)))
+                if (!b.buffer || FAILED(device->DrawPrimitiveVB(D3DPT_TRIANGLELIST, b.buffer, r.first + first, n, 0)))
                 {
                     device->DrawPrimitive(D3DPT_TRIANGLELIST, kFvf, const_cast<TLVertex*>(r.vertices.data()) + first, n, 0);
                 }
