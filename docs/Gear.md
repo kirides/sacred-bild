@@ -339,6 +339,8 @@ been typed (line breaks and tabs become spaces; the box applies its own length l
 window) and gives its rect in the 1024x768 layout, `native.ui_type_text()` posts the characters as `WM_CHAR` to the game window; both are in `gear/ui.cpp`,
 the button is the end of `gear/lua/modmanager.lua`.
 
+The button shows only for a box that takes typing and whose window is open: not on the savegame screen's quicksave box, not while the screen is loading (no box takes typing there), and not on the box a closed window left focused. Test: `gear/examples/pastebuttontest`.
+
 **Ctrl+V** does the same as the button (the text is typed once Ctrl is released; not with AltGr).
 
 ### Text fields of RmlUi documents: selection and clipboard

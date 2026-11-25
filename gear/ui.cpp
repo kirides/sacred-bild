@@ -1923,6 +1923,65 @@ namespace
     }
 }
 
+namespace
+{
+    // The window an edit control belongs to. The game keeps its edit controls as members of the window object (the savegame screen's
+    // boxes have no parent link), so the owner is the window (of the manager's slots, or the start menu's screens) that starts last
+    // before the control, within kOwnerSpan bytes. Whether the owner is shown, and the savegame screen's boxes that take no typing,
+    // decide whether the control is a text box the player can use.
+    constexpr uintptr_t kOwnerSpan = 0x20000;
+    constexpr uint32_t kMenusOff = 0x130, kMenuCount = 5, kSavegameMenu = 3;
+    constexpr int kSavegameSlot = 11;           // UI_WND_SAVEGAME
+    // cUI_Savegame (docs: src/sacred/ui.h): mode +0x75C (1 saving, 2 loading ...); the four boxes (the quicksave first) are members
+    // from +0x4594 on, 0xED0 apart; typing reaches them in saving mode only, and the quicksave box never takes it.
+    constexpr uint32_t kSavegameModeOff = 0x75C, kSavegameBoxesOff = 0x4594;
+    constexpr uintptr_t kSavegameBoxStride = 0xED0;
+    constexpr uint32_t kSavegameSaving = 1;
+
+    bool editableInOwner(uintptr_t m, uintptr_t control)
+    {
+        uintptr_t owner = 0;
+        bool savegame = false;
+        const auto consider = [&](uintptr_t w, bool isSavegame)
+        {
+            if (w && w <= control && control - w < kOwnerSpan && w > owner)
+            {
+                owner = w;
+                savegame = isSavegame;
+            }
+        };
+        for (int slot = 0; slot < kWindowSlots; ++slot)
+        {
+            consider(windowAt(m, slot), slot == kSavegameSlot);
+        }
+        if (managerFlags(m) & kManagerMenus)
+        {
+            for (uint32_t i = 0; i < kMenuCount; ++i)
+            {
+                consider(readOr<uintptr_t>(m + kMenusOff + 4 * i, 0), i == kSavegameMenu);
+            }
+        }
+        if (!owner)
+        {
+            return true;            // not a member of a window we know: the control's own flags decide
+        }
+        if (!visible(owner))
+        {
+            return false;           // the game leaves the focus on the box of a window that was closed
+        }
+        if (savegame)
+        {
+            const uintptr_t offset = control - owner;
+            if (readOr<uint32_t>(owner + kSavegameModeOff, 0) != kSavegameSaving ||
+                offset == kSavegameBoxesOff)
+            {
+                return false;       // loading: no box takes typing; the quicksave box takes none in saving either
+            }
+        }
+        return true;
+    }
+}
+
 bool Ui::focusedTextField(float& x, float& y, float& w, float& h)
 {
     // cUI_Control2: flags +0x10, x/y +0x24/+0x28 (relative to the parent), width/height int16 +0x2C/+0x2E, parent +0x50.
@@ -1945,6 +2004,10 @@ bool Ui::focusedTextField(float& x, float& y, float& w, float& h)
     const uintptr_t descriptor = locator ? readOr<uintptr_t>(locator + 12, 0) : 0;
     char name[24] = {};
     if (!descriptor || !read(descriptor + 8, name) || std::strcmp(name, ".?AVcUI_EditControl@@") != 0)
+    {
+        return false;
+    }
+    if (!editableInOwner(m, control))
     {
         return false;
     }
