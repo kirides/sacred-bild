@@ -3857,11 +3857,37 @@ A merchant's wares live in the merchant window: three pages (its tabs, "Waffen",
 
 `shop.stock` fires once per page, in the order of the containers, right after the game stocked or changed the page: `reason` is `'new'` (another merchant: the page was emptied and stocked anew), `'refresh'` (the window's refresh message did the same for the same merchant) or `'restock'` (the game swapped some wares of the same merchant: only when the page really changed). A handler adds wares with `gear.shop.add` (the game's own stocking code: room in the grid, the item, its random properties) and takes them out with `gear.shop.remove`. The added items are real items: the player buys and sells them like the game's own wares. Single player and network games alike (the shop is on this PC).
 
+### GearShopCategories
+
+The equipment categories of the item picker (`GearShopCategory.category`, `GearShopAddOpts.category`) by name.
+
+| Field | Type | |
+|---|---|---|
+| `WEAPON` | `integer` | 5 |
+| `CHEST_ARMOUR` | `integer` | 6 |
+| `RING` | `integer` | 8 |
+| `POTION` | `integer` | 9 (potions are not equipment: the picker has no equipment to give for it) |
+| `SHIELD` | `integer` | 13 |
+| `HELMET` | `integer` | 17 |
+| `BOOTS` | `integer` | 18 |
+| `BELT` | `integer` | 19 |
+| `AMULET` | `integer` | 20 |
+| `SHOULDERS` | `integer` | 21 |
+| `ARMS` | `integer` | 22 |
+| `LEGS` | `integer` | 23 |
+| `GLOVES` | `integer` | 24 |
+| `WINGS` | `integer` | 25 |
+| `HORSE` | `integer` | 29 |
+
 ### GearShop
 
 Reached as `gear.shop`.
 
 Merchants' stock pages.
+
+| Field | Type | |
+|---|---|---|
+| `CATEGORY` | `GearShopCategories` | The category numbers by name, e.g. `gear.shop.CATEGORY.WEAPON`. |
 
 ### GearShopPage
 

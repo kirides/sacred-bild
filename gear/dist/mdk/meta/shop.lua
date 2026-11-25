@@ -15,9 +15,28 @@
 --: stocking code: room in the grid, the item, its random properties) and takes them out with `gear.shop.remove`. The added items are real items:
 --: the player buys and sells them like the game's own wares. Single player and network games alike (the shop is on this PC).
 
+--- The equipment categories of the item picker (`GearShopCategory.category`, `GearShopAddOpts.category`) by name.
+---@class GearShopCategories
+---@field WEAPON integer 5
+---@field CHEST_ARMOUR integer 6
+---@field RING integer 8
+---@field POTION integer 9 (potions are not equipment: the picker has no equipment to give for it)
+---@field SHIELD integer 13
+---@field HELMET integer 17
+---@field BOOTS integer 18
+---@field BELT integer 19
+---@field AMULET integer 20
+---@field SHOULDERS integer 21
+---@field ARMS integer 22
+---@field LEGS integer 23
+---@field GLOVES integer 24
+---@field WINGS integer 25
+---@field HORSE integer 29
+
 -- path gear.shop
 --- Merchants' stock pages.
 ---@class GearShop
+---@field CATEGORY GearShopCategories The category numbers by name, e.g. `gear.shop.CATEGORY.WEAPON`.
 local GearShop = {}
 
 --- One stock page of the merchant window.
