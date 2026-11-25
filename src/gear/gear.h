@@ -1,5 +1,4 @@
 #pragma once
-#include "gear_res.h"
 #include "version_info.h"
 
 // Sacred Gear: the mod kit for Sacred Gold (LuaJIT). One DLL, SacredGear.dll, that any DLL loader can put into

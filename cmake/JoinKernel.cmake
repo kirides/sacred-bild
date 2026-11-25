@@ -1,0 +1,20 @@
+# Joins Sacred Gear's kernel parts (src/gear/lua/kernel.parts lists them in order) into the one chunk gear.rc embeds:
+#   cmake -DLUA_DIR=<src/gear/lua> -DOUT=<file> -P cmake/JoinKernel.cmake
+# The parts share one scope, so the text is joined unchanged; only rewritten when it changes.
+file(STRINGS "${LUA_DIR}/kernel.parts" parts REGEX "^[^#].*")
+set(text "")
+foreach(part IN LISTS parts)
+  string(STRIP "${part}" part)
+  if(part STREQUAL "")
+    continue()
+  endif()
+  file(READ "${LUA_DIR}/${part}" body)
+  string(APPEND text "${body}")
+endforeach()
+if(EXISTS "${OUT}")
+  file(READ "${OUT}" old)
+  if(old STREQUAL text)
+    return()
+  endif()
+endif()
+file(WRITE "${OUT}" "${text}")

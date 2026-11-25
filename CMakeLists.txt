@@ -188,6 +188,15 @@ if(SACREDGEAR)
     src/gear/main.cpp
     src/gear/hooks.cpp
     src/gear/lua_host.cpp
+    src/gear/tables_lua.cpp
+    src/gear/save_lua.cpp
+    src/gear/net_lua.cpp
+    src/gear/files_lua.cpp
+    src/gear/automation_lua.cpp
+    src/gear/world/world_lua.cpp
+    src/gear/world/party_lua.cpp
+    src/gear/items/items_lua.cpp
+    src/gear/ui/ui_lua.cpp
     src/gear/world/classes.cpp
     src/gear/world/classes_alias.cpp
     src/gear/items/itemuse.cpp
@@ -229,7 +238,20 @@ if(SACREDGEAR)
   )
   add_dependencies(SacredGear version_info)
   target_include_directories(SacredGear PRIVATE ${VERSION_INFO_DIR} src/gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS} ${STB_INCLUDE_DIRS})
-  set_source_files_properties(src/gear/gear.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/kernel.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/modmanager.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/lookup.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/fmt.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/toast.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/store.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/kit.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/npc.lua;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/res/GearIcons.ttf;${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/modmanager.rml;${VERSION_INFO_DIR}/version_info.h")
+  # The kernel: its parts (src/gear/lua/kernel.parts) joined into the one chunk gear.rc embeds. gear.rc depends on every file in
+  # lua/ and res/, so a new embedded file needs only its line in gear.rc.
+  file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/kernel.parts GEAR_KERNEL_PARTS REGEX "^[^#].*")
+  list(TRANSFORM GEAR_KERNEL_PARTS PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/)
+  add_custom_command(OUTPUT ${VERSION_INFO_DIR}/gear_kernel.lua
+    COMMAND ${CMAKE_COMMAND} -DLUA_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua -DOUT=${VERSION_INFO_DIR}/gear_kernel.lua -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/JoinKernel.cmake
+    DEPENDS ${GEAR_KERNEL_PARTS} ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/kernel.parts ${CMAKE_CURRENT_SOURCE_DIR}/cmake/JoinKernel.cmake
+    COMMENT "Joining the Sacred Gear kernel"
+    VERBATIM)
+  add_custom_target(gear_kernel DEPENDS ${VERSION_INFO_DIR}/gear_kernel.lua)
+  add_dependencies(SacredGear gear_kernel)
+  file(GLOB GEAR_EMBEDDED CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/* ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/res/*)
+  list(APPEND GEAR_EMBEDDED ${VERSION_INFO_DIR}/gear_kernel.lua ${VERSION_INFO_DIR}/version_info.h)
+  set_source_files_properties(src/gear/gear.rc PROPERTIES OBJECT_DEPENDS "${GEAR_EMBEDDED}")
   target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32)
   target_compile_definitions(SacredGear PRIVATE RMLUI_STATIC_LIB)
   target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})

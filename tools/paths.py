@@ -52,8 +52,9 @@ def rel(path):
 
 
 def kernel_sources():
-    """The kernel's Lua files: kernel.lua and its parts (kernel_*.lua), in a stable order."""
-    names = sorted(n for n in os.listdir(GEAR_LUA) if n == 'kernel.lua' or (n.startswith('kernel_') and n.endswith('.lua')))
+    """The kernel's parts in the order they are joined (src/gear/lua/kernel.parts)."""
+    with open(os.path.join(GEAR_LUA, 'kernel.parts'), encoding='utf-8') as f:
+        names = [l.strip() for l in f if l.strip() and not l.startswith('#')]
     return [os.path.join(GEAR_LUA, n) for n in names]
 
 

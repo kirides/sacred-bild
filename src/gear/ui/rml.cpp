@@ -2,7 +2,6 @@
 #include "log.h"
 #include "padnav.h"
 #include "css_compat.h"
-#include "gear_res.h"
 #include "ui.h"
 
 #include <RmlUi/Core.h>
@@ -1716,14 +1715,14 @@ namespace
     }
 
     // A resource of SacredGear.dll (gear.rc), as bytes.
-    std::string embeddedResource(int id)
+    std::string embeddedResource(const wchar_t* name)
     {
         HMODULE module = nullptr;
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(&embeddedResource), &module))
         {
             return {};
         }
-        HRSRC res = FindResourceW(module, MAKEINTRESOURCEW(id), MAKEINTRESOURCEW(10));
+        HRSRC res = FindResourceW(module, name, MAKEINTRESOURCEW(10));
         HGLOBAL data = res ? LoadResource(module, res) : nullptr;
         const char* bytes = data ? static_cast<const char*>(LockResource(data)) : nullptr;
         return bytes ? std::string(bytes, SizeofResource(module, res)) : std::string();
@@ -1782,7 +1781,7 @@ namespace
             }
         }
         // The icon font of Sacred Gear (a subset of Material Symbols): class "icon icon-refresh" ... in every document, see kUserAgentStyle.
-        if (!addFace("Gear Icons", embeddedResource(IDR_GEAR_ICONS), FontStyle::Normal, FontWeight::Normal))
+        if (!addFace("Gear Icons", embeddedResource(L"GEARICONS_TTF"), FontStyle::Normal, FontWeight::Normal))
         {
             LOG("RmlUi: the icon font did not load");
         }

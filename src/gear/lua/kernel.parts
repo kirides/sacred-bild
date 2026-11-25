@@ -1,0 +1,12 @@
+# The kernel's parts in the order they are joined into one chunk (cmake/JoinKernel.cmake, the kernel tests, tools/paths.py).
+# They share one scope: a local of an earlier part is visible in the later ones, as when they were one file.
+kernel.lua
+kernel_data.lua
+kernel_json.lua
+kernel_timers.lua
+kernel_world.lua
+kernel_net.lua
+kernel_items.lua
+kernel_ui.lua
+kernel_events.lua
+kernel_mods.lua

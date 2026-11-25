@@ -3,7 +3,8 @@
 --     luajit src/gear/tests/kernel_test.lua
 -- (vcpkg puts luajit.exe under vcpkg_installed\x86-windows-static\tools\luajit). Exit code 0: all passed.
 
-local kernel_path = arg and arg[1] or 'src/gear/lua/kernel.lua'
+-- The kernel as the DLL embeds it: the parts listed in kernel.parts, joined in order (arg[1]: another lua folder).
+local lua_dir = arg and arg[1] or 'src/gear/lua'
 
 local failures, passes = 0, 0
 local function ok(cond, name)
@@ -48,6 +49,7 @@ layout_file, moved_windows = '{"game:UI_WND_INVENTORY":{"x":2048,"y":1024}}', {}
 
 local native = {
     version = 'test',
+    name_text = function() return nil end,          -- creatures have no own name text (creature:display_name falls back to the type)
     log = function(s) logs[#logs + 1] = s end,
     mod_dirs = function()
         local t = {}
@@ -537,9 +539,19 @@ files.m = {
 files.d = {['mod.lua'] = "return {id = 'd', enabled = false}", ['main.lua'] = 'drec = true'}
 files.u = {['mod.lua'] = "return {id = 'u', settings = {{id = 'x', type = 'weird'}}}", ['main.lua'] = ''}
 
-local f = assert(io.open(kernel_path, 'rb'))
-local source = f:read('*a')
-f:close()
+local source
+do
+    local parts = {}
+    for line in assert(io.open(lua_dir .. '/kernel.parts', 'rb')):lines() do
+        line = line:gsub('%s+$', '')
+        if line ~= '' and line:sub(1, 1) ~= '#' then
+            local f = assert(io.open(lua_dir .. '/' .. line, 'rb'))
+            parts[#parts + 1] = f:read('*a')
+            f:close()
+        end
+    end
+    source = table.concat(parts)
+end
 local chunk = assert(loadstring(source, '=kernel'))
 local kernel = chunk(native)
 
