@@ -172,7 +172,17 @@ void ConfigFile::load(const std::wstring& gameDir)
     Config::display.frame = _wcsicmp(borderless.c_str(), L"auto") == 0 ? Config::Display::Frame::Auto
         : readBool(ini, L"Display", L"Borderless", true)      ? Config::Display::Frame::Never
                                                                : Config::Display::Frame::Always;
+    {
+        const std::wstring fullscreen = readString(ini, L"Display", L"Fullscreen", L"0");
+        Config::display.fullscreen = _wcsicmp(fullscreen.c_str(), L"1") == 0 || _wcsicmp(fullscreen.c_str(), L"fit") == 0 ? Config::Display::Fullscreen::Fit
+            : _wcsicmp(fullscreen.c_str(), L"2") == 0 || _wcsicmp(fullscreen.c_str(), L"stretch") == 0 ? Config::Display::Fullscreen::Stretch
+                                                                                                      : Config::Display::Fullscreen::Off;
+    }
     applyAutomationWindow();
+    if (Config::display.automationWindow)
+    {
+        Config::display.fullscreen = Config::Display::Fullscreen::Off;
+    }
     Config::display.resizable = !Config::display.automationWindow && readBool(ini, L"Display", L"Resizable", true);
     Config::display.clipCursor = readInt(ini, L"Display", L"ClipCursor", Config::display.clipCursor) != 0;
     Config::display.fpsLimit = readInt(ini, L"Display", L"FpsLimit", Config::display.fpsLimit);

@@ -253,6 +253,10 @@ namespace
 
     bool wantFrame()
     {
+        if (Config::display.fullscreen != Config::Display::Fullscreen::Off)
+        {
+            return false;
+        }
         switch (Config::display.frame)
         {
         case Config::Display::Frame::Never: return false;
@@ -282,6 +286,72 @@ namespace
         }
     }
 
+    // [Display] Fullscreen: the game window is the whole monitor (Stretch) or the largest part of it with the game's
+    // proportions (Fit), centered over a black window of the monitor's size that it is owned by (so they raise,
+    // minimize and close together, and the bars are black).
+    HWND g_backdrop = nullptr;
+
+    bool fullscreenMode()
+    {
+        return Config::display.fullscreen != Config::Display::Fullscreen::Off;
+    }
+
+    void ensureBackdrop(const RECT& monitor)
+    {
+        if (!g_backdrop)
+        {
+            static const wchar_t kClass[] = L"SacredBildBackdrop";
+            WNDCLASSW wc = {};
+            wc.lpfnWndProc = DefWindowProcW;
+            wc.hInstance = GetModuleHandleW(nullptr);
+            wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+            wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
+            wc.lpszClassName = kClass;
+            RegisterClassW(&wc);
+            g_backdrop = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, kClass, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
+                wc.hInstance, nullptr);
+        }
+        if (g_backdrop)
+        {
+            SetWindowPos(g_backdrop, nullptr, monitor.left, monitor.top, monitor.right - monitor.left, monitor.bottom - monitor.top,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+    }
+
+    // The rectangle the main window takes on the monitor it is on.
+    RECT fullscreenRect(HWND window)
+    {
+        MONITORINFO monitor = {};
+        monitor.cbSize = sizeof(monitor);
+        RECT rect = {0, 0, g_width, g_height};
+        if (!GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY), &monitor))
+        {
+            return rect;
+        }
+        rect = monitor.rcMonitor;
+        const int mw = rect.right - rect.left;
+        const int mh = rect.bottom - rect.top;
+        if (Config::display.fullscreen == Config::Display::Fullscreen::Fit && mw > 0 && mh > 0)
+        {
+            int w = mw;
+            int h = static_cast<int>((static_cast<int64_t>(mw) * g_height + g_width / 2) / g_width);
+            if (h > mh)
+            {
+                h = mh;
+                w = static_cast<int>((static_cast<int64_t>(mh) * g_width + g_height / 2) / g_height);
+            }
+            ensureBackdrop(monitor.rcMonitor);
+            if (g_backdrop && GetWindowLongPtrW(window, GWLP_HWNDPARENT) != reinterpret_cast<LONG_PTR>(g_backdrop))
+            {
+                SetWindowLongPtrW(window, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(g_backdrop));
+            }
+            const int x = rect.left + (mw - w) / 2;
+            const int y = rect.top + (mh - h) / 2;
+            rect = {x, y, x + w, y + h};
+        }
+        return rect;
+    }
+
     BOOL WINAPI hookSetWindowPos(HWND window, HWND after, int x, int y, int cx, int cy, UINT flags)
     {
         // dxDriver7::init's fullscreen branch sizes the window screen width x screen width (GetSystemMetrics(SM_CXSCREEN)
@@ -297,7 +367,17 @@ namespace
             y = (screenH - cy) / 2;
             LOG("Main window: fullscreen as a {}x{} window", cx, cy);
         }
-        if (window && window == g_mainWindow && g_framed && !(flags & SWP_NOSIZE))
+        if (window && window == g_mainWindow && fullscreenMode() && !(flags & SWP_NOSIZE))
+        {
+            const RECT rect = fullscreenRect(window);
+            x = rect.left;
+            y = rect.top;
+            cx = rect.right - rect.left;
+            cy = rect.bottom - rect.top;
+            flags &= ~SWP_NOMOVE;
+            LOG("Main window: fullscreen {}x{} at {},{} for the {}x{} picture", cx, cy, x, y, g_width, g_height);
+        }
+        else if (window && window == g_mainWindow && g_framed && !(flags & SWP_NOSIZE))
         {
             RECT rect = {x, y, x + cx, y + cy};
             addFrame(window, rect);
@@ -360,7 +440,7 @@ namespace
             {
                 style = (style & WS_VISIBLE) | kFramedStyle | (Config::display.resizable ? kResizableStyle : 0);
             }
-            LOG("Main window: {}", g_framed ? "framed" : "borderless");
+            LOG("Main window: {}", g_framed ? "framed" : fullscreenMode() ? "fullscreen" : "borderless");
         }
         HWND window = g_origCreateWindowExA(exStyle, cls, name, style, x, y, w, h, parent, menu, inst, param);
         if (mainWindow && window)
@@ -370,6 +450,10 @@ namespace
             if (g_framed && Config::display.resizable)
             {
                 WindowFit::windowCreated(window);
+            }
+            else if (fullscreenMode())
+            {
+                WindowFit::windowCreated(window, true);
             }
         }
         return window;
@@ -1010,6 +1094,12 @@ void Resolution::install()
     }
     if (!active())
     {
+        if (fullscreenMode())
+        {
+            // 1024x768 is unpatched, but the window still covers the screen.
+            g_origCreateWindowExA = static_cast<CreateWindowExAFn>(
+                Patch::iat("USER32.dll", "CreateWindowExA", reinterpret_cast<void*>(&hookCreateWindowExA)));
+        }
         return;
     }
 

@@ -17,8 +17,9 @@ namespace WindowFit
     // Hooks the game's GetCursorPos (SetCursorPos is Focus's, which calls gameToScreen).
     void install();
 
-    // The main window was created, framed and resizable.
-    void windowCreated(HWND window);
+    // The main window was created, framed and resizable, or (`fixedSize`) covers the screen or a fitted part of it
+    // (`[Display] Fullscreen`): then only the cursor conversion and the background apply, not the resizing.
+    void windowCreated(HWND window, bool fixedSize = false);
 
     // True while the client area is not the frame's size: positions need converting.
     bool scaled();

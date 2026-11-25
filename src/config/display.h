@@ -18,6 +18,16 @@ namespace Config
             Always,
         };
         Frame frame = Frame::Auto;
+        // [Display] Fullscreen: the window covers the whole screen at any resolution, the game keeps its own. Fit = the
+        // picture is scaled to the screen at its proportions (black bars), Stretch = it fills the screen. Not in
+        // automation runs.
+        enum class Fullscreen
+        {
+            Off,
+            Fit,
+            Stretch,
+        };
+        Fullscreen fullscreen = Fullscreen::Off;
         // Automation runs (-gear-auto): a framed window of the size above, placed at the work area's bottom-right
         // corner unless -gear-window=WxH+X+Y gave a position (client area's top-left, in screen pixels).
         bool automationWindow = false;

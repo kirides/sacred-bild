@@ -57,6 +57,19 @@ No game function is replaced for this: `GetCursorPos` is the game's import (wrap
 automation wraps it), `SetCursorPos` the one `Focus` already wraps, and the rest is the window procedure of the
 main window that SacredBild already subclasses.
 
+## Fullscreen at a lower resolution
+
+`[Display] Fullscreen` (`fit` or `stretch`) makes the window cover the whole screen whatever `Width` x `Height` is, e.g.
+a 1280x720 game on a 1920x1080 screen. It uses the machinery of the resizable window: the game keeps its resolution and
+back buffer, Windows stretches the presented frame to the window, and the cursor is converted between the window and
+the game's pixels.
+
+- `fit`: the largest window of the game's proportions, centered on the monitor, with a black window of the monitor's
+  size behind it (the game window is owned by it, so they raise and minimize together). The mouse stays inside the
+  picture.
+- `stretch`: the window is the monitor, the picture fills it (distorted if the proportions differ).
+- Overrides `Borderless` and `Resizable`; not in automation runs.
+
 ## Screenshots
 
 Print Screen saves the whole screen as `Capture\shotNNNN.png` (or `.jpg`, `[Screenshot] Format`), on a worker
