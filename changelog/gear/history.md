@@ -1,3 +1,10 @@
+## v0.15.0 (2026-11-25)
+
+- New: windows of mods (RmlUi documents) that have a title bar and a `data-panel` can be moved by dragging the title bar with the mouse, not only in the layout editor. The place is kept in the layout like the editor's, and "Reset" in the editor puts it back.
+- New: a dragged window stays on the screen; a plain click on the title bar moves nothing, and a close button in the bar still closes the window. `data-no-drag` on a window keeps it fixed.
+- Improved: `kit.window` with a title and an `id` is a movable panel by default (`panel = false` keeps it fixed); the on-screen keyboard and the confirm dialog stay fixed.
+- Improved: `gear.ui.panel` windows are kept on the screen while they are dragged.
+
 ## v0.14.1 (2026-11-25)
 
 - Fixed: windows made with `gear.kit` that have no width of their own (the on-screen keyboard) shrank to nothing: a document's body is only as wide as its content, so an absolutely positioned window found a containing block 0 wide. `kit.page` now gives the body the full width, so such windows size themselves from their content.
