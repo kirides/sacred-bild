@@ -272,6 +272,7 @@ if(SACREDBILD_NETTEST)
     tools/test/nettest/nettest.cpp
     src/bild/settings/config.cpp
     src/core/fmt.cpp
+    src/core/instance.cpp
     src/core/log.cpp
     src/bild/net/address.cpp
     src/bild/net/adapters.cpp
