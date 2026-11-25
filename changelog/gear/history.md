@@ -1,6 +1,15 @@
-## v0.10.1 (2026-11-25)
+## v0.11.0 (2026-11-25)
 
-- Fixed: a companion you play no longer attacks, casts and steps away on their own when enemies hit them; the game's own reactions now stay off for whichever hero you play, also after loading a savegame
+- New: `creature:set_level(level)` sets a creature's level, stats and maximum health, keeping its share of health (not heroes).
+- New: `creature:set_pet{scale, untargetable}` draws a creature larger and/or leaves it out of world clicks and hover; needs SacredBild 0.2.14 or newer.
+- Improved: `creature:order_move` and `creature:order_stop` also work on any creature in single player, not only party heroes.
+- Fixed: a companion you play no longer fights back or steps away on its own, also after loading a savegame.
+
+## v0.10.0 (2026-11-25)
+
+- New: `gear.buffs` `speeds` and `speed_factors` lift the engine's 220 cap on attack, cast and move speed; read them with `gear.buffs.speeds(target)`
+- New: `gear.game.map_markers()` lists the world map's service symbols: merchant, blacksmith, combo master and horse trader
+- Fixed: the Paste button shows only over an editable box of an open window, not on the savegame quicksave box or while loading
 
 ## v0.9.0 (2026-11-25)
 
