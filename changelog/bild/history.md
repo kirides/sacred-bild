@@ -1,3 +1,7 @@
+## v0.3.1 (2026-11-25)
+
+- Under the hood: no change to the game. The version only moves because the mod index was refreshed after 0.3.0.
+
 ## v0.3.0 (2026-11-25)
 
 - New: `Fullscreen` in the Display settings (`[Display] Fullscreen`): the window covers the whole screen at any resolution, e.g. 1024x768 or 1280x720 on a 1920x1080 screen, and the picture is scaled up to it. `Fit` keeps the picture's proportions with black bars, `Stretch` fills the screen. The mouse follows the scaled picture.
