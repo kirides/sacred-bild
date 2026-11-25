@@ -30,7 +30,7 @@ namespace
     decltype(Addr::cGranny_renderShadow)::Ptr g_origShadow = nullptr;
     decltype(Addr::cObject3D_drawModel)::Ptr g_origDrawModel = nullptr;
 
-    // A pet's model handle (the first of the pair at object +0x40) with the scale and anchor the shadow pass needs: the shadow is drawn
+    // A pet's model handle (object +0x44, the second of the pair at +0x40; the first is the same for every object, which once made every shadow in the frame a pet's) with the scale and anchor the shadow pass needs: the shadow is drawn
     // later, by cModelInstance::draw, which knows the handles of the model but not the object.
     struct Shadow
     {
@@ -73,7 +73,7 @@ namespace
             t_scale = scale;
             t_ax = ax;
             t_ay = ay;
-            const uint32_t handle = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x40);
+            const uint32_t handle = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x44);
             AcquireSRWLockExclusive(&g_lock);
             g_shadows[handle] = {scale, ax, ay};
             g_shadowCount.store(static_cast<int>(g_shadows.size()), std::memory_order_relaxed);
@@ -83,7 +83,7 @@ namespace
         {
             // A model handle outlives its pet: once the pet is dismissed or dies the engine hands the handle to another object. Forget
             // it here, before that object's shadow pass, or an NPC's shadow would be drawn at the old pet's scale and anchor.
-            const uint32_t handle = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x40);
+            const uint32_t handle = *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(self) + 0x44);
             AcquireSRWLockExclusive(&g_lock);
             if (g_shadows.erase(handle) != 0)
             {
@@ -98,7 +98,7 @@ namespace
         return r;
     }
 
-    // The shadow of a model: found by the model's handle (object +0x40), drawn scaled like the model.
+    // The shadow of a model: found by the model's handle (object +0x44, the shadow pass's handle1), drawn scaled like the model.
     void __fastcall hookShadow(void* self, void* edx, void* device, uint32_t handle0, uint32_t handle1, uint8_t* extra, char flag)
     {
         Shadow sh{1.0f, 0.0f, 0.0f};
@@ -106,7 +106,7 @@ namespace
         if (g_count.load(std::memory_order_relaxed) > 0)
         {
             AcquireSRWLockShared(&g_lock);
-            const auto it = g_shadows.find(handle0);
+            const auto it = g_shadows.find(handle1);
             if (it != g_shadows.end())
             {
                 sh = it->second;
