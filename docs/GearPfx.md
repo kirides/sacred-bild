@@ -2,7 +2,8 @@
 
 What a mod can do with the particle effects of combat arts and spells: give an effect another colour, other sprites or another speed, and
 choose that per cast, for instance "from skill level 10 on, red instead of green". The calls are in [GearApi.md](GearApi.md), section
-"Skill effects"; the effect types and the texture names are in [GearPfxTypes.md](GearPfxTypes.md) (generated).
+"Skill effects"; the effect types and the texture names are in [GearPfxTypes.md](GearPfxTypes.md) (generated). Which effect types each combat art and
+spell makes in game is in [GearPfxArtEffects.json](GearPfxArtEffects.json) (from an automated cast run of `gear/examples/pfxtable`).
 
 ```lua
 -- The green effects of Poison Mist (spell 12) turn red from level 10 on.
