@@ -102,6 +102,7 @@ SACRED = [
     ('frameLimiter', 0x0060A9F0, 'func'),
     ('weatherRender', 0x004190D0, 'func'),
     ('renderLimiterReturn', 0x0060EA6E, 'code'),
+    ('menuLoopSleepJump', 0x0075713C, 'code'),    # the `jz` over the menu loop's Sleep(20) in cUI_Manager
     ('captureLockBackReturn', 0x006136AB, 'code'),
     ('captureScreenshot', 0x006487D0, 'func'),
     # world view

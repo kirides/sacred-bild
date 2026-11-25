@@ -665,6 +665,11 @@
    "451BBE74": "0060EB0E",
    "451BBE74:sacredreborn.exe": "0060EB0E"
   },
+  "menuLoopSleepJump": {
+   "452F85C7": "0075713C",
+   "451BBE74": "00756A1C",
+   "451BBE74:sacredreborn.exe": "00756A1C"
+  },
   "captureLockBackReturn": {
    "452F85C7": "006136AB",
    "451BBE74": "0061374B",
