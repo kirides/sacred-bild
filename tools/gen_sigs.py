@@ -8,6 +8,7 @@
 import json, os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 import sigs
+import paths
 from funcs import _A
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -258,9 +259,9 @@ def main():
     sacred = sigs.Image(SACRED_ENG, _A), other_builds(SACRED_DE, SACRED_REBORN)
     server = sigs.Image(GAMESERVER_ENG), other_builds(GAMESERVER_DE, GAMESERVER_REBORN)
     report = {}
-    r, f1 = emit('src/game/sacred_sigs.inc', '', 'Sacred::Addr', SACRED, *sacred, 'kAddressSigs')
+    r, f1 = emit(paths.rel(paths.SACRED_SIGS), '', 'Sacred::Addr', SACRED, *sacred, 'kAddressSigs')
     report['sacred.exe'] = r
-    r, f2 = emit('src/game/gameserver_sigs.inc', '', 'GameServer::Addr', GAMESERVER, *server, 'kAddressSigs')
+    r, f2 = emit(paths.rel(paths.GAMESERVER_SIGS), '', 'GameServer::Addr', GAMESERVER, *server, 'kAddressSigs')
     report['gameserver.exe'] = r
     with open(os.path.join(ROOT, 'tools', 'data', 'addresses.json'), 'w', newline='\n') as f:
         json.dump(report, f, indent=1)
