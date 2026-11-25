@@ -2777,6 +2777,10 @@ kernel.shop_api = {}
 do
     local S = kernel.shop_api
 
+    -- shop.CATEGORY: the equipment categories of the item picker by name.
+    S.CATEGORY = {WEAPON = 5, CHEST_ARMOUR = 6, RING = 8, POTION = 9, SHIELD = 13, HELMET = 17, BOOTS = 18, BELT = 19, AMULET = 20,
+                  SHOULDERS = 21, ARMS = 22, LEGS = 23, GLOVES = 24, WINGS = 25, HORSE = 29}
+
     -- shop.info() -> {open, merchant, hero_level, pages = {{container, visible, categories = {{category, weight}, ...}}, ...}} | nil
     function S.info() return native.shop_info() end
 
