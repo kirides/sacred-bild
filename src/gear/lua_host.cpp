@@ -1,5 +1,6 @@
 #include "lua_host.h"
 #include "lua_native.h"
+#include "clock.h"
 #include "automation.h"
 #include "chat.h"
 #include "world/classes.h"
@@ -301,7 +302,7 @@ namespace LuaNative
     // native.time() -> seconds
     int nativeTime(lua_State* L)
     {
-        lua_pushnumber(L, now());
+        lua_pushnumber(L, GearClock::g_override ? GearClock::g_override() : now());
         return 1;
     }
 
@@ -619,6 +620,14 @@ using namespace LuaNative;
 std::wstring LuaHost::stateFilePath(const wchar_t* file)
 {
     return statePath(file);
+}
+
+void LuaHost::configureFolders(HMODULE module, const std::wstring& gameDir, const std::wstring& modsDir)
+{
+    g_module = module;
+    g_modsDir = modsDir;
+    g_gameDir = gameDir;
+    RmlHost::configure(g_modsDir);
 }
 
 void LuaHost::configure(HMODULE module, const std::wstring& gameDir)

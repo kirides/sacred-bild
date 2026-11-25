@@ -4,6 +4,7 @@
 #include "css_compat.h"
 #include "ui.h"
 #include "prof.h"
+#include "clock.h"
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/DataTypes.h>
@@ -297,9 +298,7 @@ namespace
     public:
         double GetElapsedTime() override
         {
-            using Clock = std::chrono::steady_clock;
-            static const Clock::time_point start = Clock::now();
-            return std::chrono::duration<double>(Clock::now() - start).count();
+            return GearClock::seconds();
         }
 
         // "@mod-id/file" is a complete reference, whatever document names it; the links inside a shared file are joined to it as usual.
@@ -1710,6 +1709,7 @@ namespace
         std::vector<std::string> listenerEvents;    // the event name of each listener (the same index), to attach them to a reloaded document
 
         // ---- Retained mode (docs/RmlRetained.md): what has to run again, and what can be given again ----
+        bool noCache = false;                   // rml_nocache: this document runs as with GEAR_RML_NOCACHE (the twin of the differential tests)
         bool dirty = true;                      // Context::Update must run (an input or a native changed the document, the canvas changed)
         bool renderDirty = true;                // the recorded draw below is out of date
         unsigned gen = 1;                       // moves with every change and every Update that ran: the tree walks' results are valid for one gen
@@ -1969,8 +1969,14 @@ namespace
         return Rml::LoadFontFace(Rml::Span<const Rml::byte>(reinterpret_cast<const Rml::byte*>(kept.data()), kept.size()), family, style, weight, false);
     }
 
+    fs::path g_fontDirOverride;     // RmlHost::setFontDir
+
     fs::path gameFontDir()
     {
+        if (!g_fontDirOverride.empty())
+        {
+            return g_fontDirOverride;
+        }
         wchar_t exe[MAX_PATH] = {};
         const DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
         if (n == 0 || n >= MAX_PATH)
@@ -3296,6 +3302,15 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     }
 
     // native.rml_reloads(id) -> how many times the document was reloaded, last error | nil
+    // native.rml_nocache(id, on): the document is updated, walked and rendered every frame, as all are with GEAR_RML_NOCACHE (tests: the
+    // twin a retained document is compared with, tools/sandbox/fuzz).
+    int rmlNoCache(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        d.noCache = lua_toboolean(L, 2) != 0;
+        return 0;
+    }
+
     int rmlReloads(lua_State* L)
     {
         Doc& d = docArg(L);
@@ -3330,7 +3345,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             // A move only when the mouse moved (or the context's mouse was put elsewhere: rml_click, rml_mouse): RmlUi runs its hover
             // chain for every move, and a still mouse is no reason to update the document.
             const int x = static_cast<int>(mx * d.unit - d.originPx.x), y = static_cast<int>(my * d.unit - d.originPx.y);
-            if (!d.hovering || !d.mouseKnown || x != d.mouseX || y != d.mouseY || g_noCache)
+            if (!d.hovering || !d.mouseKnown || x != d.mouseX || y != d.mouseY || g_noCache || d.noCache)
             {
                 d.context->ProcessMouseMove(x, y, 0);
                 d.mouseKnown = true;
@@ -3351,7 +3366,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         // animation, a transition, smooth scrolling, the caret's blink) and once more after any of those (generated content, button prompts and
         // the hover of an element that moved under a still mouse settle one update later).
         const double now = g_system->GetElapsedTime();
-        const bool reason = d.dirty || now >= d.nextUpdate || g_noCache;
+        const bool reason = d.dirty || now >= d.nextUpdate || g_noCache || d.noCache;
         if (reason || d.trailing > 0)
         {
             ++d.stats.updates;
@@ -3446,7 +3461,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             reportDocs();
         }
         // Retained mode: a document that did not change since its last draw, drawn to the same place, gives the same commands again.
-        if (!d.renderDirty && !g_noCache && d.drawnValid && d.drawnLayer == layer && d.drawnSlot == slot && d.drawnUnit == d.unit &&
+        if (!d.renderDirty && !g_noCache && !d.noCache && d.drawnValid && d.drawnLayer == layer && d.drawnSlot == slot && d.drawnUnit == d.unit &&
             d.drawnOrigin == d.originPx)
         {
             int count = 0;
@@ -3621,7 +3636,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     // same table): it is given back as it is, no walk, nothing written.
     bool reuseRows(lua_State* L, const Doc& d, const Doc::Walk& w)
     {
-        if (g_noCache || !lua_istable(L, 2) || w.gen != d.gen || w.table != lua_topointer(L, 2))
+        if (g_noCache || d.noCache || !lua_istable(L, 2) || w.gen != d.gen || w.table != lua_topointer(L, 2))
         {
             return false;
         }
@@ -4881,6 +4896,11 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     }
 }
 
+void RmlHost::setFontDir(const std::wstring& dir)
+{
+    g_fontDirOverride = dir;
+}
+
 void RmlHost::configure(const std::wstring& modsDir)
 {
     g_modsDir = modsDir;
@@ -4903,6 +4923,7 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_update", guarded<rmlUpdate>},
         {"rml_hot", guarded<rmlHot>},
         {"rml_reloads", guarded<rmlReloads>},
+        {"rml_nocache", guarded<rmlNoCache>},
         {"rml_draw", guarded<rmlDraw>},
         {"rml_rects", guarded<rmlRects>},
         {"rml_move", mutating<rmlMove>},

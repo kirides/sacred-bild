@@ -14,6 +14,8 @@ namespace RmlHost
 {
     // The game's mods folder (<game>\mods), before the first document.
     void configure(const std::wstring& modsDir);
+    // Where the game's fonts are (default: font\ next to the exe); a host other than the game sets the game's font folder.
+    void setFontDir(const std::wstring& dir);
 
     // Adds the natives (rml_load, rml_update, rml_draw ...) to the table on top of the Lua stack.
     void registerNatives(lua_State* L);

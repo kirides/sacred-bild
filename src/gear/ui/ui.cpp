@@ -46,6 +46,7 @@ namespace
     size_t g_recorded = 0;
     std::array<std::vector<Command>, kLayers> g_published;
     ULONGLONG g_publishedAt = 0;
+    std::vector<Command>* g_capture = nullptr;     // Ui::hostCapture (g_lock)
 
     // The draws of one layer, copied out of the published frame (the Lua thread may publish the next one meanwhile).
     thread_local std::vector<Command> t_draw;
@@ -186,6 +187,7 @@ namespace
     PopFrameFn g_popFrame = nullptr;
     BoundsFn g_screenBounds = nullptr;
     std::once_flag g_bildOnce;
+    const Ui::Host* g_host = nullptr;           // a host other than the game (Ui::setHost), or nullptr
 
     void findBild()
     {
@@ -304,6 +306,10 @@ namespace
 
     uint32_t countImages()
     {
+        if (g_host)
+        {
+            return g_host->imageCount ? g_host->imageCount() : 0;
+        }
         std::call_once(g_imageOnce, [] {
             const uintptr_t t = imageTable();
             for (uint32_t i = 1; t && i < kMaxImages; ++i)
@@ -383,6 +389,16 @@ namespace
 
     bool imageRecord(uint32_t id, ImageRecord& out)
     {
+        if (g_host)
+        {
+            Ui::HostImage h;
+            if (!g_host->image || !g_host->image(id, h))
+            {
+                return false;
+            }
+            out = {h.texture, h.u0, h.v0, h.u1, h.v1, h.width, h.height};
+            return true;
+        }
         if (id >= kTextureImageBase && id < kTextureImageBase + kTextureImageMax)
         {
             const uint32_t handle = id - kTextureImageBase;
@@ -422,6 +438,10 @@ namespace
 
     IDirectDrawSurface7* imageSurface(uint32_t handle)
     {
+        if (g_host)
+        {
+            return g_host->surface && handle ? g_host->surface(handle) : nullptr;
+        }
         void* tm = Gear::Addr::g_pTextureManager ? *Gear::Addr::g_pTextureManager : nullptr;
         if (!tm || !handle || !Gear::Addr::cTextureManager_get)
         {
@@ -1743,6 +1763,7 @@ namespace
     std::atomic<uint32_t> g_faults{0};
 
     void drawLayerImpl(Layer layer, IDirect3DDevice7* device);
+    void drawList(const std::vector<Command>& list, Layer layer, IDirect3DDevice7* device);
 
     void drawLayer(Layer layer, IDirect3DDevice7* device)
     {
@@ -1782,6 +1803,12 @@ namespace
             t_draw = list;
         }
         GearProf::count(GearProf::DrawCmds, t_draw.size());
+        drawList(t_draw, layer, device);
+    }
+
+    // Draws `list` (t_draw, or a host's test list) with `device`.
+    void drawList(const std::vector<Command>& list, Layer layer, IDirect3DDevice7* device)
+    {
         findBild();
         const uintptr_t m = manager();
         StateGuard state(device);
@@ -1789,7 +1816,7 @@ namespace
         // canvas unconfined, so overlays may reach beyond the canvas to the screen's edges.
         int frameSlot = -2;     // -2: no frame chosen yet
         bool pushed = false;
-        for (const Command& c : t_draw)
+        for (const Command& c : list)
         {
             const uintptr_t w = c.window >= 0 ? windowAt(m, c.window) : 0;
             if (c.window >= 0 && !w)
@@ -2142,6 +2169,10 @@ bool Ui::add(Command&& command)
     {
         return false;
     }
+    if (g_capture)
+    {
+        g_capture->push_back(command);
+    }
     ++g_recorded;
     g_recording[static_cast<size_t>(command.layer)].push_back(std::move(command));
     return true;
@@ -2215,12 +2246,16 @@ bool Ui::install()
 
 uint32_t Ui::textureImage(const std::string& name)
 {
-    loadTextureIndex();
     std::string key = name;
     for (char& c : key)
     {
         c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     }
+    if (g_host)
+    {
+        return g_host->textureImage ? g_host->textureImage(key) : 0;
+    }
+    loadTextureIndex();
     const auto it = g_textureIndex.find(key);
     return it == g_textureIndex.end() ? 0 : kTextureImageBase + it->second;
 }
@@ -2235,8 +2270,19 @@ bool Ui::imageInfo(uint32_t id, ImageInfo& out)
         return false;
     }
     char name[0x21] = {};
-    read(imageTable() + id * kImageStride + 8, *reinterpret_cast<char(*)[0x20]>(name));
-    out.sheet = name;
+    if (g_host)
+    {
+        HostImage h;
+        if (g_host->image && g_host->image(id, h))
+        {
+            out.sheet = h.sheet;
+        }
+    }
+    else
+    {
+        read(imageTable() + id * kImageStride + 8, *reinterpret_cast<char(*)[0x20]>(name));
+        out.sheet = name;
+    }
     out.width = r.width;
     out.height = r.height;
     out.loaded = r.texture != 0;
@@ -2514,6 +2560,25 @@ Ui::State Ui::state()
     State s;
     const uintptr_t m = manager();
     findBild();
+    if (g_host)
+    {
+        if (g_screenBounds)
+        {
+            float bounds[4];
+            if (g_screenBounds(bounds))
+            {
+                s.screenLeft = bounds[0];
+                s.screenTop = bounds[1];
+                s.screenRight = bounds[2];
+                s.screenBottom = bounds[3];
+            }
+        }
+        if (g_host->state)
+        {
+            g_host->state(s);
+        }
+        return s;
+    }
     float bounds[4];
     if (g_screenBounds && g_screenBounds(bounds))
     {
@@ -2694,4 +2759,89 @@ bool Ui::screenOrigin(float& left, float& top)
     left = std::min(left, bounds[0]);
     top = std::min(top, bounds[1]);
     return true;
+}
+
+// ---- Hosts other than the game (ui.h) ----
+
+void Ui::setHost(const Host* host)
+{
+    std::call_once(g_bildOnce, [] {});      // no SacredBild: the host gives the placement and the screen
+    g_host = host;
+    g_screenBounds = host ? host->screenBounds : nullptr;
+    g_placement = host ? host->placement : nullptr;
+}
+
+bool Ui::hostMouse(bool down, int button, int x, int y)
+{
+    std::scoped_lock lock(g_lock);
+    uint32_t region = 0;
+    if (down)
+    {
+        region = regionAt(0, x, y);
+        if (region)
+        {
+            g_captured = region;
+        }
+    }
+    else if (g_captured)
+    {
+        region = g_captured;
+        g_captured = 0;
+    }
+    if (region && g_events.size() < kMaxEvents)
+    {
+        g_events.push_back({down, button, x, y, region});
+    }
+    return region != 0;
+}
+
+bool Ui::hostWheel(int delta, int x, int y)
+{
+    {
+        std::scoped_lock lock(g_lock);
+        if (!delta || !regionAt(0, x, y))
+        {
+            return false;
+        }
+    }
+    g_wheel += delta;
+    return true;
+}
+
+void Ui::hostDraw(Layer layer, IDirect3DDevice7* device)
+{
+    drawLayer(layer, device);
+}
+
+void Ui::hostDrawList(const std::vector<Command>& commands, IDirect3DDevice7* device)
+{
+    if (!device || commands.empty())
+    {
+        return;
+    }
+    releaseDeadPictures();
+    drawList(commands, commands.front().layer, device);
+}
+
+void Ui::hostCapture(std::vector<Command>* sink)
+{
+    std::scoped_lock lock(g_lock);
+    g_capture = sink;
+}
+
+bool Ui::hostMesh(uint32_t id, std::vector<MeshVertex>& vertices, std::vector<int>& indices)
+{
+    const auto mesh = findMesh(id);
+    if (!mesh)
+    {
+        return false;
+    }
+    vertices = mesh->vertices;
+    indices = mesh->indices;
+    return true;
+}
+
+const std::vector<Command>& Ui::hostRetained(const RetainedList& list)
+{
+    return list.commands;
 }

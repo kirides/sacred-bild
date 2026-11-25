@@ -184,8 +184,9 @@ endif()
 # from the game folder, and any other DLL loader (an ASI loader, an injector) can load it instead.
 option(SACREDGEAR "Build Sacred Gear (SacredGear.dll)" ON)
 if(SACREDGEAR)
-  add_library(SacredGear SHARED
-    src/gear/main.cpp
+  # Everything of Sacred Gear but its DllMain and resources, compiled once: SacredGear.dll links it, and so does the UI sandbox
+  # (tools/sandbox, docs/Sandbox.md), which runs the same Lua host, RmlUi host and UI replay outside the game.
+  add_library(gear_objs OBJECT
     src/gear/hooks.cpp
     src/gear/lua_host.cpp
     src/gear/tables_lua.cpp
@@ -234,6 +235,14 @@ if(SACREDGEAR)
     src/gear/ui/dds.cpp
     src/gear/vfs.cpp
     src/gear/ui/css_compat.cpp
+  )
+  add_dependencies(gear_objs version_info)
+  target_include_directories(gear_objs PUBLIC ${VERSION_INFO_DIR} src/gear ${LUAJIT_INCLUDE_DIRS}/luajit ${DETOURS_INCLUDE_DIRS} ${STB_INCLUDE_DIRS})
+  target_link_libraries(gear_objs PUBLIC sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32)
+  target_compile_definitions(gear_objs PUBLIC RMLUI_STATIC_LIB SACREDGEAR_BUILD)
+  target_compile_options(gear_objs PRIVATE ${COMMON_OPTIONS})
+  add_library(SacredGear SHARED
+    src/gear/main.cpp
     src/gear/gear.rc
   )
   add_dependencies(SacredGear version_info)
@@ -249,10 +258,11 @@ if(SACREDGEAR)
     VERBATIM)
   add_custom_target(gear_kernel DEPENDS ${VERSION_INFO_DIR}/gear_kernel.lua)
   add_dependencies(SacredGear gear_kernel)
+  set(GEAR_RC ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/gear.rc)
   file(GLOB GEAR_EMBEDDED CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/lua/* ${CMAKE_CURRENT_SOURCE_DIR}/src/gear/res/*)
   list(APPEND GEAR_EMBEDDED ${VERSION_INFO_DIR}/gear_kernel.lua ${VERSION_INFO_DIR}/version_info.h)
   set_source_files_properties(src/gear/gear.rc PROPERTIES OBJECT_DEPENDS "${GEAR_EMBEDDED}")
-  target_link_libraries(SacredGear PRIVATE sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32)
+  target_link_libraries(SacredGear PRIVATE gear_objs sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32)
   target_compile_definitions(SacredGear PRIVATE RMLUI_STATIC_LIB SACREDGEAR_BUILD)
   target_compile_options(SacredGear PRIVATE ${COMMON_OPTIONS})
   # SAFESEH off as for ddraw (Detours trampolines); /MAP for profiles.
@@ -287,4 +297,33 @@ if(SACREDBILD_NETTEST)
   target_compile_definitions(nettest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
   target_compile_options(nettest PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
   target_precompile_headers(nettest PRIVATE src/bild/pch.h)
+endif()
+
+# The UI sandbox (docs/Sandbox.md): Sacred Gear's Lua host, RmlUi host and UI replay outside the game, on SacredBild's DirectDraw /
+# Direct3D 7 emulation (Direct3D 9Ex), the game's images read from the install's files. Window or off-screen, PNG snapshots, driver
+# scripts and the differential RmlUi fuzzer (tools/sandbox/fuzz).
+option(SACREDGEAR_SANDBOX "Build tools/sandbox (gear_sandbox.exe)" ON)
+if(SACREDGEAR AND SACREDGEAR_SANDBOX)
+  add_executable(gear_sandbox
+    tools/sandbox/sandbox.cpp
+    tools/sandbox/game_data.cpp
+    src/bild/ddraw9/device.cpp
+    src/bild/ddraw9/device_skin.cpp
+    src/bild/ddraw9/device_ground.cpp
+    src/bild/ddraw9/directdraw.cpp
+    src/bild/ddraw9/format.cpp
+    src/bild/ddraw9/gpu.cpp
+    src/bild/ddraw9/smaa.cpp
+    src/bild/ddraw9/surface.cpp
+    src/bild/ddraw9/vertex_buffer.cpp
+    ${GEAR_RC}
+  )
+  add_dependencies(gear_sandbox version_info gear_kernel)
+  target_include_directories(gear_sandbox PRIVATE ${VERSION_INFO_DIR} src/gear src/bild tools/sandbox ${STB_INCLUDE_DIRS})
+  target_link_libraries(gear_sandbox PRIVATE gear_objs sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32 dxguid gdi32 ole32 psapi)
+  target_compile_definitions(gear_sandbox PRIVATE RMLUI_STATIC_LIB)
+  target_compile_options(gear_sandbox PRIVATE ${COMMON_OPTIONS})
+  # SacredGear's sources read game addresses under fault guards and find none here (every address stays 0); the image sits high so that
+  # nothing of the sandbox lies where Sacred.exe would.
+  target_link_options(gear_sandbox PRIVATE /SAFESEH:NO /BASE:0x50000000 /SUBSYSTEM:CONSOLE)
 endif()
