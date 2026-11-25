@@ -86,6 +86,26 @@ namespace
         return nullptr;
     }
 
+    // Whether the file's copy of the code is the code that runs, give or take the few patches of other modules: nearly every
+    // 4 KiB block of both is (almost) the same. Encrypted or packed code on disk differs in almost every byte.
+    bool resemblesMemory(const std::vector<uint8_t>& file, const uint8_t* memory)
+    {
+        constexpr size_t kBlock = 4096;
+        size_t blocks = 0, same = 0;
+        for (size_t at = 0; at < file.size(); at += kBlock)
+        {
+            const size_t n = std::min(kBlock, file.size() - at);
+            size_t different = 0;
+            for (size_t i = 0; i < n; ++i)
+            {
+                different += file[at + i] != memory[at + i];
+            }
+            ++blocks;
+            same += different * 20 <= n;    // up to 5% of a block patched
+        }
+        return blocks && same * 10 >= blocks * 9;
+    }
+
     // The code section as the exe file on disk has it: what the game's code was before any module patched it. Hooks of
     // another DLL (SacredBild's, Sacred Gear's, a third one's) put jumps over the first bytes of functions; a signature
     // searched in memory would then miss the functions the other module hooked first, depending on the load order. The
@@ -126,6 +146,13 @@ namespace
                         (bytes.resize(section->Misc.VirtualSize), readAt(section->PointerToRawData, bytes.data(),
                                                                           std::min<uint32_t>(section->SizeOfRawData, section->Misc.VirtualSize)));
         CloseHandle(file);
+        if (ok && !resemblesMemory(bytes, reinterpret_cast<const uint8_t*>(GetModuleHandleW(nullptr)) + section->VirtualAddress))
+        {
+            // A wrapped exe (Steam's SteamStub) keeps .text encrypted on disk and decrypts it into memory: the file's bytes
+            // are noise, and a pattern found there would be a coincidence.
+            LOG("Signatures: the exe's code on disk differs from memory throughout (a wrapped exe), searching memory");
+            return code;
+        }
         if (ok)
         {
             code = std::move(bytes);
@@ -192,16 +219,55 @@ size_t resolveIn(std::span<const Sig::Entry> entries, std::span<const uint8_t> c
         }
     }
 
-    const uint8_t* data = code.data();
-    const size_t size = code.size();
-    for (size_t at = 0; at < size; ++at)
-    {
-        for (const uint32_t i : byFirstByte[data[at]])
+    auto search = [&](const uint8_t* data, size_t size, const std::vector<uint32_t>& which) {
+        std::array<std::vector<uint32_t>, 256> byFirst;
+        for (const uint32_t i : which)
         {
-            Pattern& p = patterns[i];
-            if (at + p.bytes.size() <= size && matches(data + at, p) && ++p.hits == 1)
+            patterns[i].hits = 0;
+            byFirst[patterns[i].bytes[0]].push_back(i);
+        }
+        for (size_t at = 0; at < size; ++at)
+        {
+            for (const uint32_t i : byFirst[data[at]])
             {
-                p.hit = at;
+                Pattern& p = patterns[i];
+                if (at + p.bytes.size() <= size && matches(data + at, p) && ++p.hits == 1)
+                {
+                    p.hit = at;
+                }
+            }
+        }
+    };
+    std::vector<uint32_t> all;
+    for (const auto& list : byFirstByte)
+    {
+        all.insert(all.end(), list.begin(), list.end());
+    }
+    search(code.data(), code.size(), all);
+
+    // Entries the file's copy does not resolve exactly once are looked up in memory, which may be all that matches (the file
+    // differs there, or the exe is not the one the file's copy belongs to).
+    std::vector<const uint8_t*> source(entries.size(), code.data());
+    if (live)
+    {
+        std::vector<uint32_t> retry;
+        for (const uint32_t i : all)
+        {
+            if (patterns[i].hits != 1)
+            {
+                retry.push_back(i);
+            }
+        }
+        if (!retry.empty())
+        {
+            search(live, code.size(), retry);
+            for (const uint32_t i : retry)
+            {
+                if (patterns[i].hits == 1)
+                {
+                    LOG("Signature {}: not in the exe file, found in memory", entries[i].name);
+                    source[i] = live;
+                }
             }
         }
     }
@@ -218,7 +284,7 @@ size_t resolveIn(std::span<const Sig::Entry> entries, std::span<const uint8_t> c
             ++failed;
             continue;
         }
-        if (live && (live[p.hit] != p.bytes[0] || !matches(live + p.hit, p)))
+        if (live && source[i] != live && (live[p.hit] != p.bytes[0] || !matches(live + p.hit, p)))
         {
             // The bytes in memory are not the file's any more: something patched them before this module looked (the other
             // of SacredBild / Sacred Gear, or a third DLL). The address comes from the file and is right; a patch of ours
@@ -235,13 +301,13 @@ size_t resolveIn(std::span<const Sig::Entry> entries, std::span<const uint8_t> c
         if (e.take == Take::Abs32)
         {
             uint32_t value;
-            std::memcpy(&value, data + at, 4);
+            std::memcpy(&value, source[i] + at, 4);
             *e.out.address = value;
         }
         else if (e.take == Take::Rel32)
         {
             int32_t rel;
-            std::memcpy(&rel, data + at, 4);
+            std::memcpy(&rel, source[i] + at, 4);
             *e.out.address = codeVa + at + 4 + static_cast<uintptr_t>(static_cast<intptr_t>(rel));
         }
         else
