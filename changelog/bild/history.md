@@ -1,3 +1,8 @@
+## v0.2.14 (2026-11-25)
+
+- New: pets for Sacred Gear: creatures drawn larger with their shadow, and optionally left out of world clicks and hover.
+- Under the hood: new exports `SacredBild_PetSet` and `SacredBild_PetClear`, used by Sacred Gear.
+
 ## v0.2.13 (2026-11-24)
 
 - Under the hood: no ddraw.dll code changed; the build only tracks the SacredGear icon font as a rebuild input.
