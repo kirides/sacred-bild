@@ -1,0 +1,1885 @@
+{
+ "note": "Effect types (gear.pfx fx, docs/GearPfxTypes.md) that each combat art (id >= 1000) and spell (id < 1000) made when cast in game by gear/examples/pfxtable (English GOG Sacred.exe, cast level 5, regeneration set to 0, one caster per class, tried at the ground, at itself and at a creature). 'owned': types made with the ability in flight by the caster (reliable); 'loose': types seen within 2.6 s of the cast that had no caster or ability (made by projectiles or hits, or late effects of an earlier cast: less reliable); neither: no effect object was seen (many arts make none, or the cast did not start: unverified). 'caster' is the class that cast it, 'tried' what was attempted.",
+ "abilities": [
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 1,
+   "loose": [
+    774,
+    775
+   ],
+   "target": "ground",
+   "target_mode": 3,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 2,
+   "owned": [
+    769,
+    777
+   ],
+   "target": "self",
+   "target_mode": 2,
+   "tried": [
+    "battle_mage:ground",
+    "battle_mage:self"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "wood_elf",
+   "id": 3,
+   "loose": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 3,
+   "tried": [
+    "wood_elf:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 4,
+   "owned": [
+    783
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 5,
+   "loose": [
+    778
+   ],
+   "owned": [
+    782,
+    791
+   ],
+   "target": "self",
+   "target_mode": 0,
+   "tried": [
+    "battle_mage:ground",
+    "battle_mage:self"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 6,
+   "loose": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 3,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 7,
+   "owned": [
+    784
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 8,
+   "target_mode": 0,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 9,
+   "loose": [
+    798
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 10,
+   "target_mode": 2,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 11,
+   "owned": [
+    790,
+    791,
+    792,
+    804
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 12,
+   "target_mode": 3,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 13,
+   "loose": [
+    792
+   ],
+   "target": "ground",
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 14,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 15,
+   "loose": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 3,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 16,
+   "loose": [
+    805
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 17,
+   "loose": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 18,
+   "loose": [
+    814
+   ],
+   "target": "ground",
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 19,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 20,
+   "loose": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 21,
+   "loose": [
+    817
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 22,
+   "loose": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 23,
+   "loose": [
+    819,
+    820
+   ],
+   "owned": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 3,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 24,
+   "owned": [
+    791,
+    821
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 25,
+   "target_mode": 1,
+   "tried": [
+    "battle_mage:ground",
+    "battle_mage:self",
+    "battle_mage:creature"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 26,
+   "loose": [
+    791,
+    823
+   ],
+   "target": "ground",
+   "target_mode": 3,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 27,
+   "loose": [
+    825
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 28,
+   "loose": [
+    826
+   ],
+   "target": "self",
+   "target_mode": 2,
+   "tried": [
+    "battle_mage:ground",
+    "battle_mage:self"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 29,
+   "loose": [
+    791,
+    831
+   ],
+   "target": "ground",
+   "target_mode": 0,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 30,
+   "loose": [
+    834
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 31,
+   "loose": [
+    835
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 32,
+   "loose": [
+    836
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 33,
+   "target_mode": 1,
+   "tried": [
+    "battle_mage:ground",
+    "battle_mage:self",
+    "battle_mage:creature"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 34,
+   "loose": [
+    839
+   ],
+   "target": "ground",
+   "target_mode": 0,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "battle_mage",
+   "id": 35,
+   "loose": [
+    791,
+    840
+   ],
+   "owned": [
+    779,
+    784,
+    850,
+    856,
+    888,
+    1015
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "battle_mage:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "wood_elf",
+   "id": 36,
+   "loose": [
+    791,
+    888
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "wood_elf:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "wood_elf",
+   "id": 37,
+   "loose": [
+    791,
+    846
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "wood_elf:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "wood_elf",
+   "id": 38,
+   "loose": [
+    847
+   ],
+   "target": "self",
+   "target_mode": 0,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "wood_elf",
+   "id": 39,
+   "loose": [
+    791,
+    848
+   ],
+   "target": "ground",
+   "target_mode": 3,
+   "tried": [
+    "wood_elf:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 40,
+   "target_mode": 1,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self",
+    "wood_elf:creature"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "wood_elf",
+   "id": 41,
+   "loose": [
+    779,
+    791,
+    850
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "wood_elf:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "wood_elf",
+   "id": 42,
+   "loose": [
+    851
+   ],
+   "target": "self",
+   "target_mode": 2,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 43,
+   "loose": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 3,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 44,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 45,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 46,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 47,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 48,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 49,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 50,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 51,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 52,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "seraphim",
+   "id": 53,
+   "loose": [
+    867
+   ],
+   "target": "ground",
+   "target_mode": 0,
+   "tried": [
+    "seraphim:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "dwarf",
+   "id": 55,
+   "loose": [
+    1155
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "dwarf:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "dwarf",
+   "id": 56,
+   "loose": [
+    1153,
+    1154
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "dwarf:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "dwarf",
+   "id": 57,
+   "loose": [
+    1152
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "dwarf:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "dwarf",
+   "id": 58,
+   "loose": [
+    1021
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "dwarf:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "dwarf",
+   "id": 59,
+   "loose": [
+    1022
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "dwarf:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "daemon",
+   "id": 60,
+   "loose": [
+    791
+   ],
+   "owned": [
+    791,
+    1005
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 61,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "daemon",
+   "id": 62,
+   "owned": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "daemon",
+   "id": 63,
+   "owned": [
+    791,
+    1173
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "daemon",
+   "id": 64,
+   "owned": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 3,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "daemon",
+   "id": 65,
+   "owned": [
+    791,
+    794,
+    1013,
+    1153
+   ],
+   "target": "ground",
+   "target_mode": 5,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "daemon",
+   "id": 66,
+   "owned": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 0,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": false,
+   "caster": "daemon",
+   "id": 67,
+   "loose": [
+    1012
+   ],
+   "owned": [
+    791,
+    794,
+    803,
+    844,
+    856,
+    861,
+    863,
+    865,
+    869,
+    1019,
+    1023,
+    1153
+   ],
+   "target": "ground",
+   "target_mode": 0,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": false,
+   "id": 69,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 70,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 71,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": false,
+   "id": 72,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1000,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1001,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1002,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1003,
+   "target_mode": 1,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1004,
+   "target_mode": 1,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self",
+    "wood_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1005,
+   "target_mode": 0,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self",
+    "wood_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1006,
+   "target_mode": 1,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self",
+    "wood_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1007,
+   "target_mode": 1,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self",
+    "wood_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1008,
+   "target_mode": 1,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self",
+    "wood_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1009,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1010,
+   "target_mode": 1,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1012,
+   "target_mode": 1,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1013,
+   "target_mode": 1,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1014,
+   "target_mode": 2,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1015,
+   "target_mode": 2,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1016,
+   "target_mode": 2,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1017,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1018,
+   "target_mode": 5,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1019,
+   "target_mode": 5,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1020,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1021,
+   "target_mode": 0,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "caster": "vampiress",
+   "id": 1022,
+   "loose": [
+    863
+   ],
+   "target": "ground",
+   "target_mode": 0,
+   "tried": [
+    "vampiress:ground"
+   ]
+  },
+  {
+   "art": true,
+   "caster": "vampiress",
+   "id": 1023,
+   "loose": [
+    856,
+    863
+   ],
+   "target": "self",
+   "target_mode": 0,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1024,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1025,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1026,
+   "target_mode": 3,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1027,
+   "target_mode": 3,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "caster": "vampiress",
+   "id": 1028,
+   "loose": [
+    856
+   ],
+   "target": "ground",
+   "target_mode": 0,
+   "tried": [
+    "vampiress:ground"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1029,
+   "target_mode": 0,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1030,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1031,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1032,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1033,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1034,
+   "target_mode": 4,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1035,
+   "target_mode": 0,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1036,
+   "target_mode": 0,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1037,
+   "target_mode": 0,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1038,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1039,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1040,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1041,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1042,
+   "target_mode": 1,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1043,
+   "target_mode": 3,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1044,
+   "target_mode": 5,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1045,
+   "target_mode": 2,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1046,
+   "target_mode": 2,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1047,
+   "target_mode": 5,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1048,
+   "target_mode": 5,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1049,
+   "target_mode": 0,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1050,
+   "target_mode": 0,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1051,
+   "target_mode": 0,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1052,
+   "target_mode": 0,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1053,
+   "target_mode": 0,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1054,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1057,
+   "target_mode": 1,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1058,
+   "target_mode": 1,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1059,
+   "target_mode": 1,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1060,
+   "target_mode": 1,
+   "tried": [
+    "gladiator:ground",
+    "gladiator:self",
+    "gladiator:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1061,
+   "target_mode": 1,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self",
+    "wood_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1062,
+   "target_mode": 1,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self",
+    "wood_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1063,
+   "target_mode": 1,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self",
+    "wood_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1064,
+   "target_mode": 1,
+   "tried": [
+    "wood_elf:ground",
+    "wood_elf:self",
+    "wood_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1065,
+   "target_mode": 1,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1066,
+   "target_mode": 1,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1067,
+   "target_mode": 1,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1068,
+   "target_mode": 1,
+   "tried": [
+    "dark_elf:ground",
+    "dark_elf:self",
+    "dark_elf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1069,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1070,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1071,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1072,
+   "target_mode": 1,
+   "tried": [
+    "seraphim:ground",
+    "seraphim:self",
+    "seraphim:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1073,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1074,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1075,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1076,
+   "target_mode": 1,
+   "tried": [
+    "vampiress:ground",
+    "vampiress:self",
+    "vampiress:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1078,
+   "target_mode": 1,
+   "tried": [
+    "dwarf:ground",
+    "dwarf:self",
+    "dwarf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1079,
+   "target_mode": 1,
+   "tried": [
+    "dwarf:ground",
+    "dwarf:self",
+    "dwarf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1080,
+   "target_mode": 1,
+   "tried": [
+    "dwarf:ground",
+    "dwarf:self",
+    "dwarf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1082,
+   "target_mode": 5,
+   "tried": [
+    "dwarf:ground",
+    "dwarf:self",
+    "dwarf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1083,
+   "target_mode": 1,
+   "tried": [
+    "dwarf:ground",
+    "dwarf:self",
+    "dwarf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1084,
+   "target_mode": 1,
+   "tried": [
+    "dwarf:ground",
+    "dwarf:self",
+    "dwarf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1085,
+   "target_mode": 0,
+   "tried": [
+    "dwarf:ground",
+    "dwarf:self",
+    "dwarf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1086,
+   "target_mode": 0,
+   "tried": [
+    "dwarf:ground",
+    "dwarf:self",
+    "dwarf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1087,
+   "target_mode": 0,
+   "tried": [
+    "dwarf:ground",
+    "dwarf:self",
+    "dwarf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1089,
+   "target_mode": 5,
+   "tried": [
+    "dwarf:ground",
+    "dwarf:self",
+    "dwarf:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1091,
+   "target_mode": 1,
+   "tried": [
+    "daemon:ground",
+    "daemon:self",
+    "daemon:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1092,
+   "target_mode": 1,
+   "tried": [
+    "daemon:ground",
+    "daemon:self",
+    "daemon:creature"
+   ]
+  },
+  {
+   "art": true,
+   "id": 1094,
+   "target_mode": 5,
+   "tried": [
+    "daemon:ground",
+    "daemon:self",
+    "daemon:creature"
+   ]
+  },
+  {
+   "art": true,
+   "caster": "daemon",
+   "id": 1097,
+   "loose": [
+    791,
+    1014
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": true,
+   "caster": "daemon",
+   "id": 1098,
+   "loose": [
+    791,
+    1014
+   ],
+   "target": "self",
+   "target_mode": 2,
+   "tried": [
+    "daemon:ground",
+    "daemon:self"
+   ]
+  },
+  {
+   "art": true,
+   "caster": "daemon",
+   "id": 1099,
+   "loose": [
+    791,
+    1014
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": true,
+   "caster": "daemon",
+   "id": 1100,
+   "loose": [
+    791,
+    1014
+   ],
+   "target": "ground",
+   "target_mode": 2,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": true,
+   "caster": "daemon",
+   "id": 1101,
+   "loose": [
+    791
+   ],
+   "target": "self",
+   "target_mode": 0,
+   "tried": [
+    "daemon:ground",
+    "daemon:self"
+   ]
+  },
+  {
+   "art": true,
+   "caster": "daemon",
+   "id": 1102,
+   "loose": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 0,
+   "tried": [
+    "daemon:ground"
+   ]
+  },
+  {
+   "art": true,
+   "caster": "daemon",
+   "id": 1103,
+   "loose": [
+    791
+   ],
+   "target": "ground",
+   "target_mode": 0,
+   "tried": [
+    "daemon:ground"
+   ]
+  }
+ ]
+}
