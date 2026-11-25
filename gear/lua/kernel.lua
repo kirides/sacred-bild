@@ -7655,6 +7655,8 @@ local function make_env(mod)
     gear.game = {
         -- difficulty() -> 0..4: the difficulty level of the running game.
         difficulty = function() return native.difficulty() end,
+        -- map_markers() -> {{x, y, kind, region}, ...}: the world map's service symbols (merchant 0, blacksmith 1, combo master 2, horse trader 3).
+        map_markers = function() return native.map_markers() end,
         cursor_click = function(down) return native.cursor_click(down ~= false) end,
         -- can_save() -> true | false, reason: whether a save may start now.
         can_save = function()
