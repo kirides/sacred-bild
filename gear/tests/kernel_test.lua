@@ -918,7 +918,8 @@ do
     save_block = nil
     ok(game.save(98, 'Autosave', {thumbnail = true}) == true and save_calls[1][1] == 98 and save_calls[1][2] == 'Autosave'
         and save_calls[1][3] == true, 'save passes slot, name and thumbnail')
-    ok(game.save(5) == true and save_calls[2][2] == '' and save_calls[2][3] == false, 'save defaults')
+    ok(game.save(5) == true and save_calls[2][2] == '' and save_calls[2][3] == true, 'save defaults (the picture is taken)')
+    ok(game.save(6, 'x', {thumbnail = false}) == true and save_calls[3][3] == false, 'save without a new picture')
     ok(game.save_info(97).exists and game.save_info(40000) == nil, 'save_info')
     save_results[1] = {slot = 98, ok = true, message = '', info = {exists = true, size = 77, mtime = 1}}
     save_results[2] = {slot = 99, ok = false, message = 'disk full', info = {exists = false, size = 0, mtime = 0}}

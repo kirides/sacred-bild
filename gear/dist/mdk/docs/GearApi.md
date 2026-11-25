@@ -2721,8 +2721,8 @@ What `save` can be told.
 
 | Field | Type | |
 |---|---|---|
-| `thumbnail` | `boolean` | Let the engine capture the savegame's picture first (default false: the savegame keeps no new picture). (optional) |
-| `window` | `boolean` | Save as the open savegame window's own Save button does, for a mod that replaces the window (`gear.ui.replace_window`): only while that window is open in game; the picture is the one the game took when it opened, and the window closes once the engine took the request. (optional) |
+| `thumbnail` | `boolean` | Let the engine capture the savegame's picture first (default true: a picture of the world as it is now; false: the savegame keeps the last picture the engine took, which may be old, or the start menu's). (optional) |
+| `window` | `boolean` | Save as the open savegame window's own Save button does, for a mod that replaces the window (`gear.ui.replace_window`): only while that window is open in game; the picture is taken of the world in the next frame, before the interface is drawn over it (not `thumbnail`'s), the request follows it, and the window closes once the engine took the request; a refusal then comes as `game.save_failed`, not as this call's result. (optional) |
 
 #### `gear.game.save(slot, name, opts) -> boolean?, string?`
 

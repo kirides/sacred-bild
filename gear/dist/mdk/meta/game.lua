@@ -42,8 +42,8 @@ function GearGame.can_save() end
 
 --- What `save` can be told.
 ---@class GearSaveOpts
----@field thumbnail? boolean Let the engine capture the savegame's picture first (default false: the savegame keeps no new picture).
----@field window? boolean Save as the open savegame window's own Save button does, for a mod that replaces the window (`gear.ui.replace_window`): only while that window is open in game; the picture is the one the game took when it opened, and the window closes once the engine took the request.
+---@field thumbnail? boolean Let the engine capture the savegame's picture first (default true: a picture of the world as it is now; false: the savegame keeps the last picture the engine took, which may be old, or the start menu's).
+---@field window? boolean Save as the open savegame window's own Save button does, for a mod that replaces the window (`gear.ui.replace_window`): only while that window is open in game; the picture is taken of the world in the next frame, before the interface is drawn over it (not `thumbnail`'s), the request follows it, and the window closes once the engine took the request; a refusal then comes as `game.save_failed`, not as this call's result.
 
 --- Asks the engine to save into slot `slot` (0 to 32766: `Save\GAME05.PAK`, `Save\GAME500.PAK`, ... `Save\GAME32766.PAK`; the game itself stopped at 509). The engine refuses while a trading, chest or similar window
 --- is open. Returns true when the request is accepted; the outcome is the event `game.saved` or `game.save_failed`.

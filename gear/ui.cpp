@@ -1,4 +1,5 @@
 #include "memfault.h"
+#include "save.h"
 #include "ui.h"
 #include "itemicon.h"
 #include "text.h"
@@ -1507,6 +1508,7 @@ namespace
 
     void __cdecl hookWorldCall(void* device)
     {
+        Save::renderCapture();
         drawLayer(Layer::World, static_cast<IDirect3DDevice7*>(device));
         g_origWorldCall(device);
     }
