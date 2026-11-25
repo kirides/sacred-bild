@@ -351,12 +351,14 @@ void CssContentSupport::registerProperty()
     }
 }
 
-void CssContentSupport::apply(Rml::Context* context)
+bool CssContentSupport::apply(Rml::Context* context)
 {
     if (!context || property_id_ == Rml::PropertyId::Invalid)
-        return;
+        return false;
+    bool changed = false;
     for (int i = 0; i < context->GetNumDocuments(); ++i)
-        applyElement(context->GetDocument(i));
+        changed |= applyElement(context->GetDocument(i));
+    return changed;
 }
 
 // Text nodes are the only elements with the tag "#text" (Rml::Factory::InstanceElementText); a tag compare is much cheaper than
@@ -366,10 +368,11 @@ static bool isTextNode(const Rml::Element* element)
     return element->GetTagName() == "#text";
 }
 
-void CssContentSupport::applyElement(Rml::Element* element)
+bool CssContentSupport::applyElement(Rml::Element* element)
 {
     if (!element || isTextNode(element))
-        return;
+        return false;
+    bool changed = false;
 
     // Generated text is a text node: only those can carry the marker (an attribute lookup is a string-keyed map search).
     Rml::Element* first = element->GetFirstChild();
@@ -395,19 +398,23 @@ void CssContentSupport::applyElement(Rml::Element* element)
                 Rml::ElementPtr node = doc->CreateTextNode(text);
                 node->SetAttribute(kGeneratedMarker, true);
                 element->InsertBefore(std::move(node), element->GetFirstChild());
+                changed = true;
             }
         } else if (generated->GetText() != text) {
             generated->SetText(text);
+            changed = true;
         }
     } else if (generated) {
         element->RemoveChild(generated);
+        changed = true;
     }
 
     for (int i = 0; i < element->GetNumChildren(); ++i) {
         Rml::Element* child = element->GetChild(i);
         if (!isTextNode(child))     // (a text node has no content of its own, and the generated one is a text node)
-            applyElement(child);
+            changed |= applyElement(child);
     }
+    return changed;
 }
 
 } // namespace GearCss
