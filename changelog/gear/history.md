@@ -1,3 +1,7 @@
+## v0.10.1 (2026-11-25)
+
+- Fixed: a companion you play no longer attacks, casts and steps away on their own when enemies hit them; the game's own reactions now stay off for whichever hero you play, also after loading a savegame
+
 ## v0.9.0 (2026-11-25)
 
 - New: `creature:copy_stats(source)` gives a creature the level, stats and health share of another creature
