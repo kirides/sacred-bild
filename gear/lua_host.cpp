@@ -3102,6 +3102,24 @@ namespace
         return 1;
     }
 
+    // native.gait(id, value?) -> gait | nil, message: a creature's gait (1 walk, 2 run); with a value it is set first.
+    int nativeGait(lua_State* L)
+    {
+        const uint32_t id = checkId(L, 1);
+        int32_t value = static_cast<int32_t>(luaL_optnumber(L, 2, 0));
+        const bool set = lua_isnumber(L, 2) != 0;
+        if (!id || (set && (value < 0 || value > 3)))
+        {
+            return pushFailure(L, "bad gait (0 to 3)");
+        }
+        if (!World::gait(id, value, set) || (set && !World::gait(id, value, false)))
+        {
+            return pushFailure(L, "no such creature");
+        }
+        lua_pushnumber(L, value);
+        return 1;
+    }
+
     // native.clear_pets()
     int nativeClearPets(lua_State*)
     {
@@ -5291,6 +5309,7 @@ namespace
             {"set_pet", nativeSetPet},
             {"set_tint", nativeSetTint},
             {"set_texture", nativeSetTexture},
+            {"gait", nativeGait},
             {"set_level", nativeSetLevel},
             {"clear_pets", nativeClearPets},
             {"set_max_health", nativeSetMaxHealth},

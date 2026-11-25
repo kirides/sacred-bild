@@ -1845,6 +1845,14 @@ Orders a party hero (`gear.party`) to walk to (x, y), as a click on the ground d
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:gait(value) -> integer?, string?`
+
+How the creature moves now: 1 walk, 2 run (the game's field at +0x1F8; 0: none yet). Pass a value to set it first (0 to 3). The game sets it when an order starts: a creature of the game's own AI runs while it chases (order_attack) and walks after `order_move`, so call `creature:gait(2)` right after `order_move` to make it run (measured on a wolf: 133 units a second walking, 335 running, the movement speed buffs scale both). The hero's own gait follows the Shift key, setting it has no effect there. Single player.
+
+- `value`: `integer` (optional)
+- returns `gait` `integer?`
+- returns `error` `string?`
+
 #### `creature:order_stop() -> boolean?, string?`
 
 Orders a party hero to stop. In single player this also works on any other creature.

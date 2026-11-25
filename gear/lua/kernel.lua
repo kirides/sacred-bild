@@ -1836,6 +1836,11 @@ do
         local o = info(self)
         return native.party_order(self.id, 'move', 0, math.floor(x), math.floor(y), o and o.layer or 0, 0)
     end
+    -- creature:gait([value]): how the creature moves, 1 walk, 2 run (read; with a value, set first). The engine sets it by itself when an order
+    -- starts (a creature of the game's own AI runs while it chases, and walks otherwise), so set it after the order.
+    function creature_mt:gait(value)
+        return native.gait(self.id, value)
+    end
     function creature_mt:order_stop() return native.party_order(self.id, 'stop') end
     function creature_mt:order_attack(target)
         local id = type(target) == 'table' and target.id or target
