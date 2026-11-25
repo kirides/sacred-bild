@@ -17,6 +17,12 @@ e.g. sacred-theme) or Gear's **plain base style**. Both style the same class nam
 Every button, link and input is a stop for the controller with no extra work. Adding a widget means giving the kit its markup and the base style and the theme
 their classes.
 
+**Moving windows.** A window with a `.titlebar` and a `data-panel="name"` (`kit.window` sets it from the `id` when it has a title; `panel = false` keeps it fixed) is dragged
+by its title bar, with the mouse, and stays on the screen. The place is kept in `mods\gear_layout.json` under `<mod id>:<name>` like the layout editor's, so both
+agree and "Reset" in the editor puts it back. A close button or any other control in the bar keeps its click. `data-no-drag` on the window turns the drag off
+(for a window that sits at a game panel and must stay there); windows without a title bar or a `data-panel` (the keyboard, the confirm dialog) never move.
+Native `gear.ui.panel`s have always been draggable by their title (`draggable = false` turns it off).
+
 ## Icons
 
 Every document can use the icon font of Sacred Gear (a 10 KB subset of Google's Material Symbols Sharp, Apache License 2.0, bundled in the DLL): `<span class="icon icon-refresh"></span>`

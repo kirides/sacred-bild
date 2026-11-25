@@ -1427,6 +1427,7 @@ local function make_ui(mod)
                 local x, y = p.x, p.y
                 local saved = layout_get()[key]
                 if saved and saved.x then x, y = from_virtual(saved.x, saved.y) end
+                if p.drag_x then x, y = p.drag_x, p.drag_y end       -- being dragged by its title bar
                 local sel = '[data-panel="' .. r.panel .. '"]'
                 if r.resizable then
                     -- data-resizable: the layout editor sizes it (a corner grip, or the popup's numbers); the size is kept like the place
@@ -1466,6 +1467,40 @@ local function make_ui(mod)
             local wkey = keys[-i]
             if not wkey then wkey = 'rml:' .. id .. ':w' .. i; keys[-i] = wkey end
             if not ui_edit and region(wkey, r.x, r.y, r.w, r.h, ropts).hover then hover = true end
+            if not ui_edit and r.panel and r.panel ~= '' and (r.title_h or 0) > 0 then
+                -- A window with a title bar: the player drags it by the bar (registered after the window's region and before the buttons', so a
+                -- close button in the bar still takes its click). The place is kept in the layout like the layout editor's (key "<mod id>:<panel>").
+                local tkey = keys[-100000 - i]
+                if not tkey then tkey = 'rml:' .. id .. ':t' .. i; keys[-100000 - i] = tkey end
+                local topts = self.topts
+                if not topts then topts = {layer = opts.layer, _rml_doc = id, nav = false}; self.topts = topts end
+                local bar = region(tkey, r.x + r.title_x, r.y + r.title_y, r.title_w, r.title_h, topts)
+                if bar.hover then hover = true end
+                local p = panels[r.panel]
+                if bar.pressed then
+                    p.grab_x, p.grab_y, p.press_x, p.press_y = mx - r.x, my - r.y, mx, my
+                end
+                if p.grab_x then
+                    if bar.held then
+                        -- a click on the bar moves nothing; only a drag (a few units) does
+                        if p.drag_x or math.abs(mx - p.press_x) + math.abs(my - p.press_y) >= 3 then
+                            local sl, st, sr, sb = screen_rect()
+                            p.drag_x = math.max(sl, math.min(mx - p.grab_x, sr - r.w))
+                            p.drag_y = math.max(st, math.min(my - p.grab_y, sb - r.h))
+                        end
+                        hover = true
+                    else
+                        if p.drag_x then
+                            local vx, vy = to_virtual(p.drag_x, p.drag_y)
+                            local e = {x = vx, y = vy}
+                            local old = layout_get()[mod.id .. ':' .. r.panel]
+                            if old and old.w then e.w, e.h = old.w, old.h end
+                            layout_set(mod.id .. ':' .. r.panel, e)
+                        end
+                        p.grab_x, p.grab_y, p.drag_x, p.drag_y = nil, nil, nil, nil
+                    end
+                end
+            end
         end
         if not ui_edit then
             -- Lists marked data-nav-scroll are the pad's scroll areas (up / down walks their cards; at the edge of the view the list scrolls to the next one).
@@ -2479,7 +2514,10 @@ local function make_ui(mod)
             local bar = region(tostring(id) .. '#bar', x, y, w - 24, 21, {layer = opts.layer, tooltip = opts.tooltip, nav = false})
             if bar.pressed then p.grab_x, p.grab_y = ui_mouse.x - x, ui_mouse.y - y end
             if bar.held and p.grab_x then
-                p.x, p.y = ui_mouse.x - p.grab_x, ui_mouse.y - p.grab_y
+                -- kept on the screen while it is dragged (left / top win when it is larger than the screen)
+                local sl, st_, sr, sb = screen_rect()
+                p.x = math.max(sl, math.min(ui_mouse.x - p.grab_x, sr - w))
+                p.y = math.max(st_, math.min(ui_mouse.y - p.grab_y, sb - h))
                 x, y = p.x, p.y
             elseif p.x then
                 store()

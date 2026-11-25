@@ -17,7 +17,7 @@
 ---@field y? number
 ---@field width? number
 ---@field height? number
----@field panel? string A window the layout editor can move (`data-panel`; the place is kept under `<mod id>:<panel>`).
+---@field panel? string|false A window the player can move, by its title bar or in the layout editor (`data-panel`; the place is kept under `<mod id>:<panel>`). Default: the `id`, when there is a title and an id; `false`: fixed.
 ---@field resizable? boolean The editor sizes it too (`data-resizable`).
 ---@field close? string The id of a close button in the title bar.
 ---@field class? string Extra classes.
