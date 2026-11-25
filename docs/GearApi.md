@@ -4670,7 +4670,7 @@ The options of `window`.
 | `y` | `number` |  (optional) |
 | `width` | `number` |  (optional) |
 | `height` | `number` |  (optional) |
-| `panel` | `string` | A window the layout editor can move (`data-panel`; the place is kept under `<mod id>:<panel>`). (optional) |
+| `panel` | `string\|false` | A window the player can move, by its title bar or in the layout editor (`data-panel`; the place is kept under `<mod id>:<panel>`). Default: the `id`, when there is a title and an id; `false`: fixed. (optional) |
 | `resizable` | `boolean` | The editor sizes it too (`data-resizable`). (optional) |
 | `close` | `string` | The id of a close button in the title bar. (optional) |
 | `class` | `string` | Extra classes. (optional) |
