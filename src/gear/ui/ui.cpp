@@ -1133,8 +1133,78 @@ namespace
         return c(a) << 24 | c(r) << 16 | c(g) << 8 | c(b);
     }
 
+    // Consecutive mesh commands that share a picture are drawn with one DrawPrimitive: a document records hundreds of small meshes per
+    // frame (one per element), and a draw call each was most of the replay's time. The batch is flushed when the picture or the
+    // sampling changes, before any other kind of command, before the draw frame changes and at the end of a layer.
+    struct MeshBatch
+    {
+        std::vector<TLVertex> vertices;
+        uint32_t image = 0;
+        IDirectDrawSurface7* surface = nullptr;
+        bool premultiplied = true;
+        bool point = false;
+        bool active = false;
+    };
+    thread_local MeshBatch t_batch;
+
+    void flushMeshBatch(IDirect3DDevice7* device, StateGuard& state)
+    {
+        MeshBatch& b = t_batch;
+        if (!b.active)
+        {
+            return;
+        }
+        b.active = false;
+        if (b.vertices.empty())
+        {
+            return;
+        }
+        state.enter();
+        state.texture(b.surface);
+        device->SetRenderState(D3DRENDERSTATE_SRCBLEND, b.premultiplied ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
+        if (b.point)
+        {
+            device->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_POINT);
+            device->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFN_POINT);
+        }
+        constexpr size_t kChunk = 60000;        // vertices per call (a multiple of 3, below the device's limit)
+        for (size_t first = 0; first < b.vertices.size(); first += kChunk)
+        {
+            const size_t n = std::min(kChunk, b.vertices.size() - first);
+            device->DrawPrimitive(D3DPT_TRIANGLELIST, kFvf, b.vertices.data() + first, static_cast<DWORD>(n), 0);
+        }
+        if (b.point)
+        {
+            device->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_LINEAR);
+            device->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFN_LINEAR);
+        }
+        device->SetRenderState(D3DRENDERSTATE_SRCBLEND, D3DBLEND_SRCALPHA);
+        b.vertices.clear();
+    }
+
+    // A fault in the driver or a freed texture drops the batch, like a faulting command.
+    bool flushMeshBatchGuarded(IDirect3DDevice7* device, StateGuard& state)
+    {
+        __try
+        {
+            flushMeshBatch(device, state);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            t_batch.active = false;
+            t_batch.vertices.clear();
+            return false;
+        }
+    }
+
     void drawMesh(IDirect3DDevice7* device, StateGuard& state, const Command& c)
     {
+        // A different picture or sampling: what is batched goes out first (before this command resolves its texture).
+        if (t_batch.active && (t_batch.image != c.image || t_batch.point != c.point))
+        {
+            flushMeshBatch(device, state);
+        }
         std::shared_ptr<const MeshData> mesh;
         {
             std::scoped_lock lock(g_meshLock);
@@ -1177,7 +1247,7 @@ namespace
         // the game's own at a UI scale that is not 1, and tiles drawn cell by cell meet without seams.
         const Text::Placement place = placement();
         const bool snapToPixels = !c.matrix;
-        const auto point = [&](int index) {
+        const auto point = [&](int index) [[msvc::forceinline]] {
             const Ui::MeshVertex& v = vs[static_cast<size_t>(index)];
             MeshPoint p;
             float px = v.x + c.x, py = v.y + c.y;
@@ -1209,7 +1279,7 @@ namespace
             p.b = static_cast<float>(v.color & 0xFF);
             return p;
         };
-        const auto toVertex = [&](const MeshPoint& p, float cellU = 0.0f, float cellV = 0.0f) {
+        const auto toVertex = [&](const MeshPoint& p, float cellU = 0.0f, float cellV = 0.0f) [[msvc::forceinline]] {
             float rr = p.r, gg = p.g, bb = p.b;
             if (!premultiplied && p.a > 0.0f)
             {
@@ -1223,9 +1293,16 @@ namespace
                             surface ? tu0 + (p.u - cellU) * tdu : 0.0f, surface ? tv0 + (p.v - cellV) * tdv : 0.0f};
         };
 
-        thread_local std::vector<TLVertex> out;
-        out.clear();
+        std::vector<TLVertex>& out = t_batch.vertices;
+        const size_t before = out.size();
         const size_t triangles = mesh->indices.size() / 3;
+        // Each vertex is placed once: a quad's four vertices serve six triangle corners.
+        thread_local std::vector<MeshPoint> placed;
+        placed.resize(vs.size());
+        for (size_t i = 0; i < vs.size(); ++i)
+        {
+            placed[i] = point(static_cast<int>(i));
+        }
         for (size_t t = 0; t < triangles; ++t)
         {
             const int i0 = mesh->indices[t * 3], i1 = mesh->indices[t * 3 + 1], i2 = mesh->indices[t * 3 + 2];
@@ -1234,7 +1311,7 @@ namespace
             {
                 continue;
             }
-            const MeshPoint tri[3] = {point(i0), point(i1), point(i2)};
+            const MeshPoint tri[3] = {placed[static_cast<size_t>(i0)], placed[static_cast<size_t>(i1)], placed[static_cast<size_t>(i2)]};
             const float umin = std::min({tri[0].u, tri[1].u, tri[2].u}), umax = std::max({tri[0].u, tri[1].u, tri[2].u});
             const float vmin = std::min({tri[0].v, tri[1].v, tri[2].v}), vmax = std::max({tri[0].v, tri[1].v, tri[2].v});
             if (surface && !(c.image >= Ui::kPictureBase) && (umin < -0.001f || umax > 1.001f || vmin < -0.001f || vmax > 1.001f))
@@ -1275,7 +1352,10 @@ namespace
                 }
                 continue;
             }
-            if (c.clipped)
+            const bool inside = c.clipped &&
+                std::min({tri[0].x, tri[1].x, tri[2].x}) >= c.clip[0] && std::max({tri[0].x, tri[1].x, tri[2].x}) <= c.clip[0] + c.clip[2] &&
+                std::min({tri[0].y, tri[1].y, tri[2].y}) >= c.clip[1] && std::max({tri[0].y, tri[1].y, tri[2].y}) <= c.clip[1] + c.clip[3];
+            if (c.clipped && !inside)
             {
                 MeshPoint poly[8];
                 const size_t n = clipPolygon(tri, 3, c.clip, poly);
@@ -1293,30 +1373,15 @@ namespace
                 out.push_back(toVertex(tri[2]));
             }
         }
-        if (out.empty())
+        if (out.size() == before)
         {
             return;
         }
-        state.enter();
-        state.texture(surface);
-        device->SetRenderState(D3DRENDERSTATE_SRCBLEND, premultiplied ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
-        if (c.point)
-        {
-            device->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_POINT);
-            device->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFN_POINT);
-        }
-        constexpr size_t kChunk = 60000;        // vertices per call (a multiple of 3, below the device's limit)
-        for (size_t first = 0; first < out.size(); first += kChunk)
-        {
-            const size_t n = std::min(kChunk, out.size() - first);
-            device->DrawPrimitive(D3DPT_TRIANGLELIST, kFvf, out.data() + first, static_cast<DWORD>(n), 0);
-        }
-        if (c.point)
-        {
-            device->SetTextureStageState(0, D3DTSS_MAGFILTER, D3DTFG_LINEAR);
-            device->SetTextureStageState(0, D3DTSS_MINFILTER, D3DTFN_LINEAR);
-        }
-        device->SetRenderState(D3DRENDERSTATE_SRCBLEND, D3DBLEND_SRCALPHA);
+        t_batch.active = true;
+        t_batch.image = c.image;
+        t_batch.surface = surface;
+        t_batch.premultiplied = premultiplied;
+        t_batch.point = c.point;
     }
 
     void drawText(IDirect3DDevice7* device, StateGuard& state, const Command& c)
@@ -1484,6 +1549,7 @@ namespace
             }
             if (g_pushFrame && c.window != frameSlot)
             {
+                flushMeshBatchGuarded(device, state);
                 state.restore();
                 if (pushed)
                 {
@@ -1492,12 +1558,17 @@ namespace
                 pushed = g_pushFrame(reinterpret_cast<void*>(w), w ? 1 : 0) != 0;
                 frameSlot = c.window;
             }
+            if (c.kind != Kind::Mesh)
+            {
+                flushMeshBatchGuarded(device, state);
+            }
             if (!drawGuarded(device, state, c) && g_faults.fetch_add(1) < 5)
             {
                 LOG("UI: a draw command faulted (kind {}, layer {}); skipped", static_cast<int>(c.kind),
                     static_cast<int>(layer));
             }
         }
+        flushMeshBatchGuarded(device, state);
         state.restore();
         if (pushed)
         {
