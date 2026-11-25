@@ -13,5 +13,8 @@ means minor, `break(<scope>)`/`feat!:` major; scopes `gear`, `bild`) and refresh
   the `post-merge` hook then skips the bump and John's own merges still bump.
 - Write commit messages so the bump level is right: `feat(gear): ...` for a new feature, `break(bild): ...` for a change that breaks
   saves, settings or the mod API, anything else is a patch.
+- **Changelog:** player-facing release notes live in `changelog/bild/vX.Y.Z.md` and `changelog/gear/vX.Y.Z.md` (one file per released version, starting with
+  `## vX.Y.Z (date)`, short bullets `New:`/`Fixed:`/`Improved:`/`Under the hood:`, never vague). Write the note for the version a bump will produce, then run
+  `python tools/make_changelog.py` (writes each `history.md`, newest first; `--check` verifies). `changelog/` never triggers a bump.
 - Never push (John does). His `pre-push` hook refuses `main` with a pending bump, so a forgotten bump shows up there.
 - After changing a version or `tools/make_mod_index.py`: `python tools/make_mod_index.py --check` and `python tools/test_bump_versions.py`.

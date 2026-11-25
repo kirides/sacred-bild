@@ -156,6 +156,8 @@ class Tests(unittest.TestCase):
         self.assertIsNone(bv.bump('v1', 'patch'))
         self.assertTrue(bv.is_test_path('x/Tests/a.cpp'))
         self.assertTrue(bv.is_test_path('net/udp_test.cpp'))
+        self.assertTrue(bv.is_test_path('changelog/gear/v1.2.3.md'))
+        self.assertTrue(bv.is_test_path('src/changelog/history.md'))
         self.assertFalse(bv.is_test_path('main.cpp'))
 
 

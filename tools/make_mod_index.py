@@ -14,6 +14,7 @@ import bump_versions as bv
 
 REPOSITORY = 'kirides/sacred-bild'
 IMAGES = 'https://raw.githubusercontent.com/%s/main/docs/images/' % REPOSITORY  # thumbnails: docs/images/mod-index-<id>.png (1420x800)
+CHANGELOGS = 'https://raw.githubusercontent.com/%s/main/changelog/' % REPOSITORY  # changelog/<bild|gear>/history.md, written by tools/make_changelog.py
 # What the release workflow publishes per push: SacredBild-v<version>.zip (ddraw.dll, SacredBild.ini, version file) and
 # SacredGear-v<version>.zip (SacredGear.dll, version file), laid out like the game folder. Nightlies are pre-releases.
 ITEMS = {
@@ -26,6 +27,7 @@ ITEMS = {
         'description': 'Sacred Gold on a modern renderer (ddraw.dll): Direct3D 9 output, window scaling, controller support, UDP multiplayer and more.',
         'tags': ['graphics', 'controller', 'multiplayer'],
         'thumbnail': IMAGES + 'mod-index-sacred-bild.png',
+        'changelog': CHANGELOGS + 'bild/history.md',
         'install': {'files': ['ddraw.dll']},
         'download': {'github': REPOSITORY, 'asset': 'SacredBild-v*.zip', 'prerelease': True},
     },
@@ -38,11 +40,12 @@ ITEMS = {
         'description': 'The Lua mod kit for Sacred Gold (SacredGear.dll). Runs next to Sacred-Bild or on its own; the Gear mods need it.',
         'tags': ['tools'],
         'thumbnail': IMAGES + 'mod-index-sacred-gear.png',
+        'changelog': CHANGELOGS + 'gear/history.md',
         'install': {'files': ['SacredGear.dll']},
         'download': {'github': REPOSITORY, 'asset': 'SacredGear-v*.zip', 'prerelease': True},
     },
 }
-ORDER = ['id', 'kind', 'path', 'platforms', 'name', 'version', 'author', 'description', 'tags', 'thumbnail', 'install', 'download']
+ORDER = ['id', 'kind', 'path', 'platforms', 'name', 'version', 'author', 'description', 'tags', 'thumbnail', 'changelog', 'install', 'download']
 
 
 def build(repo):

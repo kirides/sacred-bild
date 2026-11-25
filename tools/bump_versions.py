@@ -60,10 +60,10 @@ def git(repo, *args, check=True):
 
 
 def is_test_path(rel):
-    """rel: path with forward slashes. Folders called test/tests/tools or ending with test(s), files ending with test(s) or test_*."""
+    """rel: path with forward slashes. Folders called test/tests/tools/changelog (release notes never change the DLLs) or ending with test(s), files ending with test(s) or test_*."""
     parts = rel.lower().split('/')
     for d in parts[:-1]:
-        if d in ('test', 'tests', 'tools') or d.endswith(('test', 'tests')):
+        if d in ('test', 'tests', 'tools', 'changelog') or d.endswith(('test', 'tests')):
             return True
     stem = os.path.splitext(parts[-1])[0]
     return stem.endswith(('test', 'tests')) or stem.startswith('test_')
