@@ -3408,6 +3408,21 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             }
             Rml::Element* const hoverBefore = d.context->GetHoverElement();
             d.context->Update();
+            // Update runs the hover chain before the layout: an element that the layout just moved under (or away from) a still mouse would
+            // get its :hover one update, one frame, later. The hover is checked against the new layout right away instead (a move to the same
+            // place runs only the hover chain, no mousemove event), and while it changes, the document is updated again in this frame (a few
+            // times at most: a :hover that pushes the element away from the mouse never settles).
+            for (int i = 0; i < kMaxSettle && d.hovering && d.mouseKnown; ++i)
+            {
+                Rml::Element* const hover = d.context->GetHoverElement();
+                d.context->ProcessMouseMove(d.mouseX, d.mouseY, 0);
+                if (d.context->GetHoverElement() == hover)
+                {
+                    break;
+                }
+                ++d.stats.updates;
+                d.context->Update();
+            }
             g_active = nullptr;
             // The hover moved in this update (an element's :hover changed its size or place, so the element under the still mouse is another
             // one now): that can change the layout once more, so one more update follows, as long as the hover keeps moving (a few times at

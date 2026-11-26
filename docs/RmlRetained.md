@@ -36,11 +36,13 @@ regions as well as stale pixels. The design below lists every source of change a
    animation, a transition or smooth scrolling runs, the caret's next blink while a text field has the focus, the key-repeat time of a held slider or
    scroll arrow, and infinity otherwise. A clean document is updated again when that time has come.
 4. **One more update after any update.** A few things only settle on the frame after an update: the CSS `content` walk and `ensureButtonPrompts` act
-   on the computed values and the elements the previous `Update` produced (a `data-for` row's button), and `Context::Update` runs the hover chain
-   before the layout, so an element that moved under a still mouse gets its `:hover` one update later. So every `Update` that ran is followed by one
+   on the computed values and the elements the previous `Update` produced (a `data-for` row's button). So every `Update` that ran is followed by one
    more on the next frame, and if the content walk or the prompts changed the DOM the document stays `dirty`. An update that moved the hover (a
    `:hover` rule resized an element and another one came under the mouse) is followed by one more again, at most `kMaxSettle` (4) in a row:
    such a chain can take more than one step to settle, and a document whose `:hover` pushes the element away from the mouse never does.
+   `Context::Update` runs the hover chain before the layout, so an element that the layout moves under a still mouse would get its `:hover`
+   one frame late: right after each `Update` the mouse is handed in again at the same place (the hover chain only, no `mousemove` event), and
+   while that changes the hover the document is updated again in the same frame, at most `kMaxSettle` times.
 5. **The output of a clean document is replayed, not rebuilt.** `rml_draw` keeps the commands of the last `Context::Render` (before `Ui::add`, so a
    `ui.scroll_begin` clip of the moment still applies on the way in). A clean document with the same layer, window slot, unit and origin gives them
    again. In stage 2 the replay becomes one command that refers to the list, and the render thread keeps the list's finished vertices (already
