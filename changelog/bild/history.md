@@ -1,3 +1,7 @@
+## v0.3.7 (2026-11-26)
+
+- Under the hood: Sacred Bild's Direct3D 9 backend is also built into the new Sacred Gear UI sandbox, which draws mod windows through it outside the game; nothing changes in game.
+
 ## v0.3.6 (2026-11-25)
 
 - Under the hood: Sacred Gear's mod windows can now be drawn from vertex buffers that hold screen positions already; Sacred Bild passes those draws straight through instead of applying its 3D overlay mapping to them.

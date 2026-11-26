@@ -1,3 +1,11 @@
+## v0.15.4 (2026-11-26)
+
+- Fixed: text in mod windows could vanish or show garbled pixels for one frame when another mod window needed new letters in the same font (the font texture was thrown away while the frame still used it).
+- Fixed: a mod window could keep an in-between layout after a hover effect changed an element's size, until the mouse moved again.
+- Fixed: an element that slides under the resting mouse (scrolling, a window moving or resizing) now shows its hover look in the same frame instead of one frame later.
+- Fixed: a mod window dragged by its title bar now sticks to the mouse instead of trailing it by a frame and jumping once more after you let go.
+- Under the hood: the UI sandbox (`gear_sandbox.exe`, docs/Sandbox.md) runs Sacred Gear's mod UI outside the game with the game's own images and fonts, renders off-screen, takes snapshots and runs scripted UI tests; its fuzzer compares every mod window with an uncached twin to catch missed redraws.
+
 ## v0.15.3 (2026-11-25)
 
 - Improved: mod windows written as HTML/CSS documents now cost almost nothing while they do not change. A document is laid out and drawn again only after a mouse move over it, a click or key, a change from its mod, or while an animation or a blinking text cursor runs; otherwise its last picture is reused and kept on the graphics card. With 38 mods loaded the idle frame time at 1600x900 went from 3.16 to about 2.1 ms (walking 3.41 -> 2.28 ms).
