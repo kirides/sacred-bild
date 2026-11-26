@@ -1437,7 +1437,14 @@ local function make_ui(mod)
                 local x, y = p.x, p.y
                 local saved = layout_get()[key]
                 if saved and saved.x then x, y = from_virtual(saved.x, saved.y) end
-                if p.drag_x then x, y = p.drag_x, p.drag_y end       -- being dragged by its title bar
+                if p.drag_x then
+                    -- being dragged by its title bar: where this frame's mouse puts it (the bar's handler below follows the mouse only after the
+                    -- window was placed, so the window trailed the cursor by a frame and caught up a frame after the release)
+                    local sl, st, sr, sb = screen_rect()
+                    p.drag_x = math.max(sl, math.min(mx - p.grab_x, sr - r.w))
+                    p.drag_y = math.max(st, math.min(my - p.grab_y, sb - r.h))
+                    x, y = p.drag_x, p.drag_y
+                end
                 local sel = '[data-panel="' .. r.panel .. '"]'
                 if r.resizable then
                     -- data-resizable: the layout editor sizes it (a corner grip, or the popup's numbers); the size is kept like the place
@@ -1494,9 +1501,12 @@ local function make_ui(mod)
                     if bar.held then
                         -- a click on the bar moves nothing; only a drag (a few units) does
                         if p.drag_x or math.abs(mx - p.press_x) + math.abs(my - p.press_y) >= 3 then
+                            local starting = not p.drag_x
                             local sl, st, sr, sb = screen_rect()
                             p.drag_x = math.max(sl, math.min(mx - p.grab_x, sr - r.w))
                             p.drag_y = math.max(st, math.min(my - p.grab_y, sb - r.h))
+                            -- the drag starts: the window goes there in this frame already (the document is laid out further down)
+                            if starting then native.rml_move(id, '[data-panel="' .. r.panel .. '"]', p.drag_x, p.drag_y) end
                         end
                         hover = true
                     else

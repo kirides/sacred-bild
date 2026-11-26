@@ -14,9 +14,9 @@
 --
 -- gear_sandbox --hidden --no-mods --mods tools\sandbox\fuzz\mods --script tools\sandbox\fuzz\rml_fuzz.lua [seed=N] [cases=N] [steps=N]
 --     [case=K] [out=dir] [verbose=1] [stop=1]
--- `case=K` runs only case K of the seed (a repro). Exit code: the number of failing cases (0: all agree).
+-- `case=K` runs only case K of the seed (a repro). `dt=` the frame time (default 1/60). Exit code: the number of failing cases (0: all agree).
 
-local opts = {seed = 1, cases = 20, steps = 150, out = nil, verbose = false, stop = false, hide = 0, flicker = false}
+local opts = {seed = 1, cases = 20, steps = 150, out = nil, verbose = false, stop = false, hide = 0, flicker = false, dt = 1 / 60}
 for _, a in ipairs(arg or {}) do
     local k, v = a:match('^(%w+)=(.*)$')
     if k then opts[k] = tonumber(v) or v end
@@ -289,7 +289,7 @@ end
 function Twin:settle()
     local frames, agree, changed = 8, {}, {}
     for k = 1, frames do
-        sbx.advance(1 / 60)
+        sbx.advance(opts.dt)
         agree[k] = self:frame(-k, false, nil) and true or false
         if self.b_prev then
             local same_rows = deep_equal(self.b_prev.rows, self.b_last.rows, 'b')
@@ -479,7 +479,7 @@ local function play(markup, m, steps, prefix, pixel_every)
             break
         end
         if st.clip then sbx.clip(true, st.clip[1], st.clip[2], st.clip[3], st.clip[4]) end
-        sbx.advance(1 / 60)
+        sbx.advance(opts.dt)
         ok, why = t:frame(s, pixel_every ~= nil and (s % pixel_every == 0 or s == n), prefix)
         if st.clip then sbx.clip(false) end
         sbx.capture_clear()

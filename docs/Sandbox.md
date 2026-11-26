@@ -75,15 +75,14 @@ after each step both are updated, walked and drawn and must agree on events, the
 gear_sandbox --hidden --no-mods --mods tools\sandbox\fuzz\mods --script tools\sandbox\fuzz\rml_fuzz.lua seed=1 cases=60 steps=200 out=<dir>
 ```
 
-Options: `seed`, `cases`, `steps`, `case=K` (only case K), `out=<dir>` (failing cases as `.rml`, `.steps.txt`, `.repro.lua` and PNGs),
+Options: `seed`, `cases`, `steps`, `dt` (frame time, default 1/60), `case=K` (only case K), `out=<dir>` (failing cases as `.rml`, `.steps.txt`, `.repro.lua` and PNGs),
 `replay=<file.repro.lua>` (play a shrunk failure again; with `verbose=1` A's updates and renders per frame), `hide=1` (also hide
 documents), `strict=1` (count short lags), `flicker=1` (count flicker), `stop=1`. The exit code is the number of failing cases.
 
 A difference is followed by idle frames and classified: **lag** (A agrees again after n frames), **flicker** (B itself changes from
 frame to frame: a document whose `:hover` rules push the element away from the mouse never settles; B flickers as before retained
 mode, A stops on one state) or **stale** (B is stable, A stays different: a missed change). Lags of one or two frames and flicker are
-not counted as failures: the hover of an element that moved under a still mouse settles one update later by design (principle 4 of
-RmlRetained.md), while the twin moves the mouse before every update and gets it a frame earlier. A failing case is shrunk (ddmin) to the
+not counted as failures (with the frame time 1/60 the caret's blink can land exactly on a frame and round either way; `strict=1` counts them). A failing case is shrunk (ddmin) to the
 few steps that still fail.
 
 ## Findings (2026-11-26)
@@ -93,7 +92,8 @@ few steps that still fail.
 | A font atlas that one document's render rebuilds is released at once (`Ui::pictureRelease` erased the id): documents drawn earlier in the same tick, and the published frame the render thread still draws, lost their text or drew noise for one frame. Older than retained mode, more frequent with it (a replayed draw keeps the old atlas id until the release touches the document). | missed pixels, 1 frame | fixed: a released picture stays drawable for a few layer draws (`kReleasedPictureFrames`) |
 | A trailing update that itself moved the hover (a `:hover` rule resized an element, another one came under the still mouse) was the last one: the document kept the in-between layout until the next input. | stale | fixed: an update that moved the hover adds one more, at most `kMaxSettle` (4) in a row |
 | A hidden document (`rml_show(false)`) gets no update from RmlUi's `GetNextUpdateDelay`, so its animations stand still while it is hidden and continue from there when it is shown; before retained mode they ran on while hidden (if the mod kept calling `doc:draw`). Shown by a focused script (an animated box hidden for 3 s); the random cases with `hide=1` rarely meet it. | behaviour change | open: harmless for most UI, a choice to make |
-| One-frame hover lags after layout changes under a still mouse. | lag 1 | by design (principle 4) |
+| An element that the layout moved under a still mouse got its `:hover` one frame late (`Context::Update` runs the hover chain before the layout; the twin had the same lag). | lag 1 | fixed: after each update the hover is checked against the new layout and the document updated again in the same frame (`tools/sandbox/tests/hover_same_frame.lua`) |
+| The text caret's blink one frame apart from the twin's. | lag 1 | test artifact: the blink (0.5 s) lands exactly on a simulated frame (dt 1/60) and RmlUi's float timer rounds either way; with `dt=0.0171` no case lags |
 
 After the fixes, 760 cases of 200 steps (seeds 1 to 12, 60 cases each, plus 40 with `hide=1`) agree, apart from a few one-frame hover lags
 and documents that flicker on their own.
