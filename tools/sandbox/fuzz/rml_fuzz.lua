@@ -14,9 +14,9 @@
 --
 -- gear_sandbox --hidden --no-mods --mods tools\sandbox\fuzz\mods --script tools\sandbox\fuzz\rml_fuzz.lua [seed=N] [cases=N] [steps=N]
 --     [case=K] [out=dir] [verbose=1] [stop=1]
--- `case=K` runs only case K of the seed (a repro). `dt=` the frame time (default 1/60). Exit code: the number of failing cases (0: all agree).
+-- `case=K` runs only case K of the seed (a repro). `dt=` the frame time (default 1/64: exact in floats, see sbx.dt). Exit code: the number of failing cases (0: all agree).
 
-local opts = {seed = 1, cases = 20, steps = 150, out = nil, verbose = false, stop = false, hide = 0, flicker = false, dt = 1 / 60}
+local opts = {seed = 1, cases = 20, steps = 150, out = nil, verbose = false, stop = false, hide = 0, flicker = false, dt = 1 / 64}
 for _, a in ipairs(arg or {}) do
     local k, v = a:match('^(%w+)=(.*)$')
     if k then opts[k] = tonumber(v) or v end
@@ -407,7 +407,7 @@ local function gen_step(t)
     elseif k <= 95 then return N('rml_query', some_selector(), true)
     elseif k <= 96 then return N('rml_rect', some_selector())
     elseif k <= 97 then return {layer = pick({1, 2})}
-    else return {time = pick({0.05, 0.2, 0.5, 1.2, 3})}
+    else return {time = pick({0.0625, 0.25, 0.5, 1.25, 3})}     -- exact in floats (see sbx.dt)
     end
 end
 

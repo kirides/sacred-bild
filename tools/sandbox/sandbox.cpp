@@ -54,7 +54,10 @@ namespace
         bool hidden = false;
         bool mods = true;                   // run the kernel and the mods
         bool simulated = false;             // simulated clock (fixed dt per frame); scripts always have it
-        double dt = 1.0 / 60.0;
+        // Frame time of the simulated clock: 1/64 s, a power of two, so that every simulated time and every difference of two is exact in a float
+        // too. RmlUi counts the caret's blink (0.5 s) and other timers down in floats; with 1/60 the rounding decided whether a blink fell in one
+        // frame or the next, depending on how often the document had been updated before. With 1/64 a 0.5 s timer ends exactly on frame 32.
+        double dt = 1.0 / 64.0;
         std::string mode = "game";          // gear.ui.state().mode
         uint32_t clear = 0xFF202830;
     };
@@ -438,7 +441,8 @@ namespace
     // Lua tick (the mods record), then the three layers drawn as the game's UI pass would.
     int g_frame = 0;
 
-    void frame()
+    // One frame: the clock moves on by dt (simulated), the mods tick, and (unless `draw` is false) the three layers are drawn.
+    void frame(bool draw = true)
     {
         pumpMessages();
         if (g_opt.simulated)
@@ -448,6 +452,11 @@ namespace
         if (g_opt.mods)
         {
             LuaHost::frame(static_cast<float>(g_opt.dt));
+        }
+        if (!draw)
+        {
+            ++g_frame;
+            return;
         }
         beginCanvas();
         Ui::hostDraw(Ui::Layer::World, g_device);
@@ -747,13 +756,81 @@ namespace
         return 0;
     }
 
+    // sbx.step(n [, dt]): n ticks without drawing (fast-forward: timers, animations and mods run, nothing is rendered).
+    int sbxStep(lua_State* L)
+    {
+        const int n = static_cast<int>(luaL_optnumber(L, 1, 1));
+        const double saved = g_opt.dt;
+        if (lua_isnumber(L, 2))
+        {
+            g_opt.dt = lua_tonumber(L, 2);
+        }
+        for (int i = 0; i < n && !g_quit; ++i)
+        {
+            frame(false);
+        }
+        g_opt.dt = saved;
+        lua_pushboolean(L, !g_quit);
+        return 1;
+    }
+
+    // sbx.set_time(seconds): the simulated clock jumps to that time; the next frame sees it plus dt (sbx.frame(1, 0) shows exactly it).
+    // Forward jumps are what RmlUi expects: an animation started earlier is then shown at that point of its timeline. Going back is allowed
+    // but RmlUi's timers do not run backwards (an animation stays where it is until the time passes it again).
+    int sbxSetTime(lua_State* L)
+    {
+        g_simTime = luaL_checknumber(L, 1);
+        return 0;
+    }
+
+    // sbx.seek(seconds [, fn]): moves the simulated clock forward to that time in steps of at most 1/16 s, a tick without drawing after each
+    // (the mods' timers and documents run), and fn() after each too (a script that updates its documents itself). RmlUi advances an
+    // animation by at most 0.1 s per update, so a jump of the clock alone would show an earlier frame of it; this shows the frame at
+    // `seconds`. The steps are powers of two: the times stay exact in floats.
+    int sbxSeek(lua_State* L)
+    {
+        const double target = luaL_checknumber(L, 1);
+        const bool callback = lua_isfunction(L, 2);
+        const double saved = g_opt.dt;
+        while (g_simTime < target && !g_quit)
+        {
+            g_opt.dt = std::min(1.0 / 16.0, target - g_simTime);
+            frame(false);
+            if (callback)
+            {
+                lua_pushvalue(L, 2);
+                lua_call(L, 0, 0);
+            }
+        }
+        g_opt.dt = saved;
+        return 0;
+    }
+
+    // sbx.dt([seconds]) -> the frame time of the simulated clock (sets it with an argument; default 1/64)
+    int sbxDt(lua_State* L)
+    {
+        if (lua_isnumber(L, 1))
+        {
+            g_opt.dt = lua_tonumber(L, 1);
+        }
+        lua_pushnumber(L, g_opt.dt);
+        return 1;
+    }
+
+    // sbx.frame([n [, dt]]): n frames (dt: their frame time instead of sbx.dt(); 0 draws the present time again).
     int sbxFrame(lua_State* L)
     {
         const int n = static_cast<int>(luaL_optnumber(L, 1, 1));
+        const double saved = g_opt.dt;
+        if (lua_isnumber(L, 2))
+        {
+            g_opt.dt = lua_tonumber(L, 2);
+        }
         for (int i = 0; i < n && !g_quit; ++i)
         {
             frame();
         }
+        g_opt.dt = saved;
         lua_pushboolean(L, !g_quit);
         return 1;
     }
@@ -796,6 +873,19 @@ namespace
     int sbxWheel(lua_State* L)
     {
         lua_pushboolean(L, Ui::hostWheel(static_cast<int>(luaL_checknumber(L, 1)), g_mouseX, g_mouseY));
+        return 1;
+    }
+
+    // sbx.pixel(x, y) -> 0xRRGGBB of the last drawn frame at (x, y) (canvas pixels), nil outside
+    int sbxPixel(lua_State* L)
+    {
+        const int x = static_cast<int>(luaL_checknumber(L, 1)), y = static_cast<int>(luaL_checknumber(L, 2));
+        std::vector<uint32_t> px;
+        if (x < 0 || y < 0 || x >= g_opt.width || y >= g_opt.height || !readPixels(px))
+        {
+            return 0;
+        }
+        lua_pushnumber(L, px[static_cast<size_t>(y) * g_opt.width + x] & 0xFFFFFF);
         return 1;
     }
 
@@ -866,8 +956,8 @@ namespace
         lua_State* L = luaL_newstate();
         luaL_openlibs(L);
         static constexpr luaL_Reg kSbx[] = {
-            {"frame", sbxFrame}, {"advance", sbxAdvance}, {"key", sbxKey}, {"time", sbxTime}, {"mouse", sbxMouse}, {"button", sbxButton},
-            {"wheel", sbxWheel}, {"snapshot", sbxSnapshot}, {"draw", sbxDraw}, {"commit", sbxCommit}, {"log", sbxLog},
+            {"frame", sbxFrame}, {"step", sbxStep}, {"set_time", sbxSetTime}, {"seek", sbxSeek}, {"dt", sbxDt}, {"advance", sbxAdvance}, {"key", sbxKey}, {"time", sbxTime}, {"mouse", sbxMouse}, {"button", sbxButton},
+            {"wheel", sbxWheel}, {"snapshot", sbxSnapshot}, {"pixel", sbxPixel}, {"draw", sbxDraw}, {"commit", sbxCommit}, {"log", sbxLog},
             {"size", sbxSize}, {"image", sbxImage}, {"capture_begin", sbxCaptureBegin}, {"capture_end", sbxCaptureEnd},
             {"capture_info", sbxCaptureInfo}, {"capture_clear", sbxCaptureClear}, {"compare", sbxCompare},
             {"render_compare", sbxRenderCompare}, {"clip", sbxClip}, {nullptr, nullptr},
@@ -957,7 +1047,7 @@ namespace
             "  --background file    an image drawn under the UI (PNG, JPG, TGA)\n"
             "  --enable all|a,b,c   switch these mods on (gear_mods.json in the mods folder; all: every folder with a mod.lua)\n"
             "  --log file           the log (default SacredGearSandbox.log next to the sandbox)\n"
-            "  --sim [dt]           simulated clock, dt seconds per frame (default 1/60); scripts always run on it\n"
+            "  --sim [dt]           simulated clock, dt seconds per frame (default 1/64, exact in floats); scripts always run on it\n"
             "  --script file.lua [args...]  run a driver script (the rest of the command line is its arg table)\n");
     }
 
