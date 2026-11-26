@@ -4,6 +4,7 @@
 #include "css_compat.h"
 #include "ui.h"
 #include "prof.h"
+#include "clock.h"
 
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/DataTypes.h>
@@ -297,9 +298,7 @@ namespace
     public:
         double GetElapsedTime() override
         {
-            using Clock = std::chrono::steady_clock;
-            static const Clock::time_point start = Clock::now();
-            return std::chrono::duration<double>(Clock::now() - start).count();
+            return GearClock::seconds();
         }
 
         // "@mod-id/file" is a complete reference, whatever document names it; the links inside a shared file are joined to it as usual.
@@ -1710,10 +1709,12 @@ namespace
         std::vector<std::string> listenerEvents;    // the event name of each listener (the same index), to attach them to a reloaded document
 
         // ---- Retained mode (docs/RmlRetained.md): what has to run again, and what can be given again ----
+        bool noCache = false;                   // rml_nocache: this document runs as with GEAR_RML_NOCACHE (the twin of the differential tests)
         bool dirty = true;                      // Context::Update must run (an input or a native changed the document, the canvas changed)
         bool renderDirty = true;                // the recorded draw below is out of date
         unsigned gen = 1;                       // moves with every change and every Update that ran: the tree walks' results are valid for one gen
         int trailing = 0;                       // updates still to run after one that had a reason (generated content, hover after a layout change)
+        int settling = 0;                       // trailing updates added because the last one moved the hover (bounded: kMaxSettle)
         double nextUpdate = 0.0;                // RmlUi's own next update (animations, transitions, smooth scrolling, caret blink), RmlUi's clock
         bool mouseKnown = false;                // the context's mouse is at mouseX, mouseY (the last move this host sent)
         int mouseX = 0, mouseY = 0;
@@ -1744,6 +1745,7 @@ namespace
     };
 
     std::map<int, std::unique_ptr<Doc>> g_docs;
+    constexpr int kMaxSettle = 4;   // extra updates while the hover keeps moving under a still mouse (Doc::settling)
     int g_nextDoc = 1;
 
     // GEAR_RML_NOCACHE=1: every document is updated, walked and rendered every frame (as before retained mode), for comparing.
@@ -1969,8 +1971,14 @@ namespace
         return Rml::LoadFontFace(Rml::Span<const Rml::byte>(reinterpret_cast<const Rml::byte*>(kept.data()), kept.size()), family, style, weight, false);
     }
 
+    fs::path g_fontDirOverride;     // RmlHost::setFontDir
+
     fs::path gameFontDir()
     {
+        if (!g_fontDirOverride.empty())
+        {
+            return g_fontDirOverride;
+        }
         wchar_t exe[MAX_PATH] = {};
         const DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
         if (n == 0 || n >= MAX_PATH)
@@ -3296,6 +3304,39 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     }
 
     // native.rml_reloads(id) -> how many times the document was reloaded, last error | nil
+    // native.rml_nocache(id, on): the document is updated, walked and rendered every frame, as all are with GEAR_RML_NOCACHE (tests: the
+    // twin a retained document is compared with, tools/sandbox/fuzz).
+    int rmlNoCache(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        d.noCache = lua_toboolean(L, 2) != 0;
+        return 0;
+    }
+
+    // native.rml_stats(id) -> {updates, renders, replays, timed, trailing, dirty, render_dirty, next_update, gen}: the retained mode's counters
+    // (since the load, or the last SACREDGEAR_PROF report) and state, for tests (tools/sandbox).
+    int rmlStats(lua_State* L)
+    {
+        Doc& d = docArg(L);
+        lua_createtable(L, 0, 9);
+        auto num = [&](const char* k, double v) {
+            lua_pushnumber(L, v);
+            lua_setfield(L, -2, k);
+        };
+        num("updates", d.stats.updates);
+        num("renders", d.stats.renders);
+        num("replays", d.stats.replays);
+        num("timed", d.stats.timed);
+        num("trailing", d.stats.trailing);
+        num("next_update", d.nextUpdate);
+        num("gen", d.gen);
+        lua_pushboolean(L, d.dirty);
+        lua_setfield(L, -2, "dirty");
+        lua_pushboolean(L, d.renderDirty);
+        lua_setfield(L, -2, "render_dirty");
+        return 1;
+    }
+
     int rmlReloads(lua_State* L)
     {
         Doc& d = docArg(L);
@@ -3330,7 +3371,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             // A move only when the mouse moved (or the context's mouse was put elsewhere: rml_click, rml_mouse): RmlUi runs its hover
             // chain for every move, and a still mouse is no reason to update the document.
             const int x = static_cast<int>(mx * d.unit - d.originPx.x), y = static_cast<int>(my * d.unit - d.originPx.y);
-            if (!d.hovering || !d.mouseKnown || x != d.mouseX || y != d.mouseY || g_noCache)
+            if (!d.hovering || !d.mouseKnown || x != d.mouseX || y != d.mouseY || g_noCache || d.noCache)
             {
                 d.context->ProcessMouseMove(x, y, 0);
                 d.mouseKnown = true;
@@ -3351,7 +3392,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
         // animation, a transition, smooth scrolling, the caret's blink) and once more after any of those (generated content, button prompts and
         // the hover of an element that moved under a still mouse settle one update later).
         const double now = g_system->GetElapsedTime();
-        const bool reason = d.dirty || now >= d.nextUpdate || g_noCache;
+        const bool reason = d.dirty || now >= d.nextUpdate || g_noCache || d.noCache;
         if (reason || d.trailing > 0)
         {
             ++d.stats.updates;
@@ -3365,8 +3406,21 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             {
                 changed = g_content->apply(d.context) || changed;
             }
+            Rml::Element* const hoverBefore = d.context->GetHoverElement();
             d.context->Update();
             g_active = nullptr;
+            // The hover moved in this update (an element's :hover changed its size or place, so the element under the still mouse is another
+            // one now): that can change the layout once more, so one more update follows, as long as the hover keeps moving (a few times at
+            // most: a document whose :hover rules push the element away from the mouse would flip forever, as it did before retained mode).
+            if (reason)
+            {
+                d.settling = 0;
+            }
+            if (d.context->GetHoverElement() != hoverBefore && d.settling < kMaxSettle)
+            {
+                ++d.settling;
+                d.trailing = std::max(d.trailing, 1);
+            }
             ++d.gen;
             d.renderDirty = true;
             d.dirty = d.dirty || changed;
@@ -3446,7 +3500,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             reportDocs();
         }
         // Retained mode: a document that did not change since its last draw, drawn to the same place, gives the same commands again.
-        if (!d.renderDirty && !g_noCache && d.drawnValid && d.drawnLayer == layer && d.drawnSlot == slot && d.drawnUnit == d.unit &&
+        if (!d.renderDirty && !g_noCache && !d.noCache && d.drawnValid && d.drawnLayer == layer && d.drawnSlot == slot && d.drawnUnit == d.unit &&
             d.drawnOrigin == d.originPx)
         {
             int count = 0;
@@ -3621,7 +3675,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     // same table): it is given back as it is, no walk, nothing written.
     bool reuseRows(lua_State* L, const Doc& d, const Doc::Walk& w)
     {
-        if (g_noCache || !lua_istable(L, 2) || w.gen != d.gen || w.table != lua_topointer(L, 2))
+        if (g_noCache || d.noCache || !lua_istable(L, 2) || w.gen != d.gen || w.table != lua_topointer(L, 2))
         {
             return false;
         }
@@ -4881,6 +4935,11 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
     }
 }
 
+void RmlHost::setFontDir(const std::wstring& dir)
+{
+    g_fontDirOverride = dir;
+}
+
 void RmlHost::configure(const std::wstring& modsDir)
 {
     g_modsDir = modsDir;
@@ -4903,6 +4962,8 @@ void RmlHost::registerNatives(lua_State* L)
         {"rml_update", guarded<rmlUpdate>},
         {"rml_hot", guarded<rmlHot>},
         {"rml_reloads", guarded<rmlReloads>},
+        {"rml_nocache", guarded<rmlNoCache>},
+        {"rml_stats", guarded<rmlStats>},
         {"rml_draw", guarded<rmlDraw>},
         {"rml_rects", guarded<rmlRects>},
         {"rml_move", mutating<rmlMove>},

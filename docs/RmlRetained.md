@@ -38,7 +38,9 @@ regions as well as stale pixels. The design below lists every source of change a
 4. **One more update after any update.** A few things only settle on the frame after an update: the CSS `content` walk and `ensureButtonPrompts` act
    on the computed values and the elements the previous `Update` produced (a `data-for` row's button), and `Context::Update` runs the hover chain
    before the layout, so an element that moved under a still mouse gets its `:hover` one update later. So every `Update` that ran is followed by one
-   more on the next frame, and if the content walk or the prompts changed the DOM the document stays `dirty`.
+   more on the next frame, and if the content walk or the prompts changed the DOM the document stays `dirty`. An update that moved the hover (a
+   `:hover` rule resized an element and another one came under the mouse) is followed by one more again, at most `kMaxSettle` (4) in a row:
+   such a chain can take more than one step to settle, and a document whose `:hover` pushes the element away from the mouse never does.
 5. **The output of a clean document is replayed, not rebuilt.** `rml_draw` keeps the commands of the last `Context::Render` (before `Ui::add`, so a
    `ui.scroll_begin` clip of the moment still applies on the way in). A clean document with the same layer, window slot, unit and origin gives them
    again. In stage 2 the replay becomes one command that refers to the list, and the render thread keeps the list's finished vertices (already
@@ -142,6 +144,10 @@ of sacred-gear-mods:
 Screenshots the tests take (hover and pressed states of the theme's buttons and links, modal, layout editor, art bars, cool-downs) match main's
 apart from the animated world. `GEAR_RML_NOCACHE=1` in the environment turns retained mode off (every document dirty every frame), for comparing
 and for finding a missed source of change.
+
+The UI sandbox's differential fuzzer ([Sandbox.md](Sandbox.md), `tools/sandbox/fuzz/rml_fuzz.lua`) compares each random document with an
+`rml_nocache` twin of itself through random inputs and setters (events, tree walks, commands, pixels). It found the hover chains above and a
+font atlas released while commands of the same frame still named it (see Sandbox.md, "Findings").
 
 ## Stages
 

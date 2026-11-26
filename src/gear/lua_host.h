@@ -12,6 +12,8 @@ namespace LuaHost
 {
     // Before the first frame: the module (for the embedded kernel) and the game folder (mods\ is in it).
     void configure(HMODULE module, const std::wstring& gameDir);
+    // The same with the mods in another folder than <game>\mods (a host other than the game: the UI sandbox).
+    void configureFolders(HMODULE module, const std::wstring& gameDir, const std::wstring& modsDir);
 
     // A file next to the mod manager's: mods\<file> (the run's own folder in an automation run).
     std::wstring stateFilePath(const wchar_t* file);

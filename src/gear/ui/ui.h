@@ -229,4 +229,40 @@ namespace Ui
     State state();
     // The engine of the running game (cEngine_updateZoom's this, each frame), for its world view's flags.
     void setEngine(void* engine);
+
+    // ---- Hosts other than the game: the UI sandbox (tools/sandbox, docs/Sandbox.md) runs the same recording and replay without Sacred.exe ----
+    // Its game images (UI images and Texture.pak textures, decoded from the game files) and the UI state the game's UI manager would give.
+    struct HostImage
+    {
+        uint32_t texture = 0;               // the host's texture handle (surface() gives its surface)
+        float u0 = 0, v0 = 0, u1 = 1, v1 = 1;
+        int width = 0, height = 0;          // pixels at the 1024x768 layout
+        std::string sheet;                  // the TGA it is cut from
+    };
+    struct Host
+    {
+        void (*state)(State& s) = nullptr;                                  // mode, mouse, screen edges (instead of the UI manager)
+        uint32_t (*imageCount)() = nullptr;                                 // UI image ids 1 .. count-1
+        bool (*image)(uint32_t id, HostImage& out) = nullptr;               // a UI image id or a texture image id (textureImage)
+        uint32_t (*textureImage)(const std::string& upperName) = nullptr;   // a Texture.pak texture by its name: its image id, 0 if none
+        IDirectDrawSurface7* (*surface)(uint32_t texture) = nullptr;        // render thread: the surface of a HostImage::texture
+        int (__cdecl* screenBounds)(float* bounds) = nullptr;               // as SacredBild_UiScreenBounds
+        int (__cdecl* placement)(float* out) = nullptr;                     // as SacredBild_UiPlacement
+    };
+    // Before anything else of Ui runs; `host` lives as long as the process. SacredBild is not looked for then.
+    void setHost(const Host* host);
+    // The host's mouse button at (x, y) in layout units, handed over as the game's UI manager would: true if a mod's region took it.
+    bool hostMouse(bool down, int button, int x, int y);
+    // The host's wheel at (x, y): true if a mod's region took it (Ui::takeWheel gives it to the mods).
+    bool hostWheel(int delta, int x, int y);
+    // Render thread of a host: draws the published commands of `layer` with `device`, as the game's UI pass does.
+    void hostDraw(Layer layer, IDirect3DDevice7* device);
+    // Tests: draws `commands` as one layer with `device` (nothing published needed).
+    void hostDrawList(const std::vector<Command>& commands, IDirect3DDevice7* device);
+    // Tests: every command Ui::add takes from now on is copied into `sink` as well (nullptr: off). Lua thread.
+    void hostCapture(std::vector<Command>* sink);
+    // Tests: the vertices and indices of mesh `id`; false if there is none.
+    bool hostMesh(uint32_t id, std::vector<MeshVertex>& vertices, std::vector<int>& indices);
+    // Tests: the commands of a retained list.
+    const std::vector<Command>& hostRetained(const RetainedList& list);
 }
