@@ -74,7 +74,16 @@ namespace
         uint32_t (__thiscall* textureHandle)(void* pak, const char* name);
         const char* glowName;
         uint32_t (__thiscall* lightFlags)(void* light);
+        // Blob shadows (the footprint function).
+        void* (__cdecl* renderFlags)();
+        void* (__cdecl* lightObject)();
+        uint32_t (__thiscall* shadowColor)(void* light);
+        const float* shadowCell;    // 1/16: a cell of the shadow texture
+        const float* const* shadowHalfW;
+        const float* const* shadowHalfH;
     } g;
+
+    decltype(Fn::footprint) g_origFootprint = nullptr;
 
     uintptr_t callAddr(uintptr_t at)
     {
@@ -616,6 +625,106 @@ namespace
         }
     }
 
+    // A blob shadow under a static object (the game's footprint function, ENG 0x631EB0, also called by the first object
+    // pass): one quad of the view's shadow texture (+0x97070; 16 x 16 cells, the cell's corner at view +0x30 + 8 * the
+    // descriptor's +0x5B) at twice the descriptor's offset (+0x5D, +0x5F), +0x64 wide, slanted where +0x63 says so, in
+    // the light's shadow color. The quad is the view's own vertex template (+0x96FF0), filled in as the game does.
+    void __fastcall footprint(uint8_t* view, void*, IDirect3DDevice7* device, uint8_t* desc, uint32_t xBits, uint32_t yBits)
+    {
+        DeviceProxy* proxy = DeviceProxy::instance();
+        if (!proxy || device != proxy)
+        {
+            g_origFootprint(view, device, desc, xBits, yBits);
+            return;
+        }
+        float x, y;
+        std::memcpy(&x, &xBits, 4);
+        std::memcpy(&y, &yBits, 4);
+        void* flags = g.renderFlags();
+        const float z = zoom(view);
+        const float halfW = **g.shadowHalfW, halfH = **g.shadowHalfH;
+        const float cx = (x - halfW) / z + halfW;
+        const float cy = (y - halfH) / z + halfH;
+        const float ox = static_cast<float>(*reinterpret_cast<const int16_t*>(desc + 0x5D)) * 2.0f;
+        const float oy = static_cast<float>(*reinterpret_cast<const int16_t*>(desc + 0x5F)) * 2.0f;
+        const float size = static_cast<float>(*reinterpret_cast<const uint16_t*>(desc + 0x64));
+        const uint16_t cellIndex = *reinterpret_cast<const uint16_t*>(desc + 0x5B);
+        Vertex* v = reinterpret_cast<Vertex*>(view + 0x96FF0);
+        const uint32_t color = g.shadowColor(g.lightObject());
+        for (int i = 0; i < 4; ++i)
+        {
+            v[i].color = color;
+        }
+        if (desc[0x63])
+        {
+            v[0].x = ox / z + cx;
+            v[1].x = (size + size + ox) / z + cx;
+            v[2].x = (ox - size) / z + cx;
+            v[3].x = (size + ox) / z + cx;
+        }
+        else
+        {
+            v[0].x = v[2].x = (ox - size) / z + cx;
+            v[1].x = v[3].x = (size + ox) / z + cx;
+        }
+        v[0].y = v[1].y = (oy - size) / z + cy;
+        v[2].y = v[3].y = oy / z + cy;
+        const float* cell = reinterpret_cast<const float*>(view + 0x30 + cellIndex * 8);
+        const float step = *g.shadowCell;
+        v[0].u = cell[0];        v[0].v = cell[1];
+        v[1].u = cell[0] + step; v[1].v = cell[1];
+        v[2].u = cell[0];        v[2].v = cell[1] + step;
+        v[3].u = cell[0] + step; v[3].v = cell[1] + step;
+        g.renderFlag(flags, 0x100, 0);
+        g.renderFlag(flags, 1, 0);
+        g.renderFlag(flags, 8, 0);
+        g.renderFlag(flags, 0x10, 0);
+        g.renderFlag(flags, 0x800, 1);
+        static bool s_logged = false;
+        if (!s_logged)
+        {
+            s_logged = true;
+            LOG("World statics: first blob shadow drawn by SacredBild");
+        }
+        g_batch.texture = *reinterpret_cast<const uint32_t*>(view + 0x97070);
+        g_batch.vertices.insert(g_batch.vertices.end(), v, v + 4);
+        g_batch.draw(proxy);
+    }
+
+    bool resolveFootprint(uintptr_t f)
+    {
+        struct Check
+        {
+            uint32_t offset;
+            std::initializer_list<uint8_t> bytes;
+        };
+        const Check checks[] = {
+            {0x000, {0x83, 0xEC, 0x08, 0x53, 0x55, 0x56, 0x57, 0x8B, 0xF1, 0xE8}}, {0x012, {0xD8, 0x25}},
+            {0x04A, {0xD8, 0x25}}, {0x084, {0xE8}}, {0x08B, {0xE8}}, {0x090, {0x89, 0x86, 0x60, 0x70, 0x09, 0x00}},
+            {0x1B0, {0xD8, 0x05}}, {0x202, {0xE8}}, {0x236, {0x8B, 0x96, 0x70, 0x70, 0x09, 0x00}},
+            {0x274, {0xFF, 0x52, 0x64}}, {0x27E, {0xC2, 0x10, 0x00}},
+        };
+        for (const Check& c : checks)
+        {
+            if (!Patch::verify(f + c.offset, c.bytes))
+            {
+                LOG("World statics: the footprint function's code at +{:#x} is not the expected one; the game draws blob shadows", c.offset);
+                return false;
+            }
+        }
+        if (callAddr(f + 0x202) != reinterpret_cast<uintptr_t>(g.renderFlag))
+        {
+            return false;
+        }
+        g.renderFlags = callTarget<decltype(g.renderFlags)>(f + 0x009);
+        g.shadowHalfW = reinterpret_cast<const float* const*>(f + 0x014);
+        g.shadowHalfH = reinterpret_cast<const float* const*>(f + 0x04C);
+        g.lightObject = callTarget<decltype(g.lightObject)>(f + 0x084);
+        g.shadowColor = callTarget<decltype(g.shadowColor)>(f + 0x08B);
+        g.shadowCell = operand<const float*>(f + 0x1B2);
+        return true;
+    }
+
     bool resolve(uintptr_t s)
     {
         struct Check
@@ -716,6 +825,14 @@ void WorldStatics::install()
         std::memcpy(code + 1, &rel, sizeof(rel));
         return Patch::write(at, code, sizeof(code));
     };
+    if (resolveFootprint(reinterpret_cast<uintptr_t>(g.footprint)))
+    {
+        g_origFootprint = g.footprint;
+        if (Patch::hook(g_origFootprint, &footprint, "cWorldView::drawFootprint"))
+        {
+            LOG("World statics: SacredBild draws the blob shadows of static objects");
+        }
+    }
     if (jump(s, &stub) && jump(s + 0x820, &stub2))
     {
         g_site = s;

@@ -209,3 +209,10 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   setting). Checked on five saves (outdoors, a town, a park with portals and water, a temple yard with braziers):
   everything that stands still is the same with the take-over on and off; only characters, effects, water and fire
   move between runs.
+- 2026-11-27: stage 7, blob shadows: the footprint function (ENG 0x631EB0; objects2's kind 8 and kind 1 with entry flag
+  0x10, and the first object pass 0x62E410) is detoured: one quad of the view's shadow texture (+0x97070, 16 x 16 cells,
+  the cell corner at view +0x30 + 8 * descriptor +0x5B) at twice the descriptor's offset (+0x5D, +0x5F), +0x64 wide,
+  slanted with +0x63, in the light's shadow color, filled into the view's vertex template (+0x96FF0) as the game does
+  and drawn through SacredBild's batcher. Checked on the five saves (all draw shadows): unchanged. What is left of
+  objects2: kind 4 (0x419860 is an empty function), kind 0x20 (Granny helpers through 0x401660: stage 8) and kind 0, the
+  game objects (creatures, 3D objects, effects, frozen objects; cCreature_render and friends: stages 8 and 9).
