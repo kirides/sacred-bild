@@ -72,13 +72,13 @@ function GearInv.container(which) end
 ---@return boolean network
 function GearInv.can_change() end
 
---- First and last item type id a mod may define (16000 to 16999).
+--- First and last item type id a mod may define (6150 to 6199).
 ---@type integer
-GearInv.TYPE_FIRST = 16000
+GearInv.TYPE_FIRST = 6150
 ---@type integer
-GearInv.TYPE_LAST = 16999
+GearInv.TYPE_LAST = 6199
 
---- Defines an item type of Gear's own, `type` (16000 to 16999, free in the game's type table): a copy of the type record of `base` (any item type, e.g. a potion
+--- Defines an item type of Gear's own, `type` (6150 to 6199, free in the game's type table): a copy of the type record of `base` (any item type, e.g. a potion
 --- or a rune) with the name text `name_text` (`gear.text.key` / `gear.text.add`; 0 keeps the base's name). The item looks and works like the base item
 --- (a potion: its model and size; drinking it goes to the `item.use` event), and is a plain unknown item in a game without Sacred Gear. Define it every
 --- time the mod starts, before a savegame loads: a savegame keeps the id. Spawn it with `gear.world.spawn(type, x, y)`.

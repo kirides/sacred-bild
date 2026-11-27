@@ -359,7 +359,7 @@ end
 
 -- inv.define_type(type, base, name_text) -> true | nil, message: an item type of Gear's own (ids INV_TYPE_FIRST..INV_TYPE_LAST) that is a copy of
 -- the type record of `base`, named by the text id `name_text` (gear.text.key / add; 0: the base's name). Looks and works like the base item.
-inv.TYPE_FIRST, inv.TYPE_LAST = 16000, 16999
+inv.TYPE_FIRST, inv.TYPE_LAST = 6150, 6199
 function inv.define_type(type_id, base, name_text)
     assert(type(type_id) == 'number' and type(base) == 'number', 'define_type wants an item type and a base type')
     if type_id < inv.TYPE_FIRST or type_id > inv.TYPE_LAST then
