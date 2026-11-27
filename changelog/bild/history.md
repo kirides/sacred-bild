@@ -1,3 +1,16 @@
+## v0.4.0 (2026-11-28)
+
+- New (experimental): the NVRHI renderer, SacredBild's own renderer on Direct3D 12 or Vulkan (`[DDraw] Backend=nvrhi`, chosen in the settings window). If neither API starts, it falls back to the Direct3D 9 renderer. It draws on a render thread of its own and draws the world's buildings, trees, props, water, lava and blob shadows itself in few large draws. It also merges particle effects, rain and the interface's quads.
+- New on the NVRHI renderer: SMAA, GPU animation, the ground kept on the GPU, SacredBild's own screens and controller prompts, and world supersampling (`[Render] WorldScale`, 1.5x or 2x).
+- New on the NVRHI renderer: an optional xBR-style filter that smooths the diagonal edges of the ground and sprites when zoomed in (`[Render] SpriteFilter`).
+- New on the NVRHI renderer: HD Font (`[UI] NativeFonts`). The game's text is drawn again with the same font at the UI's size, so it is sharp instead of stretched up from 1024 x 768.
+- New on the NVRHI renderer: compiled shaders are kept between runs, so later starts are faster (`[Render] PipelineCache`). Textures and vertex buffers come from shared memory blocks, which cuts hitches when new areas stream in (`[Render] PlacedResources`).
+- New on the NVRHI renderer: Sacred Gear's mod windows are drawn directly by SacredBild instead of through Direct3D 7 calls (`[Render] GearGfx`).
+- Faster: fewer hitches when new areas stream in. The game's packed textures and maps are unpacked about three times faster (`[Render] FastInflate`), and its many small map reads come from memory (`[Render] ReadCache`). Both work with every renderer.
+- Faster: the characters' skeletons are posed on the animation threads (`[Render] ParallelPosing`). With a frame limit or VSync, the next frame's animation can start while the frame waits (`[Render] AnimationAhead`).
+- Settings window: every ini option now has a control. A new NVRHI tab appears only while that renderer is chosen, and the new Performance and Controller tabs take options from Advanced.
+- Fixed (NVRHI): the overview map (Tab) showed artifacts and flickering pixels.
+
 ## v0.3.7 (2026-11-26)
 
 - Under the hood: Sacred Bild's Direct3D 9 backend is also built into the new Sacred Gear UI sandbox, which draws mod windows through it outside the game; nothing changes in game.
