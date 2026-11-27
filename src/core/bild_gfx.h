@@ -53,6 +53,26 @@ extern "C"
         // Texture filtering (clamped at the edges either way).
         SACREDBILD_GFX_LINEAR = 0,
         SACREDBILD_GFX_POINT = 1,
+
+        // SacredBild_GfxMeshDraw::flags.
+        SACREDBILD_GFX_FLIP_U = 1,          // u -> 1 - u
+        SACREDBILD_GFX_FLIP_V = 2,          // v -> 1 - v
+        SACREDBILD_GFX_SWAP_UV = 4,         // u and v swapped (before the flips): an image turned by 90 degrees
+        SACREDBILD_GFX_WRAP = 8,            // coordinates past 0..1 repeat the image inside its rectangle (atlas tiles)
+        SACREDBILD_GFX_STRAIGHT = 16,       // the vertex colors are premultiplied, the texture is not: colors divided by alpha
+        SACREDBILD_GFX_SNAP = 32,           // positions rounded to whole screen pixels (sharp at UI scales that are not 1)
+    };
+
+    // How drawMeshEx places a mesh: vertex (x, y) -> transform (setTransform) of (x + this.x, y + this.y), times
+    // `scale` (mesh units per canvas unit, e.g. 1 / RmlUi's dp ratio), then the canvas mapping. The texture coordinates
+    // (after the flags' flips) span the image's rectangle uv0 .. uv1 in the texture.
+    struct SacredBild_GfxMeshDraw
+    {
+        float x, y;
+        float scale;
+        uint32_t texture;
+        float u0, v0, u1, v1;
+        uint32_t flags;
     };
 
     struct SacredBild_Gfx
@@ -97,6 +117,10 @@ extern "C"
         // A texture id for one of the device's surfaces (a game texture, a picture made with the device's DirectDraw),
         // valid until end(); 0 if it isn't one.
         uint32_t(__cdecl* surfaceTexture)(IDirectDrawSurface7* surface);
+
+        // A mesh placed and textured as `draw` says. The mesh's vertices stay with SacredBild: nothing is computed per
+        // vertex on the CPU, and the draws of one texture, state and scissor share one pipeline state.
+        void(__cdecl* drawMeshEx)(uint32_t mesh, const SacredBild_GfxMeshDraw* draw);
     };
 
     // The table for `version` (SACREDBILD_GFX_VERSION), null if this ddraw.dll can't draw for others now. Exported by

@@ -684,7 +684,21 @@ namespace
     {
         std::vector<Ui::MeshVertex> vertices;
         std::vector<int> indices;
+        // The mesh in SacredBild's renderer (bild_gfx.h), made on its first draw there; 0: not yet, ~0u: can't be.
+        mutable std::atomic<uint32_t> gfx{0};
+        mutable bool repeats = false;   // texture coordinates past 0..1 (a tiled image)
+
+        ~MeshData();
     };
+    MeshData::~MeshData()
+    {
+        const uint32_t id = gfx.load();
+        if (id && id != ~0u && g_gfx)
+        {
+            g_gfx->meshRelease(id);
+        }
+    }
+
     std::mutex g_meshLock;
     std::map<uint32_t, std::shared_ptr<const MeshData>> g_meshes;
     uint32_t g_nextMesh = 1;
@@ -1528,8 +1542,83 @@ namespace
         }
     }
 
+    // The mesh in SacredBild's renderer, made on its first draw (0 if it can't be: too many vertices).
+    uint32_t gfxMesh(const MeshData& mesh)
+    {
+        uint32_t id = mesh.gfx.load();
+        if (id)
+        {
+            return id == ~0u ? 0 : id;
+        }
+        thread_local std::vector<SacredBild_GfxVertex> converted;
+        converted.resize(mesh.vertices.size());
+        bool repeats = false;
+        for (size_t i = 0; i < mesh.vertices.size(); ++i)
+        {
+            const Ui::MeshVertex& v = mesh.vertices[i];
+            converted[i] = {v.x, v.y, v.u, v.v, v.color};
+            repeats = repeats || v.u < -0.001f || v.u > 1.001f || v.v < -0.001f || v.v > 1.001f;
+        }
+        id = g_gfx->meshCreate(converted.data(), static_cast<int>(converted.size()), mesh.indices.data(),
+            static_cast<int>(mesh.indices.size()));
+        mesh.repeats = repeats;
+        mesh.gfx.store(id ? id : ~0u);
+        return id;
+    }
+
+    // A mesh command drawn by reference with SacredBild's renderer: placement, the image's rectangle, flips, tiling,
+    // the alpha mode and the pixel snapping are the draw's constants (meshVertices does the same per vertex on the CPU).
+    // False: draw it the CPU way.
+    bool drawMeshGfx(IDirect3DDevice7* device, StateGuard& state, const Command& c, const MeshData& mesh)
+    {
+        MeshTexture tex;
+        if (!meshTexture(device, c, tex))
+        {
+            return true;    // nothing to draw now
+        }
+        const uint32_t id = gfxMesh(mesh);
+        if (!id)
+        {
+            return false;
+        }
+        state.texture(tex.surface);
+        uint32_t flags = 0;
+        flags |= (c.flip & 1) ? SACREDBILD_GFX_FLIP_U : 0;
+        flags |= (c.flip & 2) ? SACREDBILD_GFX_FLIP_V : 0;
+        flags |= (c.flip & 4) ? SACREDBILD_GFX_SWAP_UV : 0;
+        // A repeated tile of a game image: the atlas can't wrap, so the image repeats inside its rectangle.
+        flags |= tex.surface && c.image && c.image < Ui::kPictureBase && mesh.repeats ? SACREDBILD_GFX_WRAP : 0;
+        flags |= tex.premultiplied ? 0 : SACREDBILD_GFX_STRAIGHT;
+        flags |= c.matrix ? 0 : SACREDBILD_GFX_SNAP;
+        SacredBild_GfxMeshDraw d = {c.x, c.y, c.w > 0 ? 1.0f / c.w : 1.0f, t_gfx.texture, 0.0f, 0.0f, 1.0f, 1.0f, flags};
+        if (tex.surface)
+        {
+            d.u0 = tex.u0;
+            d.v0 = tex.v0;
+            d.u1 = tex.u1;
+            d.v1 = tex.v1;
+        }
+        g_gfx->setState(tex.premultiplied ? SACREDBILD_GFX_PREMULTIPLIED : SACREDBILD_GFX_ALPHA, c.point ? SACREDBILD_GFX_POINT : SACREDBILD_GFX_LINEAR);
+        g_gfx->setScissor(c.clipped ? 1 : 0, c.clip[0], c.clip[1], c.clip[2], c.clip[3]);
+        g_gfx->setTransform(c.matrix ? c.matrix->data() : nullptr);
+        g_gfx->drawMeshEx(id, &d);
+        g_gfx->setTransform(nullptr);
+        g_gfx->setScissor(0, 0, 0, 0, 0);
+        g_gfx->setState(SACREDBILD_GFX_ALPHA, SACREDBILD_GFX_LINEAR);
+        return true;
+    }
+
     void drawMesh(IDirect3DDevice7* device, StateGuard& state, const Command& c)
     {
+        if (t_gfx.on && g_gfx->size >= offsetof(SacredBild_Gfx, drawMeshEx) + sizeof(g_gfx->drawMeshEx))
+        {
+            flushMeshBatch(device, state);
+            const std::shared_ptr<const MeshData> mesh = findMesh(c.region);
+            if (!mesh || drawMeshGfx(device, state, c, *mesh))
+            {
+                return;
+            }
+        }
         // A different picture or sampling: what is batched goes out first (before this command resolves its texture).
         if (t_batch.active && (t_batch.image != c.image || t_batch.point != c.point))
         {
@@ -1725,6 +1814,17 @@ namespace
             return;
         }
         const Ui::RetainedList& list = *c.retained;
+        if (t_gfx.on && g_gfx->size >= offsetof(SacredBild_Gfx, drawMeshEx) + sizeof(g_gfx->drawMeshEx))
+        {
+            // Each command drawn by reference: nothing to build.
+            for (const Command& rc : list.commands)
+            {
+                drawGuarded(device, state, rc);
+            }
+            t_clip = c.clipped ? c.clip : nullptr;
+            Text::setClip(t_clip);
+            return;
+        }
         if (!list.build)
         {
             list.build = std::make_unique<RetainedBuild>();

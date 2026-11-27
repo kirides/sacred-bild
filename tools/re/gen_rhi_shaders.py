@@ -29,6 +29,10 @@ SHADERS = {
         ('UiVS', 'vs_6_0', 'vsMain', []),
         ('UiPS', 'ps_6_0', 'psMain', []),
     ],
+    'gfx.hlsl': [
+        ('GfxVS', 'vs_6_0', 'vsMain', []),
+        ('GfxPS', 'ps_6_0', 'psMain', []),
+    ],
     'smaa.hlsl': [
         ('SmaaEdgeVS', 'vs_6_0', 'EdgeVS', ['SMAA_PRESET_LOW=1']),
         ('SmaaBlendVS', 'vs_6_0', 'BlendVS', ['SMAA_PRESET_LOW=1']),

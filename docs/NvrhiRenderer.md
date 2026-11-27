@@ -262,3 +262,16 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   flush first; no device state is touched. Checked: the mod manager self test (45 checks, sacred-theme) passes both
   ways on D3D12 and Vulkan (validation clean) with the windows pixel-identical to the Direct3D 7 path; the minimap,
   the transform test and the image contact sheets match too.
+- 2026-11-27: John: drop Gear's per-frame vertex work for RmlUi too. bild_gfx's meshes now stay with SacredBild and are
+  drawn by reference: `drawMeshEx(mesh, {x, y, scale, texture, image rectangle, flags})` with the current transform,
+  scissor, blending and filtering. shaders/gfx.hlsl places them on the GPU (one 4x4 matrix to the target's pixels: the
+  translation, RmlUi's transform, the dp scale and the canvas mapping folded together) and does per draw what Gear's
+  meshVertices did per vertex on the CPU: the atlas rectangle, flips and the 90-degree swap, tiles repeated inside the
+  rectangle (frac in the pixel shader), straight-alpha colors and the pixel snapping of untransformed meshes. A batch
+  (one texture, state and scissor) goes into the upload ring once; each draw is a push constant and a drawIndexed, so
+  hundreds of RmlUi elements cost one pipeline state. Immediate draws use the same shader with an identity placement.
+  Gear makes each mesh's copy on its first draw (released with the mesh), draws mesh commands and retained documents
+  by reference, and keeps the CPU path for meshes over 65535 vertices. Gear's command list stays as the ordered
+  handoff from the Lua thread to the frame. Checked: mod manager self test 45/45 on D3D12 and Vulkan, both under
+  validation, pictures as before; the UI pass in that run averages 0.48 ms against 0.57 (CPU vertices through
+  bild_gfx) and 0.60 (Direct3D 7 path).
