@@ -20,6 +20,7 @@
 #include "log.h"
 #include "patch.h"
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -31,6 +32,7 @@ namespace
     uintptr_t g_site = 0;
     uintptr_t g_continue = 0;   // the entry loop's next entry
     uintptr_t g_resumeCall = 0; // the game's own code for the entry (its call of staticObject)
+    uintptr_t g_resumeCall2 = 0; // the same for a miniature (kind 2)
 
     struct Fn
     {
@@ -63,12 +65,26 @@ namespace
         const float* full;      // 255
         const float* texel;
         const float* fadeMax;   // 0.8
+        // Miniatures (kind 2).
+        const float* cellSpan;      // 256: a grid cell's size is this / columns
+        const float* angleStep;     // radians per rotation step
+        const float* halfFactor;    // 0.5
+        const double* linearZoom;   // 1.2: filtered above this zoom
+        void* (__cdecl* texturePak)();
+        uint32_t (__thiscall* textureHandle)(void* pak, const char* name);
+        const char* glowName;
+        uint32_t (__thiscall* lightFlags)(void* light);
     } g;
+
+    uintptr_t callAddr(uintptr_t at)
+    {
+        return at + 5 + *reinterpret_cast<const int32_t*>(at + 1);
+    }
 
     template <class T>
     T callTarget(uintptr_t at)
     {
-        return reinterpret_cast<T>(at + 5 + *reinterpret_cast<const int32_t*>(at + 1));
+        return reinterpret_cast<T>(callAddr(at));
     }
 
     template <class T>
@@ -409,6 +425,197 @@ namespace
         }
     }
 
+    // A miniature (kind 2): one quad from a static record's own texture (its descriptor's +4), either a square cut out
+    // of it (+0x2E, +0x2F the corner, +0x30 the size) or a cell of a grid of +0x2E x +0x2F cells animated over time
+    // (record flag 0x40; +0x30 the rotation in steps, +0x31 / +0x32 the speed), lit per corner, and a glow over it
+    // where the view lights statics and the descriptor has a light of its own.
+    bool drawMiniature(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame)
+    {
+        DeviceProxy* proxy = DeviceProxy::instance();
+        if (!proxy || device != proxy)
+        {
+            return false;
+        }
+        const uint8_t* record = static_cast<const uint8_t*>(g.staticObject(*reinterpret_cast<void**>(view + 4), entry->id));
+        const uint8_t* desc = g.sprite(*g.sprites, *reinterpret_cast<const int32_t*>(record + 4));
+        const uint32_t descFlags = *reinterpret_cast<const uint32_t*>(desc);
+        const float z = zoom(view);
+        const float halfW = **g.halfW, halfH = **g.halfH, w = **g.width, h = **g.height, zero = *g.zero;
+        const float a = static_cast<float>(record[0x2E]), b = static_cast<float>(record[0x2F]);
+        const uint8_t step = record[0x30];
+        const float c = static_cast<float>(step);
+        const float cx = (entry->x - halfW) / z + halfW;
+        const float cy = (entry->y - halfH) / z + halfH;
+        const float texel = *g.texel;
+        void* light = *reinterpret_cast<void* const*>(frame + 0x34);
+        const int32_t recordX = *reinterpret_cast<const int32_t*>(record + 0xE);
+        const int32_t recordY = *reinterpret_cast<const int32_t*>(record + 0x12);
+        float corner[4][2] = {};
+        float u0, v0, u1, v1, r;
+        if (record[8] & 0x40)
+        {
+            const float cellW = *g.cellSpan / a, cellH = *g.cellSpan / b;
+            corner[1][0] = cellW;
+            corner[2][1] = cellH;
+            corner[3][0] = cellW;
+            corner[3][1] = cellH;
+            if (step)
+            {
+                const double angle = static_cast<double>(c) * *g.angleStep;
+                const float sn = static_cast<float>(std::sin(angle));
+                const double cs = std::cos(angle);
+                for (float(&p)[2] : corner)
+                {
+                    const double x = p[0], y = p[1];
+                    p[0] = static_cast<float>(x * cs + y * sn);
+                    p[1] = static_cast<float>(y * cs - x * sn);
+                }
+            }
+            const uint8_t* t = g.timer();
+            const int64_t counter = *reinterpret_cast<const int64_t*>(t + 0x10);
+            const int64_t frequency = *reinterpret_cast<const int64_t*>(t + 0x20);
+            const uint32_t ms = static_cast<uint32_t>(counter * 1000 / frequency);
+            const int32_t columns = record[0x2E];
+            const uint32_t q = (ms << 2) / (static_cast<uint32_t>(record[0x31]) * static_cast<uint32_t>(columns));
+            const int32_t cell = static_cast<int32_t>((q % 1000) * record[0x32]) / 1000;
+            u0 = static_cast<float>(cell % columns) * cellW * texel;
+            v0 = static_cast<float>(cell / columns) * cellH * texel;
+            u1 = cellW * texel + u0;
+            v1 = cellH * texel + v0;
+            r = cellW / z;
+            if (descFlags & 0x20000)
+            {
+                const int32_t y = ftol(static_cast<float>(recordY) + cellH * *g.halfFactor);
+                const int32_t x = ftol(static_cast<float>(recordX) + cellW * *g.halfFactor);
+                g.recordLight(light, x, y, *reinterpret_cast<const uint16_t*>(desc + 0x32));
+            }
+        }
+        else
+        {
+            corner[1][0] = c;
+            corner[2][1] = c;
+            corner[3][0] = c;
+            corner[3][1] = c;
+            u0 = a * texel;
+            v0 = b * texel;
+            u1 = (c + a) * texel;
+            v1 = (c + b) * texel;
+            r = c / z;
+            if (descFlags & 0x20000)
+            {
+                const float half = c * *g.halfFactor;
+                const int32_t y = ftol(static_cast<float>(recordY) + half);
+                const int32_t x = ftol(static_cast<float>(recordX) + half);
+                g.recordLight(light, x, y, *reinterpret_cast<const uint16_t*>(desc + 0x32));
+            }
+        }
+        Vertex v[4] = {};
+        for (int i = 0; i < 4; ++i)
+        {
+            v[i].x = corner[i][0] / z + cx;
+            v[i].y = corner[i][1] / z + cy;
+            v[i].rhw = 1.0f;
+        }
+        if (!(v[0].x - r < w) || v[1].x + r < zero || !(v[0].y - r < h) || v[2].y + r < zero)
+        {
+            return true;
+        }
+        v[0].u = u0; v[0].v = v0;
+        v[1].u = u1; v[1].v = v0;
+        v[2].u = u0; v[2].v = v1;
+        v[3].u = u1; v[3].v = v1;
+        const bool lit = frame[0x1B] != 0;
+        for (int i = 0; i < 4; ++i)
+        {
+            if (!(descFlags & 0x20000) && lit)
+            {
+                const int32_t y = ftol(static_cast<float>(ftol(corner[i][1])) + entry->y);
+                const int32_t x = ftol(static_cast<float>(ftol(corner[i][0])) + entry->x);
+                v[i].color = g.lightAt(light, x, y, 0) | 0xFF000000;
+            }
+            else
+            {
+                v[i].color = 0xFFFFFFFF;
+            }
+        }
+        g.renderFlag(flags, 8, 0);
+        g.renderFlag(flags, 0x10, 0);
+        g.renderFlag(flags, 0x100, 0);
+        g.renderFlag(flags, 1, 0);
+        g.renderFlag(flags, 0x800, z > *g.linearZoom ? 1 : 0);
+        g_batch.texture = *reinterpret_cast<const uint32_t*>(desc + 4);
+        g_batch.vertices.insert(g_batch.vertices.end(), v, v + 4);
+        g_batch.draw(proxy);
+        ++*reinterpret_cast<uint32_t*>(view + 0x9708C);
+        static bool s_logged = false;
+        if (!s_logged)
+        {
+            s_logged = true;
+            LOG("World statics: first miniature drawn by SacredBild ({})", record[8] & 0x40 ? "animated" : "square");
+        }
+        if (!lit || !(descFlags & 0x20000))
+        {
+            return true;
+        }
+        v[0].x -= r; v[0].y -= r;
+        v[1].x += r; v[1].y -= r;
+        v[2].x -= r; v[2].y += r;
+        v[3].x += r; v[3].y += r;
+        v[0].u = 0.0f; v[0].v = 0.0f;
+        v[1].u = 0.0f; v[1].v = 1.0f;
+        v[2].u = 1.0f; v[2].v = 0.0f;
+        v[3].u = 1.0f; v[3].v = 1.0f;
+        const uint8_t* l = static_cast<const uint8_t*>(light);
+        uint32_t glow = 0xFFFFFFFF;
+        if (l[0x9E0C])
+        {
+            glow = 0x40FFDA2B;
+        }
+        else if (g.lightFlags(light) & 0x20)
+        {
+            glow = *reinterpret_cast<const uint32_t*>(l + 0x12E54) << 23 | 0xFFEC95;
+        }
+        for (Vertex& p : v)
+        {
+            p.color = glow;
+        }
+        g.renderFlag(flags, 0x800, 1);
+        g_batch.texture = g.textureHandle(g.texturePak(), g.glowName);
+        g_batch.vertices.insert(g_batch.vertices.end(), v, v + 4);
+        g_batch.draw(proxy);
+        return true;
+    }
+
+    bool __cdecl drawMiniatureEntry(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame)
+    {
+        return drawMiniature(view, entry, device, flags, frame);
+    }
+
+    __declspec(naked) void stub2()
+    {
+        __asm
+        {
+            pushad
+            lea eax, [esp + 32]
+            push eax
+            push edi
+            push dword ptr [ebp + 8]
+            push ebx
+            push esi
+            call drawMiniatureEntry
+            add esp, 20
+            test al, al
+            popad
+            jne done
+            mov ecx, dword ptr [ebx + 4]
+            push ecx
+            mov ecx, dword ptr [esi + 4]
+            jmp dword ptr [g_resumeCall2]
+        done:
+            jmp dword ptr [g_continue]
+        }
+    }
+
     bool resolve(uintptr_t s)
     {
         struct Check
@@ -424,6 +631,10 @@ namespace
             {0x2CF, {0xD8, 0x1D}}, {0x2EC, {0xD8, 0x1D}}, {0x303, {0xD8, 0x1D}}, {0x354, {0xE8}}, {0x40F, {0xD9, 0x05}},
             {0x54A, {0xD8, 0x15}}, {0x56C, {0xD8, 0x0D}}, {0x572, {0xD9, 0x05}}, {0x5FF, {0xE8}}, {0x682, {0x8D, 0x8E}},
             {0x691, {0xB9}}, {0x696, {0xE8}}, {0x6A2, {0xD8, 0x05}}, {0x76F, {0xE8}}, {0x7F2, {0xD8, 0x1D}},
+            // Miniatures (kind 2).
+            {0x820, {0x8B, 0x4B, 0x04, 0x51, 0x8B, 0x4E, 0x04, 0xE8}}, {0x838, {0xE8}}, {0x8C4, {0xD8, 0x3D}},
+            {0x932, {0xD8, 0x0D}}, {0x977, {0xE8}}, {0xA63, {0xD8, 0x0D}}, {0xB6C, {0xE8}}, {0xCE8, {0xE8}},
+            {0xD4A, {0xDC, 0x1D}}, {0xED9, {0xE8}}, {0xF23, {0x68}}, {0xF28, {0xE8}}, {0xF2F, {0xE8}},
         };
         for (const Check& c : checks)
         {
@@ -463,6 +674,25 @@ namespace
         g.flush = callTarget<decltype(g.flush)>(s + 0x76F);
         g.fadeMax = operand<const float*>(s + 0x7F4);
         g_resumeCall = s + 0x007;
+        // The miniature code calls the same functions (checked: its calls go where the static object's go).
+        if (callAddr(s + 0x827) != reinterpret_cast<uintptr_t>(g.staticObject) ||
+            callAddr(s + 0x838) != reinterpret_cast<uintptr_t>(g.sprite) ||
+            callAddr(s + 0x977) != reinterpret_cast<uintptr_t>(g.timer) ||
+            callAddr(s + 0xB6C) != reinterpret_cast<uintptr_t>(g.recordLight) ||
+            callAddr(s + 0xCE8) != reinterpret_cast<uintptr_t>(g.lightAt))
+        {
+            LOG("World statics: objects2's miniature code calls other functions than expected; the game draws static objects");
+            return false;
+        }
+        g.cellSpan = operand<const float*>(s + 0x8C6);
+        g.angleStep = operand<const float*>(s + 0x934);
+        g.halfFactor = operand<const float*>(s + 0xA65);
+        g.linearZoom = operand<const double*>(s + 0xD4C);
+        g.lightFlags = callTarget<decltype(g.lightFlags)>(s + 0xED9);
+        g.glowName = operand<const char*>(s + 0xF24);
+        g.texturePak = callTarget<decltype(g.texturePak)>(s + 0xF28);
+        g.textureHandle = callTarget<decltype(g.textureHandle)>(s + 0xF2F);
+        g_resumeCall2 = s + 0x827;
         return true;
     }
 }
@@ -479,12 +709,16 @@ void WorldStatics::install()
     {
         return;
     }
-    uint8_t jump[7] = {0xE9, 0, 0, 0, 0, 0x90, 0x90};   // jmp stub; nop; nop (over mov ecx,[ebx+4]; push ecx; mov ecx,[esi+4])
-    const int32_t rel = static_cast<int32_t>(reinterpret_cast<uintptr_t>(&stub) - (s + 5));
-    std::memcpy(jump + 1, &rel, sizeof(rel));
-    if (Patch::write(s, jump, sizeof(jump)))
+    // jmp stub; nop; nop (over mov ecx,[ebx+4]; push ecx; mov ecx,[esi+4])
+    auto jump = [](uintptr_t at, void (*to)()) {
+        uint8_t code[7] = {0xE9, 0, 0, 0, 0, 0x90, 0x90};
+        const int32_t rel = static_cast<int32_t>(reinterpret_cast<uintptr_t>(to) - (at + 5));
+        std::memcpy(code + 1, &rel, sizeof(rel));
+        return Patch::write(at, code, sizeof(code));
+    };
+    if (jump(s, &stub) && jump(s + 0x820, &stub2))
     {
         g_site = s;
-        LOG("World statics: SacredBild draws the draw lists' static objects");
+        LOG("World statics: SacredBild draws the draw lists' static objects and miniatures");
     }
 }

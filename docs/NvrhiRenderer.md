@@ -202,3 +202,10 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   order. `[Render] TakeOverStatics` (on; NVRHI only). Pictures as with it off (D3D12, Vulkan; only the animated birds
   and the player differ, as between any two runs), 1.63-1.71 ms as before. Not seen in the test scene: the fade circles
   (the player behind a building) and lit statics (night, dungeons).
+- 2026-11-27: stage 7, second kind: miniatures (kind 2; ENG 0x630A37 .. 0x63118A): a static record drawn as one quad of
+  its own texture, a square cut out of it (+0x2E, +0x2F, size +0x30) or a cell of a grid animated over time (record
+  flag 0x40, rotated by +0x30 steps of 2*pi/256), lit per corner, filtered above zoom 1.2, and PARTICLE_GLOW01 over it
+  where statics are lit and the descriptor has a light. Same take-over as the static objects (second jump, same
+  setting). Checked on five saves (outdoors, a town, a park with portals and water, a temple yard with braziers):
+  everything that stands still is the same with the take-over on and off; only characters, effects, water and fire
+  move between runs.
