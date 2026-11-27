@@ -30,6 +30,9 @@ find_library(LUAJIT_LIBRARY_RELEASE NAMES lua51 luajit-5.1 luajit PATHS "${VCPKG
 find_library(LUAJIT_LIBRARY_DEBUG NAMES lua51 luajit-5.1 luajit PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/lib" NO_DEFAULT_PATH REQUIRED)
 set(LUAJIT_LIBRARY optimized ${LUAJIT_LIBRARY_RELEASE} debug ${LUAJIT_LIBRARY_DEBUG})
 
+# NVRHI and the D3D12 / Vulkan headers, vendored (third_party/README.md): the renderer of [DDraw] Backend=nvrhi (docs/NvrhiRenderer.md).
+add_subdirectory(third_party)
+
 set(COMMON_DEFINITIONS WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 set(COMMON_OPTIONS /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
 
@@ -161,7 +164,7 @@ target_include_directories(ddraw PRIVATE ${VERSION_INFO_DIR})
 target_include_directories(ddraw PRIVATE src/bild ${DETOURS_INCLUDE_DIRS})
 # The resource script embeds the button prompts' atlas (tools/re/gen_prompts.py).
 set_source_files_properties(src/bild/version.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/bild/controller/prompts.png;${VERSION_INFO_DIR}/version_info.h")
-target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
+target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 nvrhi nvrhi_d3d12 nvrhi_vk dxgi delayimp)
 target_compile_options(ddraw PRIVATE ${COMMON_OPTIONS})
 target_precompile_headers(ddraw PRIVATE src/bild/pch.h)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.
@@ -170,6 +173,8 @@ target_link_options(ddraw PRIVATE /SAFESEH:NO /MAP)
 # Winsock and the IP helper load on first use (LAN relay), Media Foundation with the first movie, Common Controls
 # in the settings window (version 6 there, from its activation context).
 target_link_options(ddraw PRIVATE /DELAYLOAD:ws2_32.dll /DELAYLOAD:iphlpapi.dll /DELAYLOAD:mfplat.dll /DELAYLOAD:comctl32.dll)
+# Direct3D 12 and DXGI only with [DDraw] Backend=nvrhi (Api=d3d12): ddraw.dll still loads where they are missing (Windows 7).
+target_link_options(ddraw PRIVATE /DELAYLOAD:d3d12.dll /DELAYLOAD:dxgi.dll)
 set_target_properties(ddraw PROPERTIES OUTPUT_NAME "ddraw")
 
 # Optional: copy the DLL into the game folder after build (-DSACRED_GAME_DIR=...).
