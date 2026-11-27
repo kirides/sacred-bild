@@ -188,7 +188,9 @@ namespace nvrhi::vulkan
 #endif
         vk::DescriptorSetLayout emptyDescriptorSetLayout;
 
-        void nameVKObject(const void* handle, const vk::ObjectType objtype,
+        // sacred-bild: x86: non-dispatchable handles are uint64_t in 32-bit builds, not pointers; vkHandle widens either.
+        template <typename T> static uint64_t vkHandle(T handle) { return (uint64_t)(handle); }
+        void nameVKObject(uint64_t handle, const vk::ObjectType objtype,   // sacred-bild: x86
             const vk::DebugReportObjectTypeEXT objtypeEXT, const char* name) const;
         void error(const std::string& message) const;
         void warning(const std::string& message) const;
@@ -330,8 +332,8 @@ namespace nvrhi::vulkan
             vk::MemoryPropertyFlags memPropertyFlags,
             bool enableDeviceAddress = false,
             bool enableExportMemory = false,
-            VkImage dedicatedImage = nullptr,
-            VkBuffer dedicatedBuffer = nullptr) const;
+            VkImage dedicatedImage = VK_NULL_HANDLE,   // sacred-bild: x86
+            VkBuffer dedicatedBuffer = VK_NULL_HANDLE) const;   // sacred-bild: x86
         void freeMemory(MemoryResource* res) const;
 
     private:

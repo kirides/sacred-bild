@@ -343,7 +343,7 @@ namespace nvrhi::vulkan
         ASSERT_VK_OK(res);
 
         const std::string debugName = std::string("ImageView for: ") + utils::DebugNameToString(desc.debugName);
-        m_Context.nameVKObject(VkImageView(view.view), vk::ObjectType::eImageView, vk::DebugReportObjectTypeEXT::eImageView, debugName.c_str());
+        m_Context.nameVKObject(VulkanContext::vkHandle(VkImageView(view.view)), vk::ObjectType::eImageView, vk::DebugReportObjectTypeEXT::eImageView, debugName.c_str());   // sacred-bild: x86
 
         return view;
     }
@@ -358,7 +358,7 @@ namespace nvrhi::vulkan
         ASSERT_VK_OK(res);
         CHECK_VK_FAIL(res)
 
-        m_Context.nameVKObject(texture->image, vk::ObjectType::eImage, vk::DebugReportObjectTypeEXT::eImage, desc.debugName.c_str());
+        m_Context.nameVKObject(VulkanContext::vkHandle(VkImage(texture->image)), vk::ObjectType::eImage, vk::DebugReportObjectTypeEXT::eImage, desc.debugName.c_str());   // sacred-bild: x86
 
         if (!desc.isVirtual && !desc.isTiled)
         {
@@ -375,7 +375,7 @@ namespace nvrhi::vulkan
 #endif
             }
 
-            m_Context.nameVKObject(texture->memory, vk::ObjectType::eDeviceMemory, vk::DebugReportObjectTypeEXT::eDeviceMemory, desc.debugName.c_str());
+            m_Context.nameVKObject(VulkanContext::vkHandle(VkDeviceMemory(texture->memory)), vk::ObjectType::eDeviceMemory, vk::DebugReportObjectTypeEXT::eDeviceMemory, desc.debugName.c_str());   // sacred-bild: x86
         }
 
         return TextureHandle::Create(texture);

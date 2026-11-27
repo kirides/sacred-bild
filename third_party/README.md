@@ -7,9 +7,10 @@ new upstream files over the folder, then re-applying the local changes listed be
 |---|---|---|---|---|
 | `nvrhi/` | https://github.com/NVIDIA-RTX/NVRHI | `648f745142a929a1a61c91799a3be1f6969bbcf8` (main, 2026-11-27) | `CMakeLists.txt`, `cmake/`, `include/`, `src/`, `tools/` (natvis), licenses, README | MIT (`nvrhi/LICENSE.txt`) |
 | `DirectX-Headers/` | https://github.com/microsoft/DirectX-Headers | `v1.717.0-preview` (`d873b34`), the tag NVRHI's CMake pins | `include/` without the `.idl` files, `src/`, license, README | MIT (`DirectX-Headers/LICENSE`) |
+| `Vulkan-Headers/` | https://github.com/KhronosGroup/Vulkan-Headers | `v1.4.352` (`015e25c`), the tag NVRHI's CMake pins | `include/`, licenses, README | Apache-2.0 / MIT (`Vulkan-Headers/LICENSE.md`) |
 
-`DirectX-Headers/` is built by `third_party/CMakeLists.txt` (its own CMake files are not kept): an interface target with the
-include folders and `DirectX-Guids` from `src/dxguids.cpp`, under the names NVRHI looks for.
+`DirectX-Headers/` and `Vulkan-Headers/` are built by `third_party/CMakeLists.txt` (their own CMake files are not kept): interface
+targets with the include folders and `DirectX-Guids` from `src/dxguids.cpp`, under the names NVRHI looks for.
 
 ## Local changes to NVRHI
 
@@ -26,5 +27,15 @@ Only what a 32-bit (Win32) build needs; Sacred is a 32-bit process. Each change 
 - `src/d3d12/d3d12-texture.cpp` and `src/d3d12/d3d12-upload.cpp`: `std::min`/`std::max`/`align` called with one explicit type
   where a `size_t` met a `uint64_t`.
 
-The Vulkan backend is not built (`NVRHI_WITH_VULKAN=OFF`): on x86 its non-dispatchable handles are 64-bit integers that NVRHI
-passes as pointers, which needs more changes than these (see `docs/NvrhiRenderer.md`).
+Vulkan backend: in 32-bit builds Vulkan's non-dispatchable handles (`VkImage`, `VkBuffer`, `VkDeviceMemory`, ...) are
+`uint64_t`, not pointers, and Vulkan-Hpp leaves out its handle classes' conversions to them.
+
+- `CMakeLists.txt`: `VULKAN_HPP_TYPESAFE_CONVERSION=1` (public) for 32-bit builds, which restores those conversions as 64-bit
+  builds have them by default.
+- `src/vulkan/vulkan-backend.h`, `vulkan-device.cpp`: `nameVKObject` takes the handle as `uint64_t`; `VulkanContext::vkHandle`
+  widens a C handle of either kind; the callers in `vulkan-buffer.cpp`, `vulkan-shader.cpp`, `vulkan-texture.cpp` and
+  `vulkan-device.cpp` (and the buffer log line, which used `reinterpret_cast<uintptr_t>`) go through it.
+- `src/vulkan/vulkan-backend.h`, `vulkan-allocator.cpp`: `VK_NULL_HANDLE` instead of `nullptr` for the dedicated image and
+  buffer of `allocateMemory`.
+- `include/nvrhi/common/resource.h` `Object(void*)`: zeroes the 8-byte union before storing a 4-byte pointer, so `integer`
+  has no stale upper half (`getNativeObject` returns Vulkan handles in `integer` and interfaces in `pointer`).

@@ -53,7 +53,7 @@ namespace nvrhi::vulkan
 
         // allocate memory
         const bool enableMemoryExport = (buffer->desc.sharedResourceFlags & SharedResourceFlags::Shared) != 0;
-        const vk::Result res = allocateMemory(buffer, memRequirements, pickBufferMemoryProperties(buffer->desc), enableDeviceAddress, enableMemoryExport, nullptr, buffer->buffer);
+        const vk::Result res = allocateMemory(buffer, memRequirements, pickBufferMemoryProperties(buffer->desc), enableDeviceAddress, enableMemoryExport, VK_NULL_HANDLE, buffer->buffer);   // sacred-bild: x86
         CHECK_VK_RETURN(res)
 
         m_Context.device.bindBufferMemory(buffer->buffer, buffer->memory, 0);
@@ -76,7 +76,7 @@ namespace nvrhi::vulkan
         const vk::MemoryPropertyFlags memProperties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         const bool enableDeviceAddress = false;
         const bool enableMemoryExport = (texture->desc.sharedResourceFlags & SharedResourceFlags::Shared) != 0;
-        const vk::Result res = allocateMemory(texture, memRequirements, memProperties, enableDeviceAddress, enableMemoryExport, texture->image, nullptr);
+        const vk::Result res = allocateMemory(texture, memRequirements, memProperties, enableDeviceAddress, enableMemoryExport, texture->image, VK_NULL_HANDLE);   // sacred-bild: x86
         CHECK_VK_RETURN(res)
 
         m_Context.device.bindImageMemory(texture->image, texture->memory, 0);

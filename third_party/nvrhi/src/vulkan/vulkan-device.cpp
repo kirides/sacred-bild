@@ -869,7 +869,7 @@ namespace nvrhi::vulkan
 
         if (!d.debugName.empty())
         {
-            m_Context.nameVKObject(heap->memory, vk::ObjectType::eDeviceMemory, vk::DebugReportObjectTypeEXT::eDeviceMemory, d.debugName.c_str());
+            m_Context.nameVKObject(VulkanContext::vkHandle(VkDeviceMemory(heap->memory)), vk::ObjectType::eDeviceMemory, vk::DebugReportObjectTypeEXT::eDeviceMemory, d.debugName.c_str());   // sacred-bild: x86
         }
 
         return HeapHandle::Create(heap);
@@ -884,7 +884,7 @@ namespace nvrhi::vulkan
         }
     }
 
-    void VulkanContext::nameVKObject(const void* handle, const vk::ObjectType objtype,
+    void VulkanContext::nameVKObject(uint64_t handle, const vk::ObjectType objtype,   // sacred-bild: x86
         const vk::DebugReportObjectTypeEXT objtypeEXT, const char* name) const
     {
         if (!(name && *name && handle))
@@ -894,7 +894,7 @@ namespace nvrhi::vulkan
         {
             auto info = vk::DebugUtilsObjectNameInfoEXT()
                 .setObjectType(objtype)
-                .setObjectHandle(reinterpret_cast<uint64_t>(handle))
+                .setObjectHandle(handle)   // sacred-bild: x86
                 .setPObjectName(name);
             device.setDebugUtilsObjectNameEXT(info);
         }
@@ -902,7 +902,7 @@ namespace nvrhi::vulkan
         {
             auto info = vk::DebugMarkerObjectNameInfoEXT()
                 .setObjectType(objtypeEXT)
-                .setObject(reinterpret_cast<uint64_t>(handle))
+                .setObject(handle)   // sacred-bild: x86
                 .setPObjectName(name);
 
             (void)device.debugMarkerSetObjectNameEXT(&info);

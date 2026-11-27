@@ -88,7 +88,7 @@ namespace nvrhi
         };
 
         Object(uint64_t i) : integer(i) { }  // NOLINT(cppcoreguidelines-pro-type-member-init)
-        Object(void* p) : pointer(p) { }     // NOLINT(cppcoreguidelines-pro-type-member-init)
+        Object(void* p) : integer(0) { pointer = p; }   // sacred-bild: x86: upper half zero, pointers are 4 bytes  // NOLINT(cppcoreguidelines-pro-type-member-init)
 
         template<typename T> operator T* () const { return static_cast<T*>(pointer); }
     };

@@ -129,14 +129,14 @@ namespace nvrhi::vulkan
         vk::Result res = m_Context.device.createBuffer(&bufferInfo, m_Context.allocationCallbacks, &buffer->buffer);
         CHECK_VK_FAIL(res);
 
-        m_Context.nameVKObject(VkBuffer(buffer->buffer), vk::ObjectType::eBuffer, vk::DebugReportObjectTypeEXT::eBuffer, desc.debugName.c_str());
+        m_Context.nameVKObject(VulkanContext::vkHandle(VkBuffer(buffer->buffer)), vk::ObjectType::eBuffer, vk::DebugReportObjectTypeEXT::eBuffer, desc.debugName.c_str());   // sacred-bild: x86
 
         if (!desc.isVirtual)
         {
             res = m_Allocator.allocateBufferMemory(buffer, (usageFlags & vk::BufferUsageFlagBits::eShaderDeviceAddress) != vk::BufferUsageFlags(0));
             CHECK_VK_FAIL(res)
 
-            m_Context.nameVKObject(buffer->memory, vk::ObjectType::eDeviceMemory, vk::DebugReportObjectTypeEXT::eDeviceMemory, desc.debugName.c_str());
+            m_Context.nameVKObject(VulkanContext::vkHandle(VkDeviceMemory(buffer->memory)), vk::ObjectType::eDeviceMemory, vk::DebugReportObjectTypeEXT::eDeviceMemory, desc.debugName.c_str());   // sacred-bild: x86
 
             if (desc.isVolatile)
             {
@@ -179,7 +179,7 @@ namespace nvrhi::vulkan
 
             std::stringstream ss;
             ss << "Create buffer: " << desc.debugName
-                << " Buf:0x" << std::hex << reinterpret_cast<uintptr_t>(VkBuffer(buffer->buffer))
+                << " Buf:0x" << std::hex << VulkanContext::vkHandle(VkBuffer(buffer->buffer))   // sacred-bild: x86
                 << " Gpu:0x" << std::hex << buffer->getGpuVirtualAddress() << "->0x" << std::hex << buffer->getGpuVirtualAddress() + desc.byteSize;
 
             if (desc.structStride)

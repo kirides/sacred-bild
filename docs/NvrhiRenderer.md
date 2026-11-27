@@ -35,17 +35,18 @@ Checked 2026-11-27 by building the pinned commit for Win32 with VS 2026 (MSVC 14
 |---|---|---|
 | D3D11 | gone | removed upstream before this commit (`NVRHI_WITH_DX11=ON` is a CMake error) |
 | D3D12 | builds after 8 small fixes | `SIZE_T` is `unsigned long` and `size_t` `unsigned int` on x86 (3 `getBytecode` calls), a few `uint64_t`/`size_t` mixes in `std::min`/`align`/one upload offset, two raytracing `static_assert`s that compare a 4-byte pointer with the 8-byte GPU address in the same union, a `>> 32` on a 32-bit `size_t`. Remaining warnings are `uint64_t` sizes narrowed to `size_t` for mapped ranges, which never exceed 4 GB here |
-| Vulkan | does not build yet | non-dispatchable handles are `uint64_t` on x86, NVRHI passes them as pointers: with `VULKAN_HPP_TYPESAFE_CONVERSION=1` about a dozen errors remain (`nullptr` defaults for `VkImage`/`VkBuffer`, `nameVKObject(const void*)`, a `reinterpret_cast<uintptr_t>`) |
+| Vulkan | builds after 6 small fixes | non-dispatchable handles are `uint64_t` on x86 and Vulkan-Hpp drops its handle conversions there: `VULKAN_HPP_TYPESAFE_CONVERSION=1` brings them back, and NVRHI's debug-name helper, two `nullptr` defaults and one log cast assumed pointer handles |
 
-So the renderer is D3D12 first. 32-bit d3d12.dll / dxgi.dll ship with Windows 10 and 11 (SysWOW64); Wine/Proton run it through
-vkd3d-proton. Shaders are HLSL compiled offline with the Windows SDK's `dxc` to DXIL (shader model 6.0), generated into `.inc`
-files like the existing `fxc` ones (`tools/re/gen_shaders.py`), so nothing compiles shaders at run time. Vulkan can follow as
-`Backend=nvrhi` + `[Render] Api=vulkan` once its x86 fixes are done (same HLSL through `dxc -spirv`); not before the D3D12 path
-is complete.
+Both backends are built and selectable: `[Render] Api=d3d12|vulkan` under `Backend=nvrhi` (default d3d12). 32-bit d3d12.dll /
+dxgi.dll ship with Windows 10 and 11 (SysWOW64); the 32-bit Vulkan loader and drivers are what DXVK uses. Wine/Proton: Vulkan
+natively, D3D12 through vkd3d-proton. Shaders are HLSL compiled offline with the Windows SDK's `dxc`, to DXIL (shader model 6.0)
+and to SPIR-V (`-spirv`), generated into `.inc` files like the existing `fxc` ones (`tools/re/gen_shaders.py`), so nothing
+compiles shaders at run time.
 
-Consequences for players: `Backend=nvrhi` needs Windows 10+ and a D3D12 GPU (feature level 11_0). `d3d12.dll` and `dxgi.dll` are
-delay-loaded, so ddraw.dll still loads on Windows 7 and the other backends never touch them. If the D3D12 device can't be made,
-the log says why and the game runs on the Direct3D 9 backend.
+Consequences for players: `Backend=nvrhi` needs a D3D12 GPU (feature level 11_0) on Windows 10+, or a Vulkan 1.3 driver.
+`d3d12.dll`, `dxgi.dll` and `vulkan-1.dll` are delay-loaded (Vulkan's entry points are taken from the loader at run time), so
+ddraw.dll still loads on Windows 7 and the other backends never touch them. If the device can't be made, the log says why and
+the game runs on the Direct3D 9 backend.
 
 32-bit address space is the main risk: the GOG Sacred.exe is not large-address-aware (characteristics 0x10F), so the process
 has 2 GB, and a D3D12 driver takes more of it than D3D9 (its user-mode driver, descriptor heaps, upload rings). Stage 2 measures
@@ -81,11 +82,12 @@ involved, a run in a test copy of the game (not the play folder) at 1600x900 wit
 by screenshots and frame times. Visual stages are not merged until John says "merge" in the project thread. SacredReborn.exe:
 best effort; a take-over pass whose addresses are not found in ReBorn turns itself off there and leaves that pass to the floor.
 
-1. **Vendor and build.** NVRHI and DirectX-Headers (`v1.717.0-preview`, the tag NVRHI's CMake pins) under `third_party/`, the
-   x86 fixes applied and listed, `nvrhi` + `nvrhi_d3d12` built static into ddraw.dll (validation layer in, Vulkan off),
-   `d3d12.dll`/`dxgi.dll` delay-loaded, a `dxc` step in `gen_shaders.py`. No behaviour change.
-2. **RHI core and `Backend=nvrhi`.** Adapter choice, device (D3D12 debug layer with `[Debug] RhiValidation`), flip-model swap
-   chain on the game window with a frame-latency waitable, resize, present, the frame limiter and VSync settings as today,
+1. **Vendor and build.** NVRHI, DirectX-Headers (`v1.717.0-preview`) and Vulkan-Headers (`v1.4.352`), the tags NVRHI's CMake
+   pins, under `third_party/`, the x86 fixes applied and listed, `nvrhi` + `nvrhi_d3d12` + `nvrhi_vk` built static into
+   ddraw.dll (validation layer in), the system DLLs delay-loaded, a `dxc` step (DXIL and SPIR-V) in `gen_shaders.py`. No
+   behaviour change.
+2. **RHI core and `Backend=nvrhi`.** Adapter choice, device for either API (D3D12 debug layer / Vulkan validation layer with
+   `[Debug] RhiValidation`), swap chain on the game window (DXGI flip model / VkSwapchainKHR) with a frame-latency waitable, resize, present, the frame limiter and VSync settings as today,
    NVRHI messages to the log, fallback to d3d9 on failure. Test: the window clears and presents; nothing else is drawn yet.
 3. **Compatibility floor (DirectDraw 7 / Direct3D 7 on NVRHI).** The same subset the Direct3D 9 backend implements:
    - 3a surfaces and 2D: textures (the game's formats; ARGB4444 and friends expanded on upload where DXGI lacks them), system
@@ -117,15 +119,15 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
 10. **Take-over: the interface.** cUI_Manager's windows and fonts through a 2D batch renderer (glyph pages kept as textures
     instead of GDI surfaces where it pays), Gear's RmlUi through a native render interface (a Bild export in
     `src/core/bild_gear.h`; the D3D7 replay stays for the other backends), the overlay on the same 2D path.
-11. **What is left.** Measure what still goes through the floor per frame in play (goal: nothing), Vulkan, ReBorn checks,
+11. **What is left.** Measure what still goes through the floor per frame in play (goal: nothing), ReBorn checks,
     docs (Rendering.md, Configuration.md), a frame-time report against d3d9.
 
 ## Design choices to confirm
 
 - The compatibility floor (stage 3) as the base the take-over grows on, rather than a take-over-only renderer that shows
   nothing until every screen is replaced. Recommended; stages 1-2 are the same either way.
-- D3D12 only until stage 11 (Vulkan after), given the x86 state above.
 
 ## Log
 
 - 2026-11-27: NVRHI pinned commit checked on x86 (table above). Plan written.
+- 2026-11-27: John: Vulkan works in 32-bit (DXVK), get it going now. Vulkan backend fixed for x86; both APIs from stage 2 on.

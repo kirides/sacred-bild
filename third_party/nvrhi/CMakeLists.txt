@@ -393,6 +393,12 @@ if (NVRHI_WITH_VULKAN)
         target_include_directories(${nvrhi_vulkan_target} PRIVATE include)
     endif()
     
+    # sacred-bild: x86: Vulkan-Hpp leaves out its handle classes' conversions to the C handles in 32-bit builds, where those
+    # are uint64_t; NVRHI relies on them.
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        target_compile_definitions(${nvrhi_vulkan_target} PUBLIC VULKAN_HPP_TYPESAFE_CONVERSION=1)
+    endif()
+
     if(WIN32)
         target_compile_definitions(${nvrhi_vulkan_target} PUBLIC VK_USE_PLATFORM_WIN32_KHR)
         target_compile_definitions(${nvrhi_vulkan_target} PRIVATE NOMINMAX)
