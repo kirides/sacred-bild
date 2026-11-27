@@ -21,6 +21,21 @@ With `[DDraw] Backend=chain`, SacredBild loads [DDrawCompat](https://github.com/
 targets over 2048 pixels; SacredBild works around that). SacredBild's own screens (the controller's Options, button
 prompts) need the Direct3D 9 backend.
 
+## NVRHI backend (experimental)
+
+`[DDraw] Backend=nvrhi` runs the game on SacredBild's own renderer on [NVRHI](https://github.com/NVIDIA-RTX/NVRHI)
+(vendored in `third_party/`, with the changes a 32-bit build needs), on Direct3D 12 (Windows 10 or later) or with
+`[Render] Api=vulkan` on Vulkan 1.3. If neither can make a device the Direct3D 9 backend takes over. The plan it follows,
+towards a renderer that draws the world from the game's state instead of replaying its Direct3D 7 calls, and the state of
+each stage are in [NvrhiRenderer.md](NvrhiRenderer.md).
+
+So far (`src/bild/rhi/`, `src/bild/ddrawrhi/`): DirectDraw 7 and Direct3D 7 on NVRHI, with Direct3D 7's fixed-function
+pipeline as one shader pair driven by the state the game sets (`ddrawrhi/shaders/ff.hlsl`); GroundMesh, GPU skinning,
+SacredBild's own screens and the controller prompts as with Direct3D 9; and `[Render] WorldScale`, the world view drawn at
+a multiple of the frame's size and scaled down before the interface (supersampling). Not yet: SMAA and the sharp texture
+filter. Shaders are compiled ahead of time (`tools/re/gen_rhi_shaders.py`, DXIL and SPIR-V); `tools/test/rhitest` checks
+the device and swap chain alone, and `gear_sandbox --backend nvrhi|nvrhi-vulkan` draws the Gear UI through it.
+
 ## Movies through Media Foundation
 
 `[DDraw] MediaFoundation`, always with the Direct3D 9 backend: the game decodes its WMV movies with DirectShow into

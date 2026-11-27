@@ -40,6 +40,11 @@ namespace DDrawRhi
         bool drawSkinned(nvrhi::IBuffer* vertices, uint32_t vertexCount, nvrhi::IBuffer* indices, uint32_t firstIndex,
             uint32_t indexCount, const DDraw9::Skin::Draw& draw);
 
+        // The world view's own target (world.h): draws go into a color and depth target `scale` times the render
+        // target's size until endWorld, which scales it down into the render target.
+        void beginWorld(float scale);
+        void endWorld();
+
         // IUnknown
         STDMETHOD(QueryInterface)(REFIID riid, LPVOID* out) override;
         STDMETHOD_(ULONG, AddRef)() override;
@@ -185,6 +190,10 @@ namespace DDrawRhi
         DWORD m_constantsFvf = ~0u;
         float m_ground[4] = {};                 // the ground mode's transform (drawGround)
         const DDraw9::Skin::Draw* m_skin = nullptr;     // the skinned draw being made (drawSkinned)
+        // The world view's target while it is drawn (beginWorld .. endWorld), and its scale.
+        nvrhi::TextureHandle m_worldColor, m_worldDepth;
+        bool m_inWorld = false;
+        float m_worldScale = 1.0f;
         nvrhi::BufferHandle m_boneConstants;
         uint32_t m_paletteId = 0;               // the palette in m_boneConstants (0: none)
         uint32_t m_paletteEpoch = 0;

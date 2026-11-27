@@ -158,3 +158,7 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   Direct3D 9 draws into its back buffer); `SACREDBILD_OVERLAY_DEMO=1` opens ImGui's demo window to check it, and it looks
   the same on all three. Not ported: SMAA and the sharp texture filter (both off by default). Prompts are drawn by the
   same path as the overlay but were not seen in game (no pad in the test runs).
+- 2026-11-27: stage 5 (first part): `[Render] WorldScale` (ddrawrhi/world.h): FrameHooks brackets cWorldView0::render, the
+  device draws into a world target (and depth) of that multiple of the frame's size and scales it down into the frame
+  before the interface. 1.5 and 2 run at the same frame time as 1 in the test copy (1.7-1.9 ms uncapped, GPU idle enough);
+  edges and textures visibly smoother at 2. The post chain on the world target (SMAA) comes next.

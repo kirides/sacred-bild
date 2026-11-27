@@ -266,6 +266,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     Config::render.batchSprites = readInt(ini, L"Render", L"BatchSprites", Config::render.batchSprites) != 0;
     Config::render.groundMesh = readInt(ini, L"Render", L"GroundMesh", Config::render.groundMesh) != 0;
     {
+        Config::render.worldScale = std::clamp(static_cast<float>(_wtof(readString(ini, L"Render", L"WorldScale", L"1").c_str())), 1.0f, 3.0f);
         const std::wstring smaa = readString(ini, L"Render", L"SMAA", L"Off");
         Config::render.smaa = _wcsicmp(smaa.c_str(), L"Low") == 0 ? 1
             : _wcsicmp(smaa.c_str(), L"Medium") == 0             ? 2

@@ -250,7 +250,10 @@ namespace Rhi::Detail
                     m_infoQueue->GetMessage(i, nullptr, &size);
                     std::string buffer(size, char(0));
                     auto* msg = reinterpret_cast<D3D12_MESSAGE*>(buffer.data());
-                    if (SUCCEEDED(m_infoQueue->GetMessage(i, msg, &size)) && msg->Severity <= D3D12_MESSAGE_SEVERITY_WARNING)
+                    // Clears of targets created without (or with another) clear value are only slower: not worth a line.
+                    if (SUCCEEDED(m_infoQueue->GetMessage(i, msg, &size)) && msg->Severity <= D3D12_MESSAGE_SEVERITY_WARNING &&
+                        msg->ID != D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE &&
+                        msg->ID != D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE)
                     {
                         ++m_debugLogged;
                         LOG("RHI: Direct3D 12 debug layer: {}", std::string_view(msg->pDescription, msg->DescriptionByteLength ? msg->DescriptionByteLength - 1 : 0));

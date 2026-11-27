@@ -31,6 +31,10 @@ namespace Config
         // SMAA antialiasing of the world view, before the UI is drawn (Direct3D 9 backend only): 0 off, 1 low,
         // 2 medium, 3 high (SMAA's presets).
         int smaa = 0;
+        // [DDraw] Backend=nvrhi: the world view drawn into a target of its own this many times the frame's size, then
+        // scaled down into the frame before the interface (supersampling: smoother edges, sharper textures at a cost).
+        // 1 = straight into the frame, as the other backends.
+        float worldScale = 1.0f;
         // Filtering of the game world's textures: 0 the game's own point sampling, 1 sharp bilinear (crisp texels, soft
         // edges; Direct3D 9 backend, point sampling elsewhere), 2 bilinear (smoother when zoomed in). The interface
         // follows [UI] LinearFilter.

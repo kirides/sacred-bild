@@ -17,6 +17,7 @@
 #include "settings/config/display.h"
 #include "settings/config/render.h"
 #include "ddraw9/smaa.h"
+#include "ddrawrhi/world.h"
 #include "log.h"
 #include "patch.h"
 #include "diag/profiler.h"
@@ -316,6 +317,12 @@ namespace
         }
         DeviceProxy* proxy = DeviceProxy::instance();
         const int64_t proxyTime = D3DStats::total(D3DStats::TProxy);
+        const bool ownWorld = Config::ddraw.nvrhi && Config::render.worldScale > 1.0f && proxy && device == proxy;
+        if (ownWorld)
+        {
+            proxy->syncBatch();
+            DDrawRhi::World::begin(proxy->real(), Config::render.worldScale);
+        }
         if (proxy && device == proxy)
         {
             proxy->beginBatch();
@@ -335,6 +342,11 @@ namespace
         {
             proxy->endBatch();
             g_worldDrawn = true;
+        }
+        if (ownWorld)
+        {
+            proxy->syncBatch();
+            DDrawRhi::World::end(proxy->real());
         }
         D3DStats::addTime(D3DStats::TWorldProxy, D3DStats::total(D3DStats::TProxy) - proxyTime);
         D3DStats::mark(D3DStats::TGameAfterWorld);

@@ -3,6 +3,7 @@
 #include "ddrawrhi/directdraw.h"
 #include "ddrawrhi/surface.h"
 #include "ddrawrhi/vertex_buffer.h"
+#include "ddrawrhi/world.h"
 #include "ddraw9/format.h"
 #include "ddraw9/skin.h"
 #include "rhi/rhi.h"
@@ -1173,12 +1174,16 @@ namespace DDrawRhi
         nvrhi::IBindingSet* set = bindings();      // uploads the textures' CPU changes first
         updateConstants(cmd, fvf);
         Surface* depth = depthSurface();
-        nvrhi::IFramebuffer* fb = Context::framebuffer(m_target->gpu(), depth ? depth->gpu() : nullptr);
+        nvrhi::IFramebuffer* fb = m_inWorld ? Context::framebuffer(m_worldColor, depth ? m_worldDepth.Get() : nullptr)
+                                            : Context::framebuffer(m_target->gpu(), depth ? depth->gpu() : nullptr);
         nvrhi::IGraphicsPipeline* pso = pipeline(fvf, prim, fb);
         if (!pso || !set)
         {
             return false;
         }
+        // In the world's own target everything is `s` times larger; pretransformed positions stay in render target
+        // pixels (the shader's normalized coordinates don't depend on the size), viewports and scissors scale.
+        const float s = m_inWorld ? m_worldScale : 1.0f;
         state.pipeline = pso;
         state.framebuffer = fb;
         state.bindings = {set};
@@ -1197,16 +1202,17 @@ namespace DDrawRhi
         nvrhi::Viewport vp;
         if (fvf == kGroundFvf || (!skinKey(fvf) && Fvf::pretransformed(fvf)))
         {
-            vp = nvrhi::Viewport(0.0f, static_cast<float>(tw), 0.0f, static_cast<float>(th), 0.0f, 1.0f);
+            vp = nvrhi::Viewport(0.0f, static_cast<float>(tw) * s, 0.0f, static_cast<float>(th) * s, 0.0f, 1.0f);
         }
         else
         {
-            const float vx = static_cast<float>(m_viewport.dwX) + 0.5f, vy = static_cast<float>(m_viewport.dwY) + 0.5f;
-            vp = nvrhi::Viewport(vx, vx + static_cast<float>(m_viewport.dwWidth), vy, vy + static_cast<float>(m_viewport.dwHeight),
+            const float vx = (static_cast<float>(m_viewport.dwX) + 0.5f) * s, vy = (static_cast<float>(m_viewport.dwY) + 0.5f) * s;
+            vp = nvrhi::Viewport(vx, vx + static_cast<float>(m_viewport.dwWidth) * s, vy, vy + static_cast<float>(m_viewport.dwHeight) * s,
                 std::clamp(m_viewport.dvMinZ, 0.0f, 1.0f), std::clamp(m_viewport.dvMaxZ, 0.0f, 1.0f));
         }
         state.viewport.addViewport(vp);
-        state.viewport.addScissorRect(nvrhi::Rect(x0, x1, y0, y1));
+        state.viewport.addScissorRect(nvrhi::Rect(static_cast<int>(x0 * s), static_cast<int>(x1 * s), static_cast<int>(y0 * s),
+            static_cast<int>(y1 * s)));
         return true;
     }
 
@@ -1408,6 +1414,59 @@ namespace DDrawRhi
         cmd->setGraphicsState(state);
         cmd->drawIndexed(nvrhi::DrawArguments().setVertexCount(indexCount));
         return true;
+    }
+
+    void Device::beginWorld(float scale)
+    {
+        std::scoped_lock lock(m_lock);
+        if (!m_target || m_inWorld || scale <= 1.0f)
+        {
+            return;
+        }
+        const uint32_t w = static_cast<uint32_t>(std::lround(m_target->width() * scale));
+        const uint32_t h = static_cast<uint32_t>(std::lround(m_target->height() * scale));
+        if (!m_worldColor || m_worldColor->getDesc().width != w || m_worldColor->getDesc().height != h)
+        {
+            if (m_worldColor)
+            {
+                Context::forget(m_worldColor);
+                Context::forget(m_worldDepth);
+            }
+            nvrhi::IDevice* dev = Context::device();
+            m_worldColor = dev->createTexture(nvrhi::TextureDesc().setWidth(w).setHeight(h).setFormat(nvrhi::Format::BGRA8_UNORM)
+                .setIsRenderTarget(true).setDebugName("world").setInitialState(nvrhi::ResourceStates::RenderTarget)
+                .setKeepInitialState(true));
+            m_worldDepth = dev->createTexture(nvrhi::TextureDesc().setWidth(w).setHeight(h).setFormat(nvrhi::Format::D24S8)
+                .setIsRenderTarget(true).setDebugName("world depth").setInitialState(nvrhi::ResourceStates::DepthWrite)
+                .setKeepInitialState(true));
+            if (!m_worldColor || !m_worldDepth)
+            {
+                LOG("NVRHI backend: the world's {}x{} target could not be created", w, h);
+                m_worldColor = m_worldDepth = nullptr;
+                return;
+            }
+            LOG("NVRHI backend: the world view drawn at {}x{} ({:.2f} x the frame)", w, h, scale);
+        }
+        m_worldScale = scale;
+        m_inWorld = true;
+        // What the frame had before the world (the game cleared it) and an empty depth: the world starts from there.
+        nvrhi::ICommandList* cmd = Context::commands();
+        Context::copy(m_target->gpu(), {0, 0, static_cast<LONG>(m_target->width()), static_cast<LONG>(m_target->height())},
+            m_worldColor, {0, 0, static_cast<LONG>(w), static_cast<LONG>(h)}, false);
+        cmd->clearDepthStencilTexture(m_worldDepth, nvrhi::AllSubresources, true, 1.0f, true, 0);
+    }
+
+    void Device::endWorld()
+    {
+        std::scoped_lock lock(m_lock);
+        if (!m_inWorld)
+        {
+            return;
+        }
+        m_inWorld = false;
+        const nvrhi::TextureDesc& d = m_worldColor->getDesc();
+        Context::copy(m_worldColor, {0, 0, static_cast<LONG>(d.width), static_cast<LONG>(d.height)}, m_target->gpu(),
+            {0, 0, static_cast<LONG>(m_target->width()), static_cast<LONG>(m_target->height())}, true);
     }
 
     bool Device::gather(DWORD fvf, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD count)
@@ -1624,25 +1683,29 @@ namespace DDrawRhi
                 unsupported("clearing the stencil buffer in part of the target");
             }
         }
+        nvrhi::ITexture* colorTarget = m_inWorld ? m_worldColor.Get() : m_target->gpu();
+        nvrhi::ITexture* depthTarget = !depth ? nullptr : m_inWorld ? m_worldDepth.Get() : depth->gpu();
         if (whole && (!rects || !count))
         {
             if (flags & D3DCLEAR_TARGET)
             {
-                cmd->clearTextureFloat(m_target->gpu(), nvrhi::AllSubresources, nvrhi::Color(rgba[0], rgba[1], rgba[2], rgba[3]));
+                cmd->clearTextureFloat(colorTarget, nvrhi::AllSubresources, nvrhi::Color(rgba[0], rgba[1], rgba[2], rgba[3]));
             }
             if (flags & (D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL))
             {
-                cmd->clearDepthStencilTexture(depth->gpu(), nvrhi::AllSubresources, (flags & D3DCLEAR_ZBUFFER) != 0, z,
+                cmd->clearDepthStencilTexture(depthTarget, nvrhi::AllSubresources, (flags & D3DCLEAR_ZBUFFER) != 0, z,
                     (flags & D3DCLEAR_STENCIL) != 0, static_cast<uint8_t>(stencil));
             }
             return D3D_OK;
         }
+        const float s = m_inWorld ? m_worldScale : 1.0f;
         auto clearRect = [&](const RECT& r) {
             RECT clipped;
             if (IntersectRect(&clipped, &r, &viewport))
             {
-                Context::fill(m_target->gpu(), depth ? depth->gpu() : nullptr, clipped, rgba, (flags & D3DCLEAR_TARGET) != 0,
-                    (flags & D3DCLEAR_ZBUFFER) != 0, z);
+                const RECT scaled = {static_cast<LONG>(clipped.left * s), static_cast<LONG>(clipped.top * s),
+                    static_cast<LONG>(clipped.right * s), static_cast<LONG>(clipped.bottom * s)};
+                Context::fill(colorTarget, depthTarget, scaled, rgba, (flags & D3DCLEAR_TARGET) != 0, (flags & D3DCLEAR_ZBUFFER) != 0, z);
             }
         };
         if (!rects || !count)
@@ -2369,5 +2432,24 @@ namespace DDrawRhi
     HRESULT Device::GetInfo(DWORD, LPVOID, DWORD)
     {
         return S_FALSE;
+    }
+}
+
+namespace DDrawRhi::World
+{
+    void begin(IDirect3DDevice7* device, float scale)
+    {
+        if (Device* d = Device::from(device))
+        {
+            d->beginWorld(scale);
+        }
+    }
+
+    void end(IDirect3DDevice7* device)
+    {
+        if (Device* d = Device::from(device))
+        {
+            d->endWorld();
+        }
     }
 }
