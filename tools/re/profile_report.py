@@ -54,7 +54,7 @@ for line in open(path, encoding='latin1'):
     m = re.match(r'\[thread (\d+) samples (\d+)\]', line)
     if m:
         cur = {'tid': int(m.group(1)), 'samples': int(m.group(2)), 'exclusive': [], 'external': [], 'inclusive': [],
-               'external_eip': [], 'external_caller': []}
+               'external_eip': [], 'external_caller': [], 'external_bild': [], 'external_bild2': [], 'own_caller': []}
         threads.append(cur)
         continue
     m = re.match(r'\[(\w+)\]', line)
@@ -62,8 +62,13 @@ for line in open(path, encoding='latin1'):
         section = m.group(1)
         continue
     parts = line.split()
-    if section == 'external_caller':
+    if section in ('external_caller', 'external_bild'):
         cur[section].append((parts[0], parts[1], int(parts[2], 16), int(parts[3])))
+        continue
+    if section in ('external_bild2', 'own_caller'):
+        cur[section].append((int(parts[0], 16), int(parts[1], 16), int(parts[2])))
+        continue
+    if section not in cur:
         continue
     if section in ('external', 'external_eip'):
         cur[section].append((parts[0], int(parts[1], 16), int(parts[2])))
@@ -117,6 +122,21 @@ for t in sorted(threads, key=lambda t: -t['samples']):
         for mod, cnt in sorted(callers.items(), key=lambda kv: -sum(kv[1].values()))[:8]:
             for where, c in cnt.most_common(5):
                 print(f"    {100 * c / n:5.1f}%  {mod:<18} <- {where}")
+    # Where SacredBild called into drivers and runtimes (D3D12Core, the GPU driver, win32u), which call each other.
+    bild = collections.Counter()
+    for mod, _, rva, c in t['external_bild']:
+        bild[(mod, own_name(rva))] += c
+    if bild:
+        print("  -- outside sacred.exe and SacredBild: module <- SacredBild function")
+        for (mod, where), c in bild.most_common(top):
+            print(f"    {100 * c / n:5.1f}%  {mod:<18} <- {where}")
+    oc = collections.Counter()
+    for eip, ra, c in t['own_caller']:
+        oc[(own_name(eip), own_name(ra))] += c
+    if oc:
+        print("  -- inside SacredBild: function <- SacredBild caller")
+        for (f, where), c in oc.most_common(top):
+            print(f"    {100 * c / n:5.1f}%  {f[:60]:<60} <- {where[:70]}")
     print("  -- exclusive (own code) in sacred.exe")
     for f, c in excl.most_common(top):
         print(f"    {100 * c / n:5.1f}%  {f}")

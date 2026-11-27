@@ -225,6 +225,13 @@ namespace DDrawRhi
             std::unordered_map<FramebufferKey, nvrhi::FramebufferHandle, FramebufferKeyHash> g_framebuffers;
             std::vector<ForgetFn> g_forgetFns;
 
+            // scratchTexture: by width << 40 | height << 16 | format. Context lock.
+            std::unordered_map<uint64_t, nvrhi::TextureHandle> g_scratch;
+            uint64_t g_scratchBytes = 0;
+            constexpr uint64_t kScratchBytes = 96ull << 20;     // more and the pool starts again
+            // copy(): binding sets by source texture (| 1: linear), until the texture is forgotten. g_lock.
+            std::unordered_map<const void*, nvrhi::BindingSetHandle> g_copySets;
+
             // Copies and fills.
             nvrhi::ShaderHandle g_blitVS, g_copyPS, g_fillPS;
             nvrhi::BindingLayoutHandle g_blitLayout;
@@ -282,6 +289,7 @@ namespace DDrawRhi
                 s.vsync = Config::display.vsync;
                 s.maxFrameLatency = Config::display.maxFrameLatency;
                 s.pipelineCache = Config::render.pipelineCache;
+                s.placedResources = Config::render.placedResources;
                 return s;
             }
 
@@ -428,6 +436,7 @@ namespace DDrawRhi
                         return true;    // nothing left in flight
                     }
                     lock.unlock();
+                    ++counters().waits;
                     Rhi::device()->waitEventQuery(query);
                     lock.lock();
                     g_gpuDoneSerial = std::max(g_gpuDoneSerial, querySerial);
@@ -439,6 +448,88 @@ namespace DDrawRhi
                 }
             }
 
+            // [Debug] D3DStats: GPU time of the recorded command lists, one timer query per list (Context lock).
+            struct GpuTimer
+            {
+                nvrhi::TimerQueryHandle current;            // in the open list
+                std::vector<nvrhi::TimerQueryHandle> pending, free;
+                double seconds = 0.0;
+                uint32_t lists = 0, frames = 0;
+                DWORD nextLog = 0;
+            };
+            GpuTimer g_gpuTimer;
+
+            void gpuTimerBegin(nvrhi::ICommandList* cmd)
+            {
+                if (!Config::debug.d3dStats)
+                {
+                    return;
+                }
+                GpuTimer& t = g_gpuTimer;
+                if (!t.free.empty())
+                {
+                    t.current = std::move(t.free.back());
+                    t.free.pop_back();
+                }
+                else
+                {
+                    t.current = Rhi::device()->createTimerQuery();
+                }
+                if (t.current)
+                {
+                    cmd->beginTimerQuery(t.current);
+                }
+            }
+
+            void gpuTimerEnd(nvrhi::ICommandList* cmd)
+            {
+                GpuTimer& t = g_gpuTimer;
+                if (t.current)
+                {
+                    cmd->endTimerQuery(t.current);
+                    t.pending.push_back(std::move(t.current));
+                    t.current = nullptr;
+                }
+            }
+
+            // Once a frame: what the GPU finished, logged every second with the frame count.
+            void gpuTimerFrame()
+            {
+                GpuTimer& t = g_gpuTimer;
+                if (!Config::debug.d3dStats)
+                {
+                    return;
+                }
+                ++t.frames;
+                nvrhi::IDevice* dev = Rhi::device();
+                while (!t.pending.empty() && dev->pollTimerQuery(t.pending.front()))
+                {
+                    t.seconds += dev->getTimerQueryTime(t.pending.front());
+                    dev->resetTimerQuery(t.pending.front());
+                    t.free.push_back(std::move(t.pending.front()));
+                    t.pending.erase(t.pending.begin());
+                    ++t.lists;
+                }
+                const DWORD now = GetTickCount();
+                if (!t.nextLog)
+                {
+                    t.nextLog = now + 1000;
+                }
+                if (static_cast<int32_t>(now - t.nextLog) >= 0 && t.frames)
+                {
+                    Counters& k = counters();
+                    LOG("NVRHI backend: GPU {:.3f} ms a frame ({} frames, {:.1f} command lists a frame); per frame: {:.1f} temporary "
+                        "textures, {:.1f} new textures ({:.3f} ms), {:.2f} read-backs, {:.2f} GPU waits", t.seconds * 1000.0 / t.frames,
+                        t.frames, static_cast<double>(t.lists) / t.frames, k.tempTextures.exchange(0) / double(t.frames),
+                        k.textures.exchange(0) / double(t.frames), k.textureMicros.exchange(0) / 1000.0 / t.frames,
+                        k.readBacks.exchange(0) / double(t.frames),
+                        k.waits.exchange(0) / double(t.frames));
+                    t.seconds = 0.0;
+                    t.lists = t.frames = 0;
+                    t.nextLog = now + 1000;
+                }
+            }
+
             void runPendingFwd();
             // Hands what is recorded to the render thread; returns the job's serial. Context lock held.
             uint64_t submit(nvrhi::ITexture* present, bool idle)
@@ -447,6 +538,7 @@ namespace DDrawRhi
                 Job job;
                 if (g_open)
                 {
+                    gpuTimerEnd(g_commands);
                     g_commands->close();
                     g_open = false;
                     job.list = g_commands;
@@ -663,6 +755,12 @@ namespace DDrawRhi
             }
         }
 
+        Counters& counters()
+        {
+            static Counters c;
+            return c;
+        }
+
         bool ready()
         {
             std::scoped_lock lock(g_lock);
@@ -766,6 +864,7 @@ namespace DDrawRhi
                 g_commands->open();
                 g_open = true;
                 ++g_epoch;
+                gpuTimerBegin(g_commands);
                 if (!g_whiteUploaded)
                 {
                     const uint32_t white = 0xFFFFFFFFu;
@@ -791,6 +890,7 @@ namespace DDrawRhi
                 }
                 return;
             }
+            ++counters().waits;
             waitDone(submit(nullptr, true));
             // Everything recorded so far is done: the ring is free.
             g_ringFrames.clear();
@@ -811,11 +911,17 @@ namespace DDrawRhi
                 {
                     pos += kRingSize - pos % kRingSize;     // never split: start the next lap
                 }
-                while (!g_ringFrames.empty() && gpuDone(g_ringFrames.front().frame, false))
+                // The GPU's progress is asked for only when the ring looks full: asking costs a call into the
+                // driver (a kernel call on some), and uploads come with nearly every draw.
+                uint64_t oldest = g_ringFrames.empty() ? g_frameStart : g_ringFrames.front().start;
+                if (pos + bytes - oldest > kRingSize)
                 {
-                    g_ringFrames.pop_front();
+                    while (!g_ringFrames.empty() && gpuDone(g_ringFrames.front().frame, false))
+                    {
+                        g_ringFrames.pop_front();
+                    }
+                    oldest = g_ringFrames.empty() ? g_frameStart : g_ringFrames.front().start;
                 }
-                const uint64_t oldest = g_ringFrames.empty() ? g_frameStart : g_ringFrames.front().start;
                 if (pos + bytes - oldest <= kRingSize)
                 {
                     g_head = pos + bytes;
@@ -923,6 +1029,8 @@ namespace DDrawRhi
             }
             g_uiSets.erase(texture);
             g_uiSets.erase(reinterpret_cast<const uint8_t*>(texture) + 1);
+            g_copySets.erase(texture);
+            g_copySets.erase(reinterpret_cast<const uint8_t*>(texture) + 1);
             for (ForgetFn fn : g_forgetFns)
             {
                 fn(texture);
@@ -933,6 +1041,36 @@ namespace DDrawRhi
         {
             std::scoped_lock lock(g_lock);
             g_forgetFns.push_back(fn);
+        }
+
+        nvrhi::ITexture* scratchTexture(uint32_t width, uint32_t height, nvrhi::Format format)
+        {
+            const uint64_t key = static_cast<uint64_t>(width) << 40 | static_cast<uint64_t>(height) << 16 | static_cast<uint32_t>(format);
+            if (const auto it = g_scratch.find(key); it != g_scratch.end())
+            {
+                return it->second;
+            }
+            const uint64_t bytes = static_cast<uint64_t>(width) * height * 4;
+            if (g_scratchBytes + bytes > kScratchBytes)
+            {
+                // Sizes the game no longer uses pile up: start again (what the open command list uses stays alive in it).
+                for (auto& [k, texture] : g_scratch)
+                {
+                    forget(texture);
+                }
+                g_scratch.clear();
+                g_scratchBytes = 0;
+            }
+            ++counters().tempTextures;
+            nvrhi::TextureHandle texture = Rhi::device()->createTexture(nvrhi::TextureDesc().setWidth(width).setHeight(height)
+                .setFormat(format).setDebugName("copy source").setInitialState(nvrhi::ResourceStates::ShaderResource)
+                .setKeepInitialState(true).setSharesMemory(true));     // written whole each time before it is read
+            if (texture)
+            {
+                g_scratch.emplace(key, texture);
+                g_scratchBytes += bytes;
+            }
+            return texture;
         }
 
         void copy(nvrhi::ITexture* src, const RECT& srcRect, nvrhi::ITexture* dst, const RECT& dstRect, bool linear)
@@ -950,13 +1088,27 @@ namespace DDrawRhi
             c.src[1] = static_cast<float>(srcRect.top) / s.height;
             c.src[2] = static_cast<float>(srcRect.right) / s.width;
             c.src[3] = static_cast<float>(srcRect.bottom) / s.height;
-            nvrhi::BindingSetDesc set;
-            set.bindings = {
-                nvrhi::BindingSetItem::ConstantBuffer(0, g_blitConstants),
-                nvrhi::BindingSetItem::Texture_SRV(0, src),
-                nvrhi::BindingSetItem::Sampler(0, sampler(D3DTADDRESS_CLAMP, D3DTADDRESS_CLAMP, linear, linear, D3DTFP_NONE, 0)),
-            };
-            nvrhi::BindingSetHandle bindings = Rhi::device()->createBindingSet(set, g_blitLayout);
+            const void* setKey = reinterpret_cast<const uint8_t*>(src) + (linear ? 1 : 0);
+            nvrhi::BindingSetHandle bindings;
+            {
+                std::scoped_lock lock(g_lock);
+                if (const auto it = g_copySets.find(setKey); it != g_copySets.end())
+                {
+                    bindings = it->second;
+                }
+            }
+            if (!bindings)
+            {
+                nvrhi::BindingSetDesc set;
+                set.bindings = {
+                    nvrhi::BindingSetItem::ConstantBuffer(0, g_blitConstants),
+                    nvrhi::BindingSetItem::Texture_SRV(0, src),
+                    nvrhi::BindingSetItem::Sampler(0, sampler(D3DTADDRESS_CLAMP, D3DTADDRESS_CLAMP, linear, linear, D3DTFP_NONE, 0)),
+                };
+                bindings = Rhi::device()->createBindingSet(set, g_blitLayout);
+                std::scoped_lock lock(g_lock);
+                g_copySets[setKey] = bindings;
+            }
             nvrhi::ICommandList* cmd = commands();
             cmd->writeBuffer(g_blitConstants, &c, sizeof(c));
             nvrhi::GraphicsState state;
@@ -1168,6 +1320,7 @@ namespace DDrawRhi
             }
             const uint64_t serial = submit(target, false);
             ringFrameEnded(serial);
+            gpuTimerFrame();
             // No more frames queued than the frame latency allows: the game waits here as it waited in Present.
             const int limit = std::clamp(Config::display.maxFrameLatency, 1, 3) + 1;
             std::unique_lock jobs(g_jobMutex);

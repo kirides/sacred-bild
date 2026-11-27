@@ -122,6 +122,8 @@ namespace Rhi::Detail
                 deviceDesc.pDevice = m_d3d.p;
                 deviceDesc.pipelineLibrary = m_library.p;
                 deviceDesc.pipelineLibraryLock = &m_libraryLock;
+                deviceDesc.pAdapter = m_adapter.p;
+                deviceDesc.placedResources = settings.placedResources;
                 deviceDesc.pGraphicsCommandQueue = m_queue.p;
                 if (settings.validation)
                 {
@@ -342,6 +344,7 @@ namespace Rhi::Detail
                     }
                     if (SUCCEEDED(D3D12CreateDevice(adapter.p, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(m_d3d.put()))))
                     {
+                        adapter->QueryInterface(IID_PPV_ARGS(m_adapter.put()));
                         m_identity.api = static_cast<uint32_t>(Api::D3D12);
                         m_identity.vendor = desc.VendorId;
                         m_identity.device = desc.DeviceId;
@@ -393,6 +396,7 @@ namespace Rhi::Detail
             }
 
             Com<IDXGIFactory2> m_factory;
+            Com<IDXGIAdapter> m_adapter;        // the device's: D3D12 Memory Allocator asks it for the memory budget
             Com<ID3D12Device> m_d3d;
             // Before m_device: NVRHI's device uses the library until it is gone.
             PipelineCache::Identity m_identity;

@@ -270,6 +270,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     Config::render.batchParticles = readInt(ini, L"Render", L"BatchParticles", Config::render.batchParticles) != 0;
     Config::render.mergeDraws = readInt(ini, L"Render", L"MergeDraws", Config::render.mergeDraws) != 0;
     Config::render.pipelineCache = readInt(ini, L"Render", L"PipelineCache", Config::render.pipelineCache) != 0;
+    Config::render.placedResources = readInt(ini, L"Render", L"PlacedResources", Config::render.placedResources) != 0;
     Config::render.spriteFilter = readInt(ini, L"Render", L"SpriteFilter", Config::render.spriteFilter) != 0;
     {
         Config::render.worldScale = std::clamp(static_cast<float>(_wtof(readString(ini, L"Render", L"WorldScale", L"1").c_str())), 1.0f, 3.0f);
@@ -319,6 +320,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     Config::debug.d3dStats = readInt(ini, L"Debug", L"D3DStats", Config::debug.d3dStats) != 0;
     Config::debug.profiler = readInt(ini, L"Debug", L"Profiler", Config::debug.profiler) != 0;
     Config::debug.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", Config::debug.profilerIntervalUs);
+    Config::debug.profilerWorldOnly = readInt(ini, L"Debug", L"ProfilerWorldOnly", Config::debug.profilerWorldOnly) != 0;
     Config::debug.uiTrace = readInt(ini, L"Debug", L"UiTrace", Config::debug.uiTrace) != 0;
     Config::debug.crashDump = readInt(ini, L"Debug", L"CrashDump", Config::debug.crashDump);
     Config::debug.movieFallback = readInt(ini, L"Debug", L"MovieFallback", Config::debug.movieFallback) != 0;

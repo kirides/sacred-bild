@@ -8,6 +8,10 @@ new upstream files over the folder, then re-applying the local changes listed be
 | `nvrhi/` | https://github.com/NVIDIA-RTX/NVRHI | `648f745142a929a1a61c91799a3be1f6969bbcf8` (main, 2026-11-27) | `CMakeLists.txt`, `cmake/`, `include/`, `src/`, `tools/` (natvis), licenses, README | MIT (`nvrhi/LICENSE.txt`) |
 | `DirectX-Headers/` | https://github.com/microsoft/DirectX-Headers | `v1.717.0-preview` (`d873b34`), the tag NVRHI's CMake pins | `include/` without the `.idl` files, `src/`, license, README | MIT (`DirectX-Headers/LICENSE`) |
 | `Vulkan-Headers/` | https://github.com/KhronosGroup/Vulkan-Headers | `v1.4.352` (`015e25c`), the tag NVRHI's CMake pins | `include/`, licenses, README | Apache-2.0 / MIT (`Vulkan-Headers/LICENSE.md`) |
+| `D3D12MemoryAllocator/` | https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator | `v3.3.0` (`6009492`) | `include/`, `src/D3D12MemAlloc.cpp` and `.natvis`, license, notices, README | MIT (`D3D12MemoryAllocator/LICENSE.txt`) |
+| `VulkanMemoryAllocator/` | https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator | `v3.5.0` (`0f1a757`) | `include/vk_mem_alloc.h`, license, README | MIT (`VulkanMemoryAllocator/LICENSE.txt`) |
+
+`D3D12MemoryAllocator/` is built by `third_party/CMakeLists.txt` as a static library (`D3D12MA`, with `D3D12MA_USING_DIRECTX_HEADERS`) linked into NVRHI's D3D12 backend; unmodified.
 
 `DirectX-Headers/` and `Vulkan-Headers/` are built by `third_party/CMakeLists.txt` (their own CMake files are not kept): interface
 targets with the include folders and `DirectX-Guids` from `src/dxguids.cpp`, under the names NVRHI looks for.
@@ -49,3 +53,21 @@ Vulkan backend: in 32-bit builds Vulkan's non-dispatchable handles (`VkImage`, `
 - `include/nvrhi/vulkan.h` `DeviceDesc::pipelineCacheData` / `pipelineCacheSize` (initial data of the VkPipelineCache,
   an empty cache if the driver refuses it) and `nvrhi::vulkan::getPipelineCacheData`; `vulkan-backend.h`
   `Device::getContext`.
+
+### Residency (`// sacred-bild: residency`)
+
+- `d3d12-backend.h` / `d3d12-device.cpp`: the `Context` keeps `ID3D12Device3` and a residency fence; committed textures
+  (`d3d12-texture.cpp`) are made with `D3D12_HEAP_FLAG_CREATE_NOT_RESIDENT` and `EnqueueMakeResident` signals the fence;
+  `executeCommandLists` makes the queue wait for its last value first. Making a texture no longer waits for its memory.
+
+### Placed resources (`// sacred-bild: placed resources`)
+
+- `include/nvrhi/nvrhi.h` `TextureDesc::sharesMemory` (opt-in: the contents are undefined until written; never for render
+  targets or UAVs); `include/nvrhi/d3d12.h` `DeviceDesc::pAdapter` / `placedResources`.
+- `d3d12-device.cpp` creates a D3D12 Memory Allocator (`Context::allocator`, default pools not zeroed) and releases it
+  with the device; `d3d12-texture.cpp` makes such textures with `CreateResource3` / `CreateResource` placed in its heaps,
+  the allocation owned by the texture (`PlacedAllocation`, released after the resource).
+- `include/nvrhi/vulkan.h` `DeviceDesc::placedResources`; `vulkan-allocator.cpp` compiles Vulkan Memory Allocator
+  (`VMA_IMPLEMENTATION`, dynamic functions from `VULKAN_HPP_DEFAULT_DISPATCHER`), `createPlacedAllocator` /
+  `destroyPlacedAllocator` (called by the device) and binds `sharesMemory` textures to its blocks
+  (`MemoryResource::placed`; `allocateTextureMemory` / `freeTextureMemory`).

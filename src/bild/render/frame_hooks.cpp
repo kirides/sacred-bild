@@ -374,6 +374,7 @@ namespace
         {
             rhiDevice->setWorldView(true);
         }
+        Profiler::worldDrawn();
         g_origWorldRender(self, edx, device);
         if (rhiDevice)
         {

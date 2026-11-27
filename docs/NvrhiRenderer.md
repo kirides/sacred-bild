@@ -351,3 +351,39 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   constants carry FLAG_FILTER2D, so the state of the draw before decides nothing). At 1:1 it changes little; zoomed in
   (`-gear-zoom=0.5`) statues, plants and edges lose their stair steps. No measurable frame time (2.15-2.34 ms against
   2.40-2.50 uncapped, zoomed in), Vulkan validation clean.
+- 2026-11-27: performance pass (John: profile GPU and CPU now that the renderer draws everything). `[Debug] D3DStats`
+  on NVRHI also logs the GPU time (a timer query per command list) and per-frame counts of temporary and new textures,
+  read-backs and waits for the GPU: the GPU takes 0.25-0.35 ms of a 1.6-1.9 ms frame, so the frame is CPU-bound. The
+  profiler can drop what it sampled before the world was drawn (`[Debug] ProfilerWorldOnly`, two seconds after the
+  first world frame) and records where SacredBild called into drivers and runtimes and who called SacredBild's own
+  functions (`[external_bild]`, `[own_caller]`; tools/re/profile_report.py shows them). Found: every texture NVRHI made
+  on Direct3D 12 waited for its memory to become resident (D3D12Core's MakeResident and the driver waiting on paging
+  fences, seen with cdb on win32u's D3DKMT wait), about 0.45-0.55 ms each, and the backend made a texture for every
+  CPU image drawn onto the render target and every copy within it (2800 in loading save 2, hundreds in the first
+  seconds in game; only 12 sizes). Now: `Context::scratchTexture` keeps those by size and format and hands the same
+  one out again (the command list orders the uses), also for bild_gfx's region updates; Context::copy keeps its binding
+  sets per source texture; vendored NVRHI (marked `sacred-bild: residency`) makes committed textures not resident and
+  enqueues MakeResident on the paging queue with a fence that the queue waits for before executing (0.34 ms a texture
+  instead of 0.55); merged draws reuse their GraphicsState instead of clearing a new one per draw. A/B uncapped, saves 1
+  and 2, two runs each: the first two seconds in game lose their 280-410 ms hitches (D3D12; Vulkan 140-210 ms) and run
+  at 530-640 fps instead of 280-530, the world shows up 0.4-2 s sooner, steady frames are the same within the noise
+  (save 1 1.47-1.51 ms, save 2 1.82-1.94 ms). Pictures as before on D3D12 and Vulkan. What is left in a steady frame is
+  spread out: the game's own walk (cWorldView_renderTileRow 6 %), the wait for the animation worker (6 %), the GPU
+  driver for ~300 draws (8 %), SacredBild's batching and state tracking (no single function above 3 %). Still a cost
+  of 0.34 ms per real texture made while playing (streamed sectors): placed resources in larger heaps would take that
+  away. The 200-250 ms hitch seen once per Vulkan run is pipeline compilation after a rebuilt ddraw.dll (its pipeline
+  cache is discarded), not new.
+- 2026-11-27: placed resources (John: why not D3D12 Memory Allocator?). Vendored D3D12MA 3.3.0 (third_party, static,
+  linked into NVRHI's D3D12 backend). Textures that are written whole before they are read opt in
+  (`nvrhi::TextureDesc::sharesMemory`: the surfaces with a system memory copy, the scratch textures, bild_gfx's
+  textures) and are placed in D3D12MA's heaps (default pools not zeroed); render targets, depth buffers and GPU-only
+  textures (filled by Blts that may cover part of them) keep committed, zeroed memory, made resident on the paging
+  queue as before. `[Render] PlacedResources` (on). `[Debug] D3DStats` logs the time spent making the surfaces'
+  textures. Save 2, two runs each: 0.35 ms a texture committed, 0.055 ms placed (447 textures in a run: 156 ms
+  against 24 ms). The D3D12 debug layer has nothing to say; pictures as before. Frame times are the same (that cost is
+  spread over loading and streaming). Vulkan makes a texture in 0.41 ms (NVRHI allocates memory per resource there).
+- 2026-11-27: the same on Vulkan: vendored Vulkan Memory Allocator 3.5.0 (header, compiled in NVRHI's
+  vulkan-allocator.cpp with Vulkan's functions from the dynamic dispatcher); `sharesMemory` textures are bound to its
+  blocks (`MemoryResource::placed`), freed with the texture; the allocator lives with the device. Save 2: 0.41-0.43 ms
+  a texture with memory of its own, 0.048 ms placed (185-190 ms a run against 21 ms). Validation clean, pictures as
+  before.

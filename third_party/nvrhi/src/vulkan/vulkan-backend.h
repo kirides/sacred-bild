@@ -49,6 +49,9 @@
 #define ASSERT_VK_OK(res) do {(void)(res);} while(0)
 #endif // _DEBUG
 
+struct VmaAllocator_T;     // sacred-bild: placed resources (Vulkan Memory Allocator)
+struct VmaAllocation_T;
+
 namespace nvrhi::vulkan
 {
     class Texture;
@@ -120,6 +123,7 @@ namespace nvrhi::vulkan
     // underlying vulkan context
     struct VulkanContext
     {
+        VmaAllocator_T* vma = nullptr;      // sacred-bild: placed resources; null without them
         VulkanContext(vk::Instance instance,
                       vk::PhysicalDevice physicalDevice,
                       vk::Device device,
@@ -312,7 +316,11 @@ namespace nvrhi::vulkan
     public:
         bool managed = true;
         vk::DeviceMemory memory;
+        VmaAllocation_T* placed = nullptr;     // sacred-bild: placed resources (memory is the block's, not ours)
     };
+
+    void createPlacedAllocator(VulkanContext& context);     // sacred-bild: placed resources
+    void destroyPlacedAllocator(VulkanContext& context);
 
     class VulkanAllocator
     {

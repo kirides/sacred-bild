@@ -28,6 +28,9 @@ namespace Rhi
         int maxFrameLatency = 1;
         // Pipelines kept between runs (pipeline_cache.h).
         bool pipelineCache = true;
+        // Textures that allow it (nvrhi::TextureDesc::sharesMemory) placed in shared memory blocks (D3D12 Memory
+        // Allocator, Vulkan Memory Allocator) instead of each getting memory of its own.
+        bool placedResources = true;
     };
 
     // Creates the device; false (and the reason in the log) if the API or a suitable GPU is not there. Nothing is left

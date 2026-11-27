@@ -89,7 +89,8 @@ namespace
         }
         nvrhi::TextureHandle texture = Rhi::device()->createTexture(nvrhi::TextureDesc()
             .setWidth(static_cast<uint32_t>(width)).setHeight(static_cast<uint32_t>(height)).setFormat(f)
-            .setDebugName("gfx texture").setInitialState(nvrhi::ResourceStates::ShaderResource).setKeepInitialState(true));
+            .setDebugName("gfx texture").setInitialState(nvrhi::ResourceStates::ShaderResource).setKeepInitialState(true)
+            .setSharesMemory(true));    // written whole right below
         if (!texture)
         {
             return 0;
@@ -125,14 +126,12 @@ namespace
             return 0;
         }
         // NVRHI writes whole subresources: the rectangle goes to a texture of its size and is copied over.
-        nvrhi::TextureHandle part = Rhi::device()->createTexture(nvrhi::TextureDesc()
-            .setWidth(static_cast<uint32_t>(width)).setHeight(static_cast<uint32_t>(height)).setFormat(d.format)
-            .setDebugName("gfx texture update").setInitialState(nvrhi::ResourceStates::CopySource).setKeepInitialState(true));
+        std::scoped_lock lock(DDrawRhi::Context::lock());
+        nvrhi::ITexture* part = DDrawRhi::Context::scratchTexture(static_cast<uint32_t>(width), static_cast<uint32_t>(height), d.format);
         if (!part)
         {
             return 0;
         }
-        std::scoped_lock lock(DDrawRhi::Context::lock());
         nvrhi::ICommandList* cmd = DDrawRhi::Context::commands();
         cmd->writeTexture(part, 0, 0, pixels, static_cast<size_t>(pitch));
         nvrhi::TextureSlice to;

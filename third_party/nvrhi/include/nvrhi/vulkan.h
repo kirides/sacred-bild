@@ -89,6 +89,9 @@ namespace nvrhi::vulkan
         // driver). Null: an empty cache.
         const void* pipelineCacheData = nullptr;
         size_t pipelineCacheSize = 0;
+        // sacred-bild: placed resources. Textures with TextureDesc::sharesMemory are bound to blocks of Vulkan Memory
+        // Allocator instead of memory of their own.
+        bool placedResources = false;
     };
 
     NVRHI_API DeviceHandle createDevice(const DeviceDesc& desc);

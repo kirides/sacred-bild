@@ -79,14 +79,16 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | BatchParticles | 1 | `Backend=nvrhi`: particles (a world matrix each) are moved into world space and merged into one draw per effect. 0 = one draw per particle, as before. |
 | Render | MergeDraws | 1 | `Backend=nvrhi`: pretransformed draws with the same state as the one before (the interface's quads) are drawn as one. |
 | Render | PipelineCache | 1 | `Backend=nvrhi`: the GPU pipelines are kept between runs in SacredBild-pipelines-d3d12.bin / -vulkan.bin next to the game; the file is discarded (and made again) when SacredBild, the GPU or its driver changed, or it is damaged. |
+| Render | PlacedResources | 1 | `Backend=nvrhi`: textures are placed in shared memory blocks (D3D12 / Vulkan Memory Allocator) instead of each getting memory of its own; making one takes ~0.05 ms instead of ~0.35-0.4 ms (loading, textures streamed in while playing). |
 | Render | SpriteFilter | 0 | `Backend=nvrhi`: the world's point-sampled 2D art (ground tiles, sprites) is magnified with an edge-directed filter in the manner of xBR: smooth diagonals instead of stair steps when zoomed in. |
 | Debug | RhiValidation | 0 | `Backend=nvrhi`: the API's validation (Direct3D 12 debug layer, Vulkan's `VK_LAYER_KHRONOS_validation`) and NVRHI's, messages in the log; slow. |
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | `Backend=chain`: ddraw loaded behind SacredBild; empty = system ddraw. |
 | DDraw | D3D9 | | `Backend=d3d9`: `d3d9.dll` to use (e.g. DXVK), relative to the game folder or absolute. Empty or not loadable: a `d3d9.dll` next to the exe, then Windows' own. |
 | DDraw | MediaFoundation | 1 | Movies through Media Foundation; always on with `Backend=d3d9`, 0 = the game's own player with `Backend=chain`. |
-| Debug | D3DStats | 0 | Frame statistics, hitches and texture memory in `SacredBild.log`, and the world view's time by pass (`passes:` lines). |
+| Debug | D3DStats | 0 | Frame statistics, hitches and texture memory in `SacredBild.log`, and the world view's time by pass (`passes:` lines); with `Backend=nvrhi` also the GPU time a frame and textures made (and the time making them), read-backs and GPU waits a frame (`NVRHI backend: GPU` lines). |
 | Debug | Profiler | 0 | Sampling profiler; writes `SacredBild-profile.txt` every 15 s. |
 | Debug | ProfilerIntervalUs | 500 | Sampling interval. |
+| Debug | ProfilerWorldOnly | 0 | The profile leaves out start-up and loading: what was sampled before the world was drawn is dropped two seconds after its first frame. |
 | Debug | UiTrace | 0 | Scroll Lock logs one UI frame's draws (`UiTrace:` lines: position, UI frame, calling game code) and popups set during the next 5 s. |
 | Debug | CrashDump | 1 | Minidump next to the exe on a crash: 0 = off, 1 = stacks and the memory they point to (small), 2 = all memory (for the game's globals; hundreds of MB). |
 | Debug | SkinCheck | 0 | Compares Granny's CPU skinning of characters with per-vertex bone weights rebuilt from its meshes (`Skin check:` lines every 10 s): groundwork for skinning on the GPU. |

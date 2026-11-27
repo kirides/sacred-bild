@@ -514,6 +514,11 @@ namespace nvrhi
         bool isVirtual = false;
         bool isTiled = false;
 
+        // sacred-bild: placed resources. D3D12 may place the texture in a heap shared with others (D3D12 Memory
+        // Allocator), in memory other resources used before: its contents are undefined until written, so only for
+        // textures that are written whole before they are read. Render targets and UAVs are never placed.
+        bool sharesMemory = false;
+
         Color clearValue;
         bool useClearValue = false;
 
@@ -539,6 +544,7 @@ namespace nvrhi
         constexpr TextureDesc& setIsUAV(bool value) { isUAV = value; return *this; }
         constexpr TextureDesc& setIsTypeless(bool value) { isTypeless = value; return *this; }
         constexpr TextureDesc& setIsVirtual(bool value) { isVirtual = value; return *this; }
+        constexpr TextureDesc& setSharesMemory(bool value) { sharesMemory = value; return *this; }  // sacred-bild
         constexpr TextureDesc& setClearValue(const Color& value) { clearValue = value; useClearValue = true; return *this; }
         constexpr TextureDesc& setUseClearValue(bool value) { useClearValue = value; return *this; }
         constexpr TextureDesc& setInitialState(ResourceStates value) { initialState = value; return *this; }

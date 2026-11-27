@@ -382,13 +382,22 @@ namespace DDrawRhi
             desc.debugName = m_gpuOnly ? "texture (GPU only)" : "texture";
             desc.initialState = nvrhi::ResourceStates::ShaderResource;
             desc.keepInitialState = true;
+            // The system memory copy (zeroed) is uploaded whole before the texture is drawn with; a GPU-only texture is
+            // filled by Blts that may cover part of it, so it keeps zeroed memory of its own.
+            desc.sharesMemory = !m_gpuOnly;
             break;
         default:
             break;
         }
         {
             std::scoped_lock lock(Context::lock());
+            LARGE_INTEGER t0, t1, f;
+            QueryPerformanceCounter(&t0);
             m_gpu = Context::device()->createTexture(desc);
+            QueryPerformanceCounter(&t1);
+            QueryPerformanceFrequency(&f);
+            ++Context::counters().textures;
+            Context::counters().textureMicros += static_cast<uint64_t>((t1.QuadPart - t0.QuadPart) * 1000000 / f.QuadPart);
             if (m_gpu && m_kind == Kind::RenderTarget)
             {
                 Context::commands()->clearTextureFloat(m_gpu, nvrhi::AllSubresources, nvrhi::Color(0.0f, 0.0f, 0.0f, 1.0f));
@@ -546,6 +555,7 @@ namespace DDrawRhi
             }
         }
         Context::commands()->copyTexture(m_staging, nvrhi::TextureSlice(), m_gpu, nvrhi::TextureSlice());
+        ++Context::counters().readBacks;
         Context::flush(true);
         size_t pitch = 0;
         auto* bits = static_cast<uint8_t*>(dev->mapStagingTexture(m_staging, nvrhi::TextureSlice(), nvrhi::CpuAccessMode::Read, &pitch));
@@ -578,9 +588,7 @@ namespace DDrawRhi
         const DDPIXELFORMAT& pf)
     {
         const nvrhi::Format gpu = DDrawRhi::gpuFormat(format);
-        nvrhi::TextureHandle temp = Context::device()->createTexture(nvrhi::TextureDesc().setWidth(w).setHeight(h)
-            .setFormat(gpu).setDebugName("copy source").setInitialState(nvrhi::ResourceStates::ShaderResource)
-            .setKeepInitialState(true));
+        nvrhi::TextureHandle temp = Context::scratchTexture(w, h, gpu);
         if (!temp)
         {
             return nullptr;
@@ -877,9 +885,11 @@ namespace DDrawRhi
                 {
                     // Within one render target: through a copy of the source rectangle.
                     const UINT w = static_cast<UINT>(rectWidth(srcRect)), h = static_cast<UINT>(rectHeight(srcRect));
-                    nvrhi::TextureHandle temp = Context::device()->createTexture(nvrhi::TextureDesc().setWidth(w).setHeight(h)
-                        .setFormat(nvrhi::Format::BGRA8_UNORM).setDebugName("copy source")
-                        .setInitialState(nvrhi::ResourceStates::ShaderResource).setKeepInitialState(true));
+                    nvrhi::ITexture* temp = Context::scratchTexture(w, h, nvrhi::Format::BGRA8_UNORM);
+                    if (!temp)
+                    {
+                        return DDERR_GENERIC;
+                    }
                     nvrhi::TextureSlice from;
                     from.x = static_cast<uint32_t>(srcRect.left);
                     from.y = static_cast<uint32_t>(srcRect.top);

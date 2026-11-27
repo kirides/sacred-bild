@@ -24,6 +24,8 @@
 
 #include <nvrhi/d3d12.h>
 
+namespace D3D12MA { class Allocator; class Allocation; }  // sacred-bild: placed resources
+
 #ifndef NVRHI_D3D12_WITH_NVAPI
 #define NVRHI_D3D12_WITH_NVAPI 0
 #endif
@@ -104,6 +106,7 @@
 #include <queue>
 #include <list>
 #include <mutex>
+#include <atomic>
 #include <unordered_map>
 #include <utility>
 
@@ -153,12 +156,32 @@ namespace nvrhi::d3d12
     void TranslateBlendState(const BlendState& inState, D3D12_BLEND_DESC& outState);
     void TranslateDepthStencilState(const DepthStencilState& inState, D3D12_DEPTH_STENCIL_DESC& outState);
     void TranslateRasterizerState(const RasterState& inState, D3D12_RASTERIZER_DESC& outState);
+
+    // sacred-bild: placed resources. Owns one D3D12MA allocation; declared before the resource placed in it, so the
+    // resource is released first.
+    struct PlacedAllocation
+    {
+        D3D12MA::Allocation* allocation = nullptr;
+        PlacedAllocation() = default;
+        PlacedAllocation(const PlacedAllocation&) = delete;
+        PlacedAllocation& operator=(const PlacedAllocation&) = delete;
+        ~PlacedAllocation();
+    };
     
     struct Context
     {
+        // sacred-bild: placed resources (TextureDesc::sharesMemory); null without them.
+        D3D12MA::Allocator* allocator = nullptr;
         // sacred-bild: pipeline cache (DeviceDesc::pipelineLibrary)
         ID3D12PipelineLibrary* pipelineLibrary = nullptr;
         SRWLOCK* pipelineLibraryLock = nullptr;
+        // sacred-bild: textures are made without waiting for their memory to become resident (D3D12 waits for each
+        // otherwise, about half a millisecond). They are made not resident and made resident by the paging queue, which
+        // signals residencyFence with residencyValue; the queues wait for the last value before executing.
+        RefCountPtr<ID3D12Device3> device3;
+        RefCountPtr<ID3D12Fence> residencyFence;
+        std::mutex residencyMutex;
+        std::atomic<uint64_t> residencyValue{0};
         RefCountPtr<ID3D12Device> device;
         RefCountPtr<ID3D12Device2> device2;
         RefCountPtr<ID3D12Device5> device5;
@@ -306,6 +329,7 @@ namespace nvrhi::d3d12
     public:
         const TextureDesc desc;
         const D3D12_RESOURCE_DESC1 resourceDesc;
+        PlacedAllocation placed;    // sacred-bild: placed resources
         RefCountPtr<ID3D12Resource> resource;
         uint8_t planeCount = 1;
         HANDLE sharedHandle = nullptr;
@@ -962,6 +986,7 @@ namespace nvrhi::d3d12
         std::atomic<uint64_t> lastSubmittedInstance = 0;
         std::atomic<uint64_t> lastCompletedInstance = 0;
         std::atomic<uint64_t> recordingInstance = 1;
+        uint64_t residencyWaited = 0;   // sacred-bild: Context::residencyFence value this queue waits for
 
         explicit Queue(const Context& context, ID3D12CommandQueue* queue, CommandListLifetimeTrackerHandle&& lifetimeTracker);
         uint64_t updateLastCompletedInstance();

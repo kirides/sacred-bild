@@ -21,6 +21,7 @@
 */
 
 #include "d3d12-backend.h"
+#include <D3D12MemAlloc.h>     // sacred-bild: placed resources
 
 #include <nvrhi/common/misc.h>
 
@@ -234,6 +235,17 @@ namespace nvrhi::d3d12
         m_Context.logBufferLifetime = desc.logBufferLifetime;
         m_Context.messageCallback = desc.errorCB;
 
+        // sacred-bild: placed resources (TextureDesc::sharesMemory) from D3D12 Memory Allocator's heaps.
+        if (desc.placedResources && desc.pAdapter)
+        {
+            D3D12MA::ALLOCATOR_DESC allocatorDesc = {};
+            allocatorDesc.Flags = static_cast<D3D12MA::ALLOCATOR_FLAGS>(D3D12MA::ALLOCATOR_FLAG_DEFAULT_POOLS_NOT_ZEROED | D3D12MA::ALLOCATOR_FLAG_MSAA_TEXTURES_ALWAYS_COMMITTED);
+            allocatorDesc.pDevice = desc.pDevice;
+            allocatorDesc.pAdapter = desc.pAdapter;
+            if (FAILED(D3D12MA::CreateAllocator(&allocatorDesc, &m_Context.allocator)))
+                m_Context.allocator = nullptr;
+        }
+
         if (desc.pGraphicsCommandQueue)
             m_Queues[int(CommandQueue::Graphics)] = std::make_unique<Queue>(m_Context, desc.pGraphicsCommandQueue, createCommandListLifetimeTracker(CommandQueue::Graphics));
         if (desc.pComputeCommandQueue)
@@ -280,6 +292,13 @@ namespace nvrhi::d3d12
         if (SUCCEEDED(m_Context.device->QueryInterface(&m_Context.device8)) && hasOptions7)
         {
             m_SamplerFeedbackSupported = m_Options7.SamplerFeedbackTier >= D3D12_SAMPLER_FEEDBACK_TIER_0_9;
+        }
+
+        // sacred-bild: residency without waiting (Context::residencyFence)
+        if (SUCCEEDED(m_Context.device->QueryInterface(&m_Context.device3)) &&
+            FAILED(m_Context.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_Context.residencyFence))))
+        {
+            m_Context.device3 = nullptr;
         }
 
         if (SUCCEEDED(m_Context.device->QueryInterface(&m_Context.device10)) && hasOptions12 && desc.enableEnhancedBarriers)
@@ -573,6 +592,13 @@ namespace nvrhi::d3d12
             CloseHandle(m_FenceEvent);
             m_FenceEvent = nullptr;
         }
+
+        // sacred-bild: placed resources. The textures placed in its heaps are gone with the device's users.
+        if (m_Context.allocator)
+        {
+            m_Context.allocator->Release();
+            m_Context.allocator = nullptr;
+        }
     }
 
     bool Device::waitForIdle()
@@ -701,6 +727,13 @@ namespace nvrhi::d3d12
         }
 
         Queue* pQueue = getQueue(executionQueue);
+
+        // sacred-bild: what the lists use is resident first (Context::residencyFence).
+        if (const uint64_t resident = m_Context.residencyValue.load(); resident > pQueue->residencyWaited)
+        {
+            pQueue->queue->Wait(m_Context.residencyFence, resident);
+            pQueue->residencyWaited = resident;
+        }
 
         pQueue->queue->ExecuteCommandLists(uint32_t(commandListsToExecute.size()), commandListsToExecute.data());
         (void)pQueue->Signal();

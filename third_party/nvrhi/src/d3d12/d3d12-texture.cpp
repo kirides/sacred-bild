@@ -21,6 +21,7 @@
 */
 
 #include "d3d12-backend.h"
+#include <D3D12MemAlloc.h>     // sacred-bild: placed resources
 
 #include <nvrhi/common/misc.h>
 
@@ -137,6 +138,12 @@ namespace nvrhi::d3d12
         default:
             return nullptr;
         }
+    }
+
+    PlacedAllocation::~PlacedAllocation()   // sacred-bild: placed resources
+    {
+        if (allocation)
+            allocation->Release();
     }
 
     Texture::~Texture()
@@ -341,6 +348,7 @@ namespace nvrhi::d3d12
             return TextureHandle::Create(texture);
         }
 
+        bool enqueueResidency = false;     // sacred-bild: made resident by the paging queue (Context::residencyFence)
         D3D12_RESOURCE_STATES const initialState = convertResourceStates(d.initialState);
         D3D12_BARRIER_LAYOUT const initialLayout = convertResourceStatesForEnhancedBarriers(d.initialState, true).layout;
 
@@ -365,9 +373,29 @@ namespace nvrhi::d3d12
                     IID_PPV_ARGS(&texture->resource));
             }
         }
+        else if (d.sharesMemory && m_Context.allocator && !isShared && !d.isRenderTarget && !d.isUAV)
+        {
+            // sacred-bild: placed in one of D3D12 Memory Allocator's heaps (no allocation and no residency wait of
+            // its own); the allocation is the texture's and goes with it.
+            D3D12MA::ALLOCATION_DESC allocationDesc = {};
+            allocationDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+            if (m_EnhancedBarriersSupported)
+            {
+                hr = m_Context.allocator->CreateResource3(&allocationDesc, &texture->resourceDesc, initialLayout,
+                    d.useClearValue ? &clearValue : nullptr, 0, nullptr, &texture->placed.allocation, IID_PPV_ARGS(&texture->resource));
+            }
+            else
+            {
+                hr = m_Context.allocator->CreateResource(&allocationDesc, reinterpret_cast<D3D12_RESOURCE_DESC const*>(&texture->resourceDesc),
+                    initialState, d.useClearValue ? &clearValue : nullptr, &texture->placed.allocation, IID_PPV_ARGS(&texture->resource));
+            }
+        }
         else
         {
             heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+            enqueueResidency = m_Context.device3 && !isShared;
+            if (enqueueResidency)
+                heapFlags |= D3D12_HEAP_FLAG_CREATE_NOT_RESIDENT;
 
             if (m_EnhancedBarriersSupported)
             {
@@ -403,6 +431,17 @@ namespace nvrhi::d3d12
             
             delete texture;
             return nullptr;
+        }
+
+        if (enqueueResidency)
+        {
+            std::scoped_lock lock(m_Context.residencyMutex);
+            ID3D12Pageable* pageable = texture->resource;
+            const uint64_t value = m_Context.residencyValue.load() + 1;
+            if (SUCCEEDED(m_Context.device3->EnqueueMakeResident(D3D12_RESIDENCY_FLAG_NONE, 1, &pageable, m_Context.residencyFence, value)))
+                m_Context.residencyValue = value;
+            else
+                m_Context.device3->MakeResident(1, &pageable);
         }
 
         if (isShared)
