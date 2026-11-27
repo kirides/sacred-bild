@@ -2,6 +2,7 @@
 #include "gear.h"
 #include "hooks.h"
 #include "ui/keyblock.h"
+#include "host_guard.h"
 #include "instance.h"
 #include "log.h"
 #include "overlay.h"
@@ -171,6 +172,15 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH)
     {
+        // Never in a third-party exe: the load fails, so no loader (ASI, injector, SacredBild) keeps this module there.
+        // Decided from the exe itself (core/host_guard.h), before anything else of this DLL runs.
+        if (HostGuard::verdict().host == HostGuard::Host::ThirdParty)
+        {
+            const std::wstring exe = exePath();
+            Log::init((directoryOf(exe) + L"\\SacredGear-blocked.log").c_str());
+            LOG("Sacred Gear {} refuses to load into this exe: {}", Gear::kVersion, HostGuard::verdict().reason);
+            return FALSE;
+        }
         DisableThreadLibraryCalls(instance);
         start(instance);
     }

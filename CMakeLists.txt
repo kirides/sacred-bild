@@ -40,6 +40,7 @@ set(COMMON_OPTIONS /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
 # its own copy (its own log file, its own Detours transactions).
 add_library(sacred_core STATIC
   src/core/fmt.cpp
+  src/core/host_guard.cpp
   src/core/instance.cpp
   src/core/log.cpp
   src/core/patch.cpp
@@ -308,6 +309,11 @@ if(SACREDGEAR)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_PDB_FILE:SacredGear> "${SACRED_GAME_DIR}/SacredGear.pdb")
   endif()
 endif()
+
+# Which exes Sacred Gear may run in (src/core/host_guard.*): run hostguard_test.exe, exit code 0 = passed.
+add_executable(hostguard_test tools/test/hostguard/hostguard_test.cpp)
+target_link_libraries(hostguard_test PRIVATE sacred_core)
+target_compile_options(hostguard_test PRIVATE ${COMMON_OPTIONS})
 
 # Test bench for the UDP transport and the matchmaker client outside the game (tools/test/nettest/nettest.cpp).
 option(SACREDBILD_NETTEST "Build tools/test/nettest" OFF)
