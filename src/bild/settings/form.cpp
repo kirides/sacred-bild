@@ -286,9 +286,10 @@ Ui::Control& Ui::Control::digits()
     return *this;
 }
 
-void Ui::Form::page(const wchar_t* title)
+void Ui::Form::page(const wchar_t* title, Predicate visibleIf)
 {
     m_pages.push_back({title});
+    m_pages.back().visible = std::move(visibleIf);
     column();
 }
 
@@ -815,6 +816,7 @@ void Ui::Form::init(HWND dlg)
         TCITEMW tab = {TCIF_TEXT};
         tab.pszText = m_pages[i].title.data();
         SendMessageW(m_tabs, TCM_INSERTITEMW, i, reinterpret_cast<LPARAM>(&tab));
+        m_pages[i].shown = true;
     }
     RECT area;
     GetClientRect(m_tabs, &area);
@@ -850,6 +852,7 @@ void Ui::Form::init(HWND dlg)
     }
     addTooltips();
     updateEnabled();
+    updatePages();
     SetForegroundWindow(dlg);
     SetTimer(dlg, kGamepadTimer, kGamepadMs, nullptr);
 }
@@ -860,6 +863,67 @@ void Ui::Form::showPage(int index)
     {
         ShowWindow(m_pages[i].hwnd, i == index ? SW_SHOW : SW_HIDE);
     }
+}
+
+int Ui::Form::tabPage(int tab) const
+{
+    for (int i = 0; i < static_cast<int>(m_pages.size()); ++i)
+    {
+        if (m_pages[i].shown && tab-- == 0)
+        {
+            return i;
+        }
+    }
+    return 0;
+}
+
+int Ui::Form::pageTab(int page) const
+{
+    if (page < 0 || page >= static_cast<int>(m_pages.size()) || !m_pages[page].shown)
+    {
+        return -1;
+    }
+    int tab = 0;
+    for (int i = 0; i < page; ++i)
+    {
+        tab += m_pages[i].shown ? 1 : 0;
+    }
+    return tab;
+}
+
+// Pages with visibleIf get their tab back or lose it; the shown page stays shown if it still has a tab.
+void Ui::Form::updatePages()
+{
+    if (!m_tabs)
+    {
+        return;
+    }
+    bool changed = false;
+    for (Page& page : m_pages)
+    {
+        const bool shown = !page.visible || page.visible(*this);
+        changed |= shown != page.shown;
+    }
+    if (!changed)
+    {
+        return;
+    }
+    const int current = tabPage(TabCtrl_GetCurSel(m_tabs));
+    TabCtrl_DeleteAllItems(m_tabs);
+    int tab = 0;
+    for (Page& page : m_pages)
+    {
+        page.shown = !page.visible || page.visible(*this);
+        if (page.shown)
+        {
+            TCITEMW item = {TCIF_TEXT};
+            item.pszText = page.title.data();
+            SendMessageW(m_tabs, TCM_INSERTITEMW, tab++, reinterpret_cast<LPARAM>(&item));
+        }
+    }
+    const int page = pageTab(current) >= 0 ? current : 0;
+    TabCtrl_SetCurSel(m_tabs, pageTab(page));
+    showPage(page);
 }
 
 void Ui::Form::addTooltips()
@@ -926,6 +990,7 @@ void Ui::Form::command(WORD id)
     if (m_dlg)
     {
         updateEnabled();
+        updatePages();
     }
 }
 
@@ -1150,18 +1215,18 @@ void Ui::Form::padSideways(HWND focus, bool right)
 void Ui::Form::padPage(int step)
 {
     const int from = TabCtrl_GetCurSel(m_tabs);
-    const int to = std::clamp(from + step, 0, static_cast<int>(m_pages.size()) - 1);
+    const int to = std::clamp(from + step, 0, TabCtrl_GetItemCount(m_tabs) - 1);
     if (from < 0 || to == from)
     {
         return;
     }
     const HWND focus = GetFocus();
-    const bool onPage = focus && IsChild(m_pages[from].hwnd, focus);
+    const bool onPage = focus && IsChild(m_pages[tabPage(from)].hwnd, focus);
     TabCtrl_SetCurSel(m_tabs, to);
-    showPage(to);
+    showPage(tabPage(to));
     if (onPage)
     {
-        const HWND first = GetNextDlgTabItem(m_pages[to].hwnd, nullptr, FALSE);
+        const HWND first = GetNextDlgTabItem(m_pages[tabPage(to)].hwnd, nullptr, FALSE);
         focusOn(first ? first : m_tabs);
     }
 }
@@ -1286,6 +1351,7 @@ void Ui::Form::set(const wchar_t* section, const wchar_t* name, const std::wstri
     if (m_dlg)
     {
         updateEnabled();
+        updatePages();
     }
 }
 
@@ -1366,7 +1432,7 @@ INT_PTR CALLBACK Ui::Form::dialogProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp)
     case WM_NOTIFY:
         if (const auto* header = reinterpret_cast<const NMHDR*>(lp); header->idFrom == kTabsId && header->code == TCN_SELCHANGE)
         {
-            form->showPage(TabCtrl_GetCurSel(form->m_tabs));
+            form->showPage(form->tabPage(TabCtrl_GetCurSel(form->m_tabs)));
             return TRUE;
         }
         break;
