@@ -17,6 +17,7 @@
 #include "settings/config/display.h"
 #include "settings/config/render.h"
 #include "ddraw9/smaa.h"
+#include "ddrawrhi/device.h"
 #include "ddrawrhi/smaa.h"
 #include "ddrawrhi/world.h"
 #include "log.h"
@@ -368,7 +369,16 @@ namespace
             }
         }
         GroundMesh::beginFrame(self, device);
+        DDrawRhi::Device* rhiDevice = proxy && device == proxy && Config::ddraw.nvrhi ? DDrawRhi::Device::from(proxy->real()) : nullptr;
+        if (rhiDevice)
+        {
+            rhiDevice->setWorldView(true);
+        }
         g_origWorldRender(self, edx, device);
+        if (rhiDevice)
+        {
+            rhiDevice->setWorldView(false);
+        }
         if (proxy && device == proxy)
         {
             proxy->endBatch();

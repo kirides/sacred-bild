@@ -50,6 +50,9 @@ namespace Config
         // [DDraw] Backend=nvrhi: the GPU pipelines kept between runs (SacredBild-pipelines-<api>.bin next to the game;
         // discarded when SacredBild, the GPU or its driver changed).
         bool pipelineCache = true;
+        // [DDraw] Backend=nvrhi: the world's point-sampled 2D art (ground tiles, sprites) magnified with an edge-directed
+        // filter in the manner of xBR (smooth diagonals instead of stair steps when zoomed in). Off: point sampling.
+        bool spriteFilter = false;
         // Filtering of the game world's textures: 0 the game's own point sampling, 1 sharp bilinear (crisp texels, soft
         // edges; Direct3D 9 backend, point sampling elsewhere), 2 bilinear (smoother when zoomed in). The interface
         // follows [UI] LinearFilter.

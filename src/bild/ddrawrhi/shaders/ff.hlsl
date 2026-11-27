@@ -12,6 +12,7 @@
 #define FLAG_NORMALIZE      0x020   // NORMALIZENORMALS
 #define FLAG_LOCALVIEWER    0x040
 #define FLAG_SPECULARON     0x080   // SPECULARENABLE
+#define FLAG_FILTER2D       0x1000  // pixel flag: stage 0 sampled through the edge-directed 2D filter ([Render] SpriteFilter)
 #define FLAG_COLORVERTEX    0x100
 #define FLAG_GROUND         0x200   // GroundMesh's quads (ddrawrhi/ground.h): sector space, placed by groundTransform
 #define FLAG_SKIN           0x400   // GpuSkin's meshes (ddrawrhi/skin.h): bind pose skinned by the bone palette
@@ -314,6 +315,62 @@ float4 stage(uint4 s, uint4 sb, float4 current, float4 diffuse, float4 specular,
     return float4(color.rgb, alpha);
 }
 
+// [Render] SpriteFilter: an edge-directed magnification filter in the manner of xBR (level 1), for the game's
+// point-sampled 2D art (ground tiles, sprites) in the world view. Each screen pixel looks at the texel it falls in (E)
+// and the 5x5 texels around it, mirrored so that the corner of E nearest to the pixel is the lower right one. Where an
+// edge runs across that corner (the weighted color distances along it are smaller than across it), the corner is cut
+// along the diagonal: the pixel takes the color of the neighbour on the edge's side, blended over one screen pixel at
+// the cut. Elsewhere it is E, as point sampling gives. Texels are read with Load (no filtering), clamped to the texture.
+float colorDistance(float4 a, float4 b)
+{
+    const float3 d = a.rgb - b.rgb;
+    // Luma weighs most; alpha edges (sprite outlines) count like color.
+    return abs(dot(d, float3(0.299, 0.587, 0.114))) * 2.0 + dot(abs(d), float3(0.333, 0.333, 0.333)) + abs(a.a - b.a) * 2.0;
+}
+
+float4 texelAt(int2 p, int2 size)
+{
+    return tex0.Load(int3(clamp(p, int2(0, 0), size - 1), 0));
+}
+
+float4 filter2D(float2 uv)
+{
+    uint w, h;
+    tex0.GetDimensions(w, h);
+    const int2 size = int2(w, h);
+    const float2 t = uv * float2(size);
+    const int2 e = int2(floor(t));
+    const float2 f = t - float2(e);
+    // Mirror so that the nearest corner is (+1, +1).
+    const int2 d = int2(f.x >= 0.5 ? 1 : -1, f.y >= 0.5 ? 1 : -1);
+    const float2 q = float2(d.x > 0 ? f.x : 1.0 - f.x, d.y > 0 ? f.y : 1.0 - f.y);     // 0.5 .. 1 toward the corner
+    const float4 E = texelAt(e, size);
+    const float4 F = texelAt(e + int2(d.x, 0), size);
+    const float4 H = texelAt(e + int2(0, d.y), size);
+    const float4 I = texelAt(e + d, size);
+    const float4 D = texelAt(e - int2(d.x, 0), size);
+    const float4 B = texelAt(e - int2(0, d.y), size);
+    const float4 C = texelAt(e + int2(d.x, -d.y), size);
+    const float4 G = texelAt(e + int2(-d.x, d.y), size);
+    const float4 F4 = texelAt(e + int2(2 * d.x, 0), size);
+    const float4 I4 = texelAt(e + int2(2 * d.x, d.y), size);
+    const float4 H5 = texelAt(e + int2(0, 2 * d.y), size);
+    const float4 I5 = texelAt(e + int2(d.x, 2 * d.y), size);
+    // The edge F-H (across the corner) against E-I (along it).
+    const float along = colorDistance(E, C) + colorDistance(E, G) + colorDistance(I, F4) + colorDistance(I, H5) + 4.0 * colorDistance(H, F);
+    const float across = colorDistance(H, D) + colorDistance(H, I5) + colorDistance(F, I4) + colorDistance(F, B) + 4.0 * colorDistance(E, I);
+    if (!(along < across) || colorDistance(E, F) < 1e-4 || colorDistance(E, H) < 1e-4)
+    {
+        return E;
+    }
+    const float4 other = colorDistance(E, F) <= colorDistance(E, H) ? F : H;
+    // The cut: the diagonal through the corner's middle (q.x + q.y = 1.5 of the texel), one screen pixel soft.
+    const float position = q.x + q.y - 1.5;
+    const float width = max(fwidth(t.x) + fwidth(t.y), 1e-4);
+    const float cover = saturate(position / width + 0.5);
+    return lerp(E, other, cover);
+}
+
 bool alphaPasses(float alpha)
 {
     const float a = round(saturate(alpha) * 255.0);
@@ -335,7 +392,8 @@ float4 psMain(VSOut i) : SV_Target
     float4 current = i.diffuse;
     if (stage0.x > 1)
     {
-        const float4 texel0 = stage0b.z != 0 ? tex0.Sample(samp0, i.uv0) : float4(1, 1, 1, 1);
+        const float4 texel0 = stage0b.z == 0 ? float4(1, 1, 1, 1)
+            : (psFlags & FLAG_FILTER2D) != 0 ? filter2D(i.uv0) : tex0.Sample(samp0, i.uv0);
         current = stage(stage0, stage0b, current, i.diffuse, i.specular, texel0);
         if (stage1.x > 1)
         {

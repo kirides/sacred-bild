@@ -93,6 +93,7 @@ namespace DDrawRhi
             kFlagNormalize = 0x020,
             kFlagLocalViewer = 0x040,
             kFlagSpecularOn = 0x080,
+            kFlagFilter2D = 0x1000,     // pixel constants: ff.hlsl's filter2D for stage 0
             kFlagColorVertex = 0x100,
             kFlagGround = 0x200,
             kFlagSkin = 0x400,
@@ -812,6 +813,12 @@ namespace DDrawRhi
     // ------------------------------------------------------------------------------------------------------------
     // Drawing
 
+    void Device::setWorldView(bool on)
+    {
+        std::scoped_lock lock(m_lock);
+        m_worldView = on;
+    }
+
     void Device::updateConstants(nvrhi::ICommandList* cmd, DWORD fvf)
     {
         if (m_paletteEpoch != m_epoch)
@@ -825,6 +832,15 @@ namespace DDrawRhi
         const bool ground = fvf == kGroundFvf;
         const bool skin = skinKey(fvf) && m_skin;
         const bool rhw = ground || (!skin && Fvf::pretransformed(fvf));
+        // [Render] SpriteFilter: the world view's flat art (ground, sprites: pretransformed) with a point-sampled
+        // texture goes through the 2D filter. It depends on the draw, so the pixel constants follow it.
+        const bool filter = Config::render.spriteFilter && m_worldView && rhw && m_textures[0] &&
+            m_tss[0][D3DTSS_MAGFILTER] == D3DTFG_POINT;
+        if (filter != m_psFilter)
+        {
+            m_psFilter = filter;
+            m_psDirty = true;
+        }
         if (fvf != m_constantsFvf)
         {
             m_constantsFvf = fvf;
@@ -959,7 +975,7 @@ namespace DDrawRhi
             colorDword(m_rs[D3DRENDERSTATE_TEXTUREFACTOR], c.textureFactor);
             c.alphaFunc = m_rs[D3DRENDERSTATE_ALPHATESTENABLE] ? m_rs[D3DRENDERSTATE_ALPHAFUNC] : 0;
             c.alphaRef = static_cast<float>(m_rs[D3DRENDERSTATE_ALPHAREF] & 0xFF);
-            c.flags = m_rs[D3DRENDERSTATE_SPECULARENABLE] ? kFlagSpecularOn : 0;
+            c.flags = (m_rs[D3DRENDERSTATE_SPECULARENABLE] ? kFlagSpecularOn : 0) | (m_psFilter ? kFlagFilter2D : 0);
             cmd->writeBuffer(m_psConstants, &c, sizeof(c));
         }
     }

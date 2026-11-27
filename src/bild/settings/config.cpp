@@ -270,6 +270,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     Config::render.batchParticles = readInt(ini, L"Render", L"BatchParticles", Config::render.batchParticles) != 0;
     Config::render.mergeDraws = readInt(ini, L"Render", L"MergeDraws", Config::render.mergeDraws) != 0;
     Config::render.pipelineCache = readInt(ini, L"Render", L"PipelineCache", Config::render.pipelineCache) != 0;
+    Config::render.spriteFilter = readInt(ini, L"Render", L"SpriteFilter", Config::render.spriteFilter) != 0;
     {
         Config::render.worldScale = std::clamp(static_cast<float>(_wtof(readString(ini, L"Render", L"WorldScale", L"1").c_str())), 1.0f, 3.0f);
         const std::wstring smaa = readString(ini, L"Render", L"SMAA", L"Off");

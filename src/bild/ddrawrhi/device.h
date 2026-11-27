@@ -42,6 +42,8 @@ namespace DDrawRhi
 
         // The world view's own target (world.h): draws go into a color and depth target `scale` times the render
         // target's size until endWorld, which scales it down into the render target.
+        // The world view is being drawn (FrameHooks): its 2D art may be filtered ([Render] SpriteFilter).
+        void setWorldView(bool on);
         void beginWorld(float scale);
         void endWorld();
         // The render target's texture (null without one).
@@ -202,6 +204,8 @@ namespace DDrawRhi
         // The world view's target while it is drawn (beginWorld .. endWorld), and its scale.
         nvrhi::TextureHandle m_worldColor, m_worldDepth;
         bool m_inWorld = false;
+        bool m_worldView = false;
+        bool m_psFilter = false;                // the pixel constants were written with the 2D filter
         float m_worldScale = 1.0f;
         nvrhi::BufferHandle m_boneConstants;
         uint32_t m_paletteId = 0;               // the palette in m_boneConstants (0: none)
