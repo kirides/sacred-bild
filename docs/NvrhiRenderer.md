@@ -232,3 +232,10 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   and its count are checked where the code reads them (ReBorn moved them; there the game draws water).
   The take-over's batch is a fixed buffer filled in place (a vector insert and a zeroed temporary per quad cost
   0.06 ms in the park save); with it the world takes 1.63-1.66 ms there against 1.70-1.72 ms with the game's code.
+- 2026-11-27: the object branch of the draw lists (kind 0, objects2 0x63128E onwards, and the same in 0x62E410) is
+  game logic around the draws, not drawing: on- and off-screen tests with animation updates for off-screen creatures
+  (0x640600, 0x5941A0), the see-through circles of the party, the pick list (0x632E30), sound triggers (0x6770E0 commands
+  10/11), labels; the drawing itself happens in the objects' methods (cCreature_render 0x599910 into Granny, which
+  GpuSkin already draws on the GPU with SacredBild's skinning shader on NVRHI; cObject3D drawModel 0x44A9D0 through the
+  batcher's model path; sprite objects through 0x642FD0). Reimplementing that branch would copy game logic for no gain,
+  so stage 8 takes over where the draws are made (the model and sprite-object draw functions), not the branch.
