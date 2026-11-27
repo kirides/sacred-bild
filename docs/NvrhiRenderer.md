@@ -140,3 +140,14 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   still queued on resize (NVRHI's waitForIdle does not cover presents): the D3D12 side flushes its queue with a fence first.
   Still to do for stage 2: `[DDraw] Backend=nvrhi`, `[Render] Api`, `[Debug] RhiValidation` in the ini (with stage 3, which
   is what the game needs to run on it).
+- 2026-11-27: stage 3 (3a + 3b) done: `src/bild/ddrawrhi/` (commits 50a7c5b, be741f4). gear_sandbox `--backend nvrhi|nvrhi-vulkan`:
+  a UI document (text, borders, gradients, a rotated box, a game texture, opacity) is pixel-identical to the Direct3D 9
+  backend on both APIs; the sandbox's pixel tests pass. In the game (test copy `B:\DevDrive\sacred-nvrhitest`, 1600x900,
+  save 1, automation shots): menu and world on Direct3D 12 and Vulkan differ from Direct3D 9 in about 0.05 % of the pixels
+  (animation timing). Uncapped frame times there: d3d9 1.7 ms (580 fps), nvrhi 2.7 ms (375 fps) on both APIs, because
+  GroundMesh and GpuSkinning are Direct3D 9 only so far (3,400 draws a frame instead of 600): stage 4 closes that.
+  Open: the RmlUi fuzzer shows a first-frame pixel difference between retained and twin documents on Vulkan only (not
+  on D3D12 or D3D9), not explained yet; the fuzzer also found a use-after-free in RmlUi's active chain
+  (Rml::Context::ResetActiveChain after a mouse up, seed 23) that crashes only with some heap layouts, unrelated to the
+  renderer. Stage 3c (overlay, prompts) not done: SacredBild's own ImGui screens and controller prompts are off with
+  Backend=nvrhi.
