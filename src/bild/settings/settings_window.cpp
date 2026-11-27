@@ -279,11 +279,6 @@ namespace
                  L"(HUD layout tab). Off: the whole interface stays in the centered 1024 x 768 area.");
         ui.check(L"Smooth UI scaling (bilinear filtering)", {L"UI", L"LinearFilter"}, Config::ui.linearFilter)
             .tip(L"Bilinear filtering for the scaled interface. Off: the game's sharp point sampling.");
-        ui.check(L"HD Font", {L"UI", L"NativeFonts"}, Config::ui.nativeFonts)
-            .enabledIf(nvrhi)
-            .tip(L"NVRHI renderer: every character the game puts into its font textures is drawn again with the "
-                 L"same font at the UI size, so text is sharp instead of stretched from 1024 x 768. The layout and "
-                 L"line breaks stay the game's.");
         ui.group(L"Renderer");
         ui.combo(L"DirectDraw:", {L"DDraw", L"Backend"},
               {{L"SacredBild (Direct3D 9)", L"d3d9"}, {L"SacredBild NVRHI (experimental)", L"nvrhi"},
@@ -294,19 +289,6 @@ namespace
                  L"Direct3D 9 where neither works).\n"
                  L"Chain-loaded ddraw: the ddraw.dll set on the Advanced tab (DDrawCompat or another wrapper), else "
                  L"Windows' own.");
-        ui.combo(L"Graphics API:", {L"Render", L"Api"}, {{L"Direct3D 12", L"d3d12"}, {L"Vulkan", L"vulkan"}},
-              Config::ddraw.vulkan ? L"vulkan" : L"d3d12")
-            .enabledIf(nvrhi)
-            .tip(L"The API the NVRHI renderer uses; the other one is tried if this one doesn't start.");
-        ui.combo(L"World supersampling:", {L"Render", L"WorldScale"}, {{L"Off", L"1"}, {L"1.5 x", L"1.5"}, {L"2 x", L"2"}},
-              Config::render.worldScale >= 2.0f ? L"2" : Config::render.worldScale >= 1.5f ? L"1.5" : L"1")
-            .enabledIf(nvrhi)
-            .tip(L"Draw the game world at a multiple of the resolution and scale it down before the interface: smoother "
-                 L"edges, at the cost of GPU time. Needs the NVRHI renderer.");
-        ui.check(L"Smooth the world's pixel art (xBR)", {L"Render", L"SpriteFilter"}, Config::render.spriteFilter)
-            .enabledIf(nvrhi)
-            .tip(L"Magnify ground tiles and sprites with an edge-directed filter in the manner of xBR: diagonal edges come "
-                 L"out smooth instead of in stair steps when zoomed in. Needs the NVRHI renderer.");
         ui.check(L"Animate characters on the GPU", {L"Render", L"GpuSkinning"}, Config::render.gpuSkinning)
             .enabledIf(own)
             .tip(L"Animate (skin) characters and their shadows in a vertex shader instead of on the CPU. "
@@ -332,8 +314,30 @@ namespace
                  L"draws it can't do that way stay point sampled). Bilinear smooths the ground and sprites when zoomed in, "
                  L"but can show faint seams or dark fringes where a texture sheet's neighbouring images or colour-keyed "
                  L"edges blend in. The interface follows 'Smooth UI scaling'.");
-        ui.group(L"NVRHI renderer");
-        ui.beginEnabledIf(nvrhi);
+
+        ui.page(L"NVRHI", nvrhi);
+        ui.group(L"Renderer");
+        ui.combo(L"Graphics API:", {L"Render", L"Api"}, {{L"Direct3D 12", L"d3d12"}, {L"Vulkan", L"vulkan"}},
+              Config::ddraw.vulkan ? L"vulkan" : L"d3d12")
+            .tip(L"The API the NVRHI renderer uses; the other one is tried if this one doesn't start.");
+        ui.combo(L"World supersampling:", {L"Render", L"WorldScale"}, {{L"Off", L"1"}, {L"1.5 x", L"1.5"}, {L"2 x", L"2"}},
+              Config::render.worldScale >= 2.0f ? L"2" : Config::render.worldScale >= 1.5f ? L"1.5" : L"1")
+            .tip(L"Draw the game world at a multiple of the resolution and scale it down before the interface: smoother "
+                 L"edges, at the cost of GPU time. Needs the NVRHI renderer.");
+        ui.check(L"Smooth the world's pixel art (xBR)", {L"Render", L"SpriteFilter"}, Config::render.spriteFilter)
+            .tip(L"Magnify ground tiles and sprites with an edge-directed filter in the manner of xBR: diagonal edges come "
+                 L"out smooth instead of in stair steps when zoomed in. Needs the NVRHI renderer.");
+        ui.group(L"Interface");
+        ui.check(L"HD Font", {L"UI", L"NativeFonts"}, Config::ui.nativeFonts)
+            .tip(L"NVRHI renderer: every character the game puts into its font textures is drawn again with the "
+                 L"same font at the UI size, so text is sharp instead of stretched from 1024 x 768. The layout and "
+                 L"line breaks stay the game's.");
+        ui.group(L"Diagnostics");
+        ui.check(L"GPU API validation", {L"Debug", L"RhiValidation"}, Config::debug.rhiValidation)
+            .tip(L"NVRHI renderer: the Direct3D 12 debug layer or Vulkan's validation layer and NVRHI's own checks, "
+                 L"messages in SacredBild.log. Slow; for finding renderer bugs.");
+        ui.column();
+        ui.group(L"Drawing");
         ui.check(L"Draw static objects itself", {L"Render", L"TakeOverStatics"}, Config::render.takeOverStatics)
             .tip(L"Draw the world's buildings, trees, props, water and blob shadows with SacredBild's own code instead "
                  L"of the game's (same picture, merged into few draws).");
@@ -350,21 +354,8 @@ namespace
         ui.check(L"Shared texture memory", {L"Render", L"PlacedResources"}, Config::render.placedResources)
             .tip(L"Place textures and vertex buffers in shared memory blocks (D3D12 / Vulkan Memory Allocator) instead of "
                  L"each getting memory of its own: making one takes ~0.05 ms instead of ~0.4 ms.");
-        ui.endEnabledIf();
 
-        ui.page(L"Advanced");
-        ui.group(L"Frame timing");
-        ui.combo(L"In menu:", {L"Display", L"FpsLimitMenu"}, {0, 15, 20, 30, 60},
-              std::max(Config::display.fpsLimitMenu, 0), fps)
-            .tip(L"Frame limit in the main menu (no game running). The menu needs no more than 30 frames per second.");
-        ui.combo(L"In the background:", {L"Display", L"FpsLimitInactive"}, {0, 10, 15, 20, 30, 60},
-              std::max(Config::display.fpsLimitInactive, 0), fps)
-            .tip(L"Frame limit while the game is in the background (another window has the focus), in game and in the menus.");
-        ui.combo(L"Frames queued:", {L"Display", L"MaxFrameLatency"}, {1, 2, 3}, Config::display.maxFrameLatency,
-              [](int n) { return n <= 0 ? std::wstring(L"Driver default") : n == 1 ? std::wstring(L"1 (lowest latency)") : std::to_wstring(n); })
-            .enabledIf(own)
-            .tip(L"Frames the CPU may prepare ahead of the GPU. 1 = lowest input latency. "
-                 L"Needs one of SacredBild's renderers.");
+        ui.page(L"Performance");
         ui.group(L"Rendering");
         ui.combo(L"Texture memory:", {L"Render", L"TextureBudgetMB"}, {0, 256, 512, 1024, 2048}, Config::render.textureBudgetMB,
               [](int mb) { return mb ? Fmt::format(L"{} MB", mb) : std::wstring(L"Automatic"); })
@@ -409,6 +400,8 @@ namespace
         ui.endEnabledIf();
         ui.unindent();
         ui.unindent();
+        ui.column();
+        ui.group(L"Animation");
         ui.check(L"Animate on a second thread", {L"Render", L"AsyncAnimation"}, Config::render.asyncAnimation)
             .tip(L"Advance the 3D animations on a second thread while the frame starts drawing (needs a second CPU core).");
         ui.combo(L"Animation threads:", {L"Render", L"AnimationThreads"}, {0, 1, 2, 3, 4}, Config::render.animationThreads,
@@ -425,6 +418,7 @@ namespace
             .enabledIf([](const Form& f) { return f.on(L"Render", L"AsyncAnimation"); })
             .tip(L"With a frame limit or VSync: start the next frame's animation right after the interface, so it runs "
                  L"while the frame waits; the poses are one frame behind the game's clock. Uncapped it changes nothing.");
+        ui.group(L"Loading and speed-ups");
         ui.check(L"Hash index for the map records", {L"Render", L"RecordIndex"}, Config::render.recordIndex)
             .tip(L"Hash index in front of the game's record caches (looked up for every ground tile and object).");
         ui.check(L"Light-weight sound lock", {L"Render", L"SoundLock"}, Config::render.soundLock)
@@ -443,20 +437,7 @@ namespace
             .tip(L"Answer the game's thousands of small map reads per area change from 64 KB blocks in memory instead "
                  L"of a seek and a read system call each (32 MB at most).");
 
-        ui.column();
-        ui.group(L"DirectDraw");
-        ui.edit(L"Chain ddraw:", {L"DDraw", L"Chain"}, Config::ddraw.chain)
-            .enabledIf([](const Form& f) { return !own(f); })
-            .tip(L"Chain-loaded ddraw renderer: the ddraw.dll to load behind SacredBild, relative to the game folder "
-                 L"(DDrawCompat or another wrapper). Empty = Windows' own ddraw.dll.");
-        ui.edit(L"d3d9.dll:", {L"DDraw", L"D3D9"}, Config::ddraw.d3d9Path)
-            .enabledIf(d3d9)
-            .tip(L"SacredBild (Direct3D 9) renderer: the d3d9.dll to use, e.g. DXVK's (relative to the game folder or "
-                 L"absolute). Empty: a d3d9.dll next to the game exe if there is one, else Windows' own.");
-        ui.check(L"Movies through Media Foundation", {L"DDraw", L"MediaFoundation"}, iniMediaFoundation(ini))
-            .enabledIf([](const Form& f) { return !own(f); })
-            .tip(L"Play the intro and cutscene movies through Media Foundation instead of the game's DirectShow path "
-                 L"(the window stays responsive). Always on with the SacredBild (Direct3D 9) renderer.");
+        ui.page(L"Controller");
         ui.group(L"Controller");
         ui.check(L"Play with a controller", {L"Controller", L"Enabled"}, Config::controller.enabled)
             .tip(L"Play with a controller (Xbox, PlayStation, Switch), as in Diablo 2 Resurrected: the left stick walks, the "
@@ -488,6 +469,34 @@ namespace
             .tip(L"Button icons beside what a button does (SacredBild (Direct3D 9) renderer).");
         ui.endEnabledIf();
         ui.unindent();
+
+        ui.page(L"Advanced");
+        ui.group(L"Frame timing");
+        ui.combo(L"In menu:", {L"Display", L"FpsLimitMenu"}, {0, 15, 20, 30, 60},
+              std::max(Config::display.fpsLimitMenu, 0), fps)
+            .tip(L"Frame limit in the main menu (no game running). The menu needs no more than 30 frames per second.");
+        ui.combo(L"In the background:", {L"Display", L"FpsLimitInactive"}, {0, 10, 15, 20, 30, 60},
+              std::max(Config::display.fpsLimitInactive, 0), fps)
+            .tip(L"Frame limit while the game is in the background (another window has the focus), in game and in the menus.");
+        ui.combo(L"Frames queued:", {L"Display", L"MaxFrameLatency"}, {1, 2, 3}, Config::display.maxFrameLatency,
+              [](int n) { return n <= 0 ? std::wstring(L"Driver default") : n == 1 ? std::wstring(L"1 (lowest latency)") : std::to_wstring(n); })
+            .enabledIf(own)
+            .tip(L"Frames the CPU may prepare ahead of the GPU. 1 = lowest input latency. "
+                 L"Needs one of SacredBild's renderers.");
+        ui.column();
+        ui.group(L"DirectDraw");
+        ui.edit(L"Chain ddraw:", {L"DDraw", L"Chain"}, Config::ddraw.chain)
+            .enabledIf([](const Form& f) { return !own(f); })
+            .tip(L"Chain-loaded ddraw renderer: the ddraw.dll to load behind SacredBild, relative to the game folder "
+                 L"(DDrawCompat or another wrapper). Empty = Windows' own ddraw.dll.");
+        ui.edit(L"d3d9.dll:", {L"DDraw", L"D3D9"}, Config::ddraw.d3d9Path)
+            .enabledIf(d3d9)
+            .tip(L"SacredBild (Direct3D 9) renderer: the d3d9.dll to use, e.g. DXVK's (relative to the game folder or "
+                 L"absolute). Empty: a d3d9.dll next to the game exe if there is one, else Windows' own.");
+        ui.check(L"Movies through Media Foundation", {L"DDraw", L"MediaFoundation"}, iniMediaFoundation(ini))
+            .enabledIf([](const Form& f) { return !own(f); })
+            .tip(L"Play the intro and cutscene movies through Media Foundation instead of the game's DirectShow path "
+                 L"(the window stays responsive). Always on with the SacredBild (Direct3D 9) renderer.");
         ui.group(L"Screenshots and diagnostics");
         ui.combo(L"Screenshots:", {L"Screenshot", L"Format"}, {{L"PNG", L"png"}, {L"JPEG (smaller)", L"jpg"}},
               Config::screenshot.jpeg ? L"jpg" : L"png")
@@ -530,10 +539,6 @@ namespace
             .tip(L"Leave start-up and loading out of the profile: what was sampled before the world was drawn is "
                  L"dropped two seconds after its first frame.");
         ui.endEnabledIf();
-        ui.check(L"GPU API validation", {L"Debug", L"RhiValidation"}, Config::debug.rhiValidation)
-            .enabledIf(nvrhi)
-            .tip(L"NVRHI renderer: the Direct3D 12 debug layer or Vulkan's validation layer and NVRHI's own checks, "
-                 L"messages in SacredBild.log. Slow; for finding renderer bugs.");
 
         ui.page(L"Network");
         ui.group(L"LAN games");

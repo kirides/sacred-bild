@@ -104,7 +104,8 @@ namespace Ui
 
         // Layout: a page is a tab, column() starts its next column, group() a group box; rows stack downwards.
         // Controls declared after footer() go into the bottom row, left of the OK and Cancel buttons.
-        void page(const wchar_t* title);
+        // A page whose tab shows only while `visibleIf` holds (re-checked as values change, like enabledIf).
+        void page(const wchar_t* title, Predicate visibleIf = {});
         void column();
         void group(const wchar_t* title);
         void footer();
@@ -161,6 +162,8 @@ namespace Ui
             std::wstring title;
             std::vector<Column> columns;
             HWND hwnd = nullptr;
+            Predicate visible;      // empty: always
+            bool shown = true;      // has a tab now
         };
         struct Size
         {
@@ -174,7 +177,10 @@ namespace Ui
         DialogTemplate pageTemplate(const Page& page) const;
         void addControl(DialogTemplate& dialog, const Control& control) const;
         void init(HWND dlg);
-        void showPage(int index);
+        void showPage(int index);       // a page (not a tab) index
+        void updatePages();             // tabs for the pages that are visible now
+        int tabPage(int tab) const;     // the page of a tab
+        int pageTab(int page) const;    // the tab of a page, -1 if it has none
         void command(WORD id);
         void updateEnabled();
         void addTooltips();
