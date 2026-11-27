@@ -176,3 +176,13 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
 - 2026-11-27: John on memory: in his experience D3D12 uses less (process) memory than D3D9, since fewer buffers are kept
   on the CPU side and more stays on the GPU. So the 2 GB address space above is a thing to watch, not a blocker; the
   backend's own CPU copies (texture copies for Lock, the 32 MB upload ring) are the parts to keep small.
+- 2026-11-27: one render thread (John: the game's two presenting threads did more harm than good). The game's threads
+  (UI thread 0x757060, engine render thread 0x60E350, the main thread's odd device call) only record, under the Context
+  lock, into pooled command lists; a Bild-owned thread ("SacredBild render") is the only one that executes them, swaps
+  and presents. Flip copies the frame into one of five present textures (the overlay draws there), hands it over with a
+  serial and waits while more than the frame latency of presents are queued, as it waited in Present before. The upload
+  ring waits on per-list event queries by serial. Data the game hands over only for the call (vertices, Lock copies) is
+  copied into the ring or a staging texture before the call returns, as before, so nothing of the caller's outlives it.
+  Uncapped in the test copy: Direct3D 9 1.75 ms, NVRHI Direct3D 12 1.63 ms (was 1.74), Vulkan 1.9 ms; pictures as before,
+  both clean under validation. Also: AMD's Vulkan driver has no D24S8 depth buffers (validation showed it), so the
+  backend uses D32S8 where the device lacks D24S8.

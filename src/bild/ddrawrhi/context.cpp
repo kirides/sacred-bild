@@ -12,9 +12,11 @@
 #include <nvrhi/utils.h>
 
 #include <algorithm>
+#include <condition_variable>
 #include <cstring>
 #include <deque>
 #include <mutex>
+#include <thread>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -35,6 +37,21 @@ namespace DDrawRhi
         }
     }
 
+    // D24S8 where the device has it as a depth buffer, else D32S8 (AMD's Vulkan drivers have no D24S8).
+    static nvrhi::Format depthStencil()
+    {
+        static const nvrhi::Format format = [] {
+            const nvrhi::FormatSupport support = Rhi::device()->queryFormatSupport(nvrhi::Format::D24S8);
+            if ((support & nvrhi::FormatSupport::DepthStencil) == nvrhi::FormatSupport::DepthStencil)
+            {
+                return nvrhi::Format::D24S8;
+            }
+            LOG("NVRHI backend: the device has no D24S8 depth buffers, using D32S8");
+            return nvrhi::Format::D32S8;
+        }();
+        return format;
+    }
+
     nvrhi::Format gpuFormat(d9::D3DFORMAT format)
     {
         switch (format)
@@ -43,7 +60,7 @@ namespace DDrawRhi
         case d9::D3DFMT_DXT2: case d9::D3DFMT_DXT3: return nvrhi::Format::BC2_UNORM;
         case d9::D3DFMT_DXT4: case d9::D3DFMT_DXT5: return nvrhi::Format::BC3_UNORM;
         case d9::D3DFMT_D16: return nvrhi::Format::D16;
-        case d9::D3DFMT_D24X8: case d9::D3DFMT_D24S8: return nvrhi::Format::D24S8;
+        case d9::D3DFMT_D24X8: case d9::D3DFMT_D24S8: return depthStencil();
         case d9::D3DFMT_D32: return nvrhi::Format::D32;
         case d9::D3DFMT_UNKNOWN: return nvrhi::Format::UNKNOWN;
         default:
@@ -131,9 +148,44 @@ namespace DDrawRhi
             bool g_available = false;
             HWND g_window = nullptr;
 
+            // The command list being recorded (Context lock held) and the idle ones; recorded lists go to the render thread.
             nvrhi::CommandListHandle g_commands;
+            std::vector<nvrhi::CommandListHandle> g_idleLists;      // guarded by g_jobMutex
             bool g_open = false;
             uint32_t g_epoch = 0;
+
+            // The render thread: the only thread that executes command lists and presents. The game's threads record
+            // (under the Context lock) and hand each closed list over with a serial; a frame's list comes with the
+            // texture it is presented from.
+            struct Job
+            {
+                nvrhi::CommandListHandle list;  // null: nothing recorded (a present or a wait only)
+                uint64_t serial = 0;
+                nvrhi::TextureHandle present;   // shown after the list (a present)
+                bool idle = false;              // wait until the GPU is idle afterwards
+            };
+            std::mutex g_jobMutex;
+            std::condition_variable g_jobCv;    // a job was queued
+            std::condition_variable g_doneCv;   // a job was done
+            std::deque<Job> g_jobs;
+            uint64_t g_nextSerial = 1;          // Context lock
+            uint64_t g_doneSerial = 0;          // jobs up to here executed (g_jobMutex)
+            int g_pendingPresents = 0;          // presents queued and not shown yet (g_jobMutex)
+            struct Executed
+            {
+                uint64_t serial;
+                nvrhi::EventQueryHandle query;
+            };
+            std::deque<Executed> g_executed;    // the GPU's progress through the executed lists (g_jobMutex)
+            uint64_t g_gpuDoneSerial = 0;       // lists up to here are done on the GPU (g_jobMutex)
+            std::vector<nvrhi::EventQueryHandle> g_freeQueries;    // g_jobMutex
+            std::thread g_renderThread;
+
+            // The textures frames are presented from (a copy of the frame and the overlay), rotating; the render thread
+            // copies them into the swap chain. Context lock.
+            constexpr int kPresentTextures = 5;
+            nvrhi::TextureHandle g_presentTextures[kPresentTextures];
+            int g_presentNext = 0;
 
             nvrhi::BufferHandle g_defaults;
             nvrhi::TextureHandle g_white;
@@ -203,7 +255,6 @@ namespace DDrawRhi
             std::unordered_map<const void*, nvrhi::BindingSetHandle> g_uiSets;     // by texture (and sampler bit)
             OverlayActiveFn g_overlayActive = nullptr;
             OverlayDrawFn g_overlayDraw = nullptr;
-            nvrhi::TextureHandle g_overlayTarget;   // the frame with the overlay, at the frame's size
 
             struct UiConstants
             {
@@ -330,10 +381,281 @@ namespace DDrawRhi
                 return pipeline;
             }
 
-            void ringFrameEnded(uint64_t frame)
+            // The ring's frames are the serials of the lists that last read their data.
+            void ringFrameEnded(uint64_t serial)
             {
-                g_ringFrames.push_back({frame, g_frameStart});
+                g_ringFrames.push_back({serial, g_frameStart});
                 g_frameStart = g_head;
+            }
+
+            // Whether the GPU is done with the list of `serial`; with `wait`, until it is (the list must be queued).
+            bool gpuDone(uint64_t serial, bool wait)
+            {
+                std::unique_lock lock(g_jobMutex);
+                for (;;)
+                {
+                    while (!g_executed.empty() && Rhi::device()->pollEventQuery(g_executed.front().query))
+                    {
+                        g_gpuDoneSerial = g_executed.front().serial;
+                        g_freeQueries.push_back(std::move(g_executed.front().query));
+                        g_executed.pop_front();
+                    }
+                    if (serial <= g_gpuDoneSerial || !wait)
+                    {
+                        return serial <= g_gpuDoneSerial;
+                    }
+                    if (g_doneSerial < serial)
+                    {
+                        g_doneCv.wait(lock, [&] { return g_doneSerial >= serial; });
+                        continue;
+                    }
+                    // Executed: wait for its query (or a later one) without holding the job lock.
+                    nvrhi::EventQueryHandle query;
+                    uint64_t querySerial = 0;
+                    for (const Executed& e : g_executed)
+                    {
+                        if (e.serial >= serial)
+                        {
+                            query = e.query;
+                            querySerial = e.serial;
+                            break;
+                        }
+                    }
+                    if (!query)
+                    {
+                        return true;    // nothing left in flight
+                    }
+                    lock.unlock();
+                    Rhi::device()->waitEventQuery(query);
+                    lock.lock();
+                    g_gpuDoneSerial = std::max(g_gpuDoneSerial, querySerial);
+                    while (!g_executed.empty() && g_executed.front().serial <= g_gpuDoneSerial)
+                    {
+                        g_freeQueries.push_back(std::move(g_executed.front().query));
+                        g_executed.pop_front();
+                    }
+                }
+            }
+
+            // Hands what is recorded to the render thread; returns the job's serial. Context lock held.
+            uint64_t submit(nvrhi::ITexture* present, bool idle)
+            {
+                Job job;
+                if (g_open)
+                {
+                    g_commands->close();
+                    g_open = false;
+                    job.list = g_commands;
+                    g_commands = nullptr;
+                }
+                job.serial = g_nextSerial++;
+                job.present = present;
+                job.idle = idle;
+                {
+                    std::scoped_lock lock(g_jobMutex);
+                    if (present)
+                    {
+                        ++g_pendingPresents;
+                    }
+                    g_jobs.push_back(std::move(job));
+                }
+                g_jobCv.notify_one();
+                return g_nextSerial - 1;
+            }
+
+            void waitDone(uint64_t serial)
+            {
+                std::unique_lock lock(g_jobMutex);
+                g_doneCv.wait(lock, [&] { return g_doneSerial >= serial; });
+            }
+
+            // The render thread's own copy into the swap chain: its pipelines, bindings and constants are its alone.
+            struct Presenter
+            {
+                nvrhi::CommandListHandle commands;
+                nvrhi::BufferHandle constants;
+                nvrhi::SamplerHandle linear, point;
+                std::vector<std::pair<nvrhi::Format, nvrhi::GraphicsPipelineHandle>> pipelines;
+                std::vector<std::pair<std::pair<nvrhi::ITexture*, bool>, nvrhi::BindingSetHandle>> sets;
+                std::vector<std::pair<nvrhi::ITexture*, nvrhi::FramebufferHandle>> framebuffers;
+            };
+
+            void show(Presenter& p, nvrhi::ITexture* source)
+            {
+                nvrhi::IDevice* dev = Rhi::device();
+                HWND window = g_window;
+                RECT client = {};
+                if (!window || !GetClientRect(window, &client) || client.right <= 0 || client.bottom <= 0)
+                {
+                    return;     // no window yet, or minimized
+                }
+                const uint32_t w = static_cast<uint32_t>(client.right), h = static_cast<uint32_t>(client.bottom);
+                if (!Rhi::window())
+                {
+                    if (!Rhi::attachWindow(window, w, h))
+                    {
+                        return;
+                    }
+                }
+                else if (w != Rhi::width() || h != Rhi::height())
+                {
+                    p.framebuffers.clear();
+                    Rhi::resize(w, h);
+                }
+                if (!Rhi::beginFrame())
+                {
+                    return;
+                }
+                nvrhi::ITexture* back = Rhi::backBuffer();
+                nvrhi::IFramebuffer* fb = nullptr;
+                for (auto& [t, f] : p.framebuffers)
+                {
+                    if (t == back)
+                    {
+                        fb = f;
+                    }
+                }
+                if (!fb)
+                {
+                    p.framebuffers.emplace_back(back, dev->createFramebuffer(nvrhi::FramebufferDesc().addColorAttachment(back)));
+                    fb = p.framebuffers.back().second;
+                }
+                const nvrhi::FramebufferInfoEx& info = fb->getFramebufferInfo();
+                nvrhi::IGraphicsPipeline* pipeline = nullptr;
+                for (auto& [f, pso] : p.pipelines)
+                {
+                    if (f == info.colorFormats[0])
+                    {
+                        pipeline = pso;
+                    }
+                }
+                if (!pipeline)
+                {
+                    nvrhi::GraphicsPipelineDesc desc;
+                    desc.VS = g_blitVS;
+                    desc.PS = g_copyPS;
+                    desc.primType = nvrhi::PrimitiveType::TriangleList;
+                    desc.bindingLayouts = {g_blitLayout};
+                    desc.renderState.rasterState.setCullNone();
+                    desc.renderState.depthStencilState.setDepthTestEnable(false).setDepthWriteEnable(false);
+                    p.pipelines.emplace_back(info.colorFormats[0], dev->createGraphicsPipeline(desc, info));
+                    pipeline = p.pipelines.back().second;
+                }
+                const nvrhi::TextureDesc& sd = source->getDesc();
+                const bool scaled = sd.width != w || sd.height != h;
+                nvrhi::IBindingSet* set = nullptr;
+                for (auto& [k, bs] : p.sets)
+                {
+                    if (k.first == source && k.second == scaled)
+                    {
+                        set = bs;
+                    }
+                }
+                if (!set)
+                {
+                    nvrhi::BindingSetDesc desc;
+                    desc.bindings = {
+                        nvrhi::BindingSetItem::ConstantBuffer(0, p.constants),
+                        nvrhi::BindingSetItem::Texture_SRV(0, source),
+                        nvrhi::BindingSetItem::Sampler(0, scaled ? p.linear : p.point),
+                    };
+                    if (p.sets.size() > 32)
+                    {
+                        p.sets.clear();
+                    }
+                    p.sets.emplace_back(std::make_pair(source, scaled), dev->createBindingSet(desc, g_blitLayout));
+                    set = p.sets.back().second;
+                }
+                BlitConstants c = {};
+                c.dst[0] = -1.0f;
+                c.dst[1] = 1.0f;
+                c.dst[2] = 1.0f;
+                c.dst[3] = -1.0f;
+                c.src[2] = 1.0f;
+                c.src[3] = 1.0f;
+                p.commands->open();
+                p.commands->writeBuffer(p.constants, &c, sizeof(c));
+                nvrhi::GraphicsState state;
+                state.pipeline = pipeline;
+                state.framebuffer = fb;
+                state.bindings = {set};
+                state.viewport.addViewportAndScissorRect(nvrhi::Viewport(static_cast<float>(w), static_cast<float>(h)));
+                p.commands->setGraphicsState(state);
+                p.commands->draw(nvrhi::DrawArguments().setVertexCount(6));
+                p.commands->close();
+                dev->executeCommandList(p.commands);
+                Rhi::present();
+            }
+
+            void renderThread()
+            {
+                Presenter p;
+                nvrhi::IDevice* dev = Rhi::device();
+                p.commands = dev->createCommandList();
+                p.constants = dev->createBuffer(nvrhi::utils::CreateVolatileConstantBufferDesc(sizeof(BlitConstants), "DDrawRhi present", 16));
+                p.linear = dev->createSampler(nvrhi::SamplerDesc().setAllFilters(true).setAllAddressModes(nvrhi::SamplerAddressMode::Clamp));
+                p.point = dev->createSampler(nvrhi::SamplerDesc().setAllFilters(false).setAllAddressModes(nvrhi::SamplerAddressMode::Clamp));
+                for (;;)
+                {
+                    Job job;
+                    {
+                        std::unique_lock lock(g_jobMutex);
+                        g_jobCv.wait(lock, [] { return !g_jobs.empty(); });
+                        job = std::move(g_jobs.front());
+                        g_jobs.pop_front();
+                    }
+                    if (job.list)
+                    {
+                        dev->executeCommandList(job.list);
+                        nvrhi::EventQueryHandle query;
+                        {
+                            std::scoped_lock lock(g_jobMutex);
+                            if (!g_freeQueries.empty())
+                            {
+                                query = std::move(g_freeQueries.back());
+                                g_freeQueries.pop_back();
+                            }
+                        }
+                        if (query)
+                        {
+                            dev->resetEventQuery(query);
+                        }
+                        else
+                        {
+                            query = dev->createEventQuery();
+                        }
+                        dev->setEventQuery(query, nvrhi::CommandQueue::Graphics);
+                        std::scoped_lock lock(g_jobMutex);
+                        g_executed.push_back({job.serial, std::move(query)});
+                        g_idleLists.push_back(std::move(job.list));
+                    }
+                    if (job.present)
+                    {
+                        show(p, job.present);
+                    }
+                    if (job.idle)
+                    {
+                        dev->waitForIdle();
+                    }
+                    {
+                        std::scoped_lock lock(g_jobMutex);
+                        g_doneSerial = job.serial;
+                        if (job.present)
+                        {
+                            --g_pendingPresents;
+                        }
+                        if (job.idle)
+                        {
+                            g_gpuDoneSerial = std::max(g_gpuDoneSerial, job.serial);
+                            for (Executed& e : g_executed)
+                            {
+                                g_freeQueries.push_back(std::move(e.query));
+                            }
+                            g_executed.clear();
+                        }
+                    }
+                    g_doneCv.notify_all();
+                }
             }
         }
 
@@ -357,6 +679,13 @@ namespace DDrawRhi
                 Rhi::shutdown();
                 g_available = false;
             }
+            if (g_available)
+            {
+                g_renderThread = std::thread(&renderThread);
+                SetThreadDescription(g_renderThread.native_handle(), L"SacredBild render");
+                g_renderThread.detach();    // lives as long as the process
+                LOG("NVRHI backend: command lists are executed and frames presented by one render thread");
+            }
             return g_available;
         }
 
@@ -379,6 +708,19 @@ namespace DDrawRhi
         {
             if (!g_open)
             {
+                if (!g_commands)
+                {
+                    std::scoped_lock lock(g_jobMutex);
+                    if (!g_idleLists.empty())
+                    {
+                        g_commands = std::move(g_idleLists.back());
+                        g_idleLists.pop_back();
+                    }
+                }
+                if (!g_commands)
+                {
+                    g_commands = Rhi::device()->createCommandList();
+                }
                 g_commands->open();
                 g_open = true;
                 ++g_epoch;
@@ -399,19 +741,18 @@ namespace DDrawRhi
 
         void flush(bool wait)
         {
-            if (g_open)
+            if (!wait)
             {
-                g_commands->close();
-                g_open = false;
-                Rhi::device()->executeCommandList(g_commands);
+                if (g_open)
+                {
+                    submit(nullptr, false);
+                }
+                return;
             }
-            if (wait)
-            {
-                Rhi::device()->waitForIdle();
-                // Everything recorded so far is done: the ring is free.
-                g_ringFrames.clear();
-                g_frameStart = g_head;
-            }
+            waitDone(submit(nullptr, true));
+            // Everything recorded so far is done: the ring is free.
+            g_ringFrames.clear();
+            g_frameStart = g_head;
         }
 
         bool upload(uint32_t bytes, Upload& out)
@@ -428,7 +769,7 @@ namespace DDrawRhi
                 {
                     pos += kRingSize - pos % kRingSize;     // never split: start the next lap
                 }
-                while (!g_ringFrames.empty() && Rhi::frameFinished(g_ringFrames.front().frame))
+                while (!g_ringFrames.empty() && gpuDone(g_ringFrames.front().frame, false))
                 {
                     g_ringFrames.pop_front();
                 }
@@ -443,7 +784,7 @@ namespace DDrawRhi
                 }
                 if (!g_ringFrames.empty())
                 {
-                    Rhi::waitForFrame(g_ringFrames.front().frame);
+                    gpuDone(g_ringFrames.front().frame, true);
                     g_ringFrames.pop_front();
                 }
                 else
@@ -738,76 +1079,57 @@ namespace DDrawRhi
             {
                 return DDERR_GENERIC;
             }
-            RECT client = {};
-            if (!g_window || !GetClientRect(g_window, &client) || client.right <= 0 || client.bottom <= 0)
+            const nvrhi::TextureDesc& fd = frame->getDesc();
+            RECT src = {0, 0, static_cast<LONG>(fd.width), static_cast<LONG>(fd.height)};
+            if (srcRect)
             {
-                // No window yet, or minimized: the frame is executed, not shown.
+                IntersectRect(&src, srcRect, &src);
+            }
+            const uint32_t w = static_cast<uint32_t>(src.right - src.left), h = static_cast<uint32_t>(src.bottom - src.top);
+            if (!w || !h)
+            {
                 flush(false);
                 return DD_OK;
             }
-            const uint32_t w = static_cast<uint32_t>(client.right), h = static_cast<uint32_t>(client.bottom);
-            if (!Rhi::window())
+            // The frame so far, copied into the next present texture (the game draws its next frame into the same target
+            // right away), the overlay over it.
+            nvrhi::TextureHandle& target = g_presentTextures[g_presentNext];
+            g_presentNext = (g_presentNext + 1) % kPresentTextures;
+            if (!target || target->getDesc().width != w || target->getDesc().height != h)
             {
-                if (!Rhi::attachWindow(g_window, w, h))
+                if (target)
+                {
+                    flush(true);    // the render thread may still show it
+                    forget(target);
+                }
+                target = Rhi::device()->createTexture(nvrhi::TextureDesc().setWidth(w).setHeight(h)
+                    .setFormat(nvrhi::Format::BGRA8_UNORM).setIsRenderTarget(true).setDebugName("presented frame")
+                    .setInitialState(nvrhi::ResourceStates::ShaderResource).setKeepInitialState(true));
+                if (!target)
                 {
                     flush(false);
                     return DDERR_GENERIC;
                 }
             }
-            else if (w != Rhi::width() || h != Rhi::height())
+            nvrhi::TextureSlice from;
+            from.x = static_cast<uint32_t>(src.left);
+            from.y = static_cast<uint32_t>(src.top);
+            from.width = w;
+            from.height = h;
+            nvrhi::TextureSlice to;
+            to.width = w;
+            to.height = h;
+            commands()->copyTexture(target, to, frame, from);
+            if (g_overlayActive && g_overlayDraw && g_overlayActive())
             {
-                flush(false);
-                Rhi::resize(w, h);
+                g_overlayDraw(target, g_window);
             }
-            if (!Rhi::beginFrame())
-            {
-                flush(false);
-                return DD_OK;
-            }
-            const nvrhi::TextureDesc& fd = frame->getDesc();
-            RECT src = {0, 0, static_cast<LONG>(fd.width), static_cast<LONG>(fd.height)};
-            if (srcRect)
-            {
-                src = *srcRect;
-            }
-            const bool overlayOn = g_overlayActive && g_overlayDraw && g_overlayActive();
-            if (overlayOn)
-            {
-                // The overlay goes over a copy of the frame at the frame's size, which is then shown in its place.
-                const uint32_t ow = static_cast<uint32_t>(src.right - src.left), oh = static_cast<uint32_t>(src.bottom - src.top);
-                if (!g_overlayTarget || g_overlayTarget->getDesc().width != ow || g_overlayTarget->getDesc().height != oh)
-                {
-                    if (g_overlayTarget)
-                    {
-                        forget(g_overlayTarget);
-                    }
-                    g_overlayTarget = Rhi::device()->createTexture(nvrhi::TextureDesc().setWidth(ow).setHeight(oh)
-                        .setFormat(nvrhi::Format::BGRA8_UNORM).setIsRenderTarget(true).setDebugName("overlay frame")
-                        .setInitialState(nvrhi::ResourceStates::ShaderResource).setKeepInitialState(true));
-                }
-                if (g_overlayTarget)
-                {
-                    nvrhi::TextureSlice from;
-                    from.x = static_cast<uint32_t>(src.left);
-                    from.y = static_cast<uint32_t>(src.top);
-                    from.width = ow;
-                    from.height = oh;
-                    nvrhi::TextureSlice to;
-                    to.width = ow;
-                    to.height = oh;
-                    commands()->copyTexture(g_overlayTarget, to, frame, from);
-                    g_overlayDraw(g_overlayTarget, g_window);
-                    frame = g_overlayTarget;
-                    src = {0, 0, static_cast<LONG>(ow), static_cast<LONG>(oh)};
-                }
-            }
-            const RECT dst = {0, 0, static_cast<LONG>(w), static_cast<LONG>(h)};
-            const bool scaled = src.right - src.left != dst.right || src.bottom - src.top != dst.bottom;
-            copy(frame, src, Rhi::backBuffer(), dst, scaled);
-            flush(false);
-            const uint64_t presented = Rhi::frameIndex();
-            Rhi::present();
-            ringFrameEnded(presented);
+            const uint64_t serial = submit(target, false);
+            ringFrameEnded(serial);
+            // No more frames queued than the frame latency allows: the game waits here as it waited in Present.
+            const int limit = std::clamp(Config::display.maxFrameLatency, 1, 3) + 1;
+            std::unique_lock jobs(g_jobMutex);
+            g_doneCv.wait(jobs, [&] { return g_pendingPresents <= limit - 1; });
             return DD_OK;
         }
     }

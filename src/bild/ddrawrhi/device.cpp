@@ -1436,7 +1436,7 @@ namespace DDrawRhi
             m_worldColor = dev->createTexture(nvrhi::TextureDesc().setWidth(w).setHeight(h).setFormat(nvrhi::Format::BGRA8_UNORM)
                 .setIsRenderTarget(true).setDebugName("world").setInitialState(nvrhi::ResourceStates::RenderTarget)
                 .setKeepInitialState(true));
-            m_worldDepth = dev->createTexture(nvrhi::TextureDesc().setWidth(w).setHeight(h).setFormat(nvrhi::Format::D24S8)
+            m_worldDepth = dev->createTexture(nvrhi::TextureDesc().setWidth(w).setHeight(h).setFormat(gpuFormat(d9::D3DFMT_D24S8))
                 .setIsRenderTarget(true).setDebugName("world depth").setInitialState(nvrhi::ResourceStates::DepthWrite)
                 .setKeepInitialState(true));
             if (!m_worldColor || !m_worldDepth)
