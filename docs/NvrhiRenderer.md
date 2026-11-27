@@ -412,3 +412,8 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   went from 70-80 ms to ~35 ms, and loading save 2 to the world from 7.3 to 4.7 s; steady frames unchanged. Left in a
   move: libdeflate itself (~20 %), the conversion and upload of the new textures, a CRT lock the game's loader waits on,
   and driver calls.
+- 2026-11-27: toBgra8 also with AVX2 (John asked for AVX/AVX2/AVX-512 by what the CPU has): sixteen pixels at a time
+  where IsProcessorFeaturePresent reports AVX2, SSE2 elsewhere; the same values as the SSE2 path on all 65 536 inputs
+  per format, 1.6-2.3x faster (0.008-0.012 ms against 0.014-0.021 ms for 256x256). A sector change converts ~3 million
+  pixels, now ~0.5 ms, so there is little left to win; no AVX-512 path (this test machine has none, so it could not be
+  checked, and AVX2 already leaves the conversion near memory speed).

@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <emmintrin.h>
+#include <immintrin.h>
 #include <condition_variable>
 #include <cstring>
 #include <deque>
@@ -80,7 +81,71 @@ namespace DDrawRhi
         // 16-bit pixels to BGRA8, eight at a time (SSE2). Channels widen as the tables in toBgra8 do: 4 bits times 17,
         // 5 and 6 bits rounded (x * 255 / 31 is (x * 527 + 23) >> 6, x * 255 / 63 is (x * 259 + 33) >> 6, exactly).
         // Returns the pixels done; toBgra8's loops do the rest.
+        uint32_t expand16Sse2(d9::D3DFORMAT format, const uint16_t* in, uint32_t* out, uint32_t width);
+
+        // The same sixteen at a time with AVX2 (the 128-bit halves widen separately; the permutes put the pixels back
+        // in order). Only called where the CPU has AVX2 (and the system saves its registers).
+        uint32_t expand16Avx2(d9::D3DFORMAT format, const uint16_t* in, uint32_t* out, uint32_t width)
+        {
+            const __m256i m4 = _mm256_set1_epi16(15), m5 = _mm256_set1_epi16(31), m6 = _mm256_set1_epi16(63);
+            const __m256i k527 = _mm256_set1_epi16(527), k23 = _mm256_set1_epi16(23), k259 = _mm256_set1_epi16(259),
+                k33 = _mm256_set1_epi16(33), k17 = _mm256_set1_epi16(17), k255 = _mm256_set1_epi16(255);
+            uint32_t x = 0;
+            for (; x + 16 <= width; x += 16)
+            {
+                const __m256i p = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(in + x));
+                __m256i a, r, g, b;
+                switch (format)
+                {
+                case d9::D3DFMT_R5G6B5:
+                    a = k255;
+                    r = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_srli_epi16(p, 11), k527), k23), 6);
+                    g = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_and_si256(_mm256_srli_epi16(p, 5), m6), k259), k33), 6);
+                    b = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_and_si256(p, m5), k527), k23), 6);
+                    break;
+                case d9::D3DFMT_X1R5G5B5:
+                case d9::D3DFMT_A1R5G5B5:
+                    a = format == d9::D3DFMT_A1R5G5B5 ? _mm256_srli_epi16(_mm256_srai_epi16(p, 15), 8) : k255;
+                    r = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_and_si256(_mm256_srli_epi16(p, 10), m5), k527), k23), 6);
+                    g = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_and_si256(_mm256_srli_epi16(p, 5), m5), k527), k23), 6);
+                    b = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_and_si256(p, m5), k527), k23), 6);
+                    break;
+                case d9::D3DFMT_A4R4G4B4:
+                    a = _mm256_mullo_epi16(_mm256_srli_epi16(p, 12), k17);
+                    r = _mm256_mullo_epi16(_mm256_and_si256(_mm256_srli_epi16(p, 8), m4), k17);
+                    g = _mm256_mullo_epi16(_mm256_and_si256(_mm256_srli_epi16(p, 4), m4), k17);
+                    b = _mm256_mullo_epi16(_mm256_and_si256(p, m4), k17);
+                    break;
+                default:
+                    _mm256_zeroupper();
+                    return x;
+                }
+                const __m256i bg = _mm256_or_si256(b, _mm256_slli_epi16(g, 8));
+                const __m256i ra = _mm256_or_si256(r, _mm256_slli_epi16(a, 8));
+                const __m256i lo = _mm256_unpacklo_epi16(bg, ra), hi = _mm256_unpackhi_epi16(bg, ra);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(out + x), _mm256_permute2x128_si256(lo, hi, 0x20));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(out + x + 8), _mm256_permute2x128_si256(lo, hi, 0x31));
+            }
+            _mm256_zeroupper();
+            return x;
+        }
+
+        const bool g_avx2 = IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE) != FALSE;
+
         uint32_t expand16(d9::D3DFORMAT format, const uint16_t* in, uint32_t* out, uint32_t width)
+        {
+            uint32_t done = 0;
+            if (g_avx2 && width >= 16)
+            {
+                done = expand16Avx2(format, in, out, width);
+                in += done;
+                out += done;
+                width -= done;
+            }
+            return done + expand16Sse2(format, in, out, width);
+        }
+
+        uint32_t expand16Sse2(d9::D3DFORMAT format, const uint16_t* in, uint32_t* out, uint32_t width)
         {
             const __m128i m4 = _mm_set1_epi16(15), m5 = _mm_set1_epi16(31), m6 = _mm_set1_epi16(63);
             const auto widen5 = [](__m128i v) { return _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(v, _mm_set1_epi16(527)), _mm_set1_epi16(23)), 6); };
