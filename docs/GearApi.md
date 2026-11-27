@@ -527,6 +527,8 @@ The table `mod.lua` returns. It runs without any globals, so it can only hold va
 | `pipes` | `string[]` | Names of the named pipes the mod may open (`gear.pipe.open`). (optional) |
 | `theme` | `string` | The `.rcss` file (path inside the mod) that Gear puts in front of every RmlUi document of every mod while this mod runs (the shared theme). (optional) |
 | `theme_dp` | `string` | The same stylesheet for documents laid out in screen pixels (`dp = true`; lengths in `dp`); Gear uses it for those documents instead of `theme`. (optional) |
+| `theme_sprites` | `string` | A second `.rcss` file of the theme (path inside the mod) that Gear links in after `theme` only into documents whose markup mentions `sprite-` (or that load with `sprites = true`): for a stylesheet with a rule per picture, which RmlUi keeps a copy of in every document that links it. (optional) |
+| `theme_sprites_dp` | `string` | The same sheet for `dp = true` documents (instead of `theme_sprites`). (optional) |
 | `vfs` | `GearVfsLayer[]` | Packs (ZIP archives) the mod's resources come from, in order; a later layer wins over an earlier one, and a file in the mod's folder wins over every layer. Without it every `*.gpak` in the mod's folder is one layer mounted at `/`. Documents, style sheets, templates and images read through the layers; `gear.vfs` reads any file. At most 32. (optional) |
 | `exports` | `string[]` | Files of the mod that the RmlUi documents of other mods may use while this mod runs, as `@<mod id>/<path>` in a link (`<link type="text/template" href="@sacred-theme/templates/window.rml"/>`, `<link type="text/rcss" ...>`), an image (`src`, `image(...)`) or `rml.load_font('@id/fonts/x.ttf')`: `'templates/'` (a folder and below), `'styles/*.rcss'` (the files of one folder with that ending), `'images/logo.png'` (one file), `'*'` (everything). Nothing else of the mod can be reached, and no path leaves its folder. (optional) |
 | `automation` | `boolean` | `true`: the mod gets `gear.auto` when the game runs with `-gear-auto`. (optional) |
@@ -5691,6 +5693,7 @@ The options of `load` and `load_string`.
 | Field | Type | |
 |---|---|---|
 | `theme` | `boolean` | `false`: do not add the theme mod's stylesheet to this document. Default: added. (optional) |
+| `sprites` | `boolean` | The theme's sprite sheet (`theme_sprites` in its `mod.lua`, the `.sprite-N` classes of sacred-theme): `true` links it into this document, `false` never does; by default it is linked when the markup mentions `sprite-` (a class that Lua adds later needs `true`). (optional) |
 | `model` | `table` | Data binding: the values of the document's data model, named `model` (`<body data-model="model">`, then `{{ hp }}`, `data-value="name"`, `data-if="hp < 10"`, `data-for="item : items"`, `data-class-low="hp < 10"` ...). Top-level keys fix what can be bound; their values may be numbers, strings, booleans, lists and records (nested up to 8 deep). Change them through `doc.model`. (optional) |
 | `calls` | `table<string, fun(args: string[], doc: GearRmlDoc, event: GearRmlEvent)>` | Functions for `data-event-click="name(arg, ...)"` attributes; `args` are the call's arguments as text. (optional) |
 | `on_change` | `fun(doc: GearRmlDoc, model: table)` | Called after the document changed a value itself (an input with `data-value`); the table is up to date. (optional) |

@@ -9,3 +9,4 @@ __pycache__/
 *.pyc
 tools/test/gs-launcher/bin/
 tools/test/gs-launcher/obj/
+tools/sandbox/tests/theme_sprites/mods/gear_mods.json

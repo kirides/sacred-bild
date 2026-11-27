@@ -9,7 +9,9 @@ local catalog_list = {}     -- the entries by id
 -- `dp`: for a document laid out in screen pixels: the stylesheet the manifest names as `theme_dp` (the lengths in dp, the pictures sized in layout units), else `theme`.
 function uis.theme_provider(dp)
     for _, e in ipairs(catalog_list) do
-        if e.loaded and e.m and e.m.theme then return e.dir, (dp and e.m.theme_dp) or e.m.theme end
+        if e.loaded and e.m and e.m.theme then
+            return e.dir, (dp and e.m.theme_dp) or e.m.theme, (dp and e.m.theme_sprites_dp) or e.m.theme_sprites
+        end
     end
 end
 local mod_state = nil       -- gear_mods.json decoded: {mods = {id = {enabled, settings, keys, migrated}}, order = {id, ...}}
@@ -1782,6 +1784,12 @@ local function check_manifest(m, dir)
     if m.theme_dp ~= nil and (type(m.theme_dp) ~= 'string' or m.theme_dp:find('%.%.') or m.theme_dp:find('^[/\\]') or m.theme_dp:find(':')) then
         return nil, 'mod.lua: theme_dp must be the path of an .rcss file inside the mod'
     end
+    for _, key in ipairs({'theme_sprites', 'theme_sprites_dp'}) do
+        local v = m[key]
+        if v ~= nil and (type(v) ~= 'string' or v:find('%.%.') or v:find('^[/\\]') or v:find(':')) then
+            return nil, 'mod.lua: ' .. key .. ' must be the path of an .rcss file inside the mod'
+        end
+    end
     local allowed = {}
     for _, name in ipairs(m.pipes or {}) do
         if type(name) ~= 'string' or not name:match('^[%w_%-%.]+$') then
@@ -1814,6 +1822,8 @@ local function check_manifest(m, dir)
         keys_by_id = keys_by_id,
         theme = m.theme,
         theme_dp = m.theme_dp,
+        theme_sprites = m.theme_sprites,
+        theme_sprites_dp = m.theme_sprites_dp,
         exports = m.exports,
         vfs = m.vfs,
         dir = dir,

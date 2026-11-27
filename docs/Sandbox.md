@@ -78,6 +78,16 @@ script moves it, so a run gives the same frames every time, as fast as the machi
   has to get there in steps (`tools/sandbox/tests/clock_animation.lua` checks the pixel of a fading box at 0, 0.5, 1, 1.5 and 1.875 s).
 - `sbx.set_time(t)` and `sbx.advance(s)` move the clock at once, for timers that only look at the time (Lua timers, the caret).
 
+## Theme sprite sheet test
+
+`tools/sandbox/tests/theme_sprites.lua` checks that a theme's sprite sheet (`theme_sprites` in the theme mod's `mod.lua`) is linked only into documents that mention `sprite-` or load with `sprites = true`, for px and dp documents:
+
+```n$m = (Resolve-Path tools\sandbox\tests\theme_sprites\mods).Path
+gear_sandbox --hidden --mods $m --enable spritetheme,spritetest --size 1600x900 --script tools\sandbox\tests\theme_sprites.lua
+```
+
+(Use absolute paths; the kernel writes `gear_mods.json` into the mods folder.) The sacred-theme templates have their own sandbox demo in the mods repository (`tests/sandbox/theme_templates.ps1`).
+
 ## The RmlUi fuzzer
 
 `tools/sandbox/fuzz/rml_fuzz.lua` tests retained-mode documents ([RmlRetained.md](RmlRetained.md)) against their own twin. Each case

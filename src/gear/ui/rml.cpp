@@ -1701,6 +1701,8 @@ namespace
         std::string source;                     // the markup of a string document
         bool fromString = false;
         fs::path themeFile;
+        fs::path spritesFile;                   // the theme's sprite sheet (.sprite-N classes), linked only into documents that use them
+        bool forceSprites = false;
         bool base = false;                      // the plain base style (no theme)
         std::map<fs::path, fs::file_time_type> deps;
         double hotChecked = 0.0;
@@ -2862,7 +2864,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
 
     // Puts the user agent style and <link> to the theme's stylesheet (if any) at the start of the document's head (a
     // head is added if there is none); `base`: the plain base style when there is no theme.
-    void injectTheme(std::string& markup, const fs::path& themeFile, bool base)
+    void injectTheme(std::string& markup, const fs::path& themeFile, const fs::path& spritesFile, bool forceSprites, bool base)
     {
         std::string link = kUserAgentStyle;
         link += "<style>";
@@ -2879,6 +2881,18 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             if (href.size() > 1 && href[1] == ':')
             {
                 href.insert(0, "file:///");     // see create: a bare drive path is no URL
+            }
+            link += "<link type=\"text/rcss\" href=\"" + href + "\"/>";
+        }
+        // The theme's sprite sheet holds a rule per game picture (about nine tenths of the theme's rules, and RmlUi keeps a copy of every rule per
+        // document): only a document that mentions a `sprite-` class (or asks for it with `sprites = true`) gets it.
+        if (!themeFile.empty() && !spritesFile.empty() && (forceSprites || markup.find("sprite-") != std::string::npos))
+        {
+            std::string href = toUtf8(spritesFile);
+            std::replace(href.begin(), href.end(), '\\', '/');
+            if (href.size() > 1 && href[1] == ':')
+            {
+                href.insert(0, "file:///");
             }
             link += "<link type=\"text/rcss\" href=\"" + href + "\"/>";
         }
@@ -2918,7 +2932,7 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             }
             if (inMemory)
             {
-                injectTheme(markup, d.themeFile, d.base);
+                injectTheme(markup, d.themeFile, d.spritesFile, d.forceSprites, d.base);
                 markup = preprocessCss(markup, logicalDir(toUtf8(d.file), d.file), true);       // (after the injection: the icon classes use ::before)
             }
             // A path with a drive letter ("B:/...") is no URL to RmlUi (it takes "B" for a protocol and logs an error per
@@ -3032,6 +3046,17 @@ gear-ring { display: inline-block; width: 40px; height: 40px; }
             {
                 d->themeRoot = themeRoot;
                 themeFile = candidate;
+                // 9 / 10 (load_string: 10 / 11): the theme's sprite sheet and whether the document asked for it
+                const int spritesArg = fromString ? 10 : 9;
+                if (lua_isstring(L, spritesArg))
+                {
+                    const fs::path sprites = themeRoot / fromUtf8(str(L, spritesArg));
+                    if (inside(themeRoot, sprites))
+                    {
+                        d->spritesFile = sprites;
+                        d->forceSprites = lua_toboolean(L, spritesArg + 1) != 0;
+                    }
+                }
             }
         }
         d->file = file;

@@ -1129,7 +1129,9 @@ local function make_ui(mod)
     -- The theme mod's folder and stylesheet (a running mod whose mod.lua has `theme = 'file.rcss'`), for the natives; nothing with opts.theme = false.
     function uis.rml_theme(opts)
         if opts.theme == false or not uis.theme_provider then return end
-        return uis.theme_provider(opts.dp)
+        local dir, file, sprites = uis.theme_provider(opts.dp)
+        if opts.sprites == false then sprites = nil end
+        return dir, file, sprites
     end
     -- doc.model: the data model's values, read and written like a table; writing a value (at any depth) has the bindings of the
     -- document refresh. The top-level keys are the ones the model was loaded with.
@@ -1168,9 +1170,10 @@ local function make_ui(mod)
         assert(type(path) == 'string', 'path must be a string')
         if not native.rml_load then error('RmlUi is not available in this build', 2) end
         opts = opts or {}
-        local theme_dir, theme_file = uis.rml_theme(opts)
+        local theme_dir, theme_file, theme_sprites = uis.rml_theme(opts)
         -- (no theme running and none refused: the plain base style of the host is the look of the document)
-        local id, err = native.rml_load(mod.dir, path, opts.dp and true or false, opts.model, uis.rml_call_names(opts), theme_dir, theme_file, theme_dir == nil and opts.theme ~= false)
+        local id, err = native.rml_load(mod.dir, path, opts.dp and true or false, opts.model, uis.rml_call_names(opts), theme_dir, theme_file, theme_dir == nil and opts.theme ~= false,
+            theme_sprites, opts.sprites == true)
         if not id then return nil, err end
         if opts.origin == 'screen' and native.rml_origin then native.rml_origin(id, true) end
         return rml_open(id, opts)
@@ -1187,9 +1190,9 @@ local function make_ui(mod)
             -- (there is nothing to read then, and the base style of the host is the look).
             dir = uis.theme_provider and uis.theme_provider() or 'gear'
         end
-        local theme_dir, theme_file = uis.rml_theme(opts)
+        local theme_dir, theme_file, theme_sprites = uis.rml_theme(opts)
         local id, err = native.rml_load_string(dir, markup, opts.dp and true or false, opts.model, uis.rml_call_names(opts), theme_dir, theme_file, mod.builtin and true or false,
-            theme_dir == nil and opts.theme ~= false)
+            theme_dir == nil and opts.theme ~= false, theme_sprites, opts.sprites == true)
         if not id then return nil, err end
         if opts.origin == 'screen' and native.rml_origin then native.rml_origin(id, true) end
         return rml_open(id, opts)
