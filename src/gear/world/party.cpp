@@ -300,6 +300,57 @@ namespace
         return shown == id || callTaskbarSetHero(taskbar, id);
     }
 
+    // The inventory window marks the container of the hero it shows (bit 8 of container +0x1162: set when the window opens, cleared
+    // when it closes, both through the hero id its backpack tab holds). While the bit is set, a hero's click pickup does not go to
+    // the backpack but into the cursor's hand. retargetTab moves the tab to another hero without moving the bit: the new hero's
+    // pickups then fill the hand of a closed window (the items vanish), and the bit stays on the old hero for good. Move it too.
+    void moveInventoryMark(uint32_t id)
+    {
+        constexpr uintptr_t kInventoryFlags = 0x1162, kMarkList = 0x116C, kMarkListUsed = 0x1170, kContainerSize = 0x1180;
+        constexpr uint8_t kShown = 8;
+        uintptr_t inv = 0;
+        if (!Addr::g_pInventory || !safeCopy(&inv, Addr::g_pInventory.get(), sizeof(inv)) || !inv)
+        {
+            return;
+        }
+        bool shown = false;
+        for (uint32_t h = 1; h <= Party::kLastHeroId; ++h)
+        {
+            const uintptr_t c = inv + h * kContainerSize;
+            uint8_t flags = 0;
+            if (h == id || !readAt(c, kInventoryFlags, flags) || !(flags & kShown))
+            {
+                continue;
+            }
+            shown = true;
+            uint32_t list = 0;
+            if (readAt(c, kMarkList, list))
+            {
+                writeAt(c, kMarkListUsed, list);
+            }
+            writeAt(c, kInventoryFlags, static_cast<uint8_t>(flags & ~kShown));
+        }
+        uint8_t now = 0;
+        const uintptr_t target = inv + id * kContainerSize;
+        if (readAt(target, kInventoryFlags, now))
+        {
+            if (shown)
+            {
+                writeAt(target, kInventoryFlags, static_cast<uint8_t>(now | kShown));
+            }
+            else if (now & kShown)
+            {
+                // a stale mark (the window is closed): the new hero's pickups must reach the backpack
+                uint32_t list = 0;
+                if (readAt(target, kMarkList, list))
+                {
+                    writeAt(target, kMarkListUsed, list);
+                }
+                writeAt(target, kInventoryFlags, static_cast<uint8_t>(now & ~kShown));
+            }
+        }
+    }
+
     bool retargetInventory(uint32_t id)
     {
         uintptr_t ui = 0;
@@ -530,7 +581,7 @@ void Party::frame()
         retargetInventory(localNow);
         retargetTaskbar(localNow);
         // only the hero the player plays keeps the game's own reactions off (a savegame of a played companion, or a load)
-        for (uint32_t h = 1; h <= kLastHeroId; ++h)
+        for (uint32_t h = 1; h <= Party::kLastHeroId; ++h)
         {
             const uintptr_t o = heroObject(h);
             uint32_t flags = 0;
@@ -810,7 +861,7 @@ uint32_t Party::importHero(const std::wstring& path, const World::Position& at, 
     // The file's hero comes with the place and id it was saved at: the engine puts the hero of that id there too (the hero
     // you play, when the file is another savegame's main hero). Every hero goes back where it stood.
     std::vector<std::pair<uint32_t, World::Position>> before;
-    for (uint32_t h = 1; h <= kLastHeroId; ++h)
+    for (uint32_t h = 1; h <= Party::kLastHeroId; ++h)
     {
         World::Object ho;
         if (h != id && World::object(h, ho) && ho.creature)
@@ -990,6 +1041,7 @@ bool Party::control(uint32_t id, const char*& error)
     {
         LOG("Party: the inventory window's backpack page was not found");
     }
+    moveInventoryMark(id);
     if (!retargetTaskbar(id))
     {
         LOG("Party: the taskbar was not found");
@@ -1062,6 +1114,42 @@ bool Party::giveGold(uint32_t fromId, uint32_t toId, uint32_t amount, const char
         return false;
     }
     return true;
+}
+
+bool Party::pickup(uint32_t id, uint32_t item, const char*& error)
+{
+    const char* why = nullptr;
+    if (!available(why))
+    {
+        error = why;
+        return false;
+    }
+    const uintptr_t c = memberObject(id);
+    if (!c || !sameOwnerAsLocal(c) || !Addr::cCreature_pickupItem)
+    {
+        error = "not a party hero";
+        return false;
+    }
+    if (!World::itemObject(item))
+    {
+        error = "no such item";
+        return false;
+    }
+    bool taken = false;
+    __try
+    {
+        taken = Addr::cCreature_pickupItem(reinterpret_cast<void*>(c), item) != 0;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        error = "the engine failed";
+        return false;
+    }
+    if (!taken)
+    {
+        error = "the hero could not pick it up";
+    }
+    return taken;
 }
 
 bool Party::order(uint32_t id, const Order& o, const char*& error)

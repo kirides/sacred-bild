@@ -103,6 +103,10 @@ namespace Party
     // Hands an order to a party hero as the mouse does for the controlled one.
     bool order(uint32_t id, const Order& o, const char*& error);
 
+    // The hero picks up world item `item` at once (the engine's pickupItem, as the click and the collect behaviour call it
+    // when they arrive; no walking). False with `error` if the hero or item is missing or the engine refused (backpack full).
+    bool pickup(uint32_t id, uint32_t item, const char*& error);
+
     struct Ability
     {
         uint16_t id = 0;

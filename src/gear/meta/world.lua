@@ -584,6 +584,13 @@ function Creature:gait(value) end
 ---@return string? error
 function Creature:order_stop() end
 
+--- A party hero picks up the world item `item` (an id or a table with `id`) at once, as the game's click and collect behaviour do when
+--- they arrive: no walking, the item may be anywhere. Single player.
+---@param item integer|GearItem
+---@return boolean? ok
+---@return string? error
+function Creature:pickup(item) end
+
 --- Orders a party hero to attack `target` with its weapon (it walks there first), as a click on an enemy does. In single player
 --- (`gear.world.can_change()`) this also works on any other creature, a monster for example: it attacks `target` as a script's
 --- order would make it (a creature made by `gear.world.spawn` does not notice heroes on its own, see the spawn-rate mod).
