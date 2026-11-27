@@ -52,7 +52,8 @@ namespace DDrawRhi
         bool upload(uint32_t bytes, Upload& out);
 
         // Values for vertex elements a format lacks, read with a stride of 0 (DDrawRhi::Device's input layouts):
-        // normal (0,0,0) at 0, diffuse 0xFFFFFFFF at 12, specular 0 at 16, texture coordinates (0,0,0,0) at 20.
+        // normal (0,0,0) at 0, diffuse 0xFFFFFFFF at 12, specular 0 at 16, texture coordinates (0,0,0,0) at 20, bone
+        // indices 0 at 36, weights (0,0,0,0) at 40.
         nvrhi::IBuffer* vertexDefaults();
         nvrhi::ITexture* whiteTexture();
 

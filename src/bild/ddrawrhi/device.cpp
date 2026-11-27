@@ -4,6 +4,7 @@
 #include "ddrawrhi/surface.h"
 #include "ddrawrhi/vertex_buffer.h"
 #include "ddraw9/format.h"
+#include "ddraw9/skin.h"
 #include "rhi/rhi.h"
 #include "render/fvf.h"
 #include "log.h"
@@ -57,8 +58,14 @@ namespace DDrawRhi
             uint32_t texCoords[4];
             LightConstants lights[8];
             float groundTransform[4];
+            float skinColor[4];
         };
-        static_assert(sizeof(VertexConstants) == 1360);
+        static_assert(sizeof(VertexConstants) == 1376);
+
+        struct BoneConstants
+        {
+            float rows[DDraw9::Skin::kMaxBones * 3][4];
+        };
 
         struct PixelConstants
         {
@@ -86,12 +93,20 @@ namespace DDrawRhi
             kFlagSpecularOn = 0x080,
             kFlagColorVertex = 0x100,
             kFlagGround = 0x200,
+            kFlagSkin = 0x400,
+            kFlagSkinNormalize = 0x800,
+            kFlagSkinColor = 0x1000,
         };
 
         // Not a Direct3D 7 vertex format: the input layout and constants of the ground mode (ground.h).
         constexpr DWORD kGroundFvf = 0x7FFF0000;
         constexpr UINT kGroundStride = 28;
         constexpr uint32_t kQuadsPerDraw = 16384;     // 16-bit indices
+        // ... and of the skinning mode (skin.h), without and with a per-vertex diffuse stream (in slot 2).
+        constexpr DWORD kSkinFvf = 0x7FFE0000;
+        constexpr DWORD kSkinDiffuseFvf = 0x7FFD0000;
+        constexpr UINT kSkinStride = 52;
+        bool skinKey(DWORD fvf) { return fvf == kSkinFvf || fvf == kSkinDiffuseFvf; }
 
         // Shared by all devices: the shaders, the binding layout, input layouts by vertex format, pipelines by state.
         struct Shared
@@ -182,6 +197,7 @@ namespace DDrawRhi
             layout.bindings = {
                 nvrhi::BindingLayoutItem::VolatileConstantBuffer(0),
                 nvrhi::BindingLayoutItem::VolatileConstantBuffer(1),
+                nvrhi::BindingLayoutItem::VolatileConstantBuffer(2),
                 nvrhi::BindingLayoutItem::Texture_SRV(0),
                 nvrhi::BindingLayoutItem::Texture_SRV(1),
                 nvrhi::BindingLayoutItem::Sampler(0),
@@ -205,7 +221,7 @@ namespace DDrawRhi
             {
                 return it->second;
             }
-            const UINT stride = fvf == kGroundFvf ? kGroundStride : Fvf::stride(fvf);
+            const UINT stride = fvf == kGroundFvf ? kGroundStride : skinKey(fvf) ? kSkinStride : Fvf::stride(fvf);
             UINT offset = 0;
             std::vector<nvrhi::VertexAttributeDesc> attrs;
             auto own = [&](const char* name, nvrhi::Format format, UINT at) {
@@ -216,6 +232,33 @@ namespace DDrawRhi
                 attrs.push_back(nvrhi::VertexAttributeDesc().setName(name).setFormat(format).setBufferIndex(1)
                     .setOffset(at).setElementStride(0));
             };
+            auto finish = [&] {
+                nvrhi::InputLayoutHandle layout = Context::device()->createInputLayout(attrs.data(), static_cast<uint32_t>(attrs.size()));
+                g_shared->inputLayouts.emplace(fvf, layout);
+                return layout;
+            };
+            if (skinKey(fvf))
+            {
+                own("POSITION", nvrhi::Format::RGB32_FLOAT, 0);
+                own("NORMAL", nvrhi::Format::RGB32_FLOAT, 12);
+                if (fvf == kSkinDiffuseFvf)
+                {
+                    attrs.push_back(nvrhi::VertexAttributeDesc().setName("DIFFUSE").setFormat(nvrhi::Format::R32_UINT)
+                        .setBufferIndex(2).setOffset(0).setElementStride(4));
+                }
+                else
+                {
+                    fallback("DIFFUSE", nvrhi::Format::R32_UINT, 12);
+                }
+                fallback("SPECULAR", nvrhi::Format::R32_UINT, 16);
+                own("TEXA", nvrhi::Format::RG32_FLOAT, 24);
+                fallback("TEXB", nvrhi::Format::RGBA32_FLOAT, 20);
+                fallback("TEXC", nvrhi::Format::RGBA32_FLOAT, 20);
+                fallback("TEXD", nvrhi::Format::RGBA32_FLOAT, 20);
+                own("BONES", nvrhi::Format::R32_UINT, 32);
+                own("WEIGHTS", nvrhi::Format::RGBA32_FLOAT, 36);
+                return finish();
+            }
             if (fvf == kGroundFvf)
             {
                 own("POSITION", nvrhi::Format::RG32_FLOAT, 0);
@@ -226,9 +269,9 @@ namespace DDrawRhi
                 own("TEXB", nvrhi::Format::RG32_FLOAT, 20);
                 fallback("TEXC", nvrhi::Format::RGBA32_FLOAT, 20);
                 fallback("TEXD", nvrhi::Format::RGBA32_FLOAT, 20);
-                nvrhi::InputLayoutHandle ground = Context::device()->createInputLayout(attrs.data(), static_cast<uint32_t>(attrs.size()));
-                g_shared->inputLayouts.emplace(fvf, ground);
-                return ground;
+                fallback("BONES", nvrhi::Format::R32_UINT, 36);
+                fallback("WEIGHTS", nvrhi::Format::RGBA32_FLOAT, 40);
+                return finish();
             }
             switch (fvf & D3DFVF_POSITION_MASK)
             {
@@ -286,10 +329,9 @@ namespace DDrawRhi
                     fallback(kTex[set], nvrhi::Format::RGBA32_FLOAT, 20);
                 }
             }
-            nvrhi::InputLayoutHandle layout = Context::device()->createInputLayout(attrs.data(),
-                static_cast<uint32_t>(attrs.size()));
-            g_shared->inputLayouts.emplace(fvf, layout);
-            return layout;
+            fallback("BONES", nvrhi::Format::R32_UINT, 36);
+            fallback("WEIGHTS", nvrhi::Format::RGBA32_FLOAT, 40);
+            return finish();
         }
 
         DWORD primitiveCount(D3DPRIMITIVETYPE type, DWORD count)
@@ -601,7 +643,9 @@ namespace DDrawRhi
         // enough for a frame's state changes several frames over (5.5 MB and 0.8 MB).
         device->m_vsConstants = dev->createBuffer(nvrhi::utils::CreateVolatileConstantBufferDesc(sizeof(VertexConstants), "ff vertex constants", 4096));
         device->m_psConstants = dev->createBuffer(nvrhi::utils::CreateVolatileConstantBufferDesc(sizeof(PixelConstants), "ff pixel constants", 8192));
-        const HRESULT hr = device->m_vsConstants && device->m_psConstants ? device->bindTarget(target) : DDERR_GENERIC;
+        device->m_boneConstants = dev->createBuffer(nvrhi::utils::CreateVolatileConstantBufferDesc(sizeof(BoneConstants), "ff bones", 2048));
+        const HRESULT hr = device->m_vsConstants && device->m_psConstants && device->m_boneConstants ? device->bindTarget(target)
+                                                                                                  : DDERR_GENERIC;
         if (FAILED(hr))
         {
             device->Release();
@@ -767,8 +811,17 @@ namespace DDrawRhi
 
     void Device::updateConstants(nvrhi::ICommandList* cmd, DWORD fvf)
     {
+        if (m_paletteEpoch != m_epoch)
+        {
+            // Bound with every draw: written once per command list (the palette is written again by the next skinned draw).
+            static const BoneConstants none = {};
+            cmd->writeBuffer(m_boneConstants, &none, sizeof(none));
+            m_paletteEpoch = m_epoch;
+            m_paletteId = 0;
+        }
         const bool ground = fvf == kGroundFvf;
-        const bool rhw = ground || Fvf::pretransformed(fvf);
+        const bool skin = skinKey(fvf) && m_skin;
+        const bool rhw = ground || (!skin && Fvf::pretransformed(fvf));
         if (fvf != m_constantsFvf)
         {
             m_constantsFvf = fvf;
@@ -809,6 +862,18 @@ namespace DDrawRhi
             {
                 flags |= kFlagGround | kFlagDiffuse;
                 std::memcpy(c.groundTransform, m_ground, sizeof(m_ground));
+            }
+            else if (skin)
+            {
+                flags |= kFlagSkin;
+                if (m_skin->normals) flags |= kFlagNormal;
+                if (m_skin->normalizeSkinned) flags |= kFlagSkinNormalize;
+                if (m_skin->vertexColor) flags |= kFlagDiffuse;
+                if (m_skin->vertexColor && !m_skin->diffuse)
+                {
+                    flags |= kFlagSkinColor;
+                    colorDword(m_skin->color, c.skinColor);
+                }
             }
             else
             {
@@ -1009,6 +1074,7 @@ namespace DDrawRhi
         desc.bindings = {
             nvrhi::BindingSetItem::ConstantBuffer(0, m_vsConstants),
             nvrhi::BindingSetItem::ConstantBuffer(1, m_psConstants),
+            nvrhi::BindingSetItem::ConstantBuffer(2, m_boneConstants),
             nvrhi::BindingSetItem::Texture_SRV(0, key.textures[0]),
             nvrhi::BindingSetItem::Texture_SRV(1, key.textures[1]),
             nvrhi::BindingSetItem::Sampler(0, key.samplers[0]),
@@ -1129,7 +1195,7 @@ namespace DDrawRhi
             return false;
         }
         nvrhi::Viewport vp;
-        if (fvf == kGroundFvf || Fvf::pretransformed(fvf))
+        if (fvf == kGroundFvf || (!skinKey(fvf) && Fvf::pretransformed(fvf)))
         {
             vp = nvrhi::Viewport(0.0f, static_cast<float>(tw), 0.0f, static_cast<float>(th), 0.0f, 1.0f);
         }
@@ -1220,6 +1286,127 @@ namespace DDrawRhi
             cmd->drawIndexed(nvrhi::DrawArguments().setVertexCount(n * 6));
             done += n;
         }
+        return true;
+    }
+
+    bool Device::drawSkinned(nvrhi::IBuffer* vertices, uint32_t vertexCount, nvrhi::IBuffer* indices, uint32_t firstIndex,
+        uint32_t indexCount, const DDraw9::Skin::Draw& draw)
+    {
+        std::scoped_lock lock(m_lock);
+        if (!m_target || !vertices || !indices || !draw.palette || draw.bones == 0 || draw.bones > DDraw9::Skin::kMaxBones ||
+            draw.paletteId == 0 || indexCount < 3)
+        {
+            return false;
+        }
+        // What the fixed-function pipeline would do that the skinning mode doesn't: the caller skins on the CPU instead.
+        const bool lighting = m_rs[D3DRENDERSTATE_LIGHTING] != 0;
+        if (m_rs[D3DRENDERSTATE_FOGENABLE] || m_rs[D3DRENDERSTATE_CLIPPLANEENABLE] ||
+            m_rs[D3DRENDERSTATE_VERTEXBLEND] != D3DVBLEND_DISABLE || (lighting && !draw.normals))
+        {
+            return false;
+        }
+        for (DWORD stage = 0; stage < kStages && m_tss[stage][D3DTSS_COLOROP] != D3DTOP_DISABLE; ++stage)
+        {
+            const DWORD flags = m_tss[stage][D3DTSS_TEXTURETRANSFORMFLAGS];
+            if (stage >= kShaderStages || m_tss[stage][D3DTSS_TEXCOORDINDEX] > 3 ||
+                (flags != D3DTTFF_DISABLE && flags != D3DTTFF_COUNT2))
+            {
+                return false;
+            }
+        }
+        DWORD lights = 0;
+        for (const Light& l : m_lights)
+        {
+            if (l.set && l.enabled && (++lights > 8 || (l.light.dltType != D3DLIGHT_POINT && l.light.dltType != D3DLIGHT_SPOT &&
+                l.light.dltType != D3DLIGHT_DIRECTIONAL)))
+            {
+                return false;
+            }
+        }
+        if (lighting)
+        {
+            // A shadow's world matrix flattens it onto the ground (no inverse); lit draws need one for their normals.
+            const D3DMATRIX wv = multiply(m_transforms[D3DTRANSFORMSTATE_WORLD], m_transforms[D3DTRANSFORMSTATE_VIEW]);
+            const float det = wv._11 * (wv._22 * wv._33 - wv._23 * wv._32) - wv._12 * (wv._21 * wv._33 - wv._23 * wv._31) +
+                wv._13 * (wv._21 * wv._32 - wv._22 * wv._31);
+            if (std::fabs(det) < 1e-12f)
+            {
+                return false;
+            }
+        }
+
+        nvrhi::ICommandList* cmd = Context::commands();
+        if (Context::epoch() != m_epoch)
+        {
+            m_epoch = Context::epoch();
+            m_vsDirty = m_psDirty = true;
+        }
+        // Per-vertex diffuse colors into the upload ring (slot 2).
+        const bool stream = draw.vertexColor && draw.diffuse;
+        Context::Upload colors = {};
+        if (stream)
+        {
+            if (!Context::upload(vertexCount * 4, colors))
+            {
+                return false;
+            }
+            auto* out = reinterpret_cast<DWORD*>(colors.data);
+            const auto* in = reinterpret_cast<const uint8_t*>(draw.diffuse);
+            for (uint32_t v = 0; v < vertexCount; ++v)
+            {
+                std::memcpy(out + v, in + size_t(v) * draw.diffuseStride, 4);
+            }
+        }
+        // Bones: Granny's matrix rows with the translation in w. A character's shadow pass computes the same pose again
+        // (another palette id, the same values): compared before writing.
+        const size_t paletteFloats = size_t(draw.bones) * 12;
+        if (draw.paletteId != m_paletteId && m_palette.size() == paletteFloats &&
+            std::memcmp(m_palette.data(), draw.palette, paletteFloats * sizeof(float)) == 0)
+        {
+            m_paletteId = draw.paletteId;
+        }
+        if (draw.paletteId != m_paletteId || m_paletteEpoch != m_epoch)
+        {
+            m_palette.assign(draw.palette, draw.palette + paletteFloats);
+            BoneConstants b = {};
+            for (uint32_t i = 0; i < draw.bones; ++i)
+            {
+                const float* m = draw.palette + size_t(i) * 12;
+                for (int r = 0; r < 3; ++r)
+                {
+                    b.rows[i * 3 + r][0] = m[r * 3];
+                    b.rows[i * 3 + r][1] = m[r * 3 + 1];
+                    b.rows[i * 3 + r][2] = m[r * 3 + 2];
+                    b.rows[i * 3 + r][3] = m[9 + r];
+                }
+            }
+            cmd->writeBuffer(m_boneConstants, &b, sizeof(b));
+            m_paletteId = draw.paletteId;
+            m_paletteEpoch = m_epoch;
+        }
+        const DWORD key = stream ? kSkinDiffuseFvf : kSkinFvf;
+        m_skin = &draw;
+        m_vsDirty = true;       // the draw's own flags and color
+        nvrhi::GraphicsState state;
+        const bool ready = setup(cmd, key, nvrhi::PrimitiveType::TriangleList, state);
+        m_skin = nullptr;
+        m_constantsFvf = ~0u;   // the next draw writes its own
+        if (!ready)
+        {
+            return true;
+        }
+        state.vertexBuffers = {
+            nvrhi::VertexBufferBinding().setBuffer(vertices).setSlot(0).setOffset(0),
+            nvrhi::VertexBufferBinding().setBuffer(Context::vertexDefaults()).setSlot(1).setOffset(0),
+        };
+        if (stream)
+        {
+            state.vertexBuffers.push_back(nvrhi::VertexBufferBinding().setBuffer(colors.buffer).setSlot(2).setOffset(colors.offset));
+        }
+        state.indexBuffer = nvrhi::IndexBufferBinding().setBuffer(indices).setFormat(nvrhi::Format::R16_UINT)
+            .setOffset(uint64_t(firstIndex) * sizeof(WORD));
+        cmd->setGraphicsState(state);
+        cmd->drawIndexed(nvrhi::DrawArguments().setVertexCount(indexCount));
         return true;
     }
 

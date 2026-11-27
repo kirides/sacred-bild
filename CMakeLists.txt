@@ -80,6 +80,7 @@ set(DDRAWRHI_SOURCES
   src/bild/ddrawrhi/device.cpp
   src/bild/ddrawrhi/directdraw.cpp
   src/bild/ddrawrhi/ground.cpp
+  src/bild/ddrawrhi/skin.cpp
   src/bild/ddrawrhi/surface.cpp
   src/bild/ddrawrhi/vertex_buffer.cpp
 )

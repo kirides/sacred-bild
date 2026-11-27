@@ -14,6 +14,9 @@
 #define FLAG_SPECULARON     0x080   // SPECULARENABLE
 #define FLAG_COLORVERTEX    0x100
 #define FLAG_GROUND         0x200   // GroundMesh's quads (ddrawrhi/ground.h): sector space, placed by groundTransform
+#define FLAG_SKIN           0x400   // GpuSkin's meshes (ddrawrhi/skin.h): bind pose skinned by the bone palette
+#define FLAG_SKINNORMALIZE  0x800   // ... normals normalized after skinning, as Granny did
+#define FLAG_SKINCOLOR      0x1000  // ... one diffuse color for all vertices (skinColor), not a stream
 
 struct Light
 {
@@ -45,6 +48,13 @@ cbuffer VertexConstants : register(b0)
     uint4 texCoords;            // per stage: coordinate set (bits 0-15), transform count (bits 16-23), projected (bit 24)
     Light lights[8];
     float4 groundTransform;     // FLAG_GROUND: target pixels = position * x + (y, z); depth w
+    float4 skinColor;           // FLAG_SKINCOLOR
+};
+
+// FLAG_SKIN: 59 bones, 3 rows each: out = (dot(row0, v), dot(row1, v), dot(row2, v)) with v = (x, y, z, 1).
+cbuffer BoneConstants : register(b2)
+{
+    float4 bones[177];
 };
 
 cbuffer PixelConstants : register(b1)
@@ -77,6 +87,8 @@ struct VSIn
     float4 tc1 : TEXB;
     float4 tc2 : TEXC;
     float4 tc3 : TEXD;
+    uint boneIndices : BONES;   // FLAG_SKIN: four palette indices, one per byte
+    float4 weights : WEIGHTS;
 };
 
 struct VSOut
@@ -108,7 +120,7 @@ float4 materialColor(uint source, float4 material, float4 color1, float4 color2)
 float2 texCoord(uint stage, VSIn v)
 {
     const uint info = texCoords[stage];
-    const uint set = info & 0xFFFF;
+    const uint set = (vsFlags & FLAG_SKIN) != 0 ? 0 : info & 0xFFFF;     // a skinned mesh has one set
     float4 tc = set == 0 ? v.tc0 : set == 1 ? v.tc1 : set == 2 ? v.tc2 : v.tc3;
     if (((info >> 16) & 0xFF) != 0)
     {
@@ -124,7 +136,8 @@ float2 texCoord(uint stage, VSIn v)
 VSOut vsMain(VSIn v)
 {
     VSOut o;
-    const float4 color1 = (vsFlags & FLAG_DIFFUSE) != 0 ? unpackColor(v.diffuse) : float4(1, 1, 1, 1);
+    const float4 color1 = (vsFlags & FLAG_DIFFUSE) == 0 ? float4(1, 1, 1, 1)
+        : (vsFlags & FLAG_SKINCOLOR) != 0 ? skinColor : unpackColor(v.diffuse);
     const float4 color2 = (vsFlags & FLAG_SPECULAR) != 0 ? unpackColor(v.specular) : float4(0, 0, 0, 0);
 
     if ((vsFlags & FLAG_RHW) != 0)
@@ -143,7 +156,24 @@ VSOut vsMain(VSIn v)
     }
     else
     {
-        const float4 viewPos = mul(float4(v.position.xyz, 1.0), worldView);
+        float3 position = v.position.xyz;
+        float3 normal = v.normal;
+        if ((vsFlags & FLAG_SKIN) != 0)
+        {
+            const float4 bind = float4(v.position.xyz, 1.0);
+            position = 0;
+            normal = 0;
+            [unroll] for (uint k = 0; k < 4; ++k)
+            {
+                const uint b = ((v.boneIndices >> (k * 8)) & 0xFF) * 3;
+                const float w = v.weights[k];
+                position += w * float3(dot(bones[b], bind), dot(bones[b + 1], bind), dot(bones[b + 2], bind));
+                normal += w * float3(dot(bones[b].xyz, v.normal), dot(bones[b + 1].xyz, v.normal), dot(bones[b + 2].xyz, v.normal));
+            }
+            if ((vsFlags & FLAG_SKINNORMALIZE) != 0 && dot(normal, normal) > 0.0)
+                normal = normalize(normal);
+        }
+        const float4 viewPos = mul(float4(position, 1.0), worldView);
         o.position = mul(viewPos, projection);
         if ((vsFlags & FLAG_LIGHTING) != 0)
         {
@@ -154,7 +184,7 @@ VSOut vsMain(VSIn v)
             float3 n = float3(0, 0, 0);
             if ((vsFlags & FLAG_NORMAL) != 0)
             {
-                n = mul(float4(v.normal, 0.0), normalMatrix).xyz;
+                n = mul(float4(normal, 0.0), normalMatrix).xyz;
                 if ((vsFlags & FLAG_NORMALIZE) != 0 && dot(n, n) > 0.0)
                     n = normalize(n);
             }

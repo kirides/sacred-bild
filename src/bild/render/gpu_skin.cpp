@@ -689,9 +689,9 @@ void GpuSkin::install()
     {
         return;
     }
-    if (!Config::ddraw.d3d9)
+    if (!Config::ddraw.own())
     {
-        LOG("GPU skinning: off, it needs [DDraw] Backend=d3d9");
+        LOG("GPU skinning: off, it needs [DDraw] Backend=d3d9 or nvrhi");
         return;
     }
     const uintptr_t deform = findDeform("GPU skinning");

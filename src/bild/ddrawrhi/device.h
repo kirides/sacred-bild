@@ -1,5 +1,6 @@
 #pragma once
 #include "ddraw9/d3d9_api.h"
+#include "ddraw9/skin.h"
 #include "spin_lock.h"
 
 #include <nvrhi/nvrhi.h>
@@ -33,6 +34,11 @@ namespace DDrawRhi
         // (nothing drawn) if the state needs what the ground mode doesn't do.
         bool drawGround(nvrhi::IBuffer* buffer, uint32_t firstQuad, uint32_t quads, float scale, float offsetX,
             float offsetY, float z);
+        // GpuSkin's pieces (skin.h): `vertexCount` DDraw9::Skin::Vertex of `vertices`, the triangle list at `firstIndex`
+        // of `indices`, skinned by `draw`'s palette and lit with the current state. False (nothing drawn: the caller
+        // skins on the CPU) if the state needs what the skinning mode doesn't do.
+        bool drawSkinned(nvrhi::IBuffer* vertices, uint32_t vertexCount, nvrhi::IBuffer* indices, uint32_t firstIndex,
+            uint32_t indexCount, const DDraw9::Skin::Draw& draw);
 
         // IUnknown
         STDMETHOD(QueryInterface)(REFIID riid, LPVOID* out) override;
@@ -178,6 +184,11 @@ namespace DDrawRhi
         uint32_t m_epoch = 0;
         DWORD m_constantsFvf = ~0u;
         float m_ground[4] = {};                 // the ground mode's transform (drawGround)
+        const DDraw9::Skin::Draw* m_skin = nullptr;     // the skinned draw being made (drawSkinned)
+        nvrhi::BufferHandle m_boneConstants;
+        uint32_t m_paletteId = 0;               // the palette in m_boneConstants (0: none)
+        uint32_t m_paletteEpoch = 0;
+        std::vector<float> m_palette;
         nvrhi::BufferHandle m_vsConstants;
         nvrhi::BufferHandle m_psConstants;
         std::vector<uint8_t> m_scratch;
