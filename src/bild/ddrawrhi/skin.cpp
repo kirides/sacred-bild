@@ -47,7 +47,8 @@ namespace DDrawRhi::Skin
         std::scoped_lock lock(Context::lock());
         const uint64_t bytes = uint64_t(count) * sizeof(DDraw9::Skin::Vertex);
         nvrhi::BufferHandle buffer = Context::device()->createBuffer(nvrhi::BufferDesc().setByteSize(bytes).setIsVertexBuffer(true)
-            .setDebugName("skinned mesh").setInitialState(nvrhi::ResourceStates::VertexBuffer).setKeepInitialState(true));
+            .setDebugName("skinned mesh").setInitialState(nvrhi::ResourceStates::VertexBuffer).setKeepInitialState(true)
+            .setSharesMemory(true));    // written whole below
         if (!buffer)
         {
             LOG("NVRHI backend: skinning: a buffer for {} vertices could not be created", count);
@@ -78,7 +79,7 @@ namespace DDrawRhi::Skin
             const uint32_t capacity = std::max(kArenaIndices, count);
             g_arena = Context::device()->createBuffer(nvrhi::BufferDesc().setByteSize(uint64_t(capacity) * sizeof(WORD))
                 .setIsIndexBuffer(true).setDebugName("skinned pieces").setInitialState(nvrhi::ResourceStates::IndexBuffer)
-                .setKeepInitialState(true));
+                .setKeepInitialState(true).setSharesMemory(true));     // only written pieces are drawn
             if (!g_arena)
             {
                 LOG("NVRHI backend: skinning: an index arena could not be created");

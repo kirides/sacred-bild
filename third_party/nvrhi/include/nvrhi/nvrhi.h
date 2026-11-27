@@ -783,6 +783,9 @@ namespace nvrhi
         // Indicates that the buffer is created with no backing memory,
         // and memory is bound to the buffer later using bindBufferMemory.
         // On DX12, the buffer resource is created at the time of memory binding.
+        // sacred-bild: placed resources (TextureDesc::sharesMemory): GPU-only buffers whose ranges are written before
+        // they are read may live in a shared heap / memory block.
+        bool sharesMemory = false;
         bool isVirtual = false;
 
         ResourceStates initialState = ResourceStates::Common;
@@ -810,6 +813,7 @@ namespace nvrhi
         constexpr BufferDesc& setIsAccelStructStorage(bool value) { isAccelStructStorage = value; return *this; }
         constexpr BufferDesc& setIsShaderBindingTable(bool value) { isShaderBindingTable = value; return *this; }
         constexpr BufferDesc& setIsVolatile(bool value) { isVolatile = value; return *this; }
+        constexpr BufferDesc& setSharesMemory(bool value) { sharesMemory = value; return *this; }  // sacred-bild
         constexpr BufferDesc& setIsVirtual(bool value) { isVirtual = value; return *this; }
         constexpr BufferDesc& setInitialState(ResourceStates value) { initialState = value; return *this; }
         constexpr BufferDesc& setKeepInitialState(bool value) { keepInitialState = value; return *this; }

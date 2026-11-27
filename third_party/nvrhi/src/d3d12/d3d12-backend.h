@@ -24,7 +24,7 @@
 
 #include <nvrhi/d3d12.h>
 
-namespace D3D12MA { class Allocator; class Allocation; }  // sacred-bild: placed resources
+namespace D3D12MA { class Allocator; class Allocation; class Pool; }  // sacred-bild: placed resources
 
 #ifndef NVRHI_D3D12_WITH_NVAPI
 #define NVRHI_D3D12_WITH_NVAPI 0
@@ -172,6 +172,10 @@ namespace nvrhi::d3d12
     {
         // sacred-bild: placed resources (TextureDesc::sharesMemory); null without them.
         D3D12MA::Allocator* allocator = nullptr;
+        // Pools of fixed-size heaps that stay (textures, buffers): D3D12MA's default pools free a heap as soon as it is
+        // empty and start new ones small, so streaming made and dropped heaps all the time (each a residency wait).
+        D3D12MA::Pool* texturePool = nullptr;
+        D3D12MA::Pool* bufferPool = nullptr;
         // sacred-bild: pipeline cache (DeviceDesc::pipelineLibrary)
         ID3D12PipelineLibrary* pipelineLibrary = nullptr;
         SRWLOCK* pipelineLibraryLock = nullptr;
@@ -378,6 +382,7 @@ namespace nvrhi::d3d12
     {
     public:
         const BufferDesc desc;
+        PlacedAllocation placed;    // sacred-bild: placed resources
         RefCountPtr<ID3D12Resource> resource;
         D3D12_GPU_VIRTUAL_ADDRESS gpuVA{};
         D3D12_RESOURCE_DESC1 resourceDesc{};

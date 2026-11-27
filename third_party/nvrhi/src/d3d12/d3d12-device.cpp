@@ -244,6 +244,22 @@ namespace nvrhi::d3d12
             allocatorDesc.pAdapter = desc.pAdapter;
             if (FAILED(D3D12MA::CreateAllocator(&allocatorDesc, &m_Context.allocator)))
                 m_Context.allocator = nullptr;
+            if (m_Context.allocator)
+            {
+                // 64 MB heaps for textures (four kept, made now) and 16 MB ones for buffers (one kept).
+                D3D12MA::POOL_DESC pool = {};
+                pool.HeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+                pool.HeapFlags = D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES;
+                pool.BlockSize = 64ull << 20;
+                pool.MinBlockCount = 4;
+                if (FAILED(m_Context.allocator->CreatePool(&pool, &m_Context.texturePool)))
+                    m_Context.texturePool = nullptr;
+                pool.HeapFlags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
+                pool.BlockSize = 16ull << 20;
+                pool.MinBlockCount = 1;
+                if (FAILED(m_Context.allocator->CreatePool(&pool, &m_Context.bufferPool)))
+                    m_Context.bufferPool = nullptr;
+            }
         }
 
         if (desc.pGraphicsCommandQueue)
@@ -594,6 +610,16 @@ namespace nvrhi::d3d12
         }
 
         // sacred-bild: placed resources. The textures placed in its heaps are gone with the device's users.
+        if (m_Context.texturePool)
+        {
+            m_Context.texturePool->Release();
+            m_Context.texturePool = nullptr;
+        }
+        if (m_Context.bufferPool)
+        {
+            m_Context.bufferPool->Release();
+            m_Context.bufferPool = nullptr;
+        }
         if (m_Context.allocator)
         {
             m_Context.allocator->Release();

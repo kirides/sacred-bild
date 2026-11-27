@@ -70,6 +70,8 @@ Vulkan backend: in 32-bit builds Vulkan's non-dispatchable handles (`VkImage`, `
 - `d3d12-device.cpp` creates a D3D12 Memory Allocator (`Context::allocator`, default pools not zeroed) and releases it
   with the device; `d3d12-texture.cpp` makes such textures with `CreateResource3` / `CreateResource` placed in its heaps,
   the allocation owned by the texture (`PlacedAllocation`, released after the resource).
+- `BufferDesc::sharesMemory` the same for GPU-only buffers (`d3d12-buffer.cpp`, Vulkan `allocateBufferMemory`); D3D12MA
+  allocates from two pools of fixed-size heaps that stay (`Context::texturePool`, `bufferPool`).
 - `include/nvrhi/vulkan.h` `DeviceDesc::placedResources`; `vulkan-allocator.cpp` compiles Vulkan Memory Allocator
   (`VMA_IMPLEMENTATION`, dynamic functions from `VULKAN_HPP_DEFAULT_DISPATCHER`), `createPlacedAllocator` /
   `destroyPlacedAllocator` (called by the device) and binds `sharesMemory` textures to its blocks
