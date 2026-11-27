@@ -1,3 +1,7 @@
+## v0.16.0 (2026-11-27)
+
+- New: `gear.inv.define_type(type, base, name_text)` makes an item type of a mod's own (ids 16000 to 16999) from a copy of a game item type, with a name of its own. A potion copy works with the `item.use` event; the Town Portal mod uses it.
+
 ## v0.15.6 (2026-11-27)
 
 - Fixed: items a companion picks up no longer vanish. After the inventory window was open while control changed hands, the companion's pickups went into the cursor's hand of a closed window instead of its backpack; they now land in the backpack.
