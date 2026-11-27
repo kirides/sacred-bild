@@ -40,6 +40,33 @@ namespace
         return {s.begin(), s.end()};
     }
 
+    // `numbers` with `value` among them (a value set in the ini that is not one of the presets), ascending.
+    std::vector<int> withValue(std::vector<int> numbers, int value)
+    {
+        if (std::find(numbers.begin(), numbers.end(), value) == numbers.end())
+        {
+            numbers.push_back(value);
+            std::sort(numbers.begin(), numbers.end());
+        }
+        return numbers;
+    }
+
+    // The zoom steps as the ini writes them (a comma-separated list of factors).
+    std::wstring zoomStepsText()
+    {
+        std::wstring text;
+        for (float step : Config::camera.steps)
+        {
+            text += (text.empty() ? L"" : L", ") + Fmt::format(L"{}", step);
+        }
+        return text;
+    }
+
+    bool controllerOn(const Form& f)
+    {
+        return f.on(L"Controller", L"Enabled");
+    }
+
     // The ini's own MediaFoundation value: Config::ddraw has it forced on with Backend=d3d9.
     bool iniMediaFoundation(const std::wstring& ini)
     {
@@ -225,6 +252,13 @@ namespace
               Fmt::format(L"{}", Config::camera.zoomMax))
             .enabledIf([](const Form& f) { return f.value(L"Camera", L"Zoom") != L"Original"; })
             .tip(L"How far the camera may go back. The original game's limit is 200 %; far views draw many more tiles.");
+        ui.combo(L"Zoom speed:", {L"Camera", L"ZoomSpeed"}, withValue({50, 75, 100, 150, 200, 300}, Config::camera.zoomSpeed),
+              Config::camera.zoomSpeed, [](int n) { return n == 100 ? std::wstring(L"100 % (normal)") : Fmt::format(L"{} %", n); })
+            .enabledIf([](const Form& f) { return f.value(L"Camera", L"Zoom") != L"Original"; })
+            .tip(L"How fast a held zoom key, a wheel notch and the controller's zoom change the zoom.");
+        ui.edit(L"Zoom steps:", {L"Camera", L"ZoomSteps"}, zoomStepsText())
+            .enabledIf([](const Form& f) { return f.value(L"Camera", L"Zoom") == L"Steps"; })
+            .tip(L"The zooms of 'Steps', separated by commas (0.5 = everything twice as large, 2 = twice the view).");
         ui.check(L"Zoom with the mouse wheel", {L"Camera", L"ZoomWheel"}, Config::camera.zoomWheel)
             .enabledIf([](const Form& f) { return f.value(L"Camera", L"Zoom") != L"Original"; })
             .tip(L"The mouse wheel (the controller's right stick) zooms while the cursor is over the world, not over a "
@@ -298,6 +332,25 @@ namespace
                  L"draws it can't do that way stay point sampled). Bilinear smooths the ground and sprites when zoomed in, "
                  L"but can show faint seams or dark fringes where a texture sheet's neighbouring images or colour-keyed "
                  L"edges blend in. The interface follows 'Smooth UI scaling'.");
+        ui.group(L"NVRHI renderer");
+        ui.beginEnabledIf(nvrhi);
+        ui.check(L"Draw static objects itself", {L"Render", L"TakeOverStatics"}, Config::render.takeOverStatics)
+            .tip(L"Draw the world's buildings, trees, props, water and blob shadows with SacredBild's own code instead "
+                 L"of the game's (same picture, merged into few draws).");
+        ui.check(L"Merge particles", {L"Render", L"BatchParticles"}, Config::render.batchParticles)
+            .tip(L"Draw each particle effect in one call instead of one call per particle.");
+        ui.check(L"Merge consecutive interface draws", {L"Render", L"MergeDraws"}, Config::render.mergeDraws)
+            .tip(L"Draw consecutive 2D draws with the same state (the interface's quads) as one.");
+        ui.check(L"Sacred Gear UI draws directly", {L"Render", L"GearGfx"}, Config::render.gearGfx)
+            .tip(L"Let Sacred Gear's interface draw with SacredBild's renderer directly instead of through Direct3D 7 "
+                 L"calls.");
+        ui.check(L"Keep compiled shaders between runs", {L"Render", L"PipelineCache"}, Config::render.pipelineCache)
+            .tip(L"Keep the GPU pipelines in SacredBild-pipelines-d3d12.bin / -vulkan.bin next to the game, so they are "
+                 L"not compiled again at the next start. Remade when SacredBild, the GPU or its driver change.");
+        ui.check(L"Shared texture memory", {L"Render", L"PlacedResources"}, Config::render.placedResources)
+            .tip(L"Place textures and vertex buffers in shared memory blocks (D3D12 / Vulkan Memory Allocator) instead of "
+                 L"each getting memory of its own: making one takes ~0.05 ms instead of ~0.4 ms.");
+        ui.endEnabledIf();
 
         ui.page(L"Advanced");
         ui.group(L"Frame timing");
@@ -362,6 +415,16 @@ namespace
               [](int n) { return n == 1 ? std::wstring(L"1 (Granny's own)") : n == 0 ? std::wstring(L"Automatic") : std::to_wstring(n); })
             .tip(L"Threads that sample the characters' animations each frame, split by character. "
                  L"Automatic = CPU cores - 2, at most 4. 1 = as Granny does it, on one thread.");
+        ui.indent();
+        ui.check(L"Pose the skeletons on those threads too", {L"Render", L"ParallelPosing"}, Config::render.parallelPosing)
+            .enabledIf([](const Form& f) { return f.value(L"Render", L"AnimationThreads") != L"1"; })
+            .tip(L"Pose the characters' skeletons on the animation threads too, grouped by their root skeleton, instead "
+                 L"of one after the other.");
+        ui.unindent();
+        ui.check(L"Animate one frame ahead", {L"Render", L"AnimationAhead"}, Config::render.animationAhead)
+            .enabledIf([](const Form& f) { return f.on(L"Render", L"AsyncAnimation"); })
+            .tip(L"With a frame limit or VSync: start the next frame's animation right after the interface, so it runs "
+                 L"while the frame waits; the poses are one frame behind the game's clock. Uncapped it changes nothing.");
         ui.check(L"Hash index for the map records", {L"Render", L"RecordIndex"}, Config::render.recordIndex)
             .tip(L"Hash index in front of the game's record caches (looked up for every ground tile and object).");
         ui.check(L"Light-weight sound lock", {L"Render", L"SoundLock"}, Config::render.soundLock)
@@ -373,6 +436,12 @@ namespace
         ui.check(L"Faster math helpers", {L"Render", L"FastMath"}, Config::render.fastMath)
             .tip(L"Replace the game's slow x87 math (float to integer conversion, the teleporter ripple's sine and "
                  L"cosine) with faster code that gives the same results.");
+        ui.check(L"Faster unpacking (libdeflate)", {L"Render", L"FastInflate"}, Config::render.fastInflate)
+            .tip(L"Unpack the textures and maps the game loads while new areas stream in with libdeflate instead of the "
+                 L"game's zlib: the same data in about a third of the time.");
+        ui.check(L"Small file reads from memory", {L"Render", L"ReadCache"}, Config::render.readCache)
+            .tip(L"Answer the game's thousands of small map reads per area change from 64 KB blocks in memory instead "
+                 L"of a seek and a read system call each (32 MB at most).");
 
         ui.column();
         ui.group(L"DirectDraw");
@@ -394,6 +463,31 @@ namespace
                  L"buttons attack the nearest enemy, cast combat arts, drink potions and open windows. Whatever you used "
                  L"last, controller or keyboard and mouse, is in charge. Its buttons and settings are in the game's "
                  L"Options when you open them with the controller (SacredBild (Direct3D 9) renderer).");
+        ui.indent();
+        ui.beginEnabledIf(controllerOn);
+        ui.combo(L"Dead zone:", {L"Controller", L"Deadzone"}, withValue({10, 15, 20, 24, 30, 40}, Config::controller.deadzone),
+              Config::controller.deadzone, [](int n) { return Fmt::format(L"{} %", n); })
+            .tip(L"How much of a stick's travel around its center is ignored.");
+        ui.combo(L"Cursor speed:", {L"Controller", L"CursorSpeed"}, withValue({450, 600, 900, 1200, 1800}, Config::controller.cursorSpeed),
+              Config::controller.cursorSpeed, [](int n) { return Fmt::format(L"{} px/s", n); })
+            .tip(L"How fast the cursor moves at full deflection, in 1024 x 768 pixels per second.");
+        ui.combo(L"Walk ahead:", {L"Controller", L"MoveRadius"}, withValue({100, 160, 240, 320}, Config::controller.moveRadius),
+              Config::controller.moveRadius, [](int n) { return Fmt::format(L"{} px", n); })
+            .tip(L"How far ahead of the hero the left stick walks to, in screen pixels.");
+        ui.combo(L"Aim range:", {L"Controller", L"AimRange"}, withValue({300, 450, 600, 900}, Config::controller.aimRange),
+              Config::controller.aimRange, [](int n) { return Fmt::format(L"{} px", n); })
+            .tip(L"Aim assist: enemies within this many pixels of the hero are targeted.");
+        ui.combo(L"Aim cone:", {L"Controller", L"AimCone"}, withValue({45, 60, 90, 120, 180, 360}, Config::controller.aimCone),
+              Config::controller.aimCone, [](int n) { return Fmt::format(L"{} degrees", n); })
+            .tip(L"Aim assist prefers enemies within this many degrees around the direction you aim.");
+        ui.check(L"Walk with a half-pushed stick", {L"Controller", L"Walk"}, Config::controller.walk)
+            .tip(L"The left stick pushed less than halfway walks (as Shift) instead of running.");
+        ui.check(L"Combat art buttons click the target", {L"Controller", L"ArtClick"}, Config::controller.artClick)
+            .tip(L"A combat art slot button selects the slot and right-clicks the target, as the keys 6-0 and a click.");
+        ui.check(L"Button prompts", {L"Controller", L"Prompts"}, Config::controller.prompts)
+            .tip(L"Button icons beside what a button does (SacredBild (Direct3D 9) renderer).");
+        ui.endEnabledIf();
+        ui.unindent();
         ui.group(L"Screenshots and diagnostics");
         ui.combo(L"Screenshots:", {L"Screenshot", L"Format"}, {{L"PNG", L"png"}, {L"JPEG (smaller)", L"jpg"}},
               Config::screenshot.jpeg ? L"jpg" : L"png")
@@ -431,7 +525,15 @@ namespace
             .tip(kProfilerTip);
         ui.sameLine();
         ui.label(L"µs");
+        ui.sameLine();
+        ui.check(L"in game only", {L"Debug", L"ProfilerWorldOnly"}, Config::debug.profilerWorldOnly)
+            .tip(L"Leave start-up and loading out of the profile: what was sampled before the world was drawn is "
+                 L"dropped two seconds after its first frame.");
         ui.endEnabledIf();
+        ui.check(L"GPU API validation", {L"Debug", L"RhiValidation"}, Config::debug.rhiValidation)
+            .enabledIf(nvrhi)
+            .tip(L"NVRHI renderer: the Direct3D 12 debug layer or Vulkan's validation layer and NVRHI's own checks, "
+                 L"messages in SacredBild.log. Slow; for finding renderer bugs.");
 
         ui.page(L"Network");
         ui.group(L"LAN games");
