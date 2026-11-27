@@ -1,6 +1,8 @@
 #include "overlay/overlay.h"
 #include "controller/prompts.h"
 #include "ddraw9/gpu.h"
+#include "ddrawrhi/context.h"
+#include "overlay/imgui_rhi.h"
 #include "controller/gamepad.h"
 #include "controller/input_mode.h"
 #include "settings/config/ddraw.h"
@@ -113,6 +115,59 @@ namespace
         LOG("Overlay: no system font, ImGui's own");
     }
 
+    // The NVRHI backend's: ImGui on SacredBild's own renderer (imgui_rhi.h), the frame as the back buffer.
+    bool g_rhiReady = false;
+
+    // SACREDBILD_OVERLAY_DEMO=1 (environment, for testing a backend's overlay): ImGui's demo window, always open.
+    Overlay::DrawFn g_demo = nullptr;
+    void rearmDemo()
+    {
+        if (g_demo && !g_draw.load(std::memory_order_acquire))
+        {
+            g_draw.store(g_demo, std::memory_order_release);
+        }
+    }
+
+    // The ImGui context's style for a back buffer `height` pixels high.
+    void styleFor(float height);
+
+    bool initRhi(uint32_t width, uint32_t height, HWND window)
+    {
+        g_backWidth = static_cast<int>(width);
+        g_backHeight = static_cast<int>(height);
+        if (g_rhiReady && g_window == window)
+        {
+            return true;
+        }
+        if (g_rhiReady)
+        {
+            ImGuiRhi::shutdown();
+            ImGui_ImplWin32_Shutdown();
+            ImGui::DestroyContext();
+            g_rhiReady = false;
+        }
+        g_scale = height > 0 ? height / 768.0f : 1.0f;
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.LogFilename = nullptr;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad |
+            ImGuiConfigFlags_NoMouseCursorChange;
+        if (!ImGui_ImplWin32_Init(window))
+        {
+            LOG("Overlay: ImGui backend initialization failed");
+            ImGui::DestroyContext();
+            return false;
+        }
+        ImGuiRhi::init();
+        styleFor(static_cast<float>(height));
+        g_window = window;
+        g_rhiReady = true;
+        LOG("Overlay: ImGui {} on NVRHI, {}x{} (scale {:.2f})", ImGui::GetVersion(), width, height, g_scale);
+        return true;
+    }
+
     bool init(d9::IDirect3DDevice9Ex* device, d9::IDirect3DSurface9* backBuffer, HWND window)
     {
         if (g_device == device && g_window == window)
@@ -145,6 +200,15 @@ namespace
             ImGui::DestroyContext();
             return false;
         }
+        styleFor(static_cast<float>(desc.Height));
+        g_device = device;
+        g_window = window;
+        LOG("Overlay: ImGui {} on Direct3D 9, {}x{} (scale {:.2f})", ImGui::GetVersion(), desc.Width, desc.Height, g_scale);
+        return true;
+    }
+
+    void styleFor(float)
+    {
         applyStyle();
         ImGuiStyle& style = ImGui::GetStyle();
         style.ScaleAllSizes(g_scale);
@@ -152,10 +216,6 @@ namespace
         // Tooltips for what the controller or keyboard selected, as for the mouse.
         style.HoverFlagsForTooltipNav = ImGuiHoveredFlags_NoSharedDelay | ImGuiHoveredFlags_DelayShort;
         loadFont(style.FontSizeBase);
-        g_device = device;
-        g_window = window;
-        LOG("Overlay: ImGui {} on Direct3D 9, {}x{} (scale {:.2f})", ImGui::GetVersion(), desc.Width, desc.Height, g_scale);
-        return true;
     }
 
     // ImGui's Win32 backend reads XInput itself whenever XInput sees a pad. The pad is SDL's alone: two sources polled
@@ -224,7 +284,10 @@ namespace
             }
         }
         ImGuiIO& io = ImGui::GetIO();
-        ImGui_ImplDX9_NewFrame();
+        if (!Config::ddraw.nvrhi)
+        {
+            ImGui_ImplDX9_NewFrame();
+        }
         ImGui_ImplWin32_NewFrame();
         if (g_backWidth > 0 && g_backHeight > 0)
         {
@@ -254,6 +317,7 @@ namespace
     void render(d9::IDirect3DDevice9Ex* device, d9::IDirect3DSurface9* backBuffer, HWND window)
     {
         g_lastPresent = GetTickCount();
+        rearmDemo();
         Overlay::DrawFn draw = g_draw.load(std::memory_order_acquire);
         const bool prompts = Prompts::pending();
         if (!draw && !prompts)
@@ -316,8 +380,63 @@ namespace
     }
 }
 
+namespace
+{
+    // The NVRHI backend's overlay (DDrawRhi::Context::setOverlay): whether there is anything to draw this frame, and
+    // drawing it into the frame (Context lock held, presenting thread).
+    bool activeRhi()
+    {
+        g_lastPresent = GetTickCount();
+        rearmDemo();
+        return g_draw.load(std::memory_order_acquire) || Prompts::pending();
+    }
+
+    void renderRhi(nvrhi::ITexture* target, HWND window)
+    {
+        const nvrhi::TextureDesc& desc = target->getDesc();
+        Overlay::DrawFn draw = g_draw.load(std::memory_order_acquire);
+        if (draw && !initRhi(desc.width, desc.height, window))
+        {
+            g_draw = nullptr;
+            draw = nullptr;
+        }
+        const bool keep = draw ? frame(draw, window) : true;
+        Prompts::drawRhi(target);
+        if (draw)
+        {
+            ImGuiRhi::render(ImGui::GetDrawData(), target);
+        }
+        if (draw && !keep)
+        {
+            Overlay::DrawFn expected = draw;
+            g_draw.compare_exchange_strong(expected, nullptr);
+        }
+    }
+}
+
+namespace
+{
+    bool demo()
+    {
+        ImGui::ShowDemoWindow();
+        return true;
+    }
+}
+
 void Overlay::install()
 {
+    char flag[8] = {};
+    const bool showDemo = GetEnvironmentVariableA("SACREDBILD_OVERLAY_DEMO", flag, sizeof(flag)) && flag[0] == '1';
+    if (showDemo && Config::ddraw.own())
+    {
+        g_demo = &demo;
+        LOG("Overlay: ImGui demo window (SACREDBILD_OVERLAY_DEMO)");
+    }
+    if (Config::ddraw.nvrhi)
+    {
+        DDrawRhi::Context::setOverlay(&activeRhi, &renderRhi);
+        return;
+    }
     if (!Config::ddraw.d3d9)
     {
         LOG("Overlay: off ([DDraw] Backend=chain)");
@@ -328,7 +447,7 @@ void Overlay::install()
 
 bool Overlay::available()
 {
-    return Config::ddraw.d3d9 && g_lastPresent.load() && GetTickCount() - g_lastPresent.load() < 1000;
+    return Config::ddraw.own() && g_lastPresent.load() && GetTickCount() - g_lastPresent.load() < 1000;
 }
 
 void Overlay::open(DrawFn draw)

@@ -7,6 +7,7 @@
 #include "log.h"
 
 #include "ddrawrhi/shaders/blit_shaders.inc"
+#include "ddrawrhi/shaders/ui_shaders.inc"
 
 #include <nvrhi/utils.h>
 
@@ -186,6 +187,32 @@ namespace DDrawRhi
             };
             std::vector<std::pair<BlitPipelineKey, nvrhi::GraphicsPipelineHandle>> g_blitPipelines;
 
+            // SacredBild's 2D drawing (drawUi) and the overlay.
+            nvrhi::ShaderHandle g_uiVS, g_uiPS;
+            nvrhi::BindingLayoutHandle g_uiLayout;
+            nvrhi::BufferHandle g_uiConstants;
+            nvrhi::InputLayoutHandle g_uiInputs[2];
+            struct UiPipelineKey
+            {
+                nvrhi::Format color;
+                int format;
+                bool premultiplied;
+                bool operator==(const UiPipelineKey&) const = default;
+            };
+            std::vector<std::pair<UiPipelineKey, nvrhi::GraphicsPipelineHandle>> g_uiPipelines;
+            std::unordered_map<const void*, nvrhi::BindingSetHandle> g_uiSets;     // by texture (and sampler bit)
+            OverlayActiveFn g_overlayActive = nullptr;
+            OverlayDrawFn g_overlayDraw = nullptr;
+            nvrhi::TextureHandle g_overlayTarget;   // the frame with the overlay, at the frame's size
+
+            struct UiConstants
+            {
+                float scale[2];
+                float pixelOffset[2];
+                uint32_t colorOrder;
+                float pad[3];
+            };
+
             struct BlitConstants
             {
                 float dst[4];
@@ -251,8 +278,25 @@ namespace DDrawRhi
                 g_blitLayout = dev->createBindingLayout(layout);
                 g_blitConstants = dev->createBuffer(nvrhi::utils::CreateVolatileConstantBufferDesc(sizeof(BlitConstants), "DDrawRhi blit", 1024));
 
+                g_uiVS = Rhi::createShader(nvrhi::ShaderType::Vertex, "vsMain", kUiVSDxil, kUiVSSpirv);
+                g_uiPS = Rhi::createShader(nvrhi::ShaderType::Pixel, "psMain", kUiPSDxil, kUiPSSpirv);
+                g_uiLayout = g_blitLayout;      // the same three bindings
+                g_uiConstants = dev->createBuffer(nvrhi::utils::CreateVolatileConstantBufferDesc(sizeof(UiConstants), "DDrawRhi ui", 1024));
+                const nvrhi::VertexAttributeDesc rhw[] = {
+                    nvrhi::VertexAttributeDesc().setName("POSITION").setFormat(nvrhi::Format::RG32_FLOAT).setOffset(0).setElementStride(28),
+                    nvrhi::VertexAttributeDesc().setName("TEXA").setFormat(nvrhi::Format::RG32_FLOAT).setOffset(20).setElementStride(28),
+                    nvrhi::VertexAttributeDesc().setName("DIFFUSE").setFormat(nvrhi::Format::R32_UINT).setOffset(16).setElementStride(28),
+                };
+                const nvrhi::VertexAttributeDesc imgui[] = {
+                    nvrhi::VertexAttributeDesc().setName("POSITION").setFormat(nvrhi::Format::RG32_FLOAT).setOffset(0).setElementStride(20),
+                    nvrhi::VertexAttributeDesc().setName("TEXA").setFormat(nvrhi::Format::RG32_FLOAT).setOffset(8).setElementStride(20),
+                    nvrhi::VertexAttributeDesc().setName("DIFFUSE").setFormat(nvrhi::Format::R32_UINT).setOffset(16).setElementStride(20),
+                };
+                g_uiInputs[0] = dev->createInputLayout(rhw, 3);
+                g_uiInputs[1] = dev->createInputLayout(imgui, 3);
+
                 const bool ok = g_commands && g_ringData && g_defaults && g_white && g_blitVS && g_copyPS && g_fillPS &&
-                    g_blitLayout && g_blitConstants;
+                    g_blitLayout && g_blitConstants && g_uiVS && g_uiPS && g_uiConstants && g_uiInputs[0] && g_uiInputs[1];
                 if (!ok)
                 {
                     LOG("NVRHI backend: creating the shared resources failed");
@@ -494,6 +538,8 @@ namespace DDrawRhi
             {
                 it = it->first.color == texture || it->first.depth == texture ? g_framebuffers.erase(it) : std::next(it);
             }
+            g_uiSets.erase(texture);
+            g_uiSets.erase(reinterpret_cast<const uint8_t*>(texture) + 1);
             for (ForgetFn fn : g_forgetFns)
             {
                 fn(texture);
@@ -581,6 +627,96 @@ namespace DDrawRhi
             cmd->draw(nvrhi::DrawArguments().setVertexCount(6));
         }
 
+        void drawUi(nvrhi::ITexture* target, UiVertex format, bool premultiplied, nvrhi::ITexture* texture, bool linear,
+            const Upload& vertices, const Upload& indices, uint32_t firstIndex, uint32_t indexCount, uint32_t baseVertex,
+            const RECT& scissor)
+        {
+            if (!target || !indexCount)
+            {
+                return;
+            }
+            nvrhi::IFramebuffer* fb = framebuffer(target, nullptr);
+            const nvrhi::FramebufferInfoEx& info = fb->getFramebufferInfo();
+            const UiPipelineKey key = {info.colorFormats[0], static_cast<int>(format), premultiplied};
+            nvrhi::GraphicsPipelineHandle pipeline;
+            for (auto& [k, p] : g_uiPipelines)
+            {
+                if (k == key)
+                {
+                    pipeline = p;
+                }
+            }
+            if (!pipeline)
+            {
+                nvrhi::GraphicsPipelineDesc desc;
+                desc.VS = g_uiVS;
+                desc.PS = g_uiPS;
+                desc.inputLayout = g_uiInputs[format == UiVertex::ImGui ? 1 : 0];
+                desc.primType = nvrhi::PrimitiveType::TriangleList;
+                desc.bindingLayouts = {g_uiLayout};
+                desc.renderState.rasterState.setCullNone().setScissorEnable(true);
+                desc.renderState.depthStencilState.setDepthTestEnable(false).setDepthWriteEnable(false);
+                desc.renderState.blendState.targets[0].setBlendEnable(true)
+                    .setSrcBlend(premultiplied ? nvrhi::BlendFactor::One : nvrhi::BlendFactor::SrcAlpha)
+                    .setDestBlend(nvrhi::BlendFactor::InvSrcAlpha).setSrcBlendAlpha(nvrhi::BlendFactor::One)
+                    .setDestBlendAlpha(nvrhi::BlendFactor::InvSrcAlpha);
+                pipeline = Rhi::device()->createGraphicsPipeline(desc, info);
+                g_uiPipelines.emplace_back(key, pipeline);
+            }
+            if (!pipeline)
+            {
+                return;
+            }
+            nvrhi::ITexture* tex = texture ? texture : g_white.Get();
+            const void* setKey = reinterpret_cast<const uint8_t*>(tex) + (linear ? 1 : 0);
+            nvrhi::BindingSetHandle& set = g_uiSets[setKey];
+            if (!set)
+            {
+                nvrhi::BindingSetDesc desc;
+                desc.bindings = {
+                    nvrhi::BindingSetItem::ConstantBuffer(0, g_uiConstants),
+                    nvrhi::BindingSetItem::Texture_SRV(0, tex),
+                    nvrhi::BindingSetItem::Sampler(0, sampler(D3DTADDRESS_CLAMP, D3DTADDRESS_CLAMP, linear, linear, D3DTFP_NONE, 0)),
+                };
+                set = Rhi::device()->createBindingSet(desc, g_uiLayout);
+            }
+            const nvrhi::TextureDesc& td = target->getDesc();
+            UiConstants c = {};
+            c.scale[0] = 2.0f / static_cast<float>(td.width);
+            c.scale[1] = -2.0f / static_cast<float>(td.height);
+            c.pixelOffset[0] = c.pixelOffset[1] = format == UiVertex::Rhw ? 0.5f : 0.0f;
+            c.colorOrder = format == UiVertex::ImGui ? 1u : 0u;
+            nvrhi::ICommandList* cmd = commands();
+            cmd->writeBuffer(g_uiConstants, &c, sizeof(c));
+            nvrhi::GraphicsState state;
+            state.pipeline = pipeline;
+            state.framebuffer = fb;
+            state.bindings = {set};
+            state.vertexBuffers = {nvrhi::VertexBufferBinding().setBuffer(vertices.buffer).setSlot(0).setOffset(vertices.offset)};
+            state.indexBuffer = nvrhi::IndexBufferBinding().setBuffer(indices.buffer).setFormat(nvrhi::Format::R16_UINT)
+                .setOffset(indices.offset);
+            state.viewport.addViewport(nvrhi::Viewport(static_cast<float>(td.width), static_cast<float>(td.height)));
+            const LONG x0 = std::clamp<LONG>(scissor.left, 0, static_cast<LONG>(td.width));
+            const LONG y0 = std::clamp<LONG>(scissor.top, 0, static_cast<LONG>(td.height));
+            const LONG x1 = std::clamp<LONG>(scissor.right, x0, static_cast<LONG>(td.width));
+            const LONG y1 = std::clamp<LONG>(scissor.bottom, y0, static_cast<LONG>(td.height));
+            if (x1 <= x0 || y1 <= y0)
+            {
+                return;
+            }
+            state.viewport.addScissorRect(nvrhi::Rect(x0, x1, y0, y1));
+            cmd->setGraphicsState(state);
+            cmd->drawIndexed(nvrhi::DrawArguments().setVertexCount(indexCount).setStartIndexLocation(firstIndex)
+                .setStartVertexLocation(baseVertex));
+        }
+
+        void setOverlay(OverlayActiveFn active, OverlayDrawFn draw)
+        {
+            std::scoped_lock lock(g_lock);
+            g_overlayActive = active;
+            g_overlayDraw = draw;
+        }
+
         void setWindow(HWND window)
         {
             std::scoped_lock lock(g_lock);
@@ -633,6 +769,37 @@ namespace DDrawRhi
             if (srcRect)
             {
                 src = *srcRect;
+            }
+            const bool overlayOn = g_overlayActive && g_overlayDraw && g_overlayActive();
+            if (overlayOn)
+            {
+                // The overlay goes over a copy of the frame at the frame's size, which is then shown in its place.
+                const uint32_t ow = static_cast<uint32_t>(src.right - src.left), oh = static_cast<uint32_t>(src.bottom - src.top);
+                if (!g_overlayTarget || g_overlayTarget->getDesc().width != ow || g_overlayTarget->getDesc().height != oh)
+                {
+                    if (g_overlayTarget)
+                    {
+                        forget(g_overlayTarget);
+                    }
+                    g_overlayTarget = Rhi::device()->createTexture(nvrhi::TextureDesc().setWidth(ow).setHeight(oh)
+                        .setFormat(nvrhi::Format::BGRA8_UNORM).setIsRenderTarget(true).setDebugName("overlay frame")
+                        .setInitialState(nvrhi::ResourceStates::ShaderResource).setKeepInitialState(true));
+                }
+                if (g_overlayTarget)
+                {
+                    nvrhi::TextureSlice from;
+                    from.x = static_cast<uint32_t>(src.left);
+                    from.y = static_cast<uint32_t>(src.top);
+                    from.width = ow;
+                    from.height = oh;
+                    nvrhi::TextureSlice to;
+                    to.width = ow;
+                    to.height = oh;
+                    commands()->copyTexture(g_overlayTarget, to, frame, from);
+                    g_overlayDraw(g_overlayTarget, g_window);
+                    frame = g_overlayTarget;
+                    src = {0, 0, static_cast<LONG>(ow), static_cast<LONG>(oh)};
+                }
             }
             const RECT dst = {0, 0, static_cast<LONG>(w), static_cast<LONG>(h)};
             const bool scaled = src.right - src.left != dst.right || src.bottom - src.top != dst.bottom;

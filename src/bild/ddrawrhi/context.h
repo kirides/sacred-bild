@@ -73,6 +73,24 @@ namespace DDrawRhi
         void fill(nvrhi::ITexture* color, nvrhi::ITexture* depth, const RECT& rect, const float rgba[4], bool writeColor,
             bool writeDepth, float z);
 
+        // SacredBild's own 2D drawing (the ImGui screens, the controller prompts): triangles of `vertices` (uploaded)
+        // indexed by `indices` from `firstIndex` on, textured and colored, into `target` with a scissor. Lock held.
+        enum class UiVertex
+        {
+            Rhw,        // 28 bytes: x, y, z, rhw, D3DCOLOR, u, v (Direct3D 9 pixel centers)
+            ImGui,      // 20 bytes: x, y, u, v, color 0xAABBGGRR
+        };
+        void drawUi(nvrhi::ITexture* target, UiVertex format, bool premultiplied, nvrhi::ITexture* texture, bool linear,
+            const Upload& vertices, const Upload& indices, uint32_t firstIndex, uint32_t indexCount, uint32_t baseVertex,
+            const RECT& scissor);
+
+        // Drawn over the frame before it is shown, at the frame's size (as the Direct3D 9 backend's overlay draws into
+        // its back buffer): `active` says whether there is anything this frame, `draw` draws it into `target`. Lock held
+        // during both.
+        using OverlayActiveFn = bool (*)();
+        using OverlayDrawFn = void (*)(nvrhi::ITexture* target, HWND window);
+        void setOverlay(OverlayActiveFn active, OverlayDrawFn draw);
+
         // The game's window (DirectDraw's cooperative level window): the swap chain goes on it.
         void setWindow(HWND window);
         HWND window();

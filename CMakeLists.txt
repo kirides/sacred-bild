@@ -138,6 +138,7 @@ set(DDRAW_SOURCES
   src/bild/controller/gamepad.cpp
   src/bild/controller/inject.cpp
   src/bild/controller/input_mode.cpp
+  src/bild/overlay/imgui_rhi.cpp
   src/bild/overlay/overlay.cpp
   src/bild/controller/prompts.cpp
   src/bild/ddraw9/device.cpp

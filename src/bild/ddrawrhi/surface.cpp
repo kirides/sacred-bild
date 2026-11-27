@@ -371,14 +371,12 @@ namespace DDrawRhi
             desc.isRenderTarget = true;
             desc.initialState = nvrhi::ResourceStates::RenderTarget;
             desc.keepInitialState = true;
-            desc.setClearValue(nvrhi::Color(0.0f, 0.0f, 0.0f, 1.0f));
             break;
         case Kind::Depth:
             desc.debugName = "z-buffer";
             desc.isRenderTarget = true;
             desc.initialState = nvrhi::ResourceStates::DepthWrite;
             desc.keepInitialState = true;
-            desc.setClearValue(nvrhi::Color(1.0f, 0.0f, 0.0f, 0.0f));
             break;
         case Kind::Texture:
             desc.debugName = m_gpuOnly ? "texture (GPU only)" : "texture";

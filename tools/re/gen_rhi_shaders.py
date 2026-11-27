@@ -25,6 +25,10 @@ SHADERS = {
         ('FixedVS', 'vs_6_0', 'vsMain', []),
         ('FixedPS', 'ps_6_0', 'psMain', []),
     ],
+    'ui.hlsl': [
+        ('UiVS', 'vs_6_0', 'vsMain', []),
+        ('UiPS', 'ps_6_0', 'psMain', []),
+    ],
     'blit.hlsl': [
         ('BlitVS', 'vs_6_0', 'vsMain', []),
         ('BlitCopyPS', 'ps_6_0', 'psCopy', []),

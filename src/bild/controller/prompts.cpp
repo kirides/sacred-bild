@@ -1,5 +1,6 @@
 #include "prompts.h"
 #include "ddraw9/gpu.h"
+#include "ddrawrhi/context.h"
 #include "log.h"
 
 #include <SDL3/SDL.h>
@@ -38,6 +39,10 @@ namespace
     std::mutex g_lock;
     std::vector<Vertex> g_ready;
     DWORD g_readyTick = 0;
+
+    // The NVRHI backend's atlas, created on first draw.
+    nvrhi::TextureHandle g_rhiTexture;
+    bool g_rhiFailed = false;
 
     // The device's, created on first draw.
     d9::IDirect3DDevice9Ex* g_device = nullptr;
@@ -326,6 +331,63 @@ void Prompts::draw(d9::IDirect3DDevice9Ex* device, float width, float height)
         sizeof(Vertex));
     saved->Apply();
     saved->Release();
+}
+
+void Prompts::drawRhi(nvrhi::ITexture* target)
+{
+    static std::vector<Vertex> vertices;    // presenting thread only
+    {
+        std::scoped_lock lock(g_lock);
+        if (g_ready.empty() || GetTickCount() - g_readyTick >= kStaleMs)
+        {
+            return;
+        }
+        vertices = g_ready;
+    }
+    if (!g_rhiTexture && !g_rhiFailed)
+    {
+        std::vector<uint32_t> pixels;
+        {
+            std::scoped_lock lock(g_cpuLock);
+            if (loadCpuAtlas())
+            {
+                pixels = g_cpuAtlas;
+            }
+        }
+        g_rhiFailed = pixels.empty();
+        if (!g_rhiFailed)
+        {
+            g_rhiTexture = DDrawRhi::Context::device()->createTexture(nvrhi::TextureDesc().setWidth(kAtlasWidth)
+                .setHeight(kAtlasHeight).setFormat(nvrhi::Format::BGRA8_UNORM).setDebugName("prompts")
+                .setInitialState(nvrhi::ResourceStates::ShaderResource).setKeepInitialState(true));
+            g_rhiFailed = !g_rhiTexture;
+            if (g_rhiTexture)
+            {
+                DDrawRhi::Context::commands()->writeTexture(g_rhiTexture, 0, 0, pixels.data(), size_t(kAtlasWidth) * 4);
+                LOG("Prompts: atlas loaded (NVRHI)");
+            }
+        }
+    }
+    if (g_rhiFailed || vertices.empty())
+    {
+        return;
+    }
+    DDrawRhi::Context::Upload vb, ib;
+    const uint32_t count = static_cast<uint32_t>(vertices.size());
+    if (count > 65535 || !DDrawRhi::Context::upload(count * sizeof(Vertex), vb) ||
+        !DDrawRhi::Context::upload(count * sizeof(uint16_t), ib))
+    {
+        return;
+    }
+    std::memcpy(vb.data, vertices.data(), count * sizeof(Vertex));
+    auto* indices = reinterpret_cast<uint16_t*>(ib.data);
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        indices[i] = static_cast<uint16_t>(i);
+    }
+    const nvrhi::TextureDesc& desc = target->getDesc();
+    DDrawRhi::Context::drawUi(target, DDrawRhi::Context::UiVertex::Rhw, true, g_rhiTexture, true, vb, ib, 0, count, 0,
+        {0, 0, static_cast<LONG>(desc.width), static_cast<LONG>(desc.height)});
 }
 
 bool Prompts::glyph(Gamepad::Style style, uint32_t button, uint32_t* pixels)
