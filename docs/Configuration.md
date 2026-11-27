@@ -79,6 +79,7 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | BatchParticles | 1 | `Backend=nvrhi`: particles (a world matrix each) are moved into world space and merged into one draw per effect. 0 = one draw per particle, as before. |
 | Render | MergeDraws | 1 | `Backend=nvrhi`: pretransformed draws with the same state as the one before (the interface's quads) are drawn as one. |
 | Render | PipelineCache | 1 | `Backend=nvrhi`: the GPU pipelines are kept between runs in SacredBild-pipelines-d3d12.bin / -vulkan.bin next to the game; the file is discarded (and made again) when SacredBild, the GPU or its driver changed, or it is damaged. |
+| Render | SpriteFilter | 0 | `Backend=nvrhi`: the world's point-sampled 2D art (ground tiles, sprites) is magnified with an edge-directed filter in the manner of xBR: smooth diagonals instead of stair steps when zoomed in. |
 | Debug | RhiValidation | 0 | `Backend=nvrhi`: the API's validation (Direct3D 12 debug layer, Vulkan's `VK_LAYER_KHRONOS_validation`) and NVRHI's, messages in the log; slow. |
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | `Backend=chain`: ddraw loaded behind SacredBild; empty = system ddraw. |
 | DDraw | D3D9 | | `Backend=d3d9`: `d3d9.dll` to use (e.g. DXVK), relative to the game folder or absolute. Empty or not loadable: a `d3d9.dll` next to the exe, then Windows' own. |

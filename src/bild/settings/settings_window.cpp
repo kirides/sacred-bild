@@ -264,6 +264,10 @@ namespace
             .enabledIf(nvrhi)
             .tip(L"Draw the game world at a multiple of the resolution and scale it down before the interface: smoother "
                  L"edges, at the cost of GPU time. Needs the NVRHI renderer.");
+        ui.check(L"Smooth the world's pixel art (xBR)", {L"Render", L"SpriteFilter"}, Config::render.spriteFilter)
+            .enabledIf(nvrhi)
+            .tip(L"Magnify ground tiles and sprites with an edge-directed filter in the manner of xBR: diagonal edges come "
+                 L"out smooth instead of in stair steps when zoomed in. Needs the NVRHI renderer.");
         ui.check(L"Animate characters on the GPU", {L"Render", L"GpuSkinning"}, Config::render.gpuSkinning)
             .enabledIf(own)
             .tip(L"Animate (skin) characters and their shadows in a vertex shader instead of on the CPU. "

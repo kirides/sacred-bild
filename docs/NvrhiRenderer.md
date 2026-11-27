@@ -340,3 +340,14 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   loader lock), and the export made the NVRHI device there. It no longer makes the device (Context::ready() instead of
   available()). The measurements logged above from the bild_gfx entry on were taken on Vulkan where they say D3D12
   (each comparison ran both sides on the same API, so the differences hold).
+- 2026-11-27: `[Render] SpriteFilter` (off by default; John asked for an optional xBRZ-like 2x filter for ground tiles
+  and flat objects). A shader filter rather than upscaled textures: sprites and ground textures live in atlas pages
+  (an upscaled copy would not survive the atlas copy), and a filter at sampling time works at every zoom with no
+  memory. ff.hlsl `filter2D`: for each screen pixel the texel it falls in and a 5x5 neighbourhood (Load, clamped),
+  mirrored so the nearest corner is the lower right one; xBR level 1's rule (weighted color distances along the
+  corner's diagonal against across it) decides whether an edge cuts the corner, and the pixel then takes the closer
+  neighbour's color past the diagonal, blended over one screen pixel (fwidth). Applied to stage 0 of the world view's
+  pretransformed and ground draws whose texture is point-sampled (Device::setWorldView from FrameHooks; the pixel
+  constants carry FLAG_FILTER2D, so the state of the draw before decides nothing). At 1:1 it changes little; zoomed in
+  (`-gear-zoom=0.5`) statues, plants and edges lose their stair steps. No measurable frame time (2.15-2.34 ms against
+  2.40-2.50 uncapped, zoomed in), Vulkan validation clean.
