@@ -239,3 +239,11 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   GpuSkin already draws on the GPU with SacredBild's skinning shader on NVRHI; cObject3D drawModel 0x44A9D0 through the
   batcher's model path; sprite objects through 0x642FD0). Reimplementing that branch would copy game logic for no gain,
   so stage 8 takes over where the draws are made (the model and sprite-object draw functions), not the branch.
+- 2026-11-27: what stages 9 and 10 run into. Effects: the particle systems draw every particle as its own world-space
+  quad with SetTransform + DrawPrimitive (FVF 0x1E2) in particle_drawSprites (ENG 0x761B00, ret 0x60) and
+  particle_drawGroundSprite (0x7631E0); SacredGear detours both and recolors the vertices of the variant being drawn in
+  its DrawPrimitive hook (gear/world/pfx.cpp), so a Bild take-over that batches them must carry Gear's tint (an export
+  through bild_gear.h) or Gear's variants lose their colors. Interface: Gear's RmlUi renders through Gear's own command
+  layer (Ui::Command meshes and pictures, gear/ui/rml.cpp + ui.cpp) replayed as Direct3D 7 calls; a native path means a
+  Bild export Gear's renderer calls on NVRHI, and the retained-mode RmlUi branch (claude/rml-retained) changes that
+  same layer. Asked John which to take first.
