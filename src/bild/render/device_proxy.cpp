@@ -1,4 +1,5 @@
 #include "device_proxy.h"
+#include "ui_quads.h"
 #include "engine/build.h"
 #include "diag/d3d_stats.h"
 #include "gpu_skin.h"
@@ -512,9 +513,11 @@ void DeviceProxy::traceUiDraw(const char* what, DWORD count)
 
 bool DeviceProxy::clipQuad(DWORD fvf, uint8_t* verts)
 {
-    const UINT texOffset = Fvf::texCoordOffset(fvf, 0);
-    const UINT stride = Fvf::stride(fvf);
-    const UINT texCount = Fvf::texCount(fvf);
+    return UiQuads::clip(verts, Fvf::stride(fvf), Fvf::texCoordOffset(fvf, 0), Fvf::texCount(fvf), UiCanvas::placement());
+}
+
+bool UiQuads::clip(uint8_t* verts, UINT stride, UINT texOffset, UINT texCount, const UiCanvas::Placement& place)
+{
     float* v[4];
     float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
     for (int i = 0; i < 4; ++i)
@@ -525,7 +528,6 @@ bool DeviceProxy::clipQuad(DWORD fvf, uint8_t* verts)
         minY = std::min(minY, v[i][1]);
         maxY = std::max(maxY, v[i][1]);
     }
-    const UiCanvas::Placement place = UiCanvas::placement();
     const float l = place.clipLeft, t = place.clipTop, r = place.clipRight, b = place.clipBottom;
     if (minX >= l && maxX <= r && minY >= t && maxY <= b)
     {
@@ -596,8 +598,15 @@ void DeviceProxy::fitTexels(DWORD fvf, uint8_t* verts)
         m_texture0Width = desc.dwWidth;
         m_texture0Height = desc.dwHeight;
     }
-    const UINT stride = Fvf::stride(fvf);
-    const UINT uv = Fvf::texCoordOffset(fvf, 0) / 4;
+    // Bilinear sampling reads half a texel around the sample position; point sampling only the texel under it.
+    const bool linear = uiFilter(m_filters[0][0]) != D3DTFG_POINT || uiFilter(m_filters[0][1]) != D3DTFN_POINT;
+    UiQuads::fitTexels(verts, Fvf::stride(fvf), Fvf::texCoordOffset(fvf, 0), static_cast<float>(m_texture0Width),
+        static_cast<float>(m_texture0Height), linear);
+}
+
+void UiQuads::fitTexels(uint8_t* verts, UINT stride, UINT texOffset, float w, float h, bool linear)
+{
+    const UINT uv = texOffset / 4;
     float* v[4];
     float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
     for (int i = 0; i < 4; ++i)
@@ -631,10 +640,7 @@ void DeviceProxy::fitTexels(DWORD fvf, uint8_t* verts)
         t[y] = v[i][uv + 1];
         haveU[x] = haveT[y] = true;
     }
-    const float w = static_cast<float>(m_texture0Width), h = static_cast<float>(m_texture0Height);
     float eu[2] = {u[0] * w, u[1] * w}, ev[2] = {t[0] * h, t[1] * h};
-    // Bilinear sampling reads half a texel around the sample position; point sampling only the texel under it.
-    const bool linear = uiFilter(m_filters[0][0]) != D3DTFG_POINT || uiFilter(m_filters[0][1]) != D3DTFN_POINT;
     const float margin = linear ? 0.5f : 0.05f;
     fitTexelAxis(minX, maxX, eu[0], eu[1], margin);
     fitTexelAxis(minY, maxY, ev[0], ev[1], margin);

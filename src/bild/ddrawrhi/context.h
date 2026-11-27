@@ -79,6 +79,7 @@ namespace DDrawRhi
         {
             Rhw,        // 28 bytes: x, y, z, rhw, D3DCOLOR, u, v (Direct3D 9 pixel centers)
             ImGui,      // 20 bytes: x, y, u, v, color 0xAABBGGRR
+            Gfx,        // 20 bytes: x, y, u, v, D3DCOLOR (Direct3D 9 pixel centers): bild_gfx.h's draws
         };
         void drawUi(nvrhi::ITexture* target, UiVertex format, bool premultiplied, nvrhi::ITexture* texture, bool linear,
             const Upload& vertices, const Upload& indices, uint32_t firstIndex, uint32_t indexCount, uint32_t baseVertex,

@@ -25,6 +25,10 @@ struct IDirect3DDevice7;
 // the cursor tooltip and the cursor). Coordinates are the UI's 1024x768 layout, the space gear.auto.ui() reports.
 namespace Ui
 {
+    // A glyph quad (4 pretransformed vertices, a triangle strip) drawn with SacredBild's renderer while the UI commands
+    // are drawn with it (bild_gfx.h); false: draw it with the device.
+    bool gfxStrip(const void* tlVertices);
+
     enum class Layer : uint8_t { World, Hud, Top, Count };
     // Region: draws nothing; a rectangle that takes the mouse (see input below).
     // ItemIcon: an item's model drawn by the game's model renderer (src/gear/items/itemicon.*); `image` is the item type, `region` the

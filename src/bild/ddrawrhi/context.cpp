@@ -992,7 +992,7 @@ namespace DDrawRhi
                 nvrhi::GraphicsPipelineDesc desc;
                 desc.VS = g_uiVS;
                 desc.PS = g_uiPS;
-                desc.inputLayout = g_uiInputs[format == UiVertex::ImGui ? 1 : 0];
+                desc.inputLayout = g_uiInputs[format == UiVertex::Rhw ? 0 : 1];
                 desc.primType = nvrhi::PrimitiveType::TriangleList;
                 desc.bindingLayouts = {g_uiLayout};
                 desc.renderState.rasterState.setCullNone().setScissorEnable(true);
@@ -1025,7 +1025,7 @@ namespace DDrawRhi
             UiConstants c = {};
             c.scale[0] = 2.0f / static_cast<float>(td.width);
             c.scale[1] = -2.0f / static_cast<float>(td.height);
-            c.pixelOffset[0] = c.pixelOffset[1] = format == UiVertex::Rhw ? 0.5f : 0.0f;
+            c.pixelOffset[0] = c.pixelOffset[1] = format == UiVertex::ImGui ? 0.0f : 0.5f;
             c.colorOrder = format == UiVertex::ImGui ? 1u : 0u;
             nvrhi::ICommandList* cmd = commands();
             cmd->writeBuffer(g_uiConstants, &c, sizeof(c));

@@ -51,3 +51,4 @@ EXPORTS
     SacredBild_TintClear
     SacredBild_TextureSet
     SacredBild_TextureResolver
+    SacredBild_GfxGet

@@ -132,6 +132,7 @@ set(DDRAW_SOURCES
   src/bild/game/movie.cpp
   src/bild/diag/d3d_stats.cpp
   src/bild/render/device_proxy.cpp
+  src/bild/ddrawrhi/gfx.cpp
   src/bild/display/resolution.cpp
   src/bild/game/screenshot.cpp
   src/bild/ui/ui_anchor.cpp

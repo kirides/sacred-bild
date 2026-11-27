@@ -31,6 +31,7 @@ public:
     void endUi();
     // The UI frame changed (UiCanvas::FrameScope) while in UI mode.
     void uiFrameChanged();
+    bool uiMode() const { return m_ui; }
 
     // Batching scope (see Batcher), around the world view.
     void beginBatch();

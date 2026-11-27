@@ -1,6 +1,7 @@
 #include "prof.h"
 #include "memfault.h"
 #include "bild_gear.h"
+#include "bild_gfx.h"
 #include "save.h"
 #include "ui.h"
 #include "items/itemicon.h"
@@ -188,6 +189,9 @@ namespace
     BoundsFn g_screenBounds = nullptr;
     std::once_flag g_bildOnce;
     const Ui::Host* g_host = nullptr;           // a host other than the game (Ui::setHost), or nullptr
+    // SacredBild's 2D drawing (bild_gfx.h), where its renderer offers it: the commands are drawn with it instead of the
+    // device's Direct3D 7 calls (null: the device).
+    const SacredBild_Gfx* g_gfx = nullptr;
 
     void findBild()
     {
@@ -196,6 +200,15 @@ namespace
             if (!bild)
             {
                 return;
+            }
+            if (auto gfxGet = reinterpret_cast<decltype(&SacredBild_GfxGet)>(GetProcAddress(bild, "SacredBild_GfxGet")))
+            {
+                const SacredBild_Gfx* gfx = gfxGet(SACREDBILD_GFX_VERSION);
+                if (gfx && gfx->size >= offsetof(SacredBild_Gfx, surfaceTexture) + sizeof(gfx->surfaceTexture))
+                {
+                    g_gfx = gfx;
+                    LOG("UI: drawing with SacredBild's renderer (bild_gfx {})", gfx->version);
+                }
             }
             auto push = reinterpret_cast<decltype(&SacredBild_UiPushFrame)>(GetProcAddress(bild, "SacredBild_UiPushFrame"));
             auto pop = reinterpret_cast<decltype(&SacredBild_UiPopFrame)>(GetProcAddress(bild, "SacredBild_UiPopFrame"));
@@ -754,6 +767,62 @@ namespace
         {0, D3DTSS_TEXTURETRANSFORMFLAGS}, {1, D3DTSS_COLOROP}, {1, D3DTSS_ALPHAOP},
     };
 
+    // The commands being drawn with SacredBild's renderer (g_gfx between begin and end) instead of the device.
+    struct GfxDraw
+    {
+        bool on = false;
+        uint32_t texture = 0;       // the current texture's id (0: none)
+    };
+    thread_local GfxDraw t_gfx;
+
+    // Pretransformed vertices (layout units, as the device takes them) as SacredBild_GfxVertex.
+    void toGfx(const TLVertex* in, size_t n, std::vector<SacredBild_GfxVertex>& out)
+    {
+        out.resize(n);
+        for (size_t i = 0; i < n; ++i)
+        {
+            out[i] = {in[i].x, in[i].y, in[i].u, in[i].v, in[i].diffuse};
+        }
+    }
+
+    // A triangle list with the current texture.
+    void gfxTriangles(const TLVertex* v, size_t n, uint32_t blend, bool point)
+    {
+        thread_local std::vector<SacredBild_GfxVertex> converted;
+        toGfx(v, n, converted);
+        g_gfx->setState(blend, point ? SACREDBILD_GFX_POINT : SACREDBILD_GFX_LINEAR);
+        g_gfx->draw(converted.data(), static_cast<int>(n), nullptr, 0, t_gfx.texture);
+        g_gfx->setState(SACREDBILD_GFX_ALPHA, SACREDBILD_GFX_LINEAR);
+    }
+
+    // A rectangle given as a triangle strip of 4.
+    void gfxStrip(const TLVertex* v)
+    {
+        static const int kQuad[6] = {0, 1, 2, 2, 1, 3};
+        SacredBild_GfxVertex q[4];
+        for (int i = 0; i < 4; ++i)
+        {
+            q[i] = {v[i].x, v[i].y, v[i].u, v[i].v, v[i].diffuse};
+        }
+        g_gfx->draw(q, 4, kQuad, 6, t_gfx.texture);
+    }
+
+    class StateGuard;
+}
+
+// Text's glyph quads (text.cpp): drawn with SacredBild's renderer while the commands are; false: draw with the device.
+bool Ui::gfxStrip(const void* tlVertices)
+{
+    if (!t_gfx.on)
+    {
+        return false;
+    }
+    ::gfxStrip(static_cast<const TLVertex*>(tlVertices));
+    return true;
+}
+
+namespace
+{
     class StateGuard
     {
     public:
@@ -763,7 +832,7 @@ namespace
         // Before an overlay quad: saves the game's states once, then sets the overlay's.
         void enter()
         {
-            if (m_saved)
+            if (m_saved || t_gfx.on)
             {
                 return;
             }
@@ -811,6 +880,11 @@ namespace
 
         void texture(IDirectDrawSurface7* surface)
         {
+            if (t_gfx.on)
+            {
+                t_gfx.texture = surface ? g_gfx->surfaceTexture(surface) : 0;
+                return;
+            }
             if (surface == m_currentTexture)
             {
                 return;
@@ -825,6 +899,10 @@ namespace
         // The game's states back (before a game function draws, and at the end).
         void restore()
         {
+            if (t_gfx.on)
+            {
+                g_gfx->flush();     // before the game draws with the device
+            }
             if (!m_saved)
             {
                 return;
@@ -870,6 +948,11 @@ namespace
             {x0, y1, 0.0f, 1.0f, color, 0, u0, v1},
             {x1, y1, 0.0f, 1.0f, color, 0, u1, v1},
         };
+        if (t_gfx.on)
+        {
+            gfxStrip(v);
+            return;
+        }
         device->DrawPrimitive(D3DPT_TRIANGLESTRIP, kFvf, v, 4, 0);
     }
 
@@ -1210,6 +1293,12 @@ namespace
         }
         state.enter();
         state.texture(b.surface);
+        if (t_gfx.on)
+        {
+            gfxTriangles(b.vertices.data(), b.vertices.size(), b.premultiplied ? SACREDBILD_GFX_PREMULTIPLIED : SACREDBILD_GFX_ALPHA, b.point);
+            b.vertices.clear();
+            return;
+        }
         device->SetRenderState(D3DRENDERSTATE_SRCBLEND, b.premultiplied ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
         if (b.point)
         {
@@ -1656,6 +1745,12 @@ namespace
             }
             state.enter();
             state.texture(r.tex.surface);
+            if (t_gfx.on)
+            {
+                gfxTriangles(r.vertices.data(), r.vertices.size(), r.tex.premultiplied ? SACREDBILD_GFX_PREMULTIPLIED : SACREDBILD_GFX_ALPHA,
+                    r.point);
+                continue;
+            }
             device->SetRenderState(D3DRENDERSTATE_SRCBLEND, r.tex.premultiplied ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
             if (r.point)
             {
@@ -1840,6 +1935,17 @@ namespace
     {
         findBild();
         const uintptr_t m = manager();
+        // With SacredBild's renderer the draws go to it; each UI frame is a begin .. end of its own (begin takes the
+        // frame's placement).
+        const auto gfxBegin = [&] { t_gfx.on = g_gfx && !g_host && g_gfx->begin(device); t_gfx.texture = 0; };
+        const auto gfxEnd = [&] {
+            if (t_gfx.on)
+            {
+                g_gfx->end();
+                t_gfx.on = false;
+            }
+        };
+        gfxBegin();
         StateGuard state(device);
         // The frame the commands run in: the window's (confined to its 1024x768 rect, like the window), or the
         // canvas unconfined, so overlays may reach beyond the canvas to the screen's edges.
@@ -1856,12 +1962,14 @@ namespace
             {
                 flushMeshBatchGuarded(device, state);
                 state.restore();
+                gfxEnd();
                 if (pushed)
                 {
                     g_popFrame();
                 }
                 pushed = g_pushFrame(reinterpret_cast<void*>(w), w ? 1 : 0) != 0;
                 frameSlot = c.window;
+                gfxBegin();
             }
             if (c.kind != Kind::Mesh)
             {
@@ -1875,6 +1983,7 @@ namespace
         }
         flushMeshBatchGuarded(device, state);
         state.restore();
+        gfxEnd();
         if (pushed)
         {
             g_popFrame();

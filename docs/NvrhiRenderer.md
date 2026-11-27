@@ -247,3 +247,18 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   layer (Ui::Command meshes and pictures, gear/ui/rml.cpp + ui.cpp) replayed as Direct3D 7 calls; a native path means a
   Bild export Gear's renderer calls on NVRHI, and the retained-mode RmlUi branch (claude/rml-retained) changes that
   same layer. Asked John which to take first.
+- 2026-11-27: John: instead of Gear's UI going through several layers (RmlUi -> Gear's commands -> Direct3D 7 calls ->
+  the device proxy -> the Direct3D 7 emulation), export a simple RHI device context for Gear to draw on directly.
+  `src/core/bild_gfx.h`: one versioned C function table from ddraw.dll (`SacredBild_GfxGet`, exports.def; null on the
+  Direct3D 9 backend, with `[Render] GearGfx=0`, or an older ddraw.dll, and Gear draws as before). Textures (ARGB8,
+  BC1-3; region updates), meshes (RmlUi's compiled geometry), the device's surfaces by id (game textures, Gear's
+  pictures) and a device context: begin(device) / end / flush, scissor, a 4x4 transform, alpha or premultiplied
+  blending, linear or point filtering, drawMesh and immediate draws. Coordinates are canvas units; Bild maps them as it
+  maps the game's UI (placement, the pushed UI frame, confinement) and gives 4-vertex rectangles the proxy's texel
+  fitting and frame clipping (shared now as `render/ui_quads.h`). On NVRHI the triangles are batched per texture and
+  state and recorded with `Context::drawUi` (a third vertex format, `UiVertex::Gfx`), in order with the frame.
+  Gear (`gear/ui/ui.cpp`, `text.cpp`): with the table, drawList runs each UI frame as a begin .. end, rectangles, images,
+  mesh batches, retained lists and vector text go to it, and the game's own drawing (game-font text, item icons) gets a
+  flush first; no device state is touched. Checked: the mod manager self test (45 checks, sacred-theme) passes both
+  ways on D3D12 and Vulkan (validation clean) with the windows pixel-identical to the Direct3D 7 path; the minimap,
+  the transform test and the image contact sheets match too.
