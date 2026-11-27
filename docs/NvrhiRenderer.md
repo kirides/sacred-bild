@@ -373,3 +373,12 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   of 0.34 ms per real texture made while playing (streamed sectors): placed resources in larger heaps would take that
   away. The 200-250 ms hitch seen once per Vulkan run is pipeline compilation after a rebuilt ddraw.dll (its pipeline
   cache is discarded), not new.
+- 2026-11-27: placed resources (John: why not D3D12 Memory Allocator?). Vendored D3D12MA 3.3.0 (third_party, static,
+  linked into NVRHI's D3D12 backend). Textures that are written whole before they are read opt in
+  (`nvrhi::TextureDesc::sharesMemory`: the surfaces with a system memory copy, the scratch textures, bild_gfx's
+  textures) and are placed in D3D12MA's heaps (default pools not zeroed); render targets, depth buffers and GPU-only
+  textures (filled by Blts that may cover part of them) keep committed, zeroed memory, made resident on the paging
+  queue as before. `[Render] PlacedResources` (on). `[Debug] D3DStats` logs the time spent making the surfaces'
+  textures. Save 2, two runs each: 0.35 ms a texture committed, 0.055 ms placed (447 textures in a run: 156 ms
+  against 24 ms). The D3D12 debug layer has nothing to say; pictures as before. Frame times are the same (that cost is
+  spread over loading and streaming). Vulkan makes a texture in 0.41 ms (NVRHI allocates memory per resource there).

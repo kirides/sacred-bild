@@ -382,14 +382,22 @@ namespace DDrawRhi
             desc.debugName = m_gpuOnly ? "texture (GPU only)" : "texture";
             desc.initialState = nvrhi::ResourceStates::ShaderResource;
             desc.keepInitialState = true;
+            // The system memory copy (zeroed) is uploaded whole before the texture is drawn with; a GPU-only texture is
+            // filled by Blts that may cover part of it, so it keeps zeroed memory of its own.
+            desc.sharesMemory = !m_gpuOnly;
             break;
         default:
             break;
         }
         {
             std::scoped_lock lock(Context::lock());
+            LARGE_INTEGER t0, t1, f;
+            QueryPerformanceCounter(&t0);
             m_gpu = Context::device()->createTexture(desc);
+            QueryPerformanceCounter(&t1);
+            QueryPerformanceFrequency(&f);
             ++Context::counters().textures;
+            Context::counters().textureMicros += static_cast<uint64_t>((t1.QuadPart - t0.QuadPart) * 1000000 / f.QuadPart);
             if (m_gpu && m_kind == Kind::RenderTarget)
             {
                 Context::commands()->clearTextureFloat(m_gpu, nvrhi::AllSubresources, nvrhi::Color(0.0f, 0.0f, 0.0f, 1.0f));

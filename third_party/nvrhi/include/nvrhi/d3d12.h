@@ -41,6 +41,8 @@
 #include <directx/d3d12.h>
 #endif
 
+struct IDXGIAdapter;    // sacred-bild: placed resources (DeviceDesc::pAdapter)
+
 namespace nvrhi
 {
     namespace ObjectTypes
@@ -162,6 +164,9 @@ namespace nvrhi::d3d12
         // serialized blob); `pipelineLibraryLock` (an SRWLOCK) guards it. Null: no library.
         ID3D12PipelineLibrary* pipelineLibrary = nullptr;
         SRWLOCK* pipelineLibraryLock = nullptr;
+        // sacred-bild: placed resources (TextureDesc::sharesMemory) through D3D12 Memory Allocator; needs the adapter.
+        IDXGIAdapter* pAdapter = nullptr;
+        bool placedResources = false;
     };
 
     NVRHI_API DeviceHandle createDevice(const DeviceDesc& desc);

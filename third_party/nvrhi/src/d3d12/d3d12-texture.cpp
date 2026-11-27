@@ -21,6 +21,7 @@
 */
 
 #include "d3d12-backend.h"
+#include <D3D12MemAlloc.h>     // sacred-bild: placed resources
 
 #include <nvrhi/common/misc.h>
 
@@ -137,6 +138,12 @@ namespace nvrhi::d3d12
         default:
             return nullptr;
         }
+    }
+
+    PlacedAllocation::~PlacedAllocation()   // sacred-bild: placed resources
+    {
+        if (allocation)
+            allocation->Release();
     }
 
     Texture::~Texture()
@@ -364,6 +371,23 @@ namespace nvrhi::d3d12
                     initialState,
                     d.useClearValue ? &clearValue : nullptr,
                     IID_PPV_ARGS(&texture->resource));
+            }
+        }
+        else if (d.sharesMemory && m_Context.allocator && !isShared && !d.isRenderTarget && !d.isUAV)
+        {
+            // sacred-bild: placed in one of D3D12 Memory Allocator's heaps (no allocation and no residency wait of
+            // its own); the allocation is the texture's and goes with it.
+            D3D12MA::ALLOCATION_DESC allocationDesc = {};
+            allocationDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+            if (m_EnhancedBarriersSupported)
+            {
+                hr = m_Context.allocator->CreateResource3(&allocationDesc, &texture->resourceDesc, initialLayout,
+                    d.useClearValue ? &clearValue : nullptr, 0, nullptr, &texture->placed.allocation, IID_PPV_ARGS(&texture->resource));
+            }
+            else
+            {
+                hr = m_Context.allocator->CreateResource(&allocationDesc, reinterpret_cast<D3D12_RESOURCE_DESC const*>(&texture->resourceDesc),
+                    initialState, d.useClearValue ? &clearValue : nullptr, &texture->placed.allocation, IID_PPV_ARGS(&texture->resource));
             }
         }
         else

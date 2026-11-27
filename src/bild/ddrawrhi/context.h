@@ -36,6 +36,7 @@ namespace DDrawRhi
         struct Counters
         {
             std::atomic<uint32_t> tempTextures{0}, readBacks{0}, waits{0}, textures{0};
+            std::atomic<uint64_t> textureMicros{0};     // spent making the surfaces' textures
         };
         Counters& counters();
         bool available();

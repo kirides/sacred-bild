@@ -289,6 +289,7 @@ namespace DDrawRhi
                 s.vsync = Config::display.vsync;
                 s.maxFrameLatency = Config::display.maxFrameLatency;
                 s.pipelineCache = Config::render.pipelineCache;
+                s.placedResources = Config::render.placedResources;
                 return s;
             }
 
@@ -518,9 +519,10 @@ namespace DDrawRhi
                 {
                     Counters& k = counters();
                     LOG("NVRHI backend: GPU {:.3f} ms a frame ({} frames, {:.1f} command lists a frame); per frame: {:.1f} temporary "
-                        "textures, {:.1f} new textures, {:.2f} read-backs, {:.2f} GPU waits", t.seconds * 1000.0 / t.frames,
+                        "textures, {:.1f} new textures ({:.3f} ms), {:.2f} read-backs, {:.2f} GPU waits", t.seconds * 1000.0 / t.frames,
                         t.frames, static_cast<double>(t.lists) / t.frames, k.tempTextures.exchange(0) / double(t.frames),
-                        k.textures.exchange(0) / double(t.frames), k.readBacks.exchange(0) / double(t.frames),
+                        k.textures.exchange(0) / double(t.frames), k.textureMicros.exchange(0) / 1000.0 / t.frames,
+                        k.readBacks.exchange(0) / double(t.frames),
                         k.waits.exchange(0) / double(t.frames));
                     t.seconds = 0.0;
                     t.lists = t.frames = 0;
@@ -1062,7 +1064,7 @@ namespace DDrawRhi
             ++counters().tempTextures;
             nvrhi::TextureHandle texture = Rhi::device()->createTexture(nvrhi::TextureDesc().setWidth(width).setHeight(height)
                 .setFormat(format).setDebugName("copy source").setInitialState(nvrhi::ResourceStates::ShaderResource)
-                .setKeepInitialState(true));
+                .setKeepInitialState(true).setSharesMemory(true));     // written whole each time before it is read
             if (texture)
             {
                 g_scratch.emplace(key, texture);

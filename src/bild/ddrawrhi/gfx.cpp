@@ -89,7 +89,8 @@ namespace
         }
         nvrhi::TextureHandle texture = Rhi::device()->createTexture(nvrhi::TextureDesc()
             .setWidth(static_cast<uint32_t>(width)).setHeight(static_cast<uint32_t>(height)).setFormat(f)
-            .setDebugName("gfx texture").setInitialState(nvrhi::ResourceStates::ShaderResource).setKeepInitialState(true));
+            .setDebugName("gfx texture").setInitialState(nvrhi::ResourceStates::ShaderResource).setKeepInitialState(true)
+            .setSharesMemory(true));    // written whole right below
         if (!texture)
         {
             return 0;

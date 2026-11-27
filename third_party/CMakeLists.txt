@@ -30,8 +30,15 @@ set(NVRHI_FETCH_DIRECTX_HEADERS OFF CACHE BOOL "" FORCE)
 set(NVRHI_FETCH_VULKAN_HEADERS OFF CACHE BOOL "" FORCE)
 add_subdirectory(nvrhi)
 
+# D3D12 Memory Allocator: NVRHI's D3D12 backend places textures in its heaps (sacred-bild: placed resources).
+add_library(D3D12MA STATIC D3D12MemoryAllocator/src/D3D12MemAlloc.cpp)
+target_include_directories(D3D12MA PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/D3D12MemoryAllocator/include)
+target_compile_definitions(D3D12MA PUBLIC D3D12MA_USING_DIRECTX_HEADERS)
+target_link_libraries(D3D12MA PUBLIC DirectX-Headers DirectX-Guids)
+target_link_libraries(nvrhi_d3d12 PRIVATE D3D12MA)
+
 # Warnings are upstream's business; ours stay at /W4 for src/.
-foreach(t nvrhi nvrhi_d3d12 nvrhi_vk DirectX-Guids)
+foreach(t nvrhi nvrhi_d3d12 nvrhi_vk DirectX-Guids D3D12MA)
   target_compile_options(${t} PRIVATE /W0 /utf-8)
   set_target_properties(${t} PROPERTIES FOLDER "third_party")
 endforeach()
