@@ -2,6 +2,7 @@
 // vertex declaration and one index buffer of quads shared by all draws.
 #include "ddraw9/device.h"
 #include "ddraw9/gpu.h"
+#include "ddrawrhi/ground.h"
 #include "log.h"
 
 #include <algorithm>
@@ -17,6 +18,7 @@ namespace DDraw9
         {
             d9::IDirect3DVertexBuffer9* buffer;
             uint32_t capacity;      // quads
+            DDrawRhi::Ground::Mesh* rhi = nullptr;      // the NVRHI backend's instead of `buffer`
         };
     }
 
@@ -257,23 +259,34 @@ namespace DDraw9
         return true;
     }
 
+    // The NVRHI backend's devices go to DDrawRhi::Ground (ddrawrhi/ground.h).
+
     bool Ground::available(IDirect3DDevice7* device)
     {
         Device* d = Device::from(device);
-        return d && d->groundAvailable();
+        return d ? d->groundAvailable() : DDrawRhi::Ground::available(device);
     }
 
     Ground::Mesh* Ground::createMesh(IDirect3DDevice7* device, uint32_t capacity)
     {
         Device* d = Device::from(device);
-        return d ? d->createGroundMesh(capacity) : nullptr;
+        if (d)
+        {
+            return d->createGroundMesh(capacity);
+        }
+        DDrawRhi::Ground::Mesh* rhi = DDrawRhi::Ground::createMesh(device, capacity);
+        return rhi ? new Ground::Mesh{nullptr, capacity, rhi} : nullptr;
     }
 
     void Ground::releaseMesh(Mesh* mesh)
     {
         if (mesh)
         {
-            mesh->buffer->Release();
+            if (mesh->buffer)
+            {
+                mesh->buffer->Release();
+            }
+            DDrawRhi::Ground::releaseMesh(mesh->rhi);
             delete mesh;
         }
     }
@@ -285,12 +298,20 @@ namespace DDraw9
 
     bool Ground::write(IDirect3DDevice7* device, Mesh* mesh, uint32_t first, const Vertex* vertices, uint32_t count)
     {
+        if (mesh && mesh->rhi)
+        {
+            return first + count <= mesh->capacity && DDrawRhi::Ground::write(device, mesh->rhi, first, vertices, count);
+        }
         Device* d = Device::from(device);
         return d && d->writeGround(mesh, first, vertices, count);
     }
 
     bool Ground::draw(IDirect3DDevice7* device, const Draw& draw)
     {
+        if (draw.mesh && draw.mesh->rhi)
+        {
+            return draw.firstQuad + draw.quads <= draw.mesh->capacity && DDrawRhi::Ground::draw(device, draw.mesh->rhi, draw);
+        }
         Device* d = Device::from(device);
         return d && d->drawGround(draw);
     }

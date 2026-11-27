@@ -28,6 +28,12 @@ namespace DDrawRhi
         // The device behind an IDirect3DDevice7 pointer if it is one of these, else null.
         static Device* from(const void* iface);
 
+        // GroundMesh's quads (ground.h): `quads` quads of `buffer` from `firstQuad` on, 28-byte DDraw9::Ground::Vertex,
+        // drawn with the current state as the game's pretransformed quads at `scale` and `offset` with depth `z`. False
+        // (nothing drawn) if the state needs what the ground mode doesn't do.
+        bool drawGround(nvrhi::IBuffer* buffer, uint32_t firstQuad, uint32_t quads, float scale, float offsetX,
+            float offsetY, float z);
+
         // IUnknown
         STDMETHOD(QueryInterface)(REFIID riid, LPVOID* out) override;
         STDMETHOD_(ULONG, AddRef)() override;
@@ -134,6 +140,9 @@ namespace DDrawRhi
         void logStageState(DWORD stage, DWORD type, DWORD value);
         // Records a draw: `indices` (null: none) index the vertices of `source`.
         HRESULT draw(D3DPRIMITIVETYPE type, const VertexSource& source, const WORD* indices, DWORD indexCount);
+        // Everything but the buffers and the draw call: textures (uploaded), constants, pipeline, framebuffer, viewport
+        // and scissor. False if there is nothing to draw into or the pipeline failed.
+        bool setup(nvrhi::ICommandList* cmd, DWORD fvf, nvrhi::PrimitiveType prim, nvrhi::GraphicsState& state);
         // The vertex and pixel shader constants from the Direct3D 7 state, written when they changed.
         void updateConstants(nvrhi::ICommandList* cmd, DWORD fvf);
         nvrhi::IGraphicsPipeline* pipeline(DWORD fvf, nvrhi::PrimitiveType type, nvrhi::IFramebuffer* fb);
@@ -168,6 +177,7 @@ namespace DDrawRhi
         bool m_psDirty = true;
         uint32_t m_epoch = 0;
         DWORD m_constantsFvf = ~0u;
+        float m_ground[4] = {};                 // the ground mode's transform (drawGround)
         nvrhi::BufferHandle m_vsConstants;
         nvrhi::BufferHandle m_psConstants;
         std::vector<uint8_t> m_scratch;

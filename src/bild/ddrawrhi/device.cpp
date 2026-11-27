@@ -56,8 +56,9 @@ namespace DDrawRhi
             uint32_t lightCount;
             uint32_t texCoords[4];
             LightConstants lights[8];
+            float groundTransform[4];
         };
-        static_assert(sizeof(VertexConstants) == 1344);
+        static_assert(sizeof(VertexConstants) == 1360);
 
         struct PixelConstants
         {
@@ -84,13 +85,21 @@ namespace DDrawRhi
             kFlagLocalViewer = 0x040,
             kFlagSpecularOn = 0x080,
             kFlagColorVertex = 0x100,
+            kFlagGround = 0x200,
         };
+
+        // Not a Direct3D 7 vertex format: the input layout and constants of the ground mode (ground.h).
+        constexpr DWORD kGroundFvf = 0x7FFF0000;
+        constexpr UINT kGroundStride = 28;
+        constexpr uint32_t kQuadsPerDraw = 16384;     // 16-bit indices
 
         // Shared by all devices: the shaders, the binding layout, input layouts by vertex format, pipelines by state.
         struct Shared
         {
             nvrhi::ShaderHandle vs, ps;
             nvrhi::BindingLayoutHandle layout;
+            nvrhi::BufferHandle quadIndices;    // 0 1 2 2 1 3 for every 4 vertices (the ground's quads)
+            bool quadIndicesWritten = false;
             std::unordered_map<DWORD, nvrhi::InputLayoutHandle> inputLayouts;
 
             struct PipelineKey
@@ -196,7 +205,7 @@ namespace DDrawRhi
             {
                 return it->second;
             }
-            const UINT stride = Fvf::stride(fvf);
+            const UINT stride = fvf == kGroundFvf ? kGroundStride : Fvf::stride(fvf);
             UINT offset = 0;
             std::vector<nvrhi::VertexAttributeDesc> attrs;
             auto own = [&](const char* name, nvrhi::Format format, UINT at) {
@@ -207,6 +216,20 @@ namespace DDrawRhi
                 attrs.push_back(nvrhi::VertexAttributeDesc().setName(name).setFormat(format).setBufferIndex(1)
                     .setOffset(at).setElementStride(0));
             };
+            if (fvf == kGroundFvf)
+            {
+                own("POSITION", nvrhi::Format::RG32_FLOAT, 0);
+                fallback("NORMAL", nvrhi::Format::RGB32_FLOAT, 0);
+                own("DIFFUSE", nvrhi::Format::R32_UINT, 8);
+                fallback("SPECULAR", nvrhi::Format::R32_UINT, 16);
+                own("TEXA", nvrhi::Format::RG32_FLOAT, 12);
+                own("TEXB", nvrhi::Format::RG32_FLOAT, 20);
+                fallback("TEXC", nvrhi::Format::RGBA32_FLOAT, 20);
+                fallback("TEXD", nvrhi::Format::RGBA32_FLOAT, 20);
+                nvrhi::InputLayoutHandle ground = Context::device()->createInputLayout(attrs.data(), static_cast<uint32_t>(attrs.size()));
+                g_shared->inputLayouts.emplace(fvf, ground);
+                return ground;
+            }
             switch (fvf & D3DFVF_POSITION_MASK)
             {
             case D3DFVF_XYZRHW: own("POSITION", nvrhi::Format::RGBA32_FLOAT, 0); offset = 16; break;
@@ -744,7 +767,8 @@ namespace DDrawRhi
 
     void Device::updateConstants(nvrhi::ICommandList* cmd, DWORD fvf)
     {
-        const bool rhw = Fvf::pretransformed(fvf);
+        const bool ground = fvf == kGroundFvf;
+        const bool rhw = ground || Fvf::pretransformed(fvf);
         if (fvf != m_constantsFvf)
         {
             m_constantsFvf = fvf;
@@ -781,9 +805,17 @@ namespace DDrawRhi
             uint32_t flags = 0;
             if (rhw) flags |= kFlagRhw;
             if (!rhw && m_rs[D3DRENDERSTATE_LIGHTING]) flags |= kFlagLighting;
-            if (fvf & D3DFVF_NORMAL) flags |= kFlagNormal;
-            if (fvf & D3DFVF_DIFFUSE) flags |= kFlagDiffuse;
-            if (fvf & D3DFVF_SPECULAR) flags |= kFlagSpecular;
+            if (ground)
+            {
+                flags |= kFlagGround | kFlagDiffuse;
+                std::memcpy(c.groundTransform, m_ground, sizeof(m_ground));
+            }
+            else
+            {
+                if (fvf & D3DFVF_NORMAL) flags |= kFlagNormal;
+                if (fvf & D3DFVF_DIFFUSE) flags |= kFlagDiffuse;
+                if (fvf & D3DFVF_SPECULAR) flags |= kFlagSpecular;
+            }
             if (m_rs[D3DRENDERSTATE_NORMALIZENORMALS]) flags |= kFlagNormalize;
             if (m_rs[D3DRENDERSTATE_LOCALVIEWER]) flags |= kFlagLocalViewer;
             if (m_rs[D3DRENDERSTATE_SPECULARENABLE]) flags |= kFlagSpecularOn;
@@ -1045,20 +1077,11 @@ namespace DDrawRhi
             std::memcpy(idx.data, indices, indexCount * sizeof(WORD));
         }
 
-        nvrhi::IBindingSet* set = bindings();      // uploads the textures' CPU changes first
-        updateConstants(cmd, source.fvf);
-        Surface* depth = depthSurface();
-        nvrhi::IFramebuffer* fb = Context::framebuffer(m_target->gpu(), depth ? depth->gpu() : nullptr);
-        nvrhi::IGraphicsPipeline* pso = pipeline(source.fvf, prim, fb);
-        if (!pso || !set)
+        nvrhi::GraphicsState state;
+        if (!setup(cmd, source.fvf, prim, state))
         {
             return D3D_OK;
         }
-
-        nvrhi::GraphicsState state;
-        state.pipeline = pso;
-        state.framebuffer = fb;
-        state.bindings = {set};
         state.vertexBuffers = {
             nvrhi::VertexBufferBinding().setBuffer(vertices.buffer).setSlot(0).setOffset(vertices.offset),
             nvrhi::VertexBufferBinding().setBuffer(Context::vertexDefaults()).setSlot(1).setOffset(0),
@@ -1067,6 +1090,32 @@ namespace DDrawRhi
         {
             state.indexBuffer = nvrhi::IndexBufferBinding().setBuffer(idx.buffer).setFormat(nvrhi::Format::R16_UINT).setOffset(idx.offset);
         }
+        cmd->setGraphicsState(state);
+        if (indices)
+        {
+            cmd->drawIndexed(nvrhi::DrawArguments().setVertexCount(indexCount));
+        }
+        else
+        {
+            cmd->draw(nvrhi::DrawArguments().setVertexCount(source.count));
+        }
+        return D3D_OK;
+    }
+
+    bool Device::setup(nvrhi::ICommandList* cmd, DWORD fvf, nvrhi::PrimitiveType prim, nvrhi::GraphicsState& state)
+    {
+        nvrhi::IBindingSet* set = bindings();      // uploads the textures' CPU changes first
+        updateConstants(cmd, fvf);
+        Surface* depth = depthSurface();
+        nvrhi::IFramebuffer* fb = Context::framebuffer(m_target->gpu(), depth ? depth->gpu() : nullptr);
+        nvrhi::IGraphicsPipeline* pso = pipeline(fvf, prim, fb);
+        if (!pso || !set)
+        {
+            return false;
+        }
+        state.pipeline = pso;
+        state.framebuffer = fb;
+        state.bindings = {set};
         // Direct3D 7's viewport, clipped to the target: the scissor for every draw. Untransformed vertices go through it
         // with Direct3D 9's pixel centers (half a pixel down and right of today's); pretransformed ones are already in
         // target pixels (the shader moves them) and only clipped.
@@ -1077,10 +1126,10 @@ namespace DDrawRhi
         const LONG y1 = std::clamp<LONG>(static_cast<LONG>(m_viewport.dwY + m_viewport.dwHeight), 0, th);
         if (x1 <= x0 || y1 <= y0)
         {
-            return D3D_OK;
+            return false;
         }
         nvrhi::Viewport vp;
-        if (Fvf::pretransformed(source.fvf))
+        if (fvf == kGroundFvf || Fvf::pretransformed(fvf))
         {
             vp = nvrhi::Viewport(0.0f, static_cast<float>(tw), 0.0f, static_cast<float>(th), 0.0f, 1.0f);
         }
@@ -1092,16 +1141,86 @@ namespace DDrawRhi
         }
         state.viewport.addViewport(vp);
         state.viewport.addScissorRect(nvrhi::Rect(x0, x1, y0, y1));
-        cmd->setGraphicsState(state);
-        if (indices)
+        return true;
+    }
+
+    bool Device::drawGround(nvrhi::IBuffer* buffer, uint32_t firstQuad, uint32_t quads, float scale, float offsetX,
+        float offsetY, float z)
+    {
+        std::scoped_lock lock(m_lock);
+        if (!m_target || !buffer)
         {
-            cmd->drawIndexed(nvrhi::DrawArguments().setVertexCount(indexCount));
+            return false;
         }
-        else
+        if (!quads)
         {
-            cmd->draw(nvrhi::DrawArguments().setVertexCount(source.count));
+            return true;
         }
-        return D3D_OK;
+        // What the fixed-function pipeline would do with pretransformed vertices that the ground mode doesn't.
+        if (m_rs[D3DRENDERSTATE_FOGENABLE])
+        {
+            return false;
+        }
+        for (DWORD stage = 0; stage < kShaderStages && m_tss[stage][D3DTSS_COLOROP] != D3DTOP_DISABLE; ++stage)
+        {
+            if (m_tss[stage][D3DTSS_TEXCOORDINDEX] > 1 || m_tss[stage][D3DTSS_TEXTURETRANSFORMFLAGS] != D3DTTFF_DISABLE)
+            {
+                return false;
+            }
+        }
+        nvrhi::ICommandList* cmd = Context::commands();
+        if (Context::epoch() != m_epoch)
+        {
+            m_epoch = Context::epoch();
+            m_vsDirty = m_psDirty = true;
+        }
+        if (!g_shared->quadIndices)
+        {
+            g_shared->quadIndices = Context::device()->createBuffer(nvrhi::BufferDesc().setByteSize(kQuadsPerDraw * 6 * sizeof(WORD))
+                .setIsIndexBuffer(true).setDebugName("quad indices").setInitialState(nvrhi::ResourceStates::IndexBuffer)
+                .setKeepInitialState(true));
+        }
+        if (!g_shared->quadIndices)
+        {
+            return false;
+        }
+        if (!g_shared->quadIndicesWritten)
+        {
+            std::vector<WORD> indices(kQuadsPerDraw * 6);
+            for (uint32_t q = 0; q < kQuadsPerDraw; ++q)
+            {
+                const WORD v = static_cast<WORD>(q * 4);
+                const WORD quad[6] = {v, static_cast<WORD>(v + 1), static_cast<WORD>(v + 2), static_cast<WORD>(v + 2),
+                    static_cast<WORD>(v + 1), static_cast<WORD>(v + 3)};
+                std::copy(std::begin(quad), std::end(quad), indices.begin() + q * 6);
+            }
+            cmd->writeBuffer(g_shared->quadIndices, indices.data(), indices.size() * sizeof(WORD));
+            g_shared->quadIndicesWritten = true;
+        }
+        const float ground[4] = {scale, offsetX, offsetY, z};
+        if (std::memcmp(ground, m_ground, sizeof(ground)) != 0)
+        {
+            std::memcpy(m_ground, ground, sizeof(ground));
+            m_vsDirty = true;
+        }
+        nvrhi::GraphicsState state;
+        if (!setup(cmd, kGroundFvf, nvrhi::PrimitiveType::TriangleList, state))
+        {
+            return true;
+        }
+        state.indexBuffer = nvrhi::IndexBufferBinding().setBuffer(g_shared->quadIndices).setFormat(nvrhi::Format::R16_UINT);
+        for (uint32_t done = 0; done < quads;)
+        {
+            const uint32_t n = std::min(quads - done, kQuadsPerDraw);
+            state.vertexBuffers = {
+                nvrhi::VertexBufferBinding().setBuffer(buffer).setSlot(0).setOffset(uint64_t(firstQuad + done) * 4 * kGroundStride),
+                nvrhi::VertexBufferBinding().setBuffer(Context::vertexDefaults()).setSlot(1).setOffset(0),
+            };
+            cmd->setGraphicsState(state);
+            cmd->drawIndexed(nvrhi::DrawArguments().setVertexCount(n * 6));
+            done += n;
+        }
+        return true;
     }
 
     bool Device::gather(DWORD fvf, const D3DDRAWPRIMITIVESTRIDEDDATA& data, DWORD count)

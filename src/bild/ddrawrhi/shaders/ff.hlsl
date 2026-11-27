@@ -13,6 +13,7 @@
 #define FLAG_LOCALVIEWER    0x040
 #define FLAG_SPECULARON     0x080   // SPECULARENABLE
 #define FLAG_COLORVERTEX    0x100
+#define FLAG_GROUND         0x200   // GroundMesh's quads (ddrawrhi/ground.h): sector space, placed by groundTransform
 
 struct Light
 {
@@ -43,6 +44,7 @@ cbuffer VertexConstants : register(b0)
     uint lightCount;
     uint4 texCoords;            // per stage: coordinate set (bits 0-15), transform count (bits 16-23), projected (bit 24)
     Light lights[8];
+    float4 groundTransform;     // FLAG_GROUND: target pixels = position * x + (y, z); depth w
 };
 
 cbuffer PixelConstants : register(b1)
@@ -129,10 +131,13 @@ VSOut vsMain(VSIn v)
     {
         // Screen pixels of the render target, Direct3D 9's pixel centers (integer coordinates) moved to the half pixel
         // of today's APIs; w = 1 / rhw keeps texturing perspective correct.
-        const float w = v.position.w != 0.0 ? 1.0 / v.position.w : 1.0;
-        const float x = (v.position.x + 0.5) * target.z * 2.0 - 1.0;
-        const float y = 1.0 - (v.position.y + 0.5) * target.w * 2.0;
-        o.position = float4(x * w, y * w, v.position.z * w, w);
+        float4 p = v.position;
+        if ((vsFlags & FLAG_GROUND) != 0)
+            p = float4(v.position.xy * groundTransform.x + groundTransform.yz, groundTransform.w, 1.0);
+        const float w = p.w != 0.0 ? 1.0 / p.w : 1.0;
+        const float x = (p.x + 0.5) * target.z * 2.0 - 1.0;
+        const float y = 1.0 - (p.y + 0.5) * target.w * 2.0;
+        o.position = float4(x * w, y * w, p.z * w, w);
         o.diffuse = color1;
         o.specular = color2;
     }
