@@ -222,3 +222,13 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   functions draw them, from two more jumps (Addr::objects1StaticSprite, ENG 0x62E602, and +0x805). In the park save
   that list holds the lily pads and leaves on the water (square miniatures of three textures). Pictures unchanged on the
   five saves (the portals' moving destination view differs between any two runs).
+- 2026-11-27: stage 6, water and lava (cWorldView::drawWaterTiles, ENG 0x62DD00): detoured in a transaction of its own
+  before the main one (Resolution hooks the same function to draw the water list in parts; two DetourAttach of one
+  target in one transaction leave only the last). The liquid cells (+0x3FF2C, 0x98 bytes: tile, screen position, tile
+  position, region, four reflection corners) are drawn as the game draws them: at detail 2 a reflection quad per cell
+  (corners shifted by 0.2 / zoom, gray by the tile's depth bytes and the light's shadow alpha, with the texture the
+  liquid batcher had last) and the water ambience from the cells' average position (through the sound call Resolution
+  sums up), then the surface with the material's animated frame, per-corner light and alpha by depth. The cell array
+  and its count are checked where the code reads them (ReBorn moved them; there the game draws water).
+  The take-over's batch is a fixed buffer filled in place (a vector insert and a zeroed temporary per quad cost
+  0.06 ms in the park save); with it the world takes 1.63-1.66 ms there against 1.70-1.72 ms with the game's code.

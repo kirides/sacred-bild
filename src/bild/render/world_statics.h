@@ -10,4 +10,6 @@
 namespace WorldStatics
 {
     void install();
+    // The water pass (a detour of its own, in a transaction before Resolution's hook of the same function).
+    void installWater();
 }

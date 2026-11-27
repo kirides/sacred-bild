@@ -126,6 +126,7 @@ void Sacred::installHooks()
     FileCache::install();
     GrannyAsync::install();
     GroundMesh::install();     // its own transaction first: its renderTileRow hook runs inside Resolution's
+    WorldStatics::installWater();   // likewise: Resolution's drawWaterTiles hook runs around it
     FastMath::install();
     Patch::begin();
     FrameHooks::install();

@@ -130,36 +130,51 @@ namespace
     }
 
     // The quads of one texture, drawn through the batcher in the order they came.
+    // The quads of one texture, drawn through the batcher in the order they came. A full batch is drawn and started
+    // over (the 16-bit indices reach 16384 vertices).
     struct Batch
     {
-        std::vector<Vertex> vertices;
-        std::vector<uint16_t> indices;
+        static constexpr uint32_t kQuads = 4096;
+        Vertex vertices[kQuads * 4];
+        uint16_t indices[kQuads * 6];
+        uint32_t quads = 0;
         uint32_t texture = 0;
+
+        Batch()
+        {
+            for (uint32_t q = 0; q < kQuads; ++q)
+            {
+                const uint16_t b = static_cast<uint16_t>(q * 4);
+                uint16_t* i = &indices[q * 6];
+                i[0] = b; i[1] = b + 1; i[2] = b + 2; i[3] = b + 2; i[4] = b + 1; i[5] = b + 3;
+            }
+        }
+
+        void add(DeviceProxy* proxy, const Vertex* v)
+        {
+            if (quads == kQuads)
+            {
+                draw(proxy);
+            }
+            Vertex* d = &vertices[quads * 4];
+            d[0] = v[0];
+            d[1] = v[1];
+            d[2] = v[2];
+            d[3] = v[3];
+            ++quads;
+        }
 
         void draw(DeviceProxy* proxy)
         {
-            if (vertices.empty())
+            if (!quads)
             {
                 return;
             }
-            const size_t quads = vertices.size() / 4;
-            if (indices.size() < quads * 6)
-            {
-                const size_t from = indices.size() / 6;
-                indices.resize(quads * 6);
-                for (size_t q = from; q < quads; ++q)
-                {
-                    const uint16_t b = static_cast<uint16_t>(q * 4);
-                    uint16_t* i = &indices[q * 6];
-                    i[0] = b; i[1] = b + 1; i[2] = b + 2; i[3] = b + 2; i[4] = b + 1; i[5] = b + 3;
-                }
-            }
-            proxy->drawQuads(&lookup, texture, 0, cSpriteBatcher::fvf, vertices.data(), static_cast<DWORD>(vertices.size()),
-                indices.data(), static_cast<DWORD>(quads * 6));
-            vertices.clear();
+            proxy->drawQuads(&lookup, texture, 0, cSpriteBatcher::fvf, vertices, quads * 4, indices, quads * 6);
+            quads = 0;
         }
     };
-    Batch g_batch;
+    Batch g_batch;     // 160 KB, static
 
     int32_t ftol(float v) { return static_cast<int32_t>(v); }
 
@@ -324,14 +339,16 @@ namespace
             {
                 continue;
             }
-            Vertex v[4] = {};
+            Vertex v[4];
             v[0].x = v[1].x = left;
             v[2].x = v[3].x = right;
             v[0].y = v[2].y = top;
             v[1].y = v[3].y = bottom;
             for (Vertex& p : v)
             {
+                p.z = 0.0f;
                 p.rhw = 1.0f;
+                p.specular = 0;
             }
             if (lit)
             {
@@ -380,7 +397,7 @@ namespace
             }
             if (zero < maxX && minX < w && zero < maxY && minY < h)
             {
-                g_batch.vertices.insert(g_batch.vertices.end(), v, v + 4);
+                g_batch.add(proxy, v);
                 ++*reinterpret_cast<uint32_t*>(view + 0x97094);
             }
         }
@@ -644,7 +661,7 @@ namespace
         g.renderFlag(flags, 1, 0);
         g.renderFlag(flags, 0x800, z > *g.linearZoom ? 1 : 0);
         g_batch.texture = *reinterpret_cast<const uint32_t*>(desc + 4);
-        g_batch.vertices.insert(g_batch.vertices.end(), v, v + 4);
+        g_batch.add(proxy, v);
         g_batch.draw(proxy);
         ++*reinterpret_cast<uint32_t*>(view + 0x9708C);
         static bool s_logged = false;
@@ -681,7 +698,7 @@ namespace
         }
         g.renderFlag(flags, 0x800, 1);
         g_batch.texture = g.textureHandle(g.texturePak(), g.glowName);
-        g_batch.vertices.insert(g_batch.vertices.end(), v, v + 4);
+        g_batch.add(proxy, v);
         g_batch.draw(proxy);
         return true;
     }
@@ -778,7 +795,7 @@ namespace
             LOG("World statics: first blob shadow drawn by SacredBild");
         }
         g_batch.texture = *reinterpret_cast<const uint32_t*>(view + 0x97070);
-        g_batch.vertices.insert(g_batch.vertices.end(), v, v + 4);
+        g_batch.add(proxy, v);
         g_batch.draw(proxy);
     }
 
@@ -813,6 +830,312 @@ namespace
         g.lightObject = callTarget<decltype(g.lightObject)>(f + 0x084);
         g.shadowColor = callTarget<decltype(g.shadowColor)>(f + 0x08B);
         g.shadowCell = operand<const float*>(f + 0x1B2);
+        return true;
+    }
+
+    // ---- The water pass (cWorldView::drawWaterTiles, ENG 0x62DD00) ----
+    // The view's liquid cells (+0x3FF2C, 0x98 bytes each, count +0x80E3C): the tile (+0), the cell's screen position
+    // (+0x04, +0x08 floats), its tile position (+0x0C, +0x10 ints), the region index (+0x14 short), and four
+    // pretransformed corners (+0x18, 32 bytes each) for the reflection quad. Each cell is
+    // water (tile type 0x90) or lava (0xA0); its region picks the liquid's material in the light object (+0x91E8 + 0xD8
+    // * material: frame textures, animation rate +0xC8, alpha factor +0xD0, reflection on +0xCC).
+    // With the detail setting (byte at 0x182EE78) 2 or more: a reflection quad per cell from its corners, shifted by 0.2 /
+    // zoom, gray by the tile corners' depth bytes (+0x10..+0x13) and the light's shadow alpha, additive, with the
+    // texture the liquid batcher had last; the cells' average position goes to the water sound. Then the surface: a quad
+    // per cell from the view's corner offsets (+0xA90, one set per position modulo 4), the animated frame, per-corner
+    // light where the view lights statics, alpha by the depth bytes times the material's factor.
+    struct Water
+    {
+        void* (__cdecl* renderFlags)();
+        void* (__cdecl* lightObject)();
+        uint32_t (__thiscall* shadowColor)(void* light);
+        uint8_t* (__cdecl* timer)();
+        void (__cdecl* soundManager)();
+        void (__cdecl* mapToWorld)(float* out, const float* in);
+        void* soundUpdate;
+        const float* reflectShift;
+        const uint8_t* detail;
+        const float* frameRate;
+        const float* const* halfW;
+        const float* const* halfH;
+        const int32_t* centerX;
+        const int32_t* centerY;
+        uint32_t batcherOffset;
+    } w;
+
+    decltype(Addr::cWorldView_drawWaterTiles)::Ptr g_origWater = nullptr;
+
+    // sound(count, x, y) as the game makes it: the sound manager is fetched with the arguments already pushed, and its
+    // update (thiscall) takes them.
+    __declspec(naked) void __cdecl waterSound(uint32_t, int32_t, int32_t)
+    {
+        __asm
+        {
+            push dword ptr [esp + 12]
+            push dword ptr [esp + 12]
+            push dword ptr [esp + 12]
+            call dword ptr [w.soundManager]
+            mov ecx, eax
+            call dword ptr [w.soundUpdate]
+            ret
+        }
+    }
+
+    bool onScreen(const Vertex* v)
+    {
+        const float wd = **g.width, ht = **g.height, zero = *g.zero;
+        float minX = v[0].x, maxX = v[0].x, minY = v[0].y, maxY = v[0].y;
+        for (int k = 0; k < 4; ++k)
+        {
+            const Vertex& p = v[k];
+            minX = p.x < minX ? p.x : minX;
+            maxX = p.x > maxX ? p.x : maxX;
+            minY = p.y < minY ? p.y : minY;
+            maxY = p.y > maxY ? p.y : maxY;
+        }
+        return zero < maxX && minX < wd && zero < maxY && minY < ht;
+    }
+
+    // The liquid's material for a cell, or null (not a liquid tile).
+    const uint8_t* material(uint8_t* view, const uint8_t* cell, const uint8_t* light)
+    {
+        const uint8_t* tile = *reinterpret_cast<uint8_t* const*>(cell);
+        const int16_t regionIndex = *reinterpret_cast<const int16_t*>(cell + 0x14);
+        const uint8_t* region = *reinterpret_cast<uint8_t* const*>(view + 0x970B0 + regionIndex * 4);
+        const uint8_t type = tile[0x1F] & 0xF0;
+        uint8_t index;
+        if (type == 0x90)
+        {
+            index = (*reinterpret_cast<uint8_t* const*>(region + 0x17C))[0xF7];
+        }
+        else if (type == 0xA0)
+        {
+            index = (*reinterpret_cast<uint8_t* const*>(region + 0x17C))[0xF8];
+        }
+        else
+        {
+            return nullptr;
+        }
+        return light + index * 0xD8 + 0x91E8;
+    }
+
+    uint32_t clampByte(int32_t v)
+    {
+        return v < 0 ? 0u : v > 0xFF ? 0xFFu : static_cast<uint32_t>(v);
+    }
+
+    void __fastcall water(uint8_t* view, void*, IDirect3DDevice7* device)
+    {
+        DeviceProxy* proxy = DeviceProxy::instance();
+        if (!proxy || device != proxy)
+        {
+            g_origWater(reinterpret_cast<cWorldView*>(view), nullptr, device);
+            return;
+        }
+        void* flags = w.renderFlags();
+        uint8_t* light = static_cast<uint8_t*>(w.lightObject());
+        const bool lit = (light[0x10] & 0x20) || light[0x9E0C];
+        const float z = zoom(view);
+        const float shift = *w.reflectShift / z;
+        const int32_t count = *reinterpret_cast<const int32_t*>(view + 0x80E3C);
+        if (!count)
+        {
+            waterSound(static_cast<uint16_t>(count), *reinterpret_cast<const int32_t*>(view + 0x14),
+                *reinterpret_cast<const int32_t*>(view + 0x18));
+            return;
+        }
+        uint32_t* batcherTexture = reinterpret_cast<uint32_t*>(view + w.batcherOffset + 0x4FC0);
+        uint8_t* cells = view + 0x3FF2C;
+        if (*w.detail >= 2)
+        {
+            g.renderFlag(flags, 0x800, 1);
+            g.renderFlag(flags, 8, 1);
+            g.renderFlag(flags, 0x10, 1);
+            g.renderFlag(flags, 4, 1);
+            g.renderFlag(flags, 0x4000, 0);
+            const uint32_t shade = w.shadowColor(w.lightObject()) >> 24;
+            w.timer();
+            uint32_t sumX = 0, sumY = 0;
+            bool any = false;
+            // Quads the liquid batcher holds come first, with its texture, as the reflection quads do.
+            g.flush(view + w.batcherOffset, device);
+            g_batch.texture = *batcherTexture;
+            for (int32_t i = 0; i < count; ++i)
+            {
+                uint8_t* cell = cells + i * 0x98;
+                const uint8_t* m = material(view, cell, light);
+                if (!m || !m[0xCC])
+                {
+                    continue;
+                }
+                const float* c = reinterpret_cast<const float*>(cell + 0x18);
+                const int32_t cx = *reinterpret_cast<const int32_t*>(cell + 0xC), cy = *reinterpret_cast<const int32_t*>(cell + 0x10);
+                Vertex* t = reinterpret_cast<Vertex*>(view + 0x81640 + ((cx & 1) + (cy & 1) * 2) * 0x80);
+                t[0].x = shift + c[0];
+                t[0].y = c[1];
+                t[1].x = c[8];
+                t[1].y = shift + c[9];
+                t[2].x = c[0x10];
+                t[2].y = c[0x11] - shift;
+                t[3].x = c[0x18] - shift;
+                t[3].y = c[0x19];
+                const uint8_t* tile = *reinterpret_cast<uint8_t* const*>(cell);
+                const uint8_t depth[4] = {0x10, 0x11, 0x13, 0x12};
+                for (int k = 0; k < 4; ++k)
+                {
+                    const uint32_t g8 = clampByte(-static_cast<int8_t>(tile[depth[k]]) * 8) * shade >> 8;
+                    t[k].color = (g8 << 8 | g8) << 8 | g8;
+                }
+                const int16_t regionIndex = *reinterpret_cast<const int16_t*>(cell + 0x14);
+                const uint8_t* region = *reinterpret_cast<uint8_t* const*>(view + 0x970B0 + regionIndex * 4);
+                sumX += *reinterpret_cast<const uint32_t*>(region + 0x44) + *reinterpret_cast<const uint32_t*>(region + 0x34) + cx;
+                sumY += *reinterpret_cast<const uint32_t*>(region + 0x48) + *reinterpret_cast<const uint32_t*>(region + 0x38) + cy;
+                any = true;
+                if (onScreen(t))
+                {
+                    g_batch.add(proxy, t);
+                }
+            }
+            if (any)
+            {
+                const uint32_t ax = sumX / static_cast<uint32_t>(count), ay = sumY / static_cast<uint32_t>(count);
+                const float in[3] = {static_cast<float>(ax), static_cast<float>(ay), 0.0f};
+                float out[3] = {};
+                w.mapToWorld(out, in);
+                const int32_t y = ftol(out[1]);
+                const int32_t x = ftol(out[0]);
+                waterSound(static_cast<uint16_t>(count), x, y);
+            }
+            else
+            {
+                waterSound(0, 0, 0);
+            }
+            g_batch.draw(proxy);
+        }
+        g.renderFlag(flags, 0x800, 1);
+        g.renderFlag(flags, 8, 0);
+        g.renderFlag(flags, 0x10, 0);
+        const float halfW = **w.halfW, halfH = **w.halfH;
+        const int32_t centerX = *w.centerX, centerY = *w.centerY;
+        uint32_t texture = *batcherTexture;
+        g_batch.texture = texture;
+        for (int32_t i = 0; i < count; ++i)
+        {
+            uint8_t* cell = cells + i * 0x98;
+            const uint8_t* m = material(view, cell, light);
+            if (!m)
+            {
+                continue;
+            }
+            int32_t frameIndex = 0;
+            if (*w.detail >= 1)
+            {
+                const int32_t rate = *reinterpret_cast<const int32_t*>(m + 0xC8);
+                const uint8_t* t = w.timer();
+                const int64_t counter = *reinterpret_cast<const int64_t*>(t + 0x10);
+                const int64_t frequency = *reinterpret_cast<const int64_t*>(t + 0x20);
+                const uint32_t ms = static_cast<uint32_t>(counter * 1000 / frequency);
+                const int64_t phase = (ms >> 1) & 0x3FF;
+                frameIndex = static_cast<int32_t>(static_cast<double>(phase * rate) * *w.frameRate);
+            }
+            const float cellX = *reinterpret_cast<const float*>(cell + 0x4);
+            const float cellY = *reinterpret_cast<const float*>(cell + 0x8);
+            const int32_t ix = *reinterpret_cast<const int32_t*>(cell + 0xC), iy = *reinterpret_cast<const int32_t*>(cell + 0x10);
+            Vertex* t = reinterpret_cast<Vertex*>(view + 0x80E40 + ((ix & 3) + (iy & 3) * 4) * 0x80);
+            const float* offsets = reinterpret_cast<const float*>(view + 0xA90);
+            for (int k = 0; k < 4; ++k)
+            {
+                t[k].x = offsets[k * 2] + cellX;
+                t[k].y = cellY + offsets[k * 2 + 1];
+            }
+            uint32_t colors[4] = {0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF};
+            if (lit)
+            {
+                const int32_t bx = ftol((cellX - halfW) * z) + centerX;
+                const int32_t by = ftol((cellY - halfH) * z) + centerY;
+                const int32_t* lightOffsets = reinterpret_cast<const int32_t*>(view + 0xAB0);
+                for (int k = 0; k < 4; ++k)
+                {
+                    colors[k] = g.lightAt(light, bx + lightOffsets[k * 2], lightOffsets[k * 2 + 1] + by, 0);
+                }
+            }
+            const uint8_t* tile = *reinterpret_cast<uint8_t* const*>(cell);
+            const int32_t factor = *reinterpret_cast<const int32_t*>(m + 0xD0);
+            const uint8_t depth[4] = {0x10, 0x11, 0x13, 0x12};
+            for (int k = 0; k < 4; ++k)
+            {
+                t[k].color = clampByte(static_cast<int8_t>(tile[depth[k]]) * factor) << 24 | colors[k];
+            }
+            const uint32_t handle = *reinterpret_cast<const uint32_t*>(m + frameIndex * 4);
+            if (handle != texture)
+            {
+                g_batch.draw(proxy);
+                texture = handle;
+                g_batch.texture = handle;
+                *batcherTexture = handle;
+            }
+            if (onScreen(t))
+            {
+                g_batch.add(proxy, t);
+            }
+            ++*reinterpret_cast<uint32_t*>(view + 0x97098);
+        }
+        g_batch.draw(proxy);
+        static bool s_logged = false;
+        if (!s_logged)
+        {
+            s_logged = true;
+            LOG("World statics: first water drawn by SacredBild ({} cells)", count);
+        }
+    }
+
+    bool resolveWater(uintptr_t f)
+    {
+        struct Check
+        {
+            uint32_t offset;
+            std::initializer_list<uint8_t> bytes;
+        };
+        const Check checks[] = {
+            {0x008, {0xE8}}, {0x013, {0xE8}}, {0x038, {0xD9, 0x05}}, {0x056, {0xA0}}, {0x06F, {0xE8}}, {0x0AA, {0xE8}},
+            {0x0B6, {0xE8}}, {0x2DB, {0x8D, 0x8F}}, {0x2E3, {0xE8}}, {0x34D, {0xE8}}, {0x371, {0xE8}}, {0x378, {0xE8}},
+            {0x3A3, {0xE8}}, {0x496, {0xD8, 0x0D}}, {0x50C, {0xD8, 0x25}}, {0x520, {0xD8, 0x25}}, {0x528, {0x81, 0xC3}},
+            {0x539, {0x05}}, {0x571, {0xE8}}, {0x68C, {0xE8}}, {0x6E3, {0xC2, 0x04, 0x00}},
+            // The cell array and its count where this file reads them (ReBorn moved them).
+            {0x044, {0x8B, 0x87, 0x3C, 0x0E, 0x08, 0x00}}, {0x0D7, {0x8D, 0xB7, 0x44, 0xFF, 0x03, 0x00}},
+            {0x3E2, {0x8D, 0xAF, 0x3C, 0xFF, 0x03, 0x00}},
+        };
+        for (const Check& c : checks)
+        {
+            if (!Patch::verify(f + c.offset, c.bytes))
+            {
+                LOG("World statics: the water pass's code at +{:#x} is not the expected one; the game draws water", c.offset);
+                return false;
+            }
+        }
+        if (callAddr(f + 0x06F) != reinterpret_cast<uintptr_t>(g.renderFlag) ||
+            callAddr(f + 0x571) != reinterpret_cast<uintptr_t>(g.lightAt) ||
+            callAddr(f + 0x3A3) != reinterpret_cast<uintptr_t>(g.flush) ||
+            callAddr(f + 0x0B6) != reinterpret_cast<uintptr_t>(g.timer))
+        {
+            LOG("World statics: the water pass calls other functions than expected; the game draws water");
+            return false;
+        }
+        w.renderFlags = callTarget<decltype(w.renderFlags)>(f + 0x008);
+        w.lightObject = callTarget<decltype(w.lightObject)>(f + 0x013);
+        w.reflectShift = operand<const float*>(f + 0x03A);
+        w.detail = operand<const uint8_t*>(f + 0x057);
+        w.shadowColor = callTarget<decltype(w.shadowColor)>(f + 0x0AA);
+        w.timer = callTarget<decltype(w.timer)>(f + 0x0B6);
+        w.batcherOffset = operand<uint32_t>(f + 0x2DD);
+        w.mapToWorld = callTarget<decltype(w.mapToWorld)>(f + 0x34D);
+        w.soundManager = callTarget<decltype(w.soundManager)>(f + 0x371);
+        w.soundUpdate = callTarget<void*>(f + 0x378);
+        w.frameRate = operand<const float*>(f + 0x498);
+        w.halfW = reinterpret_cast<const float* const*>(f + 0x50E);
+        w.halfH = reinterpret_cast<const float* const*>(f + 0x522);
+        w.centerX = reinterpret_cast<const int32_t*>(f + 0x52A);
+        w.centerY = reinterpret_cast<const int32_t*>(f + 0x53A);
         return true;
     }
 
@@ -894,6 +1217,26 @@ namespace
         g.textureHandle = callTarget<decltype(g.textureHandle)>(s + 0xF2F);
         g_resumeCall2 = s + 0x827;
         return true;
+    }
+}
+
+void WorldStatics::installWater()
+{
+    if (!Config::ddraw.nvrhi || !Config::render.takeOverStatics || !Addr::objects2StaticSprite ||
+        !Addr::cWorldView_drawWaterTiles || !Addr::cTextureManager_get || !Addr::g_pTextureManager)
+    {
+        return;
+    }
+    // The functions it shares with the static objects are taken from objects2's code.
+    if (!resolve(Addr::objects2StaticSprite) || !resolveWater(Addr::cWorldView_drawWaterTiles))
+    {
+        return;
+    }
+    Patch::begin();
+    const bool hooked = Patch::hook(g_origWater, Addr::cWorldView_drawWaterTiles, &water, "cWorldView::drawWaterTiles");
+    if (Patch::commit() && hooked)
+    {
+        LOG("World statics: SacredBild draws the water and lava surfaces");
     }
 }
 
