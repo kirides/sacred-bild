@@ -17,6 +17,8 @@
 #include "settings/config/display.h"
 #include "settings/config/render.h"
 #include "ddraw9/smaa.h"
+#include "ddrawrhi/smaa.h"
+#include "ddrawrhi/world.h"
 #include "log.h"
 #include "patch.h"
 #include "diag/profiler.h"
@@ -297,7 +299,37 @@ namespace
             size[0x14 / 4] = static_cast<float>(driver->width);
             size[0x18 / 4] = static_cast<float>(driver->height);
         }
+        // [Debug] SACREDBILD_FORCE_WEATHER=flags,drops (environment, tests): the weather's flags (1 rain, 2 fog, 0x10
+        // sparks) and rain drop count forced on.
+        static const std::pair<uint32_t, int32_t> force = [] {
+            char text[64] = {};
+            uint32_t flags = 0;
+            int32_t drops = 0;
+            if (GetEnvironmentVariableA("SACREDBILD_FORCE_WEATHER", text, sizeof(text)) && sscanf_s(text, "%x,%d", &flags, &drops) >= 1)
+            {
+                LOG("Weather forced: flags {:#x}, {} drops", flags, drops);
+            }
+            return std::make_pair(flags, drops);
+        }();
+        if (force.first)
+        {
+            static_cast<uint32_t*>(self)[0x10 / 4] |= force.first;
+            if (force.second > 0)
+            {
+                static_cast<int32_t*>(self)[0x1C / 4] = force.second;
+            }
+        }
+        DeviceProxy* proxy = DeviceProxy::instance();
+        const bool lines = proxy && device == proxy;
+        if (lines)
+        {
+            proxy->beginLineBatch();
+        }
         g_origWeatherRender(self, edx, device, a, b, c);
+        if (lines)
+        {
+            proxy->endLineBatch();
+        }
     }
 
     bool g_worldDrawn = false;      // the world view was drawn since the last UI render (SMAA)
@@ -316,6 +348,12 @@ namespace
         }
         DeviceProxy* proxy = DeviceProxy::instance();
         const int64_t proxyTime = D3DStats::total(D3DStats::TProxy);
+        const bool ownWorld = Config::ddraw.nvrhi && Config::render.worldScale > 1.0f && proxy && device == proxy;
+        if (ownWorld)
+        {
+            proxy->syncBatch();
+            DDrawRhi::World::begin(proxy->real(), Config::render.worldScale);
+        }
         if (proxy && device == proxy)
         {
             proxy->beginBatch();
@@ -336,6 +374,11 @@ namespace
             proxy->endBatch();
             g_worldDrawn = true;
         }
+        if (ownWorld)
+        {
+            proxy->syncBatch();
+            DDrawRhi::World::end(proxy->real());
+        }
         D3DStats::addTime(D3DStats::TWorldProxy, D3DStats::total(D3DStats::TProxy) - proxyTime);
         D3DStats::mark(D3DStats::TGameAfterWorld);
     }
@@ -346,6 +389,7 @@ namespace
         D3DStats::Scope s{D3DStats::TUi};
         UiWindows::sync();
         UiCanvas::updateCursorFilter();
+        const bool inWorld = g_worldDrawn;
         // The world view antialiased before the interface goes on top of it.
         if (g_worldDrawn)
         {
@@ -353,7 +397,14 @@ namespace
             DeviceProxy* proxy = DeviceProxy::instance();
             if (Config::render.smaa > 0 && proxy && device == proxy)
             {
-                DDraw9::Smaa::apply(proxy->real(), static_cast<DDraw9::Smaa::Preset>(Config::render.smaa - 1));
+                if (Config::ddraw.nvrhi)
+                {
+                    DDrawRhi::Smaa::apply(proxy->real(), Config::render.smaa - 1);
+                }
+                else
+                {
+                    DDraw9::Smaa::apply(proxy->real(), static_cast<DDraw9::Smaa::Preset>(Config::render.smaa - 1));
+                }
             }
         }
         // The manager draws a window alone (savegame, options, character, world map): the original screen showed
@@ -383,6 +434,11 @@ namespace
             g_origUiRender(self, edx, device);
         }
         UiWindows::publishDrawn();
+        // The interface draws models too (the hero's portrait, 0x6E3D10): the next advance starts after it.
+        if (inWorld)
+        {
+            GrannyAsync::kickAhead();
+        }
         D3DStats::mark(D3DStats::TGameAfterUi);
     }
 }

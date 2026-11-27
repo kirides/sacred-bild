@@ -1,6 +1,7 @@
 #include "prof.h"
 #include "memfault.h"
 #include "bild_gear.h"
+#include "bild_gfx.h"
 #include "save.h"
 #include "ui.h"
 #include "items/itemicon.h"
@@ -188,6 +189,9 @@ namespace
     BoundsFn g_screenBounds = nullptr;
     std::once_flag g_bildOnce;
     const Ui::Host* g_host = nullptr;           // a host other than the game (Ui::setHost), or nullptr
+    // SacredBild's 2D drawing (bild_gfx.h), where its renderer offers it: the commands are drawn with it instead of the
+    // device's Direct3D 7 calls (null: the device).
+    const SacredBild_Gfx* g_gfx = nullptr;
 
     void findBild()
     {
@@ -196,6 +200,15 @@ namespace
             if (!bild)
             {
                 return;
+            }
+            if (auto gfxGet = reinterpret_cast<decltype(&SacredBild_GfxGet)>(GetProcAddress(bild, "SacredBild_GfxGet")))
+            {
+                const SacredBild_Gfx* gfx = gfxGet(SACREDBILD_GFX_VERSION);
+                if (gfx && gfx->size >= offsetof(SacredBild_Gfx, surfaceTexture) + sizeof(gfx->surfaceTexture))
+                {
+                    g_gfx = gfx;
+                    LOG("UI: drawing with SacredBild's renderer (bild_gfx {})", gfx->version);
+                }
             }
             auto push = reinterpret_cast<decltype(&SacredBild_UiPushFrame)>(GetProcAddress(bild, "SacredBild_UiPushFrame"));
             auto pop = reinterpret_cast<decltype(&SacredBild_UiPopFrame)>(GetProcAddress(bild, "SacredBild_UiPopFrame"));
@@ -671,7 +684,21 @@ namespace
     {
         std::vector<Ui::MeshVertex> vertices;
         std::vector<int> indices;
+        // The mesh in SacredBild's renderer (bild_gfx.h), made on its first draw there; 0: not yet, ~0u: can't be.
+        mutable std::atomic<uint32_t> gfx{0};
+        mutable bool repeats = false;   // texture coordinates past 0..1 (a tiled image)
+
+        ~MeshData();
     };
+    MeshData::~MeshData()
+    {
+        const uint32_t id = gfx.load();
+        if (id && id != ~0u && g_gfx)
+        {
+            g_gfx->meshRelease(id);
+        }
+    }
+
     std::mutex g_meshLock;
     std::map<uint32_t, std::shared_ptr<const MeshData>> g_meshes;
     uint32_t g_nextMesh = 1;
@@ -754,6 +781,62 @@ namespace
         {0, D3DTSS_TEXTURETRANSFORMFLAGS}, {1, D3DTSS_COLOROP}, {1, D3DTSS_ALPHAOP},
     };
 
+    // The commands being drawn with SacredBild's renderer (g_gfx between begin and end) instead of the device.
+    struct GfxDraw
+    {
+        bool on = false;
+        uint32_t texture = 0;       // the current texture's id (0: none)
+    };
+    thread_local GfxDraw t_gfx;
+
+    // Pretransformed vertices (layout units, as the device takes them) as SacredBild_GfxVertex.
+    void toGfx(const TLVertex* in, size_t n, std::vector<SacredBild_GfxVertex>& out)
+    {
+        out.resize(n);
+        for (size_t i = 0; i < n; ++i)
+        {
+            out[i] = {in[i].x, in[i].y, in[i].u, in[i].v, in[i].diffuse};
+        }
+    }
+
+    // A triangle list with the current texture.
+    void gfxTriangles(const TLVertex* v, size_t n, uint32_t blend, bool point)
+    {
+        thread_local std::vector<SacredBild_GfxVertex> converted;
+        toGfx(v, n, converted);
+        g_gfx->setState(blend, point ? SACREDBILD_GFX_POINT : SACREDBILD_GFX_LINEAR);
+        g_gfx->draw(converted.data(), static_cast<int>(n), nullptr, 0, t_gfx.texture);
+        g_gfx->setState(SACREDBILD_GFX_ALPHA, SACREDBILD_GFX_LINEAR);
+    }
+
+    // A rectangle given as a triangle strip of 4.
+    void gfxStrip(const TLVertex* v)
+    {
+        static const int kQuad[6] = {0, 1, 2, 2, 1, 3};
+        SacredBild_GfxVertex q[4];
+        for (int i = 0; i < 4; ++i)
+        {
+            q[i] = {v[i].x, v[i].y, v[i].u, v[i].v, v[i].diffuse};
+        }
+        g_gfx->draw(q, 4, kQuad, 6, t_gfx.texture);
+    }
+
+    class StateGuard;
+}
+
+// Text's glyph quads (text.cpp): drawn with SacredBild's renderer while the commands are; false: draw with the device.
+bool Ui::gfxStrip(const void* tlVertices)
+{
+    if (!t_gfx.on)
+    {
+        return false;
+    }
+    ::gfxStrip(static_cast<const TLVertex*>(tlVertices));
+    return true;
+}
+
+namespace
+{
     class StateGuard
     {
     public:
@@ -763,7 +846,7 @@ namespace
         // Before an overlay quad: saves the game's states once, then sets the overlay's.
         void enter()
         {
-            if (m_saved)
+            if (m_saved || t_gfx.on)
             {
                 return;
             }
@@ -811,6 +894,11 @@ namespace
 
         void texture(IDirectDrawSurface7* surface)
         {
+            if (t_gfx.on)
+            {
+                t_gfx.texture = surface ? g_gfx->surfaceTexture(surface) : 0;
+                return;
+            }
             if (surface == m_currentTexture)
             {
                 return;
@@ -825,6 +913,10 @@ namespace
         // The game's states back (before a game function draws, and at the end).
         void restore()
         {
+            if (t_gfx.on)
+            {
+                g_gfx->flush();     // before the game draws with the device
+            }
             if (!m_saved)
             {
                 return;
@@ -870,6 +962,11 @@ namespace
             {x0, y1, 0.0f, 1.0f, color, 0, u0, v1},
             {x1, y1, 0.0f, 1.0f, color, 0, u1, v1},
         };
+        if (t_gfx.on)
+        {
+            gfxStrip(v);
+            return;
+        }
         device->DrawPrimitive(D3DPT_TRIANGLESTRIP, kFvf, v, 4, 0);
     }
 
@@ -1210,6 +1307,12 @@ namespace
         }
         state.enter();
         state.texture(b.surface);
+        if (t_gfx.on)
+        {
+            gfxTriangles(b.vertices.data(), b.vertices.size(), b.premultiplied ? SACREDBILD_GFX_PREMULTIPLIED : SACREDBILD_GFX_ALPHA, b.point);
+            b.vertices.clear();
+            return;
+        }
         device->SetRenderState(D3DRENDERSTATE_SRCBLEND, b.premultiplied ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
         if (b.point)
         {
@@ -1439,8 +1542,83 @@ namespace
         }
     }
 
+    // The mesh in SacredBild's renderer, made on its first draw (0 if it can't be: too many vertices).
+    uint32_t gfxMesh(const MeshData& mesh)
+    {
+        uint32_t id = mesh.gfx.load();
+        if (id)
+        {
+            return id == ~0u ? 0 : id;
+        }
+        thread_local std::vector<SacredBild_GfxVertex> converted;
+        converted.resize(mesh.vertices.size());
+        bool repeats = false;
+        for (size_t i = 0; i < mesh.vertices.size(); ++i)
+        {
+            const Ui::MeshVertex& v = mesh.vertices[i];
+            converted[i] = {v.x, v.y, v.u, v.v, v.color};
+            repeats = repeats || v.u < -0.001f || v.u > 1.001f || v.v < -0.001f || v.v > 1.001f;
+        }
+        id = g_gfx->meshCreate(converted.data(), static_cast<int>(converted.size()), mesh.indices.data(),
+            static_cast<int>(mesh.indices.size()));
+        mesh.repeats = repeats;
+        mesh.gfx.store(id ? id : ~0u);
+        return id;
+    }
+
+    // A mesh command drawn by reference with SacredBild's renderer: placement, the image's rectangle, flips, tiling,
+    // the alpha mode and the pixel snapping are the draw's constants (meshVertices does the same per vertex on the CPU).
+    // False: draw it the CPU way.
+    bool drawMeshGfx(IDirect3DDevice7* device, StateGuard& state, const Command& c, const MeshData& mesh)
+    {
+        MeshTexture tex;
+        if (!meshTexture(device, c, tex))
+        {
+            return true;    // nothing to draw now
+        }
+        const uint32_t id = gfxMesh(mesh);
+        if (!id)
+        {
+            return false;
+        }
+        state.texture(tex.surface);
+        uint32_t flags = 0;
+        flags |= (c.flip & 1) ? SACREDBILD_GFX_FLIP_U : 0;
+        flags |= (c.flip & 2) ? SACREDBILD_GFX_FLIP_V : 0;
+        flags |= (c.flip & 4) ? SACREDBILD_GFX_SWAP_UV : 0;
+        // A repeated tile of a game image: the atlas can't wrap, so the image repeats inside its rectangle.
+        flags |= tex.surface && c.image && c.image < Ui::kPictureBase && mesh.repeats ? SACREDBILD_GFX_WRAP : 0;
+        flags |= tex.premultiplied ? 0 : SACREDBILD_GFX_STRAIGHT;
+        flags |= c.matrix ? 0 : SACREDBILD_GFX_SNAP;
+        SacredBild_GfxMeshDraw d = {c.x, c.y, c.w > 0 ? 1.0f / c.w : 1.0f, t_gfx.texture, 0.0f, 0.0f, 1.0f, 1.0f, flags};
+        if (tex.surface)
+        {
+            d.u0 = tex.u0;
+            d.v0 = tex.v0;
+            d.u1 = tex.u1;
+            d.v1 = tex.v1;
+        }
+        g_gfx->setState(tex.premultiplied ? SACREDBILD_GFX_PREMULTIPLIED : SACREDBILD_GFX_ALPHA, c.point ? SACREDBILD_GFX_POINT : SACREDBILD_GFX_LINEAR);
+        g_gfx->setScissor(c.clipped ? 1 : 0, c.clip[0], c.clip[1], c.clip[2], c.clip[3]);
+        g_gfx->setTransform(c.matrix ? c.matrix->data() : nullptr);
+        g_gfx->drawMeshEx(id, &d);
+        g_gfx->setTransform(nullptr);
+        g_gfx->setScissor(0, 0, 0, 0, 0);
+        g_gfx->setState(SACREDBILD_GFX_ALPHA, SACREDBILD_GFX_LINEAR);
+        return true;
+    }
+
     void drawMesh(IDirect3DDevice7* device, StateGuard& state, const Command& c)
     {
+        if (t_gfx.on && g_gfx->size >= offsetof(SacredBild_Gfx, drawMeshEx) + sizeof(g_gfx->drawMeshEx))
+        {
+            flushMeshBatch(device, state);
+            const std::shared_ptr<const MeshData> mesh = findMesh(c.region);
+            if (!mesh || drawMeshGfx(device, state, c, *mesh))
+            {
+                return;
+            }
+        }
         // A different picture or sampling: what is batched goes out first (before this command resolves its texture).
         if (t_batch.active && (t_batch.image != c.image || t_batch.point != c.point))
         {
@@ -1636,6 +1814,17 @@ namespace
             return;
         }
         const Ui::RetainedList& list = *c.retained;
+        if (t_gfx.on && g_gfx->size >= offsetof(SacredBild_Gfx, drawMeshEx) + sizeof(g_gfx->drawMeshEx))
+        {
+            // Each command drawn by reference: nothing to build.
+            for (const Command& rc : list.commands)
+            {
+                drawGuarded(device, state, rc);
+            }
+            t_clip = c.clipped ? c.clip : nullptr;
+            Text::setClip(t_clip);
+            return;
+        }
         if (!list.build)
         {
             list.build = std::make_unique<RetainedBuild>();
@@ -1656,6 +1845,12 @@ namespace
             }
             state.enter();
             state.texture(r.tex.surface);
+            if (t_gfx.on)
+            {
+                gfxTriangles(r.vertices.data(), r.vertices.size(), r.tex.premultiplied ? SACREDBILD_GFX_PREMULTIPLIED : SACREDBILD_GFX_ALPHA,
+                    r.point);
+                continue;
+            }
             device->SetRenderState(D3DRENDERSTATE_SRCBLEND, r.tex.premultiplied ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
             if (r.point)
             {
@@ -1840,6 +2035,17 @@ namespace
     {
         findBild();
         const uintptr_t m = manager();
+        // With SacredBild's renderer the draws go to it; each UI frame is a begin .. end of its own (begin takes the
+        // frame's placement).
+        const auto gfxBegin = [&] { t_gfx.on = g_gfx && !g_host && g_gfx->begin(device); t_gfx.texture = 0; };
+        const auto gfxEnd = [&] {
+            if (t_gfx.on)
+            {
+                g_gfx->end();
+                t_gfx.on = false;
+            }
+        };
+        gfxBegin();
         StateGuard state(device);
         // The frame the commands run in: the window's (confined to its 1024x768 rect, like the window), or the
         // canvas unconfined, so overlays may reach beyond the canvas to the screen's edges.
@@ -1856,12 +2062,14 @@ namespace
             {
                 flushMeshBatchGuarded(device, state);
                 state.restore();
+                gfxEnd();
                 if (pushed)
                 {
                     g_popFrame();
                 }
                 pushed = g_pushFrame(reinterpret_cast<void*>(w), w ? 1 : 0) != 0;
                 frameSlot = c.window;
+                gfxBegin();
             }
             if (c.kind != Kind::Mesh)
             {
@@ -1875,6 +2083,7 @@ namespace
         }
         flushMeshBatchGuarded(device, state);
         state.restore();
+        gfxEnd();
         if (pushed)
         {
             g_popFrame();

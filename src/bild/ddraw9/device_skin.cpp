@@ -2,6 +2,7 @@
 // and its constants, taken from the Direct3D 7 state the game set for the fixed-function pipeline.
 #include "ddraw9/device.h"
 #include "ddraw9/gpu.h"
+#include "ddrawrhi/skin.h"
 #include "log.h"
 
 #include <algorithm>
@@ -17,6 +18,7 @@ namespace DDraw9
         {
             d9::IDirect3DVertexBuffer9* buffer;
             uint32_t count;
+            DDrawRhi::Skin::Mesh* rhi = nullptr;        // the NVRHI backend's instead of `buffer`
         };
 
         // A piece's triangle list, in an index arena shared by all pieces (one SetIndices for all skinned draws).
@@ -25,6 +27,7 @@ namespace DDraw9
             d9::IDirect3DIndexBuffer9* buffer;  // holds a reference
             uint32_t start;
             uint32_t count;
+            DDrawRhi::Skin::Indices* rhi = nullptr;
         };
     }
 
@@ -557,44 +560,66 @@ namespace DDraw9
         return true;
     }
 
+    // The NVRHI backend's devices go to DDrawRhi::Skin (ddrawrhi/skin.h).
+
     bool Skin::available(IDirect3DDevice7* device)
     {
         Device* d = Device::from(device);
-        return d && d->skinAvailable();
+        return d ? d->skinAvailable() : DDrawRhi::Skin::available(device);
     }
 
     Skin::Mesh* Skin::createMesh(IDirect3DDevice7* device, const Vertex* vertices, uint32_t count)
     {
-        Device* d = Device::from(device);
-        return d ? d->createSkinMesh(vertices, count) : nullptr;
+        if (Device* d = Device::from(device))
+        {
+            return d->createSkinMesh(vertices, count);
+        }
+        DDrawRhi::Skin::Mesh* rhi = DDrawRhi::Skin::createMesh(device, vertices, count);
+        return rhi ? new Skin::Mesh{nullptr, count, rhi} : nullptr;
     }
 
     void Skin::releaseMesh(Mesh* mesh)
     {
         if (mesh)
         {
-            mesh->buffer->Release();
+            if (mesh->buffer)
+            {
+                mesh->buffer->Release();
+            }
+            DDrawRhi::Skin::releaseMesh(mesh->rhi);
             delete mesh;
         }
     }
 
     Skin::Indices* Skin::createIndices(IDirect3DDevice7* device, const WORD* indices, uint32_t count)
     {
-        Device* d = Device::from(device);
-        return d ? d->createSkinIndices(indices, count) : nullptr;
+        if (Device* d = Device::from(device))
+        {
+            return d->createSkinIndices(indices, count);
+        }
+        DDrawRhi::Skin::Indices* rhi = DDrawRhi::Skin::createIndices(device, indices, count);
+        return rhi ? new Skin::Indices{nullptr, 0, count, rhi} : nullptr;
     }
 
     void Skin::releaseIndices(Indices* indices)
     {
         if (indices)
         {
-            indices->buffer->Release();
+            if (indices->buffer)
+            {
+                indices->buffer->Release();
+            }
+            DDrawRhi::Skin::releaseIndices(indices->rhi);
             delete indices;
         }
     }
 
     bool Skin::draw(IDirect3DDevice7* device, const Draw& draw)
     {
+        if (draw.mesh && draw.mesh->rhi)
+        {
+            return draw.indices && draw.indices->rhi && DDrawRhi::Skin::draw(device, draw.mesh->rhi, draw.indices->rhi, draw);
+        }
         Device* d = Device::from(device);
         return d && d->drawSkinned(draw);
     }

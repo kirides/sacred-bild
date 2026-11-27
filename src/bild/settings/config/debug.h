@@ -18,6 +18,8 @@ namespace Config
         // With [Render] AnimationThreads: every 2 s the controls are sampled on one thread and on the threads from the
         // same state and the results compared; a difference keeps the walk on one thread.
         bool animationCheck = false;
+        // Backend=nvrhi: the API's validation (D3D12 debug layer, Vulkan's VK_LAYER_KHRONOS_validation) and NVRHI's; slow.
+        bool rhiValidation = false;
     };
     inline Debug debug;
 }

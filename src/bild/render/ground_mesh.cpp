@@ -930,9 +930,9 @@ void GroundMesh::install()
     {
         return;
     }
-    if (!Config::ddraw.d3d9)
+    if (!Config::ddraw.own())
     {
-        LOG("Ground mesh: off, it needs [DDraw] Backend=d3d9");
+        LOG("Ground mesh: off, it needs [DDraw] Backend=d3d9 or nvrhi");
         return;
     }
     if (!Addr::cWorldView_renderTileRow || !Addr::cWorldView_drawTileLayers || !Addr::cQuadBatcher_add ||

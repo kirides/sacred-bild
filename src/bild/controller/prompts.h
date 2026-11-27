@@ -9,9 +9,14 @@ namespace d9
     struct IDirect3DDevice9Ex;
 }
 
+namespace nvrhi
+{
+    class ITexture;
+}
+
 // Controller button prompts drawn over the game: icons of the pad's buttons (in the labels of its maker, from the
 // atlas tools/re/gen_prompts.py builds into src/bild/controller/prompts.png) at screen positions, all in one draw call right
-// before the frame is presented (Direct3D 9 backend only). The presenting thread collects a frame's prompts after
+// before the frame is presented (SacredBild's own backends, Direct3D 9 and NVRHI). The presenting thread collects a frame's prompts after
 // presenting it (Controller), the next present draws them.
 namespace Prompts
 {
@@ -34,6 +39,8 @@ namespace Prompts
 
     // The overlay: draws the latest prompts (unless they are stale) into the current render target.
     void draw(d9::IDirect3DDevice9Ex* device, float width, float height);
+    // The same on the NVRHI backend, into `target` (DDrawRhi::Context lock held).
+    void drawRhi(nvrhi::ITexture* target);
     bool pending();
 
     // The 64x64 icon of one button (a Gamepad::Button bit) in the labels of `style`, as 4096 premultiplied ARGB pixels

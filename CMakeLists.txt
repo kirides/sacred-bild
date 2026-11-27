@@ -30,6 +30,9 @@ find_library(LUAJIT_LIBRARY_RELEASE NAMES lua51 luajit-5.1 luajit PATHS "${VCPKG
 find_library(LUAJIT_LIBRARY_DEBUG NAMES lua51 luajit-5.1 luajit PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/lib" NO_DEFAULT_PATH REQUIRED)
 set(LUAJIT_LIBRARY optimized ${LUAJIT_LIBRARY_RELEASE} debug ${LUAJIT_LIBRARY_DEBUG})
 
+# NVRHI and the D3D12 / Vulkan headers, vendored (third_party/README.md): the renderer of [DDraw] Backend=nvrhi (docs/NvrhiRenderer.md).
+add_subdirectory(third_party)
+
 set(COMMON_DEFINITIONS WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 set(COMMON_OPTIONS /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
 
@@ -65,6 +68,26 @@ function(sort_sources_by_size_desc var)
   set(${var} ${sized} ${rest} PARENT_SCOPE)
 endfunction()
 
+# The NVRHI device and swap chain ([DDraw] Backend=nvrhi, docs/NvrhiRenderer.md); also built into tools/test/rhitest.
+set(RHI_SOURCES
+  src/bild/rhi/rhi.cpp
+  src/bild/rhi/rhi_d3d12.cpp
+  src/bild/rhi/rhi_vulkan.cpp
+)
+# DirectDraw / Direct3D 7 on the NVRHI device (stage 3 of docs/NvrhiRenderer.md).
+set(DDRAWRHI_SOURCES
+  src/bild/ddrawrhi/context.cpp
+  src/bild/ddrawrhi/device.cpp
+  src/bild/ddrawrhi/directdraw.cpp
+  src/bild/ddrawrhi/ground.cpp
+  src/bild/ddrawrhi/skin.cpp
+  src/bild/ddrawrhi/smaa.cpp
+  src/bild/ddrawrhi/surface.cpp
+  src/bild/ddrawrhi/vertex_buffer.cpp
+)
+# Direct3D 12 and Vulkan headers stay in these two files, away from the Direct3D 7 / 9 headers of the precompiled header.
+set_source_files_properties(src/bild/rhi/rhi_d3d12.cpp src/bild/rhi/rhi_vulkan.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+
 set(DDRAW_SOURCES
   src/bild/main.cpp
   src/bild/proxy.cpp
@@ -88,6 +111,7 @@ set(DDRAW_SOURCES
   src/bild/perf/file_cache.cpp
   src/bild/render/ground_quads.cpp
   src/bild/render/sprite_quads.cpp
+  src/bild/render/world_statics.cpp
   src/bild/render/ground_mesh.cpp
   src/bild/diag/layout_check.cpp
   src/bild/diag/skin_check.cpp
@@ -108,6 +132,7 @@ set(DDRAW_SOURCES
   src/bild/game/movie.cpp
   src/bild/diag/d3d_stats.cpp
   src/bild/render/device_proxy.cpp
+  src/bild/ddrawrhi/gfx.cpp
   src/bild/display/resolution.cpp
   src/bild/game/screenshot.cpp
   src/bild/ui/ui_anchor.cpp
@@ -116,6 +141,7 @@ set(DDRAW_SOURCES
   src/bild/controller/gamepad.cpp
   src/bild/controller/inject.cpp
   src/bild/controller/input_mode.cpp
+  src/bild/overlay/imgui_rhi.cpp
   src/bild/overlay/overlay.cpp
   src/bild/controller/prompts.cpp
   src/bild/ddraw9/device.cpp
@@ -144,6 +170,8 @@ set(DDRAW_SOURCES
   src/bild/net/udp_transport.cpp
   src/bild/exports.def
   src/bild/version.rc
+  ${RHI_SOURCES}
+  ${DDRAWRHI_SOURCES}
 )
 sort_sources_by_size_desc(DDRAW_SOURCES)
 # Version resources: version_info.h comes from the version files plus the git short sha (and -dirty), regenerated on every
@@ -161,7 +189,7 @@ target_include_directories(ddraw PRIVATE ${VERSION_INFO_DIR})
 target_include_directories(ddraw PRIVATE src/bild ${DETOURS_INCLUDE_DIRS})
 # The resource script embeds the button prompts' atlas (tools/re/gen_prompts.py).
 set_source_files_properties(src/bild/version.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/bild/controller/prompts.png;${VERSION_INFO_DIR}/version_info.h")
-target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 delayimp)
+target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 nvrhi_all delayimp)
 target_compile_options(ddraw PRIVATE ${COMMON_OPTIONS})
 target_precompile_headers(ddraw PRIVATE src/bild/pch.h)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.
@@ -170,6 +198,8 @@ target_link_options(ddraw PRIVATE /SAFESEH:NO /MAP)
 # Winsock and the IP helper load on first use (LAN relay), Media Foundation with the first movie, Common Controls
 # in the settings window (version 6 there, from its activation context).
 target_link_options(ddraw PRIVATE /DELAYLOAD:ws2_32.dll /DELAYLOAD:iphlpapi.dll /DELAYLOAD:mfplat.dll /DELAYLOAD:comctl32.dll)
+# Direct3D 12 and DXGI only with [DDraw] Backend=nvrhi (Api=d3d12): ddraw.dll still loads where they are missing (Windows 7).
+target_link_options(ddraw PRIVATE /DELAYLOAD:d3d12.dll /DELAYLOAD:dxgi.dll)
 set_target_properties(ddraw PROPERTIES OUTPUT_NAME "ddraw")
 
 # Optional: copy the DLL into the game folder after build (-DSACRED_GAME_DIR=...).
@@ -299,6 +329,16 @@ if(SACREDBILD_NETTEST)
   target_precompile_headers(nettest PRIVATE src/bild/pch.h)
 endif()
 
+# Test bench for src/bild/rhi outside the game: device, swap chain, clears and a resize on Direct3D 12 or Vulkan.
+option(SACREDBILD_RHITEST "Build tools/test/rhitest" ON)
+if(SACREDBILD_RHITEST)
+  add_executable(rhitest tools/test/rhitest/rhitest.cpp ${RHI_SOURCES})
+  target_include_directories(rhitest PRIVATE src/bild)
+  target_link_libraries(rhitest PRIVATE sacred_core nvrhi_all delayimp)
+  target_compile_options(rhitest PRIVATE ${COMMON_OPTIONS})
+  target_link_options(rhitest PRIVATE /DELAYLOAD:d3d12.dll /DELAYLOAD:dxgi.dll)
+endif()
+
 # The UI sandbox (docs/Sandbox.md): Sacred Gear's Lua host, RmlUi host and UI replay outside the game, on SacredBild's DirectDraw /
 # Direct3D 7 emulation (Direct3D 9Ex), the game's images read from the install's files. Window or off-screen, PNG snapshots, driver
 # scripts and the differential RmlUi fuzzer (tools/sandbox/fuzz).
@@ -316,11 +356,14 @@ if(SACREDGEAR AND SACREDGEAR_SANDBOX)
     src/bild/ddraw9/smaa.cpp
     src/bild/ddraw9/surface.cpp
     src/bild/ddraw9/vertex_buffer.cpp
+    ${RHI_SOURCES}
+    ${DDRAWRHI_SOURCES}
     ${GEAR_RC}
   )
   add_dependencies(gear_sandbox version_info gear_kernel)
   target_include_directories(gear_sandbox PRIVATE ${VERSION_INFO_DIR} src/gear src/bild tools/sandbox ${STB_INCLUDE_DIRS})
-  target_link_libraries(gear_sandbox PRIVATE gear_objs sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32 dxguid gdi32 ole32 psapi)
+  target_link_libraries(gear_sandbox PRIVATE gear_objs sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32 dxguid gdi32 ole32 psapi nvrhi_all delayimp)
+  target_link_options(gear_sandbox PRIVATE /DELAYLOAD:d3d12.dll /DELAYLOAD:dxgi.dll)
   target_compile_definitions(gear_sandbox PRIVATE RMLUI_STATIC_LIB)
   target_compile_options(gear_sandbox PRIVATE ${COMMON_OPTIONS})
   # SacredGear's sources read game addresses under fault guards and find none here (every address stays 0); the image sits high so that

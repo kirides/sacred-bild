@@ -25,6 +25,7 @@
 #include "diag/skin_check.h"
 #include "perf/sound_lock.h"
 #include "render/sprite_quads.h"
+#include "render/world_statics.h"
 #include "ui/ui_anchor.h"
 #include "ui/ui_windows.h"
 #include "ui/ui_canvas.h"
@@ -125,6 +126,7 @@ void Sacred::installHooks()
     FileCache::install();
     GrannyAsync::install();
     GroundMesh::install();     // its own transaction first: its renderTileRow hook runs inside Resolution's
+    WorldStatics::installWater();   // likewise: Resolution's drawWaterTiles hook runs around it
     FastMath::install();
     Patch::begin();
     FrameHooks::install();
@@ -145,6 +147,7 @@ void Sacred::installHooks()
     SoundLock::install();
     GroundQuads::install();
     SpriteQuads::install();
+    WorldStatics::install();
     GpuSkin::install();
     GrannyParallel::install();
     SkinCheck::install();

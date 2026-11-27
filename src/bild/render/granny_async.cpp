@@ -1,6 +1,7 @@
 #include "granny_async.h"
 #include "diag/d3d_stats.h"
 #include "settings/config/debug.h"
+#include "settings/config/display.h"
 #include "settings/config/render.h"
 #include "log.h"
 #include "patch.h"
@@ -76,13 +77,24 @@ namespace
         waitIdle(reinterpret_cast<uintptr_t>(*(static_cast<void**>(_AddressOfReturnAddress()) + 1)));
     }
 
-    int __stdcall asyncAdvanceTime(void* handle, double seconds)
+    // [Render] AnimationAhead: the advance the game asks for at the start of a frame is made at the end of the frame's
+    // interface instead (kickAhead), so it overlaps the flip and the start of the next frame rather than
+    // holding up the next frame's first model. Poses lag the game's clock by one frame; the time advanced stays the
+    // time the game asked for. Without a world view (menus, loading) the advance runs when asked, as before.
+    std::mutex g_aheadLock;
+
+    // Ahead only pays where the frame waits anyway (the frame limiter or VSync): there the advance runs in that wait.
+    // Uncapped, the next frame comes right after the interface and would wait for it at its start instead.
+    bool ahead()
     {
-        waitIdle(reinterpret_cast<uintptr_t>(_ReturnAddress()));
-        if (GetCurrentThreadId() == g_workerId)
-        {
-            return g_origAdvanceTime(handle, seconds);
-        }
+        return Config::render.animationAhead && (Config::display.fpsLimit > 0 || Config::display.vsync);
+    }
+    double g_owed = 0.0;            // seconds asked for and not advanced yet
+    void* g_aheadHandle = nullptr;
+    bool g_kicked = false;          // the world view ended since the last call: this call's time waits for the next end
+
+    void startJob(void* handle, double seconds)
+    {
         g_jobHandle = handle;
         g_jobSeconds = seconds;
         g_jobFpu = _control87(0, 0);
@@ -91,6 +103,26 @@ namespace
         g_busy.store(true, std::memory_order_release);
         g_firstWaitPending.store(true);
         SetEvent(g_jobEvent);
+    }
+
+    int __stdcall asyncAdvanceTime(void* handle, double seconds)
+    {
+        waitIdle(reinterpret_cast<uintptr_t>(_ReturnAddress()));
+        if (GetCurrentThreadId() == g_workerId)
+        {
+            return g_origAdvanceTime(handle, seconds);
+        }
+        std::scoped_lock lock(g_aheadLock);
+        if (ahead() && g_kicked)
+        {
+            g_owed += seconds;
+            g_aheadHandle = handle;
+            g_kicked = false;
+            return 0;
+        }
+        seconds += g_owed;
+        g_owed = 0.0;
+        startJob(handle, seconds);
         return 0;   // the only caller (0x401953) ignores the result
     }
 
@@ -211,6 +243,22 @@ void GrannyAsync::install()
     }
     LOG("Animation: GrannyAdvanceTime runs on worker thread {}, {} other Granny imports wait for it", g_workerId,
         count - 1);
+}
+
+void GrannyAsync::kickAhead()
+{
+    if (!g_origAdvanceTime || !ahead())
+    {
+        return;
+    }
+    waitIdle(reinterpret_cast<uintptr_t>(_ReturnAddress()));
+    std::scoped_lock lock(g_aheadLock);
+    if (g_owed > 0.0 && g_aheadHandle)
+    {
+        startJob(g_aheadHandle, g_owed);
+        g_owed = 0.0;
+    }
+    g_kicked = true;
 }
 
 void GrannyAsync::onFrame()

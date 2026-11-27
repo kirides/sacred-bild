@@ -1,4 +1,5 @@
 #include "device_proxy.h"
+#include "ui_quads.h"
 #include "engine/build.h"
 #include "diag/d3d_stats.h"
 #include "gpu_skin.h"
@@ -512,9 +513,11 @@ void DeviceProxy::traceUiDraw(const char* what, DWORD count)
 
 bool DeviceProxy::clipQuad(DWORD fvf, uint8_t* verts)
 {
-    const UINT texOffset = Fvf::texCoordOffset(fvf, 0);
-    const UINT stride = Fvf::stride(fvf);
-    const UINT texCount = Fvf::texCount(fvf);
+    return UiQuads::clip(verts, Fvf::stride(fvf), Fvf::texCoordOffset(fvf, 0), Fvf::texCount(fvf), UiCanvas::placement());
+}
+
+bool UiQuads::clip(uint8_t* verts, UINT stride, UINT texOffset, UINT texCount, const UiCanvas::Placement& place)
+{
     float* v[4];
     float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
     for (int i = 0; i < 4; ++i)
@@ -525,7 +528,6 @@ bool DeviceProxy::clipQuad(DWORD fvf, uint8_t* verts)
         minY = std::min(minY, v[i][1]);
         maxY = std::max(maxY, v[i][1]);
     }
-    const UiCanvas::Placement place = UiCanvas::placement();
     const float l = place.clipLeft, t = place.clipTop, r = place.clipRight, b = place.clipBottom;
     if (minX >= l && maxX <= r && minY >= t && maxY <= b)
     {
@@ -596,8 +598,15 @@ void DeviceProxy::fitTexels(DWORD fvf, uint8_t* verts)
         m_texture0Width = desc.dwWidth;
         m_texture0Height = desc.dwHeight;
     }
-    const UINT stride = Fvf::stride(fvf);
-    const UINT uv = Fvf::texCoordOffset(fvf, 0) / 4;
+    // Bilinear sampling reads half a texel around the sample position; point sampling only the texel under it.
+    const bool linear = uiFilter(m_filters[0][0]) != D3DTFG_POINT || uiFilter(m_filters[0][1]) != D3DTFN_POINT;
+    UiQuads::fitTexels(verts, Fvf::stride(fvf), Fvf::texCoordOffset(fvf, 0), static_cast<float>(m_texture0Width),
+        static_cast<float>(m_texture0Height), linear);
+}
+
+void UiQuads::fitTexels(uint8_t* verts, UINT stride, UINT texOffset, float w, float h, bool linear)
+{
+    const UINT uv = texOffset / 4;
     float* v[4];
     float minX = 1e30f, minY = 1e30f, maxX = -1e30f, maxY = -1e30f;
     for (int i = 0; i < 4; ++i)
@@ -631,10 +640,7 @@ void DeviceProxy::fitTexels(DWORD fvf, uint8_t* verts)
         t[y] = v[i][uv + 1];
         haveU[x] = haveT[y] = true;
     }
-    const float w = static_cast<float>(m_texture0Width), h = static_cast<float>(m_texture0Height);
     float eu[2] = {u[0] * w, u[1] * w}, ev[2] = {t[0] * h, t[1] * h};
-    // Bilinear sampling reads half a texel around the sample position; point sampling only the texel under it.
-    const bool linear = uiFilter(m_filters[0][0]) != D3DTFG_POINT || uiFilter(m_filters[0][1]) != D3DTFN_POINT;
     const float margin = linear ? 0.5f : 0.05f;
     fitTexelAxis(minX, maxX, eu[0], eu[1], margin);
     fitTexelAxis(minY, maxY, ev[0], ev[1], margin);
@@ -643,6 +649,66 @@ void DeviceProxy::fitTexels(DWORD fvf, uint8_t* verts)
         v[i][uv] = eu[isNear(v[i][0], minX) ? 0 : 1] / w;
         v[i][uv + 1] = ev[isNear(v[i][1], minY) ? 0 : 1] / h;
     }
+}
+
+bool DeviceProxy::drawWorldSpace(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD count, DWORD flags)
+{
+    // The particle systems' vertices: x y z, reserved, diffuse, specular, u v (D3DLVERTEX), a few per draw, each draw
+    // with its own world matrix (particle_drawSprites: SetTransform + DrawPrimitive per particle).
+    constexpr DWORD kLVertex = D3DFVF_XYZ | D3DFVF_RESERVED1 | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1;
+    constexpr DWORD kOut = D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1;
+    if (!Config::ddraw.nvrhi || !Config::render.batchParticles || fvf != kLVertex || !verts || count == 0 || count > 64 ||
+        (type != D3DPT_TRIANGLELIST && type != D3DPT_TRIANGLESTRIP && type != D3DPT_TRIANGLEFAN))
+    {
+        return false;
+    }
+    // Lit vertices only stand for unlit-rendered ones with lighting off (the particle drawing turns it off).
+    DWORD lighting = TRUE;
+    if (FAILED(m_batcher->getRenderState(D3DRENDERSTATE_LIGHTING, &lighting)) || lighting)
+    {
+        return false;
+    }
+    D3DMATRIX world;
+    if (FAILED(m_batcher->getWorld(&world)))
+    {
+        return false;
+    }
+    struct In
+    {
+        float x, y, z;
+        DWORD reserved, diffuse, specular;
+        float u, v;
+    };
+    struct Out
+    {
+        float x, y, z;
+        DWORD diffuse, specular;
+        float u, v;
+    };
+    static_assert(sizeof(In) == 32 && sizeof(Out) == 28);
+    m_particle.resize(sizeof(Out) * count);
+    const auto* in = static_cast<const In*>(verts);
+    auto* out = reinterpret_cast<Out*>(m_particle.data());
+    for (DWORD i = 0; i < count; ++i)
+    {
+        const float x = in[i].x, y = in[i].y, z = in[i].z;
+        out[i].x = x * world._11 + y * world._21 + z * world._31 + world._41;
+        out[i].y = x * world._12 + y * world._22 + z * world._32 + world._42;
+        out[i].z = x * world._13 + y * world._23 + z * world._33 + world._43;
+        out[i].diffuse = in[i].diffuse;
+        out[i].specular = in[i].specular;
+        out[i].u = in[i].u;
+        out[i].v = in[i].v;
+    }
+    static const D3DMATRIX identity = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    m_batcher->setTransform(D3DTRANSFORMSTATE_WORLD, identity);
+    const bool drawn = m_batcher->drawModel(type, kOut, m_particle.data(), count, nullptr, 0, flags);
+    m_batcher->setTransform(D3DTRANSFORMSTATE_WORLD, world);     // what the game set, as it set it
+    if (drawn)
+    {
+        D3DStats::count(CModelDraw);
+    }
+    return drawn;
 }
 
 HRESULT DeviceProxy::QueryInterface(REFIID riid, LPVOID* ppvObj)
@@ -854,8 +920,43 @@ HRESULT DeviceProxy::SetLight(DWORD index, LPD3DLIGHT7 light)
 
 HRESULT DeviceProxy::GetLight(DWORD index, LPD3DLIGHT7 light) { return m_real->GetLight(index, light); }
 
+void DeviceProxy::beginLineBatch()
+{
+    m_lineBatch = Config::ddraw.nvrhi && Config::render.batchParticles;
+}
+
+void DeviceProxy::endLineBatch()
+{
+    CallLock lock(*this, _ReturnAddress());
+    flushLines();
+    m_lineBatch = false;
+}
+
+void DeviceProxy::flushLines()
+{
+    if (!m_lineVerts)
+    {
+        return;
+    }
+    const DWORD count = m_lineVerts;
+    m_lineVerts = 0;
+    if (batching())
+    {
+        m_batcher->draw(D3DPT_LINELIST, m_linesFvf, m_lines.data(), count, nullptr, 0, 0);
+    }
+    else
+    {
+        m_real->DrawPrimitive(D3DPT_LINELIST, m_linesFvf, m_lines.data(), count, 0);
+    }
+}
+
 HRESULT DeviceProxy::SetRenderState(D3DRENDERSTATETYPE state, DWORD value)
 {
+    if (m_lineVerts)
+    {
+        CallLock lock(*this, _ReturnAddress());
+        flushLines();
+    }
     Scope p{TProxy};
     D3DStats::count(CRenderState);
     D3DStats::onRenderState(state, value);
@@ -916,6 +1017,18 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
     if (quad) D3DStats::count(CDrawQuad);
     D3DStats::onDraw(type, fvf, count, false);
     CallLock lock(*this, _ReturnAddress());
+    // One segment each (a 2-vertex strip or list): appended to one line list.
+    if (m_lineBatch && !m_ui && (type == D3DPT_LINELIST || type == D3DPT_LINESTRIP) && count == 2 && verts && Fvf::pretransformed(fvf) &&
+        (!m_lineVerts || fvf == m_linesFvf) && m_lineVerts < 60000)
+    {
+        const UINT stride = Fvf::stride(fvf);
+        m_lines.resize(size_t(m_lineVerts + count) * stride);
+        std::memcpy(m_lines.data() + size_t(m_lineVerts) * stride, verts, size_t(count) * stride);
+        m_linesFvf = fvf;
+        m_lineVerts += count;
+        return D3D_OK;
+    }
+    flushLines();
     if (batching())
     {
         if (Fvf::pretransformed(fvf))
@@ -923,6 +1036,10 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
             return m_batcher->draw(type, fvf, verts, count, nullptr, 0, flags);
         }
         if (m_batcher->drawModel(type, fvf, verts, count, nullptr, 0, flags))
+        {
+            return D3D_OK;
+        }
+        if (drawWorldSpace(type, fvf, verts, count, flags))
         {
             return D3D_OK;
         }
@@ -1346,6 +1463,7 @@ HRESULT DeviceProxy::SetTexture(DWORD stage, LPDIRECTDRAWSURFACE7 texture)
     Scope p{TProxy};
     D3DStats::count(CSetTexture);
     CallLock lock(*this, _ReturnAddress());
+    flushLines();
     if (stage == 0)
     {
         m_texture0Width = m_texture0Height = 0;     // the pointer may name a new texture of another size
@@ -1385,6 +1503,11 @@ HRESULT DeviceProxy::GetTextureStageState(DWORD stage, D3DTEXTURESTAGESTATETYPE 
 
 HRESULT DeviceProxy::SetTextureStageState(DWORD stage, D3DTEXTURESTAGESTATETYPE type, DWORD value)
 {
+    if (m_lineVerts)
+    {
+        CallLock lock(*this, _ReturnAddress());
+        flushLines();
+    }
     Scope p{TProxy};
     D3DStats::count(CStageState);
     D3DStats::onStageState(stage, type, value);

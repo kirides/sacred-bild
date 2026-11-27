@@ -3,6 +3,7 @@
 #include "log.h"
 #include "system_ddraw.h"
 #include "ddraw9/backend.h"
+#include "ddrawrhi/backend.h"
 
 #include <windows.h>
 #include <cstring>
@@ -74,7 +75,7 @@ namespace
 bool Proxy::init(const std::wstring& gameDir)
 {
     HMODULE chain = nullptr;
-    if (!Config::ddraw.d3d9 && !Config::ddraw.chain.empty())
+    if (!Config::ddraw.own() && !Config::ddraw.chain.empty())
     {
         const std::wstring path = gameDir + L"\\" + Config::ddraw.chain;
         chain = LoadLibraryW(path.c_str());
@@ -91,7 +92,7 @@ bool Proxy::init(const std::wstring& gameDir)
     if (!chain)
     {
         chain = system;
-        if (!Config::ddraw.d3d9)
+        if (!Config::ddraw.own())
         {
             LOG("Using system ddraw: {}", narrow(sysPath));
         }
@@ -104,7 +105,7 @@ bool Proxy::init(const std::wstring& gameDir)
     DDRAW_PROCS(RESOLVE)
 #undef RESOLVE
 
-    if (!Config::ddraw.d3d9 && chain == system)
+    if (!Config::ddraw.own() && chain == system)
     {
         g_procs.DirectDrawCreateEx = SystemDdraw::wrap(g_procs.DirectDrawCreateEx);
     }
@@ -120,6 +121,19 @@ bool Proxy::init(const std::wstring& gameDir)
 #undef OVERRIDE
         }
         LOG("ddraw: SacredBild's Direct3D 9 backend");
+    }
+    else if (Config::ddraw.nvrhi)
+    {
+        // DirectDraw objects come from the NVRHI backend; if it can't make a device, its exports go on to the Direct3D 9
+        // backend's and those to the system ddraw.dll.
+        DDraw9::setFallback(system);
+        for (const DDraw9::Export& entry : DDrawRhi::exports())
+        {
+#define OVERRIDE(p) if (std::strcmp(entry.name, #p) == 0) g_procs.p = entry.proc;
+            DDRAW_PROCS(OVERRIDE)
+#undef OVERRIDE
+        }
+        LOG("ddraw: SacredBild's NVRHI backend ({}), experimental", Config::ddraw.vulkan ? "Vulkan" : "Direct3D 12");
     }
     return true;
 }

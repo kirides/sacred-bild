@@ -14,6 +14,11 @@
 
 #pragma comment(lib, "dxguid.lib")
 
+namespace Ui
+{
+    bool gfxStrip(const void* tlVertices);     // ui.h
+}
+
 namespace
 {
     constexpr int kPage = 1024;             // atlas pages are kPage x kPage
@@ -553,7 +558,10 @@ void Text::draw(IDirect3DDevice7* device, const Placement& placement, const Styl
                 strip[0].v = strip[1].v = v0;
                 strip[2].v = strip[3].v = v1;
             }
-            device->DrawPrimitive(D3DPT_TRIANGLESTRIP, kFvf, strip, 4, 0);
+            if (!Ui::gfxStrip(strip))
+            {
+                device->DrawPrimitive(D3DPT_TRIANGLESTRIP, kFvf, strip, 4, 0);
+            }
         }
     }
 }

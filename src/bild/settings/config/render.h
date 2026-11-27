@@ -31,6 +31,22 @@ namespace Config
         // SMAA antialiasing of the world view, before the UI is drawn (Direct3D 9 backend only): 0 off, 1 low,
         // 2 medium, 3 high (SMAA's presets).
         int smaa = 0;
+        // [DDraw] Backend=nvrhi: the world view drawn into a target of its own this many times the frame's size, then
+        // scaled down into the frame before the interface (supersampling: smoother edges, sharper textures at a cost).
+        // 1 = straight into the frame, as the other backends.
+        float worldScale = 1.0f;
+        // [DDraw] Backend=nvrhi: SacredBild draws the draw lists' static objects (buildings, trees, props) itself
+        // instead of the game's code for them (render/world_statics.h).
+        bool takeOverStatics = true;
+        // [DDraw] Backend=nvrhi: Sacred Gear's UI draws with SacredBild's renderer directly (core/bild_gfx.h) instead
+        // of Direct3D 7 calls through the device proxy.
+        bool gearGfx = true;
+        // [DDraw] Backend=nvrhi: particles (lit quads with lighting off, a world matrix each) moved into world space on
+        // the CPU and merged into the model batch: one draw per effect instead of one per particle.
+        bool batchParticles = true;
+        // [DDraw] Backend=nvrhi: pretransformed draws with the same state as the one before are drawn as one (the
+        // interface's quads and what the batcher leaves).
+        bool mergeDraws = true;
         // Filtering of the game world's textures: 0 the game's own point sampling, 1 sharp bilinear (crisp texels, soft
         // edges; Direct3D 9 backend, point sampling elsewhere), 2 bilinear (smoother when zoomed in). The interface
         // follows [UI] LinearFilter.
@@ -41,6 +57,12 @@ namespace Config
         int offscreenPoses = 4;
         // GrannyAdvanceTime runs on a worker thread, overlapping the start of the frame.
         bool asyncAnimation = true;
+        // With AsyncAnimation and a frame cap (FpsLimit or VSync): the frame's animation advance starts after the frame's
+        // interface instead of the start of the next frame, so it runs while the frame waits for its cap and the next
+        // frame's models don't wait for it (poses one frame behind the game's clock).
+        bool animationAhead = true;
+        // With AnimationThreads > 1: the skeletons posed on those threads too, grouped by their root skeleton.
+        bool parallelPosing = true;
         // Threads that sample Granny's animation controls (split by skeleton); 1 = Granny's own walk, 0 = automatic.
         int animationThreads = 0;
         // Hash index in front of the map data's record caches (std::map lookups per tile and object).

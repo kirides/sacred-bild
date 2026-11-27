@@ -715,6 +715,16 @@
    "451BBE74": "0062B273",
    "451BBE74:sacredreborn.exe": "0062B273"
   },
+  "objects2StaticSprite": {
+   "452F85C7": "00630217",
+   "451BBE74": "00630387",
+   "451BBE74:sacredreborn.exe": "00630387"
+  },
+  "objects1StaticSprite": {
+   "452F85C7": "0062E602",
+   "451BBE74": "0062E772",
+   "451BBE74:sacredreborn.exe": "0062E772"
+  },
   "tileRowAfterGround": {
    "452F85C7": "0062B7FF",
    "451BBE74": "0062B96F",

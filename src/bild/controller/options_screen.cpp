@@ -742,7 +742,7 @@ namespace
 
 void OptionsScreen::install()
 {
-    if (!Config::controller.enabled || !Config::ddraw.d3d9)
+    if (!Config::controller.enabled || !Config::ddraw.own())
     {
         return;
     }

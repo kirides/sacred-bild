@@ -42,11 +42,11 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | BatchNoClip | 1 | Merged draws skip Direct3D 7's software clipping; the GPU clips. |
 | Render | BatchVertexBuffer | 1 | Merged draws go through vertex buffers instead of user memory. |
 | Render | BatchModels | 1 | 3D model draws go through the batcher too (vertex buffers, merged where possible). |
-| Render | GpuSkinning | 1 | Characters and their shadows skinned (animated) in a vertex shader instead of by Granny on the CPU; `Backend=d3d9` only. |
+| Render | GpuSkinning | 1 | Characters and their shadows skinned (animated) in a vertex shader instead of by Granny on the CPU; `Backend=d3d9` or `nvrhi`. |
 | Render | OffscreenPoses | 4 | Skeletons of characters not drawn in the last frames are posed every Nth frame (staggered) instead of every frame; one drawn after all is posed before it is drawn. 1 = every frame. Needs `GpuSkinning`. |
-| Render | SMAA | Off | Antialiasing of the world view with [SMAA](https://github.com/iryoku/smaa) 1x before the interface is drawn (the interface stays sharp): `Off`, `Low`, `Medium`, `High` (SMAA's presets: more edges found, a little more GPU time). The game itself has no antialiasing; its `FSAA_FILTER` option only keeps sprite edges from bleeding and works as before. `Backend=d3d9` only, needs shader model 3. |
+| Render | SMAA | Off | Antialiasing of the world view with [SMAA](https://github.com/iryoku/smaa) 1x before the interface is drawn (the interface stays sharp): `Off`, `Low`, `Medium`, `High` (SMAA's presets: more edges found, a little more GPU time). The game itself has no antialiasing; its `FSAA_FILTER` option only keeps sprite edges from bleeding and works as before. `Backend=d3d9` (needs shader model 3) or `nvrhi`. |
 | Render | TextureFilter | Point | Texture filtering of the game world: `Point` is the game's own sampling (sharp, blocky when zoomed in), `Sharp` keeps the texels crisp and blends only across the edge between two texels, over about one screen pixel ("sharp bilinear", good for pixel-art-like sprites and tiles at high resolutions; `Backend=d3d9` with shader support, draws it cannot reproduce stay point sampled, see the log), `Bilinear` is smoother when zoomed in but can show faint seams or dark fringes where neighbouring images of a texture sheet or colour-keyed edges blend in. With `Sharp` or `Bilinear` SacredBild switches the game's `FSAA_FILTER` (sprite texture coordinates pulled in by a fraction of a texel) on, whatever `Settings.cfg` says, so sprite pieces don't show a grid of thin lines. The interface follows `[UI] LinearFilter`. |
-| Render | GroundMesh | 1 | The ground's tiles and blend layers kept in vertex buffers per sector, built once as they come into view, and drawn by a vertex shader in a few draws per frame; the game no longer rebuilds and draws every tile each frame. `Backend=d3d9` only. |
+| Render | GroundMesh | 1 | The ground's tiles and blend layers kept in vertex buffers per sector, built once as they come into view, and drawn by a vertex shader in a few draws per frame; the game no longer rebuilds and draws every tile each frame. `Backend=d3d9` or `nvrhi`. |
 | Render | BatchGround | 1 | The ground's quad batcher hands its textures and quads to the batcher in one call instead of three device calls per quad. |
 | Render | BatchSprites | 1 | The sprite batcher (water tiles, objects) hands its texture and quads to the batcher in one call instead of two device calls per flush (nearly every sprite). |
 | Render | RecordIndex | 1 | Hash index (gtl::flat_hash_map) in front of the game's tile/object record caches. |
@@ -54,6 +54,8 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | FastMath | 1 | Faster replacements for the game's x87 math helpers with the same results: `__ftol` (float to integer) with SSE3's `fisttp`; the teleporter's ripple without x87 `fsin`/`fcos`. |
 | Render | SoundLock | 1 | The sound system's lock as a user-mode lock (SRW lock) instead of a kernel mutex; the render thread takes it for every sound command, several per object and frame. |
 | Render | AsyncAnimation | 1 | Advance Granny animations on a worker thread, overlapping the start of the frame. |
+| Render | AnimationAhead | 1 | With AsyncAnimation and a frame cap (FpsLimit or VSync): the frame's animation advance starts after the frame's interface, while the frame waits for its cap, so the next frame's models don't wait for it (poses one frame behind the game's clock). |
+| Render | ParallelPosing | 1 | With AnimationThreads > 1: the skeletons are posed on those threads too, grouped by their root skeleton. |
 | Render | AnimationThreads | 0 | Threads that sample Granny's animation controls in the advance, split by skeleton; 0 = automatic (CPU cores - 2, at most 4), 1 = Granny's own walk on one thread. |
 | Render | Atlas | 1 | Copy small textures into shared pages so more draws merge. |
 | Render | AtlasPageSize | 8192 | Atlas page size in texels (clamped to the GPU limit, halved if the GPU refuses it). |
@@ -69,7 +71,14 @@ tabs, Start is Play. Text fields need the keyboard.
 | Net | Prefer | IPv6 | Joining over UDP a host with IPv4 and IPv6 addresses: `IPv6` or `IPv4` is tried first, the other one as well after a second without an answer. |
 | Net | Matchmaker | | Matchmaking server, name or address with optional `:port` (default 2107); empty = none. |
 | Net | Publish | 1 | Hosting with a `Matchmaker`: the game is listed there. |
-| DDraw | Backend | d3d9 | `d3d9` = SacredBild's own Direct3D 9Ex backend; `chain` = the ddraw below. |
+| DDraw | Backend | d3d9 | `d3d9` = SacredBild's own Direct3D 9Ex backend; `chain` = the ddraw below; `nvrhi` = SacredBild's own renderer on [NVRHI](https://github.com/NVIDIA-RTX/NVRHI) (Direct3D 12 or Vulkan; experimental, see [Rendering](Rendering.md#nvrhi-backend-experimental)). |
+| Render | Api | d3d12 | `Backend=nvrhi`: `d3d12` or `vulkan`; the other one is tried if a device can't be made, then the Direct3D 9 backend. |
+| Render | WorldScale | 1 | `Backend=nvrhi`: the world view is drawn this many times the frame's size (up to 3) and scaled down before the interface goes on top (supersampling: smoother edges; costs GPU time). 1 = straight into the frame. |
+| Render | TakeOverStatics | 1 | `Backend=nvrhi`: SacredBild draws the static objects of the world's draw lists (buildings, trees, props) itself instead of the game's code for them. 0 = the game's code, for comparing. |
+| Render | GearGfx | 1 | `Backend=nvrhi`: Sacred Gear's UI is drawn with SacredBild's renderer directly (`bild_gfx.h`) instead of Direct3D 7 calls. 0 = the Direct3D 7 path, for comparing. |
+| Render | BatchParticles | 1 | `Backend=nvrhi`: particles (a world matrix each) are moved into world space and merged into one draw per effect. 0 = one draw per particle, as before. |
+| Render | MergeDraws | 1 | `Backend=nvrhi`: pretransformed draws with the same state as the one before (the interface's quads) are drawn as one. |
+| Debug | RhiValidation | 0 | `Backend=nvrhi`: the API's validation (Direct3D 12 debug layer, Vulkan's `VK_LAYER_KHRONOS_validation`) and NVRHI's, messages in the log; slow. |
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | `Backend=chain`: ddraw loaded behind SacredBild; empty = system ddraw. |
 | DDraw | D3D9 | | `Backend=d3d9`: `d3d9.dll` to use (e.g. DXVK), relative to the game folder or absolute. Empty or not loadable: a `d3d9.dll` next to the exe, then Windows' own. |
 | DDraw | MediaFoundation | 1 | Movies through Media Foundation; always on with `Backend=d3d9`, 0 = the game's own player with `Backend=chain`. |
