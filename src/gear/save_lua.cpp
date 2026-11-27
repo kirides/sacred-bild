@@ -207,7 +207,9 @@ namespace LuaNative
     {
         uint32_t slot = 0;
         const char* error = "the slot is a whole number 0..32766";
-        return pushResult(L, checkSlot(L, 1, slot) && Savegames::remove(slot, error), error);
+        // The call first: the message is read after it (argument order is unspecified, it used to be read before).
+        const bool ok = checkSlot(L, 1, slot) && Savegames::remove(slot, error);
+        return pushResult(L, ok, error);
     }
 
     // native.save_load(slot) -> true | nil, message
@@ -215,7 +217,9 @@ namespace LuaNative
     {
         uint32_t slot = 0;
         const char* error = "the slot is a whole number 0..32766";
-        return pushResult(L, checkSlot(L, 1, slot) && Savegames::load(slot, error), error);
+        // The call first: the message is read after it (argument order is unspecified, it used to be read before).
+        const bool ok = checkSlot(L, 1, slot) && Savegames::load(slot, error);
+        return pushResult(L, ok, error);
     }
 
     std::string upperName(lua_State* L, int index)
