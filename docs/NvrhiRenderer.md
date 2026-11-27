@@ -186,3 +186,10 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   Uncapped in the test copy: Direct3D 9 1.75 ms, NVRHI Direct3D 12 1.63 ms (was 1.74), Vulkan 1.9 ms; pictures as before,
   both clean under validation. Also: AMD's Vulkan driver has no D24S8 depth buffers (validation showed it), so the
   backend uses D32S8 where the device lacks D24S8.
+- 2026-11-27: before stage 7, a profile (`[Debug] Profiler`, uncapped, D3D12, 200 us): of the engine render thread's
+  samples, objects2 (0x62FF60) is 27 % inclusive, but 22 % of that is cCreature_render (0x599910), and most of that is
+  0x4057D0 waiting for the animation worker (the log's animWait, 0.44 ms a frame). The sprite paths of objects2 (the
+  static-object branch, the game's sprite batcher 0x628F90 / 0x628D50 / 0x629050, which already batches quads per
+  texture into one DrawIndexedPrimitive) are about 2-3 %. So taking over the draw lists buys ownership, not frame time;
+  the time left in the world is the animation wait and the game's own walk. Asked John whether to go on with the
+  take-over stages now or to have the branch tried first.
