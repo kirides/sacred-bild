@@ -24,6 +24,8 @@ namespace
     };
 
     std::atomic<bool> g_running{false};
+    std::atomic<ULONGLONG> g_worldSince{0};     // worldDrawn: first world frame (tick count)
+    bool g_worldReset = false;                  // the samples before it were dropped (sampler thread)
     HANDLE g_thread = nullptr;
     std::wstring g_reportPath;
 
@@ -35,6 +37,7 @@ namespace
 
     uintptr_t g_exeLo = 0, g_exeHi = 0;     // sacred.exe .text
     std::vector<Module> g_modules;
+    int g_self = -1;        // SacredBild in g_modules
 
     struct ThreadProfile
     {
@@ -46,6 +49,13 @@ namespace
         // EIP module << 48 | calling module << 32 | return address offset in it -> samples (outside sacred.exe):
         // the first non-system module on the stack that called into the EIP's module.
         std::unordered_map<uint64_t, uint32_t> externalCaller;
+        // EIP module << 32 | return address offset in SacredBild -> samples (outside sacred.exe and SacredBild): where
+        // SacredBild called in, through drivers and runtimes (D3D12Core, the GPU driver, win32u) that call each other.
+        std::unordered_map<uint64_t, uint32_t> externalBild;
+        // The first and second SacredBild call sites (offsets) of those samples: who called the SacredBild function.
+        std::unordered_map<uint64_t, uint32_t> externalBild2;
+        // EIP offset in SacredBild << 32 | the first SacredBild call site below it -> samples.
+        std::unordered_map<uint64_t, uint32_t> ownCaller;
         // Return address -> samples it appeared in (approximate inclusive time).
         std::unordered_map<uintptr_t, uint32_t> inclusive;
         uint32_t samples = 0;
@@ -71,6 +81,7 @@ namespace
     void loadModules()
     {
         g_modules.clear();
+        g_self = -1;
         HMODULE mods[512];
         DWORD needed = 0;
         if (!EnumProcessModules(GetCurrentProcess(), mods, sizeof(mods), &needed))
@@ -90,6 +101,10 @@ namespace
             // Our ddraw.dll and the system's share a name.
             const bool system = _stricmp(name, "ntdll.dll") == 0 || _stricmp(name, "KERNELBASE.dll") == 0 ||
                 _stricmp(name, "KERNEL32.DLL") == 0 || _stricmp(name, "win32u.dll") == 0;
+            if (mods[i] == self)
+            {
+                g_self = static_cast<int>(g_modules.size());
+            }
             g_modules.push_back({lo, lo + mi.SizeOfImage, mods[i] == self ? std::string("SacredBild") : std::string(name),
                 system});
         }
@@ -133,6 +148,8 @@ namespace
         int eipModule = -1;
         int callerModule = -1;      // outside sacred.exe: first other non-system module on the stack
         uintptr_t callerRa = 0;
+        uintptr_t bildRa = 0;       // outside sacred.exe and SacredBild: first SacredBild call site on the stack
+        uintptr_t bildRa2 = 0;      // and the next one
     };
 
     bool takeSample(HANDLE target, Sample& s, uint32_t* stack)
@@ -163,9 +180,30 @@ namespace
         }
         s.eipModule = -1;
         s.callerModule = -1;
+        s.bildRa = 0;
+        s.bildRa2 = 0;
         if (!inExe(s.eip))
         {
             s.eipModule = moduleIndex(s.eip);
+            if (g_self >= 0)
+            {
+                const Module& self = g_modules[g_self];
+                for (size_t i = 0; i < words; ++i)
+                {
+                    if (stack[i] >= self.lo && stack[i] < self.hi && isCallSite(stack[i], self.lo))
+                    {
+                        if (!s.bildRa)
+                        {
+                            s.bildRa = stack[i];
+                        }
+                        else if (stack[i] != s.bildRa)
+                        {
+                            s.bildRa2 = stack[i];
+                            break;
+                        }
+                    }
+                }
+            }
             for (size_t i = 0; i < std::min<size_t>(words, 512); ++i)
             {
                 const int mod = moduleIndex(stack[i]);
@@ -206,6 +244,19 @@ namespace
                 ++p.externalCaller[(static_cast<uint64_t>(mod) << 48) | (static_cast<uint64_t>(s.callerModule) << 32) |
                     (s.callerRa - g_modules[s.callerModule].lo)];
             }
+            if (mod >= 0 && mod == g_self && s.bildRa)
+            {
+                // In SacredBild: the function's caller (a leaf such as memcpy: who called it).
+                ++p.ownCaller[(static_cast<uint64_t>(s.eip - g_modules[g_self].lo) << 32) | (s.bildRa - g_modules[g_self].lo)];
+            }
+            else if (mod >= 0 && mod == s.eipModule && s.bildRa && g_self >= 0)
+            {
+                ++p.externalBild[(static_cast<uint64_t>(mod) << 32) | (s.bildRa - g_modules[g_self].lo)];
+                if (s.bildRa2)
+                {
+                    ++p.externalBild2[(static_cast<uint64_t>(s.bildRa - g_modules[g_self].lo) << 32) | (s.bildRa2 - g_modules[g_self].lo)];
+                }
+            }
         }
         // Count each return address once per sample.
         for (int i = 0; i < s.frames; ++i)
@@ -242,6 +293,15 @@ namespace
             else
             {
                 Sleep(1);
+            }
+            if (!g_worldReset && Config::debug.profilerWorldOnly)
+            {
+                const ULONGLONG since = g_worldSince.load();
+                if (since && GetTickCount64() - since > 2000)
+                {
+                    g_worldReset = true;
+                    g_profiles.clear();
+                }
             }
             Sample s;
             const auto keep = [&](DWORD thread) {
@@ -310,6 +370,23 @@ namespace
                 const int count = static_cast<int>(g_modules.size());
                 std::fprintf(f, "%s %s %08x %u\n", mod < count ? g_modules[mod].name.c_str() : "?",
                     caller < count ? g_modules[caller].name.c_str() : "?", static_cast<unsigned>(key & 0xFFFFFFFF), n);
+            }
+            std::fprintf(f, "[external_bild]\n");
+            for (auto& [key, n] : sorted(p.externalBild))
+            {
+                const int mod = static_cast<int>(key >> 32);
+                std::fprintf(f, "%s SacredBild %08x %u\n", mod < static_cast<int>(g_modules.size()) ? g_modules[mod].name.c_str() : "?",
+                    static_cast<unsigned>(key & 0xFFFFFFFF), n);
+            }
+            std::fprintf(f, "[own_caller]\n");
+            for (auto& [key, n] : sorted(p.ownCaller))
+            {
+                std::fprintf(f, "%08x %08x %u\n", static_cast<unsigned>(key >> 32), static_cast<unsigned>(key & 0xFFFFFFFF), n);
+            }
+            std::fprintf(f, "[external_bild2]\n");
+            for (auto& [key, n] : sorted(p.externalBild2))
+            {
+                std::fprintf(f, "%08x %08x %u\n", static_cast<unsigned>(key >> 32), static_cast<unsigned>(key & 0xFFFFFFFF), n);
             }
             std::fprintf(f, "[inclusive]\n");
             for (auto& [ra, n] : sorted(p.inclusive)) std::fprintf(f, "%08x %u\n", static_cast<unsigned>(ra), n);
@@ -407,6 +484,14 @@ void Profiler::logRecent(double ms)
     for (const auto& [key, n] : sorted(groups))
     {
         LOG("Profiler:   {}x {}", n, key);
+    }
+}
+
+void Profiler::worldDrawn()
+{
+    if (g_running.load() && !g_worldSince.load())
+    {
+        g_worldSince = GetTickCount64();
     }
 }
 

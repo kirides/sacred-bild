@@ -319,6 +319,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     Config::debug.d3dStats = readInt(ini, L"Debug", L"D3DStats", Config::debug.d3dStats) != 0;
     Config::debug.profiler = readInt(ini, L"Debug", L"Profiler", Config::debug.profiler) != 0;
     Config::debug.profilerIntervalUs = readInt(ini, L"Debug", L"ProfilerIntervalUs", Config::debug.profilerIntervalUs);
+    Config::debug.profilerWorldOnly = readInt(ini, L"Debug", L"ProfilerWorldOnly", Config::debug.profilerWorldOnly) != 0;
     Config::debug.uiTrace = readInt(ini, L"Debug", L"UiTrace", Config::debug.uiTrace) != 0;
     Config::debug.crashDump = readInt(ini, L"Debug", L"CrashDump", Config::debug.crashDump);
     Config::debug.movieFallback = readInt(ini, L"Debug", L"MovieFallback", Config::debug.movieFallback) != 0;

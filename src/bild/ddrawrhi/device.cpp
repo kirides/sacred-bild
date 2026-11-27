@@ -1167,7 +1167,8 @@ namespace DDrawRhi
         {
             std::memcpy(vertices.data, m_pending.vertices.data(), vertexBytes);
             std::memcpy(idx.data, m_pending.indices.data(), m_pending.indices.size() * sizeof(WORD));
-            nvrhi::GraphicsState state = m_pending.state;
+            // The held state gets its buffers (it is made again when the next draws are held).
+            nvrhi::GraphicsState& state = m_pending.state;
             state.vertexBuffers = {
                 nvrhi::VertexBufferBinding().setBuffer(vertices.buffer).setSlot(0).setOffset(vertices.offset),
                 nvrhi::VertexBufferBinding().setBuffer(Context::vertexDefaults()).setSlot(1).setOffset(0),
@@ -1199,7 +1200,11 @@ namespace DDrawRhi
             m_vsDirty = m_psDirty = true;
         }
         // Texture uploads in bindings() go through Context::commands(), which draws what is held first.
-        nvrhi::GraphicsState state;
+        nvrhi::GraphicsState& state = m_mergeState;
+        state.viewport.viewports.resize(0);
+        state.viewport.scissorRects.resize(0);
+        state.vertexBuffers.resize(0);
+        state.indexBuffer = nvrhi::IndexBufferBinding();
         if (!setup(Context::commandsKeepPending(), source.fvf, nvrhi::PrimitiveType::TriangleList, state))
         {
             return true;

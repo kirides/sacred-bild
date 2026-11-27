@@ -104,6 +104,7 @@
 #include <queue>
 #include <list>
 #include <mutex>
+#include <atomic>
 #include <unordered_map>
 #include <utility>
 
@@ -159,6 +160,13 @@ namespace nvrhi::d3d12
         // sacred-bild: pipeline cache (DeviceDesc::pipelineLibrary)
         ID3D12PipelineLibrary* pipelineLibrary = nullptr;
         SRWLOCK* pipelineLibraryLock = nullptr;
+        // sacred-bild: textures are made without waiting for their memory to become resident (D3D12 waits for each
+        // otherwise, about half a millisecond). They are made not resident and made resident by the paging queue, which
+        // signals residencyFence with residencyValue; the queues wait for the last value before executing.
+        RefCountPtr<ID3D12Device3> device3;
+        RefCountPtr<ID3D12Fence> residencyFence;
+        std::mutex residencyMutex;
+        std::atomic<uint64_t> residencyValue{0};
         RefCountPtr<ID3D12Device> device;
         RefCountPtr<ID3D12Device2> device2;
         RefCountPtr<ID3D12Device5> device5;
@@ -962,6 +970,7 @@ namespace nvrhi::d3d12
         std::atomic<uint64_t> lastSubmittedInstance = 0;
         std::atomic<uint64_t> lastCompletedInstance = 0;
         std::atomic<uint64_t> recordingInstance = 1;
+        uint64_t residencyWaited = 0;   // sacred-bild: Context::residencyFence value this queue waits for
 
         explicit Queue(const Context& context, ID3D12CommandQueue* queue, CommandListLifetimeTrackerHandle&& lifetimeTracker);
         uint64_t updateLastCompletedInstance();

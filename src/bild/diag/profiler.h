@@ -11,4 +11,7 @@ namespace Profiler
     // Logs where the sampled threads were during the last `ms` milliseconds (a hitch): samples grouped by location
     // and the sacred.exe return addresses above it. Nothing when not running.
     void logRecent(double ms);
+    // The world is drawn: [Debug] ProfilerWorldOnly drops what was sampled before (start-up, loading) two seconds after
+    // the first call, so that the report shows the game being played.
+    void worldDrawn();
 }

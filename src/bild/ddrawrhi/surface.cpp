@@ -389,6 +389,7 @@ namespace DDrawRhi
         {
             std::scoped_lock lock(Context::lock());
             m_gpu = Context::device()->createTexture(desc);
+            ++Context::counters().textures;
             if (m_gpu && m_kind == Kind::RenderTarget)
             {
                 Context::commands()->clearTextureFloat(m_gpu, nvrhi::AllSubresources, nvrhi::Color(0.0f, 0.0f, 0.0f, 1.0f));
@@ -546,6 +547,7 @@ namespace DDrawRhi
             }
         }
         Context::commands()->copyTexture(m_staging, nvrhi::TextureSlice(), m_gpu, nvrhi::TextureSlice());
+        ++Context::counters().readBacks;
         Context::flush(true);
         size_t pitch = 0;
         auto* bits = static_cast<uint8_t*>(dev->mapStagingTexture(m_staging, nvrhi::TextureSlice(), nvrhi::CpuAccessMode::Read, &pitch));
@@ -578,9 +580,7 @@ namespace DDrawRhi
         const DDPIXELFORMAT& pf)
     {
         const nvrhi::Format gpu = DDrawRhi::gpuFormat(format);
-        nvrhi::TextureHandle temp = Context::device()->createTexture(nvrhi::TextureDesc().setWidth(w).setHeight(h)
-            .setFormat(gpu).setDebugName("copy source").setInitialState(nvrhi::ResourceStates::ShaderResource)
-            .setKeepInitialState(true));
+        nvrhi::TextureHandle temp = Context::scratchTexture(w, h, gpu);
         if (!temp)
         {
             return nullptr;
@@ -877,9 +877,11 @@ namespace DDrawRhi
                 {
                     // Within one render target: through a copy of the source rectangle.
                     const UINT w = static_cast<UINT>(rectWidth(srcRect)), h = static_cast<UINT>(rectHeight(srcRect));
-                    nvrhi::TextureHandle temp = Context::device()->createTexture(nvrhi::TextureDesc().setWidth(w).setHeight(h)
-                        .setFormat(nvrhi::Format::BGRA8_UNORM).setDebugName("copy source")
-                        .setInitialState(nvrhi::ResourceStates::ShaderResource).setKeepInitialState(true));
+                    nvrhi::ITexture* temp = Context::scratchTexture(w, h, nvrhi::Format::BGRA8_UNORM);
+                    if (!temp)
+                    {
+                        return DDERR_GENERIC;
+                    }
                     nvrhi::TextureSlice from;
                     from.x = static_cast<uint32_t>(srcRect.left);
                     from.y = static_cast<uint32_t>(srcRect.top);

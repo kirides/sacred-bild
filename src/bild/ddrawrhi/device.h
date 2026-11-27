@@ -221,10 +221,12 @@ namespace DDrawRhi
             DWORD fvf = 0, stride = 0;
             std::vector<uint8_t> vertices;
             std::vector<WORD> indices;
-            nvrhi::GraphicsState state;     // without buffers
+            nvrhi::GraphicsState state;     // without buffers until drawn
             uint32_t epoch = 0;
         };
         Pending m_pending;
+        // drawMerged's state, made again for every draw: kept, as making one clears about a kilobyte.
+        nvrhi::GraphicsState m_mergeState;
         std::vector<std::unique_ptr<StateBlock>> m_stateBlocks;
         std::unique_ptr<StateBlock> m_recording;
     };

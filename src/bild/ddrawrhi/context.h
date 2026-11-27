@@ -4,6 +4,8 @@
 
 #include <nvrhi/nvrhi.h>
 
+#include <atomic>
+
 #include <cstdint>
 #include <string>
 
@@ -30,6 +32,12 @@ namespace DDrawRhi
     {
         // Creates the device from the settings ([Render] Api, the other API if that one fails) on first call; false if
         // neither works.
+        // [Debug] D3DStats counters, logged with the GPU time every second.
+        struct Counters
+        {
+            std::atomic<uint32_t> tempTextures{0}, readBacks{0}, waits{0}, textures{0};
+        };
+        Counters& counters();
         bool available();
         // Whether the device was made and works, without making it (available() makes it on first use).
         bool ready();
@@ -74,6 +82,13 @@ namespace DDrawRhi
         void forget(nvrhi::ITexture* texture);
         using ForgetFn = void (*)(nvrhi::ITexture* texture);
         void onForget(ForgetFn fn);
+
+        // A texture of `width` x `height` to write from the CPU or copy into and then read in the frame (a CPU image drawn
+        // onto the render target, a copy within one render target). Kept by size and format and handed out again: making
+        // a texture costs D3D12 a wait for the memory to become resident (about half a millisecond), and the game asks
+        // for the same few sizes all the time. Usable at once each time: the command list orders the uses (writing it
+        // waits for what read it before). Lock held.
+        nvrhi::ITexture* scratchTexture(uint32_t width, uint32_t height, nvrhi::Format format);
 
         // `srcRect` of `src` into `dstRect` of the color target `dst`, stretched (linear or point). Lock held.
         void copy(nvrhi::ITexture* src, const RECT& srcRect, nvrhi::ITexture* dst, const RECT& dstRect, bool linear);

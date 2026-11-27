@@ -282,6 +282,13 @@ namespace nvrhi::d3d12
             m_SamplerFeedbackSupported = m_Options7.SamplerFeedbackTier >= D3D12_SAMPLER_FEEDBACK_TIER_0_9;
         }
 
+        // sacred-bild: residency without waiting (Context::residencyFence)
+        if (SUCCEEDED(m_Context.device->QueryInterface(&m_Context.device3)) &&
+            FAILED(m_Context.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_Context.residencyFence))))
+        {
+            m_Context.device3 = nullptr;
+        }
+
         if (SUCCEEDED(m_Context.device->QueryInterface(&m_Context.device10)) && hasOptions12 && desc.enableEnhancedBarriers)
         {
 #ifndef NVRHI_WITH_RTXMU // RTXMU doesn't implement Enhanced Barriers, and we need to interop with it.
@@ -701,6 +708,13 @@ namespace nvrhi::d3d12
         }
 
         Queue* pQueue = getQueue(executionQueue);
+
+        // sacred-bild: what the lists use is resident first (Context::residencyFence).
+        if (const uint64_t resident = m_Context.residencyValue.load(); resident > pQueue->residencyWaited)
+        {
+            pQueue->queue->Wait(m_Context.residencyFence, resident);
+            pQueue->residencyWaited = resident;
+        }
 
         pQueue->queue->ExecuteCommandLists(uint32_t(commandListsToExecute.size()), commandListsToExecute.data());
         (void)pQueue->Signal();

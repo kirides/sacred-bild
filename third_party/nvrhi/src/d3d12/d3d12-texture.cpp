@@ -341,6 +341,7 @@ namespace nvrhi::d3d12
             return TextureHandle::Create(texture);
         }
 
+        bool enqueueResidency = false;     // sacred-bild: made resident by the paging queue (Context::residencyFence)
         D3D12_RESOURCE_STATES const initialState = convertResourceStates(d.initialState);
         D3D12_BARRIER_LAYOUT const initialLayout = convertResourceStatesForEnhancedBarriers(d.initialState, true).layout;
 
@@ -368,6 +369,9 @@ namespace nvrhi::d3d12
         else
         {
             heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+            enqueueResidency = m_Context.device3 && !isShared;
+            if (enqueueResidency)
+                heapFlags |= D3D12_HEAP_FLAG_CREATE_NOT_RESIDENT;
 
             if (m_EnhancedBarriersSupported)
             {
@@ -403,6 +407,17 @@ namespace nvrhi::d3d12
             
             delete texture;
             return nullptr;
+        }
+
+        if (enqueueResidency)
+        {
+            std::scoped_lock lock(m_Context.residencyMutex);
+            ID3D12Pageable* pageable = texture->resource;
+            const uint64_t value = m_Context.residencyValue.load() + 1;
+            if (SUCCEEDED(m_Context.device3->EnqueueMakeResident(D3D12_RESIDENCY_FLAG_NONE, 1, &pageable, m_Context.residencyFence, value)))
+                m_Context.residencyValue = value;
+            else
+                m_Context.device3->MakeResident(1, &pageable);
         }
 
         if (isShared)
