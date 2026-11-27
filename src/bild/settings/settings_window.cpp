@@ -146,6 +146,17 @@ namespace
         return f.value(L"DDraw", L"Backend") == L"d3d9";
     }
 
+    bool nvrhi(const Form& f)
+    {
+        return f.value(L"DDraw", L"Backend") == L"nvrhi";
+    }
+
+    // One of SacredBild's own renderers (Direct3D 9 or NVRHI), not the chain-loaded ddraw.
+    bool own(const Form& f)
+    {
+        return d3d9(f) || nvrhi(f);
+    }
+
     bool batching(const Form& f)
     {
         return f.on(L"Render", L"Batch");
@@ -190,9 +201,9 @@ namespace
               })
             .tip(L"The game's own frame limit in game (it uses 60), e.g. 144 for a 144 Hz display. The menus are unchanged.");
         ui.check(L"Wait for the display's refresh (VSync)", {L"Display", L"VSync"}, Config::display.vsync)
-            .enabledIf(d3d9)
+            .enabledIf(own)
             .tip(L"Show each frame on the display's refresh (no tearing). Off: show frames right away. "
-                 L"Needs the SacredBild (Direct3D 9) renderer.");
+                 L"Needs one of SacredBild's renderers.");
         ui.check(L"Keep the mouse inside the game window", {L"Display", L"ClipCursor"}, Config::display.clipCursor)
             .tip(L"Keep the mouse inside the game window while it is in the foreground (multiple monitors, a smaller "
                  L"window on a wide screen). Hold Alt to move the mouse out of the window.");
@@ -236,25 +247,38 @@ namespace
             .tip(L"Bilinear filtering for the scaled interface. Off: the game's sharp point sampling.");
         ui.group(L"Renderer");
         ui.combo(L"DirectDraw:", {L"DDraw", L"Backend"},
-              {{L"SacredBild (Direct3D 9)", L"d3d9"}, {L"Chain-loaded ddraw", L"chain"}}, Config::ddraw.d3d9 ? L"d3d9" : L"chain")
+              {{L"SacredBild (Direct3D 9)", L"d3d9"}, {L"SacredBild NVRHI (experimental)", L"nvrhi"},
+               {L"Chain-loaded ddraw", L"chain"}},
+              Config::ddraw.nvrhi ? L"nvrhi" : Config::ddraw.d3d9 ? L"d3d9" : L"chain")
             .tip(L"SacredBild (Direct3D 9): SacredBild runs the game's DirectDraw / Direct3D 7 on Direct3D 9 itself.\n"
+                 L"SacredBild NVRHI: SacredBild's new renderer on Direct3D 12 or Vulkan (experimental; falls back to "
+                 L"Direct3D 9 where neither works).\n"
                  L"Chain-loaded ddraw: the ddraw.dll set on the Advanced tab (DDrawCompat or another wrapper), else "
                  L"Windows' own.");
+        ui.combo(L"Graphics API:", {L"Render", L"Api"}, {{L"Direct3D 12", L"d3d12"}, {L"Vulkan", L"vulkan"}},
+              Config::ddraw.vulkan ? L"vulkan" : L"d3d12")
+            .enabledIf(nvrhi)
+            .tip(L"The API the NVRHI renderer uses; the other one is tried if this one doesn't start.");
+        ui.combo(L"World supersampling:", {L"Render", L"WorldScale"}, {{L"Off", L"1"}, {L"1.5 x", L"1.5"}, {L"2 x", L"2"}},
+              Config::render.worldScale >= 2.0f ? L"2" : Config::render.worldScale >= 1.5f ? L"1.5" : L"1")
+            .enabledIf(nvrhi)
+            .tip(L"Draw the game world at a multiple of the resolution and scale it down before the interface: smoother "
+                 L"edges, at the cost of GPU time. Needs the NVRHI renderer.");
         ui.check(L"Animate characters on the GPU", {L"Render", L"GpuSkinning"}, Config::render.gpuSkinning)
-            .enabledIf(d3d9)
+            .enabledIf(own)
             .tip(L"Animate (skin) characters and their shadows in a vertex shader instead of on the CPU. "
-                 L"Needs the SacredBild (Direct3D 9) renderer.");
+                 L"Needs one of SacredBild's renderers.");
         ui.check(L"Keep the ground on the GPU", {L"Render", L"GroundMesh"}, Config::render.groundMesh)
-            .enabledIf(d3d9)
+            .enabledIf(own)
             .tip(L"Keep the ground's tiles and their blend layers in vertex buffers, built once as they come into view, "
                  L"and draw them in a few calls per frame instead of rebuilding every tile each frame. "
-                 L"Needs the SacredBild (Direct3D 9) renderer.");
+                 L"Needs one of SacredBild's renderers.");
         ui.combo(L"Antialiasing (SMAA):", {L"Render", L"SMAA"},
               {{L"Off", L"Off"}, {L"Low", L"Low"}, {L"Medium", L"Medium"}, {L"High", L"High"}},
               std::array{L"Off", L"Low", L"Medium", L"High"}[std::clamp(Config::render.smaa, 0, 3)])
-            .enabledIf(d3d9)
+            .enabledIf(own)
             .tip(L"Smooths jagged edges in the game world with SMAA (the interface stays sharp). Higher presets find more "
-                 L"edges and cost a little more GPU time. Needs the SacredBild (Direct3D 9) renderer.");
+                 L"edges and cost a little more GPU time. Needs one of SacredBild's renderers.");
 
         ui.combo(L"Texture filtering:", {L"Render", L"TextureFilter"},
               {{L"Point (original, sharp)", L"Point"}, {L"Sharp (crisp texels, soft edges)", L"Sharp"},
@@ -276,9 +300,9 @@ namespace
             .tip(L"Frame limit while the game is in the background (another window has the focus), in game and in the menus.");
         ui.combo(L"Frames queued:", {L"Display", L"MaxFrameLatency"}, {1, 2, 3}, Config::display.maxFrameLatency,
               [](int n) { return n <= 0 ? std::wstring(L"Driver default") : n == 1 ? std::wstring(L"1 (lowest latency)") : std::to_wstring(n); })
-            .enabledIf(d3d9)
+            .enabledIf(own)
             .tip(L"Frames the CPU may prepare ahead of the GPU. 1 = lowest input latency. "
-                 L"Needs the SacredBild (Direct3D 9) renderer.");
+                 L"Needs one of SacredBild's renderers.");
         ui.group(L"Rendering");
         ui.combo(L"Texture memory:", {L"Render", L"TextureBudgetMB"}, {0, 256, 512, 1024, 2048}, Config::render.textureBudgetMB,
               [](int mb) { return mb ? Fmt::format(L"{} MB", mb) : std::wstring(L"Automatic"); })
@@ -286,7 +310,7 @@ namespace
                  L"different ground textures than the original 1024 x 768. Automatic = the game's own value, at least 256 MB.");
         ui.combo(L"Off-screen poses:", {L"Render", L"OffscreenPoses"}, {1, 2, 4, 8}, Config::render.offscreenPoses,
               [](int n) { return n <= 1 ? std::wstring(L"Every frame") : n == 2 ? std::wstring(L"Every 2nd frame") : Fmt::format(L"Every {}th frame", n); })
-            .enabledIf([](const Form& f) { return d3d9(f) && f.on(L"Render", L"GpuSkinning"); })
+            .enabledIf([](const Form& f) { return own(f) && f.on(L"Render", L"GpuSkinning"); })
             .tip(L"Characters not drawn in the last frames get their skeleton posed this often instead of every frame "
                  L"(most animated characters are off screen). Every frame = as the game does. Needs GPU animation.");
         ui.check(L"Merge draw calls", {L"Render", L"Batch"}, Config::render.batch)
@@ -344,7 +368,7 @@ namespace
         ui.column();
         ui.group(L"DirectDraw");
         ui.edit(L"Chain ddraw:", {L"DDraw", L"Chain"}, Config::ddraw.chain)
-            .enabledIf([](const Form& f) { return !d3d9(f); })
+            .enabledIf([](const Form& f) { return !own(f); })
             .tip(L"Chain-loaded ddraw renderer: the ddraw.dll to load behind SacredBild, relative to the game folder "
                  L"(DDrawCompat or another wrapper). Empty = Windows' own ddraw.dll.");
         ui.edit(L"d3d9.dll:", {L"DDraw", L"D3D9"}, Config::ddraw.d3d9Path)
@@ -352,7 +376,7 @@ namespace
             .tip(L"SacredBild (Direct3D 9) renderer: the d3d9.dll to use, e.g. DXVK's (relative to the game folder or "
                  L"absolute). Empty: a d3d9.dll next to the game exe if there is one, else Windows' own.");
         ui.check(L"Movies through Media Foundation", {L"DDraw", L"MediaFoundation"}, iniMediaFoundation(ini))
-            .enabledIf([](const Form& f) { return !d3d9(f); })
+            .enabledIf([](const Form& f) { return !own(f); })
             .tip(L"Play the intro and cutscene movies through Media Foundation instead of the game's DirectShow path "
                  L"(the window stays responsive). Always on with the SacredBild (Direct3D 9) renderer.");
         ui.group(L"Controller");
