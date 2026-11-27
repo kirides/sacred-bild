@@ -27,6 +27,61 @@
 
 namespace nvrhi::d3d12
 {
+    // sacred-bild: pipeline cache. The library name of a graphics pipeline state: FNV-1a over everything in its
+    // description but pointers (the bytecode and the input element names are hashed by content, the root signature by
+    // its serialized blob), as 16 hex digits.
+    static std::wstring pipelineName(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d, uint64_t rootSignatureHash)
+    {
+        uint64_t h = 1469598103934665603ull;
+        const auto mix = [&](const void* data, size_t size) {
+            const auto* bytes = static_cast<const uint8_t*>(data);
+            for (size_t i = 0; i < size; ++i)
+            {
+                h = (h ^ bytes[i]) * 1099511628211ull;
+            }
+        };
+        const auto pod = [&](const auto& value) { mix(&value, sizeof(value)); };
+        pod(rootSignatureHash);
+        for (const D3D12_SHADER_BYTECODE* s : {&d.VS, &d.PS, &d.DS, &d.HS, &d.GS})
+        {
+            pod(s->BytecodeLength);
+            if (s->pShaderBytecode)
+            {
+                mix(s->pShaderBytecode, s->BytecodeLength);
+            }
+        }
+        pod(d.StreamOutput.NumEntries);
+        pod(d.BlendState);
+        pod(d.SampleMask);
+        pod(d.RasterizerState);
+        pod(d.DepthStencilState);
+        pod(d.InputLayout.NumElements);
+        for (UINT i = 0; i < d.InputLayout.NumElements; ++i)
+        {
+            const D3D12_INPUT_ELEMENT_DESC& e = d.InputLayout.pInputElementDescs[i];
+            if (e.SemanticName)
+            {
+                mix(e.SemanticName, strlen(e.SemanticName));
+            }
+            pod(e.SemanticIndex);
+            pod(e.Format);
+            pod(e.InputSlot);
+            pod(e.AlignedByteOffset);
+            pod(e.InputSlotClass);
+            pod(e.InstanceDataStepRate);
+        }
+        pod(d.IBStripCutValue);
+        pod(d.PrimitiveTopologyType);
+        pod(d.NumRenderTargets);
+        pod(d.RTVFormats);
+        pod(d.DSVFormat);
+        pod(d.SampleDesc);
+        pod(d.NodeMask);
+        pod(d.Flags);
+        wchar_t text[17];
+        swprintf_s(text, L"%016llx", static_cast<unsigned long long>(h));
+        return text;
+    }
 
     Object GraphicsPipeline::getNativeObject(ObjectType objectType)
     {
@@ -169,12 +224,35 @@ namespace nvrhi::d3d12
         }
 #endif
 
+        // sacred-bild: pipeline cache. Loaded from the library if it has it (a stale entry fails to load and is made
+        // again), stored there when made.
+        std::wstring name;
+        if (m_Context.pipelineLibrary && pRS)
+        {
+            name = pipelineName(desc, pRS->blobHash);
+            AcquireSRWLockExclusive(m_Context.pipelineLibraryLock);
+            const HRESULT loaded = m_Context.pipelineLibrary->LoadGraphicsPipeline(name.c_str(), &desc, IID_PPV_ARGS(&pipelineState));
+            ReleaseSRWLockExclusive(m_Context.pipelineLibraryLock);
+            if (SUCCEEDED(loaded) && pipelineState)
+            {
+                return pipelineState;
+            }
+            pipelineState = nullptr;
+        }
+
         const HRESULT hr = m_Context.device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipelineState));
 
         if (FAILED(hr))
         {
             m_Context.error("Failed to create a graphics pipeline state object");
             return nullptr;
+        }
+
+        if (!name.empty())
+        {
+            AcquireSRWLockExclusive(m_Context.pipelineLibraryLock);
+            const HRESULT stored = m_Context.pipelineLibrary->StorePipeline(name.c_str(), pipelineState);     // fails if the name is there: kept
+            ReleaseSRWLockExclusive(m_Context.pipelineLibraryLock);
         }
 
         return pipelineState;

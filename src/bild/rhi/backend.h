@@ -1,5 +1,6 @@
 #pragma once
 #include "rhi/rhi.h"
+#include "rhi/pipeline_cache.h"
 
 #include <memory>
 #include <vector>
@@ -30,6 +31,14 @@ namespace Rhi::Detail
         virtual bool present() = 0;
         // Resizes the swap chain; the caller made sure the GPU is idle and released its framebuffers.
         virtual bool resize(uint32_t width, uint32_t height) = 0;
+
+        // The pipeline cache (pipeline_cache.h): who it is for, and its contents now (size only with `out` null).
+        // False: the backend keeps none.
+        virtual bool pipelineCache(PipelineCache::Identity& id, std::vector<uint8_t>* out, size_t& size)
+        {
+            (void)id; (void)out; (void)size;
+            return false;
+        }
     };
 
     std::unique_ptr<Backend> makeD3D12();

@@ -778,6 +778,16 @@ namespace nvrhi::d3d12
 
         // Create the RS object
 
+        // sacred-bild: pipeline cache
+        {
+            uint64_t h = 1469598103934665603ull;
+            const auto* bytes = static_cast<const uint8_t*>(rsBlob->GetBufferPointer());
+            for (size_t i = 0; i < rsBlob->GetBufferSize(); ++i)
+            {
+                h = (h ^ bytes[i]) * 1099511628211ull;
+            }
+            rootsig->blobHash = h;
+        }
         res = m_Context.device->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(&rootsig->handle));
 
         if (FAILED(res))

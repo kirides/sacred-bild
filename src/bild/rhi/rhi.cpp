@@ -234,6 +234,47 @@ namespace Rhi
         return g_backend ? g_backend->format() : nvrhi::Format::UNKNOWN;
     }
 
+    namespace
+    {
+        // The pipeline cache is saved once it stopped growing: its size is checked every two seconds and saved when
+        // it is the same as two seconds before but not what was saved last.
+        void savePipelineCache()
+        {
+            static DWORD next = 0;
+            static size_t lastSize = 0, savedSize = 0;
+            static bool first = true;
+            const DWORD now = GetTickCount();
+            if (next && static_cast<int32_t>(now - next) < 0)
+            {
+                return;
+            }
+            next = now + 2000;
+            PipelineCache::Identity id;
+            size_t size = 0;
+            if (!g_backend->pipelineCache(id, nullptr, size))
+            {
+                return;
+            }
+            if (first)
+            {
+                first = false;
+                savedSize = size;   // what was loaded (or the empty cache): written again only once it grew
+            }
+            const bool settled = size == lastSize && size != savedSize;
+            lastSize = size;
+            if (!settled)
+            {
+                return;
+            }
+            std::vector<uint8_t> data;
+            if (g_backend->pipelineCache(id, &data, size) && !data.empty())
+            {
+                savedSize = size;
+                PipelineCache::save(id, std::move(data));
+            }
+        }
+    }
+
     void present()
     {
         if (!g_backend || !g_inFrame)
@@ -242,6 +283,10 @@ namespace Rhi
         }
         g_inFrame = false;
         g_backend->present();
+        if (g_settings.pipelineCache)
+        {
+            savePipelineCache();
+        }
         nvrhi::EventQueryHandle query;
         if (!g_freeQueries.empty())
         {

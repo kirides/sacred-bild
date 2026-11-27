@@ -76,6 +76,7 @@ namespace Rhi::Detail
             bool createDevice(const Settings& settings, nvrhi::IMessageCallback* messages) override
             {
                 m_vsync = settings.vsync;
+                m_usePipelineCache = settings.pipelineCache;
                 HMODULE lib = LoadLibraryW(L"vulkan-1.dll");
                 if (!lib)
                 {
@@ -301,7 +302,34 @@ namespace Rhi::Detail
                 VULKAN_HPP_DEFAULT_DISPATCHER.init(m_device);
                 m_queue = m_device.getQueue(static_cast<uint32_t>(m_family), 0);
 
+                // The saved pipeline cache, if its header is this device's (the driver checks it again).
+                std::vector<uint8_t> cacheData;
+                if (m_usePipelineCache)
+                {
+                    const vk::PhysicalDeviceProperties props = m_gpu.getProperties();
+                    m_identity.api = static_cast<uint32_t>(Api::Vulkan);
+                    m_identity.vendor = props.vendorID;
+                    m_identity.device = props.deviceID;
+                    m_identity.driver = props.driverVersion;
+                    m_identity.extra = PipelineCache::hash(props.pipelineCacheUUID.data(), VK_UUID_SIZE);
+                    cacheData = PipelineCache::load(m_identity);
+                    VkPipelineCacheHeaderVersionOne header = {};
+                    if (cacheData.size() >= sizeof(header))
+                    {
+                        std::memcpy(&header, cacheData.data(), sizeof(header));
+                    }
+                    if (!cacheData.empty() && (cacheData.size() < sizeof(header) || header.headerSize < sizeof(header) ||
+                        header.headerVersion != VK_PIPELINE_CACHE_HEADER_VERSION_ONE || header.vendorID != props.vendorID ||
+                        header.deviceID != props.deviceID ||
+                        std::memcmp(header.pipelineCacheUUID, props.pipelineCacheUUID.data(), VK_UUID_SIZE) != 0))
+                    {
+                        LOG("RHI: Vulkan: the saved pipeline cache is not this device's, starting an empty one");
+                        cacheData.clear();
+                    }
+                }
                 nvrhi::vulkan::DeviceDesc desc;
+                desc.pipelineCacheData = cacheData.empty() ? nullptr : cacheData.data();
+                desc.pipelineCacheSize = cacheData.size();
                 desc.errorCB = messages;
                 desc.instance = m_instance;
                 desc.physicalDevice = m_gpu;
@@ -404,6 +432,26 @@ namespace Rhi::Detail
                 }
             }
 
+        public:
+            bool pipelineCache(PipelineCache::Identity& id, std::vector<uint8_t>* out, size_t& size) override
+            {
+                if (!m_usePipelineCache || !m_nvrhi)
+                {
+                    return false;
+                }
+                id = m_identity;
+                std::vector<uint8_t> data;
+                if (!nvrhi::vulkan::getPipelineCacheData(m_nvrhi.Get(), out ? *out : data))
+                {
+                    return false;
+                }
+                size = out ? out->size() : data.size();
+                return true;
+            }
+
+        private:
+            bool m_usePipelineCache = false;
+            PipelineCache::Identity m_identity;
             vk::Instance m_instance;
             vk::DebugUtilsMessengerEXT m_messenger;
             vk::SurfaceKHR m_surface;

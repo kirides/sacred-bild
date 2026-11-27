@@ -33,6 +33,33 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 namespace nvrhi::vulkan
 {
+    // sacred-bild: pipeline cache
+    bool getPipelineCacheData(nvrhi::IDevice* device, std::vector<uint8_t>& out)
+    {
+        auto* d = dynamic_cast<Device*>(device);
+        if (!d)
+        {
+            return false;
+        }
+        const VulkanContext& context = d->getContext();
+        if (!context.pipelineCache)
+        {
+            return false;
+        }
+        size_t size = 0;
+        if (context.device.getPipelineCacheData(context.pipelineCache, &size, nullptr) != vk::Result::eSuccess || !size)
+        {
+            return false;
+        }
+        out.resize(size);
+        if (context.device.getPipelineCacheData(context.pipelineCache, &size, out.data()) != vk::Result::eSuccess)
+        {
+            return false;
+        }
+        out.resize(size);
+        return true;
+    }
+
     DeviceHandle createDevice(const DeviceDesc& desc)
     {
 #if defined(NVRHI_SHARED_LIBRARY_BUILD)
@@ -260,10 +287,18 @@ namespace nvrhi::vulkan
             m_Context.warning("Opacity micro-maps are not currently supported by RTXMU.");
         }
 #endif
-        auto pipelineInfo = vk::PipelineCacheCreateInfo();
+        auto pipelineInfo = vk::PipelineCacheCreateInfo()
+            .setInitialDataSize(desc.pipelineCacheData ? desc.pipelineCacheSize : 0)    // sacred-bild: pipeline cache
+            .setPInitialData(desc.pipelineCacheData);
         vk::Result res = m_Context.device.createPipelineCache(&pipelineInfo,
             m_Context.allocationCallbacks,
             &m_Context.pipelineCache);
+        if (res != vk::Result::eSuccess && desc.pipelineCacheData)
+        {
+            // sacred-bild: pipeline cache: data the driver didn't take, an empty cache instead
+            pipelineInfo = vk::PipelineCacheCreateInfo();
+            res = m_Context.device.createPipelineCache(&pipelineInfo, m_Context.allocationCallbacks, &m_Context.pipelineCache);
+        }
 
         if (res != vk::Result::eSuccess)
         {

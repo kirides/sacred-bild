@@ -73,6 +73,7 @@ set(RHI_SOURCES
   src/bild/rhi/rhi.cpp
   src/bild/rhi/rhi_d3d12.cpp
   src/bild/rhi/rhi_vulkan.cpp
+  src/bild/rhi/pipeline_cache.cpp
 )
 # DirectDraw / Direct3D 7 on the NVRHI device (stage 3 of docs/NvrhiRenderer.md).
 set(DDRAWRHI_SOURCES

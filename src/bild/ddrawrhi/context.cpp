@@ -4,6 +4,7 @@
 #include "settings/config/ddraw.h"
 #include "settings/config/debug.h"
 #include "settings/config/display.h"
+#include "settings/config/render.h"
 #include "log.h"
 
 #include "ddrawrhi/shaders/blit_shaders.inc"
@@ -280,6 +281,7 @@ namespace DDrawRhi
                 s.validation = Config::debug.rhiValidation;
                 s.vsync = Config::display.vsync;
                 s.maxFrameLatency = Config::display.maxFrameLatency;
+                s.pipelineCache = Config::render.pipelineCache;
                 return s;
             }
 
@@ -659,6 +661,12 @@ namespace DDrawRhi
                     g_doneCv.notify_all();
                 }
             }
+        }
+
+        bool ready()
+        {
+            std::scoped_lock lock(g_lock);
+            return g_tried && g_available;
         }
 
         bool available()

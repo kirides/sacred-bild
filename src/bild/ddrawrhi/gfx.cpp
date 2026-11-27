@@ -79,7 +79,7 @@ namespace
     uint32_t __cdecl textureCreate(int width, int height, uint32_t format, const void* pixels, int pitch)
     {
         const nvrhi::Format f = gpuFormat(format);
-        if (width <= 0 || height <= 0 || f == nvrhi::Format::UNKNOWN || !pixels || pitch <= 0 || !DDrawRhi::Context::available())
+        if (width <= 0 || height <= 0 || f == nvrhi::Format::UNKNOWN || !pixels || pitch <= 0 || !DDrawRhi::Context::ready())
         {
             return 0;
         }
@@ -825,8 +825,9 @@ namespace
 
 extern "C" const SacredBild_Gfx* __cdecl SacredBild_GfxGet(uint32_t version)
 {
-    if (version == 0 || version > SACREDBILD_GFX_VERSION || !Config::ddraw.nvrhi || !Config::render.gearGfx ||
-        !DDrawRhi::Context::available())
+    // Never makes the device: Gear asks early (possibly under the loader lock, where DXGI refuses to start; making
+    // it there sent Direct3D 12 to its Vulkan fallback). begin() returns 0 until the game's device draws.
+    if (version == 0 || version > SACREDBILD_GFX_VERSION || !Config::ddraw.nvrhi || !Config::render.gearGfx)
     {
         return nullptr;
     }

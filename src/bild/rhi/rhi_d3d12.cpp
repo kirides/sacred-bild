@@ -113,9 +113,15 @@ namespace Rhi::Detail
                 }
 
                 m_latency = static_cast<UINT>(settings.maxFrameLatency < 1 ? 1 : settings.maxFrameLatency);
+                if (settings.pipelineCache)
+                {
+                    createLibrary();
+                }
                 nvrhi::d3d12::DeviceDesc deviceDesc;
                 deviceDesc.errorCB = messages;
                 deviceDesc.pDevice = m_d3d.p;
+                deviceDesc.pipelineLibrary = m_library.p;
+                deviceDesc.pipelineLibraryLock = &m_libraryLock;
                 deviceDesc.pGraphicsCommandQueue = m_queue.p;
                 if (settings.validation)
                 {
@@ -262,6 +268,54 @@ namespace Rhi::Detail
                 m_infoQueue->ClearStoredMessages();
             }
 
+            // The pipeline library, from the saved data if it is this driver's (the runtime refuses it otherwise:
+            // D3D12_ERROR_DRIVER_VERSION_MISMATCH, D3D12_ERROR_ADAPTER_NOT_FOUND, E_INVALIDARG), else empty.
+            void createLibrary()
+            {
+                Com<ID3D12Device1> device1;
+                if (FAILED(m_d3d->QueryInterface(IID_PPV_ARGS(device1.put()))))
+                {
+                    return;
+                }
+                m_libraryData = PipelineCache::load(m_identity);
+                if (!m_libraryData.empty())
+                {
+                    const HRESULT hr = device1->CreatePipelineLibrary(m_libraryData.data(), m_libraryData.size(), IID_PPV_ARGS(m_library.put()));
+                    if (SUCCEEDED(hr))
+                    {
+                        return;
+                    }
+                    LOG("RHI: Direct3D 12: the saved pipeline library was refused ({:08x}), starting an empty one", static_cast<uint32_t>(hr));
+                    m_libraryData.clear();
+                }
+                const HRESULT hr = device1->CreatePipelineLibrary(nullptr, 0, IID_PPV_ARGS(m_library.put()));
+                if (FAILED(hr))
+                {
+                    LOG("RHI: Direct3D 12: no pipeline library ({:08x}): pipelines are not kept between runs", static_cast<uint32_t>(hr));
+                }
+            }
+
+        public:
+            bool pipelineCache(PipelineCache::Identity& id, std::vector<uint8_t>* out, size_t& size) override
+            {
+                if (!m_library)
+                {
+                    return false;
+                }
+                id = m_identity;
+                AcquireSRWLockExclusive(&m_libraryLock);
+                size = m_library->GetSerializedSize();
+                bool ok = true;
+                if (out)
+                {
+                    out->resize(size);
+                    ok = SUCCEEDED(m_library->Serialize(out->data(), size));
+                }
+                ReleaseSRWLockExclusive(&m_libraryLock);
+                return ok;
+            }
+
+        private:
             bool pickAdapter()
             {
                 Com<IDXGIFactory6> factory6;
@@ -288,6 +342,15 @@ namespace Rhi::Detail
                     }
                     if (SUCCEEDED(D3D12CreateDevice(adapter.p, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(m_d3d.put()))))
                     {
+                        m_identity.api = static_cast<uint32_t>(Api::D3D12);
+                        m_identity.vendor = desc.VendorId;
+                        m_identity.device = desc.DeviceId;
+                        m_identity.extra = desc.SubSysId;
+                        LARGE_INTEGER umd = {};
+                        if (SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umd)))
+                        {
+                            m_identity.driver = static_cast<uint64_t>(umd.QuadPart);
+                        }
                         m_adapterName = narrow(desc.Description);
                         LOG("RHI: Direct3D 12: adapter {} ({} MB video memory)", m_adapterName, desc.DedicatedVideoMemory >> 20);
                         return true;
@@ -331,6 +394,11 @@ namespace Rhi::Detail
 
             Com<IDXGIFactory2> m_factory;
             Com<ID3D12Device> m_d3d;
+            // Before m_device: NVRHI's device uses the library until it is gone.
+            PipelineCache::Identity m_identity;
+            std::vector<uint8_t> m_libraryData;     // the library reads it for as long as it lives
+            Com<ID3D12PipelineLibrary> m_library;
+            SRWLOCK m_libraryLock = SRWLOCK_INIT;
             Com<ID3D12CommandQueue> m_queue;
             Com<ID3D12InfoQueue> m_infoQueue;
             Com<ID3D12Fence> m_fence;

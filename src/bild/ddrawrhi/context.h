@@ -31,6 +31,8 @@ namespace DDrawRhi
         // Creates the device from the settings ([Render] Api, the other API if that one fails) on first call; false if
         // neither works.
         bool available();
+        // Whether the device was made and works, without making it (available() makes it on first use).
+        bool ready();
         const std::string& adapterName();
 
         RecursiveSpinLock& lock();

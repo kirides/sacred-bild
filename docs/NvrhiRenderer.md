@@ -320,3 +320,23 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   `[Render] ParallelPosing` (on; with AnimationThreads > 1). Uncapped: advance 0.66 -> 0.48 ms, animation wait
   0.47 -> 0.29 ms, frame 1.76 -> 1.50 ms in the field save; wait 0.26 -> 0.12 ms in the park. Characters pose as
   before. [Debug] AnimationCheck compares the control walk only, not the posing.
+- 2026-11-27: persistent pipeline cache (John: without stale pipelines causing trouble). `rhi/pipeline_cache.*`:
+  SacredBild-pipelines-d3d12.bin / -vulkan.bin next to the game, a 64-byte header (magic, version, this ddraw.dll's link
+  time stamp and image size, API, vendor, device, driver version, Vulkan's pipelineCacheUUID hashed, data size, FNV-1a
+  of the data) before the driver's data; any mismatch deletes the file and logs why. Written on a background thread to
+  a .tmp file that is renamed over the old one; saved once the cache stopped growing (size checked every 2 s, written
+  when it stayed the same and differs from what was saved). Vendored NVRHI (marked `sacred-bild: pipeline cache`):
+  Direct3D 12 graphics pipeline states are loaded from an ID3D12PipelineLibrary by a name hashed from their whole
+  description (bytecode, states, input layout, formats, the root signature's serialized blob) and stored there when
+  made; a library the runtime refuses (another driver or adapter) is replaced by an empty one. Vulkan's
+  VkPipelineCache gets the saved data as initial data (its header checked against the device first; empty if the
+  driver refuses it) and `nvrhi::vulkan::getPipelineCacheData` reads it back. `[Render] PipelineCache` (on). Tested:
+  fresh, warm, a flipped byte, a truncated file, another driver in the header, a library the driver refuses, a
+  rebuilt ddraw.dll: each discarded or rebuilt, never drawn with. On this AMD card the D3D12 library stays ~2 KB (the
+  driver keeps the compiled code in its own cache) and all 24 pipelines of a run load from it; the Vulkan cache is
+  373 KB and takes the 200 ms first-frame hitch away.
+- 2026-11-27: found with it: since bild_gfx (ada5722) Direct3D 12 had been failing at CreateDXGIFactory2 (887A0001)
+  whenever SacredGear was loaded, and the backend fell back to Vulkan. Gear asks for SacredBild_GfxGet early (under the
+  loader lock), and the export made the NVRHI device there. It no longer makes the device (Context::ready() instead of
+  available()). The measurements logged above from the bild_gfx entry on were taken on Vulkan where they say D3D12
+  (each comparison ran both sides on the same API, so the differences hold).

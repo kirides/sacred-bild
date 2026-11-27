@@ -83,9 +83,17 @@ namespace nvrhi::vulkan
         bool logBufferLifetime = false;
 
         std::string vulkanLibraryName; // if empty, use default
+
+        // sacred-bild: pipeline cache. The initial data of the device's VkPipelineCache (from
+        // getPipelineCacheData of an earlier run; the driver checks its header and ignores data of another device or
+        // driver). Null: an empty cache.
+        const void* pipelineCacheData = nullptr;
+        size_t pipelineCacheSize = 0;
     };
 
     NVRHI_API DeviceHandle createDevice(const DeviceDesc& desc);
+    // sacred-bild: pipeline cache. The device's VkPipelineCache contents; false if there are none.
+    NVRHI_API bool getPipelineCacheData(nvrhi::IDevice* device, std::vector<uint8_t>& out);
    
     NVRHI_API VkFormat convertFormat(nvrhi::Format format);
 

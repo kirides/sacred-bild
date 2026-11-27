@@ -26,6 +26,8 @@ namespace Rhi
         bool vsync = true;
         // Frames the CPU may queue ahead of the GPU (1 = lowest input latency).
         int maxFrameLatency = 1;
+        // Pipelines kept between runs (pipeline_cache.h).
+        bool pipelineCache = true;
     };
 
     // Creates the device; false (and the reason in the log) if the API or a suitable GPU is not there. Nothing is left

@@ -1105,6 +1105,7 @@ namespace nvrhi::vulkan
 
         Queue* getQueue(CommandQueue queue) const { return m_Queues[int(queue)].get(); }
         vk::QueryPool getTimerQueryPool() const { return m_TimerQueryPool; }
+        const VulkanContext& getContext() const { return m_Context; }     // sacred-bild: pipeline cache
 
         // IResource implementation
 

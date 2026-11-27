@@ -229,6 +229,8 @@ namespace nvrhi::d3d12
         : m_Resources(m_Context, desc)
     {
         m_Context.device = desc.pDevice;
+        m_Context.pipelineLibrary = desc.pipelineLibrary;       // sacred-bild: pipeline cache
+        m_Context.pipelineLibraryLock = desc.pipelineLibraryLock;
         m_Context.logBufferLifetime = desc.logBufferLifetime;
         m_Context.messageCallback = desc.errorCB;
 
