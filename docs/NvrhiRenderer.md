@@ -151,3 +151,10 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   (Rml::Context::ResetActiveChain after a mouse up, seed 23) that crashes only with some heap layouts, unrelated to the
   renderer. Stage 3c (overlay, prompts) not done: SacredBild's own ImGui screens and controller prompts are off with
   Backend=nvrhi.
+- 2026-11-27: stage 4 (GroundMesh 3353ebc, GPU skinning 43a2efe) and 3c (overlay, prompts 9f85099) done. DDraw9::Ground and
+  DDraw9::Skin forward to DDrawRhi::Ground / Skin for NVRHI devices (GroundMesh and GpuSkin themselves unchanged); both are
+  modes of the fixed-function shader. Uncapped in the test copy: Direct3D 9 1.70 ms, NVRHI Direct3D 12 1.74 ms, Vulkan
+  1.9 ms, the same 600 draws a frame; pictures as before. The overlay draws over a copy of the frame at its size (as
+  Direct3D 9 draws into its back buffer); `SACREDBILD_OVERLAY_DEMO=1` opens ImGui's demo window to check it, and it looks
+  the same on all three. Not ported: SMAA and the sharp texture filter (both off by default). Prompts are drawn by the
+  same path as the overlay but were not seen in game (no pad in the test runs).
