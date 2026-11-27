@@ -39,3 +39,13 @@ Vulkan backend: in 32-bit builds Vulkan's non-dispatchable handles (`VkImage`, `
   buffer of `allocateMemory`.
 - `include/nvrhi/common/resource.h` `Object(void*)`: zeroes the 8-byte union before storing a 4-byte pointer, so `integer`
   has no stale upper half (`getNativeObject` returns Vulkan handles in `integer` and interfaces in `pointer`).
+
+### Pipeline cache (`// sacred-bild: pipeline cache`)
+
+- `include/nvrhi/d3d12.h` `DeviceDesc::pipelineLibrary` / `pipelineLibraryLock`, kept in the d3d12 `Context`
+  (`d3d12-backend.h`, `d3d12-device.cpp`); `RootSignature::blobHash` (FNV-1a of the serialized root signature,
+  `d3d12-resource-bindings.cpp`); `d3d12-graphics.cpp` loads a graphics pipeline state from the library by a name
+  hashed from its description and stores the ones it makes.
+- `include/nvrhi/vulkan.h` `DeviceDesc::pipelineCacheData` / `pipelineCacheSize` (initial data of the VkPipelineCache,
+  an empty cache if the driver refuses it) and `nvrhi::vulkan::getPipelineCacheData`; `vulkan-backend.h`
+  `Device::getContext`.

@@ -156,6 +156,12 @@ namespace nvrhi::d3d12
         // for the API in use.
         bool enableDxrClusters = true;
         bool enableNvapiClusters = true;
+
+        // sacred-bild: pipeline cache. Graphics pipeline states are loaded from and stored into this library by a name
+        // hashed from their whole description (shader bytecode, states, input layout, formats, the root signature's
+        // serialized blob); `pipelineLibraryLock` (an SRWLOCK) guards it. Null: no library.
+        ID3D12PipelineLibrary* pipelineLibrary = nullptr;
+        SRWLOCK* pipelineLibraryLock = nullptr;
     };
 
     NVRHI_API DeviceHandle createDevice(const DeviceDesc& desc);

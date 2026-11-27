@@ -47,6 +47,9 @@ namespace Config
         // [DDraw] Backend=nvrhi: pretransformed draws with the same state as the one before are drawn as one (the
         // interface's quads and what the batcher leaves).
         bool mergeDraws = true;
+        // [DDraw] Backend=nvrhi: the GPU pipelines kept between runs (SacredBild-pipelines-<api>.bin next to the game;
+        // discarded when SacredBild, the GPU or its driver changed).
+        bool pipelineCache = true;
         // Filtering of the game world's textures: 0 the game's own point sampling, 1 sharp bilinear (crisp texels, soft
         // edges; Direct3D 9 backend, point sampling elsewhere), 2 bilinear (smoother when zoomed in). The interface
         // follows [UI] LinearFilter.

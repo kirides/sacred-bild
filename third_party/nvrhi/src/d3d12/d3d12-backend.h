@@ -156,6 +156,9 @@ namespace nvrhi::d3d12
     
     struct Context
     {
+        // sacred-bild: pipeline cache (DeviceDesc::pipelineLibrary)
+        ID3D12PipelineLibrary* pipelineLibrary = nullptr;
+        SRWLOCK* pipelineLibraryLock = nullptr;
         RefCountPtr<ID3D12Device> device;
         RefCountPtr<ID3D12Device2> device2;
         RefCountPtr<ID3D12Device5> device5;
@@ -560,6 +563,7 @@ namespace nvrhi::d3d12
     {
     public:
         size_t hash = 0;
+        uint64_t blobHash = 0;  // sacred-bild: pipeline cache, FNV-1a of the serialized root signature
         static_vector<std::pair<BindingLayoutHandle, RootParameterIndex>, c_MaxBindingLayouts> pipelineLayouts;
         RefCountPtr<ID3D12RootSignature> handle;
         uint32_t pushConstantByteSize = 0;
