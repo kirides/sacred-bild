@@ -77,6 +77,12 @@ namespace Sacred::Addr
     inline Cdecl<void(HWND window, POINT* pt)> getClientCursorPos{}; // ENG 0066E280
     // zlib 1.2.1's uncompress (linked into the game): textures, maps and other packed files.
     inline Cdecl<int(uint8_t* dest, unsigned long* destLen, const uint8_t* source, unsigned long sourceLen)> zlibUncompress{}; // ENG 0066E160
+    // The pointer cFontTTF2 calls DrawTextW through (the Unicode layer's; it resolves itself on the first call).
+    inline uintptr_t fontDrawTextW{};                   // ENG 00A23FAC
+    // The copy of a GDI glyph into a 16-bit font page (cdecl: dst lock, src lock, int dst[2], src {x, y, u16 w, u16 h}).
+    inline uintptr_t fontCopyGlyph{};                   // ENG 0064E860
+    // cFontTTF's copy of the same kind (its font setup draws the 256 ANSI characters with DrawTextA up front).
+    inline uintptr_t fontCopyGlyphTtf{};                // ENG 0064BAE0
     inline Cdecl<cMouse*()> cMouse_instance{};          // ENG 00654F60
     inline Thiscall<void(cMouse* self, IDirect3DDevice7* device, int flag)> cMouse_renderCursor{}; // ENG 00655450
 

@@ -99,6 +99,17 @@ namespace DDrawRhi
         Surface* attachedDepth() const { return m_depth; }
         // The texture to draw with; uploads changes made through the CPU first (records into the frame: Context lock held).
         nvrhi::ITexture* texture();
+        // [UI] NativeFonts (render/font_shadow.h): a font page the game draws its text from. texture() hands out what
+        // the override gives for it (a sharper copy at the UI's scale) instead of the surface's own texture; the
+        // override hears of the page going away.
+        using TextureOverride = nvrhi::ITexture* (*)(Surface& page);
+        using PageGone = void (*)(Surface* page);
+        static void setFontPageHooks(TextureOverride override, PageGone gone);
+        void setFontPage(bool on) { m_fontPage = on; }
+        bool fontPage() const { return m_fontPage; }
+        // The surface the calling thread locked last and the bits Lock handed out for it (the game's glyph copy
+        // only has the lock's description).
+        static Surface* lastLocked(const void* bits);
         // TextureAtlas: all of `src` (a texture with a system memory copy, this surface's format) into this video
         // memory texture at (x, y) with a one-pixel gutter around it (the opposite edge, or with clampEdges the same edge),
         // in one upload and one copy instead of nine Blts. False if the formats or kinds don't allow it.
@@ -216,6 +227,7 @@ namespace DDrawRhi
 
         // Texture (and RenderTarget while the CPU has it): pixels in the surface's own format
         bool m_gpuOnly = false;                         // no system memory copy (see create)
+        bool m_fontPage = false;                        // setFontPage
         std::vector<uint8_t> m_cpu;
         UINT m_cpuPitch = 0;
         std::atomic<bool> m_dirty{false};

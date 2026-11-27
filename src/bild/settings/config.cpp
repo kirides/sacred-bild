@@ -208,6 +208,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     }
     Config::ui.scaleMenus = _wcsicmp(readString(ini, L"UI", L"ScaleMode", L"InGame").c_str(), L"Full") == 0;
     Config::ui.linearFilter = readInt(ini, L"UI", L"LinearFilter", Config::ui.linearFilter) != 0;
+    Config::ui.nativeFonts = readInt(ini, L"UI", L"NativeFonts", Config::ui.nativeFonts) != 0;
     Config::ui.anchor = readInt(ini, L"UI", L"Anchor", Config::ui.anchor) != 0;
     readPosition(ini, L"Taskbar", Config::ui.taskbar);
     readPosition(ini, L"Chat", Config::ui.chat);
