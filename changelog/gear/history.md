@@ -1,3 +1,8 @@
+## v0.15.6 (2026-11-27)
+
+- Fixed: items a companion picks up no longer vanish. After the inventory window was open while control changed hands, the companion's pickups went into the cursor's hand of a closed window instead of its backpack; they now land in the backpack.
+- New: `creature:pickup(item)` makes a party hero pick up a world item at once, as the game does on arrival (no walking), for mods and tests.
+
 ## v0.15.5 (2026-11-27)
 
 - Improved: mod windows open and update faster with a theme mod that has a big sprite sheet. The theme's picture styles (`.sprite-N`) are now loaded only into windows that use them, so every other window carries a fraction of the style rules it did before.
