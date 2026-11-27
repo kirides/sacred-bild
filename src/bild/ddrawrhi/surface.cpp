@@ -399,13 +399,6 @@ namespace DDrawRhi
             {
                 Context::commands()->clearDepthStencilTexture(m_gpu, nvrhi::AllSubresources, true, 1.0f, true, 0);
             }
-            else if (m_gpu && m_kind == Kind::Texture && gpuFormat == nvrhi::Format::BGRA8_UNORM)
-            {
-                // Transparent black until the first upload, as Direct3D 12's fresh memory is (Vulkan's is undefined).
-                thread_local std::vector<uint8_t> zeros;
-                zeros.assign(size_t(w) * h * 4, 0);
-                Context::commands()->writeTexture(m_gpu, 0, 0, zeros.data(), size_t(w) * 4);
-            }
         }
         if (!m_gpu)
         {
