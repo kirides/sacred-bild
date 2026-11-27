@@ -54,6 +54,30 @@ namespace nvrhi::vulkan
 
     vk::Result VulkanAllocator::allocateBufferMemory(Buffer *buffer, bool enableDeviceAddress) const
     {
+        // sacred-bild: placed resources: GPU-only buffers bound to a block of Vulkan Memory Allocator.
+        if (m_Context.vma && buffer->desc.sharesMemory && buffer->desc.cpuAccess == CpuAccessMode::None && !enableDeviceAddress &&
+            (buffer->desc.sharedResourceFlags & SharedResourceFlags::Shared) == 0)
+        {
+            VmaAllocationCreateInfo createInfo = {};
+            createInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            VmaAllocationInfo info = {};
+            VmaAllocation allocation = nullptr;
+            VkResult vr = vmaAllocateMemoryForBuffer(m_Context.vma, buffer->buffer, &createInfo, &allocation, &info);
+            if (vr == VK_SUCCESS)
+            {
+                vr = vmaBindBufferMemory(m_Context.vma, allocation, buffer->buffer);
+                if (vr != VK_SUCCESS)
+                {
+                    vmaFreeMemory(m_Context.vma, allocation);
+                    return vk::Result(vr);
+                }
+                buffer->managed = true;
+                buffer->placed = allocation;
+                buffer->memory = vk::DeviceMemory(info.deviceMemory);
+                return vk::Result::eSuccess;
+            }
+        }
+
         // figure out memory requirements
         vk::MemoryRequirements memRequirements;
         m_Context.device.getBufferMemoryRequirements(buffer->buffer, &memRequirements);
@@ -70,6 +94,13 @@ namespace nvrhi::vulkan
 
     void VulkanAllocator::freeBufferMemory(Buffer *buffer) const
     {
+        if (buffer->placed)    // sacred-bild: placed resources
+        {
+            vmaFreeMemory(m_Context.vma, buffer->placed);
+            buffer->placed = nullptr;
+            buffer->memory = vk::DeviceMemory(nullptr);
+            return;
+        }
         freeMemory(buffer);
     }
 

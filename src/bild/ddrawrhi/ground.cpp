@@ -34,7 +34,7 @@ namespace DDrawRhi::Ground
         std::scoped_lock lock(Context::lock());
         nvrhi::BufferHandle buffer = Context::device()->createBuffer(nvrhi::BufferDesc().setByteSize(uint64_t(capacity) * kQuadBytes)
             .setIsVertexBuffer(true).setDebugName("ground quads").setInitialState(nvrhi::ResourceStates::VertexBuffer)
-            .setKeepInitialState(true));
+            .setKeepInitialState(true).setSharesMemory(true));     // only written ranges are drawn
         if (!buffer)
         {
             LOG("NVRHI backend: ground: a buffer for {} quads could not be created", capacity);

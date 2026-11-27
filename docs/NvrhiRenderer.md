@@ -417,3 +417,11 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   per format, 1.6-2.3x faster (0.008-0.012 ms against 0.014-0.021 ms for 256x256). A sector change converts ~3 million
   pixels, now ~0.5 ms, so there is little left to win; no AVX-512 path (this test machine has none, so it could not be
   checked, and AVX2 already leaves the conversion near memory speed).
+- 2026-11-27: why D3D12 hitched more than D3D9 on sector changes (31 against 28 ms): breakpoints on the D3DKMT calls
+  during the walk found 63 allocations with a residency wait on the engine thread: the ground and skinned-mesh vertex
+  buffers were still committed resources, and D3D12MA's default pools free a heap as soon as it is empty and start new
+  ones small, so streaming made and dropped heaps all the time. Now `nvrhi::BufferDesc::sharesMemory` (ground quads,
+  skinned meshes, the skinned index arena: only written ranges are drawn) places buffers too (D3D12MA, VMA), and
+  D3D12MA allocates from two pools of fixed-size heaps that stay (textures: 64 MB, four kept; buffers: 16 MB, one
+  kept). 63 heap creations during the walk -> 3; sector-change hitches over 15 ms: D3D9 27.5-27.8 ms, D3D12
+  27.3-27.6 ms. Vulkan (VMA) was already at the same level. Validation clean on both APIs.

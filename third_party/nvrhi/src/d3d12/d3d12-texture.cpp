@@ -379,6 +379,7 @@ namespace nvrhi::d3d12
             // its own); the allocation is the texture's and goes with it.
             D3D12MA::ALLOCATION_DESC allocationDesc = {};
             allocationDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+            allocationDesc.CustomPool = m_Context.texturePool;
             if (m_EnhancedBarriersSupported)
             {
                 hr = m_Context.allocator->CreateResource3(&allocationDesc, &texture->resourceDesc, initialLayout,

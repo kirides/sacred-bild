@@ -22,6 +22,7 @@
 
 
 #include "d3d12-backend.h"
+#include <D3D12MemAlloc.h>     // sacred-bild: placed resources
 #include <nvrhi/utils.h>
 #include <nvrhi/common/misc.h>
 
@@ -144,7 +145,24 @@ namespace nvrhi::d3d12
         }
 
         HRESULT res;
-        if (m_EnhancedBarriersSupported)
+        if (d.sharesMemory && m_Context.allocator && !isShared && buffer->desc.cpuAccess == CpuAccessMode::None)
+        {
+            // sacred-bild: placed in one of D3D12 Memory Allocator's heaps (TextureDesc::sharesMemory).
+            D3D12MA::ALLOCATION_DESC allocationDesc = {};
+            allocationDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+            allocationDesc.CustomPool = m_Context.bufferPool;
+            if (m_EnhancedBarriersSupported)
+            {
+                res = m_Context.allocator->CreateResource3(&allocationDesc, &resourceDesc, D3D12_BARRIER_LAYOUT_UNDEFINED,
+                    nullptr, 0, nullptr, &buffer->placed.allocation, IID_PPV_ARGS(&buffer->resource));
+            }
+            else
+            {
+                res = m_Context.allocator->CreateResource(&allocationDesc, reinterpret_cast<D3D12_RESOURCE_DESC*>(&resourceDesc),
+                    initialState, nullptr, &buffer->placed.allocation, IID_PPV_ARGS(&buffer->resource));
+            }
+        }
+        else if (m_EnhancedBarriersSupported)
         {
             res = m_Context.device10->CreateCommittedResource3(
                 &heapProps,
