@@ -5,6 +5,7 @@
 #include "diag/d3d_stats.h"
 #include "perf/fast_math.h"
 #include "perf/fast_inflate.h"
+#include "perf/read_cache.h"
 #include "perf/file_cache.h"
 #include "diag/file_io_stats.h"
 #include "sacred_addr.h"
@@ -164,6 +165,7 @@ void Sacred::installHooks()
         WorldPasses::install();
         FileIoStats::install();
     }
+    ReadCache::install();       // after FileIoStats: in front of its hooks, which then time only what reaches Windows
     Connection::install(false);
     UdpTransport::install(false);
     Matchmaker::install(false);

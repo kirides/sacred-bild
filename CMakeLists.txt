@@ -156,6 +156,7 @@ set(DDRAW_SOURCES
   src/bild/ddraw9/vertex_buffer.cpp
   src/bild/render/atlas.cpp
   src/bild/perf/fast_inflate.cpp
+  src/bild/perf/read_cache.cpp
   src/bild/render/batcher.cpp
   src/bild/settings/form.cpp
   src/bild/settings/form.rc

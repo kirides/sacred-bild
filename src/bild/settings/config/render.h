@@ -83,6 +83,9 @@ namespace Config
         // The game's zlib uncompress (the textures and maps it unpacks while new areas stream in) through libdeflate,
         // a few times faster with the same output; anything libdeflate refuses goes to the game's zlib as before.
         bool fastInflate = true;
+        // Small reads of the files the game opens read-only (map data while new areas stream in) from 64 KB blocks in
+        // memory instead of a seek and a read system call each (perf/read_cache.h).
+        bool readCache = true;
         // Read the game's pak files and music once in the background so the game's reads during play come from
         // Windows' file cache instead of the drive (~8 ms each from an idle SSD, on the render thread).
         bool warmFileCache = true;

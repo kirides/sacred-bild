@@ -401,3 +401,14 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   game's zlib. 1200 calls checked against zlib's output in a run: identical. Unpacking ~18 -> 6 ms a move; hitches
   60 -> 48-51 ms. D3DStats' hitch lines show the atlas copy and unpacking time. Also: the GPU timer read Vulkan queries
   before the GPU had reset them (validation); it now waits for its job. Validation clean on both APIs.
+- 2026-11-27: streaming, part two. The game's map reads: World\Floor.PAK and MIXED.PAK are read 512 bytes at a time,
+  each after a seek (~8000 system calls per sector change). `[Render] ReadCache` (on, perf/read_cache.cpp): sacred.exe's
+  imports of CreateFileA, ReadFile, SetFilePointer and CloseHandle; for files it opens read-only SacredBild keeps the
+  position and answers reads up to 16 KB from 64 KB blocks (32 MB for all files, least recently used first); larger
+  reads go to Windows from the kept position. Installed after FileIoStats, so D3DStats' file I/O counts what still
+  reaches Windows. 800 000 reads checked against Windows' data in a run: identical. Hitches 48 -> 38 ms, file I/O per
+  move 11.5 -> 4 ms. toBgra8's 16-bit formats eight pixels at a time with SSE2 (the channel widening as exact
+  multiply-shifts of the tables, all 65 536 values checked for each format): 38 -> 35 ms. Altogether a sector change
+  went from 70-80 ms to ~35 ms, and loading save 2 to the world from 7.3 to 4.7 s; steady frames unchanged. Left in a
+  move: libdeflate itself (~20 %), the conversion and upload of the new textures, a CRT lock the game's loader waits on,
+  and driver calls.
