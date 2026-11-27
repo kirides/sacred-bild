@@ -1150,6 +1150,10 @@ namespace DDrawRhi
                 return;
             }
             std::scoped_lock lock(g_lock);
+            // Merged draws still held point at binding sets (raw pointers in the held state) that the forget functions
+            // below destroy for this texture: draw them first, or the flush reads freed sets (a crash when the game
+            // releases its textures while leaving a game, "Beenden").
+            runPending();
             for (auto it = g_framebuffers.begin(); it != g_framebuffers.end();)
             {
                 it = it->first.color == texture || it->first.depth == texture ? g_framebuffers.erase(it) : std::next(it);
