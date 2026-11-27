@@ -173,3 +173,6 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   stage 7, the draw lists: the walk of 0x62FF60 per entry kind (sprites, miniatures, models, effects; ~1,400 lines of
   decompiled code with object virtual calls) replaced by instanced sprites from the lists. That is RE-heavy and changes
   what the world looks like if anything is off, so it waits for a go.
+- 2026-11-27: John on memory: in his experience D3D12 uses less (process) memory than D3D9, since fewer buffers are kept
+  on the CPU side and more stays on the GPU. So the 2 GB address space above is a thing to watch, not a blocker; the
+  backend's own CPU copies (texture copies for Lock, the 32 MB upload ring) are the parts to keep small.
