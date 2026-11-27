@@ -283,3 +283,11 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   DrawPrimitive before the proxy sees the vertices. `[Render] BatchParticles` (on; NVRHI). pfxtest (spells with Gear
   variants: color rules, level conditions, speed, texture swap) passes 8/8 both ways, pictures as before; while casting
   ~270 submitted draws a frame instead of ~335, world 1.40 ms instead of 1.54.
+- 2026-11-27: stage 9, weather. weather::render (ENG 0x4190D0, the light object) draws each rain drop as its own
+  pretransformed 2-vertex line strip (DrawPrimitive type 3), the fog as two quads, sparks as quads. Inside FrameHooks'
+  weather hook the proxy now gathers the drops into one line list, drawn when anything else comes (a state, a texture,
+  another draw, the end of the weather): 600 forced drops took 888 submitted draws a frame, now 290, frame 2.15 ms
+  instead of 2.32 (uncapped, D3D12). Same `[Render] BatchParticles` switch. For tests the environment variable
+  `SACREDBILD_FORCE_WEATHER=flags,drops` (flags hex: 1 rain, 2 fog, 0x10 sparks) forces weather on. Rain looks the same
+  (its drops are random each frame). Day and night light is not a pass of its own: it is the per-corner light the
+  take-over code already gets from the game (0x41B510).

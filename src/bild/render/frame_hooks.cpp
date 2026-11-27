@@ -299,7 +299,37 @@ namespace
             size[0x14 / 4] = static_cast<float>(driver->width);
             size[0x18 / 4] = static_cast<float>(driver->height);
         }
+        // [Debug] SACREDBILD_FORCE_WEATHER=flags,drops (environment, tests): the weather's flags (1 rain, 2 fog, 0x10
+        // sparks) and rain drop count forced on.
+        static const std::pair<uint32_t, int32_t> force = [] {
+            char text[64] = {};
+            uint32_t flags = 0;
+            int32_t drops = 0;
+            if (GetEnvironmentVariableA("SACREDBILD_FORCE_WEATHER", text, sizeof(text)) && sscanf_s(text, "%x,%d", &flags, &drops) >= 1)
+            {
+                LOG("Weather forced: flags {:#x}, {} drops", flags, drops);
+            }
+            return std::make_pair(flags, drops);
+        }();
+        if (force.first)
+        {
+            static_cast<uint32_t*>(self)[0x10 / 4] |= force.first;
+            if (force.second > 0)
+            {
+                static_cast<int32_t*>(self)[0x1C / 4] = force.second;
+            }
+        }
+        DeviceProxy* proxy = DeviceProxy::instance();
+        const bool lines = proxy && device == proxy;
+        if (lines)
+        {
+            proxy->beginLineBatch();
+        }
         g_origWeatherRender(self, edx, device, a, b, c);
+        if (lines)
+        {
+            proxy->endLineBatch();
+        }
     }
 
     bool g_worldDrawn = false;      // the world view was drawn since the last UI render (SMAA)

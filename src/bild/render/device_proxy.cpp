@@ -920,8 +920,43 @@ HRESULT DeviceProxy::SetLight(DWORD index, LPD3DLIGHT7 light)
 
 HRESULT DeviceProxy::GetLight(DWORD index, LPD3DLIGHT7 light) { return m_real->GetLight(index, light); }
 
+void DeviceProxy::beginLineBatch()
+{
+    m_lineBatch = Config::ddraw.nvrhi && Config::render.batchParticles;
+}
+
+void DeviceProxy::endLineBatch()
+{
+    CallLock lock(*this, _ReturnAddress());
+    flushLines();
+    m_lineBatch = false;
+}
+
+void DeviceProxy::flushLines()
+{
+    if (!m_lineVerts)
+    {
+        return;
+    }
+    const DWORD count = m_lineVerts;
+    m_lineVerts = 0;
+    if (batching())
+    {
+        m_batcher->draw(D3DPT_LINELIST, m_linesFvf, m_lines.data(), count, nullptr, 0, 0);
+    }
+    else
+    {
+        m_real->DrawPrimitive(D3DPT_LINELIST, m_linesFvf, m_lines.data(), count, 0);
+    }
+}
+
 HRESULT DeviceProxy::SetRenderState(D3DRENDERSTATETYPE state, DWORD value)
 {
+    if (m_lineVerts)
+    {
+        CallLock lock(*this, _ReturnAddress());
+        flushLines();
+    }
     Scope p{TProxy};
     D3DStats::count(CRenderState);
     D3DStats::onRenderState(state, value);
@@ -982,6 +1017,18 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
     if (quad) D3DStats::count(CDrawQuad);
     D3DStats::onDraw(type, fvf, count, false);
     CallLock lock(*this, _ReturnAddress());
+    // One segment each (a 2-vertex strip or list): appended to one line list.
+    if (m_lineBatch && !m_ui && (type == D3DPT_LINELIST || type == D3DPT_LINESTRIP) && count == 2 && verts && Fvf::pretransformed(fvf) &&
+        (!m_lineVerts || fvf == m_linesFvf) && m_lineVerts < 60000)
+    {
+        const UINT stride = Fvf::stride(fvf);
+        m_lines.resize(size_t(m_lineVerts + count) * stride);
+        std::memcpy(m_lines.data() + size_t(m_lineVerts) * stride, verts, size_t(count) * stride);
+        m_linesFvf = fvf;
+        m_lineVerts += count;
+        return D3D_OK;
+    }
+    flushLines();
     if (batching())
     {
         if (Fvf::pretransformed(fvf))
@@ -1416,6 +1463,7 @@ HRESULT DeviceProxy::SetTexture(DWORD stage, LPDIRECTDRAWSURFACE7 texture)
     Scope p{TProxy};
     D3DStats::count(CSetTexture);
     CallLock lock(*this, _ReturnAddress());
+    flushLines();
     if (stage == 0)
     {
         m_texture0Width = m_texture0Height = 0;     // the pointer may name a new texture of another size
@@ -1455,6 +1503,11 @@ HRESULT DeviceProxy::GetTextureStageState(DWORD stage, D3DTEXTURESTAGESTATETYPE 
 
 HRESULT DeviceProxy::SetTextureStageState(DWORD stage, D3DTEXTURESTAGESTATETYPE type, DWORD value)
 {
+    if (m_lineVerts)
+    {
+        CallLock lock(*this, _ReturnAddress());
+        flushLines();
+    }
     Scope p{TProxy};
     D3DStats::count(CStageState);
     D3DStats::onStageState(stage, type, value);

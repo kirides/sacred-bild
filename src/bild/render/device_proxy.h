@@ -31,6 +31,10 @@ public:
     void endUi();
     // The UI frame changed (UiCanvas::FrameScope) while in UI mode.
     void uiFrameChanged();
+    // The weather's rain (FrameHooks, around weather::render): its drops, one pretransformed 2-vertex line strip each,
+    // are gathered and drawn as one line list when anything else comes (NVRHI backend, [Render] BatchParticles).
+    void beginLineBatch();
+    void endLineBatch();
     bool uiMode() const { return m_ui; }
 
     // Batching scope (see Batcher), around the world view.
@@ -187,6 +191,10 @@ private:
     // into the model batch with an identity world matrix, so a system's particles merge into one draw. False: not one.
     bool drawWorldSpace(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD count, DWORD flags);
     std::vector<uint8_t> m_particle;
+    bool m_lineBatch = false;
+    std::vector<uint8_t> m_lines;
+    DWORD m_linesFvf = 0, m_lineVerts = 0;
+    void flushLines();
     D3DVIEWPORT7 m_savedViewport = {};      // physical viewport before entering UI mode
     D3DVIEWPORT7 m_uiViewport = {};         // viewport as the UI sees it (virtual 1024x768 space)
     DWORD m_filters[2][2] = {{1, 1}, {1, 1}};   // game's MAG/MIN filter for stages 0/1
