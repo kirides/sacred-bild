@@ -651,6 +651,66 @@ void UiQuads::fitTexels(uint8_t* verts, UINT stride, UINT texOffset, float w, fl
     }
 }
 
+bool DeviceProxy::drawWorldSpace(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD count, DWORD flags)
+{
+    // The particle systems' vertices: x y z, reserved, diffuse, specular, u v (D3DLVERTEX), a few per draw, each draw
+    // with its own world matrix (particle_drawSprites: SetTransform + DrawPrimitive per particle).
+    constexpr DWORD kLVertex = D3DFVF_XYZ | D3DFVF_RESERVED1 | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1;
+    constexpr DWORD kOut = D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1;
+    if (!Config::ddraw.nvrhi || !Config::render.batchParticles || fvf != kLVertex || !verts || count == 0 || count > 64 ||
+        (type != D3DPT_TRIANGLELIST && type != D3DPT_TRIANGLESTRIP && type != D3DPT_TRIANGLEFAN))
+    {
+        return false;
+    }
+    // Lit vertices only stand for unlit-rendered ones with lighting off (the particle drawing turns it off).
+    DWORD lighting = TRUE;
+    if (FAILED(m_batcher->getRenderState(D3DRENDERSTATE_LIGHTING, &lighting)) || lighting)
+    {
+        return false;
+    }
+    D3DMATRIX world;
+    if (FAILED(m_batcher->getWorld(&world)))
+    {
+        return false;
+    }
+    struct In
+    {
+        float x, y, z;
+        DWORD reserved, diffuse, specular;
+        float u, v;
+    };
+    struct Out
+    {
+        float x, y, z;
+        DWORD diffuse, specular;
+        float u, v;
+    };
+    static_assert(sizeof(In) == 32 && sizeof(Out) == 28);
+    m_particle.resize(sizeof(Out) * count);
+    const auto* in = static_cast<const In*>(verts);
+    auto* out = reinterpret_cast<Out*>(m_particle.data());
+    for (DWORD i = 0; i < count; ++i)
+    {
+        const float x = in[i].x, y = in[i].y, z = in[i].z;
+        out[i].x = x * world._11 + y * world._21 + z * world._31 + world._41;
+        out[i].y = x * world._12 + y * world._22 + z * world._32 + world._42;
+        out[i].z = x * world._13 + y * world._23 + z * world._33 + world._43;
+        out[i].diffuse = in[i].diffuse;
+        out[i].specular = in[i].specular;
+        out[i].u = in[i].u;
+        out[i].v = in[i].v;
+    }
+    static const D3DMATRIX identity = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    m_batcher->setTransform(D3DTRANSFORMSTATE_WORLD, identity);
+    const bool drawn = m_batcher->drawModel(type, kOut, m_particle.data(), count, nullptr, 0, flags);
+    m_batcher->setTransform(D3DTRANSFORMSTATE_WORLD, world);     // what the game set, as it set it
+    if (drawn)
+    {
+        D3DStats::count(CModelDraw);
+    }
+    return drawn;
+}
+
 HRESULT DeviceProxy::QueryInterface(REFIID riid, LPVOID* ppvObj)
 {
     if (ppvObj && (riid == IID_IDirect3DDevice7 || riid == IID_IUnknown))
@@ -929,6 +989,10 @@ HRESULT DeviceProxy::DrawPrimitive(D3DPRIMITIVETYPE type, DWORD fvf, LPVOID vert
             return m_batcher->draw(type, fvf, verts, count, nullptr, 0, flags);
         }
         if (m_batcher->drawModel(type, fvf, verts, count, nullptr, 0, flags))
+        {
+            return D3D_OK;
+        }
+        if (drawWorldSpace(type, fvf, verts, count, flags))
         {
             return D3D_OK;
         }

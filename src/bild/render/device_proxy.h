@@ -183,6 +183,10 @@ private:
     uint32_t m_foreignCalls = 0;
     DWORD m_foreignReportTick = 0;
     bool m_ui = false;
+    // A lit, unlit-rendered vertex quad (a particle: D3DLVERTEX with lighting off) moved into world space and drawn
+    // into the model batch with an identity world matrix, so a system's particles merge into one draw. False: not one.
+    bool drawWorldSpace(D3DPRIMITIVETYPE type, DWORD fvf, const void* verts, DWORD count, DWORD flags);
+    std::vector<uint8_t> m_particle;
     D3DVIEWPORT7 m_savedViewport = {};      // physical viewport before entering UI mode
     D3DVIEWPORT7 m_uiViewport = {};         // viewport as the UI sees it (virtual 1024x768 space)
     DWORD m_filters[2][2] = {{1, 1}, {1, 1}};   // game's MAG/MIN filter for stages 0/1

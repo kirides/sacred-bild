@@ -275,3 +275,11 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   handoff from the Lua thread to the frame. Checked: mod manager self test 45/45 on D3D12 and Vulkan, both under
   validation, pictures as before; the UI pass in that run averages 0.48 ms against 0.57 (CPU vertices through
   bild_gfx) and 0.60 (Direct3D 7 path).
+- 2026-11-27: stage 9, particles. particle_drawSprites draws each particle as a lit quad (D3DLVERTEX, FVF 0x1E2) with
+  its own world matrix and lighting off, so the batcher drew every one directly. The proxy now moves such quads into
+  world space on the CPU (x y z by the recorded world matrix, the reserved field dropped: lit and unlit vertices draw
+  alike with lighting off) and appends them to the model batch with an identity world matrix, restoring the game's
+  matrix after; a system's particles merge into one draw. Gear's tint keeps working: it recolors in the device's
+  DrawPrimitive before the proxy sees the vertices. `[Render] BatchParticles` (on; NVRHI). pfxtest (spells with Gear
+  variants: color rules, level conditions, speed, texture swap) passes 8/8 both ways, pictures as before; while casting
+  ~270 submitted draws a frame instead of ~335, world 1.40 ms instead of 1.54.
