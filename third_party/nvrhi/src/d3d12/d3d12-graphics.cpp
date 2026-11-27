@@ -409,6 +409,12 @@ namespace nvrhi::d3d12
         if (bindingUpdateMask == 0)
             bindingUpdateMask = arrayDifferenceMask(m_CurrentGraphicsState.bindings, state.bindings);
 
+        // sacred-bild: binding states. A copy or write into a bound texture since the last draw (m_BindingStatesDirty)
+        // must put it back into its shader-resource state even when the bindings are the same; setGraphicsBindings
+        // only applies the states of the sets it updates (the Vulkan backend re-applies them whenever they are dirty).
+        if (m_EnableAutomaticBarriers && m_BindingStatesDirty)
+            bindingUpdateMask = ~0u;
+
         if (updatePipeline)
         {
             bindGraphicsPipeline(pso, updateRootSignature);

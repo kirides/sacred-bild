@@ -1051,7 +1051,10 @@ namespace DDrawRhi
         case D3DCULL_CCW: raster.setCullBack(); break;
         default: raster.setCullNone(); break;
         }
-        raster.setFrontCounterClockwise(false).setDepthClipEnable(true);
+        // The scissor is Direct3D 7's viewport (setup): NVRHI applies it only with scissorEnable, else the draws are
+        // clipped to the NVRHI viewport, which is the whole target for pretransformed vertices (the overview map's
+        // tiles reach far past its window).
+        raster.setFrontCounterClockwise(false).setDepthClipEnable(true).setScissorEnable(true);
         if (m_rs[D3DRENDERSTATE_FILLMODE] == D3DFILL_WIREFRAME)
         {
             raster.setFillWireframe();

@@ -425,3 +425,14 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   D3D12MA allocates from two pools of fixed-size heaps that stay (textures: 64 MB, four kept; buffers: 16 MB, one
   kept). 63 heap creations during the walk -> 3; sector-change hitches over 15 ms: D3D9 27.5-27.8 ms, D3D12
   27.3-27.6 ms. Vulkan (VMA) was already at the same level. Validation clean on both APIs.
+- 2026-11-27: the overview map (Tab) on NVRHI (John: artifacts and flickering pixels). Two causes, found with a test
+  mod that holds Tab and the UI trace: (1) the map draws its 256x256 tiles past its window and relies on the viewport
+  (Direct3D 7 and 9 clip pretransformed draws to it); our pipelines left NVRHI's `scissorEnable` off, so NVRHI used the
+  NVRHI viewport (the whole target for pretransformed vertices) as the scissor and the tiles covered the screen. Now
+  every device pipeline enables the scissor (setup already sets it to the Direct3D 7 viewport). (2) D3D12 only, older
+  than this branch: the map's fog is one 32x32 texture the game rewrites before each of its 16 tiles. NVRHI's D3D12
+  backend re-applies the shader-resource state of a binding set only when the set changes, so after a write or copy
+  into a texture whose bindings stayed the same the next draw sampled it in COPY_DEST (GPU-based validation:
+  "Incompatible texture barrier layout"); random fog and blocks. Vendored NVRHI (`sacred-bild: binding states`,
+  d3d12-graphics.cpp): with `m_BindingStatesDirty` every binding set is updated, as the Vulkan backend does. GPU-based
+  validation clean; the map matches D3D9 on D3D12 and Vulkan.
