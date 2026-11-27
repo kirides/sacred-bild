@@ -153,6 +153,13 @@ namespace DDrawRhi
         void logStageState(DWORD stage, DWORD type, DWORD value);
         // Records a draw: `indices` (null: none) index the vertices of `source`.
         HRESULT draw(D3DPRIMITIVETYPE type, const VertexSource& source, const WORD* indices, DWORD indexCount);
+        // Pretransformed triangles with the same pipeline, bindings, target, viewport and constants as the draw before
+        // are held back and drawn as one (the interface's quads, the sprites the batcher can't merge): the triangles
+        // keep their order, and anything else recorded draws them first (Context::setPendingFlush).
+        bool drawMerged(D3DPRIMITIVETYPE type, const VertexSource& source, const WORD* indices, DWORD indexCount);
+    public:
+        void flushPending();
+    private:
         // Everything but the buffers and the draw call: textures (uploaded), constants, pipeline, framebuffer, viewport
         // and scissor. False if there is nothing to draw into or the pipeline failed.
         bool setup(nvrhi::ICommandList* cmd, DWORD fvf, nvrhi::PrimitiveType prim, nvrhi::GraphicsState& state);
@@ -204,6 +211,16 @@ namespace DDrawRhi
         nvrhi::BufferHandle m_psConstants;
         std::vector<uint8_t> m_scratch;
         std::vector<WORD> m_indexScratch;
+        struct Pending
+        {
+            bool active = false;
+            DWORD fvf = 0, stride = 0;
+            std::vector<uint8_t> vertices;
+            std::vector<WORD> indices;
+            nvrhi::GraphicsState state;     // without buffers
+            uint32_t epoch = 0;
+        };
+        Pending m_pending;
         std::vector<std::unique_ptr<StateBlock>> m_stateBlocks;
         std::unique_ptr<StateBlock> m_recording;
     };

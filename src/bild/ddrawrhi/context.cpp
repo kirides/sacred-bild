@@ -437,9 +437,11 @@ namespace DDrawRhi
                 }
             }
 
+            void runPendingFwd();
             // Hands what is recorded to the render thread; returns the job's serial. Context lock held.
             uint64_t submit(nvrhi::ITexture* present, bool idle)
             {
+                runPendingFwd();
                 Job job;
                 if (g_open)
                 {
@@ -704,7 +706,39 @@ namespace DDrawRhi
             return Rhi::device();
         }
 
+        PendingFn g_pendingFn = nullptr;
+        bool g_inPending = false;
+
+        void runPending()
+        {
+            if (g_pendingFn && !g_inPending)
+            {
+                g_inPending = true;
+                g_pendingFn();
+                g_inPending = false;
+            }
+        }
+
+        void setPendingFlush(PendingFn fn)
+        {
+            g_pendingFn = fn;
+        }
+
+        namespace
+        {
+            void runPendingFwd()
+            {
+                runPending();
+            }
+        }
+
         nvrhi::ICommandList* commands()
+        {
+            runPending();
+            return commandsKeepPending();
+        }
+
+        nvrhi::ICommandList* commandsKeepPending()
         {
             if (!g_open)
             {

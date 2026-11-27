@@ -76,6 +76,7 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | TakeOverStatics | 1 | `Backend=nvrhi`: SacredBild draws the static objects of the world's draw lists (buildings, trees, props) itself instead of the game's code for them. 0 = the game's code, for comparing. |
 | Render | GearGfx | 1 | `Backend=nvrhi`: Sacred Gear's UI is drawn with SacredBild's renderer directly (`bild_gfx.h`) instead of Direct3D 7 calls. 0 = the Direct3D 7 path, for comparing. |
 | Render | BatchParticles | 1 | `Backend=nvrhi`: particles (a world matrix each) are moved into world space and merged into one draw per effect. 0 = one draw per particle, as before. |
+| Render | MergeDraws | 1 | `Backend=nvrhi`: pretransformed draws with the same state as the one before (the interface's quads) are drawn as one. |
 | Debug | RhiValidation | 0 | `Backend=nvrhi`: the API's validation (Direct3D 12 debug layer, Vulkan's `VK_LAYER_KHRONOS_validation`) and NVRHI's, messages in the log; slow. |
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | `Backend=chain`: ddraw loaded behind SacredBild; empty = system ddraw. |
 | DDraw | D3D9 | | `Backend=d3d9`: `d3d9.dll` to use (e.g. DXVK), relative to the game folder or absolute. Empty or not loadable: a `d3d9.dll` next to the exe, then Windows' own. |

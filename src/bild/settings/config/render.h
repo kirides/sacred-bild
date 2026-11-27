@@ -44,6 +44,9 @@ namespace Config
         // [DDraw] Backend=nvrhi: particles (lit quads with lighting off, a world matrix each) moved into world space on
         // the CPU and merged into the model batch: one draw per effect instead of one per particle.
         bool batchParticles = true;
+        // [DDraw] Backend=nvrhi: pretransformed draws with the same state as the one before are drawn as one (the
+        // interface's quads and what the batcher leaves).
+        bool mergeDraws = true;
         // Filtering of the game world's textures: 0 the game's own point sampling, 1 sharp bilinear (crisp texels, soft
         // edges; Direct3D 9 backend, point sampling elsewhere), 2 bilinear (smoother when zoomed in). The interface
         // follows [UI] LinearFilter.

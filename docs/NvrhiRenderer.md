@@ -301,3 +301,12 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   wait is gone (0.00 ms; world 0.95 ms instead of ~1.3 in the field save, 1.52 instead of 1.63 in the park). Without a
   world view (menus, loading) the advance runs when asked. What is left for uncapped frames: posing the skeletons
   (~0.24 ms of the advance) is still one thread (GrannyParallel splits only the control walk).
+- 2026-11-27: stage 10, the game's interface. Its draws reach the device one quad at a time (the proxy maps each into
+  the UI canvas and draws it at once; most are pretransformed quads with the same state as the one before). The floor
+  now merges them: `Device::drawMerged` holds pretransformed triangle draws back while pipeline, bindings, target,
+  viewport and constants stay the same (strips and fans as lists, order kept) and draws them as one; anything else that
+  records (Context::commands, through a pending-flush callback), a state change that rewrites the constants, presenting
+  or executing draws them first. `[Render] MergeDraws` (on). UI pass 0.23 -> 0.19 ms in the field save, 0.50 -> 0.45 ms
+  with the mod manager open; frame 1.75 -> 1.65 ms uncapped; pictures as before (the escape menu and every mod manager
+  screen identical), Vulkan validation clean. The glyph pages of the game's fonts stay GDI surfaces drawn into and
+  uploaded as the game makes them; with the draws merged there was little left to win there.

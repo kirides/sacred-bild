@@ -37,6 +37,12 @@ namespace DDrawRhi
         nvrhi::IDevice* device();
         // The frame's command list, open. Lock held.
         nvrhi::ICommandList* commands();
+        // The same without drawing what a device holds back first (Device's merged draws: only for that). Lock held.
+        nvrhi::ICommandList* commandsKeepPending();
+        // Draws what a device holds back (merged pretransformed draws): called before anything else is recorded, the
+        // frame is executed or shown. One at a time.
+        using PendingFn = void (*)();
+        void setPendingFlush(PendingFn fn);
         // Counts the command list's openings: volatile constant buffers must be written again in a new one.
         uint32_t epoch();
         // Executes what is recorded; with `wait`, also waits until the GPU is idle (read-backs). Lock held.

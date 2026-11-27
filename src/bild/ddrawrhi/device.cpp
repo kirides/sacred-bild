@@ -1,4 +1,5 @@
 #include "ddrawrhi/device.h"
+#include "settings/config/render.h"
 #include "ddrawrhi/context.h"
 #include "ddrawrhi/directdraw.h"
 #include "ddrawrhi/surface.h"
@@ -578,6 +579,7 @@ namespace DDrawRhi
     {
         {
             std::scoped_lock lock(m_lock);
+            flushPending();
             if (g_shared)
             {
                 auto& sets = g_shared->bindingSets;
@@ -1086,12 +1088,169 @@ namespace DDrawRhi
         return set;
     }
 
+    namespace
+    {
+        Device* g_pendingDevice = nullptr;
+
+        void flushPendingDevice()
+        {
+            if (g_pendingDevice)
+            {
+                g_pendingDevice->flushPending();
+            }
+        }
+
+        bool sameState(const nvrhi::GraphicsState& a, const nvrhi::GraphicsState& b)
+        {
+            if (a.pipeline != b.pipeline || a.framebuffer != b.framebuffer || a.bindings.size() != b.bindings.size() ||
+                a.viewport.viewports.size() != b.viewport.viewports.size() || a.viewport.scissorRects.size() != b.viewport.scissorRects.size())
+            {
+                return false;
+            }
+            for (size_t i = 0; i < a.bindings.size(); ++i)
+            {
+                if (a.bindings[i] != b.bindings[i])
+                {
+                    return false;
+                }
+            }
+            for (size_t i = 0; i < a.viewport.viewports.size(); ++i)
+            {
+                if (a.viewport.viewports[i] != b.viewport.viewports[i])
+                {
+                    return false;
+                }
+            }
+            for (size_t i = 0; i < a.viewport.scissorRects.size(); ++i)
+            {
+                if (a.viewport.scissorRects[i] != b.viewport.scissorRects[i])
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    void Device::flushPending()
+    {
+        if (!m_pending.active)
+        {
+            return;
+        }
+        m_pending.active = false;
+        if (g_pendingDevice == this)
+        {
+            g_pendingDevice = nullptr;
+        }
+        nvrhi::ICommandList* cmd = Context::commandsKeepPending();
+        Context::Upload vertices{}, idx{};
+        const uint32_t vertexBytes = static_cast<uint32_t>(m_pending.vertices.size());
+        const uint32_t indexBytes = static_cast<uint32_t>((m_pending.indices.size() * sizeof(WORD) + 3) & ~size_t(3));
+        if (m_pending.epoch == Context::epoch() && Context::upload(vertexBytes, vertices) && Context::upload(indexBytes, idx))
+        {
+            std::memcpy(vertices.data, m_pending.vertices.data(), vertexBytes);
+            std::memcpy(idx.data, m_pending.indices.data(), m_pending.indices.size() * sizeof(WORD));
+            nvrhi::GraphicsState state = m_pending.state;
+            state.vertexBuffers = {
+                nvrhi::VertexBufferBinding().setBuffer(vertices.buffer).setSlot(0).setOffset(vertices.offset),
+                nvrhi::VertexBufferBinding().setBuffer(Context::vertexDefaults()).setSlot(1).setOffset(0),
+            };
+            state.indexBuffer = nvrhi::IndexBufferBinding().setBuffer(idx.buffer).setFormat(nvrhi::Format::R16_UINT).setOffset(idx.offset);
+            cmd->setGraphicsState(state);
+            cmd->drawIndexed(nvrhi::DrawArguments().setVertexCount(static_cast<uint32_t>(m_pending.indices.size())));
+        }
+        m_pending.vertices.clear();
+        m_pending.indices.clear();
+    }
+
+    bool Device::drawMerged(D3DPRIMITIVETYPE type, const VertexSource& source, const WORD* indices, DWORD indexCount)
+    {
+        const DWORD n = indices ? indexCount : source.count;
+        if (!Config::render.mergeDraws || !Fvf::pretransformed(source.fvf) || skinKey(source.fvf) || source.fvf == kGroundFvf ||
+            (type != D3DPT_TRIANGLELIST && type != D3DPT_TRIANGLESTRIP && type != D3DPT_TRIANGLEFAN) || n < 3 || source.count > 4096)
+        {
+            return false;
+        }
+        // Constants about to be written again, or another device's draws held: those go first.
+        if (Context::epoch() != m_epoch || m_vsDirty || m_psDirty || (g_pendingDevice && g_pendingDevice != this))
+        {
+            flushPendingDevice();
+        }
+        if (Context::epoch() != m_epoch)
+        {
+            m_epoch = Context::epoch();
+            m_vsDirty = m_psDirty = true;
+        }
+        // Texture uploads in bindings() go through Context::commands(), which draws what is held first.
+        nvrhi::GraphicsState state;
+        if (!setup(Context::commandsKeepPending(), source.fvf, nvrhi::PrimitiveType::TriangleList, state))
+        {
+            return true;
+        }
+        if (m_pending.active && (m_pending.fvf != source.fvf || m_pending.stride != source.stride ||
+            m_pending.epoch != Context::epoch() || !sameState(m_pending.state, state) ||
+            m_pending.vertices.size() / source.stride + source.count > 0xFFFF))
+        {
+            flushPending();
+        }
+        if (!m_pending.active)
+        {
+            m_pending.active = true;
+            m_pending.fvf = source.fvf;
+            m_pending.stride = source.stride;
+            m_pending.state = state;
+            m_pending.epoch = Context::epoch();
+            g_pendingDevice = this;
+            Context::setPendingFlush(&flushPendingDevice);
+        }
+        const size_t base = m_pending.vertices.size() / source.stride;
+        const size_t bytes = size_t(source.count) * source.stride;
+        m_pending.vertices.insert(m_pending.vertices.end(), static_cast<const uint8_t*>(source.data),
+            static_cast<const uint8_t*>(source.data) + bytes);
+        const auto at = [&](DWORD i) { return static_cast<WORD>(base + (indices ? indices[i] : i)); };
+        if (type == D3DPT_TRIANGLELIST)
+        {
+            for (DWORD i = 0; i + 2 < n + 0 && i + 2 < n; i += 3)
+            {
+                m_pending.indices.push_back(at(i));
+                m_pending.indices.push_back(at(i + 1));
+                m_pending.indices.push_back(at(i + 2));
+            }
+        }
+        else if (type == D3DPT_TRIANGLESTRIP)
+        {
+            // Odd triangles turned, as Direct3D keeps a strip's winding.
+            for (DWORD i = 0; i + 2 < n; ++i)
+            {
+                m_pending.indices.push_back(at(i % 2 ? i + 1 : i));
+                m_pending.indices.push_back(at(i % 2 ? i : i + 1));
+                m_pending.indices.push_back(at(i + 2));
+            }
+        }
+        else
+        {
+            for (DWORD i = 1; i + 1 < n; ++i)
+            {
+                m_pending.indices.push_back(at(0));
+                m_pending.indices.push_back(at(i));
+                m_pending.indices.push_back(at(i + 1));
+            }
+        }
+        return true;
+    }
+
     HRESULT Device::draw(D3DPRIMITIVETYPE type, const VertexSource& source, const WORD* indices, DWORD indexCount)
     {
         if (!m_target || !source.count || !source.stride)
         {
             return D3D_OK;
         }
+        if (drawMerged(type, source, indices, indexCount))
+        {
+            return D3D_OK;
+        }
+        flushPendingDevice();
         if ((source.fvf & D3DFVF_POSITION_MASK) >= D3DFVF_XYZB1 && (source.fvf & D3DFVF_POSITION_MASK) <= D3DFVF_XYZB5)
         {
             unsupported("vertex blending weights in the vertex format (ignored)");
