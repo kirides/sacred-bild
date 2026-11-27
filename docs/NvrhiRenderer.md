@@ -165,3 +165,11 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
 - 2026-11-27: SMAA on NVRHI (457c42c): the reference shader in shader model 6 with SMAA's custom-language macros, applied
   where the Direct3D 9 one is (after the world, before the interface). Blends in gamma space; 0.5 % of the pixels differ
   from Direct3D 9's SMAA (which blends in linear light where it can).
+- 2026-11-27: settings window offers the NVRHI renderer (it showed and saved `Backend=nvrhi` as chain before), its API
+  and world supersampling (e80d984). Where the world's time goes now on NVRHI (test copy, `[Debug] D3DStats` passes,
+  1600x900): objects2 (the five draw lists, 0x62FF60) 0.95 ms of the 1.3 ms world view (about 0.7 ms of it the game's
+  own code building ~445 sprite and model draws, merged to ~100), models 0.20, the row walk 0.11, ground and layers
+  0.03 (GroundMesh), water 0. So stage 6 (ground) is in effect done by GroundMesh, and the next take-over with a gain is
+  stage 7, the draw lists: the walk of 0x62FF60 per entry kind (sprites, miniatures, models, effects; ~1,400 lines of
+  decompiled code with object virtual calls) replaced by instanced sprites from the lists. That is RE-heavy and changes
+  what the world looks like if anything is off, so it waits for a go.
