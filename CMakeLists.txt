@@ -68,6 +68,15 @@ function(sort_sources_by_size_desc var)
   set(${var} ${sized} ${rest} PARENT_SCOPE)
 endfunction()
 
+# The NVRHI device and swap chain ([DDraw] Backend=nvrhi, docs/NvrhiRenderer.md); also built into tools/test/rhitest.
+set(RHI_SOURCES
+  src/bild/rhi/rhi.cpp
+  src/bild/rhi/rhi_d3d12.cpp
+  src/bild/rhi/rhi_vulkan.cpp
+)
+# Direct3D 12 and Vulkan headers stay in these two files, away from the Direct3D 7 / 9 headers of the precompiled header.
+set_source_files_properties(src/bild/rhi/rhi_d3d12.cpp src/bild/rhi/rhi_vulkan.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+
 set(DDRAW_SOURCES
   src/bild/main.cpp
   src/bild/proxy.cpp
@@ -147,6 +156,7 @@ set(DDRAW_SOURCES
   src/bild/net/udp_transport.cpp
   src/bild/exports.def
   src/bild/version.rc
+  ${RHI_SOURCES}
 )
 sort_sources_by_size_desc(DDRAW_SOURCES)
 # Version resources: version_info.h comes from the version files plus the git short sha (and -dirty), regenerated on every
@@ -164,7 +174,7 @@ target_include_directories(ddraw PRIVATE ${VERSION_INFO_DIR})
 target_include_directories(ddraw PRIVATE src/bild ${DETOURS_INCLUDE_DIRS})
 # The resource script embeds the button prompts' atlas (tools/re/gen_prompts.py).
 set_source_files_properties(src/bild/version.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/bild/controller/prompts.png;${VERSION_INFO_DIR}/version_info.h")
-target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 nvrhi nvrhi_d3d12 nvrhi_vk dxgi delayimp)
+target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 nvrhi_all delayimp)
 target_compile_options(ddraw PRIVATE ${COMMON_OPTIONS})
 target_precompile_headers(ddraw PRIVATE src/bild/pch.h)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.
@@ -302,6 +312,16 @@ if(SACREDBILD_NETTEST)
   target_compile_definitions(nettest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
   target_compile_options(nettest PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus /EHsc /MP)
   target_precompile_headers(nettest PRIVATE src/bild/pch.h)
+endif()
+
+# Test bench for src/bild/rhi outside the game: device, swap chain, clears and a resize on Direct3D 12 or Vulkan.
+option(SACREDBILD_RHITEST "Build tools/test/rhitest" ON)
+if(SACREDBILD_RHITEST)
+  add_executable(rhitest tools/test/rhitest/rhitest.cpp ${RHI_SOURCES})
+  target_include_directories(rhitest PRIVATE src/bild)
+  target_link_libraries(rhitest PRIVATE sacred_core nvrhi_all delayimp)
+  target_compile_options(rhitest PRIVATE ${COMMON_OPTIONS})
+  target_link_options(rhitest PRIVATE /DELAYLOAD:d3d12.dll /DELAYLOAD:dxgi.dll)
 endif()
 
 # The UI sandbox (docs/Sandbox.md): Sacred Gear's Lua host, RmlUi host and UI replay outside the game, on SacredBild's DirectDraw /

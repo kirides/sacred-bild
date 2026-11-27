@@ -131,3 +131,12 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
 
 - 2026-11-27: NVRHI pinned commit checked on x86 (table above). Plan written.
 - 2026-11-27: John: Vulkan works in 32-bit (DXVK), get it going now. Vulkan backend fixed for x86; both APIs from stage 2 on.
+- 2026-11-27: stage 1 done (vendored, linked, delay-loaded). Stage 2 core done: `src/bild/rhi/` (device, swap chain, frame
+  pacing by event queries, resize) for both APIs, `tools/re/gen_rhi_shaders.py` (DXIL signed by the Windows SDK's dxc,
+  SPIR-V by the Vulkan SDK's), `tools/test/rhitest` (window, clears, a textured triangle through a constant buffer, texture
+  and sampler, a resize, a read-back screenshot). On a RX 7900 XTX in 32-bit: both APIs run clean under their validation
+  (D3D12 debug layer; Vulkan with a 32-bit VK_LAYER_KHRONOS_validation via `VK_ADD_LAYER_PATH`, the SDK ships only 64-bit),
+  and their screenshots are pixel-identical. The debug layer caught swap chain images released while their presents were
+  still queued on resize (NVRHI's waitForIdle does not cover presents): the D3D12 side flushes its queue with a fence first.
+  Still to do for stage 2: `[DDraw] Backend=nvrhi`, `[Render] Api`, `[Debug] RhiValidation` in the ini (with stage 3, which
+  is what the game needs to run on it).

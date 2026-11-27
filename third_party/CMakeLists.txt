@@ -35,3 +35,7 @@ foreach(t nvrhi nvrhi_d3d12 nvrhi_vk DirectX-Guids)
   target_compile_options(${t} PRIVATE /W0 /utf-8)
   set_target_properties(${t} PROPERTIES FOLDER "third_party")
 endforeach()
+
+# What src/bild/rhi links: NVRHI's libraries and the API headers its backends' public headers include.
+add_library(nvrhi_all INTERFACE)
+target_link_libraries(nvrhi_all INTERFACE nvrhi nvrhi_d3d12 nvrhi_vk Vulkan-Headers DirectX-Headers dxgi)
