@@ -145,6 +145,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"cWorldView_drawTileLayers", "83 EC 28 53 56 57 8B F9 E8 ?? ?? ?? ?? 8B F0 8B 87 1C FF 03 00", 0, Sig::Take::Match, &Sacred::Addr::cWorldView_drawTileLayers}, // 0062D3C0, 0062D530, 0062D530
     {"tileRowGroundQuad", "D9 05 ?? ?? ?? ?? D8 B5 60 0B 00 00 8B 45 04 8B 11", 0, Sig::Take::Match, &Sacred::Addr::tileRowGroundQuad}, // 0062B103, 0062B273, 0062B273
     {"objects2StaticSprite", "8B 4B 04 51 8B 4E 04 E8 ?? ?? ?? ?? 89 44 24 1C", 0, Sig::Take::Match, &Sacred::Addr::objects2StaticSprite}, // 00630217, 00630387, 00630387
+    {"objects1StaticSprite", "8B 45 04 8B 4E 04 50 E8 ?? ?? ?? ?? 89 44 24 24", 0, Sig::Take::Match, &Sacred::Addr::objects1StaticSprite}, // 0062E602, 0062E772, 0062E772
     {"tileRowAfterGround", "F6 84 24 90 00 00 00 10 0F 84 ?? ?? ?? ?? 8B 44 24 64", 0, Sig::Take::Match, &Sacred::Addr::tileRowAfterGround}, // 0062B7FF, 0062B96F, 0062B96F
     {"cQuadBatcher_flush", "56 8B F1 8B 86 10 59 00 00 85 C0 0F 84 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::cQuadBatcher_flush}, // 00629340, 00629420, 00629420
     {"cQuadBatcher_add", "53 8B D9 56 81 BB 14 59 00 00 52 02 00 00", 0, Sig::Take::Match, &Sacred::Addr::cQuadBatcher_add}, // 00629180, 00629260, 00629260

@@ -216,3 +216,9 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   and drawn through SacredBild's batcher. Checked on the five saves (all draw shadows): unchanged. What is left of
   objects2: kind 4 (0x419860 is an empty function), kind 0x20 (Granny helpers through 0x401660: stage 8) and kind 0, the
   game objects (creatures, 3D objects, effects, frozen objects; cCreature_render and friends: stages 8 and 9).
+- 2026-11-27: stage 7, the first object pass (0x62E410, the list at 0xAD7848 that the row walk fills with the liquid
+  cells' and other kind-2 entries): its static-object and miniature branches are the same code as objects2's,
+  instruction for instruction, with other registers and frame slots (lit flag at +0x17, light at +0x3C), so the same
+  functions draw them, from two more jumps (Addr::objects1StaticSprite, ENG 0x62E602, and +0x805). In the park save
+  that list holds the lily pads and leaves on the water (square miniatures of three textures). Pictures unchanged on the
+  five saves (the portals' moving destination view differs between any two runs).

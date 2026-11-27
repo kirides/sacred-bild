@@ -215,6 +215,14 @@ namespace
         }
     }
 
+    // Where a pass keeps, in its stack frame, whether statics are lit and the light object.
+    struct Locals
+    {
+        uint32_t lit, light;
+    };
+    constexpr Locals kObjects2 = {0x1B, 0x34};   // objects2 (0x62FF60)
+    constexpr Locals kObjects1 = {0x17, 0x3C};   // the first object pass (0x62E410)
+
     struct Entry
     {
         uint32_t kind;
@@ -223,7 +231,7 @@ namespace
     };
 
     // The entry as the game draws it; false: not this device (the game's code runs).
-    bool draw(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame)
+    bool draw(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame, const Locals& at)
     {
         DeviceProxy* proxy = DeviceProxy::instance();
         if (!proxy || device != proxy)
@@ -245,7 +253,7 @@ namespace
             std::memcpy(&y, &entry->y, 4);
             g.footprint(view, device, desc, x, y);
         }
-        void* light = *reinterpret_cast<void* const*>(frame + 0x34);
+        void* light = *reinterpret_cast<void* const*>(frame + at.light);
         if (descFlags & 0x20000)
         {
             g.recordLight(light, *reinterpret_cast<const int32_t*>(record + 0xE), *reinterpret_cast<const int32_t*>(record + 0x12),
@@ -304,7 +312,7 @@ namespace
         const float halfW = **g.halfW, halfH = **g.halfH, w = **g.width, h = **g.height, zero = *g.zero;
         const float cx = (entry->x - halfW) / z + halfW;
         const float cy = (entry->y - halfH) / z + halfH;
-        const bool lit = frame[0x1B] != 0;
+        const bool lit = frame[at.lit] != 0;
         const uint32_t count = *quadSet;
         const float* q = quads + 4;     // the game's pointer: 0x10 into the 36-byte record
         uint32_t texture = 0;
@@ -405,7 +413,90 @@ namespace
 
     bool __cdecl drawEntry(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame)
     {
-        return draw(view, entry, device, flags, frame);
+        return draw(view, entry, device, flags, frame, kObjects2);
+    }
+
+    bool drawMiniature(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame, const Locals& at);
+
+    bool __cdecl drawEntry1(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame)
+    {
+        return draw(view, entry, device, flags, frame, kObjects1);
+    }
+
+    bool __cdecl drawMiniatureEntry1(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame)
+    {
+        return drawMiniature(view, entry, device, flags, frame, kObjects1);
+    }
+
+    uintptr_t g_continue1 = 0, g_resume1 = 0, g_resume1Mini = 0;
+
+    // The first object pass: esi the view, ebp the entry, edi the device, ebx the render flags.
+    __declspec(naked) void stub1()
+    {
+        __asm
+        {
+            pushad
+            lea eax, [esp + 32]
+            push eax
+            push ebx
+            push edi
+            push ebp
+            push esi
+            call drawEntry1
+            add esp, 20
+            test al, al
+            popad
+            jne done
+            mov eax, dword ptr [ebp + 4]
+            mov ecx, dword ptr [esi + 4]
+            push eax
+            jmp dword ptr [g_resume1]
+        done:
+            jmp dword ptr [g_continue1]
+        }
+    }
+
+    __declspec(naked) void stub1Mini()
+    {
+        __asm
+        {
+            pushad
+            lea eax, [esp + 32]
+            push eax
+            push ebx
+            push edi
+            push ebp
+            push esi
+            call drawMiniatureEntry1
+            add esp, 20
+            test al, al
+            popad
+            jne done
+            mov ecx, dword ptr [ebp + 4]
+            push ecx
+            mov ecx, dword ptr [esi + 4]
+            jmp dword ptr [g_resume1Mini]
+        done:
+            jmp dword ptr [g_continue1]
+        }
+    }
+
+    // The first object pass's static objects and miniatures: the same code as objects2's (instruction for instruction,
+    // other registers and frame slots), at Addr::objects1StaticSprite and +0x805.
+    bool resolvePass1(uintptr_t s)
+    {
+        if (!Patch::verify(s, {0x8B, 0x45, 0x04, 0x8B, 0x4E, 0x04, 0x50, 0xE8}) || !Patch::verify(s + 0x015, {0x0F, 0x84}) ||
+            !Patch::verify(s + 0x805, {0x8B, 0x4D, 0x04, 0x51, 0x8B, 0x4E, 0x04, 0xE8}) ||
+            callAddr(s + 0x007) != reinterpret_cast<uintptr_t>(g.staticObject) ||
+            callAddr(s + 0x80C) != reinterpret_cast<uintptr_t>(g.staticObject))
+        {
+            LOG("World statics: the first object pass's code is not the expected one; the game draws its static objects");
+            return false;
+        }
+        g_continue1 = s + 0x015 + 6 + *reinterpret_cast<const int32_t*>(s + 0x017);
+        g_resume1 = s + 0x007;
+        g_resume1Mini = s + 0x80C;
+        return true;
     }
 
     // At the site: esi the view, ebx the entry, edi the render flags, [ebp + 8] the device; the function's frame at esp.
@@ -438,7 +529,7 @@ namespace
     // of it (+0x2E, +0x2F the corner, +0x30 the size) or a cell of a grid of +0x2E x +0x2F cells animated over time
     // (record flag 0x40; +0x30 the rotation in steps, +0x31 / +0x32 the speed), lit per corner, and a glow over it
     // where the view lights statics and the descriptor has a light of its own.
-    bool drawMiniature(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame)
+    bool drawMiniature(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame, const Locals& at)
     {
         DeviceProxy* proxy = DeviceProxy::instance();
         if (!proxy || device != proxy)
@@ -456,7 +547,7 @@ namespace
         const float cx = (entry->x - halfW) / z + halfW;
         const float cy = (entry->y - halfH) / z + halfH;
         const float texel = *g.texel;
-        void* light = *reinterpret_cast<void* const*>(frame + 0x34);
+        void* light = *reinterpret_cast<void* const*>(frame + at.light);
         const int32_t recordX = *reinterpret_cast<const int32_t*>(record + 0xE);
         const int32_t recordY = *reinterpret_cast<const int32_t*>(record + 0x12);
         float corner[4][2] = {};
@@ -533,7 +624,7 @@ namespace
         v[1].u = u1; v[1].v = v0;
         v[2].u = u0; v[2].v = v1;
         v[3].u = u1; v[3].v = v1;
-        const bool lit = frame[0x1B] != 0;
+        const bool lit = frame[at.lit] != 0;
         for (int i = 0; i < 4; ++i)
         {
             if (!(descFlags & 0x20000) && lit)
@@ -597,7 +688,7 @@ namespace
 
     bool __cdecl drawMiniatureEntry(uint8_t* view, const Entry* entry, IDirect3DDevice7* device, void* flags, const uint8_t* frame)
     {
-        return drawMiniature(view, entry, device, flags, frame);
+        return drawMiniature(view, entry, device, flags, frame, kObjects2);
     }
 
     __declspec(naked) void stub2()
@@ -832,6 +923,11 @@ void WorldStatics::install()
         {
             LOG("World statics: SacredBild draws the blob shadows of static objects");
         }
+    }
+    if (Addr::objects1StaticSprite && resolvePass1(Addr::objects1StaticSprite) && jump(Addr::objects1StaticSprite, &stub1) &&
+        jump(Addr::objects1StaticSprite + 0x805, &stub1Mini))
+    {
+        LOG("World statics: SacredBild draws the first object pass's static objects and miniatures");
     }
     if (jump(s, &stub) && jump(s + 0x820, &stub2))
     {
