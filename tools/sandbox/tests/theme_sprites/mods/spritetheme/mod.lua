@@ -1,0 +1,1 @@
+return {id = 'spritetheme', name = 'Sprite theme (test)', version = '0.1.0', author = 'test', description = 'A tiny theme with a separate sprite sheet', theme = 'theme.rcss', theme_dp = 'theme-dp.rcss', theme_sprites = 'sprites.rcss', theme_sprites_dp = 'sprites-dp.rcss'}

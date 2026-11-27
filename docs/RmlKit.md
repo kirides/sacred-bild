@@ -37,6 +37,14 @@ While that mod runs, documents of other mods name the files as `@mod-id/path`: `
 `<link type="text/rcss" href="@lib/styles/panel.rcss"/>`, `src="@lib/images/a.png"`, `rml.load_font('@lib/fonts/x.ttf')`. Nothing else of that mod is
 reachable and no path leaves its folder. Use `requires` in the user mod so the library runs first (`src/gear/examples/rmlshare-lib`, `rmlshare`).
 
+The theme mod uses this itself: sacred-theme exports `templates/` (`sacred-screen`, a window as a body template; `sacred-group`, a framed section; `sacred-dropdown`, the game's
+drop-down and its list). A template takes only content and the data model, no attributes, so what a mod has to set on its own element (`data-panel`, ids) stays in its markup.
+The text of a template file is searched for tags as plain text: a comment there must not contain the angle-bracket form of `head`, `body`, `template`, nor a slash followed by `template`.
+
+**A big stylesheet costs memory in every document.** RmlUi keeps its own copy of every rule per document that links the sheet. The theme therefore keeps the `.sprite-N` classes (a
+rule per game picture, nine tenths of its rules) in a second sheet (`theme_sprites` / `theme_sprites_dp` in its `mod.lua`) that Gear links only into documents whose markup mentions
+`sprite-` (or that load with `{sprites = true}`; `{sprites = false}` never). A class that Lua adds later, with the name nowhere in the markup, needs `sprites = true`.
+
 ## On-screen keyboard
 
 `gear.kit.osk{layout = 'qwertz'}` makes a keyboard for text a controller player has to type (a search, a name, an amount): a small window of its own at the bottom of the
