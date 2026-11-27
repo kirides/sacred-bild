@@ -160,6 +160,18 @@ namespace LuaNative
         return 1;
     }
 
+    // native.party_pickup(id, item) -> true | nil, message
+    int nativePartyPickup(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Party::pickup(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.party_abilities(id) -> {{id, level, bonus, regen, regen_max}, ...} | nil
     int nativePartyAbilities(lua_State* L)
     {
@@ -808,6 +820,7 @@ namespace LuaNative
             {"party_dismiss", nativePartyDismiss},
             {"party_control", nativePartyControl},
             {"party_order", nativePartyOrder},
+            {"party_pickup", nativePartyPickup},
             {"party_abilities", nativePartyAbilities},
             {"party_combos", nativePartyCombos},
             {"party_set_combo", nativePartySetCombo},

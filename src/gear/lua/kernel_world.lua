@@ -1001,6 +1001,7 @@ do
     function creature_mt:gait(value)
         return native.gait(self.id, value)
     end
+    function creature_mt:pickup(item) return native.party_pickup(self.id, type(item) == 'table' and item.id or item) end
     function creature_mt:order_stop() return native.party_order(self.id, 'stop') end
     function creature_mt:order_attack(target)
         local id = type(target) == 'table' and target.id or target

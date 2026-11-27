@@ -203,6 +203,30 @@ gear.task(function()
         check('a mercenary has an action', m:action() ~= nil)
     end
 
+    -- Pickups of a companion land in its backpack, also after the inventory window was open while control changed hands
+    -- (the window's mark on the hero's container moves with control; left behind it sent pickups to the cursor's hand and the items vanished).
+    do
+        local function pickup_into(hero, label)
+            local x, y, layer = hero:position()
+            local item = gear.world.spawn(5169, x - 60, y, {layer = layer})
+            gear.wait(0.5)
+            local c = gear.inv.container(hero.id)
+            local before = c and #c:items() or -1
+            local ok, why = hero:pickup(item)
+            gear.wait(1)
+            check(label, ok and c and #c:items() == before + 1, tostring(why) .. ' ' .. before .. ' -> ' .. (c and #c:items() or -1))
+        end
+        local lead = gear.world.object(1)
+        local other = party.companions()[1] or lead
+        party.control(lead) gear.wait(1)
+        A.press(0x49) gear.wait(1.5)            -- the inventory window opens for the leader
+        party.control(other) gear.wait(1)       -- control moves with the window open
+        A.press(0x49) gear.wait(1.5)            -- and it closes
+        pickup_into(other, 'a companion picks up into its own backpack after the window was open at the switch')
+        party.control(lead) gear.wait(1)
+        pickup_into(lead, 'the leader picks up into the backpack afterwards')
+    end
+
     -- Back to the main hero (id 1) and dismiss the companion.
     local first = gear.world.object(1)
     check('control the main hero', first ~= nil and party.control(first))
