@@ -357,6 +357,17 @@ function inv.remove(container, item_id)
     return bytes
 end
 
+-- inv.define_type(type, base, name_text) -> true | nil, message: an item type of Gear's own (ids INV_TYPE_FIRST..INV_TYPE_LAST) that is a copy of
+-- the type record of `base`, named by the text id `name_text` (gear.text.key / add; 0: the base's name). Looks and works like the base item.
+inv.TYPE_FIRST, inv.TYPE_LAST = 16000, 16999
+function inv.define_type(type_id, base, name_text)
+    assert(type(type_id) == 'number' and type(base) == 'number', 'define_type wants an item type and a base type')
+    if type_id < inv.TYPE_FIRST or type_id > inv.TYPE_LAST then
+        return nil, ('item types of a mod are %d to %d'):format(inv.TYPE_FIRST, inv.TYPE_LAST)
+    end
+    return native.item_define_type(type_id, base, 0, name_text or 0)
+end
+
 -- inv.hex(bytes) -> text, inv.unhex(text) -> bytes | nil: for keeping the bytes in JSON.
 function inv.hex(bytes)
     return (bytes:gsub('.', function(c) return string.format('%02x', c:byte()) end))

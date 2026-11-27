@@ -1886,6 +1886,14 @@ Orders a party hero to stop. In single player this also works on any other creat
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:pickup(item) -> boolean?, string?`
+
+A party hero picks up the world item `item` (an id or a table with `id`) at once, as the game's click and collect behaviour do when they arrive: no walking, the item may be anywhere. Single player.
+
+- `item`: `integer|GearItem`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:order_attack(target) -> boolean?, string?`
 
 Orders a party hero to attack `target` with its weapon (it walks there first), as a click on an enemy does. In single player (`gear.world.can_change()`) this also works on any other creature, a monster for example: it attacks `target` as a script's order would make it (a creature made by `gear.world.spawn` does not notice heroes on its own, see the spawn-rate mod).
@@ -3796,6 +3804,16 @@ Whether the local hero's inventory may be changed now, and whether a network gam
 
 - returns `allowed` `boolean`
 - returns `network` `boolean`
+
+#### `gear.inv.define_type(type, base, name_text) -> boolean?, string?`
+
+Defines an item type of Gear's own, `type` (16000 to 16999, free in the game's type table): a copy of the type record of `base` (any item type, e.g. a potion or a rune) with the name text `name_text` (`gear.text.key` / `gear.text.add`; 0 keeps the base's name). The item looks and works like the base item (a potion: its model and size; drinking it goes to the `item.use` event), and is a plain unknown item in a game without Sacred Gear. Define it every time the mod starts, before a savegame loads: a savegame keeps the id. Spawn it with `gear.world.spawn(type, x, y)`.
+
+- `type`: `integer`
+- `base`: `integer`
+- `name_text`: `integer` (optional) - Default 0.
+- returns `ok` `boolean?`
+- returns `error` `string?`
 
 #### `gear.inv.size(item_id) -> integer?, integer?`
 
