@@ -77,6 +77,7 @@ namespace Rhi::Detail
             {
                 m_vsync = settings.vsync;
                 m_usePipelineCache = settings.pipelineCache;
+                m_placedResources = settings.placedResources;
                 HMODULE lib = LoadLibraryW(L"vulkan-1.dll");
                 if (!lib)
                 {
@@ -329,6 +330,7 @@ namespace Rhi::Detail
                 }
                 nvrhi::vulkan::DeviceDesc desc;
                 desc.pipelineCacheData = cacheData.empty() ? nullptr : cacheData.data();
+                desc.placedResources = m_placedResources;
                 desc.pipelineCacheSize = cacheData.size();
                 desc.errorCB = messages;
                 desc.instance = m_instance;
@@ -451,6 +453,7 @@ namespace Rhi::Detail
 
         private:
             bool m_usePipelineCache = false;
+            bool m_placedResources = true;
             PipelineCache::Identity m_identity;
             vk::Instance m_instance;
             vk::DebugUtilsMessengerEXT m_messenger;

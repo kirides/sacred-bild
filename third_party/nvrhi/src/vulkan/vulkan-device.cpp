@@ -100,6 +100,9 @@ namespace nvrhi::vulkan
                 CommandQueue::Copy, desc.transferQueue, desc.transferQueueIndex);
         }
 
+        if (desc.placedResources)     // sacred-bild: placed resources
+            createPlacedAllocator(m_Context);
+
         // maps Vulkan extension strings into the corresponding boolean flags in Device
         const std::unordered_map<std::string, bool*> extensionStringMap = {
             { VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME, &m_Context.extensions.EXT_conservative_rasterization},
@@ -325,6 +328,7 @@ namespace nvrhi::vulkan
 
     Device::~Device()
     {
+        destroyPlacedAllocator(m_Context);      // sacred-bild: placed resources (its textures are gone by now)
         if (m_TimerQueryPool)
         {
             m_Context.device.destroyQueryPool(m_TimerQueryPool);

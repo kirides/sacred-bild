@@ -9,6 +9,7 @@ new upstream files over the folder, then re-applying the local changes listed be
 | `DirectX-Headers/` | https://github.com/microsoft/DirectX-Headers | `v1.717.0-preview` (`d873b34`), the tag NVRHI's CMake pins | `include/` without the `.idl` files, `src/`, license, README | MIT (`DirectX-Headers/LICENSE`) |
 | `Vulkan-Headers/` | https://github.com/KhronosGroup/Vulkan-Headers | `v1.4.352` (`015e25c`), the tag NVRHI's CMake pins | `include/`, licenses, README | Apache-2.0 / MIT (`Vulkan-Headers/LICENSE.md`) |
 | `D3D12MemoryAllocator/` | https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator | `v3.3.0` (`6009492`) | `include/`, `src/D3D12MemAlloc.cpp` and `.natvis`, license, notices, README | MIT (`D3D12MemoryAllocator/LICENSE.txt`) |
+| `VulkanMemoryAllocator/` | https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator | `v3.5.0` (`0f1a757`) | `include/vk_mem_alloc.h`, license, README | MIT (`VulkanMemoryAllocator/LICENSE.txt`) |
 
 `D3D12MemoryAllocator/` is built by `third_party/CMakeLists.txt` as a static library (`D3D12MA`, with `D3D12MA_USING_DIRECTX_HEADERS`) linked into NVRHI's D3D12 backend; unmodified.
 
@@ -66,3 +67,7 @@ Vulkan backend: in 32-bit builds Vulkan's non-dispatchable handles (`VkImage`, `
 - `d3d12-device.cpp` creates a D3D12 Memory Allocator (`Context::allocator`, default pools not zeroed) and releases it
   with the device; `d3d12-texture.cpp` makes such textures with `CreateResource3` / `CreateResource` placed in its heaps,
   the allocation owned by the texture (`PlacedAllocation`, released after the resource).
+- `include/nvrhi/vulkan.h` `DeviceDesc::placedResources`; `vulkan-allocator.cpp` compiles Vulkan Memory Allocator
+  (`VMA_IMPLEMENTATION`, dynamic functions from `VULKAN_HPP_DEFAULT_DISPATCHER`), `createPlacedAllocator` /
+  `destroyPlacedAllocator` (called by the device) and binds `sharesMemory` textures to its blocks
+  (`MemoryResource::placed`; `allocateTextureMemory` / `freeTextureMemory`).

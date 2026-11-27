@@ -22,6 +22,13 @@
 
 #include "vulkan-backend.h"
 
+// sacred-bild: placed resources. Vulkan Memory Allocator's implementation, calling Vulkan through the pointers the
+// device is made with (vulkan-1.dll is loaded at run time, never linked).
+#define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#include <vk_mem_alloc.h>
+
 namespace nvrhi::vulkan
 {
 
@@ -68,6 +75,29 @@ namespace nvrhi::vulkan
 
     vk::Result VulkanAllocator::allocateTextureMemory(Texture *texture) const
     {
+        // sacred-bild: placed resources: bound to a block of Vulkan Memory Allocator.
+        if (m_Context.vma && texture->desc.sharesMemory && (texture->desc.sharedResourceFlags & SharedResourceFlags::Shared) == 0)
+        {
+            VmaAllocationCreateInfo createInfo = {};
+            createInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            VmaAllocationInfo info = {};
+            VmaAllocation allocation = nullptr;
+            VkResult vr = vmaAllocateMemoryForImage(m_Context.vma, texture->image, &createInfo, &allocation, &info);
+            if (vr == VK_SUCCESS)
+            {
+                vr = vmaBindImageMemory(m_Context.vma, allocation, texture->image);
+                if (vr != VK_SUCCESS)
+                {
+                    vmaFreeMemory(m_Context.vma, allocation);
+                    return vk::Result(vr);
+                }
+                texture->managed = true;
+                texture->placed = allocation;
+                texture->memory = vk::DeviceMemory(info.deviceMemory);
+                return vk::Result::eSuccess;
+            }
+        }
+
         // grab the image memory requirements
         vk::MemoryRequirements memRequirements;
         m_Context.device.getImageMemoryRequirements(texture->image, &memRequirements);
@@ -86,6 +116,14 @@ namespace nvrhi::vulkan
 
     void VulkanAllocator::freeTextureMemory(Texture *texture) const
     {
+        if (texture->placed)    // sacred-bild: placed resources
+        {
+            vmaFreeMemory(m_Context.vma, texture->placed);
+            texture->placed = nullptr;
+            texture->memory = vk::DeviceMemory(nullptr);
+            return;
+        }
+
         freeMemory(texture);
     }
 
@@ -157,6 +195,31 @@ namespace nvrhi::vulkan
                             .setPNext(pNext);
 
         return m_Context.device.allocateMemory(&allocInfo, m_Context.allocationCallbacks, &res->memory);
+    }
+
+    // sacred-bild: placed resources
+    void createPlacedAllocator(VulkanContext& context)
+    {
+        VmaVulkanFunctions functions = {};
+        functions.vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr;
+        functions.vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr;
+        VmaAllocatorCreateInfo createInfo = {};
+        createInfo.physicalDevice = context.physicalDevice;
+        createInfo.device = context.device;
+        createInfo.instance = context.instance;
+        createInfo.pVulkanFunctions = &functions;
+        createInfo.pAllocationCallbacks = reinterpret_cast<const VkAllocationCallbacks*>(context.allocationCallbacks);
+        if (vmaCreateAllocator(&createInfo, &context.vma) != VK_SUCCESS)
+            context.vma = nullptr;
+    }
+
+    void destroyPlacedAllocator(VulkanContext& context)
+    {
+        if (context.vma)
+        {
+            vmaDestroyAllocator(context.vma);
+            context.vma = nullptr;
+        }
     }
 
     void VulkanAllocator::freeMemory(MemoryResource *res) const

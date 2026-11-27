@@ -37,6 +37,9 @@ target_compile_definitions(D3D12MA PUBLIC D3D12MA_USING_DIRECTX_HEADERS)
 target_link_libraries(D3D12MA PUBLIC DirectX-Headers DirectX-Guids)
 target_link_libraries(nvrhi_d3d12 PRIVATE D3D12MA)
 
+# Vulkan Memory Allocator (header only; compiled in NVRHI's vulkan-allocator.cpp): the same for the Vulkan backend.
+target_include_directories(nvrhi_vk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/VulkanMemoryAllocator/include)
+
 # Warnings are upstream's business; ours stay at /W4 for src/.
 foreach(t nvrhi nvrhi_d3d12 nvrhi_vk DirectX-Guids D3D12MA)
   target_compile_options(${t} PRIVATE /W0 /utf-8)

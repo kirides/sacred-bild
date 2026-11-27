@@ -50,8 +50,8 @@ namespace Config
         // [DDraw] Backend=nvrhi: the GPU pipelines kept between runs (SacredBild-pipelines-<api>.bin next to the game;
         // discarded when SacredBild, the GPU or its driver changed).
         bool pipelineCache = true;
-        // [DDraw] Backend=nvrhi, Direct3D 12: textures placed in shared heaps (D3D12 Memory Allocator); making one costs no
-        // memory allocation and residency wait of its own (textures streamed in while playing).
+        // [DDraw] Backend=nvrhi: textures placed in shared memory blocks (D3D12 / Vulkan Memory Allocator); making one costs
+        // no memory allocation (and on D3D12 no residency wait) of its own (loading, textures streamed in while playing).
         bool placedResources = true;
         // [DDraw] Backend=nvrhi: the world's point-sampled 2D art (ground tiles, sprites) magnified with an edge-directed
         // filter in the manner of xBR (smooth diagonals instead of stair steps when zoomed in). Off: point sampling.

@@ -382,3 +382,8 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   textures. Save 2, two runs each: 0.35 ms a texture committed, 0.055 ms placed (447 textures in a run: 156 ms
   against 24 ms). The D3D12 debug layer has nothing to say; pictures as before. Frame times are the same (that cost is
   spread over loading and streaming). Vulkan makes a texture in 0.41 ms (NVRHI allocates memory per resource there).
+- 2026-11-27: the same on Vulkan: vendored Vulkan Memory Allocator 3.5.0 (header, compiled in NVRHI's
+  vulkan-allocator.cpp with Vulkan's functions from the dynamic dispatcher); `sharesMemory` textures are bound to its
+  blocks (`MemoryResource::placed`), freed with the texture; the allocator lives with the device. Save 2: 0.41-0.43 ms
+  a texture with memory of its own, 0.048 ms placed (185-190 ms a run against 21 ms). Validation clean, pictures as
+  before.
