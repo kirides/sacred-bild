@@ -76,3 +76,10 @@ Vulkan backend: in 32-bit builds Vulkan's non-dispatchable handles (`VkImage`, `
   (`VMA_IMPLEMENTATION`, dynamic functions from `VULKAN_HPP_DEFAULT_DISPATCHER`), `createPlacedAllocator` /
   `destroyPlacedAllocator` (called by the device) and binds `sharesMemory` textures to its blocks
   (`MemoryResource::placed`; `allocateTextureMemory` / `freeTextureMemory`).
+
+### Binding states (`// sacred-bild: binding states`)
+
+- `d3d12-graphics.cpp` `setGraphicsState`: when a copy or write since the last draw left `m_BindingStatesDirty`, every
+  binding set is updated (and its resources put back into their shader-resource state), as the Vulkan backend does;
+  upstream only re-applied the states of sets that changed, so a texture rewritten between two draws with the same
+  bindings was sampled in COPY_DEST.

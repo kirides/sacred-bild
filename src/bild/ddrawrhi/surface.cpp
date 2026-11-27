@@ -118,8 +118,36 @@ namespace DDrawRhi
         }
     }
 
+    namespace
+    {
+        Surface::TextureOverride g_fontOverride = nullptr;
+        Surface::PageGone g_fontPageGone = nullptr;
+        thread_local Surface* t_lastLocked = nullptr;
+        thread_local const void* t_lastLockedBits = nullptr;
+    }
+
+    void Surface::setFontPageHooks(TextureOverride override, PageGone gone)
+    {
+        g_fontOverride = override;
+        g_fontPageGone = gone;
+    }
+
+    Surface* Surface::lastLocked(const void* bits)
+    {
+        return bits && bits == t_lastLockedBits ? t_lastLocked : nullptr;
+    }
+
     Surface::~Surface()
     {
+        if (m_fontPage && g_fontPageGone)
+        {
+            g_fontPageGone(this);
+        }
+        if (t_lastLocked == this)
+        {
+            t_lastLocked = nullptr;
+            t_lastLockedBits = nullptr;
+        }
         for (PrivateData& data : m_privateData)
         {
             if (data.object)
@@ -696,6 +724,8 @@ namespace DDrawRhi
         desc->dwFlags |= DDSD_LPSURFACE | DDSD_PITCH;
         desc->lpSurface = m.bits;
         desc->lPitch = m.pitch;
+        t_lastLocked = this;
+        t_lastLockedBits = m.bits;
         return DD_OK;
     }
 
@@ -1165,6 +1195,13 @@ namespace DDrawRhi
     {
         if (m_kind == Kind::Texture)
         {
+            if (m_fontPage && g_fontOverride)
+            {
+                if (nvrhi::ITexture* sharper = g_fontOverride(*this))
+                {
+                    return sharper;
+                }
+            }
             if (m_dirty.load(std::memory_order_relaxed) && m_lock.try_lock())
             {
                 // Locked elsewhere right now (another thread is writing it): uploaded next time.

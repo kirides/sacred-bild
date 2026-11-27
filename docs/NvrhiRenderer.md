@@ -425,3 +425,26 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   D3D12MA allocates from two pools of fixed-size heaps that stay (textures: 64 MB, four kept; buffers: 16 MB, one
   kept). 63 heap creations during the walk -> 3; sector-change hitches over 15 ms: D3D9 27.5-27.8 ms, D3D12
   27.3-27.6 ms. Vulkan (VMA) was already at the same level. Validation clean on both APIs.
+- 2026-11-27: the overview map (Tab) on NVRHI (John: artifacts and flickering pixels). Two causes, found with a test
+  mod that holds Tab and the UI trace: (1) the map draws its 256x256 tiles past its window and relies on the viewport
+  (Direct3D 7 and 9 clip pretransformed draws to it); our pipelines left NVRHI's `scissorEnable` off, so NVRHI used the
+  NVRHI viewport (the whole target for pretransformed vertices) as the scissor and the tiles covered the screen. Now
+  every device pipeline enables the scissor (setup already sets it to the Direct3D 7 viewport). (2) D3D12 only, older
+  than this branch: the map's fog is one 32x32 texture the game rewrites before each of its 16 tiles. NVRHI's D3D12
+  backend re-applies the shader-resource state of a binding set only when the set changes, so after a write or copy
+  into a texture whose bindings stayed the same the next draw sampled it in COPY_DEST (GPU-based validation:
+  "Incompatible texture barrier layout"); random fog and blocks. Vendored NVRHI (`sacred-bild: binding states`,
+  d3d12-graphics.cpp): with `m_BindingStatesDirty` every binding set is updated, as the Vulkan backend does. GPU-based
+  validation clean; the map matches D3D9 on D3D12 and Vulkan.
+- 2026-11-27: `[UI] NativeFonts` (on; NVRHI): the game's text at the UI's scale (John: the font rendered bigger at
+  native resolution instead of stretched from 1024x768; the 1024x768 layout itself stays: every window, hit box and
+  text rectangle is hard-coded in it). The game draws each character with GDI into a system memory surface and copies
+  it into a cell of a 256x256 font page (16-bit, white, alpha from the gray level): cFontTTF draws its 256 ANSI
+  characters with DrawTextA when the font is set up (copy ENG 0x64BAE0), cFontTTF2 draws characters on demand
+  through its Unicode layer's DrawTextW pointer (ENG 0xA23FAC; copy 0x64E860, called from 0x651CB0 and 0x64E1D0).
+  render/font_shadow.cpp takes the character and the selected font from those DrawText calls and, after each copy,
+  draws the character again with GDI in the same font scaled by the UI's scale (the menus' canvas against 1024,
+  rounded up to 1/8) into the same cell, scaled, of a BGRA8 copy of the page; `Surface::texture()` hands out that copy
+  for a font page (pages stay out of the atlas). The texture coordinates are relative, so the text lands where the game
+  puts it; a change of scale draws the page's glyphs again. 2560x1440 at UI scale 0 (x1.875): the text is drawn at its
+  real size instead of stretched; 1600x900 (x1.25) a little sharper. D3D12 and Vulkan alike.

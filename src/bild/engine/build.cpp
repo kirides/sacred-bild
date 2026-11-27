@@ -5,6 +5,7 @@
 #include "diag/d3d_stats.h"
 #include "perf/fast_math.h"
 #include "perf/fast_inflate.h"
+#include "render/font_shadow.h"
 #include "perf/read_cache.h"
 #include "perf/file_cache.h"
 #include "diag/file_io_stats.h"
@@ -145,6 +146,7 @@ void Sacred::installHooks()
     OptionsScreen::install();
     Movie::install();
     FastInflate::install();
+    FontShadow::install();
     Screenshot::install();
     MapCache::install();
     SoundLock::install();

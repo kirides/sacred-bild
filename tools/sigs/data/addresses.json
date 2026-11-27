@@ -50,6 +50,21 @@
    "451BBE74": "0066E3E0",
    "451BBE74:sacredreborn.exe": "0066E3E0"
   },
+  "fontDrawTextW": {
+   "452F85C7": "00A23FAC",
+   "451BBE74": "00A21F2C",
+   "451BBE74:sacredreborn.exe": "00A21F2C"
+  },
+  "fontCopyGlyph": {
+   "452F85C7": "0064E860",
+   "451BBE74": "0064E9C0",
+   "451BBE74:sacredreborn.exe": "0064E9C0"
+  },
+  "fontCopyGlyphTtf": {
+   "452F85C7": "0064BAE0",
+   "451BBE74": "0064BC10",
+   "451BBE74:sacredreborn.exe": "0064BC10"
+  },
   "cMouse_instance": {
    "452F85C7": "00654F60",
    "451BBE74": "006550F0",

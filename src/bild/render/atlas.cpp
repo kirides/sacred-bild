@@ -206,6 +206,14 @@ void TextureAtlas::describe(IDirectDrawSurface7* texture, Entry& e)
         return;
     }
 
+    // [UI] NativeFonts: font pages are drawn from their sharper copy, which only the page's own binding gets.
+    if (Config::ddraw.nvrhi)
+    {
+        if (const DDrawRhi::Surface* surface = DDrawRhi::Surface::from(texture); surface && surface->fontPage())
+        {
+            return;
+        }
+    }
     DDSURFACEDESC2 desc = {};
     desc.dwSize = sizeof(desc);
     if (FAILED(texture->GetSurfaceDesc(&desc)))

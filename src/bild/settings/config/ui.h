@@ -29,6 +29,8 @@ namespace Config
         Position portraits{0, 0};
         Position shops{0, 0};       // blacksmith, merchant, combat art master, chest, cube, trade
         bool linearFilter = true;   // bilinear filtering for the scaled UI instead of the game's point sampling
+        // Backend=nvrhi: the game's text drawn at the UI's scale (render/font_shadow.h) instead of stretched.
+        bool nativeFonts = true;
     };
     inline Ui ui;
 }

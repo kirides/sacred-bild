@@ -49,6 +49,10 @@ SACRED = [
     # mouse and UI
     ('getClientCursorPos', 0x0066E280, 'func'),
     ('zlibUncompress', 0x0066E160, 'func'),
+    # fonts
+    ('fontDrawTextW', 0x00A23FAC, 'data'),                 # the game's DrawTextW pointer (its Unicode layer's)
+    ('fontCopyGlyph', 0x0064E860, 'call', 0x00651FF8),     # through the rasterizer's call: its own start is not unique
+    ('fontCopyGlyphTtf', 0x0064BAE0, 'call', 0x0064B89A),  # cFontTTF's copy (the same code), through its font setup
     ('cMouse_instance', 0x00654F60, 'func'),
     ('cMouse_renderCursor', 0x00655450, 'func'),
     ('renderSavePortrait', 0x004B1450, 'func'),
