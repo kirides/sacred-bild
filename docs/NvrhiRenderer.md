@@ -162,3 +162,6 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   device draws into a world target (and depth) of that multiple of the frame's size and scales it down into the frame
   before the interface. 1.5 and 2 run at the same frame time as 1 in the test copy (1.7-1.9 ms uncapped, GPU idle enough);
   edges and textures visibly smoother at 2. The post chain on the world target (SMAA) comes next.
+- 2026-11-27: SMAA on NVRHI (457c42c): the reference shader in shader model 6 with SMAA's custom-language macros, applied
+  where the Direct3D 9 one is (after the world, before the interface). Blends in gamma space; 0.5 % of the pixels differ
+  from Direct3D 9's SMAA (which blends in linear light where it can).

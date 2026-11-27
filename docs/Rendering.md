@@ -32,8 +32,8 @@ each stage are in [NvrhiRenderer.md](NvrhiRenderer.md).
 So far (`src/bild/rhi/`, `src/bild/ddrawrhi/`): DirectDraw 7 and Direct3D 7 on NVRHI, with Direct3D 7's fixed-function
 pipeline as one shader pair driven by the state the game sets (`ddrawrhi/shaders/ff.hlsl`); GroundMesh, GPU skinning,
 SacredBild's own screens and the controller prompts as with Direct3D 9; and `[Render] WorldScale`, the world view drawn at
-a multiple of the frame's size and scaled down before the interface (supersampling). Not yet: SMAA and the sharp texture
-filter. Shaders are compiled ahead of time (`tools/re/gen_rhi_shaders.py`, DXIL and SPIR-V); `tools/test/rhitest` checks
+a multiple of the frame's size and scaled down before the interface (supersampling); SMAA (blended in gamma space). Not
+yet: the sharp texture filter. Shaders are compiled ahead of time (`tools/re/gen_rhi_shaders.py`, DXIL and SPIR-V); `tools/test/rhitest` checks
 the device and swap chain alone, and `gear_sandbox --backend nvrhi|nvrhi-vulkan` draws the Gear UI through it.
 
 ## Movies through Media Foundation
