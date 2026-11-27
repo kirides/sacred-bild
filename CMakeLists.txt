@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(SacredBild LANGUAGES CXX RC)
+project(SacredBild LANGUAGES C CXX RC)   # C: libdeflate (third_party)
 
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
   message(FATAL_ERROR "SacredBild must be built for Win32 (x86): Sacred is a 32-bit process.")
@@ -155,6 +155,8 @@ set(DDRAW_SOURCES
   src/bild/ddraw9/surface.cpp
   src/bild/ddraw9/vertex_buffer.cpp
   src/bild/render/atlas.cpp
+  src/bild/perf/fast_inflate.cpp
+  src/bild/perf/read_cache.cpp
   src/bild/render/batcher.cpp
   src/bild/settings/form.cpp
   src/bild/settings/form.rc
@@ -190,7 +192,7 @@ target_include_directories(ddraw PRIVATE ${VERSION_INFO_DIR})
 target_include_directories(ddraw PRIVATE src/bild ${DETOURS_INCLUDE_DIRS})
 # The resource script embeds the button prompts' atlas (tools/re/gen_prompts.py).
 set_source_files_properties(src/bild/version.rc PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/bild/controller/prompts.png;${VERSION_INFO_DIR}/version_info.h")
-target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 nvrhi_all delayimp)
+target_link_libraries(ddraw PRIVATE sacred_core ${DETOURS_LIBRARY} imgui::imgui kcp::kcp SDL3::SDL3-static psapi dxguid gdi32 ole32 oleaut32 mfplat mfuuid ws2_32 iphlpapi comctl32 nvrhi_all libdeflate_decompress delayimp)
 target_compile_options(ddraw PRIVATE ${COMMON_OPTIONS})
 target_precompile_headers(ddraw PRIVATE src/bild/pch.h)
 # SAFESEH must stay off: Detours trampolines are not registered handlers.

@@ -48,6 +48,7 @@ SACRED = [
     ('activateAppPauseOr', 0x00812DC8, 'code'),
     # mouse and UI
     ('getClientCursorPos', 0x0066E280, 'func'),
+    ('zlibUncompress', 0x0066E160, 'func'),
     ('cMouse_instance', 0x00654F60, 'func'),
     ('cMouse_renderCursor', 0x00655450, 'func'),
     ('renderSavePortrait', 0x004B1450, 'func'),

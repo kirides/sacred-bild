@@ -13,6 +13,8 @@
 #include <nvrhi/utils.h>
 
 #include <algorithm>
+#include <emmintrin.h>
+#include <immintrin.h>
 #include <condition_variable>
 #include <cstring>
 #include <deque>
@@ -74,6 +76,120 @@ namespace DDrawRhi
         return format == d9::D3DFMT_D16 || format == d9::D3DFMT_D24X8 || format == d9::D3DFMT_D24S8 || format == d9::D3DFMT_D32;
     }
 
+    namespace
+    {
+        // 16-bit pixels to BGRA8, eight at a time (SSE2). Channels widen as the tables in toBgra8 do: 4 bits times 17,
+        // 5 and 6 bits rounded (x * 255 / 31 is (x * 527 + 23) >> 6, x * 255 / 63 is (x * 259 + 33) >> 6, exactly).
+        // Returns the pixels done; toBgra8's loops do the rest.
+        uint32_t expand16Sse2(d9::D3DFORMAT format, const uint16_t* in, uint32_t* out, uint32_t width);
+
+        // The same sixteen at a time with AVX2 (the 128-bit halves widen separately; the permutes put the pixels back
+        // in order). Only called where the CPU has AVX2 (and the system saves its registers).
+        uint32_t expand16Avx2(d9::D3DFORMAT format, const uint16_t* in, uint32_t* out, uint32_t width)
+        {
+            const __m256i m4 = _mm256_set1_epi16(15), m5 = _mm256_set1_epi16(31), m6 = _mm256_set1_epi16(63);
+            const __m256i k527 = _mm256_set1_epi16(527), k23 = _mm256_set1_epi16(23), k259 = _mm256_set1_epi16(259),
+                k33 = _mm256_set1_epi16(33), k17 = _mm256_set1_epi16(17), k255 = _mm256_set1_epi16(255);
+            uint32_t x = 0;
+            for (; x + 16 <= width; x += 16)
+            {
+                const __m256i p = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(in + x));
+                __m256i a, r, g, b;
+                switch (format)
+                {
+                case d9::D3DFMT_R5G6B5:
+                    a = k255;
+                    r = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_srli_epi16(p, 11), k527), k23), 6);
+                    g = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_and_si256(_mm256_srli_epi16(p, 5), m6), k259), k33), 6);
+                    b = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_and_si256(p, m5), k527), k23), 6);
+                    break;
+                case d9::D3DFMT_X1R5G5B5:
+                case d9::D3DFMT_A1R5G5B5:
+                    a = format == d9::D3DFMT_A1R5G5B5 ? _mm256_srli_epi16(_mm256_srai_epi16(p, 15), 8) : k255;
+                    r = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_and_si256(_mm256_srli_epi16(p, 10), m5), k527), k23), 6);
+                    g = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_and_si256(_mm256_srli_epi16(p, 5), m5), k527), k23), 6);
+                    b = _mm256_srli_epi16(_mm256_add_epi16(_mm256_mullo_epi16(_mm256_and_si256(p, m5), k527), k23), 6);
+                    break;
+                case d9::D3DFMT_A4R4G4B4:
+                    a = _mm256_mullo_epi16(_mm256_srli_epi16(p, 12), k17);
+                    r = _mm256_mullo_epi16(_mm256_and_si256(_mm256_srli_epi16(p, 8), m4), k17);
+                    g = _mm256_mullo_epi16(_mm256_and_si256(_mm256_srli_epi16(p, 4), m4), k17);
+                    b = _mm256_mullo_epi16(_mm256_and_si256(p, m4), k17);
+                    break;
+                default:
+                    _mm256_zeroupper();
+                    return x;
+                }
+                const __m256i bg = _mm256_or_si256(b, _mm256_slli_epi16(g, 8));
+                const __m256i ra = _mm256_or_si256(r, _mm256_slli_epi16(a, 8));
+                const __m256i lo = _mm256_unpacklo_epi16(bg, ra), hi = _mm256_unpackhi_epi16(bg, ra);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(out + x), _mm256_permute2x128_si256(lo, hi, 0x20));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(out + x + 8), _mm256_permute2x128_si256(lo, hi, 0x31));
+            }
+            _mm256_zeroupper();
+            return x;
+        }
+
+        const bool g_avx2 = IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE) != FALSE;
+
+        uint32_t expand16(d9::D3DFORMAT format, const uint16_t* in, uint32_t* out, uint32_t width)
+        {
+            uint32_t done = 0;
+            if (g_avx2 && width >= 16)
+            {
+                done = expand16Avx2(format, in, out, width);
+                in += done;
+                out += done;
+                width -= done;
+            }
+            return done + expand16Sse2(format, in, out, width);
+        }
+
+        uint32_t expand16Sse2(d9::D3DFORMAT format, const uint16_t* in, uint32_t* out, uint32_t width)
+        {
+            const __m128i m4 = _mm_set1_epi16(15), m5 = _mm_set1_epi16(31), m6 = _mm_set1_epi16(63);
+            const auto widen5 = [](__m128i v) { return _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(v, _mm_set1_epi16(527)), _mm_set1_epi16(23)), 6); };
+            const auto widen6 = [](__m128i v) { return _mm_srli_epi16(_mm_add_epi16(_mm_mullo_epi16(v, _mm_set1_epi16(259)), _mm_set1_epi16(33)), 6); };
+            const auto widen4 = [](__m128i v) { return _mm_mullo_epi16(v, _mm_set1_epi16(17)); };
+            uint32_t x = 0;
+            for (; x + 8 <= width; x += 8)
+            {
+                const __m128i p = _mm_loadu_si128(reinterpret_cast<const __m128i*>(in + x));
+                __m128i a, r, g, b;
+                switch (format)
+                {
+                case d9::D3DFMT_R5G6B5:
+                    a = _mm_set1_epi16(255);
+                    r = widen5(_mm_srli_epi16(p, 11));
+                    g = widen6(_mm_and_si128(_mm_srli_epi16(p, 5), m6));
+                    b = widen5(_mm_and_si128(p, m5));
+                    break;
+                case d9::D3DFMT_X1R5G5B5:
+                case d9::D3DFMT_A1R5G5B5:
+                    a = format == d9::D3DFMT_A1R5G5B5 ? _mm_srli_epi16(_mm_srai_epi16(p, 15), 8) : _mm_set1_epi16(255);
+                    r = widen5(_mm_and_si128(_mm_srli_epi16(p, 10), m5));
+                    g = widen5(_mm_and_si128(_mm_srli_epi16(p, 5), m5));
+                    b = widen5(_mm_and_si128(p, m5));
+                    break;
+                case d9::D3DFMT_A4R4G4B4:
+                    a = widen4(_mm_srli_epi16(p, 12));
+                    r = widen4(_mm_and_si128(_mm_srli_epi16(p, 8), m4));
+                    g = widen4(_mm_and_si128(_mm_srli_epi16(p, 4), m4));
+                    b = widen4(_mm_and_si128(p, m4));
+                    break;
+                default:
+                    return x;
+                }
+                const __m128i bg = _mm_or_si128(b, _mm_slli_epi16(g, 8));
+                const __m128i ra = _mm_or_si128(r, _mm_slli_epi16(a, 8));
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(out + x), _mm_unpacklo_epi16(bg, ra));
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(out + x + 4), _mm_unpackhi_epi16(bg, ra));
+            }
+            return x;
+        }
+    }
+
+
     bool toBgra8(d9::D3DFORMAT format, const DDPIXELFORMAT& pf, const uint8_t* src, int srcPitch, uint32_t width,
         uint32_t height, uint8_t* dst, uint32_t dstPitch)
     {
@@ -85,6 +201,12 @@ namespace DDrawRhi
         {
             const uint8_t* in = src + ptrdiff_t(srcPitch) * y;
             uint32_t* out = reinterpret_cast<uint32_t*>(dst + size_t(dstPitch) * y);
+            uint32_t x0 = 0;        // the 16-bit formats: most of the row in expand16, the rest below
+            if (format == d9::D3DFMT_A4R4G4B4 || format == d9::D3DFMT_R5G6B5 || format == d9::D3DFMT_X1R5G5B5 ||
+                format == d9::D3DFMT_A1R5G5B5)
+            {
+                x0 = expand16(format, reinterpret_cast<const uint16_t*>(in), out, width);
+            }
             switch (format)
             {
             case d9::D3DFMT_A8R8G8B8:
@@ -95,7 +217,7 @@ namespace DDrawRhi
                     out[x] = reinterpret_cast<const uint32_t*>(in)[x] | 0xFF000000u;
                 break;
             case d9::D3DFMT_A4R4G4B4:
-                for (uint32_t x = 0; x < width; ++x)
+                for (uint32_t x = x0; x < width; ++x)
                 {
                     const uint16_t p = reinterpret_cast<const uint16_t*>(in)[x];
                     out[x] = uint32_t(expand4[p >> 12]) << 24 | uint32_t(expand4[(p >> 8) & 15]) << 16 |
@@ -103,7 +225,7 @@ namespace DDrawRhi
                 }
                 break;
             case d9::D3DFMT_R5G6B5:
-                for (uint32_t x = 0; x < width; ++x)
+                for (uint32_t x = x0; x < width; ++x)
                 {
                     const uint16_t p = reinterpret_cast<const uint16_t*>(in)[x];
                     out[x] = 0xFF000000u | uint32_t(expand5[p >> 11]) << 16 | uint32_t(expand6[(p >> 5) & 63]) << 8 | expand5[p & 31];
@@ -113,7 +235,7 @@ namespace DDrawRhi
             case d9::D3DFMT_A1R5G5B5:
             {
                 const bool alpha = format == d9::D3DFMT_A1R5G5B5;
-                for (uint32_t x = 0; x < width; ++x)
+                for (uint32_t x = x0; x < width; ++x)
                 {
                     const uint16_t p = reinterpret_cast<const uint16_t*>(in)[x];
                     const uint32_t a = !alpha || (p & 0x8000) ? 0xFF000000u : 0u;
@@ -452,7 +574,10 @@ namespace DDrawRhi
             struct GpuTimer
             {
                 nvrhi::TimerQueryHandle current;            // in the open list
-                std::vector<nvrhi::TimerQueryHandle> pending, free;
+                // Ended, with the serial of their job: read once the GPU is done with it (asking Vulkan earlier reads
+                // a query the GPU has not reset yet).
+                std::vector<std::pair<nvrhi::TimerQueryHandle, uint64_t>> pending;
+                std::vector<nvrhi::TimerQueryHandle> free;
                 double seconds = 0.0;
                 uint32_t lists = 0, frames = 0;
                 DWORD nextLog = 0;
@@ -481,13 +606,13 @@ namespace DDrawRhi
                 }
             }
 
-            void gpuTimerEnd(nvrhi::ICommandList* cmd)
+            void gpuTimerEnd(nvrhi::ICommandList* cmd, uint64_t serial)
             {
                 GpuTimer& t = g_gpuTimer;
                 if (t.current)
                 {
                     cmd->endTimerQuery(t.current);
-                    t.pending.push_back(std::move(t.current));
+                    t.pending.emplace_back(std::move(t.current), serial);
                     t.current = nullptr;
                 }
             }
@@ -502,11 +627,11 @@ namespace DDrawRhi
                 }
                 ++t.frames;
                 nvrhi::IDevice* dev = Rhi::device();
-                while (!t.pending.empty() && dev->pollTimerQuery(t.pending.front()))
+                while (!t.pending.empty() && gpuDone(t.pending.front().second, false) && dev->pollTimerQuery(t.pending.front().first))
                 {
-                    t.seconds += dev->getTimerQueryTime(t.pending.front());
-                    dev->resetTimerQuery(t.pending.front());
-                    t.free.push_back(std::move(t.pending.front()));
+                    t.seconds += dev->getTimerQueryTime(t.pending.front().first);
+                    dev->resetTimerQuery(t.pending.front().first);
+                    t.free.push_back(std::move(t.pending.front().first));
                     t.pending.erase(t.pending.begin());
                     ++t.lists;
                 }
@@ -538,7 +663,7 @@ namespace DDrawRhi
                 Job job;
                 if (g_open)
                 {
-                    gpuTimerEnd(g_commands);
+                    gpuTimerEnd(g_commands, g_nextSerial);     // this job's serial (below)
                     g_commands->close();
                     g_open = false;
                     job.list = g_commands;
@@ -859,7 +984,9 @@ namespace DDrawRhi
                 }
                 if (!g_commands)
                 {
-                    g_commands = Rhi::device()->createCommandList();
+                    // Uploads (texture writes) come from 8 MB chunks: with NVRHI's 64 KB every texture streamed in larger than
+                    // that got an upload buffer of its own, made on the spot (a sector brings ~6 MB).
+                    g_commands = Rhi::device()->createCommandList(nvrhi::CommandListParameters().setUploadChunkSize(8u << 20));
                 }
                 g_commands->open();
                 g_open = true;

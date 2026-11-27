@@ -1108,6 +1108,59 @@ namespace DDrawRhi
         return DDERR_NOTFLIPPABLE;
     }
 
+    bool Surface::copyWithGutter(Surface& src, LONG x, LONG y, bool clampEdges)
+    {
+        const UINT w = src.width(), h = src.height();
+        if (m_kind != Kind::Texture || !m_cpu.empty() || !m_gpu || src.m_kind != Kind::Texture || src.m_cpu.empty() ||
+            src.m_format != m_format || DDrawRhi::gpuFormat(m_format) != nvrhi::Format::BGRA8_UNORM || x < 1 || y < 1 ||
+            static_cast<UINT>(x) + w + 1 > width() || static_cast<UINT>(y) + h + 1 > height() || !w || !h)
+        {
+            return false;
+        }
+        const UINT gw = w + 2, gh = h + 2;
+        thread_local std::vector<uint32_t> pixels;
+        pixels.resize(size_t(gw) * gh);
+        {
+            std::scoped_lock srcLock(src.m_lock);
+            if (!toBgra8(m_format, m_desc.ddpfPixelFormat, src.m_cpu.data(), static_cast<int>(src.m_cpuPitch), w, h,
+                    reinterpret_cast<uint8_t*>(pixels.data() + gw + 1), gw * 4))
+            {
+                return false;
+            }
+        }
+        // The gutter: columns first (rows 1..h), then whole rows, so the corners come with them.
+        const UINT left = clampEdges ? 1 : w, right = clampEdges ? w : 1;
+        const UINT top = clampEdges ? 1 : h, bottom = clampEdges ? h : 1;
+        for (UINT row = 1; row <= h; ++row)
+        {
+            uint32_t* line = pixels.data() + size_t(row) * gw;
+            line[0] = line[left];
+            line[w + 1] = line[right];
+        }
+        std::memcpy(pixels.data(), pixels.data() + size_t(top) * gw, gw * 4);
+        std::memcpy(pixels.data() + size_t(h + 1) * gw, pixels.data() + size_t(bottom) * gw, gw * 4);
+
+        std::scoped_lock lock(Context::lock());
+        nvrhi::ITexture* temp = Context::scratchTexture(gw, gh, nvrhi::Format::BGRA8_UNORM);
+        if (!temp)
+        {
+            return false;
+        }
+        nvrhi::ICommandList* cmd = Context::commands();
+        cmd->writeTexture(temp, 0, 0, pixels.data(), gw * 4);
+        nvrhi::TextureSlice to;
+        to.x = static_cast<uint32_t>(x - 1);
+        to.y = static_cast<uint32_t>(y - 1);
+        to.width = gw;
+        to.height = gh;
+        nvrhi::TextureSlice from;
+        from.width = gw;
+        from.height = gh;
+        cmd->copyTexture(m_gpu, to, temp, from);
+        changed();
+        return true;
+    }
+
     nvrhi::ITexture* Surface::texture()
     {
         if (m_kind == Kind::Texture)

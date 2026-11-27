@@ -75,6 +75,8 @@ namespace Sacred::Addr
 
     // Mouse: getClientCursorPos(hwnd, POINT*) is the only cursor read; cMouse is the singleton the UI and world poll.
     inline Cdecl<void(HWND window, POINT* pt)> getClientCursorPos{}; // ENG 0066E280
+    // zlib 1.2.1's uncompress (linked into the game): textures, maps and other packed files.
+    inline Cdecl<int(uint8_t* dest, unsigned long* destLen, const uint8_t* source, unsigned long sourceLen)> zlibUncompress{}; // ENG 0066E160
     inline Cdecl<cMouse*()> cMouse_instance{};          // ENG 00654F60
     inline Thiscall<void(cMouse* self, IDirect3DDevice7* device, int flag)> cMouse_renderCursor{}; // ENG 00655450
 

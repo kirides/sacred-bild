@@ -10,6 +10,7 @@ static const Sig::Entry kAddressSigs[] = {
     {"activateAppResumeAnd", "8B 94 24 B8 02 00 00 25 FF FF FD FF", 7, Sig::Take::Match, &Sacred::Addr::activateAppResumeAnd}, // 00812D95, 00812445, 00812445
     {"activateAppPauseOr", "6A 04 6A 0C E8 ?? ?? ?? ?? 8B C8 E8 ?? ?? ?? ?? EB 3D 0B C7", 18, Sig::Take::Match, &Sacred::Addr::activateAppPauseOr}, // 00812DC8, 00812478, 00812478
     {"getClientCursorPos", "83 EC 18 56 8B 74 24 24 57 56 FF 15 ?? ?? ?? ??", 0, Sig::Take::Match, &Sacred::Addr::getClientCursorPos}, // 0066E280, 0066E500, 0066E500
+    {"zlibUncompress", "83 EC 38 8B 4C 24 48 8B 44 24 44 8B 54 24 3C 56 57 8B 7C 24 48 89 4C 24 0C 89 44 24 08", 0, Sig::Take::Match, &Sacred::Addr::zlibUncompress}, // 0066E160, 0066E3E0, 0066E3E0
     {"cMouse_instance", "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 A1 ?? ?? ?? ?? 85 C0 75 3E 6A 70", 0, Sig::Take::Match, &Sacred::Addr::cMouse_instance}, // 00654F60, 006550F0, 006550F0
     {"cMouse_renderCursor", "56 8B F1 57 8D 7E 24 8B CF E8 ?? ?? ?? ?? 8B 4E 64", 0, Sig::Take::Match, &Sacred::Addr::cMouse_renderCursor}, // 00655450, 006555E0, 006555E0
     {"renderSavePortrait", "64 A1 00 00 00 00 6A FF 68 ?? ?? ?? ?? 50 B8 50 52 00 00", 0, Sig::Take::Match, &Sacred::Addr::renderSavePortrait}, // 004B1450, 004B1740, 004B1740

@@ -45,6 +45,11 @@
    "451BBE74": "0066E500",
    "451BBE74:sacredreborn.exe": "0066E500"
   },
+  "zlibUncompress": {
+   "452F85C7": "0066E160",
+   "451BBE74": "0066E3E0",
+   "451BBE74:sacredreborn.exe": "0066E3E0"
+  },
   "cMouse_instance": {
    "452F85C7": "00654F60",
    "451BBE74": "006550F0",

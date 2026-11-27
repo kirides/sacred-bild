@@ -73,6 +73,8 @@ namespace D3DStats
         TSoundWait,     // the render thread waiting for the sound system's lock (SoundLock)
         TAnimationWait, // the render thread waiting for the animation worker (AsyncAnimation)
         TFileIo,        // the render thread in CreateFileA / ReadFile (FileIoStats)
+        TAtlasUpload,   // copying textures into atlas pages (TextureAtlas::upload)
+        TInflate,       // the render thread in the game's zlib uncompress (FastInflate)
         // The rest of the frame, between the marks below (render thread): SacredBild's work after the flip, the
         // game's before the world view, between world view and UI, and between UI and flip.
         TOwnAfterFlip,

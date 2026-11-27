@@ -293,6 +293,8 @@ void ConfigFile::load(const std::wstring& gameDir)
     Config::render.recordIndex = readInt(ini, L"Render", L"RecordIndex", Config::render.recordIndex) != 0;
     Config::render.soundLock = readInt(ini, L"Render", L"SoundLock", Config::render.soundLock) != 0;
     Config::render.fastMath = readInt(ini, L"Render", L"FastMath", Config::render.fastMath) != 0;
+    Config::render.fastInflate = readInt(ini, L"Render", L"FastInflate", Config::render.fastInflate) != 0;
+    Config::render.readCache = readInt(ini, L"Render", L"ReadCache", Config::render.readCache) != 0;
     Config::render.warmFileCache = readInt(ini, L"Render", L"WarmFileCache", Config::render.warmFileCache) != 0;
     Config::render.atlas = readInt(ini, L"Render", L"Atlas", Config::render.atlas) != 0;
     Config::render.atlasPageSize = readInt(ini, L"Render", L"AtlasPageSize", Config::render.atlasPageSize);

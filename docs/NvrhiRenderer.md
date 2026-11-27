@@ -387,3 +387,33 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   blocks (`MemoryResource::placed`), freed with the texture; the allocator lives with the device. Save 2: 0.41-0.43 ms
   a texture with memory of its own, 0.048 ms placed (185-190 ms a run against 21 ms). Validation clean, pictures as
   before.
+- 2026-11-27: streaming hitches (John: make texture streaming / buffer creation non-blocking). A test mod moving the
+  hero across ten sectors (test copy, mods/streamwalk) gives a 70-80 ms hitch per move. Making textures is no
+  longer part of it (0.05 ms each; sector art goes into atlas pages). The engine thread's time in those hitches: the
+  game's file reads (CRT reads and seeks of the map records, ~2000 per move: NtReadFile / NtSetInformationFile /
+  NtCreateFile, 30-40 %), the game's zlib uncompress of textures (30-35 %), SacredBild's atlas copies (~19 ms a move).
+  Atlas copies: each texture went in as nine Blts (the texture and its eight gutter strips), each converted, written to
+  a scratch texture and copied; now `Surface::copyWithGutter` builds texture and gutter in one BGRA8 image (one
+  conversion, one upload, one copy). NVRHI's upload chunks are 8 MB instead of 64 KB (every texture larger than a
+  chunk got an upload buffer of its own, made on the spot). Atlas time per move ~19 ms -> 3.5 ms; hitches 70-76 ->
+  56-61 ms (max 110-165 -> ~75). `[Render] FastInflate` (on): the game's zlib 1.2.1 uncompress (Addr::zlibUncompress,
+  ENG 0x66E160) goes through libdeflate (vendored 1.26, decompression only); anything libdeflate refuses goes to the
+  game's zlib. 1200 calls checked against zlib's output in a run: identical. Unpacking ~18 -> 6 ms a move; hitches
+  60 -> 48-51 ms. D3DStats' hitch lines show the atlas copy and unpacking time. Also: the GPU timer read Vulkan queries
+  before the GPU had reset them (validation); it now waits for its job. Validation clean on both APIs.
+- 2026-11-27: streaming, part two. The game's map reads: World\Floor.PAK and MIXED.PAK are read 512 bytes at a time,
+  each after a seek (~8000 system calls per sector change). `[Render] ReadCache` (on, perf/read_cache.cpp): sacred.exe's
+  imports of CreateFileA, ReadFile, SetFilePointer and CloseHandle; for files it opens read-only SacredBild keeps the
+  position and answers reads up to 16 KB from 64 KB blocks (32 MB for all files, least recently used first); larger
+  reads go to Windows from the kept position. Installed after FileIoStats, so D3DStats' file I/O counts what still
+  reaches Windows. 800 000 reads checked against Windows' data in a run: identical. Hitches 48 -> 38 ms, file I/O per
+  move 11.5 -> 4 ms. toBgra8's 16-bit formats eight pixels at a time with SSE2 (the channel widening as exact
+  multiply-shifts of the tables, all 65 536 values checked for each format): 38 -> 35 ms. Altogether a sector change
+  went from 70-80 ms to ~35 ms, and loading save 2 to the world from 7.3 to 4.7 s; steady frames unchanged. Left in a
+  move: libdeflate itself (~20 %), the conversion and upload of the new textures, a CRT lock the game's loader waits on,
+  and driver calls.
+- 2026-11-27: toBgra8 also with AVX2 (John asked for AVX/AVX2/AVX-512 by what the CPU has): sixteen pixels at a time
+  where IsProcessorFeaturePresent reports AVX2, SSE2 elsewhere; the same values as the SSE2 path on all 65 536 inputs
+  per format, 1.6-2.3x faster (0.008-0.012 ms against 0.014-0.021 ms for 256x256). A sector change converts ~3 million
+  pixels, now ~0.5 ms, so there is little left to win; no AVX-512 path (this test machine has none, so it could not be
+  checked, and AVX2 already leaves the conversion near memory speed).
