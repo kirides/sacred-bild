@@ -1505,7 +1505,7 @@ namespace nvrhi::d3d12
             {
                 void* destAddress = (char*)cpuVA + uint64_t(footprint.Footprint.RowPitch) * uint64_t(row + depthSlice * numRows);
                 const void* srcAddress = (const char*)data + rowPitch * row + depthPitch * depthSlice;
-                memcpy(destAddress, srcAddress, std::min(rowPitch, rowSizeInBytes));
+                memcpy(destAddress, srcAddress, size_t(std::min<uint64_t>(rowPitch, rowSizeInBytes)));   // sacred-bild: x86
             }
         }
 

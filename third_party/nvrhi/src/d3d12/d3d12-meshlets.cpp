@@ -126,19 +126,21 @@ namespace nvrhi::d3d12
 
         psoDesc.DSVFormat = getDxgiFormatMapping(fbinfo.depthFormat).rtvFormat;
 
+        size_t bytecodeLength = 0;   // sacred-bild: x86 (SIZE_T is not size_t in 32-bit builds)
+
         if (state.AS)
         {
-            state.AS->getBytecode(&psoDesc.AmplificationShader.pShaderBytecode, &psoDesc.AmplificationShader.BytecodeLength);
+            state.AS->getBytecode(&psoDesc.AmplificationShader.pShaderBytecode, &bytecodeLength); psoDesc.AmplificationShader.BytecodeLength = bytecodeLength;   // sacred-bild: x86
         }
 
         if (state.MS)
         {
-            state.MS->getBytecode(&psoDesc.MeshShader.pShaderBytecode, &psoDesc.MeshShader.BytecodeLength);
+            state.MS->getBytecode(&psoDesc.MeshShader.pShaderBytecode, &bytecodeLength); psoDesc.MeshShader.BytecodeLength = bytecodeLength;   // sacred-bild: x86
         }
 
         if (state.PS)
         {
-            state.PS->getBytecode(&psoDesc.PixelShader.pShaderBytecode, &psoDesc.PixelShader.BytecodeLength);
+            state.PS->getBytecode(&psoDesc.PixelShader.pShaderBytecode, &bytecodeLength); psoDesc.PixelShader.BytecodeLength = bytecodeLength;   // sacred-bild: x86
         }
 
         D3D12_PIPELINE_STATE_STREAM_DESC streamDesc;

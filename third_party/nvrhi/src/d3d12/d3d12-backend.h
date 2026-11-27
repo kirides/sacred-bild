@@ -827,7 +827,7 @@ namespace nvrhi::d3d12
         rt::AccelStructDesc desc;
         bool allowUpdate = false;
         bool compacted = false;
-        size_t rtxmuId = ~0ull;
+        size_t rtxmuId = ~size_t(0);   // sacred-bild: x86
 #ifdef NVRHI_WITH_RTXMU
         D3D12_GPU_VIRTUAL_ADDRESS rtxmuGpuVA = 0;
 #endif

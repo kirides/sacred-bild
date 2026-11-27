@@ -66,7 +66,7 @@ namespace nvrhi
 
     inline uint32_t hash_to_u32(size_t hash)
     {
-        return uint32_t(hash) ^ (uint32_t(hash >> 32));
+        return uint32_t(hash) ^ (uint32_t(uint64_t(hash) >> 32));   // sacred-bild: x86
     }
 
     // A type cast that is safer than static_cast in debug builds, and is a simple static_cast in release builds.

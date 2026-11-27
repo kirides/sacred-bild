@@ -51,7 +51,7 @@ namespace nvrhi::d3d12
     {
         auto chunk = std::make_shared<BufferChunk>();
 
-        size = align(size, BufferChunk::c_sizeAlignment);
+        size = align<size_t>(size, size_t(BufferChunk::c_sizeAlignment));   // sacred-bild: x86
 
         D3D12_HEAP_PROPERTIES heapProps = {};
         heapProps.Type = m_IsScratchBuffer ? D3D12_HEAP_TYPE_DEFAULT : D3D12_HEAP_TYPE_UPLOAD;
@@ -160,7 +160,7 @@ namespace nvrhi::d3d12
 
         if (!m_CurrentChunk)
         {
-            uint64_t sizeToAllocate = align(std::max(size, m_DefaultChunkSize), BufferChunk::c_sizeAlignment);
+            uint64_t sizeToAllocate = align<uint64_t>(std::max<uint64_t>(size, m_DefaultChunkSize), BufferChunk::c_sizeAlignment);   // sacred-bild: x86
 
             // See if we're allowed to allocate more memory
             if ((m_MemoryLimit > 0) && (m_AllocatedMemory + sizeToAllocate > m_MemoryLimit))

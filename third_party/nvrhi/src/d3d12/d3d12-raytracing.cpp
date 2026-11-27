@@ -259,8 +259,9 @@ namespace
         inputs.NumDescs = m_desc.NumDescs;
         inputs.DescsLayout = m_desc.DescsLayout;
         inputs.InstanceDescs = m_desc.InstanceDescs;
-        static_assert(sizeof(BuildRaytracingAccelerationStructure::ppGeometryDescs) == sizeof(BuildRaytracingAccelerationStructure::InstanceDescs));
-        static_assert(sizeof(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS::ppGeometryDescs) == sizeof(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS::InstanceDescs));
+        // sacred-bild: x86: the pointers are smaller than the GPU address that shares their union.
+        static_assert(sizeof(BuildRaytracingAccelerationStructure::ppGeometryDescs) <= sizeof(BuildRaytracingAccelerationStructure::InstanceDescs));   // sacred-bild: x86
+        static_assert(sizeof(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS::ppGeometryDescs) <= sizeof(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS::InstanceDescs));   // sacred-bild: x86
 #if NVRHI_D3D12_WITH_DXR12_OPACITY_MICROMAP
         static_assert(sizeof(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS::pOpacityMicromapArrayDesc) == sizeof(D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS::InstanceDescs));
 #endif
@@ -2080,7 +2081,7 @@ namespace dxr_clusters
             // Allocate a piece of the upload buffer. That will be our SBT on the device.
 
             ID3D12Resource* uploadBuffer = nullptr;
-            uint64_t uploadOffset = 0;
+            size_t uploadOffset = 0;   // sacred-bild: x86
             uint8_t* uploadCpuVA = nullptr;
             D3D12_GPU_VIRTUAL_ADDRESS uploadGpuVA;
             bool allocated = m_UploadManager.suballocateBuffer(shaderTableSize, nullptr, &uploadBuffer, &uploadOffset, 
