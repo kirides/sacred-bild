@@ -111,6 +111,7 @@ set(DDRAW_SOURCES
   src/bild/perf/file_cache.cpp
   src/bild/render/ground_quads.cpp
   src/bild/render/sprite_quads.cpp
+  src/bild/render/world_statics.cpp
   src/bild/render/ground_mesh.cpp
   src/bild/diag/layout_check.cpp
   src/bild/diag/skin_check.cpp

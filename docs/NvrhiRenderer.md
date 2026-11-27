@@ -193,3 +193,12 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   texture into one DrawIndexedPrimitive) are about 2-3 %. So taking over the draw lists buys ownership, not frame time;
   the time left in the world is the animation wait and the game's own walk. Asked John whether to go on with the
   take-over stages now or to have the branch tried first.
+- 2026-11-27: stage 7, first kind: static objects (kind 1 of the draw lists; buildings, trees, props). John: go on with
+  the take-over and check the pictures without waiting for him. `render/world_statics.cpp` jumps over objects2's code
+  for such an entry (ENG 0x630217 .. 0x630A2A, every call and operand it uses checked byte by byte and taken from that
+  code, so Resolution's patched screen size and center are the ones read) and does it itself: animation frame from the
+  game timer, placement by zoom, culling, per-corner light, the see-through circles' fade, the hand-made depth for 0x200
+  sprites, half-texel inset, the batcher's own cull, and the quads go to SacredBild's batcher per texture in the list's
+  order. `[Render] TakeOverStatics` (on; NVRHI only). Pictures as with it off (D3D12, Vulkan; only the animated birds
+  and the player differ, as between any two runs), 1.63-1.71 ms as before. Not seen in the test scene: the fade circles
+  (the player behind a building) and lit statics (night, dungeons).

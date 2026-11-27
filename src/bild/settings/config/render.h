@@ -35,6 +35,9 @@ namespace Config
         // scaled down into the frame before the interface (supersampling: smoother edges, sharper textures at a cost).
         // 1 = straight into the frame, as the other backends.
         float worldScale = 1.0f;
+        // [DDraw] Backend=nvrhi: SacredBild draws the draw lists' static objects (buildings, trees, props) itself
+        // instead of the game's code for them (render/world_statics.h).
+        bool takeOverStatics = true;
         // Filtering of the game world's textures: 0 the game's own point sampling, 1 sharp bilinear (crisp texels, soft
         // edges; Direct3D 9 backend, point sampling elsewhere), 2 bilinear (smoother when zoomed in). The interface
         // follows [UI] LinearFilter.

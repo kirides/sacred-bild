@@ -72,6 +72,7 @@ tabs, Start is Play. Text fields need the keyboard.
 | DDraw | Backend | d3d9 | `d3d9` = SacredBild's own Direct3D 9Ex backend; `chain` = the ddraw below; `nvrhi` = SacredBild's own renderer on [NVRHI](https://github.com/NVIDIA-RTX/NVRHI) (Direct3D 12 or Vulkan; experimental, see [Rendering](Rendering.md#nvrhi-backend-experimental)). |
 | Render | Api | d3d12 | `Backend=nvrhi`: `d3d12` or `vulkan`; the other one is tried if a device can't be made, then the Direct3D 9 backend. |
 | Render | WorldScale | 1 | `Backend=nvrhi`: the world view is drawn this many times the frame's size (up to 3) and scaled down before the interface goes on top (supersampling: smoother edges; costs GPU time). 1 = straight into the frame. |
+| Render | TakeOverStatics | 1 | `Backend=nvrhi`: SacredBild draws the static objects of the world's draw lists (buildings, trees, props) itself instead of the game's code for them. 0 = the game's code, for comparing. |
 | Debug | RhiValidation | 0 | `Backend=nvrhi`: the API's validation (Direct3D 12 debug layer, Vulkan's `VK_LAYER_KHRONOS_validation`) and NVRHI's, messages in the log; slow. |
 | DDraw | Chain | `SacredBild\DDrawCompat.dll` | `Backend=chain`: ddraw loaded behind SacredBild; empty = system ddraw. |
 | DDraw | D3D9 | | `Backend=d3d9`: `d3d9.dll` to use (e.g. DXVK), relative to the game folder or absolute. Empty or not loadable: a `d3d9.dll` next to the exe, then Windows' own. |
