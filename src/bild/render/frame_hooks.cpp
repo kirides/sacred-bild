@@ -17,6 +17,7 @@
 #include "settings/config/display.h"
 #include "settings/config/render.h"
 #include "ddraw9/smaa.h"
+#include "ddrawrhi/smaa.h"
 #include "ddrawrhi/world.h"
 #include "log.h"
 #include "patch.h"
@@ -365,7 +366,14 @@ namespace
             DeviceProxy* proxy = DeviceProxy::instance();
             if (Config::render.smaa > 0 && proxy && device == proxy)
             {
-                DDraw9::Smaa::apply(proxy->real(), static_cast<DDraw9::Smaa::Preset>(Config::render.smaa - 1));
+                if (Config::ddraw.nvrhi)
+                {
+                    DDrawRhi::Smaa::apply(proxy->real(), Config::render.smaa - 1);
+                }
+                else
+                {
+                    DDraw9::Smaa::apply(proxy->real(), static_cast<DDraw9::Smaa::Preset>(Config::render.smaa - 1));
+                }
             }
         }
         // The manager draws a window alone (savegame, options, character, world map): the original screen showed

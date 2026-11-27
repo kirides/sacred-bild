@@ -1456,6 +1456,11 @@ namespace DDrawRhi
         cmd->clearDepthStencilTexture(m_worldDepth, nvrhi::AllSubresources, true, 1.0f, true, 0);
     }
 
+    nvrhi::ITexture* Device::renderTarget() const
+    {
+        return m_target ? m_target->gpu() : nullptr;
+    }
+
     void Device::endWorld()
     {
         std::scoped_lock lock(m_lock);

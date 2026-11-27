@@ -44,6 +44,8 @@ namespace DDrawRhi
         // target's size until endWorld, which scales it down into the render target.
         void beginWorld(float scale);
         void endWorld();
+        // The render target's texture (null without one).
+        nvrhi::ITexture* renderTarget() const;
 
         // IUnknown
         STDMETHOD(QueryInterface)(REFIID riid, LPVOID* out) override;

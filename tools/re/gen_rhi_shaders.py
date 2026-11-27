@@ -29,6 +29,15 @@ SHADERS = {
         ('UiVS', 'vs_6_0', 'vsMain', []),
         ('UiPS', 'ps_6_0', 'psMain', []),
     ],
+    'smaa.hlsl': [
+        ('SmaaEdgeVS', 'vs_6_0', 'EdgeVS', ['SMAA_PRESET_LOW=1']),
+        ('SmaaBlendVS', 'vs_6_0', 'BlendVS', ['SMAA_PRESET_LOW=1']),
+        ('SmaaBlendPS', 'ps_6_0', 'BlendPS', ['SMAA_PRESET_LOW=1']),
+    ] + [entry for preset in ('Low', 'Medium', 'High') for entry in (
+        (f'SmaaEdgePS{preset}', 'ps_6_0', 'EdgePS', [f'SMAA_PRESET_{preset.upper()}=1']),
+        (f'SmaaWeightVS{preset}', 'vs_6_0', 'WeightVS', [f'SMAA_PRESET_{preset.upper()}=1']),
+        (f'SmaaWeightPS{preset}', 'ps_6_0', 'WeightPS', [f'SMAA_PRESET_{preset.upper()}=1']),
+    )],
     'blit.hlsl': [
         ('BlitVS', 'vs_6_0', 'vsMain', []),
         ('BlitCopyPS', 'ps_6_0', 'psCopy', []),
