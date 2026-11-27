@@ -245,6 +245,11 @@ namespace
                  L"(HUD layout tab). Off: the whole interface stays in the centered 1024 x 768 area.");
         ui.check(L"Smooth UI scaling (bilinear filtering)", {L"UI", L"LinearFilter"}, Config::ui.linearFilter)
             .tip(L"Bilinear filtering for the scaled interface. Off: the game's sharp point sampling.");
+        ui.check(L"HD Font", {L"UI", L"NativeFonts"}, Config::ui.nativeFonts)
+            .enabledIf(nvrhi)
+            .tip(L"NVRHI renderer: every character the game puts into its font textures is drawn again with the "
+                 L"same font at the UI size, so text is sharp instead of stretched from 1024 x 768. The layout and "
+                 L"line breaks stay the game's.");
         ui.group(L"Renderer");
         ui.combo(L"DirectDraw:", {L"DDraw", L"Backend"},
               {{L"SacredBild (Direct3D 9)", L"d3d9"}, {L"SacredBild NVRHI (experimental)", L"nvrhi"},
