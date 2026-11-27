@@ -310,3 +310,13 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   with the mod manager open; frame 1.75 -> 1.65 ms uncapped; pictures as before (the escape menu and every mod manager
   screen identical), Vulkan validation clean. The glyph pages of the game's fonts stay GDI surfaces drawn into and
   uploaded as the game makes them; with the draws merged there was little left to win there.
+- 2026-11-27: parallel posing (John asked whether Granny's bone math could be redone without its globals). Not needed:
+  the pose's call tree (0x10008460 -> 0x10021690 -> 0x10021250, 0x10020990 -> 0x10043570) writes no global at all;
+  the writes to 0x1006CA64.. seen before are static initializers that sit after 0x10020990 in the DLL. A skeleton's
+  pose writes its own bones and stamp (and its parents', posed first). GrannyParallel now hooks the posing walk
+  (0x10007500, found by signature; the pose call, posing flag and counter read from its code): skeletons grouped by
+  their root (parent chain +0x74), groups spread over the animation threads (largest first), the flag and counter set
+  around it as the original does, the pose called through its address so GpuSkin's off-screen skipping still applies.
+  `[Render] ParallelPosing` (on; with AnimationThreads > 1). Uncapped: advance 0.66 -> 0.48 ms, animation wait
+  0.47 -> 0.29 ms, frame 1.76 -> 1.50 ms in the field save; wait 0.26 -> 0.12 ms in the park. Characters pose as
+  before. [Debug] AnimationCheck compares the control walk only, not the posing.

@@ -89,6 +89,7 @@ namespace
     // The phase the threads share.
     struct Job
     {
+        bool posing = false;                // the groups are skeletons to pose (g_poseList), not controls
         const std::vector<Group>* groups = nullptr;
         const uint32_t* order = nullptr;    // groups, largest first
         double oldTime = 0, newTime = 0;
@@ -166,12 +167,43 @@ namespace
         }
     }
 
+    // ---- Posing (granny.dll 0x10007500: the advance's last step) ----
+    // Each skeleton in the scene's list is posed (0x10008460, thiscall (scene, out), ret 8: skips inactive and already
+    // stamped ones, poses its parent skeleton first, then its bones in order, each from its parent bone). That writes the
+    // skeleton's own bones and stamp only (and its parents'), reads the global pose counter, and calls nothing that
+    // writes shared state. Skeletons are grouped by their root skeleton (parent chain +0x74), so a parent is posed on
+    // one thread only; the groups are spread over the threads like the control walk's. The posing flag and the counter
+    // are set around it on the calling thread, as the original does. The pose is called through its address, so
+    // GpuSkin's off-screen skipping (a detour of it) still applies.
+    using PoseWalkFn = void(__fastcall*)(uint8_t* scene, void* edx);
+    using PoseFn = void(__fastcall*)(void* skeleton, void* edx, uint32_t scene, uint32_t out);
+    PoseWalkFn g_origPoseWalk = nullptr;
+    uintptr_t g_pose = 0;
+    uint8_t* g_posingFlag = nullptr;
+    uint32_t* g_poseCounter = nullptr;
+    constexpr uintptr_t kSceneSkeletons = 0x10;     // list sentinel: node {next, prev, skeleton | flags}
+    constexpr uintptr_t kSkeletonParent = 0x74;
+    std::vector<void*> g_poseList;                  // skeletons by group
+    uint8_t* g_poseScene = nullptr;
+    uint32_t g_poseOut[4] = {};
+
     void runGroups(Job& job)
     {
         const auto& groups = *job.groups;
         for (uint32_t i; (i = job.next.fetch_add(1, std::memory_order_relaxed)) < groups.size();)
         {
-            for (void* control : controlsOf(groups[job.order[i]]))
+            const Group& group = groups[job.order[i]];
+            if (job.posing)
+            {
+                const auto pose = reinterpret_cast<PoseFn>(g_pose);
+                for (uint32_t k = 0; k < group.count; ++k)
+                {
+                    pose(g_poseList[group.first + k], nullptr, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(g_poseScene)),
+                        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(g_poseOut)));
+                }
+                continue;
+            }
+            for (void* control : controlsOf(group))
             {
                 sample(control, job.oldTime, job.newTime);
             }
@@ -190,11 +222,12 @@ namespace
         }
     }
 
-    // Samples every group on the calling thread and the helpers.
+    // Samples (or poses) every group on the calling thread and the helpers.
     void runParallel(const std::vector<Group>& groups, const std::vector<uint32_t>& order, double oldTime,
-        double newTime)
+        double newTime, bool posing = false)
     {
         Job& job = g_job;
+        job.posing = posing;
         job.groups = &groups;
         job.order = order.data();
         job.oldTime = oldTime;
@@ -442,6 +475,82 @@ namespace
     }
 }
 
+namespace
+{
+    struct PoseStats
+    {
+        std::atomic<uint32_t> walks{0}, parallel{0}, skeletons{0}, groups{0};
+        std::atomic<int64_t> ticks{0};
+    };
+    PoseStats g_poseStats;
+
+    void __fastcall hookPoseWalk(uint8_t* scene, void* edx)
+    {
+        static std::vector<void*> skeletons;
+        static std::vector<void*> roots;
+        static std::vector<Group> groups;
+        static std::vector<uint32_t> order;
+        skeletons.clear();
+        auto* sentinel = reinterpret_cast<void**>(scene + kSceneSkeletons);
+        for (auto* node = static_cast<void**>(*sentinel); node != sentinel; node = static_cast<void**>(node[0]))
+        {
+            skeletons.push_back(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(node[2]) & ~3u));
+        }
+        g_poseStats.walks.fetch_add(1, std::memory_order_relaxed);
+        if (skeletons.size() < 16 || g_inWalk.load(std::memory_order_acquire))
+        {
+            g_origPoseWalk(scene, edx);
+            return;
+        }
+        const int64_t start = qpc();
+        // Grouped by root skeleton, each group in list order.
+        roots.resize(skeletons.size());
+        groups.clear();
+        for (size_t i = 0; i < skeletons.size(); ++i)
+        {
+            auto* root = static_cast<uint8_t*>(skeletons[i]);
+            for (int depth = 0; depth < 64 && field<uint8_t*>(root, kSkeletonParent); ++depth)
+            {
+                root = field<uint8_t*>(root, kSkeletonParent);
+            }
+            roots[i] = root;
+        }
+        // Small sets: a sort by root keeps each group's skeletons in list order (stable).
+        order.resize(skeletons.size());
+        for (uint32_t i = 0; i < order.size(); ++i)
+        {
+            order[i] = i;
+        }
+        std::stable_sort(order.begin(), order.end(), [](uint32_t a, uint32_t b) { return roots[a] < roots[b]; });
+        g_poseList.clear();
+        for (size_t k = 0; k < order.size(); ++k)
+        {
+            const uint32_t i = order[k];
+            if (groups.empty() || groups.back().bones != roots[i])
+            {
+                groups.push_back({static_cast<const uint8_t*>(roots[i]), static_cast<uint32_t>(g_poseList.size()), 0});
+            }
+            g_poseList.push_back(skeletons[i]);
+            ++groups.back().count;
+        }
+        order.resize(groups.size());
+        for (uint32_t i = 0; i < order.size(); ++i)
+        {
+            order[i] = i;
+        }
+        std::stable_sort(order.begin(), order.end(), [](uint32_t a, uint32_t b) { return groups[a].count > groups[b].count; });
+        *g_posingFlag = 1;
+        g_poseScene = scene;
+        runParallel(groups, order, 0.0, 0.0, true);
+        *g_poseCounter += 1;
+        *g_posingFlag = 0;
+        g_poseStats.parallel.fetch_add(1, std::memory_order_relaxed);
+        g_poseStats.skeletons.fetch_add(static_cast<uint32_t>(skeletons.size()), std::memory_order_relaxed);
+        g_poseStats.groups.fetch_add(static_cast<uint32_t>(groups.size()), std::memory_order_relaxed);
+        g_poseStats.ticks.fetch_add(qpc() - start, std::memory_order_relaxed);
+    }
+}
+
 void GrannyParallel::install()
 {
     int threads = Config::render.animationThreads;
@@ -517,6 +626,20 @@ void GrannyParallel::install()
     Patch::hook(g_origControls, walk, &hookControls, "granny control walk");
     Patch::hook(g_origLock, lock, &hookLock, "granny animation handle lock");
     Patch::hook(g_origRelease, release, &hookRelease, "granny animation handle release");
+    // The posing walk: the pose call, the posing flag and the pose counter taken from its code.
+    const uintptr_t poseWalk = Config::render.parallelPosing ? GrannyMesh::find(who, "Granny's posing walk",
+        "6A FF 68 ?? ?? ?? ?? 64 A1 00 00 00 00 50 64 89 25 00 00 00 00 51 55 56 57 8B E9 C6 05 ?? ?? ?? ?? 01 8B 75 10 8D 7D 10 3B F7", 0) : 0;
+    if (poseWalk && *reinterpret_cast<const uint8_t*>(poseWalk + 0x40) == 0xE8 && *reinterpret_cast<const uint8_t*>(poseWalk + 0x4B) == 0xA1)
+    {
+        g_pose = GrannyMesh::callTarget(poseWalk + 0x40);
+        g_posingFlag = *reinterpret_cast<uint8_t* const*>(poseWalk + 0x1D);
+        g_poseCounter = *reinterpret_cast<uint32_t* const*>(poseWalk + 0x4C);
+        g_origPoseWalk = reinterpret_cast<PoseWalkFn>(poseWalk);
+        if (g_pose && Patch::hook(g_origPoseWalk, &hookPoseWalk, "granny posing walk"))
+        {
+            LOG("{}: skeletons posed on {} threads, grouped by their root skeleton", who, g_helperIds.size() + 1);
+        }
+    }
     g_enabled = true;
     LOG("{}: Granny's animation controls sampled on {} threads{}", who, g_helperIds.size() + 1,
         Config::debug.animationCheck ? ", checked against one thread every 2 s (AnimationCheck)" : "");

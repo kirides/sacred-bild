@@ -55,6 +55,7 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | SoundLock | 1 | The sound system's lock as a user-mode lock (SRW lock) instead of a kernel mutex; the render thread takes it for every sound command, several per object and frame. |
 | Render | AsyncAnimation | 1 | Advance Granny animations on a worker thread, overlapping the start of the frame. |
 | Render | AnimationAhead | 1 | With AsyncAnimation and a frame cap (FpsLimit or VSync): the frame's animation advance starts after the frame's interface, while the frame waits for its cap, so the next frame's models don't wait for it (poses one frame behind the game's clock). |
+| Render | ParallelPosing | 1 | With AnimationThreads > 1: the skeletons are posed on those threads too, grouped by their root skeleton. |
 | Render | AnimationThreads | 0 | Threads that sample Granny's animation controls in the advance, split by skeleton; 0 = automatic (CPU cores - 2, at most 4), 1 = Granny's own walk on one thread. |
 | Render | Atlas | 1 | Copy small textures into shared pages so more draws merge. |
 | Render | AtlasPageSize | 8192 | Atlas page size in texels (clamped to the GPU limit, halved if the GPU refuses it). |

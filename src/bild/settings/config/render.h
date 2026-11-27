@@ -61,6 +61,8 @@ namespace Config
         // interface instead of the start of the next frame, so it runs while the frame waits for its cap and the next
         // frame's models don't wait for it (poses one frame behind the game's clock).
         bool animationAhead = true;
+        // With AnimationThreads > 1: the skeletons posed on those threads too, grouped by their root skeleton.
+        bool parallelPosing = true;
         // Threads that sample Granny's animation controls (split by skeleton); 1 = Granny's own walk, 0 = automatic.
         int animationThreads = 0;
         // Hash index in front of the map data's record caches (std::map lookups per tile and object).
