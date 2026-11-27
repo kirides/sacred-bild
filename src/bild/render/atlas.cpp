@@ -1,5 +1,7 @@
 #include "render/atlas.h"
 #include "diag/d3d_stats.h"
+#include "ddrawrhi/surface.h"
+#include "settings/config/ddraw.h"
 #include "log.h"
 
 #include <algorithm>
@@ -503,6 +505,20 @@ void TextureAtlas::drop(IDirectDrawSurface7* texture, Entry& e)
 
 bool TextureAtlas::upload(IDirectDrawSurface7* texture, Entry& e, bool gutterOnly)
 {
+    D3DStats::Scope timer{D3DStats::TAtlasUpload};
+    // NVRHI: texture and gutter in one upload and one copy.
+    if (!gutterOnly && Config::ddraw.nvrhi)
+    {
+        DDrawRhi::Surface* page = DDrawRhi::Surface::from(e.page->surface);
+        DDrawRhi::Surface* source = DDrawRhi::Surface::from(texture);
+        if (page && source && page->copyWithGutter(*source, e.x, e.y, e.clampEdges))
+        {
+            texture->GetUniquenessValue(&e.uniqueness);
+            ++m_uploads;
+            D3DStats::count(D3DStats::CAtlasUpload);
+            return true;
+        }
+    }
     if (!gutterOnly)
     {
         texture->GetUniquenessValue(&e.uniqueness);

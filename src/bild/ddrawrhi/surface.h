@@ -99,6 +99,10 @@ namespace DDrawRhi
         Surface* attachedDepth() const { return m_depth; }
         // The texture to draw with; uploads changes made through the CPU first (records into the frame: Context lock held).
         nvrhi::ITexture* texture();
+        // TextureAtlas: all of `src` (a texture with a system memory copy, this surface's format) into this video
+        // memory texture at (x, y) with a one-pixel gutter around it (the opposite edge, or with clampEdges the same edge),
+        // in one upload and one copy instead of nine Blts. False if the formats or kinds don't allow it.
+        bool copyWithGutter(Surface& src, LONG x, LONG y, bool clampEdges);
         bool uploadPending() const { return m_dirty.load(std::memory_order_relaxed); }
 
         // IUnknown

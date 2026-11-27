@@ -4,6 +4,7 @@
 #include "controller/controller.h"
 #include "diag/d3d_stats.h"
 #include "perf/fast_math.h"
+#include "perf/fast_inflate.h"
 #include "perf/file_cache.h"
 #include "diag/file_io_stats.h"
 #include "sacred_addr.h"
@@ -142,6 +143,7 @@ void Sacred::installHooks()
     Zoom::install();
     OptionsScreen::install();
     Movie::install();
+    FastInflate::install();
     Screenshot::install();
     MapCache::install();
     SoundLock::install();

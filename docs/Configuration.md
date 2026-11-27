@@ -52,6 +52,7 @@ tabs, Start is Play. Text fields need the keyboard.
 | Render | RecordIndex | 1 | Hash index (gtl::flat_hash_map) in front of the game's tile/object record caches. |
 | Render | WarmFileCache | 1 | Read `PAK`, `World` and `mp3` once at startup in the background (low I/O priority, at most a quarter of the free memory, sound paks first), so the game's synchronous reads while playing come from Windows' file cache; a read from the idle SSD took ~8 ms on the render thread. |
 | Render | FastMath | 1 | Faster replacements for the game's x87 math helpers with the same results: `__ftol` (float to integer) with SSE3's `fisttp`; the teleporter's ripple without x87 `fsin`/`fcos`. |
+| Render | FastInflate | 1 | The game's zlib uncompress (textures and maps unpacked while new areas stream in) through libdeflate: the same output in about a third of the time; anything libdeflate refuses goes to the game's zlib. |
 | Render | SoundLock | 1 | The sound system's lock as a user-mode lock (SRW lock) instead of a kernel mutex; the render thread takes it for every sound command, several per object and frame. |
 | Render | AsyncAnimation | 1 | Advance Granny animations on a worker thread, overlapping the start of the frame. |
 | Render | AnimationAhead | 1 | With AsyncAnimation and a frame cap (FpsLimit or VSync): the frame's animation advance starts after the frame's interface, while the frame waits for its cap, so the next frame's models don't wait for it (poses one frame behind the game's clock). |

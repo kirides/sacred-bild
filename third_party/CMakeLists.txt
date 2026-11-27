@@ -40,8 +40,21 @@ target_link_libraries(nvrhi_d3d12 PRIVATE D3D12MA)
 # Vulkan Memory Allocator (header only; compiled in NVRHI's vulkan-allocator.cpp): the same for the Vulkan backend.
 target_include_directories(nvrhi_vk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/VulkanMemoryAllocator/include)
 
+# libdeflate, decompression only: SacredBild's replacement for the game's zlib uncompress (perf/fast_inflate.cpp).
+add_library(libdeflate_decompress STATIC
+  libdeflate/lib/adler32.c
+  libdeflate/lib/deflate_decompress.c
+  libdeflate/lib/zlib_decompress.c
+  libdeflate/lib/utils.c
+  libdeflate/lib/x86/cpu_features.c)
+target_include_directories(libdeflate_decompress PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libdeflate)
+target_compile_definitions(libdeflate_decompress PUBLIC LIBDEFLATE_STATIC)
+# C11 with its atomics (the CPU feature cache); MSVC has them behind a switch.
+set_target_properties(libdeflate_decompress PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+target_compile_options(libdeflate_decompress PRIVATE /experimental:c11atomics)
+
 # Warnings are upstream's business; ours stay at /W4 for src/.
-foreach(t nvrhi nvrhi_d3d12 nvrhi_vk DirectX-Guids D3D12MA)
+foreach(t nvrhi nvrhi_d3d12 nvrhi_vk DirectX-Guids D3D12MA libdeflate_decompress)
   target_compile_options(${t} PRIVATE /W0 /utf-8)
   set_target_properties(${t} PROPERTIES FOLDER "third_party")
 endforeach()

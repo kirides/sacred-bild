@@ -10,6 +10,9 @@ new upstream files over the folder, then re-applying the local changes listed be
 | `Vulkan-Headers/` | https://github.com/KhronosGroup/Vulkan-Headers | `v1.4.352` (`015e25c`), the tag NVRHI's CMake pins | `include/`, licenses, README | Apache-2.0 / MIT (`Vulkan-Headers/LICENSE.md`) |
 | `D3D12MemoryAllocator/` | https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator | `v3.3.0` (`6009492`) | `include/`, `src/D3D12MemAlloc.cpp` and `.natvis`, license, notices, README | MIT (`D3D12MemoryAllocator/LICENSE.txt`) |
 | `VulkanMemoryAllocator/` | https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator | `v3.5.0` (`0f1a757`) | `include/vk_mem_alloc.h`, license, README | MIT (`VulkanMemoryAllocator/LICENSE.txt`) |
+| `libdeflate/` | https://github.com/ebiggers/libdeflate | `1.26` (`68351dc`) | `libdeflate.h`, `common_defs.h`, the decompression sources of `lib/` (x86), `COPYING`, README | MIT (`libdeflate/COPYING`) |
+
+`libdeflate/` is built by `third_party/CMakeLists.txt` as `libdeflate_decompress` (C11, MSVC's C11 atomics), linked into ddraw.dll for `perf/fast_inflate.cpp`; unmodified.
 
 `D3D12MemoryAllocator/` is built by `third_party/CMakeLists.txt` as a static library (`D3D12MA`, with `D3D12MA_USING_DIRECTX_HEADERS`) linked into NVRHI's D3D12 backend; unmodified.
 

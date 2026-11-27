@@ -80,6 +80,9 @@ namespace Config
         bool soundLock = true;
         // Faster replacements for the game's x87 math (float -> integer conversion, the teleporter ripple's sin/cos).
         bool fastMath = true;
+        // The game's zlib uncompress (the textures and maps it unpacks while new areas stream in) through libdeflate,
+        // a few times faster with the same output; anything libdeflate refuses goes to the game's zlib as before.
+        bool fastInflate = true;
         // Read the game's pak files and music once in the background so the game's reads during play come from
         // Windows' file cache instead of the drive (~8 ms each from an idle SSD, on the render thread).
         bool warmFileCache = true;

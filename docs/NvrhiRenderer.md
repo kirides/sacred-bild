@@ -387,3 +387,17 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   blocks (`MemoryResource::placed`), freed with the texture; the allocator lives with the device. Save 2: 0.41-0.43 ms
   a texture with memory of its own, 0.048 ms placed (185-190 ms a run against 21 ms). Validation clean, pictures as
   before.
+- 2026-11-27: streaming hitches (John: make texture streaming / buffer creation non-blocking). A test mod moving the
+  hero across ten sectors (test copy, mods/streamwalk) gives a 70-80 ms hitch per move. Making textures is no
+  longer part of it (0.05 ms each; sector art goes into atlas pages). The engine thread's time in those hitches: the
+  game's file reads (CRT reads and seeks of the map records, ~2000 per move: NtReadFile / NtSetInformationFile /
+  NtCreateFile, 30-40 %), the game's zlib uncompress of textures (30-35 %), SacredBild's atlas copies (~19 ms a move).
+  Atlas copies: each texture went in as nine Blts (the texture and its eight gutter strips), each converted, written to
+  a scratch texture and copied; now `Surface::copyWithGutter` builds texture and gutter in one BGRA8 image (one
+  conversion, one upload, one copy). NVRHI's upload chunks are 8 MB instead of 64 KB (every texture larger than a
+  chunk got an upload buffer of its own, made on the spot). Atlas time per move ~19 ms -> 3.5 ms; hitches 70-76 ->
+  56-61 ms (max 110-165 -> ~75). `[Render] FastInflate` (on): the game's zlib 1.2.1 uncompress (Addr::zlibUncompress,
+  ENG 0x66E160) goes through libdeflate (vendored 1.26, decompression only); anything libdeflate refuses goes to the
+  game's zlib. 1200 calls checked against zlib's output in a run: identical. Unpacking ~18 -> 6 ms a move; hitches
+  60 -> 48-51 ms. D3DStats' hitch lines show the atlas copy and unpacking time. Also: the GPU timer read Vulkan queries
+  before the GPU had reset them (validation); it now waits for its job. Validation clean on both APIs.

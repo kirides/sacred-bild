@@ -452,7 +452,10 @@ namespace DDrawRhi
             struct GpuTimer
             {
                 nvrhi::TimerQueryHandle current;            // in the open list
-                std::vector<nvrhi::TimerQueryHandle> pending, free;
+                // Ended, with the serial of their job: read once the GPU is done with it (asking Vulkan earlier reads
+                // a query the GPU has not reset yet).
+                std::vector<std::pair<nvrhi::TimerQueryHandle, uint64_t>> pending;
+                std::vector<nvrhi::TimerQueryHandle> free;
                 double seconds = 0.0;
                 uint32_t lists = 0, frames = 0;
                 DWORD nextLog = 0;
@@ -481,13 +484,13 @@ namespace DDrawRhi
                 }
             }
 
-            void gpuTimerEnd(nvrhi::ICommandList* cmd)
+            void gpuTimerEnd(nvrhi::ICommandList* cmd, uint64_t serial)
             {
                 GpuTimer& t = g_gpuTimer;
                 if (t.current)
                 {
                     cmd->endTimerQuery(t.current);
-                    t.pending.push_back(std::move(t.current));
+                    t.pending.emplace_back(std::move(t.current), serial);
                     t.current = nullptr;
                 }
             }
@@ -502,11 +505,11 @@ namespace DDrawRhi
                 }
                 ++t.frames;
                 nvrhi::IDevice* dev = Rhi::device();
-                while (!t.pending.empty() && dev->pollTimerQuery(t.pending.front()))
+                while (!t.pending.empty() && gpuDone(t.pending.front().second, false) && dev->pollTimerQuery(t.pending.front().first))
                 {
-                    t.seconds += dev->getTimerQueryTime(t.pending.front());
-                    dev->resetTimerQuery(t.pending.front());
-                    t.free.push_back(std::move(t.pending.front()));
+                    t.seconds += dev->getTimerQueryTime(t.pending.front().first);
+                    dev->resetTimerQuery(t.pending.front().first);
+                    t.free.push_back(std::move(t.pending.front().first));
                     t.pending.erase(t.pending.begin());
                     ++t.lists;
                 }
@@ -538,7 +541,7 @@ namespace DDrawRhi
                 Job job;
                 if (g_open)
                 {
-                    gpuTimerEnd(g_commands);
+                    gpuTimerEnd(g_commands, g_nextSerial);     // this job's serial (below)
                     g_commands->close();
                     g_open = false;
                     job.list = g_commands;
@@ -859,7 +862,9 @@ namespace DDrawRhi
                 }
                 if (!g_commands)
                 {
-                    g_commands = Rhi::device()->createCommandList();
+                    // Uploads (texture writes) come from 8 MB chunks: with NVRHI's 64 KB every texture streamed in larger than
+                    // that got an upload buffer of its own, made on the spot (a sector brings ~6 MB).
+                    g_commands = Rhi::device()->createCommandList(nvrhi::CommandListParameters().setUploadChunkSize(8u << 20));
                 }
                 g_commands->open();
                 g_open = true;
