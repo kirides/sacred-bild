@@ -12,9 +12,10 @@ namespace Rhi::Detail
     public:
         virtual ~Backend() = default;
 
-        // Device, queue and swap chain; false with the reason logged. `messages` receives NVRHI's messages.
-        virtual bool create(HWND window, uint32_t width, uint32_t height, const Settings& settings,
-            nvrhi::IMessageCallback* messages) = 0;
+        // Device and queue; false with the reason logged. `messages` receives NVRHI's messages.
+        virtual bool createDevice(const Settings& settings, nvrhi::IMessageCallback* messages) = 0;
+        // The swap chain on `window` (once).
+        virtual bool attachWindow(HWND window, uint32_t width, uint32_t height) = 0;
         virtual nvrhi::IDevice* device() = 0;
         virtual const std::string& adapterName() const = 0;
 

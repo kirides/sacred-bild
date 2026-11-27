@@ -46,7 +46,14 @@ namespace Rhi
         uint64_t g_frames = 0;
         std::vector<nvrhi::FramebufferHandle> g_framebuffers;
         // One query per frame in flight, signalled after its last command list: beginFrame waits on the oldest.
-        std::deque<nvrhi::EventQueryHandle> g_inFlight;
+        struct InFlight
+        {
+            uint64_t frame;
+            nvrhi::EventQueryHandle query;
+        };
+        std::deque<InFlight> g_inFlight;
+        uint64_t g_finished = 0;        // frames below this are known to be finished
+        HWND g_window = nullptr;
         std::vector<nvrhi::EventQueryHandle> g_freeQueries;
 
         uint32_t framesInFlight()
@@ -68,6 +75,11 @@ namespace Rhi
             if (g_device)
             {
                 g_device->waitForIdle();
+                g_finished = std::max(g_finished, g_frames);
+                for (InFlight& f : g_inFlight)
+                {
+                    g_freeQueries.push_back(std::move(f.query));
+                }
                 g_inFlight.clear();
                 g_device->runGarbageCollection();
             }
@@ -79,12 +91,12 @@ namespace Rhi
         return api == Api::Vulkan ? "Vulkan" : "Direct3D 12";
     }
 
-    bool init(HWND window, uint32_t width, uint32_t height, const Settings& settings)
+    bool initDevice(const Settings& settings)
     {
         shutdown();
         g_settings = settings;
         g_backend = settings.api == Api::Vulkan ? Detail::makeVulkan() : Detail::makeD3D12();
-        if (!g_backend || !g_backend->create(window, width, height, settings, &g_messages))
+        if (!g_backend || !g_backend->createDevice(settings, &g_messages))
         {
             g_backend.reset();
             LOG("RHI: {} not available", apiName(settings.api));
@@ -95,13 +107,49 @@ namespace Rhi
         {
             g_device = nvrhi::validation::createValidationLayer(g_device);
         }
+        LOG("RHI: {} on {}, vsync {}, frame latency {}{}", apiName(settings.api), g_backend->adapterName(),
+            settings.vsync ? "on" : "off", settings.maxFrameLatency, settings.validation ? ", validation" : "");
+        return true;
+    }
+
+    bool attachWindow(HWND window, uint32_t width, uint32_t height)
+    {
+        if (!g_backend || g_window)
+        {
+            return g_backend && g_window == window;
+        }
+        width = std::max(width, 1u);
+        height = std::max(height, 1u);
+        if (!g_backend->attachWindow(window, width, height))
+        {
+            LOG("RHI: no swap chain on the window");
+            return false;
+        }
+        g_window = window;
         g_width = width;
         g_height = height;
         makeFramebuffers();
-        LOG("RHI: {} on {}, swap chain {}x{} ({} images), vsync {}, frame latency {}{}", apiName(settings.api),
-            g_backend->adapterName(), width, height, g_backend->imageCount(), settings.vsync ? "on" : "off",
-            settings.maxFrameLatency, settings.validation ? ", validation" : "");
+        LOG("RHI: swap chain {}x{} ({} images)", width, height, g_backend->imageCount());
         return true;
+    }
+
+    bool init(HWND window, uint32_t width, uint32_t height, const Settings& settings)
+    {
+        if (!initDevice(settings))
+        {
+            return false;
+        }
+        if (!attachWindow(window, width, height))
+        {
+            shutdown();
+            return false;
+        }
+        return true;
+    }
+
+    HWND window()
+    {
+        return g_window;
     }
 
     void shutdown()
@@ -117,6 +165,9 @@ namespace Rhi
         g_backend.reset();
         g_inFrame = false;
         g_frames = 0;
+        g_finished = 0;
+        g_window = nullptr;
+        g_width = g_height = 0;
     }
 
     bool ready()
@@ -148,10 +199,7 @@ namespace Rhi
         }
         while (g_inFlight.size() >= framesInFlight())
         {
-            nvrhi::EventQueryHandle oldest = std::move(g_inFlight.front());
-            g_inFlight.pop_front();
-            g_device->waitEventQuery(oldest);
-            g_freeQueries.push_back(std::move(oldest));
+            waitForFrame(g_inFlight.front().frame);
         }
         if (!g_backend->acquire(g_image))
         {
@@ -206,7 +254,7 @@ namespace Rhi
             query = g_device->createEventQuery();
         }
         g_device->setEventQuery(query, nvrhi::CommandQueue::Graphics);
-        g_inFlight.push_back(std::move(query));
+        g_inFlight.push_back({g_frames, std::move(query)});
         g_device->runGarbageCollection();
         ++g_frames;
     }
@@ -231,6 +279,38 @@ namespace Rhi
     uint64_t frameIndex()
     {
         return g_frames;
+    }
+
+    bool frameFinished(uint64_t frame)
+    {
+        while (!g_inFlight.empty() && g_device->pollEventQuery(g_inFlight.front().query))
+        {
+            g_finished = g_inFlight.front().frame + 1;
+            g_freeQueries.push_back(std::move(g_inFlight.front().query));
+            g_inFlight.pop_front();
+        }
+        return frame < g_finished;
+    }
+
+    void waitForFrame(uint64_t frame)
+    {
+        if (!g_device || frameFinished(frame))
+        {
+            return;
+        }
+        if (frame >= g_frames)
+        {
+            waitIdle();     // not presented yet: only an idle GPU is done with it
+            g_finished = std::max(g_finished, frame + 1);
+            return;
+        }
+        while (!g_inFlight.empty() && g_inFlight.front().frame <= frame)
+        {
+            g_device->waitEventQuery(g_inFlight.front().query);
+            g_finished = g_inFlight.front().frame + 1;
+            g_freeQueries.push_back(std::move(g_inFlight.front().query));
+            g_inFlight.pop_front();
+        }
     }
 
     nvrhi::ShaderHandle createShader(nvrhi::ShaderType type, const char* entry, const void* dxil, size_t dxilSize,

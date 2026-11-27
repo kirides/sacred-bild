@@ -56,6 +56,23 @@ public:
         m_depth = 1;
     }
 
+    bool try_lock()
+    {
+        const DWORD self = SpinLock::currentThread();
+        if (m_owner.load(std::memory_order_relaxed) == self)
+        {
+            ++m_depth;
+            return true;
+        }
+        DWORD expected = 0;
+        if (m_owner.compare_exchange_strong(expected, self, std::memory_order_acquire, std::memory_order_relaxed))
+        {
+            m_depth = 1;
+            return true;
+        }
+        return false;
+    }
+
     void unlock()
     {
         if (--m_depth == 0)

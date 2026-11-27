@@ -358,7 +358,7 @@ namespace
         // for both), which an exclusive mode never showed. The Direct3D 9 backend emulates fullscreen in the window and
         // presents into its client area: the mode's size centered on the screen, as when windowed.
         const int screenW = GetSystemMetrics(SM_CXSCREEN);
-        if (Config::ddraw.d3d9 && x == 0 && y == 0 && cx == screenW && cy == screenW && flags == SWP_SHOWWINDOW)
+        if (Config::ddraw.own() && x == 0 && y == 0 && cx == screenW && cy == screenW && flags == SWP_SHOWWINDOW)
         {
             const int screenH = GetSystemMetrics(SM_CYSCREEN);
             cx = g_width;
@@ -1083,7 +1083,7 @@ void Resolution::install()
     chooseSize();
     LOG("Resolution: {}x{}, world depth range {:.0f}..{:.0f}", g_width, g_height, g_near, g_far);
     Patch::hook(g_origFindMode, Addr::cDxDevices_findMode, &hookFindMode, "cDxDevices::findMode");
-    if (active() || Config::ddraw.d3d9)
+    if (active() || Config::ddraw.own())
     {
         g_origSetWindowPos = static_cast<SetWindowPosFn>(
             Patch::iat("USER32.dll", "SetWindowPos", reinterpret_cast<void*>(&hookSetWindowPos)));

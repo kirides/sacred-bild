@@ -73,8 +73,7 @@ namespace Rhi::Detail
                 // vulkan-1.dll stays loaded: drivers may keep threads.
             }
 
-            bool create(HWND window, uint32_t width, uint32_t height, const Settings& settings,
-                nvrhi::IMessageCallback* messages) override
+            bool createDevice(const Settings& settings, nvrhi::IMessageCallback* messages) override
             {
                 m_vsync = settings.vsync;
                 HMODULE lib = LoadLibraryW(L"vulkan-1.dll");
@@ -92,8 +91,7 @@ namespace Rhi::Detail
                 VULKAN_HPP_DEFAULT_DISPATCHER.init(getInstanceProcAddr);
                 try
                 {
-                    return createInstance(settings) && createSurface(window) && pickDevice() && createDevice(messages)
-                        && createSwapchain(width, height);
+                    return createInstance(settings) && pickDevice() && createLogicalDevice(messages);
                 }
                 catch (const vk::SystemError& e)
                 {
@@ -144,6 +142,28 @@ namespace Rhi::Detail
                     return false;
                 }
                 return true;
+            }
+
+            bool attachWindow(HWND window, uint32_t width, uint32_t height) override
+            {
+                try
+                {
+                    if (!createSurface(window))
+                    {
+                        return false;
+                    }
+                    if (!m_gpu.getSurfaceSupportKHR(static_cast<uint32_t>(m_family), m_surface))
+                    {
+                        LOG("RHI: Vulkan: the GPU's graphics queue cannot present to the window");
+                        return false;
+                    }
+                    return createSwapchain(width, height);
+                }
+                catch (const vk::SystemError& e)
+                {
+                    LOG("RHI: Vulkan: {}", e.what());
+                    return false;
+                }
             }
 
             bool resize(uint32_t width, uint32_t height) override
@@ -227,7 +247,7 @@ namespace Rhi::Detail
                     vk::PhysicalDeviceFeatures2 f2;
                     f2.pNext = &f12;
                     gpu.getFeatures2(&f2);
-                    if (!f13.dynamicRendering || !f13.synchronization2 || !f12.timelineSemaphore)
+                    if (!f13.dynamicRendering || !f13.synchronization2 || !f13.shaderDemoteToHelperInvocation || !f12.timelineSemaphore)
                     {
                         continue;
                     }
@@ -235,7 +255,7 @@ namespace Rhi::Detail
                     int family = -1;
                     for (uint32_t i = 0; i < families.size(); ++i)
                     {
-                        if ((families[i].queueFlags & vk::QueueFlagBits::eGraphics) && gpu.getSurfaceSupportKHR(i, m_surface))
+                        if ((families[i].queueFlags & vk::QueueFlagBits::eGraphics) && gpu.getWin32PresentationSupportKHR(i))
                         {
                             family = static_cast<int>(i);
                             break;
@@ -257,7 +277,7 @@ namespace Rhi::Detail
                 }
                 if (best < 0)
                 {
-                    LOG("RHI: Vulkan: no GPU with Vulkan 1.3 (dynamic rendering, synchronization2, timeline semaphores) that presents to the window");
+                    LOG("RHI: Vulkan: no GPU with Vulkan 1.3 (dynamic rendering, synchronization2, timeline semaphores) that presents to windows");
                     return false;
                 }
                 const vk::PhysicalDeviceProperties props = m_gpu.getProperties();
@@ -266,10 +286,11 @@ namespace Rhi::Detail
                 return true;
             }
 
-            bool createDevice(nvrhi::IMessageCallback* messages)
+            bool createLogicalDevice(nvrhi::IMessageCallback* messages)
             {
                 m_deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-                vk::PhysicalDeviceVulkan13Features f13 = vk::PhysicalDeviceVulkan13Features().setDynamicRendering(true).setSynchronization2(true);
+                vk::PhysicalDeviceVulkan13Features f13 = vk::PhysicalDeviceVulkan13Features().setDynamicRendering(true).setSynchronization2(true)
+                    .setShaderDemoteToHelperInvocation(true);     // HLSL's discard (dxc's SPIR-V)
                 vk::PhysicalDeviceVulkan12Features f12 = vk::PhysicalDeviceVulkan12Features().setTimelineSemaphore(true).setPNext(&f13);
                 vk::PhysicalDeviceFeatures2 f2 = vk::PhysicalDeviceFeatures2().setPNext(&f12);
                 const float priority = 1.0f;

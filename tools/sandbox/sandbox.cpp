@@ -13,6 +13,9 @@
 #include "ui/ui.h"
 
 #include "ddraw9/backend.h"
+#include "ddrawrhi/backend.h"
+#include "settings/config/ddraw.h"
+#include "settings/config/debug.h"
 
 #include <windows.h>
 #include <ddraw.h>
@@ -59,6 +62,7 @@ namespace
         // frame or the next, depending on how often the document had been updated before. With 1/64 a 0.5 s timer ends exactly on frame 32.
         double dt = 1.0 / 64.0;
         std::string mode = "game";          // gear.ui.state().mode
+        std::string backend = "d3d9";       // d3d9, nvrhi (Direct3D 12) or nvrhi-vulkan: whose DirectDraw / Direct3D 7 draws
         uint32_t clear = 0xFF202830;
     };
     Options g_opt;
@@ -191,7 +195,9 @@ namespace
     {
         using CreateEx = HRESULT(WINAPI*)(GUID*, LPVOID*, REFIID, IUnknown*);
         CreateEx create = nullptr;
-        for (const DDraw9::Export& e : DDraw9::exports())
+        const bool nvrhi = g_opt.backend.starts_with("nvrhi");
+        Config::ddraw.vulkan = g_opt.backend == "nvrhi-vulkan";
+        for (const DDraw9::Export& e : nvrhi ? DDrawRhi::exports() : DDraw9::exports())
         {
             if (std::strcmp(e.name, "DirectDrawCreateEx") == 0)
             {
@@ -1047,6 +1053,8 @@ namespace
             "  --background file    an image drawn under the UI (PNG, JPG, TGA)\n"
             "  --enable all|a,b,c   switch these mods on (gear_mods.json in the mods folder; all: every folder with a mod.lua)\n"
             "  --log file           the log (default SacredGearSandbox.log next to the sandbox)\n"
+            "  --backend d3d9|nvrhi|nvrhi-vulkan  SacredBild's DirectDraw / Direct3D 7 to draw with (default d3d9)\n"
+            "  --rhi-validation     with nvrhi: the API's validation layer and NVRHI's (messages in the log)\n"
             "  --sim [dt]           simulated clock, dt seconds per frame (default 1/64, exact in floats); scripts always run on it\n"
             "  --script file.lua [args...]  run a driver script (the rest of the command line is its arg table)\n");
     }
@@ -1067,6 +1075,8 @@ namespace
             else if (a == L"--log") g_opt.log = next();
             else if (a == L"--enable") g_opt.enable = narrow(next());
             else if (a == L"--mode") g_opt.mode = narrow(next());
+            else if (a == L"--backend") g_opt.backend = narrow(next());
+            else if (a == L"--rhi-validation") Config::debug.rhiValidation = true;
             else if (a == L"--size")
             {
                 const std::wstring s = next();

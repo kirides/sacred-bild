@@ -74,6 +74,14 @@ set(RHI_SOURCES
   src/bild/rhi/rhi_d3d12.cpp
   src/bild/rhi/rhi_vulkan.cpp
 )
+# DirectDraw / Direct3D 7 on the NVRHI device (stage 3 of docs/NvrhiRenderer.md).
+set(DDRAWRHI_SOURCES
+  src/bild/ddrawrhi/context.cpp
+  src/bild/ddrawrhi/device.cpp
+  src/bild/ddrawrhi/directdraw.cpp
+  src/bild/ddrawrhi/surface.cpp
+  src/bild/ddrawrhi/vertex_buffer.cpp
+)
 # Direct3D 12 and Vulkan headers stay in these two files, away from the Direct3D 7 / 9 headers of the precompiled header.
 set_source_files_properties(src/bild/rhi/rhi_d3d12.cpp src/bild/rhi/rhi_vulkan.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
@@ -157,6 +165,7 @@ set(DDRAW_SOURCES
   src/bild/exports.def
   src/bild/version.rc
   ${RHI_SOURCES}
+  ${DDRAWRHI_SOURCES}
 )
 sort_sources_by_size_desc(DDRAW_SOURCES)
 # Version resources: version_info.h comes from the version files plus the git short sha (and -dirty), regenerated on every
@@ -341,11 +350,14 @@ if(SACREDGEAR AND SACREDGEAR_SANDBOX)
     src/bild/ddraw9/smaa.cpp
     src/bild/ddraw9/surface.cpp
     src/bild/ddraw9/vertex_buffer.cpp
+    ${RHI_SOURCES}
+    ${DDRAWRHI_SOURCES}
     ${GEAR_RC}
   )
   add_dependencies(gear_sandbox version_info gear_kernel)
   target_include_directories(gear_sandbox PRIVATE ${VERSION_INFO_DIR} src/gear src/bild tools/sandbox ${STB_INCLUDE_DIRS})
-  target_link_libraries(gear_sandbox PRIVATE gear_objs sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32 dxguid gdi32 ole32 psapi)
+  target_link_libraries(gear_sandbox PRIVATE gear_objs sacred_core ${LUAJIT_LIBRARY} RmlUi::RmlUi ZLIB::ZLIB shell32 dxguid gdi32 ole32 psapi nvrhi_all delayimp)
+  target_link_options(gear_sandbox PRIVATE /DELAYLOAD:d3d12.dll /DELAYLOAD:dxgi.dll)
   target_compile_definitions(gear_sandbox PRIVATE RMLUI_STATIC_LIB)
   target_compile_options(gear_sandbox PRIVATE ${COMMON_OPTIONS})
   # SacredGear's sources read game addresses under fault guards and find none here (every address stays 0); the image sits high so that

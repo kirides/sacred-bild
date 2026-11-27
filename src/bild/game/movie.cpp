@@ -680,7 +680,7 @@ namespace
                 const bool fresh = update();
                 outcome.frames += fresh ? 1 : 0;
                 draw();
-                if (!fresh && !(Config::ddraw.d3d9 && Config::display.vsync))
+                if (!fresh && !(Config::ddraw.own() && Config::display.vsync))
                 {
                     Sleep(1);   // presenting doesn't wait for the display here
                 }
@@ -917,7 +917,7 @@ namespace
         {
             return g_origOpenStream(path, ddraw, stream);
         }
-        if (!Config::ddraw.d3d9 && !Config::debug.movieFallback && !mediaEngineAvailable())
+        if (!Config::ddraw.own() && !Config::debug.movieFallback && !mediaEngineAvailable())
         {
             return g_origOpenStream(path, ddraw, stream);   // the game's own amstream player works on the chained ddraw
         }

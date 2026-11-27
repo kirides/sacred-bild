@@ -28,11 +28,17 @@ namespace Rhi
         int maxFrameLatency = 1;
     };
 
-    // Creates the device and a swap chain of width x height for `window`; false (and the reason in the log) if the API
-    // or a suitable GPU is not there. Nothing is left behind on failure, so another API (or backend) can be tried.
+    // Creates the device; false (and the reason in the log) if the API or a suitable GPU is not there. Nothing is left
+    // behind on failure, so another API (or backend) can be tried. Needs no window: DirectDraw is created before the
+    // game has one.
+    bool initDevice(const Settings& settings);
+    // The swap chain of width x height on `window` (once, after initDevice).
+    bool attachWindow(HWND window, uint32_t width, uint32_t height);
+    // Both of the above.
     bool init(HWND window, uint32_t width, uint32_t height, const Settings& settings);
     void shutdown();
     bool ready();
+    HWND window();          // null until attachWindow
 
     Api api();
     nvrhi::IDevice* device();
@@ -56,6 +62,10 @@ namespace Rhi
 
     // Frames presented since init.
     uint64_t frameIndex();
+    // Whether the GPU finished the frame with index `frame` (frameIndex() while it was recorded; present ends it), and
+    // waiting for it. A frame not presented yet is finished only once the GPU is idle: waiting for it waits for that.
+    bool frameFinished(uint64_t frame);
+    void waitForFrame(uint64_t frame);
 
     // A shader from the bytecode tools/re/gen_rhi_shaders.py generates (the DXIL or the SPIR-V array, by the API in use).
     nvrhi::ShaderHandle createShader(nvrhi::ShaderType type, const char* entry, const void* dxil, size_t dxilSize,

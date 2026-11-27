@@ -162,10 +162,16 @@ void ConfigFile::load(const std::wstring& gameDir)
     const std::wstring ini = gameDir + L"\\SacredBild.ini";
     g_iniPath = ini;
     Config::launcher.settingsWindow = !readBool(ini, L"Launcher", L"HideSettingsWindow", false);
-    Config::ddraw.d3d9 = _wcsicmp(readString(ini, L"DDraw", L"Backend", L"d3d9").c_str(), L"chain") != 0;
+    {
+        const std::wstring backend = readString(ini, L"DDraw", L"Backend", L"d3d9");
+        Config::ddraw.nvrhi = _wcsicmp(backend.c_str(), L"nvrhi") == 0;
+        Config::ddraw.d3d9 = !Config::ddraw.nvrhi && _wcsicmp(backend.c_str(), L"chain") != 0;
+        Config::ddraw.vulkan = _wcsicmp(readString(ini, L"Render", L"Api", L"d3d12").c_str(), L"vulkan") == 0;
+        Config::debug.rhiValidation = readBool(ini, L"Debug", L"RhiValidation", false);
+    }
     Config::ddraw.chain = readString(ini, L"DDraw", L"Chain", Config::ddraw.chain);
     Config::ddraw.d3d9Path = readString(ini, L"DDraw", L"D3D9", L"");
-    Config::ddraw.mediaFoundation = Config::ddraw.d3d9 || readBool(ini, L"DDraw", L"MediaFoundation", Config::ddraw.mediaFoundation);
+    Config::ddraw.mediaFoundation = Config::ddraw.own() || readBool(ini, L"DDraw", L"MediaFoundation", Config::ddraw.mediaFoundation);
     Config::display.width = readInt(ini, L"Display", L"Width", Config::display.width);
     Config::display.height = readInt(ini, L"Display", L"Height", Config::display.height);
     const std::wstring borderless = readString(ini, L"Display", L"Borderless", L"auto");
@@ -313,7 +319,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     LOG("Config: HideSettingsWindow={} Backend={} D3D9='{}' MediaFoundation={} Width={} Height={} Borderless={} ClipCursor={} FpsLimit={} FpsLimitInactive={} VSync={} MaxFrameLatency={} UI.Scale={} UI.ScaleMode={} UI.LinearFilter={} UI.Anchor={} TextureBudgetMB={} Batch={} "
         "BatchNoClip={} BatchVertexBuffer={} BatchModels={} BatchGround={} BatchSprites={} GroundMesh={} GpuSkinning={} SMAA={} TextureFilter={} OffscreenPoses={} AsyncAnimation={} AnimationThreads={} RecordIndex={} SoundLock={} FastMath={} WarmFileCache={} Atlas={} ({} px, {} pages, textures <= {}) "
         "Screenshot.Format={} Net.Relay={} Net.Port={} Net.Hosts='{}' Net.NoDelay={} Net.JoinTimeout={} Net.Udp={} Net.Matchmaker='{}' Net.Publish={} Net.Prefer={} D3DStats={} Profiler={} ({} us) UiTrace={} CrashDump={} MovieFallback={} SkinCheck={} AnimationCheck={}",
-        !Config::launcher.settingsWindow, Config::ddraw.d3d9 ? "d3d9" : "chain", ascii(Config::ddraw.d3d9Path), Config::ddraw.mediaFoundation, Config::display.width, Config::display.height,
+        !Config::launcher.settingsWindow, Config::ddraw.nvrhi ? (Config::ddraw.vulkan ? "nvrhi (Vulkan)" : "nvrhi (Direct3D 12)") : Config::ddraw.d3d9 ? "d3d9" : "chain", ascii(Config::ddraw.d3d9Path), Config::ddraw.mediaFoundation, Config::display.width, Config::display.height,
         Config::display.frame == Config::Display::Frame::Auto ? "auto" : Config::display.frame == Config::Display::Frame::Never ? "1" : "0", Config::display.clipCursor, Config::display.fpsLimit, Config::display.fpsLimitInactive,
         Config::display.vsync, Config::display.maxFrameLatency, Config::ui.scale,
         Config::ui.scaleMenus ? "Full" : "InGame", Config::ui.linearFilter, Config::ui.anchor,

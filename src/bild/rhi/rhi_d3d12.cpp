@@ -70,8 +70,7 @@ namespace Rhi::Detail
                 }
             }
 
-            bool create(HWND window, uint32_t width, uint32_t height, const Settings& settings,
-                nvrhi::IMessageCallback* messages) override
+            bool createDevice(const Settings& settings, nvrhi::IMessageCallback* messages) override
             {
                 if (!LoadLibraryW(L"d3d12.dll") || !LoadLibraryW(L"dxgi.dll"))
                 {
@@ -113,6 +112,26 @@ namespace Rhi::Detail
                     return false;
                 }
 
+                m_latency = static_cast<UINT>(settings.maxFrameLatency < 1 ? 1 : settings.maxFrameLatency);
+                nvrhi::d3d12::DeviceDesc deviceDesc;
+                deviceDesc.errorCB = messages;
+                deviceDesc.pDevice = m_d3d.p;
+                deviceDesc.pGraphicsCommandQueue = m_queue.p;
+                if (settings.validation)
+                {
+                    m_d3d->QueryInterface(IID_PPV_ARGS(m_infoQueue.put()));
+                }
+                m_device = nvrhi::d3d12::createDevice(deviceDesc);
+                if (!m_device)
+                {
+                    LOG("RHI: Direct3D 12: NVRHI device creation failed");
+                    return false;
+                }
+                return true;
+            }
+
+            bool attachWindow(HWND window, uint32_t width, uint32_t height) override
+            {
                 Com<IDXGIFactory5> factory5;
                 BOOL tearing = FALSE;
                 if (SUCCEEDED(m_factory->QueryInterface(IID_PPV_ARGS(factory5.put()))))
@@ -133,7 +152,7 @@ namespace Rhi::Detail
                 m_swapFlags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (m_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
                 desc.Flags = m_swapFlags;
                 Com<IDXGISwapChain1> swap1;
-                hr = m_factory->CreateSwapChainForHwnd(m_queue.p, window, &desc, nullptr, nullptr, swap1.put());
+                HRESULT hr = m_factory->CreateSwapChainForHwnd(m_queue.p, window, &desc, nullptr, nullptr, swap1.put());
                 if (FAILED(hr) || FAILED(swap1->QueryInterface(IID_PPV_ARGS(m_swap.put()))))
                 {
                     LOG("RHI: Direct3D 12: CreateSwapChainForHwnd failed ({:08x})", static_cast<uint32_t>(hr));
@@ -141,23 +160,8 @@ namespace Rhi::Detail
                 }
                 // The game handles Alt+Enter and its window itself.
                 m_factory->MakeWindowAssociation(window, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES);
-                m_swap->SetMaximumFrameLatency(static_cast<UINT>(settings.maxFrameLatency < 1 ? 1 : settings.maxFrameLatency));
+                m_swap->SetMaximumFrameLatency(m_latency);
                 m_waitable = m_swap->GetFrameLatencyWaitableObject();
-
-                nvrhi::d3d12::DeviceDesc deviceDesc;
-                deviceDesc.errorCB = messages;
-                deviceDesc.pDevice = m_d3d.p;
-                deviceDesc.pGraphicsCommandQueue = m_queue.p;
-                if (settings.validation)
-                {
-                    m_d3d->QueryInterface(IID_PPV_ARGS(m_infoQueue.put()));
-                }
-                m_device = nvrhi::d3d12::createDevice(deviceDesc);
-                if (!m_device)
-                {
-                    LOG("RHI: Direct3D 12: NVRHI device creation failed");
-                    return false;
-                }
                 return wrapImages(width, height);
             }
 
@@ -169,6 +173,10 @@ namespace Rhi::Detail
 
             bool acquire(uint32_t& index) override
             {
+                if (!m_swap)
+                {
+                    return false;
+                }
                 if (m_waitable)
                 {
                     WaitForSingleObjectEx(m_waitable, 1000, TRUE);
@@ -326,6 +334,7 @@ namespace Rhi::Detail
             UINT64 m_fenceValue = 0;
             int m_debugLogged = 0;
             Com<IDXGISwapChain3> m_swap;
+            UINT m_latency = 1;
             Com<ID3D12Resource> m_buffers[kImages];
             nvrhi::TextureHandle m_images[kImages];
             nvrhi::DeviceHandle m_device;
