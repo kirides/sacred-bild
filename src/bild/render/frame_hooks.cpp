@@ -389,6 +389,7 @@ namespace
         D3DStats::Scope s{D3DStats::TUi};
         UiWindows::sync();
         UiCanvas::updateCursorFilter();
+        const bool inWorld = g_worldDrawn;
         // The world view antialiased before the interface goes on top of it.
         if (g_worldDrawn)
         {
@@ -433,6 +434,11 @@ namespace
             g_origUiRender(self, edx, device);
         }
         UiWindows::publishDrawn();
+        // The interface draws models too (the hero's portrait, 0x6E3D10): the next advance starts after it.
+        if (inWorld)
+        {
+            GrannyAsync::kickAhead();
+        }
         D3DStats::mark(D3DStats::TGameAfterUi);
     }
 }

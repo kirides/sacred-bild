@@ -8,6 +8,9 @@ namespace GrannyAsync
     // Patches the game's granny.dll imports; call once from DllMain (not inside a Detours transaction).
     void install();
 
+    // After the interface of a frame with the world view: starts the advance the frame asked for ([Render] AnimationAhead).
+    void kickAhead();
+
     // Once per presented frame: logs where the game had to wait for the worker, every few seconds.
     void onFrame();
 }

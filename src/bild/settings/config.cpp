@@ -283,6 +283,7 @@ void ConfigFile::load(const std::wstring& gameDir)
     Config::render.gpuSkinning = readInt(ini, L"Render", L"GpuSkinning", Config::render.gpuSkinning) != 0;
     Config::render.offscreenPoses = readInt(ini, L"Render", L"OffscreenPoses", Config::render.offscreenPoses);
     Config::render.asyncAnimation = readInt(ini, L"Render", L"AsyncAnimation", Config::render.asyncAnimation) != 0;
+    Config::render.animationAhead = readInt(ini, L"Render", L"AnimationAhead", Config::render.animationAhead) != 0;
     Config::render.animationThreads = readInt(ini, L"Render", L"AnimationThreads", Config::render.animationThreads);
     Config::render.recordIndex = readInt(ini, L"Render", L"RecordIndex", Config::render.recordIndex) != 0;
     Config::render.soundLock = readInt(ini, L"Render", L"SoundLock", Config::render.soundLock) != 0;

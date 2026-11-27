@@ -291,3 +291,13 @@ best effort; a take-over pass whose addresses are not found in ReBorn turns itse
   `SACREDBILD_FORCE_WEATHER=flags,drops` (flags hex: 1 rain, 2 fog, 0x10 sparks) forces weather on. Rain looks the same
   (its drops are random each frame). Day and night light is not a pass of its own: it is the per-corner light the
   take-over code already gets from the game (0x41B510).
+- 2026-11-27: animation (John: get rid of the animation wait). The game waited for GrannyAdvanceTime on the worker at
+  its first model of every frame (0x4057F8; 0.15-0.45 ms). `[Render] AnimationAhead` (on): the advance the game asks
+  for at the start of a frame is started after the frame's interface instead (the interface draws models too: the
+  hero's portrait, 0x6E3D10 -> 0x40E9C0), with the same seconds, so it runs while the frame waits for its cap and is
+  done when the next frame's models need it. Poses are one frame behind the game's clock; the time advanced is the
+  time asked for. Only with a frame cap (FpsLimit or VSync): uncapped, the next frame starts right after the interface
+  and would wait at its start instead (measured: 0.58-0.64 ms there), so it stays as it was. At the default cap the
+  wait is gone (0.00 ms; world 0.95 ms instead of ~1.3 in the field save, 1.52 instead of 1.63 in the park). Without a
+  world view (menus, loading) the advance runs when asked. What is left for uncapped frames: posing the skeletons
+  (~0.24 ms of the advance) is still one thread (GrannyParallel splits only the control walk).
