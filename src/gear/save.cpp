@@ -46,6 +46,12 @@ namespace
         ULONGLONG started = 0;
     };
     Job g_job;
+    ULONGLONG g_lastFrame = 0;      // when Save::frame last ran (game frames only)
+
+    bool framesRunning()
+    {
+        return g_lastFrame != 0 && GetTickCount64() - g_lastFrame < 2000;
+    }
     // A savegame window's save waiting for its picture: the world is drawn first, then (before the interface goes on
     // top of it, Save::renderCapture) the engine takes the picture, and the next frame sends the request.
     struct Waiting
@@ -185,6 +191,12 @@ bool Save::available()
 bool Save::pending()
 {
     uint32_t flags = 0;
+    // The engine object is only known from the frames of a running game. In the menus (after leaving a game) the last pointer is stale
+    // and its flags are whatever the freed memory holds: that read "a save or load is pending" for a while and refused every load.
+    if (!framesRunning())
+    {
+        return false;
+    }
     return g_job.active || (engineFlags(flags) && (flags & kBusyBits) != 0);
 }
 
