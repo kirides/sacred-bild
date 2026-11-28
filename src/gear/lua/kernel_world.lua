@@ -482,6 +482,61 @@ world.FLAGS = {
     },
 }
 
+-- Enums, by name. The AI states (+0xFC) and the actions (+0x150) are the switches of the creatures' update (Sacred.exe 0x5375C0); the
+-- classes are what the exe's class predicates test in the creature record (+4, 0x426650..0x426AD0); the kinds are the item record's
+-- +0x2E (what the shop's picker calls categories); the slots are the creature's equipment words (+0x1A4). Names follow the exe's
+-- handlers and the two open reimplementations; the comment says where a name rests on a test in the exe only by its number.
+world.ENUMS = {
+    ai_state = {
+        IDLE = 0,            -- 0x542B20
+        GO_TO = 1,           -- walks to a target to act on it: a creature, door, container, item or horse (0x53A170)
+        BEHAVIOR = 2,        -- a behavior or an ordered walk (0x4EE030)
+        MELEE = 4,           -- a melee fight (0x4E0300)
+        CAST = 6,            -- a spell's cast (0x51CFD0)
+        RANGED = 8,          -- a fight at range (0x4DBFC0)
+        DEAD = 9,            -- 0x53E7C0
+        TALK = 10,           -- 0x529C60
+        WEAPON_ART = 11,     -- a weapon art ordered (0x4FD0F0)
+        PICK_UP = 12,        -- picks up items (0x4EC560)
+    },
+    action = {
+        STAND = 0,           -- 0x544890
+        MOVE = 1,            -- 0x4F4770
+        MELEE_STRIKE = 3,    -- 0x4E4CF0
+        CAST = 4,            -- 0x51D150
+        SHOOT = 5,           -- 0x4DCB80
+        DYING = 6,           -- the death's action (0x53ECA0)
+        TALK = 7,            -- 0x52AB70
+        GLADIATOR = 8,       -- the hero classes' own arts (handlers 0x4FF0B0 ... 0x5192E0)
+        SERAPHIM = 9,
+        DARK_ELF = 10,
+        WOOD_ELF = 11,
+        BATTLE_MAGE = 12,
+        VAMPIRESS = 13,
+        DWARF = 14,
+        DAEMON = 15,
+    },
+    creature_class = {       -- Creature.pak's class byte; 1, 2, 3, 4, 5 and 6 are tested by the exe (0x426650 ... 0x426AD0), the rest are named by the reimplementation
+        HERO = 1, MONSTER = 2, NPC = 3, HORSE = 4, UNDEAD = 5, ANIMAL = 6, MERCENARY = 7, GOBLIN = 8,
+        DEMON = 9, DRAGON = 10, ENERGY = 11, ELF = 12, ALL_ENEMIES = 13, HUMAN = 14, DRYAD = 15,
+    },
+    creature_type_flags = {  -- Creature.pak's flag word (+6)
+        FLIES = 0x1,         -- 0x426CF0: the crows, the giant fly, the hornets
+        GHOST = 0x20,        -- tested by the death's action and the melee fight (0x43AD80's record)
+    },
+    item_kind = {            -- the type record's kind (+0x2E); WEAPON ... GLOVES also read by `gear.world.item().category`
+        WORLD_OBJECT = 1, CREATURE = 3, CONTAINER = 4, WEAPON = 5, CHEST_ARMOR = 6, RING = 8, POTION = 9, DOOR = 10,
+        EFFECT = 12, SHIELD = 13, KEY = 14, QUEST_ITEM = 15, BOOK = 16, HELMET = 17, FOOT_ARMOR = 18, BELT = 19,
+        AMULET = 20, SHOULDER_ARMOR = 21, ARM_ARMOR = 22, LEG_ARMOR = 23, GLOVES = 24, WINGS = 25, SMITHING_ACTION = 26,
+        PROJECTILE = 27, RUNE = 28, HORSE_EQUIPMENT = 29, DWARF_CANNON = 33,
+    },
+    equipment_slot = {       -- the creature's 19 equipment words, as `creature:carry(slot, item)` takes them
+        HEAD = 0, BODY = 1, BELT = 2, FEET = 3, GLOVES = 4, ARMS = 5, AMULET_1 = 6, AMULET_2 = 7,
+        RING_1 = 8, RING_2 = 9, RING_3 = 10, RING_4 = 11, WEAPON = 12, SHIELD = 13, CANNON = 14,
+        SHOULDER = 15, LEGS = 16, WINGS = 17, MOUNT = 18,
+    },
+}
+
 -- True where `word` has any bit of `mask`: `gear.world.has_flag(c:info().flags, gear.world.FLAGS.object.DIALOGUE_ICON)`.
 function world.has_flag(word, mask)
     return bit.band(word or 0, mask) ~= 0

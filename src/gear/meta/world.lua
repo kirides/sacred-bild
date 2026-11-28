@@ -63,6 +63,14 @@
 ---@field behavior GearBehaviorFlags
 ---@field state GearStateFlags
 
+---@class GearWorldEnums
+---@field ai_state table<'IDLE'|'GO_TO'|'BEHAVIOR'|'MELEE'|'CAST'|'RANGED'|'DEAD'|'TALK'|'WEAPON_ART'|'PICK_UP', integer> A creature's AI state (+0xFC): the switch of the creatures' update.
+---@field action table<'STAND'|'MOVE'|'MELEE_STRIKE'|'CAST'|'SHOOT'|'DYING'|'TALK'|'GLADIATOR'|'SERAPHIM'|'DARK_ELF'|'WOOD_ELF'|'BATTLE_MAGE'|'VAMPIRESS'|'DWARF'|'DAEMON', integer> A creature's action (+0x150, what `creature:action()` reports): 8 to 15 are the hero classes' own arts.
+---@field creature_class table<'HERO'|'MONSTER'|'NPC'|'HORSE'|'UNDEAD'|'ANIMAL'|'MERCENARY'|'GOBLIN'|'DEMON'|'DRAGON'|'ENERGY'|'ELF'|'ALL_ENEMIES'|'HUMAN'|'DRYAD', integer> The class byte of a creature type. 1 to 6 are tested by the game's own predicates; 7 to 15 take their names from the open reimplementations.
+---@field creature_type_flags table<'FLIES'|'GHOST', integer> The flag word of a creature type.
+---@field item_kind table<string, integer> The kind of an item or object type record (`GearItem.kind`): WORLD_OBJECT, CREATURE, CONTAINER, WEAPON, CHEST_ARMOR, RING, POTION, DOOR, EFFECT, SHIELD, KEY, QUEST_ITEM, BOOK, HELMET, FOOT_ARMOR, BELT, AMULET, SHOULDER_ARMOR, ARM_ARMOR, LEG_ARMOR, GLOVES, WINGS, SMITHING_ACTION, PROJECTILE, RUNE, HORSE_EQUIPMENT, DWARF_CANNON. WEAPON, CHEST_ARMOR, RING, POTION, SHIELD, HELMET, FOOT_ARMOR, BELT and AMULET are the ones `gear.shop.CATEGORY` uses; the others rest on the reimplementation's names.
+---@field equipment_slot table<'HEAD'|'BODY'|'BELT'|'FEET'|'GLOVES'|'ARMS'|'AMULET_1'|'AMULET_2'|'RING_1'|'RING_2'|'RING_3'|'RING_4'|'WEAPON'|'SHIELD'|'CANNON'|'SHOULDER'|'LEGS'|'WINGS'|'MOUNT', integer> The creature's equipment slots (0 to 18), as `creature:carry(slot, item)` takes them.
+
 -- path gear.world
 --- Positions are world units (`TILE`, about 53.7, is one tile; the screen shows about 534 x 400 around the hero) and a
 --- layer (0 outdoors; dungeons have their own). The functions that change the world work only in single player
@@ -71,6 +79,7 @@
 ---@field TILE number World units per tile.
 ---@field CLASSES GearClassInfo[] The hero classes.
 ---@field FLAGS GearCreatureFlags The named bits of a creature's flag words (object, behavior, state), read from the game's own tests of them. `gear.world.has_flag(word, mask)` tests one.
+---@field ENUMS GearWorldEnums Named numbers of the engine: AI states, actions, creature classes, creature type flags, item kinds and equipment slots, each a table of name to number.
 ---@field QUALITIES GearQuality[] Item qualities in ascending order; `quality_rank` is the index.
 ---@field QUALITY_COLORS table<GearQuality, integer> The game's item label colours (ARGB) by quality: white, blue, yellow, gold, green for set items.
 local GearWorld = {}
