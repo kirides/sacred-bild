@@ -1,3 +1,8 @@
+## v0.18.0 (2026-11-28)
+
+- New: `gear.inv.define_type(type, base, name_text, {look = item_type, size = {w, h}, icon_scale = n})` gives an item type of a mod's own the look of another one (its model, inventory icon), and optionally another size in cells and icon scale. A potion can look like a scroll and take one cell (the Town Portal item does) and still be used through `item.use`.
+- New: `gear.inv.type_record(type)` reads the raw item record of an item type (icon scale and angles, size in cells).
+
 ## v0.17.0 (2026-11-28)
 
 - New: `gear.world.FLAGS` names the bits of a creature's object, behavior, state and rank words (the dialogue icon, boss and champion marks, townsfolk, animal and guard modes, the trader bits), and `gear.world.has_flag` tests one.

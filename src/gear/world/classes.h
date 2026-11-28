@@ -74,6 +74,12 @@ namespace Classes
     // record `type` a copy of the record of `base` (any item type: a rune of an art) with the art the item teaches (+0x6A) and the text
     // resource of its name (+0x20) replaced; `art` / `nameText` 0 keep the base's. The item record the type points to (+0x18) stays the
     // base's, so the item looks like the base item. Only an empty record (or one made by this function) is overwritten.
+    // Copies 4-byte words (record offsets) from the record of type `from` into a type made by defineItemType: its look (model, texture variant).
+    // Sets the size in cells in the item record a type made by defineItemType points to (refused when more than one other type of the game shares it).
+    // The raw item record (0x102 bytes) an item type points to.
+    bool readItemRecord(uint32_t type, uint8_t* out, size_t size, const char*& error);
+    bool setTypeSize(uint32_t type, uint32_t width, uint32_t height, float iconScale, const char*& error);
+    bool copyTypeWords(uint32_t type, uint32_t from, const uint32_t* offsets, size_t count, const char*& error);
     bool defineItemType(uint32_t type, uint32_t base, uint32_t art, uint32_t nameText, const char*& error);
 
     // The creature uses an item of its backpack (a potion is drunk, a rune read, a scroll read) with the game's own item use (what a click on

@@ -78,6 +78,18 @@ GearInv.TYPE_FIRST = 6150
 ---@type integer
 GearInv.TYPE_LAST = 6199
 
+--- The options of `define_type`.
+---@class GearItemTypeOpts
+---@field size integer[]? The size in cells, `{width, height}` (1 to 8), written into the item record the type points to. Every type that shares that record changes too, so use it with a `look` type no other item uses (refused when the record is shared by more than one other type).
+---@field icon_scale number? With `size`: the scale the icon is drawn at in the item record (a game scroll uses 3.0 for 1 x 2 cells; a smaller number fits one cell).
+---@field look integer? Another item type whose look the new type takes (its model, inventory icon and size, price record): a potion that looks like a scroll is `define_type(id, potion_type, name, {look = scroll_type})`. What the item does stays the base's.
+
+--- The raw item record (0x102 bytes, as hex) an item type points to: the icon's scale and angles, the size in cells (bytes 0x1C and 0x1D), what `look` and `size` of `define_type` work with. nil and a message if there is none.
+---@param type integer
+---@return string? hex
+---@return string? error
+function GearInv.type_record(type) end
+
 --- Defines an item type of Gear's own, `type` (6150 to 6199, free in the game's type table): a copy of the type record of `base` (any item type, e.g. a potion
 --- or a rune) with the name text `name_text` (`gear.text.key` / `gear.text.add`; 0 keeps the base's name). The item looks and works like the base item
 --- (a potion: its model and size; drinking it goes to the `item.use` event), and is a plain unknown item in a game without Sacred Gear. Define it every
@@ -85,9 +97,10 @@ GearInv.TYPE_LAST = 6199
 ---@param type integer
 ---@param base integer
 ---@param name_text integer? Default 0.
+---@param opts GearItemTypeOpts?
 ---@return boolean? ok
 ---@return string? error
-function GearInv.define_type(type, base, name_text) end
+function GearInv.define_type(type, base, name_text, opts) end
 
 --- The size of an item in cells, or nil.
 ---@param item_id integer

@@ -581,6 +581,55 @@ namespace LuaNative
         lua_pushboolean(L, 1);
         return 1;
     }
+    // native.item_copy_words(type, from, {offsets}) -> true | nil, message
+    int nativeItemCopyWords(lua_State* L)
+    {
+        const char* error = nullptr;
+        uint32_t offsets[32];
+        size_t count = 0;
+        const int n = static_cast<int>(lua_objlen(L, 3));
+        for (int i = 1; i <= n && count < 32; ++i)
+        {
+            lua_rawgeti(L, 3, i);
+            offsets[count++] = static_cast<uint32_t>(lua_tonumber(L, -1));
+            lua_pop(L, 1);
+        }
+        if (!Classes::copyTypeWords(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<uint32_t>(luaL_checknumber(L, 2)), offsets, count, error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    // native.item_set_size(type, w, h) -> true | nil, message
+    int nativeItemSetSize(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!Classes::setTypeSize(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<uint32_t>(luaL_checknumber(L, 2)), static_cast<uint32_t>(luaL_checknumber(L, 3)), static_cast<float>(luaL_optnumber(L, 4, 0)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // native.item_record(type) -> hex of the 0x102 bytes | nil, message
+    int nativeItemRecord(lua_State* L)
+    {
+        const char* error = nullptr;
+        uint8_t bytes[0x102] = {};
+        if (!Classes::readItemRecord(static_cast<uint32_t>(luaL_checknumber(L, 1)), bytes, sizeof(bytes), error))
+        {
+            return pushFailure(L, error);
+        }
+        char hex[0x102 * 2 + 1];
+        for (size_t i = 0; i < sizeof(bytes); ++i)
+        {
+            std::snprintf(hex + i * 2, 3, "%02x", bytes[i]);
+        }
+        lua_pushlstring(L, hex, sizeof(bytes) * 2);
+        return 1;
+    }
     int nativeItemUse(lua_State* L)
     {
         const char* error = nullptr;
@@ -1163,6 +1212,9 @@ namespace LuaNative
             {"world_cursor", nativeWorldCursor},
             {"art_in_flight", nativeArtInFlight},
             {"item_define_type", nativeItemDefineType},
+            {"item_copy_words", nativeItemCopyWords},
+            {"item_set_size", nativeItemSetSize},
+            {"item_record", nativeItemRecord},
             {"item_use", nativeItemUse},
             {"text_set", nativeTextSet},
             {"model_motion", nativeModelMotion},

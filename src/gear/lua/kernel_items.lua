@@ -357,15 +357,26 @@ function inv.remove(container, item_id)
     return bytes
 end
 
+-- inv.type_record(type) -> hex | nil, message: the raw item record (0x102 bytes) of an item type (for the look and the size: +0x1C, +0x1D).
+function inv.type_record(type_id) return native.item_record(type_id) end
+
 -- inv.define_type(type, base, name_text) -> true | nil, message: an item type of Gear's own (ids INV_TYPE_FIRST..INV_TYPE_LAST) that is a copy of
 -- the type record of `base`, named by the text id `name_text` (gear.text.key / add; 0: the base's name). Looks and works like the base item.
 inv.TYPE_FIRST, inv.TYPE_LAST = 6150, 6199
-function inv.define_type(type_id, base, name_text)
+function inv.define_type(type_id, base, name_text, opts)
     assert(type(type_id) == 'number' and type(base) == 'number', 'define_type wants an item type and a base type')
     if type_id < inv.TYPE_FIRST or type_id > inv.TYPE_LAST then
         return nil, ('item types of a mod are %d to %d'):format(inv.TYPE_FIRST, inv.TYPE_LAST)
     end
-    return native.item_define_type(type_id, base, 0, name_text or 0)
+    local ok, err = native.item_define_type(type_id, base, 0, name_text or 0)
+    if ok and opts and opts.look then
+        -- the look of another item type: its model variant (+0x08), item record (size, price: +0x18), +0x1C and the model's file name (+0x34..+0x5B)
+        local words = {0x08, 0x18, 0x1C}
+        for off = 0x34, 0x58, 4 do words[#words + 1] = off end
+        ok, err = native.item_copy_words(type_id, opts.look, words)
+    end
+    if ok and opts and opts.size then ok, err = native.item_set_size(type_id, opts.size[1] or opts.size.w, opts.size[2] or opts.size.h, opts.icon_scale) end
+    return ok, err
 end
 
 -- inv.hex(bytes) -> text, inv.unhex(text) -> bytes | nil: for keeping the bytes in JSON.

@@ -691,6 +691,7 @@ bool Classes::cursor(uint32_t exclude, Cursor& out)
 namespace
 {
     std::set<uint32_t> g_definedTypes;
+    constexpr size_t kItemRecordSize = 0x102;
 
     bool typeRecordAddress(uint32_t type, uintptr_t& out)
     {
@@ -705,6 +706,32 @@ namespace
         }
         out = types + type * kTypeSize;
         return true;
+    }
+
+    bool copyBytes(uintptr_t dst, uintptr_t src, size_t size)
+    {
+        __try
+        {
+            std::memcpy(reinterpret_cast<void*>(dst), reinterpret_cast<const void*>(src), size);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    bool copyWord(uintptr_t dst, uintptr_t src)
+    {
+        __try
+        {
+            std::memcpy(reinterpret_cast<void*>(dst), reinterpret_cast<const void*>(src), 4);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
     }
 
     bool copyTypeRecord(uintptr_t dst, uintptr_t src, uint32_t art, uint32_t nameText)
@@ -783,6 +810,104 @@ bool Classes::defineItemType(uint32_t type, uint32_t base, uint32_t art, uint32_
         return false;
     }
     g_definedTypes.insert(type);
+    return true;
+}
+
+bool Classes::copyTypeWords(uint32_t type, uint32_t from, const uint32_t* offsets, size_t count, const char*& error)
+{
+    uintptr_t dst = 0, src = 0;
+    if (!g_definedTypes.count(type))
+    {
+        error = "the type was not made by define_type";
+        return false;
+    }
+    if (!typeRecordAddress(type, dst) || !typeRecordAddress(from, src))
+    {
+        error = "the type table is not there, or a type id is out of 1..0x7E5F";
+        return false;
+    }
+    for (size_t i = 0; i < count; ++i)
+    {
+        if (offsets[i] + 4 > kTypeSize)
+        {
+            error = "an offset is outside the type record";
+            return false;
+        }
+        if (!copyWord(dst + offsets[i], src + offsets[i]))
+        {
+            error = "the game faulted on the type record";
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Classes::readItemRecord(uint32_t type, uint8_t* out, size_t size, const char*& error)
+{
+    uintptr_t dst = 0, types = 0, table = 0;
+    int32_t count = 0;
+    uint16_t index = 0;
+    if (size < kItemRecordSize || !typeRecordAddress(type, dst) || !readAt(Addr::g_pTypeManager.address, 0, types) || !types ||
+        !readAt(types, 0x563000, count) || !readAt(types, 0x563004, table) || !table || !readAt(dst, 0x18, index) || index >= count)
+    {
+        error = "no item record";
+        return false;
+    }
+    uint8_t bytes[kItemRecordSize] = {};
+    if (!readAt(table, static_cast<uintptr_t>(index) * kItemRecordSize, bytes))
+    {
+        error = "the game faulted on the item record";
+        return false;
+    }
+    std::memcpy(out, bytes, kItemRecordSize);
+    return true;
+}
+
+bool Classes::setTypeSize(uint32_t type, uint32_t width, uint32_t height, float iconScale, const char*& error)
+{
+    uintptr_t dst = 0;
+    if (!g_definedTypes.count(type) || !typeRecordAddress(type, dst))
+    {
+        error = "the type was not made by define_type";
+        return false;
+    }
+    if (width < 1 || width > 8 || height < 1 || height > 8)
+    {
+        error = "the size is 1 to 8 cells each way";
+        return false;
+    }
+    uintptr_t types = 0, table = 0;
+    int32_t count = 0;
+    uint16_t index = 0;
+    if (!readAt(Addr::g_pTypeManager.address, 0, types) || !types || !readAt(types, 0x563000, count) || !readAt(types, 0x563004, table) || !table || count < 1 ||
+        !readAt(dst, 0x18, index) || index >= count)
+    {
+        error = "the type has no item record";
+        return false;
+    }
+    // the size is in the item record the type points to; every type that points to the same record changes with it, so only a record that is
+    // shared with at most one other type (the one the look was taken from) may be changed
+    int shared = 0;
+    for (uint32_t t = 1; t < 0x7E60; ++t)
+    {
+        uint16_t at = 0;
+        if (t != type && !g_definedTypes.count(t) && readAt(types + t * kTypeSize, 0x18, at) && at == index)
+        {
+            ++shared;
+        }
+    }
+    if (shared > 1)
+    {
+        error = "the item record is shared by several types of the game: take another look";
+        return false;
+    }
+    const uint8_t cells[2] = {static_cast<uint8_t>(width), static_cast<uint8_t>(height)};
+    if (!copyBytes(table + static_cast<uintptr_t>(index) * kItemRecordSize + 0x1C, reinterpret_cast<uintptr_t>(cells), 2) ||
+        (iconScale > 0 && !copyBytes(table + static_cast<uintptr_t>(index) * kItemRecordSize, reinterpret_cast<uintptr_t>(&iconScale), 4)))
+    {
+        error = "the game faulted on the item record";
+        return false;
+    }
     return true;
 }
 
