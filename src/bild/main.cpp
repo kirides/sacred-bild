@@ -1,5 +1,6 @@
 #include "settings/config.h"
 #include "crash_dump.h"
+#include "host_guard.h"
 #include "instance.h"
 #include "log.h"
 #include "patch.h"
@@ -42,8 +43,24 @@ namespace
     // (tools/sigs/check_gear_overlap.py), so either can load first. This may run under the loader lock (startGame from
     // DllMain): Sacred Gear's DllMain only scans and hooks, it loads nothing. If an ASI loader already put a Sacred
     // Gear in, that one stays the only active one (the first claims the process).
+    //
+    // Never in an exe HostGuard does not take for the stock game (core/host_guard.h): a third-party build must not get
+    // the mod kit, whatever is in its folder. Checked here and again in SacredGear.dll's own DllMain.
     void loadSacredGear(const std::wstring& gameDir)
     {
+        if (!HostGuard::gearAllowed())
+        {
+            const HostGuard::Verdict& v = HostGuard::verdict();
+            if (v.host == HostGuard::Host::ThirdParty)
+            {
+                LOG("Sacred Gear is blocked: {}. SacredGear.dll is not loaded.", v.reason);
+            }
+            if (GetModuleHandleW(L"SacredGear.dll") || GetModuleHandleW(L"SacredGear.asi"))
+            {
+                LOG("Sacred Gear was loaded by something else into this exe; it refuses to run there");
+            }
+            return;
+        }
         const std::wstring path = gameDir + L"\\SacredGear.dll";
         if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
         {

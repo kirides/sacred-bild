@@ -18,6 +18,8 @@ SACRED_DE = os.environ.get('SACRED_DE', r'B:\Spiele\GOG Games\Sacred Gold\sacred
 # Sacred ReBorn: the German exe with patched code (same PE timestamp) and its own cTextTable_load.
 SACRED_REBORN = os.environ.get('SACRED_REBORN', r'B:\Spiele\GOG Games\sacred gold ReBorn\SacredReborn.exe')
 GAMESERVER_REBORN = os.environ.get('GAMESERVER_REBORN', r'B:\Spiele\GOG Games\sacred gold ReBorn\SacredReborn Gameserver.exe')
+# SacredClosedNet.exe: a third-party Sacred 1.x build from 2005 (older code than the others; Sacred Gear never runs in it, but SacredBild does).
+SACRED_CLOSEDNET = os.environ.get('SACRED_CLOSEDNET', r'B:\Spiele\GOG Games\sacred gold GOG\SacredClosedNet.exe')
 GAMESERVER_DE = os.environ.get('GAMESERVER_DE', r'B:\Spiele\GOG Games\Sacred Gold\gameserver.exe')
 
 
@@ -204,8 +206,10 @@ GAMESERVER = [
 ]
 
 
-# Not found in ReBorn, whose cTextTable_load reads the language files itself (see Language::install).
+# Not found in ReBorn, whose cTextTable_load reads the language files itself (see Language::install), nor in
+# SacredClosedNet.exe, whose text loading is different code. Language stays off in those builds.
 OPTIONAL = {'cTextTable_load', 'textTableAllocCall'}
+OPTIONAL_SKIP = {SACRED_REBORN, SACRED_CLOSEDNET}
 
 
 def resolve(ref, others, name, va, kind, start=None):
@@ -248,7 +252,7 @@ def emit(path, header, namespace, entries, ref, others, table):
         start = e[3] if len(e) > 3 else None
         is_optional = name in OPTIONAL
         # An optional entry need not exist in ReBorn; the C++ side leaves the feature off when it is not found.
-        builds = [o for o in others if not (is_optional and o.path == SACRED_REBORN)]
+        builds = [o for o in others if not (is_optional and o.path in OPTIONAL_SKIP)]
         r = resolve(ref, builds, name, va, kind, start)
         if not r:
             failed.append(name)
@@ -275,7 +279,7 @@ def emit(path, header, namespace, entries, ref, others, table):
 
 
 def main():
-    sacred = sigs.Image(SACRED_ENG, _A), other_builds(SACRED_DE, SACRED_REBORN)
+    sacred = sigs.Image(SACRED_ENG, _A), other_builds(SACRED_DE, SACRED_REBORN, SACRED_CLOSEDNET)
     server = sigs.Image(GAMESERVER_ENG), other_builds(GAMESERVER_DE, GAMESERVER_REBORN)
     report = {}
     r, f1 = emit(paths.rel(paths.SACRED_SIGS), '', 'Sacred::Addr', SACRED, *sacred, 'kAddressSigs')

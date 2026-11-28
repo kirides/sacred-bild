@@ -3,892 +3,1070 @@
   "dxDriver7_init": {
    "452F85C7": "00645260",
    "451BBE74": "00645390",
-   "451BBE74:sacredreborn.exe": "00645390"
+   "451BBE74:sacredreborn.exe": "00645390",
+   "43146D12": "00644CD0"
   },
   "dxDriver7_flip": {
    "452F85C7": "00645E40",
    "451BBE74": "00645F70",
-   "451BBE74:sacredreborn.exe": "00645F70"
+   "451BBE74:sacredreborn.exe": "00645F70",
+   "43146D12": "006458B0"
   },
   "dxDriver7_lockBack": {
    "452F85C7": "00646150",
    "451BBE74": "00646280",
-   "451BBE74:sacredreborn.exe": "00646280"
+   "451BBE74:sacredreborn.exe": "00646280",
+   "43146D12": "00645BC0"
   },
   "dxDriver7_drawLoadingScreen": {
    "452F85C7": "006468A0",
    "451BBE74": "006469D0",
-   "451BBE74:sacredreborn.exe": "006469D0"
+   "451BBE74:sacredreborn.exe": "006469D0",
+   "43146D12": "00646310"
   },
   "cDxDevices_findMode": {
    "452F85C7": "00644130",
    "451BBE74": "00644260",
-   "451BBE74:sacredreborn.exe": "00644260"
+   "451BBE74:sacredreborn.exe": "00644260",
+   "43146D12": "00643BA0"
   },
   "mainWindowCreateReturn": {
    "452F85C7": "00813C87",
    "451BBE74": "00813337",
-   "451BBE74:sacredreborn.exe": "00813337"
+   "451BBE74:sacredreborn.exe": "00813337",
+   "43146D12": "00812C07"
   },
   "activateAppResumeAnd": {
    "452F85C7": "00812D95",
    "451BBE74": "00812445",
-   "451BBE74:sacredreborn.exe": "00812445"
+   "451BBE74:sacredreborn.exe": "00812445",
+   "43146D12": "00811D15"
   },
   "activateAppPauseOr": {
    "452F85C7": "00812DC8",
    "451BBE74": "00812478",
-   "451BBE74:sacredreborn.exe": "00812478"
+   "451BBE74:sacredreborn.exe": "00812478",
+   "43146D12": "00811D48"
   },
   "getClientCursorPos": {
    "452F85C7": "0066E280",
    "451BBE74": "0066E500",
-   "451BBE74:sacredreborn.exe": "0066E500"
+   "451BBE74:sacredreborn.exe": "0066E500",
+   "43146D12": "0066DF90"
   },
   "zlibUncompress": {
    "452F85C7": "0066E160",
    "451BBE74": "0066E3E0",
-   "451BBE74:sacredreborn.exe": "0066E3E0"
+   "451BBE74:sacredreborn.exe": "0066E3E0",
+   "43146D12": "0066DE70"
   },
   "fontDrawTextW": {
    "452F85C7": "00A23FAC",
    "451BBE74": "00A21F2C",
-   "451BBE74:sacredreborn.exe": "00A21F2C"
+   "451BBE74:sacredreborn.exe": "00A21F2C",
+   "43146D12": "00A21E2C"
   },
   "fontCopyGlyph": {
    "452F85C7": "0064E860",
    "451BBE74": "0064E9C0",
-   "451BBE74:sacredreborn.exe": "0064E9C0"
+   "451BBE74:sacredreborn.exe": "0064E9C0",
+   "43146D12": "0064E370"
   },
   "fontCopyGlyphTtf": {
    "452F85C7": "0064BAE0",
    "451BBE74": "0064BC10",
-   "451BBE74:sacredreborn.exe": "0064BC10"
+   "451BBE74:sacredreborn.exe": "0064BC10",
+   "43146D12": "0064B550"
   },
   "cMouse_instance": {
    "452F85C7": "00654F60",
    "451BBE74": "006550F0",
-   "451BBE74:sacredreborn.exe": "006550F0"
+   "451BBE74:sacredreborn.exe": "006550F0",
+   "43146D12": "00654A40"
   },
   "cMouse_renderCursor": {
    "452F85C7": "00655450",
    "451BBE74": "006555E0",
-   "451BBE74:sacredreborn.exe": "006555E0"
+   "451BBE74:sacredreborn.exe": "006555E0",
+   "43146D12": "00654F30"
   },
   "renderSavePortrait": {
    "452F85C7": "004B1450",
    "451BBE74": "004B1740",
-   "451BBE74:sacredreborn.exe": "004B1740"
+   "451BBE74:sacredreborn.exe": "004B1740",
+   "43146D12": "004B1560"
   },
   "playVideo": {
    "452F85C7": "006A0EA0",
    "451BBE74": "006A0C60",
-   "451BBE74:sacredreborn.exe": "006A0C60"
+   "451BBE74:sacredreborn.exe": "006A0C60",
+   "43146D12": "006A0BF0"
   },
   "openMovieStream": {
    "452F85C7": "006A0D80",
    "451BBE74": "006A0B40",
-   "451BBE74:sacredreborn.exe": "006A0B40"
+   "451BBE74:sacredreborn.exe": "006A0B40",
+   "43146D12": "006A0AD0"
   },
   "g_pUiManager": {
    "452F85C7": "017EEBBC",
    "451BBE74": "017ECB3C",
-   "451BBE74:sacredreborn.exe": "017ECB3C"
+   "451BBE74:sacredreborn.exe": "017ECB3C",
+   "43146D12": "017ECA34"
   },
   "cUI_Manager_isCursorOverUi": {
    "452F85C7": "0075AA90",
    "451BBE74": "0075A370",
-   "451BBE74:sacredreborn.exe": "0075A370"
+   "451BBE74:sacredreborn.exe": "0075A370",
+   "43146D12": "0075A040"
   },
   "cUI_Manager_render": {
    "452F85C7": "00758ED0",
    "451BBE74": "007587B0",
-   "451BBE74:sacredreborn.exe": "007587B0"
+   "451BBE74:sacredreborn.exe": "007587B0",
+   "43146D12": "00758480"
   },
   "worldCursorUiTestCall": {
    "452F85C7": "00611EE3",
    "451BBE74": "00611F83",
-   "451BBE74:sacredreborn.exe": "00611F83"
+   "451BBE74:sacredreborn.exe": "00611F83",
+   "43146D12": "00611A83"
   },
   "worldCursorSpecialRenderReturn": {
    "452F85C7": "00612E6F",
    "451BBE74": "00612F0F",
-   "451BBE74:sacredreborn.exe": "00612F0F"
+   "451BBE74:sacredreborn.exe": "00612F0F",
+   "43146D12": "00612A0F"
   },
   "cEngine_worldMouse": {
    "452F85C7": "006172C0",
    "451BBE74": "00617360",
-   "451BBE74:sacredreborn.exe": "00617360"
+   "451BBE74:sacredreborn.exe": "00617360",
+   "43146D12": "00616ED0"
   },
   "cEngine_handleZoomInput": {
    "452F85C7": "0060DD20",
    "451BBE74": "0060DDC0",
-   "451BBE74:sacredreborn.exe": "0060DDC0"
+   "451BBE74:sacredreborn.exe": "0060DDC0",
+   "43146D12": "0060D8C0"
   },
   "zoomInputCall": {
    "452F85C7": "0060E6DC",
    "451BBE74": "0060E77C",
-   "451BBE74:sacredreborn.exe": "0060E77C"
+   "451BBE74:sacredreborn.exe": "0060E77C",
+   "43146D12": "0060E27C"
   },
   "g_zoomPrevStep": {
    "452F85C7": "0095DCAC",
    "451BBE74": "0095BCC4",
-   "451BBE74:sacredreborn.exe": "0095BCC4"
+   "451BBE74:sacredreborn.exe": "0095BCC4",
+   "43146D12": "0095BCA4"
   },
   "cWorldView_setZoom": {
    "452F85C7": "00628130",
    "451BBE74": "00628210",
-   "451BBE74:sacredreborn.exe": "00628210"
+   "451BBE74:sacredreborn.exe": "00628210",
+   "43146D12": "00627D90"
   },
   "getPauseState": {
    "452F85C7": "006413E0",
    "451BBE74": "006414D0",
-   "451BBE74:sacredreborn.exe": "006414D0"
+   "451BBE74:sacredreborn.exe": "006414D0",
+   "43146D12": "00640E50"
   },
   "g_textInputActive": {
    "452F85C7": "017EA344",
    "451BBE74": "017E82C4",
-   "451BBE74:sacredreborn.exe": "017E82C4"
+   "451BBE74:sacredreborn.exe": "017E82C4",
+   "43146D12": "017E81BC"
   },
   "cEngine_receiveEvent": {
    "452F85C7": "00618090",
    "451BBE74": "00618130",
-   "451BBE74:sacredreborn.exe": "00618130"
+   "451BBE74:sacredreborn.exe": "00618130",
+   "43146D12": "00617CA0"
   },
   "worldMouseTileAtCall": {
    "452F85C7": "0061746E",
    "451BBE74": "0061750E",
-   "451BBE74:sacredreborn.exe": "0061750E"
+   "451BBE74:sacredreborn.exe": "0061750E",
+   "43146D12": "0061707E"
   },
   "cEventMouseDown_vtable": {
    "452F85C7": "0089704C",
    "451BBE74": "008950A8",
-   "451BBE74:sacredreborn.exe": "008950A8"
+   "451BBE74:sacredreborn.exe": "008950A8",
+   "43146D12": "00895090"
   },
   "cEventMouseUp_vtable": {
    "452F85C7": "00899248",
    "451BBE74": "00897248",
-   "451BBE74:sacredreborn.exe": "00897248"
+   "451BBE74:sacredreborn.exe": "00897248",
+   "43146D12": "00897220"
   },
   "worldGetXCalls[0]": {
    "452F85C7": "00611F54",
    "451BBE74": "00611FF4",
-   "451BBE74:sacredreborn.exe": "00611FF4"
+   "451BBE74:sacredreborn.exe": "00611FF4",
+   "43146D12": "00611AF4"
   },
   "worldGetXCalls[1]": {
    "452F85C7": "00611F9D",
    "451BBE74": "0061203D",
-   "451BBE74:sacredreborn.exe": "0061203D"
+   "451BBE74:sacredreborn.exe": "0061203D",
+   "43146D12": "00611B3D"
   },
   "worldGetXCalls[2]": {
    "452F85C7": "0061273C",
    "451BBE74": "006127DC",
-   "451BBE74:sacredreborn.exe": "006127DC"
+   "451BBE74:sacredreborn.exe": "006127DC",
+   "43146D12": "006122DC"
   },
   "worldGetXCalls[3]": {
    "452F85C7": "006127C8",
    "451BBE74": "00612868",
-   "451BBE74:sacredreborn.exe": "00612868"
+   "451BBE74:sacredreborn.exe": "00612868",
+   "43146D12": "00612368"
   },
   "worldGetXCalls[4]": {
    "452F85C7": "00617DFC",
    "451BBE74": "00617E9C",
-   "451BBE74:sacredreborn.exe": "00617E9C"
+   "451BBE74:sacredreborn.exe": "00617E9C",
+   "43146D12": "00617A0C"
   },
   "worldGetXCalls[5]": {
    "452F85C7": "00617E69",
    "451BBE74": "00617F09",
-   "451BBE74:sacredreborn.exe": "00617F09"
+   "451BBE74:sacredreborn.exe": "00617F09",
+   "43146D12": "00617A79"
   },
   "worldGetYCalls[0]": {
    "452F85C7": "00611F47",
    "451BBE74": "00611FE7",
-   "451BBE74:sacredreborn.exe": "00611FE7"
+   "451BBE74:sacredreborn.exe": "00611FE7",
+   "43146D12": "00611AE7"
   },
   "worldGetYCalls[1]": {
    "452F85C7": "00611F90",
    "451BBE74": "00612030",
-   "451BBE74:sacredreborn.exe": "00612030"
+   "451BBE74:sacredreborn.exe": "00612030",
+   "43146D12": "00611B30"
   },
   "worldGetYCalls[2]": {
    "452F85C7": "0061274D",
    "451BBE74": "006127ED",
-   "451BBE74:sacredreborn.exe": "006127ED"
+   "451BBE74:sacredreborn.exe": "006127ED",
+   "43146D12": "006122ED"
   },
   "worldGetYCalls[3]": {
    "452F85C7": "006127D9",
    "451BBE74": "00612879",
-   "451BBE74:sacredreborn.exe": "00612879"
+   "451BBE74:sacredreborn.exe": "00612879",
+   "43146D12": "00612379"
   },
   "worldGetYCalls[4]": {
    "452F85C7": "00617E0D",
    "451BBE74": "00617EAD",
-   "451BBE74:sacredreborn.exe": "00617EAD"
+   "451BBE74:sacredreborn.exe": "00617EAD",
+   "43146D12": "00617A1D"
   },
   "worldGetYCalls[5]": {
    "452F85C7": "00617E5C",
    "451BBE74": "00617EFC",
-   "451BBE74:sacredreborn.exe": "00617EFC"
+   "451BBE74:sacredreborn.exe": "00617EFC",
+   "43146D12": "00617A6C"
   },
   "worldMouseReads[0]": {
    "452F85C7": "004FB881",
    "451BBE74": "004FB6C1",
-   "451BBE74:sacredreborn.exe": "004FB6C1"
+   "451BBE74:sacredreborn.exe": "004FB6C1",
+   "43146D12": "004FB8E1"
   },
   "worldMouseReads[1]": {
    "452F85C7": "0060F268",
    "451BBE74": "0060F308",
-   "451BBE74:sacredreborn.exe": "0060F308"
+   "451BBE74:sacredreborn.exe": "0060F308",
+   "43146D12": "0060EE08"
   },
   "worldMouseReads[2]": {
    "452F85C7": "006104C7",
    "451BBE74": "00610567",
-   "451BBE74:sacredreborn.exe": "00610567"
+   "451BBE74:sacredreborn.exe": "00610567",
+   "43146D12": "00610067"
   },
   "worldMouseReads[3]": {
    "452F85C7": "00611EC3",
    "451BBE74": "00611F63",
-   "451BBE74:sacredreborn.exe": "00611F63"
+   "451BBE74:sacredreborn.exe": "00611F63",
+   "43146D12": "00611A63"
   },
   "worldMouseReads[4]": {
    "452F85C7": "0062764E",
    "451BBE74": "0062772E",
-   "451BBE74:sacredreborn.exe": "0062772E"
+   "451BBE74:sacredreborn.exe": "0062772E",
+   "43146D12": "006272AE"
   },
   "uiMouseReads[0]": {
    "452F85C7": "005DC316",
    "451BBE74": "005DC2D6",
-   "451BBE74:sacredreborn.exe": "005DC2D6"
+   "451BBE74:sacredreborn.exe": "005DC2D6",
+   "43146D12": "005DC0F6"
   },
   "uiMouseReads[1]": {
    "452F85C7": "006A3404",
    "451BBE74": "006A31C4",
-   "451BBE74:sacredreborn.exe": "006A31C4"
+   "451BBE74:sacredreborn.exe": "006A31C4",
+   "43146D12": "006A3154"
   },
   "uiMouseReads[2]": {
    "452F85C7": "006A475D",
    "451BBE74": "006A451D",
-   "451BBE74:sacredreborn.exe": "006A451D"
+   "451BBE74:sacredreborn.exe": "006A451D",
+   "43146D12": "006A44AD"
   },
   "uiMouseReads[3]": {
    "452F85C7": "006A8E1C",
    "451BBE74": "006A8ADC",
-   "451BBE74:sacredreborn.exe": "006A8ADC"
+   "451BBE74:sacredreborn.exe": "006A8ADC",
+   "43146D12": "006A8A6C"
   },
   "uiMouseReads[4]": {
    "452F85C7": "006A97DE",
    "451BBE74": "006A949E",
-   "451BBE74:sacredreborn.exe": "006A949E"
+   "451BBE74:sacredreborn.exe": "006A949E",
+   "43146D12": "006A942E"
   },
   "uiMouseReads[5]": {
    "452F85C7": "006A9F8A",
    "451BBE74": "006A9C4A",
-   "451BBE74:sacredreborn.exe": "006A9C4A"
+   "451BBE74:sacredreborn.exe": "006A9C4A",
+   "43146D12": "006A9BDA"
   },
   "uiMouseReads[6]": {
    "452F85C7": "006ACC27",
    "451BBE74": "006AC8D7",
-   "451BBE74:sacredreborn.exe": "006AC8D7"
+   "451BBE74:sacredreborn.exe": "006AC8D7",
+   "43146D12": "006AC857"
   },
   "uiMouseReads[7]": {
    "452F85C7": "006AEEDD",
    "451BBE74": "006AEBBD",
-   "451BBE74:sacredreborn.exe": "006AEBBD"
+   "451BBE74:sacredreborn.exe": "006AEBBD",
+   "43146D12": "006AEB2D"
   },
   "uiMouseReads[8]": {
    "452F85C7": "006B2A25",
    "451BBE74": "006B2705",
-   "451BBE74:sacredreborn.exe": "006B2705"
+   "451BBE74:sacredreborn.exe": "006B2705",
+   "43146D12": "006B2645"
   },
   "uiMouseReads[9]": {
    "452F85C7": "006B2B35",
    "451BBE74": "006B2815",
-   "451BBE74:sacredreborn.exe": "006B2815"
+   "451BBE74:sacredreborn.exe": "006B2815",
+   "43146D12": "006B2755"
   },
   "uiMouseReads[10]": {
    "452F85C7": "006B77F7",
    "451BBE74": "006B7497",
-   "451BBE74:sacredreborn.exe": "006B7497"
+   "451BBE74:sacredreborn.exe": "006B7497",
+   "43146D12": "006B7417"
   },
   "uiMouseReads[11]": {
    "452F85C7": "006B7C1A",
    "451BBE74": "006B78BA",
-   "451BBE74:sacredreborn.exe": "006B78BA"
+   "451BBE74:sacredreborn.exe": "006B78BA",
+   "43146D12": "006B783A"
   },
   "uiMouseReads[12]": {
    "452F85C7": "006B7DB0",
    "451BBE74": "006B7A50",
-   "451BBE74:sacredreborn.exe": "006B7A50"
+   "451BBE74:sacredreborn.exe": "006B7A50",
+   "43146D12": "006B79D0"
   },
   "uiMouseReads[13]": {
    "452F85C7": "006BB524",
    "451BBE74": "006BB1C4",
-   "451BBE74:sacredreborn.exe": "006BB1C4"
+   "451BBE74:sacredreborn.exe": "006BB1C4",
+   "43146D12": "006BB144"
   },
   "uiMouseReads[14]": {
    "452F85C7": "006BFA9A",
    "451BBE74": "006BF82A",
-   "451BBE74:sacredreborn.exe": "006BF82A"
+   "451BBE74:sacredreborn.exe": "006BF82A",
+   "43146D12": "006BF6BA"
   },
   "uiMouseReads[15]": {
    "452F85C7": "006C14E1",
    "451BBE74": "006C1271",
-   "451BBE74:sacredreborn.exe": "006C1271"
+   "451BBE74:sacredreborn.exe": "006C1271",
+   "43146D12": "006C1101"
   },
   "uiMouseReads[16]": {
    "452F85C7": "006C219F",
    "451BBE74": "006C1F2F",
-   "451BBE74:sacredreborn.exe": "006C1F2F"
+   "451BBE74:sacredreborn.exe": "006C1F2F",
+   "43146D12": "006C1DBF"
   },
   "uiMouseReads[17]": {
    "452F85C7": "006C25CC",
    "451BBE74": "006C235C",
-   "451BBE74:sacredreborn.exe": "006C235C"
+   "451BBE74:sacredreborn.exe": "006C235C",
+   "43146D12": "006C21EC"
   },
   "uiMouseReads[18]": {
    "452F85C7": "006C7167",
    "451BBE74": "006C6EE7",
-   "451BBE74:sacredreborn.exe": "006C6EE7"
+   "451BBE74:sacredreborn.exe": "006C6EE7",
+   "43146D12": "006C6D77"
   },
   "uiMouseReads[19]": {
    "452F85C7": "006C793A",
    "451BBE74": "006C76BA",
-   "451BBE74:sacredreborn.exe": "006C76BA"
+   "451BBE74:sacredreborn.exe": "006C76BA",
+   "43146D12": "006C754A"
   },
   "uiMouseReads[20]": {
    "452F85C7": "006C9805",
    "451BBE74": "006C9585",
-   "451BBE74:sacredreborn.exe": "006C9585"
+   "451BBE74:sacredreborn.exe": "006C9585",
+   "43146D12": "006C9415"
   },
   "uiMouseReads[21]": {
    "452F85C7": "006C9F92",
    "451BBE74": "006C9D12",
-   "451BBE74:sacredreborn.exe": "006C9D12"
+   "451BBE74:sacredreborn.exe": "006C9D12",
+   "43146D12": "006C9BA2"
   },
   "uiMouseReads[22]": {
    "452F85C7": "006D2E32",
    "451BBE74": "006D2BB2",
-   "451BBE74:sacredreborn.exe": "006D2BB2"
+   "451BBE74:sacredreborn.exe": "006D2BB2",
+   "43146D12": "006D2A42"
   },
   "uiMouseReads[23]": {
    "452F85C7": "006D4D11",
    "451BBE74": "006D4A91",
-   "451BBE74:sacredreborn.exe": "006D4A91"
+   "451BBE74:sacredreborn.exe": "006D4A91",
+   "43146D12": "006D4921"
   },
   "uiMouseReads[24]": {
    "452F85C7": "006D65D7",
    "451BBE74": "006D6357",
-   "451BBE74:sacredreborn.exe": "006D6357"
+   "451BBE74:sacredreborn.exe": "006D6357",
+   "43146D12": "006D61E7"
   },
   "uiMouseReads[25]": {
    "452F85C7": "006D7451",
    "451BBE74": "006D71D1",
-   "451BBE74:sacredreborn.exe": "006D71D1"
+   "451BBE74:sacredreborn.exe": "006D71D1",
+   "43146D12": "006D7061"
   },
   "uiMouseReads[26]": {
    "452F85C7": "006D7BEC",
    "451BBE74": "006D796C",
-   "451BBE74:sacredreborn.exe": "006D796C"
+   "451BBE74:sacredreborn.exe": "006D796C",
+   "43146D12": "006D77FC"
   },
   "uiMouseReads[27]": {
    "452F85C7": "006D9055",
    "451BBE74": "006D8DD5",
-   "451BBE74:sacredreborn.exe": "006D8DD5"
+   "451BBE74:sacredreborn.exe": "006D8DD5",
+   "43146D12": "006D8C65"
   },
   "uiMouseReads[28]": {
    "452F85C7": "006D90E7",
    "451BBE74": "006D8E67",
-   "451BBE74:sacredreborn.exe": "006D8E67"
+   "451BBE74:sacredreborn.exe": "006D8E67",
+   "43146D12": "006D8CF7"
   },
   "uiMouseReads[29]": {
    "452F85C7": "006DAAB4",
    "451BBE74": "006DA834",
-   "451BBE74:sacredreborn.exe": "006DA834"
+   "451BBE74:sacredreborn.exe": "006DA834",
+   "43146D12": "006DA6C4"
   },
   "uiMouseReads[30]": {
    "452F85C7": "006DCEF8",
    "451BBE74": "006DCCA8",
-   "451BBE74:sacredreborn.exe": "006DCCA8"
+   "451BBE74:sacredreborn.exe": "006DCCA8",
+   "43146D12": "006DCB08"
   },
   "uiMouseReads[31]": {
    "452F85C7": "006DE1F4",
    "451BBE74": "006DDFA4",
-   "451BBE74:sacredreborn.exe": "006DDFA4"
+   "451BBE74:sacredreborn.exe": "006DDFA4",
+   "43146D12": "006DDE04"
   },
   "uiMouseReads[32]": {
    "452F85C7": "006E45AC",
    "451BBE74": "006E435C",
-   "451BBE74:sacredreborn.exe": "006E435C"
+   "451BBE74:sacredreborn.exe": "006E435C",
+   "43146D12": "006E41BC"
   },
   "uiMouseReads[33]": {
    "452F85C7": "006E7819",
    "451BBE74": "006E7459",
-   "451BBE74:sacredreborn.exe": "006E7459"
+   "451BBE74:sacredreborn.exe": "006E7459",
+   "43146D12": "006E72F9"
   },
   "uiMouseReads[34]": {
    "452F85C7": "006EA956",
    "451BBE74": "006EA5C6",
-   "451BBE74:sacredreborn.exe": "006EA5C6"
+   "451BBE74:sacredreborn.exe": "006EA5C6",
+   "43146D12": "006EA436"
   },
   "uiMouseReads[35]": {
    "452F85C7": "006F1666",
    "451BBE74": "006F1326",
-   "451BBE74:sacredreborn.exe": "006F1326"
+   "451BBE74:sacredreborn.exe": "006F1326",
+   "43146D12": "006F1146"
   },
   "uiMouseReads[36]": {
    "452F85C7": "006F778B",
    "451BBE74": "006F744B",
-   "451BBE74:sacredreborn.exe": "006F744B"
+   "451BBE74:sacredreborn.exe": "006F744B",
+   "43146D12": "006F726B"
   },
   "uiMouseReads[37]": {
    "452F85C7": "006F8D46",
    "451BBE74": "006F8A06",
-   "451BBE74:sacredreborn.exe": "006F8A06"
+   "451BBE74:sacredreborn.exe": "006F8A06",
+   "43146D12": "006F8826"
   },
   "uiMouseReads[38]": {
    "452F85C7": "0070F811",
    "451BBE74": "0070F211",
-   "451BBE74:sacredreborn.exe": "0070F211"
+   "451BBE74:sacredreborn.exe": "0070F211",
+   "43146D12": "0070EFA1"
   },
   "uiMouseReads[39]": {
    "452F85C7": "00716E53",
    "451BBE74": "00716693",
-   "451BBE74:sacredreborn.exe": "00716693"
+   "451BBE74:sacredreborn.exe": "00716693",
+   "43146D12": "00716423"
   },
   "uiMouseReads[40]": {
    "452F85C7": "0072192F",
    "451BBE74": "007211BF",
-   "451BBE74:sacredreborn.exe": "007211BF"
+   "451BBE74:sacredreborn.exe": "007211BF",
+   "43146D12": "00720F4F"
   },
   "uiMouseReads[41]": {
    "452F85C7": "00722001",
    "451BBE74": "00721891",
-   "451BBE74:sacredreborn.exe": "00721891"
+   "451BBE74:sacredreborn.exe": "00721891",
+   "43146D12": "00721621"
   },
   "uiMouseReads[42]": {
    "452F85C7": "007222A3",
    "451BBE74": "00721B33",
-   "451BBE74:sacredreborn.exe": "00721B33"
+   "451BBE74:sacredreborn.exe": "00721B33",
+   "43146D12": "007218C3"
   },
   "uiMouseReads[43]": {
    "452F85C7": "0072885E",
    "451BBE74": "007280EE",
-   "451BBE74:sacredreborn.exe": "007280EE"
+   "451BBE74:sacredreborn.exe": "007280EE",
+   "43146D12": "00727E7E"
   },
   "uiMouseReads[44]": {
    "452F85C7": "0072C1A2",
    "451BBE74": "0072BA32",
-   "451BBE74:sacredreborn.exe": "0072BA32"
+   "451BBE74:sacredreborn.exe": "0072BA32",
+   "43146D12": "0072B7C2"
   },
   "uiMouseReads[45]": {
    "452F85C7": "0072FFF9",
    "451BBE74": "0072F919",
-   "451BBE74:sacredreborn.exe": "0072F919"
+   "451BBE74:sacredreborn.exe": "0072F919",
+   "43146D12": "0072F6E9"
   },
   "uiMouseReads[46]": {
    "452F85C7": "00731F14",
    "451BBE74": "00731834",
-   "451BBE74:sacredreborn.exe": "00731834"
+   "451BBE74:sacredreborn.exe": "00731834",
+   "43146D12": "00731604"
   },
   "uiMouseReads[47]": {
    "452F85C7": "0073219C",
    "451BBE74": "00731ABC",
-   "451BBE74:sacredreborn.exe": "00731ABC"
+   "451BBE74:sacredreborn.exe": "00731ABC",
+   "43146D12": "0073188C"
   },
   "uiMouseReads[48]": {
    "452F85C7": "00732853",
    "451BBE74": "00732173",
-   "451BBE74:sacredreborn.exe": "00732173"
+   "451BBE74:sacredreborn.exe": "00732173",
+   "43146D12": "00731F43"
   },
   "uiMouseReads[49]": {
    "452F85C7": "0074BBED",
    "451BBE74": "0074B49D",
-   "451BBE74:sacredreborn.exe": "0074B49D"
+   "451BBE74:sacredreborn.exe": "0074B49D",
+   "43146D12": "0074B1BD"
   },
   "uiMouseReads[50]": {
    "452F85C7": "0074FEDB",
    "451BBE74": "0074F7EB",
-   "451BBE74:sacredreborn.exe": "0074F7EB"
+   "451BBE74:sacredreborn.exe": "0074F7EB",
+   "43146D12": "0074F4AB"
   },
   "uiMouseReads[51]": {
    "452F85C7": "00752F4B",
    "451BBE74": "0075282B",
-   "451BBE74:sacredreborn.exe": "0075282B"
+   "451BBE74:sacredreborn.exe": "0075282B",
+   "43146D12": "0075252B"
   },
   "uiMouseReads[52]": {
    "452F85C7": "007541BD",
    "451BBE74": "00753A9D",
-   "451BBE74:sacredreborn.exe": "00753A9D"
+   "451BBE74:sacredreborn.exe": "00753A9D",
+   "43146D12": "0075379D"
   },
   "uiMouseReads[53]": {
    "452F85C7": "00754BD0",
    "451BBE74": "007544B0",
-   "451BBE74:sacredreborn.exe": "007544B0"
+   "451BBE74:sacredreborn.exe": "007544B0",
+   "43146D12": "007541B0"
   },
   "uiMouseReads[54]": {
    "452F85C7": "00758A9D",
    "451BBE74": "0075837D",
-   "451BBE74:sacredreborn.exe": "0075837D"
+   "451BBE74:sacredreborn.exe": "0075837D",
+   "43146D12": "0075804D"
   },
   "uiGetXCalls[0]": {
    "452F85C7": "005DC46B",
    "451BBE74": "005DC42B",
-   "451BBE74:sacredreborn.exe": "005DC42B"
+   "451BBE74:sacredreborn.exe": "005DC42B",
+   "43146D12": "005DC24B"
   },
   "uiGetXCalls[1]": {
    "452F85C7": "006B6819",
    "451BBE74": "006B64B9",
-   "451BBE74:sacredreborn.exe": "006B64B9"
+   "451BBE74:sacredreborn.exe": "006B64B9",
+   "43146D12": "006B6439"
   },
   "uiGetXCalls[2]": {
    "452F85C7": "006B6FC7",
    "451BBE74": "006B6C67",
-   "451BBE74:sacredreborn.exe": "006B6C67"
+   "451BBE74:sacredreborn.exe": "006B6C67",
+   "43146D12": "006B6BE7"
   },
   "uiGetXCalls[3]": {
    "452F85C7": "006DADF5",
    "451BBE74": "006DAB75",
-   "451BBE74:sacredreborn.exe": "006DAB75"
+   "451BBE74:sacredreborn.exe": "006DAB75",
+   "43146D12": "006DAA05"
   },
   "uiGetXCalls[4]": {
    "452F85C7": "006DBF81",
    "451BBE74": "006DBD01",
-   "451BBE74:sacredreborn.exe": "006DBD01"
+   "451BBE74:sacredreborn.exe": "006DBD01",
+   "43146D12": "006DBB91"
   },
   "uiGetXCalls[5]": {
    "452F85C7": "006DD9E3",
    "451BBE74": "006DD793",
-   "451BBE74:sacredreborn.exe": "006DD793"
+   "451BBE74:sacredreborn.exe": "006DD793",
+   "43146D12": "006DD5F3"
   },
   "uiGetYCalls[0]": {
    "452F85C7": "005DC47B",
    "451BBE74": "005DC43B",
-   "451BBE74:sacredreborn.exe": "005DC43B"
+   "451BBE74:sacredreborn.exe": "005DC43B",
+   "43146D12": "005DC25B"
   },
   "uiGetYCalls[1]": {
    "452F85C7": "006B6828",
    "451BBE74": "006B64C8",
-   "451BBE74:sacredreborn.exe": "006B64C8"
+   "451BBE74:sacredreborn.exe": "006B64C8",
+   "43146D12": "006B6448"
   },
   "uiGetYCalls[2]": {
    "452F85C7": "006B6FD6",
    "451BBE74": "006B6C76",
-   "451BBE74:sacredreborn.exe": "006B6C76"
+   "451BBE74:sacredreborn.exe": "006B6C76",
+   "43146D12": "006B6BF6"
   },
   "uiGetYCalls[3]": {
    "452F85C7": "006DAE04",
    "451BBE74": "006DAB84",
-   "451BBE74:sacredreborn.exe": "006DAB84"
+   "451BBE74:sacredreborn.exe": "006DAB84",
+   "43146D12": "006DAA14"
   },
   "uiGetYCalls[4]": {
    "452F85C7": "006DBF90",
    "451BBE74": "006DBD10",
-   "451BBE74:sacredreborn.exe": "006DBD10"
+   "451BBE74:sacredreborn.exe": "006DBD10",
+   "43146D12": "006DBBA0"
   },
   "uiGetYCalls[5]": {
    "452F85C7": "006DD9F2",
    "451BBE74": "006DD7A2",
-   "451BBE74:sacredreborn.exe": "006DD7A2"
+   "451BBE74:sacredreborn.exe": "006DD7A2",
+   "43146D12": "006DD602"
   },
   "uiCursorPosCalls[0]": {
    "452F85C7": "005DC495",
    "451BBE74": "005DC455",
-   "451BBE74:sacredreborn.exe": "005DC455"
+   "451BBE74:sacredreborn.exe": "005DC455",
+   "43146D12": "005DC275"
   },
   "uiCursorPosCalls[1]": {
    "452F85C7": "006AD204",
    "451BBE74": "006ACEB4",
-   "451BBE74:sacredreborn.exe": "006ACEB4"
+   "451BBE74:sacredreborn.exe": "006ACEB4",
+   "43146D12": "006ACE34"
   },
   "uiCursorPosCalls[2]": {
    "452F85C7": "006C01A2",
    "451BBE74": "006BFF32",
-   "451BBE74:sacredreborn.exe": "006BFF32"
+   "451BBE74:sacredreborn.exe": "006BFF32",
+   "43146D12": "006BFDC2"
   },
   "uiCursorPosCalls[3]": {
    "452F85C7": "006EA500",
    "451BBE74": "006EA170",
-   "451BBE74:sacredreborn.exe": "006EA170"
+   "451BBE74:sacredreborn.exe": "006EA170",
+   "43146D12": "006E9FE0"
   },
   "uiCursorPosCalls[4]": {
    "452F85C7": "006EA589",
    "451BBE74": "006EA1F9",
-   "451BBE74:sacredreborn.exe": "006EA1F9"
+   "451BBE74:sacredreborn.exe": "006EA1F9",
+   "43146D12": "006EA069"
   },
   "cMouse_getCursorPos": {
    "452F85C7": "00655810",
    "451BBE74": "006559A0",
-   "451BBE74:sacredreborn.exe": "006559A0"
+   "451BBE74:sacredreborn.exe": "006559A0",
+   "43146D12": "006552F0"
   },
   "cUI_Manager_createGameWindows": {
    "452F85C7": "00759AF0",
    "451BBE74": "007593D0",
-   "451BBE74:sacredreborn.exe": "007593D0"
+   "451BBE74:sacredreborn.exe": "007593D0",
+   "43146D12": "007590A0"
   },
   "cUI_Manager_showHelp": {
    "452F85C7": "0075B4F0",
    "451BBE74": "0075ADD0",
-   "451BBE74:sacredreborn.exe": "0075ADD0"
+   "451BBE74:sacredreborn.exe": "0075ADD0",
+   "43146D12": "0075AAA0"
   },
   "cUI_Popup_setText": {
    "452F85C7": "006E6EA0",
    "451BBE74": "006E6AE0",
-   "451BBE74:sacredreborn.exe": "006E6AE0"
+   "451BBE74:sacredreborn.exe": "006E6AE0",
+   "43146D12": "006E6980"
   },
   "cUI_Popup_setTextId": {
    "452F85C7": "006E6FB0",
    "451BBE74": "006E6BF0",
-   "451BBE74:sacredreborn.exe": "006E6BF0"
+   "451BBE74:sacredreborn.exe": "006E6BF0",
+   "43146D12": "006E6A90"
   },
   "cUI_Popup_layout": {
    "452F85C7": "006E7AF0",
    "451BBE74": "006E7730",
-   "451BBE74:sacredreborn.exe": "006E7730"
+   "451BBE74:sacredreborn.exe": "006E7730",
+   "43146D12": "006E75D0"
   },
   "cInventoryEntry_render": {
    "452F85C7": "005DC430",
    "451BBE74": "005DC3F0",
-   "451BBE74:sacredreborn.exe": "005DC3F0"
+   "451BBE74:sacredreborn.exe": "005DC3F0",
+   "43146D12": "005DC210"
   },
   "cUI_Window2_layoutChildren": {
    "452F85C7": "00727B30",
    "451BBE74": "007273C0",
-   "451BBE74:sacredreborn.exe": "007273C0"
+   "451BBE74:sacredreborn.exe": "007273C0",
+   "43146D12": "00727150"
   },
   "g_pTextureManager": {
    "452F85C7": "013E7838",
    "451BBE74": "013E57B8",
-   "451BBE74:sacredreborn.exe": "013E57B8"
+   "451BBE74:sacredreborn.exe": "013E57B8",
+   "43146D12": "013E56B0"
   },
   "cTextureManager_init": {
    "452F85C7": "0065E7A0",
    "451BBE74": "0065EA20",
-   "451BBE74:sacredreborn.exe": "0065EA20"
+   "451BBE74:sacredreborn.exe": "0065EA20",
+   "43146D12": "0065E320"
   },
   "cEngine_renderThreadRun": {
    "452F85C7": "0060E350",
    "451BBE74": "0060E3F0",
-   "451BBE74:sacredreborn.exe": "0060E3F0"
+   "451BBE74:sacredreborn.exe": "0060E3F0",
+   "43146D12": "0060DEF0"
   },
   "frameLimiter": {
    "452F85C7": "0060A9F0",
    "451BBE74": "0060AA90",
-   "451BBE74:sacredreborn.exe": "0060AA90"
+   "451BBE74:sacredreborn.exe": "0060AA90",
+   "43146D12": "0060A590"
   },
   "weatherRender": {
    "452F85C7": "004190D0",
    "451BBE74": "004190B0",
-   "451BBE74:sacredreborn.exe": "004190B0"
+   "451BBE74:sacredreborn.exe": "004190B0",
+   "43146D12": "00419090"
   },
   "renderLimiterReturn": {
    "452F85C7": "0060EA6E",
    "451BBE74": "0060EB0E",
-   "451BBE74:sacredreborn.exe": "0060EB0E"
+   "451BBE74:sacredreborn.exe": "0060EB0E",
+   "43146D12": "0060E60E"
   },
   "menuLoopSleepJump": {
    "452F85C7": "0075713C",
    "451BBE74": "00756A1C",
-   "451BBE74:sacredreborn.exe": "00756A1C"
+   "451BBE74:sacredreborn.exe": "00756A1C",
+   "43146D12": "007566EC"
   },
   "captureLockBackReturn": {
    "452F85C7": "006136AB",
    "451BBE74": "0061374B",
-   "451BBE74:sacredreborn.exe": "0061374B"
+   "451BBE74:sacredreborn.exe": "0061374B",
+   "43146D12": "0061324B"
   },
   "captureScreenshot": {
    "452F85C7": "006487D0",
    "451BBE74": "00648900",
-   "451BBE74:sacredreborn.exe": "00648900"
+   "451BBE74:sacredreborn.exe": "00648900",
+   "43146D12": "00648240"
   },
   "pixelsToWorld": {
    "452F85C7": "00623940",
    "451BBE74": "00623A20",
-   "451BBE74:sacredreborn.exe": "00623A20"
+   "451BBE74:sacredreborn.exe": "00623A20",
+   "43146D12": "00623540"
   },
   "worldToPixels": {
    "452F85C7": "00623B60",
    "451BBE74": "00623C40",
-   "451BBE74:sacredreborn.exe": "00623C40"
+   "451BBE74:sacredreborn.exe": "00623C40",
+   "43146D12": "00623760"
   },
   "g_unzoomedProjection": {
    "452F85C7": "0182ED70",
    "451BBE74": "0182CCF0",
-   "451BBE74:sacredreborn.exe": "0182CCF0"
+   "451BBE74:sacredreborn.exe": "0182CCF0",
+   "43146D12": "0182CBE8"
   },
   "cWorldView0_render": {
    "452F85C7": "00632140",
    "451BBE74": "006322B0",
-   "451BBE74:sacredreborn.exe": "006322B0"
+   "451BBE74:sacredreborn.exe": "006322B0",
+   "43146D12": "00631E10"
   },
   "cWorldView_renderTileRow": {
    "452F85C7": "0062AE90",
    "451BBE74": "0062B000",
-   "451BBE74:sacredreborn.exe": "0062B000"
+   "451BBE74:sacredreborn.exe": "0062B000",
+   "43146D12": "0062AB60"
   },
   "cWorldView_drawTileLayers": {
    "452F85C7": "0062D3C0",
    "451BBE74": "0062D530",
-   "451BBE74:sacredreborn.exe": "0062D530"
+   "451BBE74:sacredreborn.exe": "0062D530",
+   "43146D12": "0062D090"
   },
   "tileRowGroundQuad": {
    "452F85C7": "0062B103",
    "451BBE74": "0062B273",
-   "451BBE74:sacredreborn.exe": "0062B273"
+   "451BBE74:sacredreborn.exe": "0062B273",
+   "43146D12": "0062ADD3"
   },
   "objects2StaticSprite": {
    "452F85C7": "00630217",
    "451BBE74": "00630387",
-   "451BBE74:sacredreborn.exe": "00630387"
+   "451BBE74:sacredreborn.exe": "00630387",
+   "43146D12": "0062FEE7"
   },
   "objects1StaticSprite": {
    "452F85C7": "0062E602",
    "451BBE74": "0062E772",
-   "451BBE74:sacredreborn.exe": "0062E772"
+   "451BBE74:sacredreborn.exe": "0062E772",
+   "43146D12": "0062E2D2"
   },
   "tileRowAfterGround": {
    "452F85C7": "0062B7FF",
    "451BBE74": "0062B96F",
-   "451BBE74:sacredreborn.exe": "0062B96F"
+   "451BBE74:sacredreborn.exe": "0062B96F",
+   "43146D12": "0062B4CF"
   },
   "cQuadBatcher_flush": {
    "452F85C7": "00629340",
    "451BBE74": "00629420",
-   "451BBE74:sacredreborn.exe": "00629420"
+   "451BBE74:sacredreborn.exe": "00629420",
+   "43146D12": "00628FA0"
   },
   "cQuadBatcher_add": {
    "452F85C7": "00629180",
    "451BBE74": "00629260",
-   "451BBE74:sacredreborn.exe": "00629260"
+   "451BBE74:sacredreborn.exe": "00629260",
+   "43146D12": "00628DE0"
   },
   "cQuadBatcher_setTexture": {
    "452F85C7": "006292C0",
    "451BBE74": "006293A0",
-   "451BBE74:sacredreborn.exe": "006293A0"
+   "451BBE74:sacredreborn.exe": "006293A0",
+   "43146D12": "00628F20"
   },
   "cSpriteBatcher_setTexture": {
    "452F85C7": "00628F90",
    "451BBE74": "00629070",
-   "451BBE74:sacredreborn.exe": "00629070"
+   "451BBE74:sacredreborn.exe": "00629070",
+   "43146D12": "00628BF0"
   },
   "cSpriteBatcher_flush": {
    "452F85C7": "00629050",
    "451BBE74": "00629130",
-   "451BBE74:sacredreborn.exe": "00629130"
+   "451BBE74:sacredreborn.exe": "00629130",
+   "43146D12": "00628CB0"
   },
   "renderFlags_instance": {
    "452F85C7": "00643110",
    "451BBE74": "00643240",
-   "451BBE74:sacredreborn.exe": "00643240"
+   "451BBE74:sacredreborn.exe": "00643240",
+   "43146D12": "00642B80"
   },
   "renderFlags_set": {
    "452F85C7": "00643430",
    "451BBE74": "00643560",
-   "451BBE74:sacredreborn.exe": "00643560"
+   "451BBE74:sacredreborn.exe": "00643560",
+   "43146D12": "00642EA0"
   },
   "worldState_instance": {
    "452F85C7": "00417E70",
    "451BBE74": "00417E50",
-   "451BBE74:sacredreborn.exe": "00417E50"
+   "451BBE74:sacredreborn.exe": "00417E50",
+   "43146D12": "00417E30"
   },
   "cTextureManager_get": {
    "452F85C7": "0065ED90",
    "451BBE74": "0065F010",
-   "451BBE74:sacredreborn.exe": "0065F010"
+   "451BBE74:sacredreborn.exe": "0065F010",
+   "43146D12": "0065E910"
   },
   "cWorldView_drawWaterTiles": {
    "452F85C7": "0062DD00",
    "451BBE74": "0062DE70",
-   "451BBE74:sacredreborn.exe": "0062DE70"
+   "451BBE74:sacredreborn.exe": "0062DE70",
+   "43146D12": "0062D9D0"
   },
   "cWorldView_drawObjects": {
    "452F85C7": "0062E410",
    "451BBE74": "0062E580",
-   "451BBE74:sacredreborn.exe": "0062E580"
+   "451BBE74:sacredreborn.exe": "0062E580",
+   "43146D12": "0062E0E0"
   },
   "cWorldView_drawObjects2": {
    "452F85C7": "0062FF60",
    "451BBE74": "006300D0",
-   "451BBE74:sacredreborn.exe": "006300D0"
+   "451BBE74:sacredreborn.exe": "006300D0",
+   "43146D12": "0062FC30"
   },
   "cObject3D_drawModel": {
    "452F85C7": "0044A9D0",
    "451BBE74": "0044ABA0",
-   "451BBE74:sacredreborn.exe": "0044ABA0"
+   "451BBE74:sacredreborn.exe": "0044ABA0",
+   "43146D12": "0044AB70"
   },
   "cGranny_renderShadow": {
    "452F85C7": "00406FF0",
    "451BBE74": "00407030",
-   "451BBE74:sacredreborn.exe": "00407030"
+   "451BBE74:sacredreborn.exe": "00407030",
+   "43146D12": "00407030"
   },
   "cWorldView_initRowWalk": {
    "452F85C7": "006328C0",
    "451BBE74": "00632A30",
-   "451BBE74:sacredreborn.exe": "00632A30"
+   "451BBE74:sacredreborn.exe": "00632A30",
+   "43146D12": "00632590"
   },
   "g_viewCameraX": {
    "452F85C7": "00AD7998",
    "451BBE74": "00AD5918",
-   "451BBE74:sacredreborn.exe": "00AD5918"
+   "451BBE74:sacredreborn.exe": "00AD5918",
+   "43146D12": "00AD5810"
   },
   "g_viewCameraY": {
    "452F85C7": "00AD799C",
    "451BBE74": "00AD591C",
-   "451BBE74:sacredreborn.exe": "00AD591C"
+   "451BBE74:sacredreborn.exe": "00AD591C",
+   "43146D12": "00AD5814"
   },
   "layerRecordCache": {
    "452F85C7": "00635FE0",
    "451BBE74": "006360E0",
-   "451BBE74:sacredreborn.exe": "006360E0"
+   "451BBE74:sacredreborn.exe": "006360E0",
+   "43146D12": "00635C00"
   },
   "recordCache": {
    "452F85C7": "00635E50",
    "451BBE74": "00635F50",
-   "451BBE74:sacredreborn.exe": "00635F50"
+   "451BBE74:sacredreborn.exe": "00635F50",
+   "43146D12": "00635A70"
   },
   "recordMapFind": {
    "452F85C7": "00640410",
    "451BBE74": "006404C0",
-   "451BBE74:sacredreborn.exe": "006404C0"
+   "451BBE74:sacredreborn.exe": "006404C0",
+   "43146D12": "0063FEE0"
   },
   "g_recordStamp": {
    "452F85C7": "00CD7A50",
    "451BBE74": "00CD59D0",
-   "451BBE74:sacredreborn.exe": "00CD59D0"
+   "451BBE74:sacredreborn.exe": "00CD59D0",
+   "43146D12": "00CD58C8"
   },
   "cMutex_lock": {
    "452F85C7": "0066FA00",
    "451BBE74": "0066FCE0",
-   "451BBE74:sacredreborn.exe": "0066FCE0"
+   "451BBE74:sacredreborn.exe": "0066FCE0",
+   "43146D12": "0066F720"
   },
   "cMutex_unlock": {
    "452F85C7": "0066FA10",
    "451BBE74": "0066FCF0",
-   "451BBE74:sacredreborn.exe": "0066FCF0"
+   "451BBE74:sacredreborn.exe": "0066FCF0",
+   "43146D12": "0066F730"
   },
   "rtFtol": {
    "452F85C7": "0084A1F4",
    "451BBE74": "00848F94",
-   "451BBE74:sacredreborn.exe": "00848F94"
+   "451BBE74:sacredreborn.exe": "00848F94",
+   "43146D12": "00848864"
   },
   "cParticleSystemStargate_vtable": {
    "452F85C7": "00897E9C",
    "451BBE74": "00895E9C",
-   "451BBE74:sacredreborn.exe": "00895E9C"
+   "451BBE74:sacredreborn.exe": "00895E9C",
+   "43146D12": "00895E74"
   },
   "cParticleSystemStargateUw_vtable": {
    "452F85C7": "00899118",
    "451BBE74": "00897118",
-   "451BBE74:sacredreborn.exe": "00897118"
+   "451BBE74:sacredreborn.exe": "00897118",
+   "43146D12": "008970F0"
   },
   "g_pGameClient": {
    "452F85C7": "0182EBF0",
    "451BBE74": "0182CB70",
-   "451BBE74:sacredreborn.exe": "0182CB70"
+   "451BBE74:sacredreborn.exe": "0182CB70",
+   "43146D12": "0182CA68"
   },
   "initNetworkNagleTest": {
    "452F85C7": "007D310E",
    "451BBE74": "007D294E",
-   "451BBE74:sacredreborn.exe": "007D294E"
+   "451BBE74:sacredreborn.exe": "007D294E",
+   "43146D12": "007D247E"
   },
   "cTextTable_load": {
    "452F85C7": "0080E680",
@@ -901,177 +1079,212 @@
   "cMSS_ctor": {
    "452F85C7": "00676200",
    "451BBE74": "006764E0",
-   "451BBE74:sacredreborn.exe": "006764E0"
+   "451BBE74:sacredreborn.exe": "006764E0",
+   "43146D12": "00675F80"
   },
   "g_soundPakPath": {
    "452F85C7": "009D760C",
    "451BBE74": "009D5624",
-   "451BBE74:sacredreborn.exe": "009D5624"
+   "451BBE74:sacredreborn.exe": "009D5624",
+   "43146D12": "009D5604"
   },
   "g_language": {
    "452F85C7": "017E7D34",
    "451BBE74": "017E5CB4",
-   "451BBE74:sacredreborn.exe": "017E5CB4"
+   "451BBE74:sacredreborn.exe": "017E5CB4",
+   "43146D12": "017E5BAC"
   },
   "g_languageCodes": {
    "452F85C7": "00899394",
    "451BBE74": "00897394",
-   "451BBE74:sacredreborn.exe": "00897394"
+   "451BBE74:sacredreborn.exe": "00897394",
+   "43146D12": "0089736C"
   },
   "worldPick": {
    "452F85C7": "00626C50",
    "451BBE74": "00626D30",
-   "451BBE74:sacredreborn.exe": "00626D30"
+   "451BBE74:sacredreborn.exe": "00626D30",
+   "43146D12": "006268B0"
   },
   "g_pObjectManager": {
    "452F85C7": "00AD5C40",
    "451BBE74": "00AD3BC0",
-   "451BBE74:sacredreborn.exe": "00AD3BC0"
+   "451BBE74:sacredreborn.exe": "00AD3BC0",
+   "43146D12": "00AD3AB8"
   },
   "cObjectManager_getData": {
    "452F85C7": "005FE000",
    "451BBE74": "005FE060",
-   "451BBE74:sacredreborn.exe": "005FE060"
+   "451BBE74:sacredreborn.exe": "005FE060",
+   "43146D12": "005FDF30"
   },
   "cObjectManager_hero": {
    "452F85C7": "00603E30",
    "451BBE74": "00603E90",
-   "451BBE74:sacredreborn.exe": "00603E90"
+   "451BBE74:sacredreborn.exe": "00603E90",
+   "43146D12": "00603D60"
   },
   "rtDynamicCast": {
    "452F85C7": "0084A961",
    "451BBE74": "00849701",
-   "451BBE74:sacredreborn.exe": "00849701"
+   "451BBE74:sacredreborn.exe": "00849701",
+   "43146D12": "00848FD1"
   },
   "cObject_typeDescriptor": {
    "452F85C7": "008EB648",
    "451BBE74": "008E9648",
-   "451BBE74:sacredreborn.exe": "008E9648"
+   "451BBE74:sacredreborn.exe": "008E9648",
+   "43146D12": "008E9650"
   },
   "cCreature_typeDescriptor": {
    "452F85C7": "008EB660",
    "451BBE74": "008E9660",
-   "451BBE74:sacredreborn.exe": "008E9660"
+   "451BBE74:sacredreborn.exe": "008E9660",
+   "43146D12": "008E9668"
   },
   "cCreature_isEnemy": {
    "452F85C7": "00548F60",
    "451BBE74": "00548DD0",
-   "451BBE74:sacredreborn.exe": "00548DD0"
+   "451BBE74:sacredreborn.exe": "00548DD0",
+   "43146D12": "00548F70"
   },
   "cUI_Options_vtable": {
    "452F85C7": "00897078",
    "451BBE74": "0089505C",
-   "451BBE74:sacredreborn.exe": "0089505C"
+   "451BBE74:sacredreborn.exe": "0089505C",
+   "43146D12": "00895044"
   },
   "cUI_Control2_setFlags": {
    "452F85C7": "00732550",
    "451BBE74": "00731E70",
-   "451BBE74:sacredreborn.exe": "00731E70"
+   "451BBE74:sacredreborn.exe": "00731E70",
+   "43146D12": "00731C40"
   },
   "cUI_Control2_clearFlags": {
    "452F85C7": "007325C0",
    "451BBE74": "00731EE0",
-   "451BBE74:sacredreborn.exe": "00731EE0"
+   "451BBE74:sacredreborn.exe": "00731EE0",
+   "43146D12": "00731CB0"
   },
   "cUI_Control2_getAbsoluteRect": {
    "452F85C7": "00732350",
    "451BBE74": "00731C70",
-   "451BBE74:sacredreborn.exe": "00731C70"
+   "451BBE74:sacredreborn.exe": "00731C70",
+   "43146D12": "00731A40"
   },
   "cUI_Slider_getValue": {
    "452F85C7": "00753430",
    "451BBE74": "00752D10",
-   "451BBE74:sacredreborn.exe": "00752D10"
+   "451BBE74:sacredreborn.exe": "00752D10",
+   "43146D12": "00752A10"
   },
   "cUI_Slider_setValue": {
    "452F85C7": "007533B0",
    "451BBE74": "00752C90",
-   "451BBE74:sacredreborn.exe": "00752C90"
+   "451BBE74:sacredreborn.exe": "00752C90",
+   "43146D12": "00752990"
   },
   "cEngine_instance": {
    "452F85C7": "0060D6C0",
    "451BBE74": "0060D760",
-   "451BBE74:sacredreborn.exe": "0060D760"
+   "451BBE74:sacredreborn.exe": "0060D760",
+   "43146D12": "0060D260"
   },
   "cEngine_getViewOffset": {
    "452F85C7": "006113E0",
    "451BBE74": "00611480",
-   "451BBE74:sacredreborn.exe": "00611480"
+   "451BBE74:sacredreborn.exe": "00611480",
+   "43146D12": "00610F80"
   },
   "cUI_Book_lineAt": {
    "452F85C7": "006B3640",
    "451BBE74": "006B3320",
-   "451BBE74:sacredreborn.exe": "006B3320"
+   "451BBE74:sacredreborn.exe": "006B3320",
+   "43146D12": "006B3260"
   },
   "cUI_Savegame_selectRow": {
    "452F85C7": "0071C360",
    "451BBE74": "0071BBF0",
-   "451BBE74:sacredreborn.exe": "0071BBF0"
+   "451BBE74:sacredreborn.exe": "0071BBF0",
+   "43146D12": "0071B980"
   },
   "textResources_instance": {
    "452F85C7": "006725E0",
    "451BBE74": "006728C0",
-   "451BBE74:sacredreborn.exe": "006728C0"
+   "451BBE74:sacredreborn.exe": "006728C0",
+   "43146D12": "00672330"
   },
   "textResources_get": {
    "452F85C7": "00672C90",
    "451BBE74": "00672F70",
-   "451BBE74:sacredreborn.exe": "00672F70"
+   "451BBE74:sacredreborn.exe": "00672F70",
+   "43146D12": "006729E0"
   },
   "g_pFontManager": {
    "452F85C7": "00CDCA70",
    "451BBE74": "00CDA9F0",
-   "451BBE74:sacredreborn.exe": "00CDA9F0"
+   "451BBE74:sacredreborn.exe": "00CDA9F0",
+   "43146D12": "00CDA8E8"
   },
   "g_hasAddon": {
    "452F85C7": "0182EBEC",
    "451BBE74": "0182CB6C",
-   "451BBE74:sacredreborn.exe": "0182CB6C"
+   "451BBE74:sacredreborn.exe": "0182CB6C",
+   "43146D12": "0182CA64"
   },
   "g_gameSettings": {
    "452F85C7": "0182EE78",
    "451BBE74": "0182CDF8",
-   "451BBE74:sacredreborn.exe": "0182CDF8"
+   "451BBE74:sacredreborn.exe": "0182CDF8",
+   "43146D12": "0182CCF0"
   },
   "g_portalTexts": {
    "452F85C7": "017EA420",
    "451BBE74": "017E83A0",
-   "451BBE74:sacredreborn.exe": "017E83A0"
+   "451BBE74:sacredreborn.exe": "017E83A0",
+   "43146D12": "017E8298"
   },
   "g_characterSlotLocked": {
    "452F85C7": "017EA3D0",
    "451BBE74": "017E8350",
-   "451BBE74:sacredreborn.exe": "017E8350"
+   "451BBE74:sacredreborn.exe": "017E8350",
+   "43146D12": "017E8248"
   },
   "cUI_NetworkInfo_cellRect": {
    "452F85C7": "006F7130",
    "451BBE74": "006F6DF0",
-   "451BBE74:sacredreborn.exe": "006F6DF0"
+   "451BBE74:sacredreborn.exe": "006F6DF0",
+   "43146D12": "006F6C10"
   },
   "g_pNetPlayers": {
    "452F85C7": "0182EBE8",
    "451BBE74": "0182CB68",
-   "451BBE74:sacredreborn.exe": "0182CB68"
+   "451BBE74:sacredreborn.exe": "0182CB68",
+   "43146D12": "0182CA60"
   },
   "cNetPlayers_count": {
    "452F85C7": "007DB2C0",
    "451BBE74": "007DA890",
-   "451BBE74:sacredreborn.exe": "007DA890"
+   "451BBE74:sacredreborn.exe": "007DA890",
+   "43146D12": "007DA3A0"
   },
   "cEngine_sendOrder": {
    "452F85C7": "00617030",
    "451BBE74": "006170D0",
-   "451BBE74:sacredreborn.exe": "006170D0"
+   "451BBE74:sacredreborn.exe": "006170D0",
+   "43146D12": "00616C40"
   },
   "cOrder_vtable": {
    "452F85C7": "0089095C",
    "451BBE74": "0088E95C",
-   "451BBE74:sacredreborn.exe": "0088E95C"
+   "451BBE74:sacredreborn.exe": "0088E95C",
+   "43146D12": "0088E94C"
   },
   "g_worldInputFlags": {
    "452F85C7": "00AB73DC",
    "451BBE74": "00AB535C",
-   "451BBE74:sacredreborn.exe": "00AB535C"
+   "451BBE74:sacredreborn.exe": "00AB535C",
+   "43146D12": "00AB525C"
   }
  },
  "gameserver.exe": {

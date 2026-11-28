@@ -65,6 +65,7 @@ namespace
         {0x451BBDBF, "gameserver.exe, German"},
         {0x45462A42, "SacredReborn Gameserver.exe"},
         {0x452F8580, "GameServer.exe, English (GOG, Steam)"},
+        {0x43146D12, "SacredClosedNet.exe, third-party build from Aug 2005 (Sacred Gear never runs in it)"},
     };
 
     // ReBorn's jump from the object culling code into the code it appended to the exe (what makes it handle the
@@ -113,7 +114,12 @@ bool Sacred::resolveAddresses()
     }
     else
     {
-        missing += Sig::resolve(kOptionalAddressSigs);
+        // Only the language feature uses these; a build without them (SacredClosedNet.exe) just does not get it.
+        const size_t optionalMissing = Sig::resolve(kOptionalAddressSigs);
+        if (optionalMissing)
+        {
+            LOG("{} optional addresses not found: the language setting stays off", optionalMissing);
+        }
     }
     if (missing)
     {

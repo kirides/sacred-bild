@@ -36,6 +36,7 @@ before it (after rebasing) to move the files the branch added.
 | `src/bild/settings/config.*`, `src/bild/settings/config/` | `SacredBild.ini`: loading it, and the settings in a header per ini section (`Config::render`, `Config::net`, ...) |
 | `src/bild/settings/settings_window.*` | The settings window before the game starts (`[Launcher] HideSettingsWindow`): what it shows, declared control by control |
 | `src/bild/settings/form.*` | `Ui::Form`: settings windows declared in code (pages, groups, rows of controls bound to ini keys), laid out and run as dialogs |
+| `src/core/host_guard.*` | Which exe the DLLs are in: the game, its server, or a third-party build (SacredClosedNet.exe) that Sacred Gear must never run in. SacredBild does not load SacredGear.dll there and SacredGear.dll refuses to load itself (its `DllMain` fails), by file name, build timestamp and the build banner string in the image; `tools/test/hostguard/` tests it |
 | `src/core/log.*`, `src/bild/crash_dump.*` | `SacredBild.log`, minidumps on crashes |
 | `src/core/patch.*`, `src/core/sig.*` | Code patches and hooks; byte signature search |
 | `sacred_core` (CMake) | `src/core/fmt.*`, `log.*`, `patch.*`, `sig.*` as a static library, linked by SacredBild and by Sacred Gear (`src/gear/`, see [Sacred Gear](Gear.md)) |
