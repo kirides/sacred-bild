@@ -169,6 +169,7 @@ local looked_hostile = {}   -- creature id -> true: its boss modifiers were set 
 local looked = {}            -- creature id -> true: its tint was set this session (the tints end with the savegame)
 
 local function apply_look(c, def, inst)
+    if def.dialog then c:set_talk(true) end     -- the game's talk cursor over the NPC
     local tint = (inst and inst.tint) or def.tint
     if tint ~= nil then
         local ok, why = c:set_tint(tint)
@@ -563,7 +564,7 @@ local function routine_tick()
     local t = gear.time()
     for _, inst in ipairs(data().list) do
         local def = kinds[inst.kind]
-        if def and not looked[inst.id] and (inst.tint ~= nil or def.tint ~= nil or inst.texture ~= nil or def.texture ~= nil) then
+        if def and not looked[inst.id] and (inst.tint ~= nil or def.tint ~= nil or inst.texture ~= nil or def.texture ~= nil or def.dialog) then
             local c = gear.world.object(inst.id)
             if c and c:is_creature() then apply_look(c, def, inst) end
         end

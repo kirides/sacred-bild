@@ -1614,6 +1614,14 @@ Gives the creature (not a hero) a name of its own: the game shows this text over
 - returns `ok` `boolean?`
 - returns `error` `string?`
 
+#### `creature:set_talk(on) -> boolean?, string?`
+
+Marks the creature as one that talks, as the game's own NPCs are: the cursor over it becomes the game's talk cursor instead of the plain pointer (the game shows it for a creature whose speech id, at +0x245, is above 0). The click and what follows stay the mod's. Single player.
+
+- `on`: `boolean` (optional) - Default true.
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `creature:set_tint(spec) -> boolean?, string?`
 
 Draws the creature's model with a colour multiplied over it. `spec`: a colour (0xAARRGGBB; a number below 0x1000000 is taken as 0xRRGGBB, opaque) for the whole model, or `{all = colour, parts = {[1] = colour, ...}}` for single meshes in the order the game draws them (a character is made of a few meshes, for example the body and the cloth); a part's colour wins over `all`. nil clears it. Textures are multiplied, so a light texture takes the colour best. Needs SacredBild; single player; the tints end with the savegame (ids then mean other creatures), so a mod sets them again after a load.

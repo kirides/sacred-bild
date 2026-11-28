@@ -139,6 +139,11 @@ function creature_mt:set_pet(opts)
     assert(type(scale) == 'number' and scale >= 0.1 and scale <= 4, 'scale must be a number from 0.1 to 4')
     return native.set_pet(self.id, scale, opts.untargetable == true)
 end
+-- set_talk(on): marks the creature as one that talks: the game's cursor over it is the talk cursor (a speech bubble) instead of the plain pointer.
+-- Single player; set again after a savegame load unless the game keeps it.
+function creature_mt:set_talk(on)
+    return native.set_talk(self.id, on == false and 0 or 1)
+end
 -- set_tint(spec): the model is drawn with a colour multiplied over it. spec: a colour (0xAARRGGBB; a number below 0x1000000 is taken as
 -- 0xRRGGBB, opaque) for the whole model, or {all = colour, parts = {[1] = colour, ...}} (the meshes of the model in the order the game
 -- draws them: a character is a few meshes, e.g. body, cloth). nil clears it. Needs SacredBild; single player; ends with the savegame.

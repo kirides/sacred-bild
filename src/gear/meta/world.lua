@@ -350,6 +350,13 @@ function Creature:name_text() end
 ---@return string? error
 function Creature:set_name_text(id) end
 
+--- Marks the creature as one that talks, as the game's own NPCs are: the cursor over it becomes the game's talk cursor instead of the plain
+--- pointer (the game shows it for a creature whose speech id, at +0x245, is above 0). The click and what follows stay the mod's. Single player.
+---@param on boolean? Default true.
+---@return boolean? ok
+---@return string? error
+function Creature:set_talk(on) end
+
 --- Draws the creature's model with a colour multiplied over it. `spec`: a colour (0xAARRGGBB; a number below 0x1000000 is taken as
 --- 0xRRGGBB, opaque) for the whole model, or `{all = colour, parts = {[1] = colour, ...}}` for single meshes in the order the game
 --- draws them (a character is made of a few meshes, for example the body and the cloth); a part's colour wins over `all`. nil clears it.

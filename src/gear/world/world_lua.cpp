@@ -974,6 +974,18 @@ namespace LuaNative
         return 1;
     }
 
+    // native.set_talk(id, value) -> true | nil, message
+    int nativeSetTalk(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::setTalk(checkId(L, 1), static_cast<int32_t>(luaL_checknumber(L, 2)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.set_texture(id, part, image) -> true | nil, message
     int nativeSetTexture(lua_State* L)
     {
@@ -1177,6 +1189,7 @@ namespace LuaNative
             {"set_level", nativeSetLevel},
             {"set_pet", nativeSetPet},
             {"set_tint", nativeSetTint},
+            {"set_talk", nativeSetTalk},
             {"set_texture", nativeSetTexture},
             {"clear_pets", nativeClearPets},
             {"set_max_health", nativeSetMaxHealth},

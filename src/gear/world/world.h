@@ -149,6 +149,8 @@ namespace World
     // one of its meshes (`part` 1..8, in the order the engine draws them). The object id is only valid until the game ends or another
     // savegame loads (clearPets).
     bool setTint(uint32_t id, uint32_t part, uint32_t argb, const char*& error);
+    // Marks a creature as one that talks (the game's hover cursor over it becomes the talk cursor): its speech id at +0x245, above 0.
+    bool setTalk(uint32_t id, int32_t value, const char*& error);
     // Draws one mesh (`part` 1..8) or the whole model (0) with another texture: `image` is a Texture.pak image (Ui::textureImage) or a picture
     // (Ui::pictureCreate*; its sides must be powers of two so the model's texture coordinates fit), 0 takes it away. SacredBild.
     bool setTexture(uint32_t id, uint32_t part, uint32_t image, const char*& error);

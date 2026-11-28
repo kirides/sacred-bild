@@ -1,3 +1,8 @@
+## v0.17.0 (2026-11-28)
+
+- New: `creature:set_talk(on)` marks a creature as one that talks, so the game's talk cursor shows over it on hover, as over its own NPCs.
+- Improved: every `gear.npc` NPC with a dialog now shows the talk cursor when the mouse is over it (the Town Portal's portal included).
+
 ## v0.16.0 (2026-11-28)
 
 - New: `gear.inv.define_type(type, base, name_text)` makes an item type of a mod's own (ids 6150 to 6199) from a copy of a game item type, with a name of its own. A potion copy works with the `item.use` event; the Town Portal mod uses it.

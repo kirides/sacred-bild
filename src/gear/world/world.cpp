@@ -1025,6 +1025,25 @@ bool World::setTint(uint32_t id, uint32_t part, uint32_t argb, const char*& erro
     return true;
 }
 
+bool World::setTalk(uint32_t id, int32_t value, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    if (!o || !callIsCreature(o))
+    {
+        error = "no such creature, or world changes are not possible now";
+        return false;
+    }
+    // creature +0x245 (unaligned): the speech / dialog id of a talking NPC; the world cursor's pick (0x611E70) shows the talk cursor over a
+    // creature when it is above 0 (0x549920 returns it)
+    if (!safeStore(reinterpret_cast<void*>(o + 0x245), &value, 4))
+    {
+        error = "the game faulted on the creature";
+        return false;
+    }
+    return true;
+}
+
 bool World::setMaxHealth(uint32_t id, int32_t maxHealth, bool setCurrent, int32_t health, const char*& error)
 {
     void* m = manager();
