@@ -58,7 +58,11 @@
 ---@field COMBAT_MASTER integer 0x4000: a combat art master.
 ---@field HORSE_TRADER integer 0x4000000: the horse trader.
 
+---@class GearRankFlags
+---@field CHAMPION integer 0x400: champion-levelled; its ring is drawn under it.
+
 ---@class GearCreatureFlags
+---@field rank GearRankFlags
 ---@field object GearObjectFlags
 ---@field behavior GearBehaviorFlags
 ---@field state GearStateFlags
@@ -78,7 +82,7 @@
 ---@class GearWorld
 ---@field TILE number World units per tile.
 ---@field CLASSES GearClassInfo[] The hero classes.
----@field FLAGS GearCreatureFlags The named bits of a creature's flag words (object, behavior, state), read from the game's own tests of them. `gear.world.has_flag(word, mask)` tests one.
+---@field FLAGS GearCreatureFlags The named bits of a creature's flag words (object, behavior, state, rank), read from the game's own tests of them. `gear.world.has_flag(word, mask)` tests one.
 ---@field ENUMS GearWorldEnums Named numbers of the engine: AI states, actions, creature classes, creature type flags, item kinds and equipment slots, each a table of name to number.
 ---@field QUALITIES GearQuality[] Item qualities in ascending order; `quality_rank` is the index.
 ---@field QUALITY_COLORS table<GearQuality, integer> The game's item label colours (ARGB) by quality: white, blue, yellow, gold, green for set items.
@@ -374,6 +378,22 @@ function Creature:set_texture(spec) end
 ---@return boolean? ok
 ---@return string? error
 function Creature:carry(slot, item) end
+
+--- A raw flag word of the object: `'object'` (any object, the one `info().flags` returns), `'behavior'`, `'state'` or `'rank'` (creatures); the bits are in `gear.world.FLAGS`.
+---@alias GearFlagWord 'object'|'behavior'|'state'|'rank'
+
+--- The raw flag word, or nil when the object is gone (or is no creature, for the creature words).
+---@param word GearFlagWord
+---@return integer?
+function Creature:flags(word) end
+
+--- Sets the bits of `set` in a flag word, then clears those of `clear` (a field left out stays). Single player. Bits the game's object manager owns (0x2 and 0x10 of the object word) stay as they are. The bits are the game's own: a wrong one changes what the creature does, e.g. `FLAGS.object.DIALOGUE_ICON` shows the icon over its head, `FLAGS.behavior.BOSS` and `FLAGS.rank.CHAMPION` its ring.
+---@param word GearFlagWord
+---@param set integer Bits to set.
+---@param clear? integer Bits to clear.
+---@return boolean? ok
+---@return string? error
+function Creature:set_flags(word, set, clear) end
 
 --- The creature's faction (0 to 15, the class the game's hostility table is indexed by) and whether its behavior flags say aggressive.
 ---@return integer? faction

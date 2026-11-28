@@ -711,6 +711,54 @@ bool World::setAllegiance(uint32_t id, uint32_t faction, uint32_t behavior, cons
     return true;
 }
 
+namespace
+{
+    constexpr uintptr_t kRankWord = 0xB0;
+    constexpr uint32_t kObjectManagerBits = 0x2 | kFlagGone;   // not in the world, freed or parked: the manager's bits
+
+    // The offset of a flag word by its number (see World::flagWord), 0 for none.
+    uintptr_t flagWordOffset(uint32_t which)
+    {
+        switch (which)
+        {
+        case 0: return kFlags;
+        case 1: return kBehavior;
+        case 2: return kState;
+        case 3: return kRankWord;
+        default: return 0;
+        }
+    }
+}
+
+bool World::flagWord(uint32_t id, uint32_t which, uint32_t& value)
+{
+    void* m = available() ? manager() : nullptr;
+    const uintptr_t o = m ? live(m, id) : 0;
+    const uintptr_t off = flagWordOffset(which);
+    return o && off && (which == 0 || callIsCreature(o)) && readAt(o, off, value);
+}
+
+bool World::setFlagWord(uint32_t id, uint32_t which, uint32_t value, const char*& error)
+{
+    void* m = manager();
+    const uintptr_t o = changesAllowed() ? live(m, id) : 0;
+    const uintptr_t off = flagWordOffset(which);
+    uint32_t own = 0;
+    if (!o || !off || (which != 0 && !callIsCreature(o)) || !readAt(o, off, own))
+    {
+        error = "no such object (or creature), or world changes are not possible now";
+        return false;
+    }
+    if (which == 0)
+        value = (value & ~kObjectManagerBits) | (own & kObjectManagerBits);
+    if (!safeStore(reinterpret_cast<void*>(o + off), &value, sizeof(value)))
+    {
+        error = "cannot write the object";
+        return false;
+    }
+    return true;
+}
+
 bool World::copyAllegiance(uint32_t id, uint32_t from, const char*& error)
 {
     void* m = manager();

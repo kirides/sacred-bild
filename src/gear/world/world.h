@@ -124,6 +124,12 @@ namespace World
     // such creature. setAllegiance writes them (not for heroes); `behavior` is the low word only.
     bool allegiance(uint32_t id, uint32_t& faction, uint32_t& behavior);
     bool setAllegiance(uint32_t id, uint32_t faction, uint32_t behavior, const char*& error);
+
+    // The creature flag words, by name: 0 the object word (+0x14, any object), 1 the behavior word (+0x1F4), 2 the state word (+0x200),
+    // 3 the rank word (+0xB0: bit 0x400 marks a champion, whose ring is drawn). The last three are creatures'. setFlagWord writes the
+    // whole word (single player; the bits that the object manager owns, 0x2 and 0x10 of the object word, stay as they are).
+    bool flagWord(uint32_t id, uint32_t which, uint32_t& value);
+    bool setFlagWord(uint32_t id, uint32_t which, uint32_t value, const char*& error);
     // Gives creature `id` (not a hero) the level of creature `from` through the engine's own setLevel (ENG 00564D60, which the sector
     // fill calls for the creatures it places: the experience the level starts at, the derived stats and the health come from the
     // creature's type and that level), then its health in the same share of the maximum as the donor's. A plain create is level 1

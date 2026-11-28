@@ -87,6 +87,25 @@ function creature_mt:set_allegiance(spec)
     end
     return native.set_allegiance(self.id, faction, behavior)
 end
+-- flags(word) -> integer | nil: a creature's raw flag word, `word` one of 'object' (also for items), 'behavior', 'state', 'rank'
+-- (see gear.world.FLAGS). set_flags(word, set, clear) -> true | nil, message: sets the bits of `set`, then clears those of `clear`
+-- (single player). The object manager's own bits of the object word (0x2 and 0x10) are never changed.
+world._flag_words = {object = 0, behavior = 1, state = 2, rank = 3}
+function creature_mt:flags(word)
+    local which = world._flag_words[word]
+    assert(which, "word is 'object', 'behavior', 'state' or 'rank'")
+    return native.flag_word(self.id, which)
+end
+function creature_mt:set_flags(word, set, clear)
+    local which = world._flag_words[word]
+    assert(which, "word is 'object', 'behavior', 'state' or 'rank'")
+    assert(type(set) == 'number' and (clear == nil or type(clear) == 'number'), 'set_flags(word, set, clear): masks are numbers')
+    local value = native.flag_word(self.id, which)
+    if not value then return nil, 'no such creature' end
+    value = bit.bor(value, set)
+    if clear then value = bit.band(value, bit.bnot(clear)) end
+    return native.set_flag_word(self.id, which, value % 4294967296)
+end
 -- carry(slot, item): puts an item object (made with gear.world.spawn, lying in the world) into equipment slot 0..18 of a creature that is no hero:
 -- it leaves the world and the creature carries it there, as the creatures the game places do (single player).
 function creature_mt:carry(slot, item)
@@ -469,6 +488,9 @@ world.FLAGS = {
         EFFECT_32_MARK = 0x40000000, -- set while effect 32 holds (no stat change); the creature render draws an extra marker over a creature that has it
         -- A creature with any of these bits is one that the game lets talk, show a doing's icon (Alt) and wander in the AI's behaviours.
         TOWNSFOLK_MASK = 0x1006DCF8,
+    },
+    rank = {
+        CHAMPION = 0x400,            -- champion-levelled: its ring is drawn under it (the boss's is BEHAVIOR.BOSS)
     },
     state = {
         IN_TALK = 0x10,              -- in a talk (no speech-bubble cursor while it is set); a creature's cast sets it as its action starts

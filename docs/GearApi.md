@@ -1250,10 +1250,17 @@ The bits of the creature state word (+0x200).
 | `COMBAT_MASTER` | `integer` | 0x4000: a combat art master. |
 | `HORSE_TRADER` | `integer` | 0x4000000: the horse trader. |
 
+### GearRankFlags
+
+| Field | Type | |
+|---|---|---|
+| `CHAMPION` | `integer` | 0x400: champion-levelled; its ring is drawn under it. |
+
 ### GearCreatureFlags
 
 | Field | Type | |
 |---|---|---|
+| `rank` | `GearRankFlags` |  |
 | `object` | `GearObjectFlags` |  |
 | `behavior` | `GearBehaviorFlags` |  |
 | `state` | `GearStateFlags` |  |
@@ -1279,7 +1286,7 @@ Positions are world units (`TILE`, about 53.7, is one tile; the screen shows abo
 |---|---|---|
 | `TILE` | `number` | World units per tile. |
 | `CLASSES` | `GearClassInfo[]` | The hero classes. |
-| `FLAGS` | `GearCreatureFlags` | The named bits of a creature's flag words (object, behavior, state), read from the game's own tests of them. `gear.world.has_flag(word, mask)` tests one. |
+| `FLAGS` | `GearCreatureFlags` | The named bits of a creature's flag words (object, behavior, state, rank), read from the game's own tests of them. `gear.world.has_flag(word, mask)` tests one. |
 | `ENUMS` | `GearWorldEnums` | Named numbers of the engine: AI states, actions, creature classes, creature type flags, item kinds and equipment slots, each a table of name to number. |
 | `QUALITIES` | `GearQuality[]` | Item qualities in ascending order; `quality_rank` is the index. |
 | `QUALITY_COLORS` | `table<GearQuality, integer>` | The game's item label colours (ARGB) by quality: white, blue, yellow, gold, green for set items. |
@@ -1629,6 +1636,29 @@ Puts an item object (made with `gear.world.spawn`, lying in the world) into equi
 
 - `slot`: `integer`
 - `item`: `GearItem|integer`
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
+### GearFlagWord
+
+A raw flag word of the object: `'object'` (any object, the one `info().flags` returns), `'behavior'`, `'state'` or `'rank'` (creatures); the bits are in `gear.world.FLAGS`.
+
+`'object'|'behavior'|'state'|'rank'`
+
+#### `creature:flags(word) -> integer?`
+
+The raw flag word, or nil when the object is gone (or is no creature, for the creature words).
+
+- `word`: `GearFlagWord`
+- returns `integer?`
+
+#### `creature:set_flags(word, set, clear) -> boolean?, string?`
+
+Sets the bits of `set` in a flag word, then clears those of `clear` (a field left out stays). Single player. Bits the game's object manager owns (0x2 and 0x10 of the object word) stay as they are. The bits are the game's own: a wrong one changes what the creature does, e.g. `FLAGS.object.DIALOGUE_ICON` shows the icon over its head, `FLAGS.behavior.BOSS` and `FLAGS.rank.CHAMPION` its ring.
+
+- `word`: `GearFlagWord`
+- `set`: `integer` - Bits to set.
+- `clear`: `integer` (optional) - Bits to clear.
 - returns `ok` `boolean?`
 - returns `error` `string?`
 

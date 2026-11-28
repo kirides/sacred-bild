@@ -2361,6 +2361,24 @@ do
     ok(W.FLAGS.object.DIALOGUE_ICON == 0x80000 and W.FLAGS.behavior.BOSS == 0x80000 and W.FLAGS.state.IN_TALK == 0x10, 'flags: bits by name')
     ok(W.FLAGS.object.MADE_BY_ENTER == 0x80000000 and W.has_flag(0x80000000, W.FLAGS.object.MADE_BY_ENTER), 'flags: the top bit tests true')
     ok(W.has_flag(0x1006DCF8 + 0x1, W.FLAGS.behavior.TOWNSFOLK_MASK) and not W.has_flag(0x1, W.FLAGS.behavior.TOWNSFOLK_MASK) and not W.has_flag(nil, 0x10), 'flags: has_flag tests any bit and takes nil')
+    do   -- creature:flags and set_flags read and write whole words through the native side
+        local words = {[0] = 0x44008000, [1] = 0x1, [2] = 0, [3] = 0}
+        native.flag_word = function(id, which) return words[which] end
+        native.set_flag_word = function(id, which, value) words[which] = value; return true end
+        local saved_hero = hero_id
+        hero_id = 1
+        local c2 = W.hero()
+        if c2 then
+            ok(c2:flags('behavior') == 1, 'flags: reads the word')
+            ok(c2:set_flags('object', W.FLAGS.object.DIALOGUE_ICON) and words[0] == 0x44088000, 'set_flags: sets bits')
+            ok(c2:set_flags('behavior', W.FLAGS.behavior.BOSS, 1) and words[1] == 0x80000, 'set_flags: sets then clears')
+            ok(c2:set_flags('state', 0x80000000) and words[2] == 0x80000000, 'set_flags: the top bit stays unsigned')
+            ok(not pcall(c2.flags, c2, 'nope'), 'flags: an unknown word is refused')
+        else
+            ok(false, 'flags: no hero in the mock')
+        end
+        hero_id = saved_hero
+    end
     local E = W.ENUMS
     ok(E.ai_state.MELEE == 4 and E.action.CAST == 4 and E.creature_class.HORSE == 4 and E.item_kind.WEAPON == 5 and E.equipment_slot.WEAPON == 12, 'enums: by name')
     ok(E.creature_type_flags.FLIES == 1 and E.item_kind.WEAPON == srec.gear.shop.CATEGORY.WEAPON and E.item_kind.AMULET == srec.gear.shop.CATEGORY.AMULET, 'enums: agree with the shop categories')

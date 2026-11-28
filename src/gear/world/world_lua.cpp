@@ -1017,6 +1017,31 @@ namespace LuaNative
         return 1;
     }
 
+    // native.flag_word(id, which) -> value | nil; native.set_flag_word(id, which, value) -> true | nil, message
+    // `which`: 0 the object word, 1 the behavior word, 2 the state word, 3 the rank word (see World::flagWord).
+    int nativeFlagWord(lua_State* L)
+    {
+        uint32_t value = 0;
+        if (!World::flagWord(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)), value))
+        {
+            lua_pushnil(L);
+            return 1;
+        }
+        lua_pushnumber(L, value);
+        return 1;
+    }
+    int nativeSetFlagWord(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::setFlagWord(checkId(L, 1), static_cast<uint32_t>(luaL_checknumber(L, 2)),
+                                static_cast<uint32_t>(static_cast<int64_t>(luaL_checknumber(L, 3))), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.carry(id, slot, item) -> true | nil, message
     int nativeCarry(lua_State* L)
     {
@@ -1160,6 +1185,8 @@ namespace LuaNative
             {"allegiance", nativeAllegiance},
             {"carry", nativeCarry},
             {"set_allegiance", nativeSetAllegiance},
+            {"flag_word", nativeFlagWord},
+            {"set_flag_word", nativeSetFlagWord},
             {nullptr, nullptr},
         };
         setFunctions(L, kNatives);
