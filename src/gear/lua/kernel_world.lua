@@ -434,6 +434,59 @@ local CLASS_INFO = {by_id = {}, all = 0xC0003F}   -- one local: the main chunk i
 for _, c in ipairs(CLASSES) do CLASS_INFO.by_id[c.id] = c end
 world.CLASSES = CLASSES
 
+-- Creature flag words, by name: the bits of three words every creature has. Each name was read from the game's own tests of the bit
+-- (Sacred.exe: the creature render 0x599910, the cursor 0x611E70, the talk query 0x549920, the AI state 0x4EE030, the tag handlers
+-- of CreateNPC 0x482510 and Dialog 0x48F9E0). `object` is the word `creature:info().flags` returns (object +0x14), `behavior` the
+-- second value of `creature:allegiance()` (+0x1F4, what a creature does by itself), `state` the creature's state word (+0x200).
+world.FLAGS = {
+    object = {
+        NOT_IN_WORLD = 0x2,          -- carried or being picked up (an item), not lying in the world
+        REMOVED = 0x10,              -- freed or parked: the object is gone
+        DIALOGUE_ICON = 0x80000,     -- the "!?" icon over its head, set by every dialogue assignment, cleared when its dialogue goes (+0x245 < 1)
+        THROWN = 0x100000,           -- in a throw's flight
+        MADE_BY_ENTER = 0x80000000,  -- made by a sector's Enter function (the fills' creatures among them)
+    },
+    behavior = {
+        AGGRESSIVE = 0x1,            -- hostile and awake: attacks (what `allegiance()` reports as aggressive)
+        FOLLOWER = 0x4,              -- follows a partner (the scripts' companions, CreateNPC tags 0x37 and 0x71)
+        TOWNSPERSON = 0x8,           -- the townsfolk's mode (CreateNPC tag 0x2B; the bit 0x8000 runs as this one)
+        ANIMAL_10 = 0x10,            -- the four animal modes (CreateNPC tags 0x2E, 0x30, 0x2F/0x31, 0x32): they move only while standing
+        ANIMAL_20 = 0x20,            -- (the loose farm animals' mode; waters' fish take it too)
+        ANIMAL_40 = 0x40,
+        ANIMAL_80 = 0x80,
+        HIRED = 0x100,               -- a hired follower fighting at its master's side
+        TOWNSPERSON_400 = 0x400,     -- the townsfolk's second mode (CreateNPC tag 0x42)
+        STANDS_800 = 0x800,          -- stands (tag 0x43)
+        STANDS_1000 = 0x1000,        -- stands (tag 0x44)
+        GUARD = 0x4000,              -- the guards' mode (tag 0x46)
+        TOWNSPERSON_8000 = 0x8000,   -- tag 0x4C, handled as TOWNSPERSON
+        SLIDE = 0x20000,             -- a slide
+        NO_TALK = 0x40000,           -- gets no generic dialogue and no speech-bubble cursor (the AI also lets it look among the creatures about it for a fight)
+        BOSS = 0x80000,              -- a boss: its ring is drawn under it
+        FLYING = 0x200000,           -- flies (the crows, hornets)
+        SIGHT = 0x400000,            -- runs its sight function (`See:`) once the hero comes in view
+        JUGGLER = 0x10000000,        -- the jugglers' mode
+        EFFECT_32_MARK = 0x40000000, -- set while effect 32 holds (no stat change); the creature render draws an extra marker over a creature that has it
+        -- A creature with any of these bits is one that the game lets talk, show a doing's icon (Alt) and wander in the AI's behaviours.
+        TOWNSFOLK_MASK = 0x1006DCF8,
+    },
+    state = {
+        IN_TALK = 0x10,              -- in a talk (no speech-bubble cursor while it is set); a creature's cast sets it as its action starts
+        PLAYER_HERO = 0x40,          -- a player's hero (its own reactions off); the companions' control switch moves it
+        FIGHT_STANCE = 0x8000,       -- the fight stance: enemies are about (what `creature:in_combat()` reads)
+        HELD = 0x40000,              -- held by a stun, knock-down or knock-back
+        SMITH = 0x1000,              -- a smith's trader (hammer cursor, smith window)
+        MERCHANT = 0x2000,           -- a merchant (bag cursor, trade window)
+        COMBAT_MASTER = 0x4000,      -- a combat art master (combo cursor)
+        HORSE_TRADER = 0x4000000,    -- the horse trader (CreateNPC tag 0x64)
+    },
+}
+
+-- True where `word` has any bit of `mask`: `gear.world.has_flag(c:info().flags, gear.world.FLAGS.object.DIALOGUE_ICON)`.
+function world.has_flag(word, mask)
+    return bit.band(word or 0, mask) ~= 0
+end
+
 -- Custom classes: which hero classes' action handlers know a combat art (read from the handlers' switch cases in the exe:
 -- Seraphim 0x5038F0, Gladiator 0x4FF0B0, Battle Mage 0x50CD10, Dark Elf 0x506770, Wood Elf 0x50AC00, Vampiress 0x50E6C0, Dwarf
 -- 0x514790, Daemon 0x5192E0), the arts tied to class state (forms, firearms) and the arts' tiers for a body. Spells (ids below

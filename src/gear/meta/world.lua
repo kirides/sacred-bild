@@ -15,6 +15,54 @@
 ---@alias GearPotionColor 'black'|'blue'|'green'|'red'|'yellow'
 ---@alias GearClassName 'seraphim'|'gladiator'|'battlemage'|'darkelf'|'woodelf'|'vampiress'|'dwarf'|'daemon'
 
+--- The bits of the object flag word (`creature:info().flags`, the object's +0x14).
+---@class GearObjectFlags
+---@field NOT_IN_WORLD integer 0x2: carried or being picked up (an item), not lying in the world.
+---@field REMOVED integer 0x10: freed or parked; the object is gone.
+---@field DIALOGUE_ICON integer 0x80000: the "!?" icon over the creature's head. Every dialogue assignment sets it; the game clears it when the dialogue goes. The speech-bubble cursor does not read it, it reads the dialogue id.
+---@field THROWN integer 0x100000: in a throw's flight.
+---@field MADE_BY_ENTER integer 0x80000000: made by a sector's Enter function (the fills' creatures among them).
+
+--- The bits of the behavior word (the second value of `creature:allegiance()`, +0x1F4): what a creature does by itself. Several are the modes the scripts' creature maker (`CreateNPC`) gives by its tags.
+---@class GearBehaviorFlags
+---@field AGGRESSIVE integer 0x1: hostile and awake, attacks.
+---@field FOLLOWER integer 0x4: follows a partner (the scripts' companions).
+---@field TOWNSPERSON integer 0x8: the townsfolk's mode; 0x8000 runs as this one.
+---@field ANIMAL_10 integer 0x10: an animal mode (moves only while standing).
+---@field ANIMAL_20 integer 0x20: an animal mode (the loose farm animals').
+---@field ANIMAL_40 integer 0x40: an animal mode.
+---@field ANIMAL_80 integer 0x80: an animal mode.
+---@field HIRED integer 0x100: a hired follower at its master's side.
+---@field TOWNSPERSON_400 integer 0x400: the townsfolk's second mode.
+---@field STANDS_800 integer 0x800: stands.
+---@field STANDS_1000 integer 0x1000: stands.
+---@field GUARD integer 0x4000: the guards' mode.
+---@field TOWNSPERSON_8000 integer 0x8000: runs as TOWNSPERSON.
+---@field SLIDE integer 0x20000: a slide.
+---@field NO_TALK integer 0x40000: gets no generic dialogue and no speech-bubble cursor.
+---@field BOSS integer 0x80000: a boss; its ring is drawn under it.
+---@field FLYING integer 0x200000: flies.
+---@field SIGHT integer 0x400000: runs its sight function once the hero comes in view.
+---@field JUGGLER integer 0x10000000: the jugglers' mode.
+---@field EFFECT_32_MARK integer 0x40000000: set while effect 32 holds; the creature render draws an extra marker over it.
+---@field TOWNSFOLK_MASK integer 0x1006DCF8: the bits that let a creature talk by the generic dialogues, show a doing's icon (Alt) and take the AI's behaviours.
+
+--- The bits of the creature state word (+0x200).
+---@class GearStateFlags
+---@field IN_TALK integer 0x10: in a talk; no speech-bubble cursor while it is set.
+---@field PLAYER_HERO integer 0x40: a player's hero (the game's own reactions are off).
+---@field FIGHT_STANCE integer 0x8000: the fight stance, enemies about (what `creature:in_combat()` reads).
+---@field HELD integer 0x40000: held by a stun, knock-down or knock-back.
+---@field SMITH integer 0x1000: a smith (hammer cursor, smith window).
+---@field MERCHANT integer 0x2000: a merchant (bag cursor, trade window).
+---@field COMBAT_MASTER integer 0x4000: a combat art master.
+---@field HORSE_TRADER integer 0x4000000: the horse trader.
+
+---@class GearCreatureFlags
+---@field object GearObjectFlags
+---@field behavior GearBehaviorFlags
+---@field state GearStateFlags
+
 -- path gear.world
 --- Positions are world units (`TILE`, about 53.7, is one tile; the screen shows about 534 x 400 around the hero) and a
 --- layer (0 outdoors; dungeons have their own). The functions that change the world work only in single player
@@ -22,9 +70,16 @@
 ---@class GearWorld
 ---@field TILE number World units per tile.
 ---@field CLASSES GearClassInfo[] The hero classes.
+---@field FLAGS GearCreatureFlags The named bits of a creature's flag words (object, behavior, state), read from the game's own tests of them. `gear.world.has_flag(word, mask)` tests one.
 ---@field QUALITIES GearQuality[] Item qualities in ascending order; `quality_rank` is the index.
 ---@field QUALITY_COLORS table<GearQuality, integer> The game's item label colours (ARGB) by quality: white, blue, yellow, gold, green for set items.
 local GearWorld = {}
+
+--- True where `word` has any bit of `mask`, e.g. `gear.world.has_flag(creature:info().flags, gear.world.FLAGS.object.DIALOGUE_ICON)`.
+---@param word integer?
+---@param mask integer
+---@return boolean
+function GearWorld.has_flag(word, mask) end
 
 --- The local hero, or nil.
 ---@return Creature?

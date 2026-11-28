@@ -1195,6 +1195,69 @@ A hero class: the hero's type (1..9) and the bit an item's class mask has for it
 
 `'seraphim'|'gladiator'|'battlemage'|'darkelf'|'woodelf'|'vampiress'|'dwarf'|'daemon'`
 
+### GearObjectFlags
+
+The bits of the object flag word (`creature:info().flags`, the object's +0x14).
+
+| Field | Type | |
+|---|---|---|
+| `NOT_IN_WORLD` | `integer` | 0x2: carried or being picked up (an item), not lying in the world. |
+| `REMOVED` | `integer` | 0x10: freed or parked; the object is gone. |
+| `DIALOGUE_ICON` | `integer` | 0x80000: the "!?" icon over the creature's head. Every dialogue assignment sets it; the game clears it when the dialogue goes. The speech-bubble cursor does not read it, it reads the dialogue id. |
+| `THROWN` | `integer` | 0x100000: in a throw's flight. |
+| `MADE_BY_ENTER` | `integer` | 0x80000000: made by a sector's Enter function (the fills' creatures among them). |
+
+### GearBehaviorFlags
+
+The bits of the behavior word (the second value of `creature:allegiance()`, +0x1F4): what a creature does by itself. Several are the modes the scripts' creature maker (`CreateNPC`) gives by its tags.
+
+| Field | Type | |
+|---|---|---|
+| `AGGRESSIVE` | `integer` | 0x1: hostile and awake, attacks. |
+| `FOLLOWER` | `integer` | 0x4: follows a partner (the scripts' companions). |
+| `TOWNSPERSON` | `integer` | 0x8: the townsfolk's mode; 0x8000 runs as this one. |
+| `ANIMAL_10` | `integer` | 0x10: an animal mode (moves only while standing). |
+| `ANIMAL_20` | `integer` | 0x20: an animal mode (the loose farm animals'). |
+| `ANIMAL_40` | `integer` | 0x40: an animal mode. |
+| `ANIMAL_80` | `integer` | 0x80: an animal mode. |
+| `HIRED` | `integer` | 0x100: a hired follower at its master's side. |
+| `TOWNSPERSON_400` | `integer` | 0x400: the townsfolk's second mode. |
+| `STANDS_800` | `integer` | 0x800: stands. |
+| `STANDS_1000` | `integer` | 0x1000: stands. |
+| `GUARD` | `integer` | 0x4000: the guards' mode. |
+| `TOWNSPERSON_8000` | `integer` | 0x8000: runs as TOWNSPERSON. |
+| `SLIDE` | `integer` | 0x20000: a slide. |
+| `NO_TALK` | `integer` | 0x40000: gets no generic dialogue and no speech-bubble cursor. |
+| `BOSS` | `integer` | 0x80000: a boss; its ring is drawn under it. |
+| `FLYING` | `integer` | 0x200000: flies. |
+| `SIGHT` | `integer` | 0x400000: runs its sight function once the hero comes in view. |
+| `JUGGLER` | `integer` | 0x10000000: the jugglers' mode. |
+| `EFFECT_32_MARK` | `integer` | 0x40000000: set while effect 32 holds; the creature render draws an extra marker over it. |
+| `TOWNSFOLK_MASK` | `integer` | 0x1006DCF8: the bits that let a creature talk by the generic dialogues, show a doing's icon (Alt) and take the AI's behaviours. |
+
+### GearStateFlags
+
+The bits of the creature state word (+0x200).
+
+| Field | Type | |
+|---|---|---|
+| `IN_TALK` | `integer` | 0x10: in a talk; no speech-bubble cursor while it is set. |
+| `PLAYER_HERO` | `integer` | 0x40: a player's hero (the game's own reactions are off). |
+| `FIGHT_STANCE` | `integer` | 0x8000: the fight stance, enemies about (what `creature:in_combat()` reads). |
+| `HELD` | `integer` | 0x40000: held by a stun, knock-down or knock-back. |
+| `SMITH` | `integer` | 0x1000: a smith (hammer cursor, smith window). |
+| `MERCHANT` | `integer` | 0x2000: a merchant (bag cursor, trade window). |
+| `COMBAT_MASTER` | `integer` | 0x4000: a combat art master. |
+| `HORSE_TRADER` | `integer` | 0x4000000: the horse trader. |
+
+### GearCreatureFlags
+
+| Field | Type | |
+|---|---|---|
+| `object` | `GearObjectFlags` |  |
+| `behavior` | `GearBehaviorFlags` |  |
+| `state` | `GearStateFlags` |  |
+
 ### GearWorld
 
 Reached as `gear.world`.
@@ -1205,8 +1268,17 @@ Positions are world units (`TILE`, about 53.7, is one tile; the screen shows abo
 |---|---|---|
 | `TILE` | `number` | World units per tile. |
 | `CLASSES` | `GearClassInfo[]` | The hero classes. |
+| `FLAGS` | `GearCreatureFlags` | The named bits of a creature's flag words (object, behavior, state), read from the game's own tests of them. `gear.world.has_flag(word, mask)` tests one. |
 | `QUALITIES` | `GearQuality[]` | Item qualities in ascending order; `quality_rank` is the index. |
 | `QUALITY_COLORS` | `table<GearQuality, integer>` | The game's item label colours (ARGB) by quality: white, blue, yellow, gold, green for set items. |
+
+#### `gear.world.has_flag(word, mask) -> boolean`
+
+True where `word` has any bit of `mask`, e.g. `gear.world.has_flag(creature:info().flags, gear.world.FLAGS.object.DIALOGUE_ICON)`.
+
+- `word`: `integer` (optional)
+- `mask`: `integer`
+- returns `boolean`
 
 #### `gear.world.hero() -> Creature?`
 

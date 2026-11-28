@@ -2355,6 +2355,14 @@ do
     ok(B.speeds(5) == nil, 'buffs.speeds: no creature gives nil')
 end
 
+-- gear.world.FLAGS: the named bits and the test helper.
+do
+    local W = srec.gear.world
+    ok(W.FLAGS.object.DIALOGUE_ICON == 0x80000 and W.FLAGS.behavior.BOSS == 0x80000 and W.FLAGS.state.IN_TALK == 0x10, 'flags: bits by name')
+    ok(W.FLAGS.object.MADE_BY_ENTER == 0x80000000 and W.has_flag(0x80000000, W.FLAGS.object.MADE_BY_ENTER), 'flags: the top bit tests true')
+    ok(W.has_flag(0x1006DCF8 + 0x1, W.FLAGS.behavior.TOWNSFOLK_MASK) and not W.has_flag(0x1, W.FLAGS.behavior.TOWNSFOLK_MASK) and not W.has_flag(nil, 0x10), 'flags: has_flag tests any bit and takes nil')
+end
+
 print(('%d passed, %d failed'):format(passes, failures))
 if failures > 0 then
     for _, l in ipairs(logs) do print('  log: ' .. l) end
