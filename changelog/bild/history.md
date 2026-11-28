@@ -1,3 +1,7 @@
+## v0.5.0 (2026-11-28)
+
+- New: Sacred Gear can give an item type textures of its own for its inventory icon (`SacredBild_TypeTextureSet`, `SacredBild_IconBegin` / `SacredBild_IconEnd`): the Direct3D renderer applies them to the meshes of the game's icon draw. The NVRHI renderer does not draw item textures yet.
+
 ## v0.4.1 (2026-11-28)
 
 - Fixed: on the NVRHI renderer, leaving a game with "Beenden" no longer crashes. Merged draws kept pointers to texture binding sets that were freed when a texture was released.

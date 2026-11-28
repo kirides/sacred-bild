@@ -357,6 +357,25 @@ function inv.remove(container, item_id)
     return bytes
 end
 
+-- inv.set_type_texture(type, spec) -> true | nil, message: other textures for the inventory icon of every item of an item type (as creature:set_texture).
+function inv.set_type_texture(type_id, spec)
+    assert(type(type_id) == 'number', 'set_type_texture wants an item type')
+    if spec == nil then
+        for part = 0, 8 do local ok, err = native.item_type_texture(type_id, part, 0) if not ok then return nil, err end end
+        return true
+    end
+    if type(spec) == 'number' then spec = {all = spec} end
+    assert(type(spec) == 'table', 'the texture is an image id, a table or nil')
+    local parts = spec.parts or {}
+    local ok, err = native.item_type_texture(type_id, 0, spec.all or 0)
+    if not ok then return nil, err end
+    for part = 1, 8 do
+        ok, err = native.item_type_texture(type_id, part, parts[part] or 0)
+        if not ok then return nil, err end
+    end
+    return true
+end
+
 -- inv.type_record(type) -> hex | nil, message: the raw item record (0x102 bytes) of an item type (for the look and the size: +0x1C, +0x1D).
 function inv.type_record(type_id) return native.item_record(type_id) end
 

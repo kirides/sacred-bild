@@ -613,6 +613,18 @@ namespace LuaNative
         return 1;
     }
 
+    // native.item_type_texture(type, part, image) -> true | nil, message
+    int nativeItemTypeTexture(lua_State* L)
+    {
+        const char* error = nullptr;
+        if (!World::setTypeTexture(static_cast<uint32_t>(luaL_checknumber(L, 1)), static_cast<uint32_t>(luaL_checknumber(L, 2)), static_cast<uint32_t>(luaL_checknumber(L, 3)), error))
+        {
+            return pushFailure(L, error);
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
     // native.item_record(type) -> hex of the 0x102 bytes | nil, message
     int nativeItemRecord(lua_State* L)
     {
@@ -1214,6 +1226,7 @@ namespace LuaNative
             {"item_define_type", nativeItemDefineType},
             {"item_copy_words", nativeItemCopyWords},
             {"item_set_size", nativeItemSetSize},
+            {"item_type_texture", nativeItemTypeTexture},
             {"item_record", nativeItemRecord},
             {"item_use", nativeItemUse},
             {"text_set", nativeTextSet},

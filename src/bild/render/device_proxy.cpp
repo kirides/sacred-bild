@@ -1261,7 +1261,7 @@ HRESULT DeviceProxy::DrawIndexedPrimitiveStrided(D3DPRIMITIVETYPE type, DWORD fv
     // mesh's texture in stage 0 for this draw; a tint is one more texture stage that multiplies what the engine's stages made by the colour
     // (stage 1 must be unused: a glow effect that uses it is left as it is).
     uint32_t tint = 0, texture = 0;
-    if (!m_inTint && !m_ui && Pets::tinting() && Pets::tintNext(tint, texture))
+    if (!m_inTint && (!m_ui || Pets::iconTinting()) && Pets::tinting() && Pets::tintNext(tint, texture))
     {
         IDirectDrawSurface7* replacement = texture ? Pets::resolveTexture(m_real, texture) : nullptr;
         IDirectDrawSurface7* original = nullptr;

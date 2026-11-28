@@ -4,6 +4,7 @@
 #include "world/classes.h"
 #include "items/itemtip.h"
 #include "items/itemuse.h"
+#include "items/itemtexture.h"
 #include "world/killstat.h"
 #include "items/drops.h"
 #include "lua_host.h"
@@ -69,6 +70,7 @@ bool Hooks::install()
     Savegames::install();
     ItemTip::install();
     ItemUse::install();
+    ItemTexture::install();
     KillStat::install();
     PotionPick::install();
     Shop::install();

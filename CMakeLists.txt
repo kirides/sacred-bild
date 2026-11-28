@@ -236,6 +236,7 @@ if(SACREDGEAR)
     src/gear/world/classes.cpp
     src/gear/world/classes_alias.cpp
     src/gear/items/itemuse.cpp
+    src/gear/items/itemtexture.cpp
     src/gear/items/master.cpp
     src/gear/world/killstat.cpp
     src/gear/world/party.cpp

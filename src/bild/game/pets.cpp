@@ -42,6 +42,9 @@ namespace
     thread_local const Tint* t_tint = nullptr;      // the object being drawn (valid while its drawModel runs: the map entry is copied below)
     thread_local Tint t_tintCopy;
     thread_local int t_part = 0;
+    thread_local bool t_icon = false;                // the inventory's icon draw of a type with textures is running (IconBegin .. IconEnd)
+    std::unordered_map<uint32_t, Tint> g_typeTints;  // item type -> its textures (the tint fields stay 0)
+    std::atomic<int> g_typeCount{0};
 
     decltype(Addr::cGranny_renderShadow)::Ptr g_origShadow = nullptr;
     decltype(Addr::cObject3D_drawModel)::Ptr g_origDrawModel = nullptr;
@@ -251,6 +254,11 @@ bool Pets::tinting()
     return t_tint != nullptr;
 }
 
+bool Pets::iconTinting()
+{
+    return t_icon && t_tint != nullptr;
+}
+
 bool Pets::tintNext(uint32_t& argb, uint32_t& texture)
 {
     argb = 0;
@@ -423,4 +431,65 @@ extern "C" int __cdecl SacredBild_TextureSet(unsigned id, unsigned part, unsigne
     const int n = g_tintCount.load();
     ReleaseSRWLockExclusive(&g_lock);
     return n;
+}
+
+// Sacred Gear: other textures for an item type (the inventory icon of every item of the type): `part` 0 the whole model, 1..8 a mesh; token 0 clears.
+extern "C" int __cdecl SacredBild_TypeTextureSet(unsigned type, unsigned part, unsigned token)
+{
+    AcquireSRWLockExclusive(&g_lock);
+    if (part <= static_cast<unsigned>(kParts) && (token || g_typeTints.count(type)))
+    {
+        Tint& t = g_typeTints[type];
+        if (part == 0)
+        {
+            t.texAll = token;
+        }
+        else
+        {
+            t.texPart[part - 1] = token;
+        }
+        bool any = t.texAll != 0;
+        for (int i = 0; i < kParts; ++i)
+        {
+            any = any || t.texPart[i] != 0;
+        }
+        if (!any)
+        {
+            g_typeTints.erase(type);
+        }
+    }
+    g_typeCount.store(static_cast<int>(g_typeTints.size()));
+    const int n = g_typeCount.load();
+    ReleaseSRWLockExclusive(&g_lock);
+    return n;
+}
+
+// Sacred Gear: the game is about to draw the inventory icon of an item type: if the type has textures, the meshes of this draw use them.
+extern "C" void __cdecl SacredBild_IconBegin(unsigned type)
+{
+    t_icon = false;
+    t_tint = nullptr;
+    if (g_typeCount.load(std::memory_order_relaxed) == 0)
+    {
+        return;
+    }
+    AcquireSRWLockShared(&g_lock);
+    const auto it = g_typeTints.find(type);
+    if (it != g_typeTints.end())
+    {
+        t_tintCopy = it->second;
+        t_tint = &t_tintCopy;
+        t_part = 0;
+        t_icon = true;
+    }
+    ReleaseSRWLockShared(&g_lock);
+}
+
+extern "C" void __cdecl SacredBild_IconEnd()
+{
+    if (t_icon)
+    {
+        t_icon = false;
+        t_tint = nullptr;
+    }
 }

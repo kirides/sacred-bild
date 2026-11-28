@@ -34,6 +34,8 @@ namespace Pets
     // While the engine draws an object that has tints (its drawModel, not its shadow), `tintNext` answers for each mesh draw in
     // turn whether it has a colour (0xAARRGGBB, white 0xFFFFFFFF: none).
     bool tinting();
+    // Whether the meshes being drawn are an item icon of a type with textures of its own (SacredBild_IconBegin): the UI pass applies them too.
+    bool iconTinting();
     // `argb` the colour (0: none) and `texture` the token of another texture for the mesh (0: none), true if either is set. (A mesh is
     // counted whether it has them or not.)
     bool tintNext(uint32_t& argb, uint32_t& texture);

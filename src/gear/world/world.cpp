@@ -916,6 +916,9 @@ namespace
     using TextureSetFn = int(__cdecl*)(unsigned, unsigned, unsigned);
     using SetResolverFn = void(__cdecl*)(ResolverFn);
     TextureSetFn g_textureSet = nullptr;
+    TextureSetFn g_typeTextureSet = nullptr;
+    void(__cdecl* g_iconBegin)(unsigned) = nullptr;
+    void(__cdecl* g_iconEnd)() = nullptr;
 
     IDirectDrawSurface7* __cdecl resolveTexture(IDirect3DDevice7* device, unsigned image)
     {
@@ -939,6 +942,9 @@ namespace
                 g_tintSet = reinterpret_cast<decltype(&SacredBild_TintSet)>(GetProcAddress(bild, "SacredBild_TintSet"));
                 g_tintClear = reinterpret_cast<decltype(&SacredBild_TintClear)>(GetProcAddress(bild, "SacredBild_TintClear"));
                 g_textureSet = reinterpret_cast<decltype(&SacredBild_TextureSet)>(GetProcAddress(bild, "SacredBild_TextureSet"));
+                g_typeTextureSet = reinterpret_cast<decltype(&SacredBild_TypeTextureSet)>(GetProcAddress(bild, "SacredBild_TypeTextureSet"));
+                g_iconBegin = reinterpret_cast<decltype(&SacredBild_IconBegin)>(GetProcAddress(bild, "SacredBild_IconBegin"));
+                g_iconEnd = reinterpret_cast<decltype(&SacredBild_IconEnd)>(GetProcAddress(bild, "SacredBild_IconEnd"));
                 if (const auto setResolver = reinterpret_cast<decltype(&SacredBild_TextureResolver)>(GetProcAddress(bild, "SacredBild_TextureResolver")))
                 {
                     setResolver(&resolveTexture);
@@ -1000,6 +1006,38 @@ bool World::setTexture(uint32_t id, uint32_t part, uint32_t image, const char*& 
     }
     g_textureSet(id, part, image);
     return true;
+}
+
+bool World::setTypeTexture(uint32_t type, uint32_t part, uint32_t image, const char*& error)
+{
+    if (!petApi() || !g_typeTextureSet)
+    {
+        error = "item textures need a newer SacredBild";
+        return false;
+    }
+    if (part > 8 || type < 1 || type >= 0x7E60)
+    {
+        error = "the part is 0 (the whole model) or 1 to 8, the type 1 to 0x7E5F";
+        return false;
+    }
+    g_typeTextureSet(type, part, image);
+    return true;
+}
+
+void World::iconBegin(uint32_t type)
+{
+    if (g_iconBegin)
+    {
+        g_iconBegin(type);
+    }
+}
+
+void World::iconEnd()
+{
+    if (g_iconEnd)
+    {
+        g_iconEnd();
+    }
 }
 
 bool World::setTint(uint32_t id, uint32_t part, uint32_t argb, const char*& error)

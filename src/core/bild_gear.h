@@ -65,6 +65,13 @@ extern "C"
     int __cdecl SacredBild_TextureSet(unsigned id, unsigned part, unsigned token);
     void __cdecl SacredBild_TextureResolver(IDirectDrawSurface7*(__cdecl* resolver)(IDirect3DDevice7* device, unsigned token));
 
+    // Item type textures (pets): the inventory's item icon is a model drawn by the game's model renderer for an item *type*, not an object.
+    // `TypeTextureSet` gives a type other textures (`part` 0 the whole model, 1..8 a mesh; `token` 0 takes it away); Sacred Gear brackets the
+    // game's icon draw of a type with `IconBegin` / `IconEnd`, and the meshes drawn in between use them.
+    int __cdecl SacredBild_TypeTextureSet(unsigned type, unsigned part, unsigned token);
+    void __cdecl SacredBild_IconBegin(unsigned type);
+    void __cdecl SacredBild_IconEnd();
+
     // SacredGear.dll -> ddraw.dll: the foreground window of an isolated automation run (automation).
     SACREDGEAR_EXPORT HWND __cdecl SacredGear_IsolatedForeground();
 }

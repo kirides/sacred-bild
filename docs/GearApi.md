@@ -3937,6 +3937,15 @@ The options of `define_type`.
 | `icon_scale` | `number` | With `size`: the scale the icon is drawn at in the item record (a game scroll uses 3.0 for 1 x 2 cells; a smaller number fits one cell). (optional) |
 | `look` | `integer` | Another item type whose look the new type takes (its model, inventory icon and size, price record): a potion that looks like a scroll is `define_type(id, potion_type, name, {look = scroll_type})`. What the item does stays the base's. (optional) |
 
+#### `gear.inv.set_type_texture(type, spec) -> boolean?, string?`
+
+Draws the inventory icon of every item of an item type with other textures (a merchant's window, the backpack, the chest and the windows of mods that draw the item with `gear.ui.item_icon`): `spec` is an image id for the whole model, or `{all = id, parts = {[n] = id}}` for single meshes (in the order the game draws them, as `creature:set_texture`). An id is `gear.ui.texture_image(name)` (a texture of the game's Texture.pak) or the `picture` of a `gear.ui.texture.load(path)` handle (an image file of the mod: PNG, TGA, JPG or DDS, both sides a power of two; keep the handle). The texture replaces the mesh's own one, so it needs the same texture layout (a type made with `define_type{look = ...}` has the layout of its look's model). nil clears it. Needs SacredBild's Direct3D renderer; set it again each time the mod starts.
+
+- `type`: `integer`
+- `spec`: `integer|{all: integer?, parts: table<integer, integer>?}` (optional)
+- returns `ok` `boolean?`
+- returns `error` `string?`
+
 #### `gear.inv.type_record(type) -> string?, string?`
 
 The raw item record (0x102 bytes, as hex) an item type points to: the icon's scale and angles, the size in cells (bytes 0x1C and 0x1D), what `look` and `size` of `define_type` work with. nil and a message if there is none.
