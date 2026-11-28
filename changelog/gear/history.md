@@ -1,7 +1,10 @@
 ## v0.17.0 (2026-11-28)
 
-- New: `creature:set_talk(on)` marks a creature as one that talks, so the game's talk cursor shows over it on hover, as over its own NPCs.
-- Improved: every `gear.npc` NPC with a dialog now shows the talk cursor when the mouse is over it (the Town Portal's portal included).
+- New: `gear.world.FLAGS` names the bits of a creature's object, behavior, state and rank words (the dialogue icon, boss and champion marks, townsfolk, animal and guard modes, the trader bits), and `gear.world.has_flag` tests one.
+- New: `gear.world.ENUMS` names the AI states, actions, creature classes, item kinds and equipment slots.
+- New: `creature:flags(word)` and `creature:set_flags(word, set, clear)` read and write those words in single player. Setting the boss or champion bit on an enemy draws the game's red ring under it.
+- New: `creature:set_talk(on)` marks a creature as one that talks, so the game's talk cursor shows over it on hover. Every `gear.npc` NPC with a dialog now gets it (the Town Portal's portal included).
+- Fixed: Sacred Gear no longer loads in a third-party exe (SacredClosedNet.exe), however the exe is renamed or re-stamped; SacredBild logs why.
 
 ## v0.16.0 (2026-11-28)
 

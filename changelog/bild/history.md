@@ -1,3 +1,8 @@
+## v0.4.1 (2026-11-28)
+
+- Fixed: on the NVRHI renderer, leaving a game with "Beenden" no longer crashes. Merged draws kept pointers to texture binding sets that were freed when a texture was released.
+- Fixed: SacredClosedNet.exe gets SacredBild's game hooks (HD, UI scaling) instead of a plain pass-through; a missing optional address in that build no longer switches every hook off (only the language setting stays off).
+
 ## v0.4.0 (2026-11-28)
 
 - New (experimental): the NVRHI renderer, SacredBild's own renderer on Direct3D 12 or Vulkan (`[DDraw] Backend=nvrhi`, chosen in the settings window). If neither API starts, it falls back to the Direct3D 9 renderer. It draws on a render thread of its own and draws the world's buildings, trees, props, water, lava and blob shadows itself in few large draws. It also merges particle effects, rain and the interface's quads.
